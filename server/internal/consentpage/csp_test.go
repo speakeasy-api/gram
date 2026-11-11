@@ -18,6 +18,12 @@ func TestFormActionSources(t *testing.T) {
 		{"userinfo", "https://user:pass@client.example/callback", "'self'"},
 		{"relative", "/callback", "'self'"},
 		{"opaque https", "https:callback", "'self'"},
+		{"empty hostname", "https://:443/callback", "'self'"},
+		{"directive delimiter", "https://host.example;/callback", "'self'"},
+		{"policy delimiter", "https://host.example,/callback", "'self'"},
+		{"wildcard host", "https://*.example/callback", "'self'"},
+		{"punycode host", "https://xn--bcher-kva.example/callback", "'self' https://xn--bcher-kva.example"},
+		{"web port", "https://client.example:8443/callback", "'self' https://client.example:8443"},
 	} {
 		t.Run(tc.name, func(t *testing.T) { t.Parallel(); require.Equal(t, tc.sources, FormActionSources(tc.redirect)) })
 	}
