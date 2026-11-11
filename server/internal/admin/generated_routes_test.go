@@ -50,6 +50,12 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 		"GetMeterUsage":                         "GET /admin/organizations.getMeterUsage",
 		"GetSpendBreakdown":                     "GET /admin/organization.spendBreakdown",
 		"ListCustomerUsage":                     "GET /admin/organizations.customerUsage",
+		"ListPlatformExternalCredentials":       "GET /admin/externalCredentials.list",
+		"GetGcpIamPlatformCredential":           "GET /admin/externalCredentials.getGcpIam",
+		"CreateGcpIamPlatformCredential":        "POST /admin/externalCredentials.createGcpIam",
+		"UpdateGcpIamPlatformCredential":        "POST /admin/externalCredentials.updateGcpIam",
+		"VerifyGcpIamPlatformCredential":        "POST /admin/externalCredentials.verifyGcpIam",
+		"DeleteGcpIamPlatformCredential":        "POST /admin/externalCredentials.deleteGcpIam",
 	}
 	got := map[string]string{}
 	for _, mount := range server.Mounts {

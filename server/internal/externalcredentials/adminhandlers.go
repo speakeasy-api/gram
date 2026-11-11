@@ -33,13 +33,52 @@ import (
 // subject) for a platform credential mutation, standing in for the auditlogs
 // rows platform-scoped records can't have. Call it only after the transaction
 // commits so the log never claims a mutation that rolled back.
-func logPlatformMutation(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, action, subject, subjectID string) {
+func logPlatformMutation(ctx context.Context, logger *slog.Logger, actorEmail, action, subject, subjectID string) {
 	logger.InfoContext(ctx, "platform external credential "+subject+" "+action,
 		attr.SlogAuditAction(action),
 		attr.SlogAuditSubject(subject),
 		attr.SlogAuditSubjectID(subjectID),
-		attr.SlogAuthUserEmail(conv.PtrValOrEmpty(authCtx.Email, "")),
+		attr.SlogAuthUserEmail(actorEmail),
 	)
+}
+
+// logPlatformExemptionGranted records that a platform credential was exempted
+// from own-project screening. The logger already carries the actor's identity.
+func logPlatformExemptionGranted(ctx context.Context, logger *slog.Logger, actorEmail string, credentialID uuid.UUID, target string) {
+	logger.InfoContext(ctx, "platform admin exempted a gcp iam credential from own-project screening",
+		attr.SlogAuthUserEmail(actorEmail),
+		attr.SlogExternalCredentialID(credentialID.String()),
+		attr.SlogGCPImpersonateServiceAccount(target),
+	)
+}
+
+// authorizePlatformRead admits a staff identity verified by the standalone
+// admin transport, or a dashboard session carrying the platform-admin flag.
+// It returns the actor's email for audit lines.
+func (s *Service) authorizePlatformRead(ctx context.Context) (string, *slog.Logger, error) {
+	email, logger, err := auth.RequireGlobalAdmin(ctx, s.logger)
+	if err != nil {
+		return "", logger, fmt.Errorf("authorize platform credential request: %w", err)
+	}
+	return email, logger, nil
+}
+
+// authorizePlatformWrite gates mutations of the platform credentials Speakeasy
+// signs with. The standalone admin transport verifies its staff identity
+// against the identity provider on every request, so it is accepted as is. A
+// dashboard caller needs a fresh platform-admin session: the users.admin flag
+// alone can ride along on support sessions, legacy impersonation and stale
+// session state.
+func (s *Service) authorizePlatformWrite(ctx context.Context) (string, *slog.Logger, error) {
+	if _, ok := contextvalues.GetAdminAuthContext(ctx); ok {
+		return s.authorizePlatformRead(ctx)
+	}
+
+	authCtx, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
+	if err != nil {
+		return "", logger, fmt.Errorf("authorize platform credential request: %w", err)
+	}
+	return conv.PtrValOrEmpty(authCtx.Email, ""), logger, nil
 }
 
 // platformOrganizationID is the NULL organization_id that selects the platform
@@ -79,6 +118,21 @@ func requireNoLiveManagedKeys(ctx context.Context, logger *slog.Logger, q *repo.
 	return true, nil
 }
 
+// requireNoManagedEncryptionKeys refuses a change to a platform credential's
+// identity, or its deletion, while Speakeasy-managed organization encryption
+// keys still reach KMS through it. Call it after requireNoLiveManagedKeys has
+// locked the credential.
+func requireNoManagedEncryptionKeys(ctx context.Context, logger *slog.Logger, q *repo.Queries, id uuid.UUID) error {
+	count, err := q.CountManagedEncryptionKeysByCredential(ctx, id)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error counting organization encryption keys").LogError(ctx, logger)
+	}
+	if count > 0 {
+		return oops.E(oops.CodeConflict, nil, "credential backs %d organization encryption keys; create a new credential and switch to it instead", count)
+	}
+	return nil
+}
+
 // platformOwnProjectExemption records the own-project exemption on a platform
 // credential whose target is a service account in Speakeasy's own project. Platform
 // rows back Speakeasy's own signing keys, so that is the expected shape; the
@@ -95,9 +149,9 @@ func (s *Service) platformOwnProjectExemption(ctx context.Context, logger *slog.
 }
 
 func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.CreateGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
-	authCtx, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
+	actor, logger, err := s.authorizePlatformWrite(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("authorize platform credential request: %w", err)
+		return nil, err
 	}
 
 	name := strings.TrimSpace(payload.Name)
@@ -154,9 +208,9 @@ func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *a
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving platform external credential").LogError(ctx, logger)
 	}
 
-	logPlatformMutation(ctx, logger, authCtx, "create", "gcp_iam_credential", ec.ID.String())
+	logPlatformMutation(ctx, logger, actor, "create", "gcp_iam_credential", ec.ID.String())
 	if exempt {
-		logExemptionGranted(ctx, logger, authCtx, ec.ID, cols.ImpersonateServiceAccount.String)
+		logPlatformExemptionGranted(ctx, logger, actor, ec.ID, cols.ImpersonateServiceAccount.String)
 	}
 
 	return mv.BuildPlatformGcpIamCredentialView(ec, gcp), nil
@@ -165,9 +219,9 @@ func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *a
 // UpdateGcpIamPlatformCredential replaces a platform GCP credential's name and
 // auth configuration (full replace, like the organization update).
 func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.UpdateGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
-	authCtx, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
+	actor, logger, err := s.authorizePlatformWrite(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("authorize platform credential request: %w", err)
+		return nil, err
 	}
 
 	id, err := uuid.Parse(payload.ID)
@@ -241,6 +295,9 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 	identityChanged := strings.ToLower(strings.TrimSpace(stored.ImpersonateServiceAccount.String)) != cols.ImpersonateServiceAccount.String ||
 		stored.WifPoolID != cols.WifPoolID || stored.WifProviderID != cols.WifProviderID || stored.WifProjectNumber != cols.WifProjectNumber
 	if identityChanged {
+		if err := requireNoManagedEncryptionKeys(ctx, logger, q, id); err != nil {
+			return nil, err
+		}
 		granted, err := q.CountIssuerKeysGrantedByCredential(ctx, repo.CountIssuerKeysGrantedByCredentialParams{ExternalCredentialID: id, IncludePendingCleanup: true})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error counting issuer signing keys").LogError(ctx, logger)
@@ -279,18 +336,18 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving platform external credential").LogError(ctx, logger)
 	}
 
-	logPlatformMutation(ctx, logger, authCtx, "update", "gcp_iam_credential", ec.ID.String())
+	logPlatformMutation(ctx, logger, actor, "update", "gcp_iam_credential", ec.ID.String())
 	// A rename that keeps an exempted target is not a new grant.
 	carried := prior.GcpIamCredential.SkipProjectVerification && strings.EqualFold(strings.TrimSpace(prior.GcpIamCredential.ImpersonateServiceAccount.String), strings.TrimSpace(cols.ImpersonateServiceAccount.String))
 	if exempt && !carried {
-		logExemptionGranted(ctx, logger, authCtx, id, cols.ImpersonateServiceAccount.String)
+		logPlatformExemptionGranted(ctx, logger, actor, id, cols.ImpersonateServiceAccount.String)
 	}
 
 	return mv.BuildPlatformGcpIamCredentialView(ec, gcp), nil
 }
 
 func (s *Service) ListPlatformExternalCredentials(ctx context.Context, payload *adminecgen.ListPlatformExternalCredentialsPayload) (*adminecgen.ListExternalCredentialsResult, error) {
-	_, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	_, logger, err := s.authorizePlatformRead(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +371,7 @@ func (s *Service) ListPlatformExternalCredentials(ctx context.Context, payload *
 }
 
 func (s *Service) GetGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.GetGcpIamPlatformCredentialPayload) (*adminecgen.GcpIamCredential, error) {
-	_, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	_, logger, err := s.authorizePlatformRead(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +397,7 @@ func (s *Service) GetGcpIamPlatformCredential(ctx context.Context, payload *admi
 // The probe is ephemeral: nothing is persisted. A resolution failure is a
 // normal, reportable outcome (verified=false), not a request error.
 func (s *Service) VerifyGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.VerifyGcpIamPlatformCredentialPayload) (*adminecgen.VerifyPlatformCredentialResult, error) {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	actor, logger, err := s.authorizePlatformRead(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +422,7 @@ func (s *Service) VerifyGcpIamPlatformCredential(ctx context.Context, payload *a
 		WifProjectNumber:          row.GcpIamCredential.WifProjectNumber.String,
 	})
 
-	logPlatformMutation(ctx, logger, authCtx, "verify", "gcp_iam_credential", id.String())
+	logPlatformMutation(ctx, logger, actor, "verify", "gcp_iam_credential", id.String())
 
 	if resolveErr != nil {
 		detail := resolveErr.Error()
@@ -395,9 +452,9 @@ func (s *Service) VerifyGcpIamPlatformCredential(ctx context.Context, payload *a
 }
 
 func (s *Service) DeleteGcpIamPlatformCredential(ctx context.Context, payload *adminecgen.DeleteGcpIamPlatformCredentialPayload) error {
-	authCtx, logger, err := auth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
+	actor, logger, err := s.authorizePlatformWrite(ctx)
 	if err != nil {
-		return fmt.Errorf("authorize platform credential request: %w", err)
+		return err
 	}
 
 	id, err := uuid.Parse(payload.ID)
@@ -418,6 +475,9 @@ func (s *Service) DeleteGcpIamPlatformCredential(ctx context.Context, payload *a
 	}
 	if !found {
 		return nil
+	}
+	if err := requireNoManagedEncryptionKeys(ctx, logger, repo.New(dbtx), id); err != nil {
+		return err
 	}
 	// Live issuer keys sign through this credential. Revoked ones don't block:
 	// their cleanup reads the deleted credential's account.
@@ -445,7 +505,7 @@ func (s *Service) DeleteGcpIamPlatformCredential(ctx context.Context, payload *a
 		return oops.E(oops.CodeUnexpected, err, "error saving platform external credential deletion").LogError(ctx, logger)
 	}
 
-	logPlatformMutation(ctx, logger, authCtx, "delete", "gcp_iam_credential", deleted.ID.String())
+	logPlatformMutation(ctx, logger, actor, "delete", "gcp_iam_credential", deleted.ID.String())
 
 	return nil
 }
