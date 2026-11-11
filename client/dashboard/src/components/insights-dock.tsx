@@ -1120,6 +1120,9 @@ export function InsightsProvider({
   // useHideInsightsDock layout effect can register with this parent.
   const pageOwnsRuntime =
     routes.playground.active ||
+    // Inspect's Chat tab mounts its own provider.
+    routes.mcp.details.inspect.active ||
+    routes.mcp.gateway.inspect.active ||
     routes.assistants.newAssistant.active ||
     routes.assistants.detail.active;
   const shouldMountRuntime = assistantReady && !pageOwnsRuntime;

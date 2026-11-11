@@ -1,3 +1,4 @@
+import { useHideInsightsDock } from "@/components/insights-context";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
 import {
@@ -11,10 +12,13 @@ import { StatusDot } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
 import { useUserSessionToken } from "@/hooks/useUserSessionToken";
-import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import {
+  platformEndpointSlug,
+  useResolvedMcpServerUrl,
+} from "@/hooks/useToolsetUrl";
 import { enumPresentation } from "@/lib/enum";
 import { DEFAULT_MODEL } from "@/lib/models";
-import { mcpConnectionUrl } from "@/lib/utils";
+import { getServerURL, mcpConnectionUrl } from "@/lib/utils";
 import { PlaygroundChat } from "@/pages/playground/PlaygroundChat";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
@@ -48,6 +52,8 @@ export function GatewayInspectTab(
   props: Parameters<typeof GatewayInspectConnection>[0],
 ): JSX.Element {
   const session = useSession();
+  // The Chat tab hosts its own chat runtime; see InspectTab.
+  useHideInsightsDock();
   return (
     <GatewayInspectConnection
       key={`${props.metaMcpServer.id}:${session.user.id}`}
@@ -217,6 +223,15 @@ function GatewayInspectConnection({
   const unserved =
     servedMembers !== undefined ? rows.length - servedMembers.length : 0;
   const failedMembers = members.filter((m) => m.error);
+  // list_servers is best-effort, so a failure leaves the catalog undefined
+  // rather than failing the tab; say so instead of showing no members.
+  const catalogFailed =
+    mode === "progressive"
+      ? !!data && data.servers === undefined
+      : mode === "code_mode"
+        ? catalog.isError ||
+          (!!catalog.data && catalog.data.servers === undefined)
+        : false;
 
   const defaultLabel = enumPresentation(
     modeLabels,
@@ -312,14 +327,35 @@ function GatewayInspectConnection({
         error.
       </p>
     ) : null;
+  const catalogFailure = catalogFailed ? (
+    <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
+      <StatusDot tone="destructive" />
+      Couldn&apos;t list this gateway&apos;s servers, so their tools aren&apos;t
+      shown.
+      <button
+        type="button"
+        onClick={mode === "code_mode" ? catalog.refetch : inspection.refetch}
+        className="text-foreground underline underline-offset-2"
+      >
+        Try again
+      </button>
+    </p>
+  ) : null;
   const notice =
-    fallbackNote || shortfall || memberFailures ? (
+    fallbackNote || shortfall || memberFailures || catalogFailure ? (
       <div className="flex flex-col gap-1">
         {fallbackNote}
         {shortfall}
+        {catalogFailure}
         {memberFailures}
       </div>
     ) : undefined;
+  // The chat prefers the Speakeasy origin over a custom domain; a gateway
+  // with only a custom-domain address chats there.
+  const platformSlug = platformEndpointSlug(endpoints);
+  const chatUrl = platformSlug
+    ? `${getServerURL()}/mcp/${platformSlug}`
+    : mcpUrl;
 
   let state: ReactNode;
   if (!connectUrl && !resolvingUrl) {
@@ -416,9 +452,9 @@ function GatewayInspectConnection({
           ) : undefined
         }
         chat={
-          mcpUrl && data && !inspection.isError ? (
+          chatUrl && data && !inspection.isError ? (
             <PlaygroundChat
-              mcpUrl={mcpUrl}
+              mcpUrl={chatUrl}
               gatewayToken={token.accessToken}
               model={DEFAULT_MODEL}
               compact

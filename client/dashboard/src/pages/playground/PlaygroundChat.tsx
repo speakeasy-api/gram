@@ -51,7 +51,10 @@ interface PlaygroundChatProps {
   additionalActions?: React.ReactNode;
   /** Optional warning banner rendered above the chat (e.g. missing auth). */
   banner?: React.ReactNode;
-  /** Drop the history bar, for a chat embedded in a narrow panel. */
+  /**
+   * Drop the history popover, for a chat embedded in a narrow panel. Any
+   * additional actions stay; the bar goes only when there are none.
+   */
   compact?: boolean;
 }
 
@@ -220,23 +223,27 @@ export function PlaygroundChat({
           <div
             className={cn(
               "border-b-border flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3",
-              compact && "hidden",
+              compact && !additionalActions && "hidden",
             )}
           >
-            <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-              <PopoverTrigger asChild>
-                <Button size="sm" variant="tertiary">
-                  <HistoryIcon className="mr-2 size-4" />
-                  Chat History
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="start"
-                className="max-h-96 min-h-fit w-72 overflow-y-scroll p-0"
-              >
-                <ChatHistory className="h-full max-h-96 min-h-fit overflow-y-auto" />
-              </PopoverContent>
-            </Popover>
+            {compact ? (
+              <span />
+            ) : (
+              <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+                <PopoverTrigger asChild>
+                  <Button size="sm" variant="tertiary">
+                    <HistoryIcon className="mr-2 size-4" />
+                    Chat History
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className="max-h-96 min-h-fit w-72 overflow-y-scroll p-0"
+                >
+                  <ChatHistory className="h-full max-h-96 min-h-fit overflow-y-auto" />
+                </PopoverContent>
+              </Popover>
+            )}
             <div className="flex items-center gap-2">{additionalActions}</div>
           </div>
           {banner}

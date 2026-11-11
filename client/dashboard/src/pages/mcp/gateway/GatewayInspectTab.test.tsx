@@ -90,6 +90,7 @@ vi.mock("@/hooks/useUserSessionToken", () => ({
   },
 }));
 vi.mock("@/hooks/useToolsetUrl", () => ({
+  platformEndpointSlug: () => undefined,
   useResolvedMcpServerUrl: () => ({
     mcpUrl: "https://example.com/mcp/gateway",
     loading: false,
@@ -300,5 +301,36 @@ it("explains Progressive fallback when the saved Code runtime is unavailable", (
     screen.getByText(
       /Code Mode isn't available for this gateway, so this connection uses Progressive/i,
     ),
+  ).toBeTruthy();
+});
+
+it("says so when the gateway couldn't list its servers", () => {
+  state.data = {
+    discoveryMode: "progressive",
+    tools: [{ name: "list_servers" }],
+    instructions: undefined,
+    protocolVersion: undefined,
+    serverName: undefined,
+    servers: undefined,
+  };
+  state.loading = false;
+  render(
+    <TooltipProvider>
+      <MemoryRouter>
+        <GatewayInspectTab
+          metaMcpServer={
+            {
+              id: "gateway-test",
+              discoveryMode: "progressive",
+            } as MetaMcpServer
+          }
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
+  );
+  expect(
+    screen.getByText(/Couldn't list this gateway's servers/i),
   ).toBeTruthy();
 });

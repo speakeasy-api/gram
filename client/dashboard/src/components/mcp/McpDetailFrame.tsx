@@ -9,6 +9,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useIsDarkTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { Check, Circle, ExternalLink } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
@@ -116,11 +117,14 @@ function HeaderBand({ children }: { children: ReactNode }): JSX.Element {
     stillWhenReduced: true,
     exclusive: false,
   });
+  // The sea reads its ink when it starts, so a theme switch restarts it in
+  // the new theme's color.
+  const isDark = useIsDarkTheme();
   // Starts once laid out.
   useEffect(() => {
     const frame = requestAnimationFrame(start);
     return () => cancelAnimationFrame(frame);
-  }, [start]);
+  }, [start, isDark]);
 
   return (
     <header className="border-border bg-card relative isolate shrink-0 overflow-hidden border-b">
@@ -194,12 +198,16 @@ function ReadinessChip({
 }): JSX.Element | null {
   const required = chrome.readinessChecks.filter((check) => !check.optional);
   if (chrome.readinessChecks.length === 0) return null;
-  const left = required.filter((check) => check.ready !== true).length;
+  // A check that can't be determined yet is neither a step left nor done.
+  const left = required.filter((check) => check.ready === false).length;
+  const checking = left === 0 && required.some((check) => check.ready === null);
 
   return (
     <Popover>
       <PopoverTrigger className="flex h-6 items-center gap-2 leading-6 hover:underline">
-        <StatusDot tone={left === 0 ? "success" : "warning"} />
+        <StatusDot
+          tone={left > 0 ? "warning" : checking ? "neutral" : "success"}
+        />
         <span
           className={cn(
             left === 0
@@ -207,9 +215,11 @@ function ReadinessChip({
               : "text-foreground font-medium",
           )}
         >
-          {left === 0
-            ? "Ready"
-            : `${left} ${left === 1 ? "step" : "steps"} left`}
+          {left > 0
+            ? `${left} ${left === 1 ? "step" : "steps"} left`
+            : checking
+              ? "Checking…"
+              : "Ready"}
         </span>
       </PopoverTrigger>
       <PopoverContent

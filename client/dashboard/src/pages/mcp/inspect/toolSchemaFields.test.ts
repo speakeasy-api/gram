@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { extractFields, toArguments, type ToolField } from "./toolSchemaFields";
+import {
+  extractFields,
+  optionKey,
+  toArguments,
+  type ToolField,
+} from "./toolSchemaFields";
 
 describe("extractFields", () => {
   it("maps each property type to a field kind", () => {
@@ -53,7 +58,10 @@ describe("extractFields", () => {
         required: false,
         description: undefined,
         kind: "enum",
-        options: ["low", "high"],
+        options: [
+          { label: "low", value: "low" },
+          { label: "high", value: "high" },
+        ],
         typeLabel: "enum",
       },
       {
@@ -131,6 +139,89 @@ describe("extractFields", () => {
     expect(fields.map((f) => f.name)).toEqual(["q"]);
   });
 
+  it("reads a composed root schema as one arguments editor", () => {
+    const fields = extractFields({
+      anyOf: [
+        { properties: { id: { type: "string" } }, required: ["id"] },
+        { properties: { slug: { type: "string" } }, required: ["slug"] },
+      ],
+    });
+    expect(fields).toMatchObject([{ kind: "arguments", required: true }]);
+    expect(toArguments(fields, { arguments: '{"id":"a"}' })).toEqual({
+      ok: true,
+      args: { id: "a" },
+    });
+    expect(toArguments(fields, { arguments: "[1]" })).toEqual({
+      ok: false,
+      error: "Arguments must be a JSON object.",
+    });
+    expect(
+      extractFields({
+        type: "object",
+        additionalProperties: { type: "string" },
+      }),
+    ).toMatchObject([{ kind: "arguments" }]);
+  });
+
+  it("offers number enums and const unions as typed choices", () => {
+    const [level, mode] = extractFields({
+      properties: {
+        level: { type: "integer", enum: [1, 2] },
+        mode: {
+          oneOf: [
+            { const: "a", title: "Mode A" },
+            { const: 3, title: "Three" },
+          ],
+        },
+      },
+    });
+    expect(level).toMatchObject({
+      kind: "enum",
+      options: [
+        { label: "1", value: 1 },
+        { label: "2", value: 2 },
+      ],
+    });
+    expect(mode).toMatchObject({
+      kind: "enum",
+      options: [
+        { label: "Mode A", value: "a" },
+        { label: "Three", value: 3 },
+      ],
+    });
+    if (!level || !mode) throw new Error("no fields");
+    expect(
+      toArguments([level, mode], {
+        level: optionKey(2),
+        mode: optionKey(3),
+      }),
+    ).toEqual({ ok: true, args: { level: 2, mode: 3 } });
+  });
+
+  it("reads a nullable anyOf as its non-null type", () => {
+    const [count, tags] = extractFields({
+      properties: {
+        count: {
+          description: "How many",
+          anyOf: [{ type: "integer" }, { type: "null" }],
+        },
+        tags: {
+          anyOf: [
+            { type: "array", items: { type: "string" } },
+            { type: "null" },
+          ],
+        },
+      },
+    });
+    expect(count).toMatchObject({
+      kind: "number",
+      integer: true,
+      typeLabel: "integer",
+      description: "How many",
+    });
+    expect(tags).toMatchObject({ kind: "json", typeLabel: "string[]" });
+  });
+
   it("returns no fields for a missing schema", () => {
     expect(extractFields(undefined)).toEqual([]);
     expect(extractFields({ type: "object" })).toEqual([]);
@@ -155,6 +246,28 @@ describe("toArguments", () => {
     expect(toArguments([field("n", "number")], { n: "abc" })).toEqual({
       ok: false,
       error: "n must be a number.",
+    });
+  });
+
+  it("rejects a non-finite number and a fractional integer", () => {
+    expect(toArguments([field("n", "number")], { n: "Infinity" })).toEqual({
+      ok: false,
+      error: "n must be a number.",
+    });
+    const integer: ToolField = {
+      name: "n",
+      kind: "number",
+      integer: true,
+      required: false,
+      typeLabel: "integer",
+    };
+    expect(toArguments([integer], { n: "1.5" })).toEqual({
+      ok: false,
+      error: "n must be a whole number.",
+    });
+    expect(toArguments([integer], { n: "3" })).toEqual({
+      ok: true,
+      args: { n: 3 },
     });
   });
 

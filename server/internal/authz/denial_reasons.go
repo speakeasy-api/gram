@@ -36,6 +36,11 @@ const (
 // checks, which are not granted.
 func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialReason, error) {
 	reasons := make([]DenialReason, len(checks))
+	for _, c := range checks {
+		if err := validateInput(c); err != nil {
+			return nil, e.mapError(ctx, err)
+		}
+	}
 
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
@@ -56,9 +61,6 @@ func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialRea
 	}
 
 	for i, c := range checks {
-		if err := validateInput(c); err != nil {
-			return nil, e.mapError(ctx, err)
-		}
 		evaluation, err := authorization.evaluate(c)
 		if err != nil {
 			return nil, e.mapError(ctx, err)

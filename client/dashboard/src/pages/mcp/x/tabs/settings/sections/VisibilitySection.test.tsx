@@ -11,10 +11,18 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VisibilitySection } from "./VisibilitySection";
 
-const rbac = vi.hoisted(() => ({ canWrite: true }));
+const rbac = vi.hoisted(() => ({
+  canWrite: true,
+  // When set, mcp:write holds only on this resource.
+  writableResource: undefined as string | undefined,
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: () => rbac.canWrite,
+    hasScope: (scope: string, resourceId?: string) =>
+      rbac.canWrite &&
+      (scope !== "mcp:write" ||
+        rbac.writableResource === undefined ||
+        resourceId === rbac.writableResource),
     hasAnyScope: () => rbac.canWrite,
     hasAllScopes: () => rbac.canWrite,
     isLoading: false,
@@ -132,7 +140,9 @@ afterEach(() => {
   updateServer.mockReset();
   hostedRequest.mockReset();
   rbac.canWrite = true;
+  rbac.writableResource = undefined;
   tunnelSource.allowPublic = false;
+  vi.restoreAllMocks();
 });
 
 describe("VisibilitySection", () => {
@@ -220,6 +230,52 @@ describe("VisibilitySection", () => {
     fireEvent.click(screen.getByRole("button", { name: /Save/ }));
     expect(hostedRequest).toHaveBeenCalledWith("disabled");
     expect(updateServer).not.toHaveBeenCalled();
+  });
+
+  it("checks edit access on this server, and on a hosted server's toolset", () => {
+    rbac.writableResource = "other-server";
+    renderSection({ ...base, remoteMcpServerId: "remote-1" } as McpServer);
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    cleanup();
+
+    rbac.writableResource = "toolset-1";
+    renderSection({
+      ...base,
+      id: "hosted-1",
+      toolsetId: "toolset-1",
+    } as McpServer);
+    expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
+  });
+
+  it("refreshes the page when the server already has the chosen state", async () => {
+    const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    renderSection({ ...base, tunneledMcpServerId: "tunnel-1" } as McpServer);
+    // Someone else disabled it since this page loaded.
+    latestServer.current = { ...base, visibility: "disabled" };
+
+    fireEvent.click(screen.getByRole("radio", { name: /Disabled/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    fireEvent.change(screen.getByLabelText("Type the server name to confirm"), {
+      target: { value: "Example server" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalled());
+    expect(updateServer).not.toHaveBeenCalled();
+  });
+
+  it("shows an unproxied server's availability as read-only", () => {
+    renderSection({
+      ...base,
+      unproxiedMcpServerId: "unproxied-1",
+    } as McpServer);
+
+    expect(screen.getByRole("heading", { name: "Availability" })).toBeTruthy();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /Save/ })).toBeNull();
+    expect(
+      screen.getByText(/Speakeasy can't turn this server off/),
+    ).toBeTruthy();
   });
 
   it("shows the state without controls to people who cannot edit", () => {

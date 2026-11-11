@@ -11,8 +11,8 @@ import {
 import type { ReactNode } from "react";
 
 /** A tab only one kind of MCP detail page has, with its own title and icon. */
-export interface McpDetailTabDef {
-  key: string;
+export interface McpDetailTabDef<Key extends string = string> {
+  key: Key;
   title: string;
   Icon: LucideIcon;
 }
@@ -40,20 +40,25 @@ export function buildMcpDetailNavItems<Tab extends string>({
   href,
   titleNodes,
 }: {
-  tabs: Array<SharedMcpDetailTab | McpDetailTabDef | false | null | undefined>;
+  // Shared tabs only when the page routes them, and page-only tabs keyed by
+  // the page's own tab values, so every key is one `href` accepts.
+  tabs: Array<
+    (SharedMcpDetailTab & Tab) | McpDetailTabDef<Tab> | false | null | undefined
+  >;
   activeTab: Tab | undefined;
   href: (tab: Tab) => string;
-  titleNodes?: Partial<Record<string, ReactNode>>;
+  titleNodes?: Partial<Record<Tab, ReactNode>>;
 }): DetailSidebarNavItem[] {
   return tabs.flatMap((tab) => {
     if (!tab) return [];
-    const def = typeof tab === "string" ? SHARED_TABS[tab] : tab;
+    const def: McpDetailTabDef<Tab> =
+      typeof tab === "string" ? { ...SHARED_TABS[tab], key: tab } : tab;
     const titleNode = titleNodes?.[def.key];
     return [
       {
         ...def,
         ...(titleNode !== undefined ? { titleNode } : {}),
-        href: href(def.key as Tab),
+        href: href(def.key),
         active: activeTab === def.key,
       },
     ];

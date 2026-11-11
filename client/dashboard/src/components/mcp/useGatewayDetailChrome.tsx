@@ -43,7 +43,7 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
   const endpoints = endpointsResult?.mcpEndpoints ?? [];
   const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
   const installPageUrl = gatewayInstallPageUrl(endpoints);
-  const { rows } = useGatewayMemberRows(id);
+  const { rows, isLoading: isLoadingMembers } = useGatewayMemberRows(id);
   const { hasScope } = useRBAC();
   // Mirrors the mcp_servers sidebar: the tab reads org membership as well as
   // the resource, so hide it rather than render a permission wall.
@@ -56,6 +56,12 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
   if (!id || !metaMcpServer) return null;
 
   const activeTab = activeTabFromPath(location.pathname, id);
+  // Same rule as the Overview's Members tile: unproxied and slugless members
+  // sit in the list but the gateway cannot dispatch to them.
+  const servable = rows.filter(
+    (row) =>
+      row.classification === "hosted" || row.classification === "proxied",
+  ).length;
 
   const readinessChecks: ReadinessCheck[] = metaMcpServer
     ? [
@@ -71,12 +77,15 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
         {
           key: "members",
           label: "Members",
-          description:
-            rows.length > 0
-              ? `Fronting ${rows.length} MCP ${rows.length === 1 ? "server" : "servers"}.`
-              : "Add MCP servers for this gateway to front.",
+          description: isLoadingMembers
+            ? "Checking this gateway's members."
+            : servable > 0
+              ? `Fronting ${servable} MCP ${servable === 1 ? "server" : "servers"}.`
+              : rows.length > 0
+                ? "None of this gateway's members can be served. Add a hosted or proxied MCP server."
+                : "Add MCP servers for this gateway to front.",
           // Member management lives on the Overview tab.
-          ready: rows.length > 0,
+          ready: isLoadingMembers ? null : servable > 0,
           href: gatewayTabHref(routes, id, "overview"),
         },
         {
@@ -84,8 +93,11 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
           label: "Authentication",
           description: metaMcpServer.userSessionIssuerId
             ? "User sessions are configured for this gateway."
-            : "Without an issuer the gateway serves anonymously.",
+            : "Anyone who knows the URL can connect. Add an issuer to require sign-in.",
           ready: !!metaMcpServer.userSessionIssuerId,
+          // Anonymous gateways are supported, so sign-in is a choice, not a
+          // step left.
+          optional: true,
           href: `${gatewayTabHref(routes, id, "settings")}#${GATEWAY_AUTHENTICATION_SECTION_ID}`,
         },
       ]

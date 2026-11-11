@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   FAILING_RATE,
   MIN_CALLS_FOR_RATE,
+  aggregateToolHealth,
   bareToolName,
   isFailing,
 } from "./useToolHealth";
@@ -42,5 +43,23 @@ describe("bareToolName", () => {
 
   it("leaves an unprefixed name alone", () => {
     expect(bareToolName("plain")).toBe("plain");
+  });
+});
+
+describe("aggregateToolHealth", () => {
+  it("rates failures against completed calls and sums repeated tools", () => {
+    const health = aggregateToolHealth([
+      { toolName: "a", eventCount: 20, successCount: 6, failureCount: 2 },
+      { toolName: "a", eventCount: 10, successCount: 1, failureCount: 1 },
+    ]);
+    expect(health.get("a")).toEqual({ calls: 30, failureRate: 0.3 });
+  });
+
+  it("reports a zero rate when nothing completed", () => {
+    expect(
+      aggregateToolHealth([
+        { toolName: "b", eventCount: 5, successCount: 0, failureCount: 0 },
+      ]).get("b"),
+    ).toEqual({ calls: 5, failureRate: 0 });
   });
 });

@@ -93,6 +93,9 @@ func newDemoSeedCommand() *cli.Command {
 				if err != nil {
 					return fmt.Errorf("local seed site-url: %w", err)
 				}
+				if err := validateMockMCPURL(c.String("local-mock-mcp-url")); err != nil {
+					return fmt.Errorf("local seed local-mock-mcp-url: %w", err)
+				}
 			}
 			ctx := c.Context
 			logger := PullLogger(ctx)
@@ -214,4 +217,23 @@ func newDemoSeedCommand() *cli.Command {
 			return nil
 		},
 	}
+}
+
+// validateMockMCPURL accepts an empty value, which leaves the mock MCP server
+// out of the local fixtures, or an absolute http or https URL with a host.
+func validateMockMCPURL(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse %q: %w", raw, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("%q must be an absolute http or https URL", raw)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("%q has no host", raw)
+	}
+	return nil
 }

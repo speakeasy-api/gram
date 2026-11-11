@@ -1,4 +1,7 @@
-import { useGetToolUsageTargetToolBreakdown } from "@gram/client/react-query/getToolUsageTargetToolBreakdown.js";
+import type { ToolUsageTargetToolBreakdownRow } from "@gram/client/models/components/toolusagetargettoolbreakdownrow.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { buildGetToolUsageTargetToolBreakdownQuery } from "@gram/client/react-query/getToolUsageTargetToolBreakdown.js";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 /** Calls and failures for one tool over the health window. */
@@ -43,41 +46,78 @@ export function useToolHealth(target: {
   });
   const enabled = !!(target.mcpServerId || target.metaMcpServerId);
 
-  const query = useGetToolUsageTargetToolBreakdown(
-    {
-      getToolUsageSummaryPayload: {
-        from: window.from,
-        to: window.to,
-        ...(target.metaMcpServerId
-          ? { metaMcpServerIds: [target.metaMcpServerId] }
-          : { mcpServerIds: target.mcpServerId ? [target.mcpServerId] : [] }),
-      },
+  const client = useGramContext();
+  const request = {
+    getToolUsageSummaryPayload: {
+      from: window.from,
+      to: window.to,
+      ...(target.metaMcpServerId
+        ? { metaMcpServerIds: [target.metaMcpServerId] }
+        : { mcpServerIds: target.mcpServerId ? [target.mcpServerId] : [] }),
     },
-    undefined,
-    { enabled, throwOnError: false, retry: false },
-  );
+  };
+  const built = buildGetToolUsageTargetToolBreakdownQuery(client, request);
+  // The generated key leaves the payload out, so two servers would share one
+  // cache entry; scope it to the target and the window.
+  const query = useQuery({
+    ...built,
+    queryKey: [
+      ...built.queryKey,
+      target.metaMcpServerId ?? null,
+      target.mcpServerId ?? null,
+      window.from.toISOString(),
+      window.to.toISOString(),
+    ],
+    enabled,
+    throwOnError: false,
+    retry: false,
+  });
 
-  const byName = useMemo(() => {
-    const map = new Map<string, ToolHealth>();
-    for (const row of query.data?.targetToolBreakdown ?? []) {
-      const existing = map.get(row.toolName);
-      const calls = (existing?.calls ?? 0) + row.eventCount;
-      const failures =
-        (existing ? existing.failureRate * existing.calls : 0) +
-        row.failureCount;
-      map.set(row.toolName, {
-        calls,
-        failureRate: calls > 0 ? failures / calls : 0,
-      });
-    }
-    return map;
-  }, [query.data]);
+  const byName = useMemo(
+    () => aggregateToolHealth(query.data?.targetToolBreakdown ?? []),
+    [query.data],
+  );
 
   return {
     healthFor: (toolName) =>
       byName.get(toolName) ?? byName.get(bareToolName(toolName)),
     isLoading: enabled && query.isLoading,
   };
+}
+
+/**
+ * Sums usage rows per tool name. The failure rate covers completed calls
+ * only (successes plus failures), so calls still in flight don't dilute it.
+ */
+export function aggregateToolHealth(
+  rows: Pick<
+    ToolUsageTargetToolBreakdownRow,
+    "toolName" | "eventCount" | "successCount" | "failureCount"
+  >[],
+): Map<string, ToolHealth> {
+  const totals = new Map<
+    string,
+    { calls: number; completed: number; failures: number }
+  >();
+  for (const row of rows) {
+    const total = totals.get(row.toolName) ?? {
+      calls: 0,
+      completed: 0,
+      failures: 0,
+    };
+    total.calls += row.eventCount;
+    total.completed += row.successCount + row.failureCount;
+    total.failures += row.failureCount;
+    totals.set(row.toolName, total);
+  }
+  const map = new Map<string, ToolHealth>();
+  for (const [name, total] of totals) {
+    map.set(name, {
+      calls: total.calls,
+      failureRate: total.completed > 0 ? total.failures / total.completed : 0,
+    });
+  }
+  return map;
 }
 
 /**

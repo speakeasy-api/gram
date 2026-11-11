@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
     | Record<string, { unavailable: boolean; unavailableReason?: string }>,
   stored: {} as Record<string, { toolName: string }>,
   canWrite: true,
+  chatError: null as Error | null,
+  chatRefetch: vi.fn(),
 }));
 
 vi.mock("@/hooks/useProxiedMcpTools", () => ({
@@ -40,12 +42,15 @@ vi.mock("../../inspect/useChatSessionHeaders", () => ({
   useChatSessionHeaders: () => ({
     headers: undefined,
     isLoading: false,
-    error: null,
+    error: mocks.chatError,
+    refetch: mocks.chatRefetch,
   }),
 }));
 
-vi.mock("@/pages/playground/PlaygroundProxiedChat", () => ({
-  PlaygroundProxiedChat: () => <div data-testid="proxied-chat" />,
+vi.mock("@/pages/playground/PlaygroundChat", () => ({
+  PlaygroundChat: ({ mcpUrl }: { mcpUrl: string }) => (
+    <div data-testid="chat" data-url={mcpUrl} />
+  ),
 }));
 
 vi.mock("@/hooks/useUserSessionToken", () => ({
@@ -111,6 +116,22 @@ afterEach(() => {
   mocks.tools = undefined;
   mocks.stored = {};
   mocks.canWrite = true;
+  mocks.chatError = null;
+  mocks.chatRefetch.mockReset();
+});
+
+describe("RemoteMcpToolsSection chat session", () => {
+  it("shows a retryable error when the chat session can't be created", () => {
+    mocks.needsAuth = false;
+    mocks.chatError = new Error("boom");
+    renderSection();
+
+    expect(
+      screen.getByText("Couldn't connect to this server to list its tools."),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mocks.chatRefetch).toHaveBeenCalled();
+  });
 });
 
 describe("RemoteMcpToolsSection tool list", () => {

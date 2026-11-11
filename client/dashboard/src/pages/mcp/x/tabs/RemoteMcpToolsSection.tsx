@@ -238,10 +238,11 @@ function RemoteMcpToolsSectionInner({
   }
 
   const canChat = !!mcpServerId && !needsAuth && !isError && !!listed;
-  // The chat talks to the Speakeasy origin, never a custom domain.
+  // The chat prefers the Speakeasy origin. A server reachable only on a
+  // custom domain chats at the address Inspect resolved for it.
   const chatUrl = platformSlug
     ? `${getServerURL()}/mcp/${platformSlug}`
-    : undefined;
+    : mcpUrl;
 
   return (
     <InspectWorkbench

@@ -966,9 +966,11 @@ SELECT @id::uuid, @org_id::text, r.principal_urn, 'mcp:blocked_connect',
 FROM (
   SELECT COALESCE(
     (SELECT 'role:organization:' || o.id FROM organization_roles o
-     WHERE o.organization_id = @org_id::text AND o.workos_slug = @role_slug::text),
+     WHERE o.organization_id = @org_id::text AND o.workos_slug = @role_slug::text
+       AND o.deleted IS FALSE AND o.workos_deleted IS FALSE),
     (SELECT 'role:global:' || g.id FROM global_roles g
-     WHERE g.workos_slug = @role_slug::text AND g.deleted_at IS NULL LIMIT 1)) AS principal_urn
+     WHERE g.workos_slug = @role_slug::text
+       AND g.deleted IS FALSE AND g.workos_deleted IS FALSE LIMIT 1)) AS principal_urn
 ) r
 WHERE r.principal_urn IS NOT NULL
 ON CONFLICT DO NOTHING;

@@ -38,8 +38,11 @@ const PROTOCOL_VERSION = "2026-07-28";
  * the bearer itself in the query key (react-query keys are readable in
  * devtools, and a rotating token would also accumulate cache entries).
  */
-function authCacheKey(headers: Record<string, string> | undefined): string {
-  const auth = headers?.["Authorization"];
+export function authCacheKey(
+  headers: Record<string, string> | undefined,
+): string {
+  // Either credential the dashboard sends: a bearer, or a chat session token.
+  const auth = headers?.["Authorization"] ?? headers?.["Gram-Chat-Session"];
   if (!auth) return "anon";
   let hash = 0;
   for (let i = 0; i < auth.length; i += 1) {
@@ -87,11 +90,15 @@ export async function gatewayRPC(
   method: string,
   params: unknown,
   signal?: AbortSignal,
-  requestId: string = crypto.randomUUID(),
+  /** `null` sends a notification: no id, and no result to wait for. */
+  requestId: string | null = crypto.randomUUID(),
   /** Sees the raw exchange, for callers that show the wire to the user. */
   observe?: (exchange: GatewayRPCExchange) => void,
 ): Promise<unknown> {
-  const requestBody = { jsonrpc: "2.0", id: requestId, method, params };
+  const requestBody =
+    requestId === null
+      ? { jsonrpc: "2.0", method, params }
+      : { jsonrpc: "2.0", id: requestId, method, params };
   const response = await fetch(url, {
     method: "POST",
     signal,
@@ -131,6 +138,11 @@ export async function gatewayRPC(
   }
 
   const body = await response.text();
+  // A notification is acknowledged with an empty 202.
+  if (requestId === null) {
+    report(undefined);
+    return undefined;
+  }
   // A streamable-HTTP server may answer either as JSON or as a one-event SSE
   // stream; the payload is the same either way.
   const payload = response.headers
@@ -143,7 +155,13 @@ export async function gatewayRPC(
         .trim()
     : body;
 
-  const parsed: unknown = JSON.parse(payload ?? "{}");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload ?? "{}");
+  } catch (error) {
+    report(undefined);
+    throw error;
+  }
   report(parsed);
   const envelope = z
     .object({

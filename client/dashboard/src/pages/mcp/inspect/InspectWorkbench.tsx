@@ -154,7 +154,8 @@ export function InspectWorkbench({
               ) : (
                 <span />
               );
-              if (tab !== "chat" && !runner && selected) {
+              // A state (error, sign-in) outranks a tool picked before it.
+              if (tab !== "chat" && !state && !runner && selected) {
                 // The run panel puts "Run as you" on the tab row.
                 return (
                   <ToolRunPanel
@@ -187,33 +188,111 @@ export function InspectWorkbench({
       <div className="-mx-6 -mb-5 flex min-h-[420px] flex-1 flex-col">
         {chat}
       </div>
-    ) : runner ? (
-      runner
     ) : state ? (
       <InspectSteps />
+    ) : runner ? (
+      runner
     ) : (
-      <PanelHint
-        heading="Select a tool"
-        description="Pick a tool from the list to see its arguments, run it as you, and read the response."
+      <PanelSummary
+        tools={tools}
+        healthFor={healthFor}
+        onSelect={(name) => setSelectedName(name)}
       />
     );
   }
 }
 
-/** The quiet panel state before there is a tool to show. */
-function PanelHint({
-  heading,
-  description,
+/**
+ * The panel before a tool is chosen: what agents get at a glance, the tools
+ * that need attention (one click opens them), and how to start.
+ */
+function PanelSummary({
+  tools,
+  healthFor,
+  onSelect,
 }: {
-  heading: string;
-  description: string;
+  tools: InspectTool[];
+  healthFor: (toolName: string) => ToolHealth | undefined;
+  onSelect: (name: string) => void;
 }): JSX.Element {
+  const usable = tools.filter((tool) => !tool.unavailable);
+  const unavailable = tools.length - usable.length;
+  const failing = usable
+    .map((tool) => ({ tool, health: healthFor(tool.name) }))
+    .filter(({ health }) => isFailing(health))
+    .sort(
+      (a, b) => (b.health?.failureRate ?? 0) - (a.health?.failureRate ?? 0),
+    );
+
   return (
-    <div className="flex flex-col items-start gap-2 pt-6">
-      <MousePointerClick className="text-muted-foreground size-5" />
-      <p className="text-foreground text-sm font-medium">{heading}</p>
-      <p className="text-muted-foreground max-w-[30ch] text-sm">
-        {description}
+    <div className="flex flex-col gap-6 pt-1">
+      <div className="flex flex-col gap-3">
+        <span className="text-eyebrow">At a glance</span>
+        <dl className="border-border grid grid-cols-3 border">
+          {[
+            { label: "Agents get", value: usable.length, tone: "" },
+            {
+              label: "Not available",
+              value: unavailable,
+              tone: unavailable > 0 ? "text-destructive" : "",
+            },
+            {
+              label: "Failing",
+              value: failing.length,
+              tone: failing.length > 0 ? "text-destructive" : "",
+            },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className="border-border flex flex-col gap-1 border-l px-3 py-3 first:border-l-0"
+            >
+              <dt className="text-muted-foreground text-xs">{stat.label}</dt>
+              <dd
+                className={cn(
+                  "font-display text-2xl leading-7 font-light tabular-nums",
+                  stat.tone,
+                )}
+              >
+                {stat.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      {failing.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <span className="text-eyebrow">Needs attention</span>
+          <ul className="border-border border-t">
+            {failing.slice(0, 5).map(({ tool, health }) => (
+              <li key={tool.name}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(tool.name)}
+                  className="border-border hover:bg-muted/60 flex w-full items-center justify-between gap-3 border-b py-2.5 text-left"
+                >
+                  <span className="truncate font-mono text-[13px]">
+                    {tool.label ?? tool.name}
+                  </span>
+                  <span className="text-destructive shrink-0 text-[13px] tabular-nums">
+                    {((health?.failureRate ?? 0) * 100).toFixed(1)}% failed
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <p className="text-muted-foreground flex items-start gap-2 text-sm leading-5">
+        <MousePointerClick className="mt-0.5 size-4 shrink-0" />
+        <span>
+          Pick a tool to see its arguments and run it as you. Press{" "}
+          <kbd className="border-border bg-muted border px-1 font-mono text-[11px]">
+            /
+          </kbd>{" "}
+          to search.
+        </span>
       </p>
     </div>
   );

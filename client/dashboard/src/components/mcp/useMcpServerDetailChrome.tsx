@@ -1,4 +1,6 @@
 import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
+import { serverMatchesRef } from "@/pages/mcp/overview/serverMatchesRef";
+import type { HostedServerRef } from "@/pages/mcp/overview/MCPOverviewTab";
 import type { McpDetailChrome } from "./mcpDetailChrome";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { setupProviderForUrl } from "@/pages/mcp/x/setup/provider-setup";
@@ -25,7 +27,7 @@ import {
   standsInForToolset,
   type TabValue,
 } from "@/pages/mcp/x/MCPServerDetailsRouting";
-import { useToolset } from "@/hooks/toolTypes";
+import { useHostedToolset } from "@/pages/mcp/x/hosted/useHostedToolset";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
@@ -65,17 +67,17 @@ import {
   type McpDetailTabDef,
 } from "./mcpDetailNavItems";
 
-const SETUP_TAB: McpDetailTabDef = {
+const SETUP_TAB: McpDetailTabDef<TabValue> = {
   key: "setup",
   title: "Setup",
   Icon: Wrench,
 };
-const HOSTED_TABS: McpDetailTabDef[] = [
+const HOSTED_TABS: McpDetailTabDef<TabValue>[] = [
   { key: "tools", title: "Tools", Icon: Wrench },
   { key: "resources", title: "Resources", Icon: Database },
   { key: "prompts", title: "Prompts", Icon: MessageSquareText },
 ];
-const GUARDRAILS_TAB: McpDetailTabDef = {
+const GUARDRAILS_TAB: McpDetailTabDef<TabValue> = {
   key: "guardrails",
   title: "Guardrails",
   Icon: ShieldCheck,
@@ -177,31 +179,55 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   const { data: publishStatus } = usePublishStatus(pluginScope, undefined, {
     enabled: canReadPlugins,
   });
-  const memberPlugins = (pluginsData?.plugins ?? []).filter((plugin) =>
-    plugin.servers?.some((s) => s.mcpServerId === mcpServer?.id),
-  );
+  const isCanonical = !!mcpServer && isCanonicalHostedWrapper(mcpServer);
+  // The same load the detail page does, so it is shared from the cache; it
+  // finds the toolset from the list when the read omits its summary.
+  const { toolset: canonicalToolset, isError: canonicalToolsetFailed } =
+    useHostedToolset(isCanonical ? mcpServer : undefined);
+  const canonicalToolsetSlug = canonicalToolset?.slug;
+  const { data: environmentsData, isPending: isPendingEnvironments } =
+    useListEnvironments(undefined, undefined, {
+      enabled: canonicalToolsetSlug !== undefined,
+    });
+  const { data: canonicalMetadata, isPending: isPendingMetadata } =
+    useGetMcpMetadata({ toolsetSlug: canonicalToolsetSlug ?? "" }, undefined, {
+      enabled: canonicalToolsetSlug !== undefined,
+      throwOnError: false,
+    });
+
+  // Plugin entries name a hosted server by its toolset when it is the
+  // toolset's own wrapper, and by its own id otherwise. The read can omit the
+  // toolset summary, so fall back to the loaded toolset.
+  const canonicalToolsetRef = mcpServer?.toolset ?? canonicalToolset;
+  const pluginRef: HostedServerRef | undefined = !mcpServer
+    ? undefined
+    : isCanonical && canonicalToolsetRef
+      ? {
+          kind: "toolset",
+          id: canonicalToolsetRef.id,
+          slug: canonicalToolsetRef.slug,
+          name: canonicalToolsetRef.name,
+        }
+      : {
+          kind: "mcp-server",
+          id: mcpServer.id,
+          slug: mcpServer.slug ?? "",
+          name: mcpServer.name ?? "MCP Server",
+        };
+  // Same membership rule as the header's plugin card.
+  const memberPlugins = pluginRef
+    ? (pluginsData?.plugins ?? []).filter((plugin) =>
+        plugin.servers?.some((s) => serverMatchesRef(s, pluginRef)),
+      )
+    : [];
   const isPluginMember = memberPlugins.length > 0;
+  // A marketplace with no active collaborator isn't installable either.
   const marketplaceReady = !!(
-    publishStatus?.repoOwner && publishStatus.repoName
+    publishStatus?.repoOwner &&
+    publishStatus.repoName &&
+    publishStatus.hasCollaborators !== false
   );
   const isTrulyIncluded = isPluginMember && marketplaceReady;
-
-  const canonicalToolsetSlug =
-    mcpServer && isCanonicalHostedWrapper(mcpServer)
-      ? mcpServer.toolset?.slug
-      : undefined;
-  const { data: canonicalToolset } = useToolset(canonicalToolsetSlug, {
-    enabled: canonicalToolsetSlug !== undefined,
-    throwOnError: false,
-  });
-  const { data: environmentsData } = useListEnvironments(undefined, undefined, {
-    enabled: canonicalToolsetSlug !== undefined,
-  });
-  const { data: canonicalMetadata } = useGetMcpMetadata(
-    { toolsetSlug: canonicalToolsetSlug ?? "" },
-    undefined,
-    { enabled: canonicalToolsetSlug !== undefined, throwOnError: false },
-  );
   // Settings carries the warning the toolset page put on Authentication.
   const missingRequiredEnvVars = useMissingRequiredEnvVars(
     canonicalToolset,
@@ -243,7 +269,9 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   // Source detail pages are gone; the description still explains the backend,
   // but there is no separate page to send anyone to.
   let sourceDescription = "Connect an MCP server as this server's source.";
-  if (mcpServer?.remoteMcpServerId) {
+  if (hosted) {
+    sourceDescription = "Hosted by Speakeasy.";
+  } else if (mcpServer?.remoteMcpServerId) {
     sourceDescription = "Backed by a remote MCP server.";
   } else if (mcpServer?.tunneledMcpServerId) {
     sourceDescription = "Backed by a tunneled MCP server.";
@@ -280,15 +308,26 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
         {
           key: "authentication",
           label: "Authentication",
-          description: authReadiness.description,
-          ready: authReadiness.ready,
+          ...(hosted
+            ? hostedAuthenticationCheck({
+                canonical: isCanonical,
+                toolsetLoaded: canonicalToolset !== undefined,
+                toolsetFailed: canonicalToolsetFailed,
+                settling: isPendingEnvironments || isPendingMetadata,
+                missingRequiredEnvVars,
+              })
+            : {
+                description: authReadiness.description,
+                ready: authReadiness.ready,
+              }),
           href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
         },
         {
           key: "source",
           label: "Source",
           description: sourceDescription,
-          ready: isSourceBacked,
+          // A hosted server's tools are its own; it has no source to connect.
+          ready: hosted || isSourceBacked,
         },
         ...(isTunneledBacked
           ? [
@@ -331,12 +370,11 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     tabs: [
       showSetup && SETUP_TAB,
       "overview",
-      // Hidden for unproxied servers for now: there's no reliable way to list
-      // their tools yet (the vendor's own auth blocks an anonymous probe, and
-      // there's no fallback source wired up), so the tab had nothing useful to
-      // show.
-      ...(hosted ? HOSTED_TABS : []),
+      // Inspect sits second on every kind of server. Hidden for unproxied
+      // servers: there's no reliable way to list their tools yet (the vendor's
+      // own auth blocks an anonymous probe, and there's no fallback source).
       !isUnproxied && "inspect",
+      ...(hosted ? HOSTED_TABS : []),
       canViewSkills && "skills",
       canViewTeamAccess && "team-access",
       canViewGuardrails && GUARDRAILS_TAB,
@@ -415,28 +453,56 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     ) : undefined,
     identity,
     installLinks: effectiveInstallPageLinks,
-    // Plugin entries name a hosted server by its toolset when it is the
-    // toolset's own wrapper, and by its own id otherwise.
-    aside: (
-      <PluginStatusBanner
-        variant="header"
-        server={
-          hosted && isCanonicalHostedWrapper(mcpServer) && mcpServer.toolset
-            ? {
-                kind: "toolset",
-                id: mcpServer.toolset.id,
-                slug: mcpServer.toolset.slug,
-                name: mcpServer.toolset.name,
-              }
-            : {
-                kind: "mcp-server",
-                id: mcpServer.id,
-                slug: mcpServer.slug ?? "",
-                name: mcpServer.name ?? "MCP Server",
-              }
-        }
-      />
-    ),
+    aside: pluginRef ? (
+      <PluginStatusBanner variant="header" server={pluginRef} />
+    ) : undefined,
     items,
+  };
+}
+
+/**
+ * A hosted server's Authentication step. Speakeasy signs users in itself, so
+ * the step left is the toolset's required environment variables, which the
+ * Authentication settings section asks for.
+ */
+function hostedAuthenticationCheck({
+  canonical,
+  toolsetLoaded,
+  toolsetFailed,
+  settling,
+  missingRequiredEnvVars,
+}: {
+  /** Only the toolset's own wrapper has its variables checked here. */
+  canonical: boolean;
+  toolsetLoaded: boolean;
+  toolsetFailed: boolean;
+  settling: boolean;
+  missingRequiredEnvVars: number;
+}): Pick<ReadinessCheck, "description" | "ready"> {
+  if (!canonical) {
+    return { description: "Speakeasy handles sign-in.", ready: true };
+  }
+  if (toolsetFailed) {
+    return {
+      description: "Required environment variables could not be checked.",
+      ready: null,
+    };
+  }
+  if (!toolsetLoaded || settling) {
+    return {
+      description: "Checking required environment variables.",
+      ready: null,
+    };
+  }
+  if (missingRequiredEnvVars > 0) {
+    return {
+      description: `Set ${missingRequiredEnvVars} required environment variable${missingRequiredEnvVars > 1 ? "s" : ""} so the tools can reach their API.`,
+      ready: false,
+    };
+  }
+  return {
+    description:
+      "Speakeasy handles sign-in, and every required variable is set.",
+    ready: true,
   };
 }

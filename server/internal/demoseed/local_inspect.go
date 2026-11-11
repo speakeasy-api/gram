@@ -131,9 +131,24 @@ func runLocalInspectFixtures(ctx context.Context, logger *slog.Logger, q *repo.Q
 
 // insertLocalInspectTelemetry seeds the mock's direct calls and its calls
 // through the Direct mode gateway. The next seed run's ClickHouse purge,
-// scoped to the local project, removes them.
+// scoped to the local project, removes them. The rows also feed aggregated
+// summary tables, so they cannot be deleted on their own: when this seed
+// generation already holds them, the insert is skipped instead, which keeps
+// repeated RunLocalFixtures calls from duplicating them.
 func insertLocalInspectTelemetry(ctx context.Context, s *seeder, ch driver.Conn) error {
 	tasks, remote := s.det("mcpserver-"+localTasksKey), s.det("remotemcp-"+localTasksKey)
+
+	var existing uint64
+	if err := ch.QueryRow(ctx,
+		"SELECT count() FROM telemetry_logs WHERE gram_project_id = toUUID(?) AND startsWith(gram_urn, ?)",
+		s.projectID().String(), "tools:externalmcp:"+remote.String()+":",
+	).Scan(&existing); err != nil {
+		return fmt.Errorf("count existing local mock telemetry: %w", err)
+	}
+	if existing > 0 {
+		return nil
+	}
+
 	tools := localTasksTools()
 	rows := s.directRemoteCalls(localTasksKey, tasks, remote, "", tools)
 	dispatched := make([]inspectTool, 0, len(tools))

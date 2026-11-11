@@ -149,6 +149,14 @@ vi.mock("@/pages/mcp/x/MCPServerDetailsRouting", () => ({
 vi.mock("@/hooks/toolTypes", () => ({
   useToolset: () => ({ data: undefined }),
 }));
+vi.mock("@/pages/mcp/x/hosted/useHostedToolset", () => ({
+  useHostedToolset: () => ({
+    toolset: undefined,
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
 vi.mock("@gram/client/react-query/listEnvironments.js", () => ({
   useListEnvironments: () => ({ data: undefined }),
 }));

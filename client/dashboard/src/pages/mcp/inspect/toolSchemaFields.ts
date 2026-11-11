@@ -1,3 +1,10 @@
+/** One choice of an enum field: what the list shows and what is sent. */
+interface ToolFieldOption {
+  label: string;
+  /** The value as the schema types it, e.g. the number 2, not "2". */
+  value: unknown;
+}
+
 /** One top-level argument of a tool, ready to render as a form field. */
 export type ToolField = {
   name: string;
@@ -10,86 +17,165 @@ export type ToolField = {
   /** A sample value built from the schema, for the input's placeholder. */
   example?: string;
 } & (
-  | { kind: "string" | "number" | "boolean" | "json" }
+  | { kind: "string" | "boolean" | "json" }
+  | { kind: "number"; integer?: boolean }
   /** Plain text, or JSON when it parses (a union such as string | string[]). */
   | { kind: "text-or-json" }
-  | { kind: "enum"; options: string[] }
+  | { kind: "enum"; options: ToolFieldOption[] }
   /** Fixed by the schema; sent as-is and never shown. */
   | { kind: "const"; value: unknown }
+  /**
+   * The whole arguments object as one JSON editor, for schemas whose shape
+   * can't be split into top-level fields (allOf/anyOf/oneOf at the root).
+   */
+  | { kind: "arguments" }
 );
+
+/** The form value an enum option is stored under. */
+export function optionKey(value: unknown): string {
+  return JSON.stringify(value) ?? "null";
+}
 
 /** Flattens a tool's JSON Schema into its top-level arguments. */
 export function extractFields(inputSchema: unknown): ToolField[] {
   const schema = readJsonSchema(inputSchema);
   if (!schema) return [];
   const properties = isRecord(schema.properties) ? schema.properties : {};
+  if (isComposed(schema, properties)) {
+    return [
+      {
+        name: "arguments",
+        required: true,
+        kind: "arguments",
+        typeLabel: "object",
+        schema,
+        example: exampleText(schema),
+      },
+    ];
+  }
   const required = new Set(
     Array.isArray(schema.required)
       ? schema.required.filter((r): r is string => typeof r === "string")
       : [],
   );
 
-  return Object.entries(properties).map(([name, def]): ToolField => {
-    const base = {
-      name,
-      required: required.has(name),
-      description:
-        isRecord(def) && typeof def.description === "string"
-          ? def.description
-          : undefined,
-      schema: def,
-    };
-    if (!isRecord(def)) return { ...base, kind: "json", typeLabel: "any" };
-    if ("const" in def) {
-      return { ...base, kind: "const", value: def.const, typeLabel: "const" };
-    }
+  return Object.entries(properties).map(([name, def]) =>
+    fieldFor(name, def, required.has(name)),
+  );
+}
 
-    if (
-      Array.isArray(def.enum) &&
-      def.enum.length > 0 &&
-      def.enum.every((value) => typeof value === "string")
-    ) {
+/**
+ * True when the top level can't be read as a plain property list: a root
+ * allOf/anyOf/oneOf/$ref, or arbitrary keys described by a schema.
+ */
+function isComposed(
+  schema: Record<string, unknown>,
+  properties: Record<string, unknown>,
+): boolean {
+  if (
+    Array.isArray(schema.allOf) ||
+    Array.isArray(schema.anyOf) ||
+    Array.isArray(schema.oneOf) ||
+    typeof schema.$ref === "string"
+  )
+    return true;
+  return (
+    Object.keys(properties).length === 0 &&
+    (isRecord(schema.additionalProperties) ||
+      isRecord(schema.patternProperties))
+  );
+}
+
+function fieldFor(name: string, def: unknown, required: boolean): ToolField {
+  const base = {
+    name,
+    required,
+    description:
+      isRecord(def) && typeof def.description === "string"
+        ? def.description
+        : undefined,
+    schema: def,
+  };
+  if (!isRecord(def)) return { ...base, kind: "json", typeLabel: "any" };
+  if ("const" in def) {
+    return { ...base, kind: "const", value: def.const, typeLabel: "const" };
+  }
+
+  const enumValues = Array.isArray(def.enum)
+    ? def.enum.filter((value) => value !== null)
+    : [];
+  if (enumValues.length > 0 && enumValues.every(isScalar)) {
+    return {
+      ...base,
+      kind: "enum",
+      options: enumValues.map((value) => ({ label: labelOf(value), value })),
+      typeLabel: "enum",
+    };
+  }
+
+  const variants = unionVariants(def);
+  if (variants) {
+    // A nullable type (`anyOf: [X, { type: "null" }]`) reads as X itself.
+    if (variants.length === 1) {
+      const { anyOf: _anyOf, oneOf: _oneOf, ...rest } = def;
+      const field = fieldFor(name, { ...rest, ...variants[0] }, required);
+      return { ...field, description: base.description ?? field.description };
+    }
+    // A union of fixed values is a list of choices.
+    if (variants.every((v) => "const" in v && isScalar(v.const))) {
       return {
         ...base,
         kind: "enum",
-        options: def.enum as string[],
+        options: variants.map((v) => ({
+          label: typeof v.title === "string" ? v.title : labelOf(v.const),
+          value: v.const,
+        })),
         typeLabel: "enum",
       };
     }
+    // Any other union reads as its variants; one that takes a string takes text.
+    const labels = variants.map(typeLabelOf);
+    const takesText = variants.some((v) => typeOf(v) === "string");
+    return {
+      ...base,
+      kind: takesText ? "text-or-json" : "json",
+      typeLabel: [...new Set(labels)].join(" | "),
+      example: exampleText(
+        variants.find((v) => typeOf(v) !== "string") ?? variants[0],
+      ),
+    };
+  }
 
-    // A union reads as its variants; one that takes a string takes text.
-    const variants = unionVariants(def);
-    if (variants) {
-      const labels = variants.map(typeLabelOf);
-      const takesText = variants.some((v) => typeOf(v) === "string");
+  // An untyped property is treated as an object.
+  switch (typeOf(def) ?? "object") {
+    case "string":
+      return { ...base, kind: "string", typeLabel: "string" };
+    case "integer":
+      return { ...base, kind: "number", integer: true, typeLabel: "integer" };
+    case "number":
+      return { ...base, kind: "number", typeLabel: "number" };
+    case "boolean":
+      return { ...base, kind: "boolean", typeLabel: "boolean" };
+    default:
       return {
         ...base,
-        kind: takesText ? "text-or-json" : "json",
-        typeLabel: [...new Set(labels)].join(" | "),
-        example: exampleText(
-          variants.find((v) => typeOf(v) !== "string") ?? variants[0],
-        ),
+        kind: "json",
+        typeLabel: typeLabelOf(def),
+        example: exampleText(def),
       };
-    }
+  }
+}
 
-    // An untyped property is treated as an object.
-    switch (typeOf(def) ?? "object") {
-      case "string":
-        return { ...base, kind: "string", typeLabel: "string" };
-      case "integer":
-      case "number":
-        return { ...base, kind: "number", typeLabel: typeLabelOf(def) };
-      case "boolean":
-        return { ...base, kind: "boolean", typeLabel: "boolean" };
-      default:
-        return {
-          ...base,
-          kind: "json",
-          typeLabel: typeLabelOf(def),
-          example: exampleText(def),
-        };
-    }
-  });
+function isScalar(value: unknown): value is string | number | boolean {
+  return (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
+}
+
+function labelOf(value: unknown): string {
+  return typeof value === "string" ? value : optionKey(value);
 }
 
 /**
@@ -107,6 +193,19 @@ export function toArguments(
       continue;
     }
     const raw = values[field.name] ?? "";
+    if (field.kind === "arguments") {
+      if (raw.trim() === "") continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        return { ok: false, error: "Arguments must be valid JSON." };
+      }
+      if (!isRecord(parsed))
+        return { ok: false, error: "Arguments must be a JSON object." };
+      Object.assign(args, parsed);
+      continue;
+    }
     if (raw.trim() === "" && field.kind !== "boolean") {
       if (field.required)
         return { ok: false, error: `${field.name} is required.` };
@@ -119,8 +218,10 @@ export function toArguments(
         break;
       case "number": {
         const number = Number(raw);
-        if (Number.isNaN(number))
+        if (!Number.isFinite(number))
           return { ok: false, error: `${field.name} must be a number.` };
+        if (field.integer && !Number.isInteger(number))
+          return { ok: false, error: `${field.name} must be a whole number.` };
         args[field.name] = number;
         break;
       }
@@ -148,8 +249,17 @@ export function toArguments(
         args[field.name] = raw;
         break;
       }
+      case "enum": {
+        const option = field.options.find((o) => optionKey(o.value) === raw);
+        if (!option)
+          return {
+            ok: false,
+            error: `${field.name} must be one of the choices.`,
+          };
+        args[field.name] = option.value;
+        break;
+      }
       case "string":
-      case "enum":
         args[field.name] = raw;
     }
   }

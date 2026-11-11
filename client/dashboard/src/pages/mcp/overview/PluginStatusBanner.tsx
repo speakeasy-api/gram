@@ -12,7 +12,6 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
-import type { PluginServer } from "@gram/client/models/components/pluginserver.js";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import {
   invalidateAllPlugins,
@@ -35,14 +34,8 @@ import { toast } from "sonner";
 import { StatusBanner } from "@/components/status-banner";
 import { InstallInstructionsDialog } from "@/pages/plugins/InstallInstructionsDialog";
 import type { HostedServerRef } from "./MCPOverviewTab";
+import { serverMatchesRef } from "./serverMatchesRef";
 import { Spinner } from "@/components/ui/Spinner";
-
-function serverMatchesRef(server: PluginServer, ref: HostedServerRef): boolean {
-  // A hosted entry may be keyed by its canonical mcp_server, which shares the toolset id.
-  return ref.kind === "toolset"
-    ? server.toolsetId === ref.id || server.mcpServerId === ref.id
-    : server.mcpServerId === ref.id;
-}
 
 // A little fanned stack of client badges — purely decorative, gestures at
 // "this is what publishing unlocks" without claiming these are the only
@@ -302,12 +295,13 @@ function WritablePluginStatusBanner({
 
   const pickerControls =
     plugins.length > 0 ? (
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="border-input bg-background hover:bg-muted flex h-8 w-56 items-center justify-between gap-2 border px-3 text-sm shadow-xs outline-none"
+              // Shrinks rather than pushing Publish off a narrow header.
+              className="border-input bg-background hover:bg-muted flex h-8 w-full max-w-56 min-w-0 items-center justify-between gap-2 border px-3 text-sm shadow-xs outline-none"
             >
               <span
                 className={cn(
@@ -367,9 +361,10 @@ function WritablePluginStatusBanner({
       : "Not in a plugin";
 
   if (variant === "header") {
-    // The page header's compact version: one row, what it's in and the picker.
+    // The page header's compact version: one row, what it's in and the
+    // picker, wrapping the picker under the status when the header is narrow.
     return (
-      <div className="border-border bg-card flex items-center gap-3 border py-1.5 pr-1.5 pl-3">
+      <div className="border-border bg-card flex max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 border py-1.5 pr-1.5 pl-3">
         <span
           className="flex shrink-0 items-center gap-2 text-sm whitespace-nowrap"
           title={

@@ -23,7 +23,12 @@ import { useMutation } from "@tanstack/react-query";
 import { ChevronRight, Info } from "lucide-react";
 import { useId, useMemo, useState, type ReactNode } from "react";
 import type { McpToolRun } from "./runMcpTool";
-import { extractFields, toArguments, type ToolField } from "./toolSchemaFields";
+import {
+  extractFields,
+  optionKey,
+  toArguments,
+  type ToolField,
+} from "./toolSchemaFields";
 import { isDestructive, type InspectTool } from "./types";
 import {
   HEALTH_WINDOW_LABEL,
@@ -137,7 +142,7 @@ export function ToolRunPanel({
               key={field.name}
               field={field}
               value={values[field.name] ?? ""}
-              disabled={!canRun && !execution.isPending}
+              disabled={!canRun}
               onChange={(value) =>
                 setValues((current) => ({ ...current, [field.name]: value }))
               }
@@ -210,16 +215,19 @@ function FieldInput({
   onChange: (value: string) => void;
 }): JSX.Element {
   const id = useId();
+  const labelId = `${id}-label`;
   const label = (
     <span className="flex items-baseline justify-between gap-2">
-      <label htmlFor={id} className="font-mono text-xs">
+      <label id={labelId} htmlFor={id} className="font-mono text-xs">
         {field.name}
         {field.required ? <span className="text-destructive"> *</span> : null}
       </label>
       <span className="text-muted-foreground flex items-center gap-1 font-mono text-[11px]">
         {field.typeLabel}
         {field.schema !== undefined &&
-        (field.kind === "json" || field.kind === "text-or-json") ? (
+        (field.kind === "json" ||
+          field.kind === "text-or-json" ||
+          field.kind === "arguments") ? (
           <Tooltip>
             <TooltipTrigger
               type="button"
@@ -258,8 +266,11 @@ function FieldInput({
           </SelectTrigger>
           <SelectContent>
             {field.options.map((option) => (
-              <SelectItem key={option} value={option}>
-                {option}
+              <SelectItem
+                key={optionKey(option.value)}
+                value={optionKey(option.value)}
+              >
+                {option.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -272,18 +283,19 @@ function FieldInput({
           checked={value === "true"}
           onCheckedChange={(checked) => onChange(String(checked))}
           disabled={disabled}
-          aria-label={field.name}
+          aria-labelledby={labelId}
         />
       );
       break;
     case "json":
+    case "arguments":
       control = (
         <TextArea
           id={id}
           value={value}
           onChange={onChange}
           disabled={disabled}
-          rows={3}
+          rows={field.kind === "arguments" ? 6 : 3}
           placeholder={field.example ?? "{}"}
           className="font-mono text-xs"
         />

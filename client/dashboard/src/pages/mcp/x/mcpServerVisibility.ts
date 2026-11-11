@@ -82,7 +82,7 @@ export function visibilityLabel(visibility: McpServerVisibility): string {
  * reads the latest copy first rather than write back a stale one.
  */
 export function useMcpServerVisibilityUpdate(server: McpServer): {
-  /** The user may edit MCP servers. */
+  /** The user may edit this MCP server. */
   hasWriteScope: boolean;
   /** The user may edit, and this client knows the stored visibility. */
   canWrite: boolean;
@@ -90,7 +90,9 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
   updating: boolean;
 } {
   const { hasScope } = useRBAC();
-  const hasWriteScope = hasScope("mcp:write");
+  // Checked on this server, like the API does; a hosted server is granted
+  // under its toolset id.
+  const hasWriteScope = hasScope("mcp:write", server.toolsetId ?? server.id);
   const canWrite =
     hasWriteScope &&
     isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);
@@ -136,7 +138,11 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
           ...buildGetMcpServerQuery(client, { id: server.id }),
           staleTime: 0,
         });
-        if (next === latest.visibility) return;
+        // Someone else already made this change; refresh so the page shows it.
+        if (next === latest.visibility) {
+          await invalidateMcpServerQueries(queryClient);
+          return;
+        }
         update.mutate({
           request: {
             updateMcpServerForm: mcpServerVisibilityUpdateForm(latest, next),

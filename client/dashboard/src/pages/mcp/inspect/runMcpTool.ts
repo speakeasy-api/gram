@@ -7,6 +7,9 @@ import {
 const PROTOCOL_VERSION = "2026-07-28";
 const SESSION_HEADER = "mcp-session-id";
 const TRACE_HEADER = "x-trace-id";
+const PROTOCOL_HEADER = "MCP-Protocol-Version";
+
+const initResultSchema = z.object({ protocolVersion: z.string().optional() });
 
 const callResultSchema = z
   .object({
@@ -37,10 +40,12 @@ export interface McpToolRun {
 }
 
 /**
- * Runs one tool exactly as a client would: `initialize`, then `tools/call`.
- * The session id from `initialize` rides along for servers that keep state;
- * stateless servers ignore it. Every failure comes back as a run, not a throw,
- * so the panel can always show what happened.
+ * Runs one tool exactly as a client would: `initialize`, the
+ * `notifications/initialized` notification, then `tools/call`. The session id
+ * and negotiated protocol version from `initialize` ride along on every later
+ * request; stateless servers ignore them. A session the server opened is
+ * closed with DELETE afterwards. Every failure comes back as a run, not a
+ * throw, so the panel can always show what happened.
  */
 export async function runMcpTool({
   url,
@@ -59,10 +64,11 @@ export async function runMcpTool({
   let exchange: GatewayRPCExchange | undefined;
   const elapsed = () => Math.round(performance.now() - startedAt);
   const traceId = () => exchange?.headers.get(TRACE_HEADER) ?? undefined;
+  let sessionHeaders: Record<string, string> | undefined;
 
   try {
     let sessionId: string | undefined;
-    await gatewayRPC(
+    const initResult = await gatewayRPC(
       url,
       headers,
       "initialize",
@@ -77,9 +83,25 @@ export async function runMcpTool({
         sessionId = init.headers.get(SESSION_HEADER) ?? undefined;
       },
     );
-    const callHeaders = sessionId
-      ? { ...headers, [SESSION_HEADER]: sessionId }
-      : headers;
+    const negotiated = initResultSchema.safeParse(initResult);
+    const protocolVersion =
+      (negotiated.success ? negotiated.data.protocolVersion : undefined) ??
+      PROTOCOL_VERSION;
+    if (sessionId) sessionHeaders = { [SESSION_HEADER]: sessionId };
+    const callHeaders = {
+      ...headers,
+      ...sessionHeaders,
+      [PROTOCOL_HEADER]: protocolVersion,
+    };
+
+    await gatewayRPC(
+      url,
+      callHeaders,
+      "notifications/initialized",
+      {},
+      signal,
+      null,
+    );
 
     const raw = await gatewayRPC(
       url,
@@ -115,6 +137,14 @@ export async function runMcpTool({
       traceId: traceId(),
       exchange,
     };
+  } finally {
+    // Close a session the server opened; a failed close changes nothing.
+    if (sessionHeaders) {
+      await fetch(url, {
+        method: "DELETE",
+        headers: { ...headers, ...sessionHeaders },
+      }).catch(() => undefined);
+    }
   }
 }
 

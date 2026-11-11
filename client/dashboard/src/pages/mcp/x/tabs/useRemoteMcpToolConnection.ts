@@ -134,7 +134,13 @@ export function useRemoteMcpToolConnection({
   // isn't dropped on a cross-origin hop. No-op in prod / for custom domains.
   const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
 
-  const { tools, isLoading, needsAuth, isError, refetch } = useProxiedMcpTools(
+  const {
+    tools,
+    isLoading,
+    needsAuth,
+    isError: isListError,
+    refetch: refetchTools,
+  } = useProxiedMcpTools(
     connectUrl,
     // Every failure stays inline as `isError`, so each consumer can offer its
     // own retry instead of an error boundary.
@@ -148,6 +154,12 @@ export function useRemoteMcpToolConnection({
     if (!canFirstPartyConnect || !platformSlug) return undefined;
     return firstPartyConnectUrl(`${getServerURL()}/mcp/${platformSlug}`);
   }, [canFirstPartyConnect, platformSlug]);
+
+  // A chat session that couldn't be created leaves nothing to connect with;
+  // report it as a failed listing so the retry mints a new one.
+  const chatFailed = usesChatSession && !!chat.error;
+  const isError = isListError || chatFailed;
+  const refetch = chatFailed ? chat.refetch : refetchTools;
 
   // When the user comes back from the connect tab, re-attempt the listing so a
   // freshly linked session surfaces without a manual refresh.

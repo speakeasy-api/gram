@@ -2,7 +2,7 @@ import { useQueries } from "@tanstack/react-query";
 import { z } from "zod";
 import type { InspectTool } from "../inspect/types";
 import { bareToolName } from "../inspect/useToolHealth";
-import { gatewayRPC } from "./useGatewayInspection";
+import { authCacheKey, gatewayRPC } from "./useGatewayInspection";
 
 const describedServerSchema = z.object({
   structuredContent: z
@@ -67,9 +67,17 @@ export function useGatewayMemberTools(
   options: { enabled: boolean; cacheKey: string },
 ): GatewayMemberTools[] {
   const members = servers ?? [];
+  // Another viewer's or a refreshed credential must not reuse this listing.
+  const headersKey = authCacheKey(headers);
   const results = useQueries({
     queries: members.map((server) => ({
-      queryKey: ["gatewayMemberTools", mcpUrl, server.slug, options.cacheKey],
+      queryKey: [
+        "gatewayMemberTools",
+        mcpUrl,
+        server.slug,
+        headersKey,
+        options.cacheKey,
+      ],
       enabled: options.enabled && !!mcpUrl,
       retry: false,
       staleTime: 5 * 60 * 1000,

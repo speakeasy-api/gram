@@ -1,7 +1,9 @@
 import { useProject, useSession } from "@/contexts/Auth";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+
+const TOKEN_REFRESH_MS = 45 * 60 * 1000;
 
 /**
  * Headers that let the dashboard call a hosted MCP server as the signed-in
@@ -13,6 +15,7 @@ export function useChatSessionHeaders(enabled: boolean): {
   headers: Record<string, string> | undefined;
   isLoading: boolean;
   error: Error | null;
+  refetch: () => void;
 } {
   const session = useSession();
   const project = useProject();
@@ -21,7 +24,11 @@ export function useChatSessionHeaders(enabled: boolean): {
   const query = useQuery({
     queryKey: ["inspectChatSession", project.id, session.user.id],
     enabled,
-    staleTime: 30 * 60 * 1000,
+    // The token lives for an hour (expiresAfter below). Mint a new one well
+    // before then so a tab left open never sends an expired token; a tab
+    // that was hidden past the interval refetches on focus once stale.
+    staleTime: TOKEN_REFRESH_MS,
+    refetchInterval: TOKEN_REFRESH_MS,
     retry: false,
     throwOnError: false,
     queryFn: async () => {
@@ -53,9 +60,13 @@ export function useChatSessionHeaders(enabled: boolean): {
     [query.data, project.slug],
   );
 
+  const { refetch } = query;
+  const retry = useCallback(() => void refetch(), [refetch]);
+
   return {
     headers,
     isLoading: enabled && query.isLoading,
     error: query.error,
+    refetch: retry,
   };
 }

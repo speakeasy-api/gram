@@ -21,8 +21,13 @@ export interface InspectTool {
   group?: string;
 }
 
-/** Speakeasy's stored annotation wins over what the server declares. */
+/**
+ * Speakeasy's stored annotation wins over what the server declares. A
+ * read-only tool is never destructive, whatever its destructive hint says.
+ */
 export function isDestructive(tool: InspectTool): boolean {
+  const readOnly = tool.stored?.readOnlyHint ?? tool.annotations?.readOnlyHint;
+  if (readOnly === true) return false;
   return (
     (tool.stored?.destructiveHint ?? tool.annotations?.destructiveHint) === true
   );

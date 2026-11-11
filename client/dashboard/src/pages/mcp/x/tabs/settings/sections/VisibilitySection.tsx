@@ -68,8 +68,8 @@ const PUBLIC_OPTION: Option = {
 };
 
 /**
- * Who can reach the server: off, people with access, or anyone. Remote and
- * unproxied servers only switch on and off. The choice waits for Save, then
+ * Who can reach the server: off, people with access, or anyone. Remote
+ * servers only switch on and off; unproxied servers can't be switched at all. The choice waits for Save, then
  * asks for confirmation wherever the change could cut clients off.
  */
 export function VisibilitySection({
@@ -155,6 +155,27 @@ export function VisibilitySection({
       >
         Allow public access below
       </Link>
+    );
+  }
+
+  // Clients connect straight to the vendor, so Speakeasy has no switch that
+  // could stop them; the old status control hid itself here too.
+  if (mcpServer.unproxiedMcpServerId) {
+    return (
+      <SettingsSection id={MCP_VISIBILITY_SECTION_ID}>
+        <SettingsSection.Header>
+          <SettingsSection.Title>Availability</SettingsSection.Title>
+        </SettingsSection.Header>
+        <SettingsSection.Panel>
+          <SettingsSection.Body>
+            <Text muted small className="block max-w-2xl">
+              Clients connect straight to the vendor with the vendor's own
+              credentials, so Speakeasy can't turn this server off. To stop
+              access, revoke it with the vendor.
+            </Text>
+          </SettingsSection.Body>
+        </SettingsSection.Panel>
+      </SettingsSection>
     );
   }
 

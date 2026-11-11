@@ -273,7 +273,11 @@ export function SidebarUrlRow({
               the card aligns to the trigger's box, and matching insets are
               what land the two texts on each other. The negative margin
               cancels the indent so the URL stays flush with its label. */}
-            <span className="-mx-2 block px-2 py-1">
+            <span
+              // Focusable so keyboard users can open the full URL too.
+              tabIndex={0}
+              className="focus-visible:ring-ring/50 -mx-2 block px-2 py-1 outline-none focus-visible:ring-2"
+            >
               <Text
                 variant="small"
                 muted
@@ -292,7 +296,7 @@ export function SidebarUrlRow({
             side="bottom"
             sideOffset={-24}
             data-slot="sidebar-url-full"
-            className="w-auto max-w-none px-2 py-1 font-mono text-xs whitespace-nowrap duration-75"
+            className="w-auto max-w-[calc(100vw-2rem)] px-2 py-1 font-mono text-xs break-all duration-75"
           >
             {display}
           </HoverCardContent>

@@ -363,7 +363,7 @@ function CardDashboard({
               </SimpleTooltip>
             )}
           </div>
-          {description ? (
+          {description != null ? (
             <p className="text-muted-foreground text-sm">{description}</p>
           ) : null}
         </div>

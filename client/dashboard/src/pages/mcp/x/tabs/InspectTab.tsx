@@ -1,3 +1,4 @@
+import { useHideInsightsDock } from "@/components/insights-context";
 import { mcpServerRouteParam } from "@/lib/sources";
 import {
   platformEndpointSlug,
@@ -25,6 +26,9 @@ export function InspectTab({
   endpoints,
   isLoadingEndpoints,
 }: InspectTabProps): JSX.Element {
+  // The Chat tab hosts its own chat runtime, so the floating assistant (and
+  // its shared runtime) stays out of this page: the two cannot nest.
+  useHideInsightsDock();
   const routes = useRoutes();
   const { mcpUrl, loading } = useResolvedMcpServerUrl(
     endpoints,

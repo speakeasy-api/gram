@@ -159,7 +159,9 @@ describe("SidebarUrlRow", () => {
       ) as HTMLElement | null;
       expect(full).not.toBeNull();
       expect(full?.textContent).toBe(display);
-      expect(full?.className).toContain("whitespace-nowrap");
+      // Bounded to the viewport, and long URLs break instead of spilling off it.
+      expect(full?.className).toContain("max-w-[calc(100vw-2rem)]");
+      expect(full?.className).toContain("break-all");
       expect(container.contains(full)).toBe(false);
     });
   });
