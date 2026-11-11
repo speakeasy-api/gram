@@ -75,6 +75,9 @@ import (
 )
 
 type platformMCPConfig struct {
+	// AuditLogs shares customer audit authorization and masking.
+	AuditLogs platformmcp.CustomerAuditReader
+
 	// CustomDomainTargetSuffix is the normalized parent of designated CNAME destinations.
 	CustomDomainTargetSuffix string
 	// GatewaySessions shares dashboard session scoping and pagination.
@@ -551,6 +554,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
+		WithAuditLogs(config.AuditLogs).
 		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
@@ -1338,6 +1342,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
+		WithAuditLogs(config.AuditLogs).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).

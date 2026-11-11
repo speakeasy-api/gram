@@ -14,6 +14,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
@@ -23,11 +24,9 @@ const maxAuditCursorBytes = 128
 // maxAuditOutputBytes caps the serialized payload object, not the MCP wire envelope.
 const maxAuditOutputBytes = 64 << 10 // 64 KiB
 
-// maxAuditFilterBytes bounds exact-match identifiers and vocabulary without an allowlist.
-const maxAuditFilterBytes = 256
-
-// maxAuditTimestampBytes permits RFC3339 timestamps including fractional seconds and offsets.
-const maxAuditTimestampBytes = 64
+// Shared validation bounds are also used by the staff tool contract tests.
+const maxAuditFilterBytes = audit.MaxExactFilterBytes
+const maxAuditTimestampBytes = audit.MaxExactTimestampBytes
 
 var errAuditLogsUnavailable = errors.New("audit log entries are unavailable")
 
@@ -193,12 +192,12 @@ func registerAuditLogTools(server *mcp.Server, organizations OrganizationReader,
 				BeforeSnapshot: log.BeforeSnapshot, AfterSnapshot: log.AfterSnapshot, Metadata: log.Metadata, CreatedAt: log.CreatedAt,
 			})
 		}
-		encoded, err := json.Marshal(output)
+		_, err = audit.MarshalBoundedPage(output, maxAuditOutputBytes)
+		if errors.Is(err, audit.ErrPageTooLarge) {
+			return nil, empty, errors.New("audit page exceeds 64 KiB; use narrower filters or the staff UI")
+		}
 		if err != nil {
 			return nil, empty, errAuditLogsUnavailable
-		}
-		if len(encoded) > maxAuditOutputBytes {
-			return nil, empty, errors.New("audit page exceeds 64 KiB; use narrower filters or the staff UI")
 		}
 		return nil, output, nil
 	})
@@ -223,29 +222,14 @@ func parseAuditLogFilter(input ListAuditLogEntriesInput) (admin.OrganizationActi
 			return filter, errors.New("provide a valid audit cursor returned by a previous page")
 		}
 	}
-	for name, value := range map[string]string{
-		"actor_id": input.ActorID, "action": input.Action, "subject_type": input.SubjectType,
-		"subject_id": input.SubjectID, "acting_surface": input.ActingSurface, "from": input.From, "to": input.To,
-	} {
-		limit := maxAuditFilterBytes
-		if name == "from" || name == "to" {
-			limit = maxAuditTimestampBytes
-		}
-		if len(value) > limit || value != strings.TrimSpace(value) {
-			return filter, fmt.Errorf("provide an unpadded %s up to %d bytes", name, limit)
-		}
-	}
-	if input.ProjectID != "" {
-		id, err := uuid.Parse(input.ProjectID)
-		if err != nil || id.String() != input.ProjectID {
-			return filter, errors.New("provide a canonical project UUID")
-		}
-		filter.ProjectID = uuid.NullUUID{UUID: id, Valid: true}
-	}
-	from, to, err := conv.ParseOptionalTimeWindow(conv.PtrEmpty(input.From), conv.PtrEmpty(input.To))
+	parsed, err := audit.ParseExactFilter(audit.ExactFilter{
+		ProjectID: input.ProjectID, ActorID: input.ActorID, Action: input.Action,
+		SubjectType: input.SubjectType, SubjectID: input.SubjectID,
+		ActingSurface: input.ActingSurface, From: input.From, To: input.To,
+	})
 	if err != nil {
-		return filter, errors.New("provide valid RFC3339 timestamps with from before to")
+		return filter, fmt.Errorf("parse audit log filter: %w", err)
 	}
-	filter.From, filter.To = from, to
+	filter.ProjectID, filter.From, filter.To = parsed.ProjectID, parsed.From, parsed.To
 	return filter, nil
 }

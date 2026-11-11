@@ -1621,7 +1621,8 @@ func newStartCommand() *cli.Command {
 			dataexports.Attach(mux, dataexports.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient))
 			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
-			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+			auditService := auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine)
+			auditapi.Attach(mux, auditService)
 			identityapi.Attach(mux, identityapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			authService := auth.NewService(
 				logger,
@@ -1949,6 +1950,7 @@ func newStartCommand() *cli.Command {
 			dashboardsSvc := dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			workloadPolicySvc := workloadpolicy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), featureFlags)
 			platformMCPCfg := platformMCPConfig{
+				AuditLogs:                 auditService,
 				CustomDomainTargetSuffix:  customDomainTargetSuffix,
 				DeploymentRedeploy:        deploymentsService,
 				AssistantIdentity:         assistantsSvc,

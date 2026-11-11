@@ -376,41 +376,45 @@ WHERE a.organization_id = $1
   )
   AND (
     $5::text IS NULL
-    OR a.action = $5::text
+    OR a.actor_type = $5::text
+  )
+  AND (
+    $6::text IS NULL
+    OR a.action = $6::text
   )
   AND (
     (
-      $6::text IS NULL
-      AND ($7::boolean OR a.subject_type <> 'assistant')
+      $7::text IS NULL
+      AND ($8::boolean OR a.subject_type <> 'assistant')
     )
-    OR a.subject_type = $6::text
+    OR a.subject_type = $7::text
   )
-  AND ($8::boolean OR NOT a.is_internal)
+  AND ($9::boolean OR NOT a.is_internal)
   AND (
-    $9::text IS NULL
-    OR a.subject_id = $9::text
-  )
-  AND (
-    coalesce(cardinality($10::text[]), 0) = 0
-    OR a.subject_id = ANY($10::text[])
+    $10::text IS NULL
+    OR a.subject_id = $10::text
   )
   AND (
-    $11::text IS NULL
-    OR COALESCE(a.acting_surface, 'unknown') = $11::text
+    coalesce(cardinality($11::text[]), 0) = 0
+    OR a.subject_id = ANY($11::text[])
+  )
+  AND (
+    $12::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = $12::text
   )
   -- Origin splits the log by who initiated a change: 'system' is Speakeasy
   -- acting on its own (background jobs), 'user' is everything else.
   AND (
-    $12::text IS NULL
-    OR ($12::text = 'system') = (a.acting_surface IS NOT DISTINCT FROM 'system')
-  )
-  AND (
-    $13::timestamptz IS NULL
-    OR a.created_at >= $13::timestamptz
+    $13::text IS NULL
+    OR ($13::text = 'system') = (a.acting_surface IS NOT DISTINCT FROM 'system')
   )
   AND (
     $14::timestamptz IS NULL
-    OR a.created_at < $14::timestamptz
+    OR a.created_at >= $14::timestamptz
+  )
+  AND (
+    $15::timestamptz IS NULL
+    OR a.created_at < $15::timestamptz
   )
 ORDER BY a.seq DESC
 LIMIT 51
@@ -421,6 +425,7 @@ type ListSecurityAuditLogsParams struct {
 	ProjectID              uuid.NullUUID
 	CursorSeq              pgtype.Int8
 	ActorID                pgtype.Text
+	ActorType              pgtype.Text
 	Action                 pgtype.Text
 	SubjectType            pgtype.Text
 	IncludeAssistantEvents bool
@@ -467,6 +472,7 @@ func (q *Queries) ListSecurityAuditLogs(ctx context.Context, arg ListSecurityAud
 		arg.ProjectID,
 		arg.CursorSeq,
 		arg.ActorID,
+		arg.ActorType,
 		arg.Action,
 		arg.SubjectType,
 		arg.IncludeAssistantEvents,

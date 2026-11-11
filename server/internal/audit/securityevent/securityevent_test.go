@@ -282,6 +282,21 @@ func TestListReadsSecurityLog(t *testing.T) {
 	require.Len(t, rows, 2)
 	require.Greater(t, rows[0].Seq, rows[1].Seq, "newest first")
 
+	for _, tc := range []struct {
+		actorType string
+		wantRows  int
+	}{
+		{actorType: "agent", wantRows: 2},
+		{actorType: "user", wantRows: 0},
+	} {
+		filtered, err := securityevent.List(ctx, conn, auditrepo.ListAuditLogsParams{
+			OrganizationID: orgID,
+			ActorType:      pgtype.Text{String: tc.actorType, Valid: true},
+		})
+		require.NoError(t, err)
+		require.Len(t, filtered, tc.wantRows, "actor type %s", tc.actorType)
+	}
+
 	actions, err := securityevent.ActionFacets(ctx, conn, auditrepo.ListAuditActionFacetsParams{OrganizationID: orgID})
 	require.NoError(t, err)
 	require.Len(t, actions, 1)

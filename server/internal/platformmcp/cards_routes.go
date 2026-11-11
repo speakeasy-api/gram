@@ -188,6 +188,7 @@ const (
 
 // textOnlyTools keep their plain result, each with the reason.
 var textOnlyTools = map[string]string{
+	"list_audit_log_entries":               textOnlyLog,
 	"run_analytics_query":                  textOnlyAnalytics,
 	"query_mcp_events":                     textOnlyAnalytics,
 	"query_mcp_metrics":                    textOnlyAnalytics,

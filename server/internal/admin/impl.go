@@ -1132,7 +1132,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization for activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
 	}
 	if filter.ProjectID.Valid {
-		belongs, err := repo.New(s.db).AdminAuditProjectBelongsToOrganization(ctx, repo.AdminAuditProjectBelongsToOrganizationParams{
+		belongs, err := auditrepo.New(s.db).AuditProjectBelongsToOrganization(ctx, auditrepo.AuditProjectBelongsToOrganizationParams{
 			ProjectID: filter.ProjectID.UUID, OrganizationID: filter.OrganizationID,
 		})
 		switch {
@@ -1151,6 +1151,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		ProjectID:              filter.ProjectID,
 		CursorSeq:              pgtype.Int8{Int64: 0, Valid: false},
 		ActorID:                conv.PtrToPGTextEmpty(filter.ActorID),
+		ActorType:              pgtype.Text{String: "", Valid: false},
 		Action:                 conv.PtrToPGTextEmpty(filter.Action),
 		SubjectType:            conv.PtrToPGTextEmpty(filter.SubjectType),
 		IncludeAssistantEvents: true,

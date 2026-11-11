@@ -12,6 +12,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const auditProjectBelongsToOrganization = `-- name: AuditProjectBelongsToOrganization :one
+SELECT EXISTS (
+  SELECT 1 FROM projects
+  WHERE id = $1 AND organization_id = $2
+)
+`
+
+type AuditProjectBelongsToOrganizationParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Historical audit targeting includes soft-deleted projects.
+func (q *Queries) AuditProjectBelongsToOrganization(ctx context.Context, arg AuditProjectBelongsToOrganizationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, auditProjectBelongsToOrganization, arg.ProjectID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const getLatestOpenRouterSpendCapAuditOperation = `-- name: GetLatestOpenRouterSpendCapAuditOperation :one
 SELECT
   COALESCE(latest.operation_id, '')::text AS operation_id,
@@ -410,49 +430,53 @@ WHERE a.organization_id = $1
   )
   AND (
     $5::text IS NULL
-    OR a.action = $5::text
+    OR a.actor_type = $5::text
+  )
+  AND (
+    $6::text IS NULL
+    OR a.action = $6::text
   )
   AND (
     (
-      $6::text IS NULL
-      AND ($7::boolean OR a.subject_type <> 'assistant')
+      $7::text IS NULL
+      AND ($8::boolean OR a.subject_type <> 'assistant')
     )
-    OR a.subject_type = $6::text
+    OR a.subject_type = $7::text
   )
   -- Internal activity is visible only to the private staff caller.
-  AND ($8::boolean OR NOT a.is_internal)
+  AND ($9::boolean OR NOT a.is_internal)
   AND (
-    $9::text IS NULL
-    OR a.subject_id = $9::text
+    $10::text IS NULL
+    OR a.subject_id = $10::text
   )
   -- An empty or absent list is no filter, so a caller composing filters can
   -- always send the parameter.
   AND (
-    coalesce(cardinality($10::text[]), 0) = 0
-    OR a.subject_id = ANY($10::text[])
+    coalesce(cardinality($11::text[]), 0) = 0
+    OR a.subject_id = ANY($11::text[])
   )
   -- A row written before attribution existed has no surface. Coalescing here
   -- means filtering for 'unknown' finds those rows too, instead of returning
   -- nothing and implying the organization has no unattributed history.
   AND (
-    $11::text IS NULL
-    OR COALESCE(a.acting_surface, 'unknown') = $11::text
+    $12::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = $12::text
   )
   -- Origin splits the log by who initiated a change: 'system' is Speakeasy
   -- acting on its own (background jobs), 'user' is everything else.
   AND (
-    $12::text IS NULL
-    OR ($12::text = 'system') = (a.acting_surface IS NOT DISTINCT FROM 'system')
+    $13::text IS NULL
+    OR ($13::text = 'system') = (a.acting_surface IS NOT DISTINCT FROM 'system')
   )
   -- Half-open window, so consecutive ranges neither double-count a row nor
   -- drop one that lands exactly on a boundary.
   AND (
-    $13::timestamptz IS NULL
-    OR a.created_at >= $13::timestamptz
+    $14::timestamptz IS NULL
+    OR a.created_at >= $14::timestamptz
   )
   AND (
-    $14::timestamptz IS NULL
-    OR a.created_at < $14::timestamptz
+    $15::timestamptz IS NULL
+    OR a.created_at < $15::timestamptz
   )
 ORDER BY a.seq DESC
 LIMIT 51
@@ -463,6 +487,7 @@ type ListAuditLogsParams struct {
 	ProjectID              uuid.NullUUID
 	CursorSeq              pgtype.Int8
 	ActorID                pgtype.Text
+	ActorType              pgtype.Text
 	Action                 pgtype.Text
 	SubjectType            pgtype.Text
 	IncludeAssistantEvents bool
@@ -523,6 +548,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		arg.ProjectID,
 		arg.CursorSeq,
 		arg.ActorID,
+		arg.ActorType,
 		arg.Action,
 		arg.SubjectType,
 		arg.IncludeAssistantEvents,

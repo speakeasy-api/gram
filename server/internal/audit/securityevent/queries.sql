@@ -67,6 +67,10 @@ WHERE a.organization_id = @organization_id
     OR a.actor_id = sqlc.narg(actor_id)::text
   )
   AND (
+    sqlc.narg(actor_type)::text IS NULL
+    OR a.actor_type = sqlc.narg(actor_type)::text
+  )
+  AND (
     sqlc.narg(action)::text IS NULL
     OR a.action = sqlc.narg(action)::text
   )

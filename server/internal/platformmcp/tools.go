@@ -222,6 +222,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		"Do not volunteer an ID either. The exceptions are: when a name matches more than one plugin, assistant, or skill, show the IDs because they distinguish the candidates; and in the external Platform MCP session-handoff chooser, show each session_id because explicit selection and confirmation require it.",
 		"Keep the words that collide apart. \"Connect\" is linking an MCP server to its OAuth provider; \"add to a plugin\" is plugin membership; do not call either one attaching. Say an MCP server was \"added to the project\" rather than \"registered\", so it is not mistaken for OAuth dynamic client registration. When a diagnosis blames the calling MCP client, say \"the app making the calls\", never bare \"client\".",
 		"# Rules",
+		"Audit history is separate from Event Feed and Tool Logs; use list_audit_log_entries for who-changed-what questions.",
 		sessionHandoffSelectionInstructions,
 		"Use list_recent_tool_calls to inspect a project’s newest Tool Logs summaries. For a particular agent, provide its exact agent_id; this includes authenticated gateway and hook calls. Returned agent_id values identify agents, while human identities remain omitted. Resolve names through the agent directory only when that separate access is available; do not infer a human owner or authorizer from a log row.",
 		"On the external Platform MCP, to explain what an agent identity may reach, call get_agent_mcp_access with its exact agent_id: it lists the MCP servers the agent may connect to through its own grants, its roles, and grants to everyone, with blocks applied, not the ones it called, and whether it signs in with a shared credential, on behalf of named people, or with what its own client sends. A grant on every server means it may connect to any of them; which servers it actually called needs list_recent_tool_calls and log:read. To explain why an agent was refused, call list_agent_authorization_checks: denied checks come first. Both are read-only; grants and connection assignments change in the dashboard. The managed assistant does not have these reads, so it sends people to the agent's page in the dashboard.",
@@ -284,6 +285,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 
 	reg := newRegistrar(server)
 	reg.instructions = instructions
+	var auditLogs CustomerAuditReader
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		auditLogs = postgresReader.auditLogs
+	}
+	registerAuditLogTools(reg, auditLogs)
 
 	registerAssistantIdentityTool(reg, assistantIdentity)
 	registerSignalTools(reg, signalAuthoring)
