@@ -1,0 +1,105 @@
+{
+  "description": "Grant write expansion (nil versus empty selectors) and malformed stored selectors.",
+  "cases": [
+    {
+      "name": "nil_selectors_write_one_wildcard_row",
+      "contract": "nil_empty_writes",
+      "caller": "human",
+      "operation": "role_grant_rows",
+      "checks": [],
+      "want": "allow",
+      "writes": [{ "scope": "project:read", "selectors": null }],
+      "want_rows": [
+        {
+          "scope": "project:read",
+          "selector": { "resource_kind": "project", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "empty_selectors_write_no_rows",
+      "contract": "nil_empty_writes",
+      "caller": "human",
+      "operation": "role_grant_rows",
+      "checks": [],
+      "want": "allow",
+      "writes": [{ "scope": "project:read", "selectors": [] }],
+      "want_rows": []
+    },
+    {
+      "name": "duplicate_selectors_write_once",
+      "contract": "nil_empty_writes",
+      "caller": "human",
+      "operation": "role_grant_rows",
+      "checks": [],
+      "want": "allow",
+      "writes": [
+        {
+          "scope": "mcp:connect",
+          "selectors": [
+            { "resource_kind": "mcp", "resource_id": "srv_1" },
+            { "resource_kind": "mcp", "resource_id": "srv_1" }
+          ]
+        }
+      ],
+      "want_rows": [
+        {
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        }
+      ]
+    },
+    {
+      "name": "invalid_selector_write_is_rejected",
+      "contract": "nil_empty_writes",
+      "caller": "human",
+      "operation": "role_grant_rows",
+      "checks": [],
+      "want": "error",
+      "writes": [
+        {
+          "scope": "project:read",
+          "selectors": [
+            { "resource_kind": "project", "resource_id": "proj_1", "tool": "x" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "stored_selector_object_parses",
+      "contract": "malformed_grants",
+      "caller": "human",
+      "operation": "selector_from_row",
+      "checks": [],
+      "want": "allow",
+      "raw": { "resource_kind": "mcp", "resource_id": "srv_1" }
+    },
+    {
+      "name": "stored_selector_string_is_malformed",
+      "contract": "malformed_grants",
+      "caller": "human",
+      "operation": "selector_from_row",
+      "checks": [],
+      "want": "deny",
+      "raw": "not an object"
+    },
+    {
+      "name": "stored_selector_array_is_malformed",
+      "contract": "malformed_grants",
+      "caller": "human",
+      "operation": "selector_from_row",
+      "checks": [],
+      "want": "deny",
+      "raw": [1]
+    },
+    {
+      "name": "stored_selector_non_string_value_is_malformed",
+      "contract": "malformed_grants",
+      "caller": "human",
+      "operation": "selector_from_row",
+      "checks": [],
+      "want": "deny",
+      "raw": { "resource_kind": "mcp", "resource_id": 1 }
+    }
+  ]
+}
