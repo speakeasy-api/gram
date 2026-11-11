@@ -104340,7 +104340,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ExternalCredentialSummary'
-          description: The organization's external credentials.
+          description: The external credentials.
       required:
         - credentials
     ListExternalKeysResult:
