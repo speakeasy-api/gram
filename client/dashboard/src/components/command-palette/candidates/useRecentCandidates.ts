@@ -8,6 +8,7 @@ import type { LauncherCandidate } from "./types";
 // display name — their email when no name is known — as its recent label.
 // The identities index itself has no person in its label and is not matched.
 const IDENTITY_PAGE_RE = /\/identities\/[^/]+/;
+const CHANNELS_PAGE_RE = /\/channels(?:[/?#]|$)/;
 
 /**
  * Recently visited pages (localStorage) as candidates. Takes the same gating
@@ -44,7 +45,12 @@ export function useRecentCandidates({
         const label = getRecentLabelOverride(recent.href) ?? recent.label;
         // A person's name ranks by fuzzy alone, like People: it never leaves
         // the tenant.
-        const fuzzyOnly = IDENTITY_PAGE_RE.test(recent.href) || undefined;
+        // Channels recents normally say only "Channels", but never trust a
+        // persisted label or future override to be free of DM identity data.
+        const fuzzyOnly =
+          IDENTITY_PAGE_RE.test(recent.href) ||
+          CHANNELS_PAGE_RE.test(recent.href) ||
+          undefined;
         return {
           id: `recent:${recent.href}`,
           kind: "recent",

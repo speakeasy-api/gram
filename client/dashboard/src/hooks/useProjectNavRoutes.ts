@@ -49,6 +49,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isSignalsIntelligenceEnabled =
     productFeatures.isSuccess &&
     productFeatures.data.signalsIntelligenceEnabled === true;
+  const channelsFlag = useFeatureFlag(FEATURE_FLAGS.channels);
+  const isChannelsEnabled = channelsFlag.status === "enabled";
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
@@ -92,6 +94,19 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.deployments, scope: readWrite },
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
+      // Keep this selected-project page discoverable for per-person exceptions.
+      // The project snapshot authorizes effective access; native RBAC alone
+      // would hide it from explicitly admitted members. No content is indexed.
+      ...(isChannelsEnabled
+        ? [
+            {
+              route: routes.channels,
+              scope: [],
+              resourceId: projectId,
+              projectId,
+            },
+          ]
+        : []),
       {
         route: routes.assistants,
         scope: ["assistant:read"],
@@ -134,6 +149,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   }, [
     routes,
     projectId,
+    isChannelsEnabled,
     isExploreEnabled,
     isOrgMemoryEnabled,
     isSignalsIntelligenceEnabled,
