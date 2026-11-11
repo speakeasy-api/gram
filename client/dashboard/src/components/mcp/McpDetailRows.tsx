@@ -8,7 +8,7 @@ import {
 import { type IdentityMode } from "@/lib/remote-identity";
 import { IdentityExplainerDialog } from "@/lib/remote-identity";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { ExternalLink, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import {
   HoverCard,
   HoverCardContent,
@@ -320,47 +320,6 @@ export function McpServerCardStatus({
     <div className="flex flex-col gap-1.5">
       <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
       <MCPServerStatusDropdown server={server} />
-    </div>
-  );
-}
-
-/**
- * The install page links at the foot of the details card. With no link, a
- * disabled placeholder stands in when `placeholder` is set.
- */
-export function InstallPageLinks({
-  links,
-  placeholder = false,
-}: {
-  links: { url: string; label: string }[];
-  placeholder?: boolean;
-}): React.JSX.Element | null {
-  if (links.length === 0 && !placeholder) return null;
-  return (
-    <div
-      className={`border-border flex gap-3 border-t pt-3 ${links.length > 1 ? "flex-col items-start" : "items-stretch justify-center"}`}
-    >
-      {links.length > 0 ? (
-        <div className="flex min-w-0 max-w-full flex-col items-start gap-1">
-          {links.map(({ url, label }) => (
-            <a
-              key={url}
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 break-words text-xs font-semibold transition-colors hover:no-underline"
-            >
-              {label}
-              <ExternalLink className="size-3 shrink-0" />
-            </a>
-          ))}
-        </div>
-      ) : (
-        <span className="text-muted-foreground/50 flex cursor-not-allowed items-center gap-1 text-xs font-semibold">
-          Install page
-          <ExternalLink className="h-3 w-3" />
-        </span>
-      )}
     </div>
   );
 }

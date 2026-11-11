@@ -48,7 +48,7 @@ export const VISIBILITY_OPTIONS: VisibilityOption[] = [
 
 // Public visibility is offered for hosted servers, and for tunneled-backed
 // servers once the tunnel source owner has consented (double opt-in).
-export const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
+const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
   value: "public",
   label: "Public",
   description:
