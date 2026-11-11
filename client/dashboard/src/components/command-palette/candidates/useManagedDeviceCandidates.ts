@@ -95,7 +95,6 @@ export function useManagedDeviceCandidates({
               device.userEmail ?? "",
             ].filter(Boolean),
             verbs: ["open"],
-            fuzzyOnly: true,
             icon: "laptop",
             group: "Devices",
             run: () => {
