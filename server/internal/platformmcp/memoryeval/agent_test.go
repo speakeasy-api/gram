@@ -468,7 +468,7 @@ func renderReport(corpus *memoryeval.Corpus, answerModel, judgeModel string, run
 			citations, len(s.leaks), sortedKeys(s.leaks), len(s.isolation), sortedKeys(s.isolation),
 			s.notFound, s.negatives, s.toolTokens/max(s.answers, 1), s.retrievalMisses, s.reasoningMisses, s.errors)
 	}
-	b.WriteString("\nCounts in the kind columns are summed across runs. Hard set is accuracy on the temporal and synthesis questions, which share no keywords with their sources and each need three or more chats weeks apart. Valid citations is the share of answerable questions whose answer cites at least one chat and only chats that contain the answer; memo and digest citations are not checked against the corpus and are counted in brackets.\n")
+	b.WriteString("\nCounts in the kind columns are summed across runs. Hard set is accuracy on the temporal and synthesis questions, which share no keywords with their sources and each need three or more chats weeks apart. Valid citations is the share of answerable questions whose answer cites at least one chat and only chats that contain the answer; memo and digest citations are not checked against the corpus and are counted in parentheses.\n")
 	return b.String()
 }
 
