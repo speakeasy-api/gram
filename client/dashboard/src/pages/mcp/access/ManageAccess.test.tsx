@@ -275,9 +275,9 @@ describe("the access list", () => {
     renderList([entry({ level: "manage" })]);
     expandFirstRow();
 
-    // Manage satisfies the connect and read checks, so all three lines read
-    // as open — without explaining which rule did it.
-    expect(screen.getAllByText("All tools").length).toBeGreaterThan(0);
+    // Manage satisfies the read check, so view and manage read as open —
+    // without explaining which rule did it. It does not satisfy connect.
+    expect(screen.queryByText("All tools")).toBeNull();
     expect(screen.getAllByText("Allowed")).toHaveLength(2);
     expect(screen.queryByText("via Manage")).toBeNull();
   });

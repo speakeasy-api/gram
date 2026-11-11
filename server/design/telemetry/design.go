@@ -1441,10 +1441,34 @@ var ListSessionsPayload = Type("ListSessionsPayload", func() {
 var ListSessionsResult = Type("ListSessionsResult", func() {
 	Description("Result of listing org-scoped chat sessions")
 
-	Attribute("sessions", ArrayOf(SessionSummaryType), "List of chat session summaries")
+	Attribute("sessions", ArrayOf(SessionSummaryType), "List of chat session summaries. Only sessions from projects the caller holds chat:read on are listed.")
 	Attribute("next_cursor", String, "Cursor for next page")
+	Attribute("scoped", Boolean, "True when sessions were withheld because the caller lacks chat:read on one or more projects. The totals still cover every matching session.")
+	Attribute("totals", SessionTotalsType, "Aggregates over every matching session in the organization. Present only when scoped is true.")
 
-	Required("sessions")
+	Required("sessions", "scoped")
+})
+
+var SessionTotalsType = Type("SessionTotals", func() {
+	Description("Aggregate usage over a set of chat sessions")
+
+	Attribute("session_count", Int64, "Number of matching chat sessions")
+	Attribute("message_count", Int64, "Number of LLM completion messages across the sessions")
+	Attribute("tool_call_count", Int64, "Number of tool calls across the sessions")
+	Attribute("total_input_tokens", Int64, "Total input tokens used")
+	Attribute("total_output_tokens", Int64, "Total output tokens used")
+	Attribute("total_tokens", Int64, "Total tokens used")
+	Attribute("total_cost", Float64, "Total cost in USD")
+
+	Required(
+		"session_count",
+		"message_count",
+		"tool_call_count",
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"total_cost",
+	)
 })
 
 var SessionSummaryType = Type("SessionSummary", func() {

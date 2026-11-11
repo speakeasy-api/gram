@@ -810,3 +810,68 @@ func TestBackfillMapsANoAuthChoiceOntoTheAdminHeaderClient(t *testing.T) {
 	require.Equal(t, 1, report.SelectionsMapped)
 	require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
 }
+
+func TestListLiveUserSessionCredentialsExcludesDeletedOwnershipAndForeignSessionTenant(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	ctx := t.Context()
+	projectIssuer, organizationIssuer := f.projectIssuer(), f.organizationIssuer()
+	projectCredential := f.session(projectIssuer)
+	legacyCredential := uuid.New()
+	foreignCredential := uuid.New()
+	foreignOrganization := "org_" + uuid.NewString()
+	require.NoError(t, f.q.SeedOrganizationFixture(ctx, foreignOrganization))
+	for _, row := range []struct {
+		credential   uuid.UUID
+		organization pgtype.Text
+	}{
+		{credential: legacyCredential, organization: pgtype.Text{String: "", Valid: false}},
+		{credential: foreignCredential, organization: pgtype.Text{String: foreignOrganization, Valid: true}},
+	} {
+		require.NoError(t, f.q.SeedUserSessionFixture(ctx, SeedUserSessionFixtureParams{
+			ID: row.credential, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: row.organization,
+			UserSessionIssuerID: organizationIssuer, SubjectUrn: urn.NewUserSubject("live-scope-" + row.credential.String()), Jti: row.credential.String(),
+			RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: 0, Valid: true}, CredentialID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}))
+	}
+	params := ListLiveUserSessionCredentialsParams{OrganizationID: f.orgID, Cursor: uuid.Nil, PageSize: defaultPageSize, IssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+	rows, err := f.q.ListLiveUserSessionCredentials(ctx, params)
+	require.NoError(t, err)
+	ids := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.CredentialID)
+	}
+	require.ElementsMatch(t, []uuid.UUID{projectCredential, legacyCredential}, ids)
+	require.NoError(t, authclientbackfill.New(f.pool).SoftDeleteProjectFixture(ctx, f.projectID))
+	rows, err = f.q.ListLiveUserSessionCredentials(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "NULL-project organization issuers remain live when a project is deleted")
+	require.Equal(t, legacyCredential, rows[0].CredentialID)
+	require.NoError(t, f.q.SoftDeleteUserSessionIssuerFixture(ctx, organizationIssuer))
+	rows, err = f.q.ListLiveUserSessionCredentials(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+func TestReconcileIssuerScopeEmptyDoesNotRecordOrMap(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.organizationIssuer()
+	registration := f.client(issuer)
+	server := f.server(issuer, registration)
+	existing, missing := f.session(issuer), f.session(issuer)
+	// This existing OAuth choice is deliberately unmapped before maintenance.
+	require.NoError(t, authclientbackfill.New(f.pool).SeedOAuthSelectionFixture(t.Context(), authclientbackfill.SeedOAuthSelectionFixtureParams{OrganizationID: f.orgID, ProjectID: f.projectID, CredentialID: existing, McpServerID: server, RemoteSessionClientID: registration}))
+	tx := testenv.BeginTx(t, t.Context(), f.pool)
+	require.NoError(t, authclientbackfill.LockEMAWriterScope(t.Context(), tx, f.orgID, []uuid.UUID{f.projectID}))
+	require.NoError(t, authclientbackfill.PreflightServerAssociations(t.Context(), tx, f.orgID, server))
+	require.NoError(t, authclientbackfill.SyncServerAssociations(t.Context(), tx, f.orgID, server))
+	skipped, err := ReconcileIssuerScopeInLockedTransaction(t.Context(), tx, f.orgID, issuer, []uuid.UUID{}, nil)
+	require.NoError(t, err)
+	require.Zero(t, skipped)
+	require.NoError(t, tx.Commit(t.Context()))
+	require.False(t, f.namedAuthClient(existing, server).AuthClientID.Valid)
+	choices, err := f.q.ListSelectionsFixture(t.Context(), ListSelectionsFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: missing})
+	require.NoError(t, err)
+	require.Empty(t, choices)
+}
