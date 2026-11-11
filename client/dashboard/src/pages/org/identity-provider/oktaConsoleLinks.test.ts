@@ -157,6 +157,9 @@ describe("normalizeOktaOrgUrl", () => {
     expect(normalizeOktaOrgUrl("https://admin-team.okta.com")).toBe(
       "https://admin-team.okta.com",
     );
+    expect(normalizeOktaOrgUrl("https://foo--admin.okta.com")).toBe(
+      "https://foo--admin.okta.com",
+    );
     expect(normalizeOktaOrgUrl("https://acme-admin.sub.okta.com")).toBe(
       "https://acme-admin.sub.okta.com",
     );

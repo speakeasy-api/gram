@@ -886,6 +886,10 @@ func TestNormalizeOktaOrgURL(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, fullOrgURL, normalized)
 
+	doubleHyphen, err := identityproviderconnections.NormalizeOktaOrgURL("https://foo--admin.okta.com")
+	require.NoError(t, err)
+	require.Equal(t, "https://foo--admin.okta.com", doubleHyphen)
+
 	for _, raw := range []string{"https://sub.example.okta.mil", "https://dev-1.oktapreview.com", "https://x.okta-emea.com", "https://agency.okta-gov.com", "https://oin-test.trexcloud.com"} {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.NoError(t, err, raw)
