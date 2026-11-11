@@ -46,11 +46,13 @@ func TestRequirePluginWrite(t *testing.T) {
 
 func TestPluginScopeIsIndependent(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopePluginWrite))
-	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopePluginBlockedWrite))
-	require.Contains(t, adminScopes, ScopePluginWrite)
-	require.NotContains(t, memberScopes, ScopePluginWrite)
-	require.Equal(t, ScopePluginBlockedWrite, scopeExclusions[ScopePluginWrite])
+	require.Equal(t, ResourceKindProject, ScopePluginWrite.ResourceKind())
+	require.Equal(t, ResourceKindProject, ScopePluginBlockedWrite.ResourceKind())
+	require.Contains(t, SystemRoleScopes(SystemRoleAdmin), ScopePluginWrite)
+	require.NotContains(t, SystemRoleScopes(SystemRoleMember), ScopePluginWrite)
+	blocked, ok := ScopePluginWrite.BlockedBy()
+	require.True(t, ok)
+	require.Equal(t, ScopePluginBlockedWrite, blocked)
 	for _, scope := range []Scope{ScopeSkillRead, ScopeSkillWrite, ScopeMCPRead, ScopeMCPWrite, ScopeProjectRead, ScopeProjectWrite, ScopeOrgRead} {
 		require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopePluginWrite, "*")}, Check{Scope: scope, ResourceID: "project-one"}), "plugin write must not imply %s", scope)
 		require.False(t, GrantsSatisfy([]Grant{NewGrant(scope, "*")}, Check{Scope: ScopePluginWrite, ResourceID: "project-one"}), "%s must not imply plugin write", scope)

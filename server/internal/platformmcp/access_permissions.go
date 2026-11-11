@@ -42,7 +42,7 @@ func describeAccessPermissions() DescribeAccessPermissionsOutput {
 	catalog := authz.ScopeCatalog()
 	scopes := make([]AccessPermission, 0, len(catalog))
 	for _, entry := range catalog {
-		visibility, ok := authz.ScopeVisibilityFor(entry.Scope)
+		visibility, ok := entry.Scope.Visibility()
 		if !ok || visibility != authz.ScopeVisibilityUserVisible {
 			continue
 		}

@@ -25,7 +25,7 @@ func TestConsentPolicyExclusionHierarchy(t *testing.T) {
 				require.NoError(t, err)
 				// mcp:write satisfies all three checks, so the only thing
 				// that can take one away is that scope's own exclusion.
-				exclusion, ok := authz.ExclusionScopeFor(scope)
+				exclusion, ok := scope.BlockedBy()
 				require.True(t, ok)
 				want := blocked != exclusion
 				require.Equal(t, want, allowed)

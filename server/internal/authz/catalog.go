@@ -67,13 +67,13 @@ var ScopeCategories = []ScopeCategory{
 // ScopeEntry defines one scope: what a person needs to know before granting
 // it, and the rules the engine evaluates it by. Every table the engine,
 // the API and the dashboard read about scopes is derived from these entries,
-// so adding a scope means adding one entry here plus, where they apply, a role
-// default and an agent runtime eligibility entry.
+// so adding a scope means adding one entry here plus, where it applies, an
+// agent runtime eligibility entry.
 //
 // The presentation fields are exported for callers that list or describe
-// scopes. The evaluation rules are unexported so that only this package reads
-// them, through ExclusionScopeFor, GrantSurfaceForScope, ScopeVisibilityFor,
-// ResourceKindForScope and check expansion.
+// scopes. The evaluation rules and role defaults are unexported; callers read
+// them through methods on Scope (Visibility, BlockedBy, GrantSurface,
+// ResourceKind, SubScopes, ImpliedScopes) and SystemRoleScopes.
 type ScopeEntry struct {
 	Scope Scope
 
@@ -113,6 +113,10 @@ type ScopeEntry struct {
 	// grant, or empty when nothing can. Broader exception scopes reach it
 	// through their own satisfiedBy.
 	blockedBy Scope
+
+	// defaultRoles lists the built-in roles that hold the scope by default.
+	// SystemRoleGrants is built from it.
+	defaultRoles []string
 }
 
 // Sensitive reports whether granting the scope deserves a warning.
@@ -123,7 +127,7 @@ func (e ScopeEntry) Sensitive() bool {
 // SubScopes lists the user-visible scopes a grant of this scope also
 // satisfies, one step down the expansion graph.
 func (e ScopeEntry) SubScopes() []string {
-	return CalculateSubScopes(e.Scope)
+	return e.Scope.SubScopes()
 }
 
 // scopeCatalog lists every scope a role can hold, in the order the catalogue
@@ -157,6 +161,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeOrgAdmin},
 		blockedBy:    ScopeOrgBlockedRead,
+		defaultRoles: []string{SystemRoleAdmin, SystemRoleMember},
 	},
 	{
 		Scope:        ScopeOrgBlockedRead,
@@ -169,6 +174,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeOrgAdmin,
@@ -181,6 +187,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    ScopeOrgBlockedAdmin,
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopeOrgBlockedAdmin,
@@ -193,6 +200,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeOrgBlockedRead},
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeOrgDeviceAgentSync,
@@ -205,6 +213,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeOrgAdmin},
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeOrgHooksIngest,
@@ -217,6 +226,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeOrgAdmin},
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeProjectRead,
@@ -229,6 +239,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeProjectWrite},
 		blockedBy:    ScopeProjectBlockedRead,
+		defaultRoles: []string{SystemRoleAdmin, SystemRoleMember},
 	},
 	{
 		Scope:        ScopeProjectBlockedRead,
@@ -241,6 +252,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeProjectWrite,
@@ -253,6 +265,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    ScopeProjectBlockedWrite,
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopeProjectBlockedWrite,
@@ -265,6 +278,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeProjectBlockedRead},
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeMCPRead,
@@ -277,6 +291,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeMCPWrite},
 		blockedBy:    ScopeMCPBlockedRead,
+		defaultRoles: []string{SystemRoleAdmin, SystemRoleMember},
 	},
 	{
 		Scope:        ScopeMCPBlockedRead,
@@ -289,6 +304,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeMCPWrite,
@@ -301,6 +317,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    ScopeMCPBlockedWrite,
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopeMCPBlockedWrite,
@@ -313,6 +330,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeMCPConnect,
@@ -325,6 +343,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeMCPRead, ScopeMCPWrite},
 		blockedBy:    ScopeMCPBlockedConnect,
+		defaultRoles: []string{SystemRoleAdmin, SystemRoleMember},
 	},
 	{
 		Scope:        ScopeMCPBlockedConnect,
@@ -337,6 +356,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeMCPAuth,
@@ -349,6 +369,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    ScopeMCPBlockedAuth,
+		defaultRoles: []string{SystemRoleAdmin, SystemRoleMember},
 	},
 	{
 		Scope:        ScopeMCPBlockedAuth,
@@ -361,6 +382,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeEnvironmentRead,
@@ -373,6 +395,9 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeEnvironmentWrite},
 		blockedBy:    ScopeEnvironmentBlockedRead,
+		// Not a member default: environment values include secrets, so members
+		// get them only through a custom role.
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopeEnvironmentBlockedRead,
@@ -385,6 +410,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeEnvironmentWrite,
@@ -397,6 +423,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    ScopeEnvironmentBlockedWrite,
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopeEnvironmentBlockedWrite,
@@ -409,6 +436,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeEnvironmentBlockedRead},
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeSkillRead,
@@ -421,6 +449,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeSkillWrite},
 		blockedBy:    ScopeSkillBlockedRead,
+		defaultRoles: []string{SystemRoleAdmin, SystemRoleMember},
 	},
 	{
 		Scope:        ScopeSkillBlockedRead,
@@ -433,6 +462,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeSkillWrite,
@@ -445,6 +475,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    ScopeSkillBlockedWrite,
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopeSkillBlockedWrite,
@@ -457,6 +488,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeSkillBlockedRead},
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopePluginWrite,
@@ -469,6 +501,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    ScopePluginBlockedWrite,
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopePluginBlockedWrite,
@@ -481,6 +514,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeAssistantRead,
@@ -493,6 +527,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeAssistantWrite},
 		blockedBy:    ScopeAssistantBlockedRead,
+		defaultRoles: []string{SystemRoleAdmin, SystemRoleMember},
 	},
 	{
 		Scope:        ScopeAssistantBlockedRead,
@@ -505,6 +540,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeAssistantWrite,
@@ -517,6 +553,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    ScopeAssistantBlockedWrite,
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopeAssistantBlockedWrite,
@@ -529,6 +566,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeAssistantBlockedRead},
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeRiskPolicyEvaluate,
@@ -541,6 +579,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceRiskPolicy,
 		satisfiedBy:  nil,
 		blockedBy:    ScopeRiskPolicyBypass,
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeRiskPolicyBypass,
@@ -553,6 +592,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceRiskPolicy,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeRiskPolicyBlock,
@@ -565,6 +605,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceRiskPolicy,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeChatRead,
@@ -577,6 +618,11 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeChatWrite},
 		blockedBy:    "",
+		// No system role holds chat:read or chat:write, not even admin: other
+		// members' transcripts are sensitive and changing them is destructive.
+		// Everyone keeps their own sessions through owner matching in the chat
+		// handlers. Pinning follows chat:read, since a pin is a shared bookmark.
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeChatWrite,
@@ -589,6 +635,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeInferenceExecute,
@@ -601,6 +648,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeLogRead,
@@ -613,6 +661,10 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		// No system role holds log:read: tool-call logs carry every member's
+		// arguments, results, prompt text and hook payloads, so they are granted
+		// explicitly per project. Neither project:* nor org:admin implies it.
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeAgentRead,
@@ -625,6 +677,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopeAgentWrite,
@@ -637,6 +690,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopeAgentAuthorize,
@@ -649,6 +703,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopeAgentTransfer,
@@ -661,6 +716,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopeWorkloadRead,
@@ -673,6 +729,8 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeWorkloadWrite},
 		blockedBy:    ScopeWorkloadBlockedRead,
+		// A member default so team members can view the Access Hub.
+		defaultRoles: []string{SystemRoleAdmin, SystemRoleMember},
 	},
 	{
 		Scope:        ScopeWorkloadBlockedRead,
@@ -685,6 +743,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 	{
 		Scope:        ScopeWorkloadWrite,
@@ -697,6 +756,9 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  nil,
 		blockedBy:    ScopeWorkloadBlockedWrite,
+		// Admin only: assigning an agent to a workload is the same delegation as
+		// issuing that agent a credential.
+		defaultRoles: []string{SystemRoleAdmin},
 	},
 	{
 		Scope:        ScopeWorkloadBlockedWrite,
@@ -709,6 +771,7 @@ var scopeCatalog = []ScopeEntry{
 		surface:      GrantSurfaceAccess,
 		satisfiedBy:  []Scope{ScopeWorkloadBlockedRead},
 		blockedBy:    "",
+		defaultRoles: nil,
 	},
 }
 
@@ -725,36 +788,151 @@ var rootScopeEntry = ScopeEntry{
 	surface:      GrantSurfaceAccess,
 	satisfiedBy:  nil,
 	blockedBy:    "",
+	defaultRoles: nil,
 }
 
 // scopeDefinitions is every scope the engine knows: the catalogue plus root.
 var scopeDefinitions = append([]ScopeEntry{rootScopeEntry}, scopeCatalog...)
 
-// The lookup tables below are indexes over scopeDefinitions. Edit the
-// entries above, never these.
-var (
-	scopeVisibilityByScope = indexScopes(func(e ScopeEntry) scopeVisibility { return e.visibility })
-	scopeExpansions        = indexScopes(func(e ScopeEntry) []Scope { return e.satisfiedBy })
-	scopeExclusions        = indexScopes(func(e ScopeEntry) Scope { return e.blockedBy })
-	scopeGrantSurfaces     = indexScopes(func(e ScopeEntry) GrantSurface { return e.surface })
-	scopeResourceKinds     = indexScopes(func(e ScopeEntry) string { return e.ResourceType })
-)
-
-func indexScopes[V any](field func(ScopeEntry) V) map[Scope]V {
-	out := make(map[Scope]V, len(scopeDefinitions))
+// scopeIndex finds a scope's definition. It is an index over
+// scopeDefinitions; edit the entries above, never this.
+var scopeIndex = func() map[Scope]ScopeEntry {
+	out := make(map[Scope]ScopeEntry, len(scopeDefinitions))
 	for _, entry := range scopeDefinitions {
-		out[entry.Scope] = field(entry)
-	}
-	return out
-}
-
-var scopeCatalogByScope = func() map[Scope]ScopeEntry {
-	out := make(map[Scope]ScopeEntry, len(scopeCatalog))
-	for _, entry := range scopeCatalog {
 		out[entry.Scope] = entry
 	}
 	return out
 }()
+
+// scopeSubScopes is the user-visible inverse of satisfiedBy: for each
+// higher-privilege scope, the lower scopes it implies (org:admin implies
+// org:read). Exception scopes are left out.
+var scopeSubScopes = func() map[Scope][]Scope {
+	out := make(map[Scope][]Scope)
+	for _, lower := range scopeDefinitions {
+		if lower.visibility != scopeVisibilityUserVisible {
+			continue
+		}
+		for _, higher := range lower.satisfiedBy {
+			if scopeIndex[higher].visibility != scopeVisibilityUserVisible {
+				continue
+			}
+			out[higher] = append(out[higher], lower.Scope)
+		}
+	}
+	for _, lowers := range out {
+		slices.Sort(lowers)
+	}
+	return out
+}()
+
+// RegisteredScopes returns every scope the engine knows, root included, in
+// stable order.
+func RegisteredScopes() []Scope {
+	scopes := make([]Scope, 0, len(scopeDefinitions))
+	for _, entry := range scopeDefinitions {
+		scopes = append(scopes, entry.Scope)
+	}
+	slices.Sort(scopes)
+	return scopes
+}
+
+// SystemRoleScopes returns, in catalogue order, the scopes a built-in role
+// holds by default.
+func SystemRoleScopes(role string) []Scope {
+	var out []Scope
+	for _, entry := range scopeCatalog {
+		if slices.Contains(entry.defaultRoles, role) {
+			out = append(out, entry.Scope)
+		}
+	}
+	return out
+}
+
+// Visibility reports whether the scope is exposed to clients as a permission
+// (ScopeVisibilityUserVisible) or only stores exceptions
+// (ScopeVisibilityInternal). It reports false for an unknown scope.
+func (s Scope) Visibility() (string, bool) {
+	entry, ok := scopeIndex[s]
+	if !ok {
+		return "", false
+	}
+	switch entry.visibility {
+	case scopeVisibilityUserVisible:
+		return ScopeVisibilityUserVisible, true
+	case scopeVisibilityInternal:
+		return ScopeVisibilityInternal, true
+	default:
+		return "", false
+	}
+}
+
+// BlockedBy returns the exception scope that withdraws this scope, if any.
+func (s Scope) BlockedBy() (Scope, bool) {
+	blocked := scopeIndex[s].blockedBy
+	return blocked, blocked != ""
+}
+
+// GrantSurface returns the product surface that owns writes of grants for
+// this scope.
+func (s Scope) GrantSurface() (GrantSurface, bool) {
+	entry, ok := scopeIndex[s]
+	return entry.surface, ok
+}
+
+// ResourceKind returns the selector resource kind a check of this scope is
+// evaluated against. Names the catalogue does not define, such as the retired
+// remote-mcp:* family, are answered from their prefix.
+func (s Scope) ResourceKind() string {
+	if entry, ok := scopeIndex[s]; ok {
+		return entry.ResourceType
+	}
+	return resourceKindForUnregisteredScope(s)
+}
+
+// SubScopes lists the user-visible scopes a grant of this scope also
+// satisfies, one step down the expansion graph.
+func (s Scope) SubScopes() []string {
+	lowers := scopeSubScopes[s]
+	out := make([]string, len(lowers))
+	for i, lower := range lowers {
+		out[i] = string(lower)
+	}
+	return out
+}
+
+// ImpliedScopes returns every scope whose checks a grant of this scope can
+// satisfy, the scope itself included, following satisfiedBy transitively.
+func (s Scope) ImpliedScopes() []Scope {
+	seen := map[Scope]struct{}{s: {}}
+	queue := []Scope{s}
+	for len(queue) > 0 {
+		granted := queue[0]
+		queue = queue[1:]
+		for _, checked := range scopeDefinitions {
+			if !slices.Contains(checked.satisfiedBy, granted) {
+				continue
+			}
+			if _, ok := seen[checked.Scope]; ok {
+				continue
+			}
+			seen[checked.Scope] = struct{}{}
+			queue = append(queue, checked.Scope)
+		}
+	}
+	implied := make([]Scope, 0, len(seen))
+	for scope := range seen {
+		implied = append(implied, scope)
+	}
+	slices.Sort(implied)
+	return implied
+}
+
+// satisfiedBy lists the other scopes whose grants also satisfy a check of
+// this scope.
+func (s Scope) satisfiedBy() []Scope {
+	return scopeIndex[s].satisfiedBy
+}
 
 // ScopeCatalog returns every grantable scope with its presentation metadata,
 // in presentation order. The slice is a copy; callers may reorder it.
@@ -762,9 +940,12 @@ func ScopeCatalog() []ScopeEntry {
 	return slices.Clone(scopeCatalog)
 }
 
-// ScopeEntryFor returns the catalogue entry for scope.
+// ScopeEntryFor returns the catalogue entry for scope. Root has none.
 func ScopeEntryFor(scope Scope) (ScopeEntry, bool) {
-	entry, ok := scopeCatalogByScope[scope]
+	if scope == ScopeRoot {
+		return ScopeEntry{}, false //nolint:exhaustruct // zero value for a scope with no entry
+	}
+	entry, ok := scopeIndex[scope]
 	return entry, ok
 }
 
@@ -783,7 +964,7 @@ func ScopeNames() []string {
 func ExclusionScopeNames() []string {
 	var out []string
 	for _, entry := range scopeCatalog {
-		exclusion, ok := ExclusionScopeFor(entry.Scope)
+		exclusion, ok := entry.Scope.BlockedBy()
 		if ok && !slices.Contains(out, string(exclusion)) {
 			out = append(out, string(exclusion))
 		}

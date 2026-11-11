@@ -376,7 +376,7 @@ func TestService_UpdateRole_RevokedAssistantGrantsStayRevoked(t *testing.T) {
 		role, err := ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: roleID, RemoveGrants: tc.remove})
 		require.NoError(t, err)
 		for _, grant := range role.Grants {
-			require.NotEqual(t, authz.ResourceKindAssistant, authz.ResourceKindForScope(authz.Scope(grant.Scope)), "%s role view must not list %s", tc.name, grant.Scope)
+			require.NotEqual(t, authz.ResourceKindAssistant, authz.Scope(grant.Scope).ResourceKind(), "%s role view must not list %s", tc.name, grant.Scope)
 		}
 
 		// Load twice: effective authority must match the stored grants on

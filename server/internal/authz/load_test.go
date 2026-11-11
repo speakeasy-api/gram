@@ -217,7 +217,7 @@ func TestLoadGrantsHonorsRevokedSystemRoleAssistantGrants(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, grants, "%s role keeps its other grants", tc.slug)
 		for _, grant := range grants {
-			require.NotEqual(t, ResourceKindAssistant, ResourceKindForScope(grant.Scope), "%s role must not regain %s", tc.slug, grant.Scope)
+			require.NotEqual(t, ResourceKindAssistant, grant.Scope.ResourceKind(), "%s role must not regain %s", tc.slug, grant.Scope)
 		}
 		for _, check := range tc.checks {
 			var oopsErr *oops.ShareableError

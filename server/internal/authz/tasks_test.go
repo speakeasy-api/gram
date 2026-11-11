@@ -25,7 +25,7 @@ func TestTasks_StayInsideTheCatalogue(t *testing.T) {
 		for _, scope := range task.Scopes {
 			entry, ok := ScopeEntryFor(scope)
 			require.True(t, ok, "%s: %s is not catalogued", task.Slug, scope)
-			visibility, ok := ScopeVisibilityFor(scope)
+			visibility, ok := scope.Visibility()
 			require.True(t, ok)
 			require.Equal(t, ScopeVisibilityUserVisible, visibility, "%s: %s is not grantable by a person", task.Slug, entry.Scope)
 
@@ -33,7 +33,7 @@ func TestTasks_StayInsideTheCatalogue(t *testing.T) {
 				if other == scope {
 					continue
 				}
-				require.NotContains(t, ScopeImplicationClosure(other), scope,
+				require.NotContains(t, other.ImpliedScopes(), scope,
 					"%s: %s already includes %s", task.Slug, other, scope)
 			}
 		}

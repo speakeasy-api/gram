@@ -40,11 +40,11 @@ func TestScopeCatalog_EntriesAreComplete(t *testing.T) {
 		require.Contains(t, ScopeCategories, entry.Category, "%s: category", entry.Scope)
 		require.NotEmpty(t, entry.ResourceType, "%s: resource type", entry.Scope)
 
-		surface, ok := GrantSurfaceForScope(entry.Scope)
+		surface, ok := entry.Scope.GrantSurface()
 		require.True(t, ok, "%s: grant surface", entry.Scope)
 		require.NotEmpty(t, surface)
 
-		visibility, ok := ScopeVisibilityFor(entry.Scope)
+		visibility, ok := entry.Scope.Visibility()
 		require.True(t, ok)
 		if visibility == ScopeVisibilityInternal {
 			require.True(t, strings.HasPrefix(entry.Label, "Exception: "), "%s: internal scopes are labelled as exceptions", entry.Scope)
@@ -131,7 +131,7 @@ func TestScopeNames_FollowTheCatalogue(t *testing.T) {
 	slices.Sort(sorted)
 	require.Len(t, slices.Compact(sorted), len(exclusions), "each exclusion scope is listed once")
 	for _, entry := range scopeCatalog {
-		exclusion, ok := ExclusionScopeFor(entry.Scope)
+		exclusion, ok := entry.Scope.BlockedBy()
 		if ok {
 			require.Contains(t, exclusions, string(exclusion), "%s: exclusion scope missing", entry.Scope)
 		}
@@ -229,8 +229,8 @@ func TestScopeCatalog_RootIsRegisteredButNotCatalogued(t *testing.T) {
 	require.Contains(t, RegisteredScopes(), ScopeRoot)
 	_, ok := ScopeEntryFor(ScopeRoot)
 	require.False(t, ok)
-	visibility, ok := ScopeVisibilityFor(ScopeRoot)
+	visibility, ok := ScopeRoot.Visibility()
 	require.True(t, ok)
 	require.Equal(t, ScopeVisibilityInternal, visibility)
-	require.Equal(t, ResourceKindWildcard, ResourceKindForScope(ScopeRoot))
+	require.Equal(t, ResourceKindWildcard, ScopeRoot.ResourceKind())
 }

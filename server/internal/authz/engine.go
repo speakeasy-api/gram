@@ -443,7 +443,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 func resourceKindBreadth(check Check) int {
 	kind := check.ResourceKind
 	if kind == "" {
-		kind = ResourceKindForScope(check.Scope)
+		kind = check.Scope.ResourceKind()
 	}
 	switch kind {
 	case ResourceKindOrg:
@@ -474,7 +474,7 @@ func leastPrivilegedAlternative(checks []Check, blocked []bool) (Check, bool) {
 		if blocked[i] {
 			continue
 		}
-		closure := ScopeImplicationClosure(check.Scope)
+		closure := check.Scope.ImpliedScopes()
 		covers := 0
 		for j, other := range checks {
 			if j != i && slices.Contains(closure, other.Scope) {

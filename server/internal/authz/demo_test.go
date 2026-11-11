@@ -49,7 +49,7 @@ func TestPrepareContext_demoOrgGetsEveryUserVisibleScope(t *testing.T) {
 	// Internal scopes stay internal: the demo set is the user-visible
 	// catalogue, not every scope the server declares.
 	for _, grant := range grants {
-		visibility, ok := ScopeVisibilityFor(grant.Scope)
+		visibility, ok := grant.Scope.Visibility()
 		require.True(t, ok, "scope %q has no declared visibility", grant.Scope)
 		require.Equal(t, ScopeVisibilityUserVisible, visibility, "scope %q is not user-visible", grant.Scope)
 	}

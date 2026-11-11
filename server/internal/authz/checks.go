@@ -101,7 +101,7 @@ func validateAuthClientCheck(c Check) error {
 	if c.ResourceKind != "" && c.ResourceKind != ResourceKindMCPAuthClient {
 		return invalidCheckReason(c.Scope, c.ResourceID, "resource kind must be "+ResourceKindMCPAuthClient)
 	}
-	if ResourceKindForScope(c.Scope) != ResourceKindMCPAuthClient {
+	if c.Scope.ResourceKind() != ResourceKindMCPAuthClient {
 		return invalidCheckReason(c.Scope, c.ResourceID, "scope must be an auth-client scope")
 	}
 	clientType := c.Dimensions[SelectorKeyClientType]
@@ -144,7 +144,7 @@ func personalCheckUnbound(c Check) bool {
 }
 
 func expressionForCheck(check Check) GrantExpression {
-	exclusion, ok := ExclusionScopeFor(check.Scope)
+	exclusion, ok := check.Scope.BlockedBy()
 	if !ok {
 		return nil
 	}

@@ -118,7 +118,7 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 	for _, c := range l.Checks {
 		kind := c.ResourceKind
 		if kind == "" {
-			kind = ResourceKindForScope(c.Scope)
+			kind = c.Scope.ResourceKind()
 		}
 		scope := string(c.Scope)
 		resourceID := c.ResourceID

@@ -39,19 +39,19 @@ func TestScopeTablesGolden(t *testing.T) {
 func dumpScopeTables() string {
 	var b strings.Builder
 	for _, scope := range RegisteredScopes() {
-		visibility, _ := ScopeVisibilityFor(scope)
-		exclusion, _ := ExclusionScopeFor(scope)
-		surface, _ := GrantSurfaceForScope(scope)
+		visibility, _ := scope.Visibility()
+		exclusion, _ := scope.BlockedBy()
+		surface, _ := scope.GrantSurface()
 		expansions := satisfyingScopes(scope)
 
 		fmt.Fprintf(&b, "%s\n", scope)
 		fmt.Fprintf(&b, "  visibility: %s\n", visibility)
-		fmt.Fprintf(&b, "  resource_kind: %s\n", ResourceKindForScope(scope))
+		fmt.Fprintf(&b, "  resource_kind: %s\n", scope.ResourceKind())
 		fmt.Fprintf(&b, "  surface: %s\n", cmp.Or(string(surface), "-"))
 		fmt.Fprintf(&b, "  satisfied_by: %v\n", expansions)
 		fmt.Fprintf(&b, "  exclusion: %s\n", cmp.Or(string(exclusion), "-"))
-		fmt.Fprintf(&b, "  closure: %v\n", ScopeImplicationClosure(scope))
-		fmt.Fprintf(&b, "  sub_scopes: %v\n", CalculateSubScopes(scope))
+		fmt.Fprintf(&b, "  closure: %v\n", scope.ImpliedScopes())
+		fmt.Fprintf(&b, "  sub_scopes: %v\n", scope.SubScopes())
 		fmt.Fprintf(&b, "  selector_keys: %v\n", acceptedSelectorKeys(scope))
 		fmt.Fprintf(&b, "  roles: %v\n", systemRolesHolding(scope))
 	}
@@ -74,7 +74,7 @@ func acceptedSelectorKeys(scope Scope) []string {
 	var accepted []string
 	for key, value := range probes {
 		sel := Selector{
-			SelectorKeyResourceKind: ResourceKindForScope(scope),
+			SelectorKeyResourceKind: scope.ResourceKind(),
 			SelectorKeyResourceID:   WildcardResource,
 			key:                     value,
 		}
@@ -103,7 +103,7 @@ func systemRolesHolding(scope Scope) []string {
 // out: it satisfies everything except auth-client checks, and the corpus
 // covers it separately.
 func satisfyingScopes(scope Scope) []Scope {
-	check := Check{Scope: scope, ResourceKind: ResourceKindForScope(scope), ResourceID: "probe", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	check := Check{Scope: scope, ResourceKind: scope.ResourceKind(), ResourceID: "probe", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
 	var satisfying []Scope
 	for _, candidate := range RegisteredScopes() {
 		if candidate == scope || candidate == ScopeRoot {

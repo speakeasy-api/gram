@@ -71,7 +71,7 @@ func isAPIKeyGrant(grant *Grant) bool {
 func apiKeyGrantMatches(grant *Grant, check *Check) bool {
 	kind := check.ResourceKind
 	if kind == "" {
-		kind = ResourceKindForScope(check.Scope)
+		kind = check.Scope.ResourceKind()
 	}
 	if kind == ResourceKindMCP && check.Dimensions[SelectorKeyProjectID] == "" {
 		return false

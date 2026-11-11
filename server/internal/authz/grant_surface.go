@@ -13,16 +13,10 @@ const (
 	GrantSurfaceRiskPolicy GrantSurface = "risk_policy"
 )
 
-// GrantSurfaceForScope returns the surface that owns writes for scope.
-func GrantSurfaceForScope(scope Scope) (GrantSurface, bool) {
-	surface, ok := scopeGrantSurfaces[scope]
-	return surface, ok
-}
-
 // ValidateScopeGrantSurface verifies that the requested surface owns writes for
 // scope.
 func ValidateScopeGrantSurface(surface GrantSurface, scope Scope) error {
-	owner, ok := GrantSurfaceForScope(scope)
+	owner, ok := scope.GrantSurface()
 	if !ok {
 		return fmt.Errorf("scope %q is not managed by a grant surface", scope)
 	}

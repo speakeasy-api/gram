@@ -63,7 +63,7 @@ func withdrawn(allow authz.Grant, grants []authz.Grant, representedUserID string
 	if authz.IsBlocklistScope(allow.Scope) {
 		return false
 	}
-	exclusion, ok := authz.ExclusionScopeFor(allow.Scope)
+	exclusion, ok := allow.Scope.BlockedBy()
 	if !ok {
 		return false
 	}
@@ -115,7 +115,7 @@ func delegableGrants(agent, owner, caller []authz.Grant, representedUserID strin
 		if !compatible {
 			continue
 		}
-		for _, scope := range authz.ScopeImplicationClosure(grant.Scope) {
+		for _, scope := range grant.Scope.ImpliedScopes() {
 			if !IsRuntimeScopeSafe(CurrentRuntimeScopeRegistryVersion, scope) {
 				continue
 			}
@@ -191,7 +191,7 @@ func delegableGrantKey(grant authz.Grant) (string, error) {
 // exclusion would also withdraw the directly granted part.
 func delegationFor(candidate authz.Grant, carryExclusions bool, representedUserID string, policies ...[]authz.Grant) ([]authz.Grant, bool) {
 	delegated := []authz.Grant{candidate}
-	exclusion, ok := authz.ExclusionScopeFor(candidate.Scope)
+	exclusion, ok := candidate.Scope.BlockedBy()
 	if !carryExclusions || !ok || !IsRuntimeScopeSafe(CurrentRuntimeScopeRegistryVersion, exclusion) {
 		return delegated, true
 	}
@@ -256,7 +256,7 @@ func DelegationContainedFor(representedUserID string, delegated DelegatedPolicy,
 			if !authz.GrantsContainSelectorFor(representedUserID, policy, grant.Scope, grant.Selector) {
 				return false, nil
 			}
-			exclusion, hasExclusion := authz.ExclusionScopeFor(grant.Scope)
+			exclusion, hasExclusion := grant.Scope.BlockedBy()
 			if !hasExclusion {
 				continue
 			}
@@ -288,7 +288,7 @@ type liveOverlap struct {
 func liveOverlaps(policy []authz.Grant, grant authz.Grant, exclusion authz.Scope, representedUserID string) []liveOverlap {
 	var overlaps []liveOverlap
 	for _, restriction := range policy {
-		if !slices.Contains(authz.ScopeImplicationClosure(restriction.Scope), exclusion) {
+		if !slices.Contains(restriction.Scope.ImpliedScopes(), exclusion) {
 			continue
 		}
 		overlap, ok := intersectRestriction(grant.Selector, restriction.Selector, representedUserID)

@@ -39,7 +39,7 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 	}
 	for _, check := range checks {
 		check = authorization.bind(check)
-		exclusionScope, ok := ExclusionScopeFor(check.Scope)
+		exclusionScope, ok := check.Scope.BlockedBy()
 		if !ok {
 			continue
 		}
@@ -47,7 +47,7 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		exclusion.Scope = exclusionScope
 		// Preserve the base resource kind, including explicit overrides.
 		if exclusion.ResourceKind == "" {
-			exclusion.ResourceKind = ResourceKindForScope(check.Scope)
+			exclusion.ResourceKind = check.Scope.ResourceKind()
 		}
 		for _, policy := range authorization.policiesFor(check) {
 			grant, _ := matchingGrant(policy, expandWithoutRoot(exclusion))

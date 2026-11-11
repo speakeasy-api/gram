@@ -355,7 +355,7 @@ func missingServerGrants(grants []authz.Grant, principalURN string, servers []gr
 	}
 	missing := 0
 	for _, grant := range grants {
-		if grant.PrincipalUrn != principalURN || !slices.Contains(authz.ScopeImplicationClosure(grant.Scope), authz.ScopeMCPConnect) {
+		if grant.PrincipalUrn != principalURN || !slices.Contains(grant.Scope.ImpliedScopes(), authz.ScopeMCPConnect) {
 			continue
 		}
 		resourceID := grant.Selector.ResourceID()

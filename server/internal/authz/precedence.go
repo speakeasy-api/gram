@@ -82,7 +82,7 @@ func isDirectOverrideGrant(grant Grant) bool {
 // ExclusionYieldsToDirectGrants reports whether a direct concrete grant can
 // outrank the exclusion paired with scope when that exclusion is inherited.
 func ExclusionYieldsToDirectGrants(scope Scope) bool {
-	exclusion, ok := ExclusionScopeFor(scope)
+	exclusion, ok := scope.BlockedBy()
 	return ok && IsBlocklistScope(exclusion)
 }
 

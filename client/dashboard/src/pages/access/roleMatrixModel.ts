@@ -698,8 +698,8 @@ export function unblockPlatformScope(
 
 /**
  * The Blocked column for a platform row. A block on View also blocks Manage
- * (scopeExpansions), so blocking stores on View alone and takes back what the
- * row grants; unblocking takes back the blocks everywhere on both. Blocks on
+ * (satisfiedBy in the scope catalogue), so blocking stores on View alone and
+ * takes back what the row grants; unblocking takes back the blocks everywhere on both. Blocks on
  * some projects stay either way.
  */
 export function setPlatformBlocked(
