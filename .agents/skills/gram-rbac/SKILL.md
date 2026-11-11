@@ -87,25 +87,25 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 
 ### Non-generated files
 
-| File                                   | Purpose                                                                                                                                                   |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `server/design/access/design.go`       | Goa design for the `access` service. Regenerates `server/gen/access/` and `server/gen/http/access/` via `mise run gen:goa-server`.                        |
-| `server/internal/authz/access.go`      | The `Check` type and its expansion logic.                                                                                                                 |
-| `server/internal/authz/checks.go`      | Pre-built `Check` builders for multi-dimensional checks (e.g. `MCPToolCallCheck`, `MCPToolCallDimensions`).                                               |
-| `server/internal/authz/context.go`     | Request-context helpers for grants (`GrantsToContext`, `GrantsFromContext`).                                                                              |
-| `server/internal/authz/engine.go`      | The `Engine` type — central RBAC enforcer, role-slug caching, and override resolution.                                                                    |
-| `server/internal/authz/errors.go`      | Package sentinel errors and typed errors.                                                                                                                 |
-| `server/internal/authz/grants.go`      | `Grant`/`RoleGrant`/`ScopedGrant` types, `SystemRoleGrants`, `SyncGrants`, `SeedSystemRoleGrants`, `GrantsForRole`, `GrantsToScopedGrants`.               |
-| `server/internal/authz/load.go`        | Principal grant loading from the database.                                                                                                                |
-| `server/internal/authz/override.go`    | Scope override plumbing (header parsing, override-to-grants conversion).                                                                                  |
-| `server/internal/authz/precedence.go`  | Principal precedence: direct concrete grants outrank blocklist exclusions inherited from roles or `user:all`.                                             |
-| `server/internal/authz/provisioner.go` | New-organization provisioning for built-in role grants and the initial Admin assignment.                                                                  |
-| `server/internal/authz/scopes.go`      | Scope type, constants and `Parts`.                                                                                                                        |
-| `server/internal/authz/catalog.go`     | Scope catalogue: one entry per grantable scope (rules, role defaults) and the `Scope` methods that read it.                                               |
-| `server/internal/authz/selector.go`    | `Selector` type, matching rules, `NewSelector`/`NewGrant`, `ValidateSelector`, resource-kind prefix fallback, dispositions, `SelectorFromRow`.            |
-| `server/internal/authztest/helpers.go` | Test helpers other packages reuse for RBAC setup, including `WithExactGrants`.                                                                            |
-| `server/internal/access/impl.go`       | Implementation of the `/rpc/access.*` Goa service.                                                                                                        |
-| `server/internal/access/queries.sql`   | SQLc queries for principals, grants, roles, and members. Regenerates `server/internal/access/repo/` via `mise run gen:sqlc-server`.                       |
+| File                                   | Purpose                                                                                                                                        |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/design/access/design.go`       | Goa design for the `access` service. Regenerates `server/gen/access/` and `server/gen/http/access/` via `mise run gen:goa-server`.             |
+| `server/internal/authz/access.go`      | The `Check` type and its expansion logic.                                                                                                      |
+| `server/internal/authz/checks.go`      | Pre-built `Check` builders for multi-dimensional checks (e.g. `MCPToolCallCheck`, `MCPToolCallDimensions`).                                    |
+| `server/internal/authz/context.go`     | Request-context helpers for grants (`GrantsToContext`, `GrantsFromContext`).                                                                   |
+| `server/internal/authz/engine.go`      | The `Engine` type — central RBAC enforcer, role-slug caching, and override resolution.                                                         |
+| `server/internal/authz/errors.go`      | Package sentinel errors and typed errors.                                                                                                      |
+| `server/internal/authz/grants.go`      | `Grant`/`RoleGrant`/`ScopedGrant` types, `SystemRoleGrants`, `SyncGrants`, `SeedSystemRoleGrants`, `GrantsForRole`, `GrantsToScopedGrants`.    |
+| `server/internal/authz/load.go`        | Principal grant loading from the database.                                                                                                     |
+| `server/internal/authz/override.go`    | Scope override plumbing (header parsing, override-to-grants conversion).                                                                       |
+| `server/internal/authz/precedence.go`  | Principal precedence: direct concrete grants outrank blocklist exclusions inherited from roles or `user:all`.                                  |
+| `server/internal/authz/provisioner.go` | New-organization provisioning for built-in role grants and the initial Admin assignment.                                                       |
+| `server/internal/authz/scopes.go`      | Scope type, constants and `Parts`.                                                                                                             |
+| `server/internal/authz/catalog.go`     | Scope catalogue: one entry per grantable scope (rules, role defaults) and the `Scope` methods that read it.                                    |
+| `server/internal/authz/selector.go`    | `Selector` type, matching rules, `NewSelector`/`NewGrant`, `ValidateSelector`, resource-kind prefix fallback, dispositions, `SelectorFromRow`. |
+| `server/internal/authztest/helpers.go` | Test helpers other packages reuse for RBAC setup, including `WithExactGrants`.                                                                 |
+| `server/internal/access/impl.go`       | Implementation of the `/rpc/access.*` Goa service.                                                                                             |
+| `server/internal/access/queries.sql`   | SQLc queries for principals, grants, roles, and members. Regenerates `server/internal/access/repo/` via `mise run gen:sqlc-server`.            |
 
 ### Generated files
 
