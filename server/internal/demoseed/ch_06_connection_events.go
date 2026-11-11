@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	// connectionAttemptDays stays well inside the events table's 30-day TTL.
-	connectionAttemptDays = 12
+	// ConnectionAttemptDays stays well inside the events table's 30-day TTL.
+	ConnectionAttemptDays = 12
 
 	// connectionAttemptsPerDay gives every server and result rows on most days.
 	connectionAttemptsPerDay = 12
@@ -53,6 +53,9 @@ type connectionEnding struct {
 	what mcpconnectionattempts.Happened
 }
 
+// demoScriptVersion is the seeded HTTP library version, as its User-Agent names it.
+const demoScriptVersion = "0.28.1"
+
 // connectionClients is the clients seeded attempts come from.
 var connectionClients = []struct{ family, version string }{
 	{mcpconnectionattempts.FamilyCodexCLI, "0.77.0"},
@@ -60,7 +63,7 @@ var connectionClients = []struct{ family, version string }{
 	{mcpconnectionattempts.FamilyCursor, "2.0.77"},
 	{mcpconnectionattempts.FamilyVSCode, "1.105.1"},
 	{mcpconnectionattempts.FamilyOpenAIConnector, "1.0.0"},
-	{mcpconnectionattempts.FamilyScript, "0.28.1"},
+	{mcpconnectionattempts.FamilyScript, demoScriptVersion},
 }
 
 var connectionEndings = []connectionEnding{
@@ -115,8 +118,8 @@ var connectionRequestEndings = []connectionEnding{
 func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 	scopes := s.connectionScopes()
 	subject := urn.NewUserSubject(s.userID("amara"))
-	rows := make([]mcpconnectionattempts.Row, 0, connectionAttemptDays*len(connectionRequestEndings))
-	for day := range connectionAttemptDays {
+	rows := make([]mcpconnectionattempts.Row, 0, ConnectionAttemptDays*len(connectionRequestEndings))
+	for day := range ConnectionAttemptDays {
 		for n, ending := range connectionRequestEndings {
 			key := "connection-request-" + strconv.Itoa(day) + "-" + strconv.Itoa(n)
 			scope := scopes[hash64(s.name(key), "scope")%uint64(len(scopes))]
@@ -161,8 +164,8 @@ func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 	scopes := s.connectionScopes()
 
-	rows := make([]mcpconnectionattempts.Row, 0, connectionAttemptDays*connectionAttemptsPerDay*2)
-	for day := range connectionAttemptDays {
+	rows := make([]mcpconnectionattempts.Row, 0, ConnectionAttemptDays*connectionAttemptsPerDay*2)
+	for day := range ConnectionAttemptDays {
 		for n := range connectionAttemptsPerDay {
 			key := "connection-attempt-" + strconv.Itoa(day) + "-" + strconv.Itoa(n)
 			scope := scopes[hash64(s.name(key), "scope")%uint64(len(scopes))]
@@ -191,6 +194,11 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 		return err
 	}
 	rows = append(rows, requestRows...)
+	tokenRows, err := s.connectionWorkloadRows()
+	if err != nil {
+		return err
+	}
+	rows = append(rows, tokenRows...)
 	if err := mcpconnectionattempts.AppendRows(ctx, ch, rows); err != nil {
 		return fmt.Errorf("seed connection events: %w", err)
 	}
@@ -243,12 +251,12 @@ func (s *seeder) connectionScopes() []mcpconnectionattempts.Scope {
 	return []mcpconnectionattempts.Scope{
 		s.connectionServerScope(),
 		mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR),
-		mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), orggateway.GatewayID(s.orgID()), mcpconnectionattempts.AppOf(demoConnectionApp)),
+		mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), orggateway.GatewayID(s.orgID()), mcpconnectionattempts.AppOf(demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted)),
 	}
 }
 
 func (s *seeder) connectionServerScope() mcpconnectionattempts.Scope {
-	return mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppOf(demoConnectionApp))
+	return mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppOf(demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted))
 }
 
 func (s *seeder) setConnectionClient(row *mcpconnectionattempts.Row, key string) {
@@ -323,4 +331,48 @@ func (s *seeder) stoppedAttemptRows(attempt mcpconnectionattempts.Attempt, key s
 	member.TraceID = md5Hex(s.name(key + "-member"))
 	member.ClientFamily, member.DeviceKey = first.ClientFamily, first.DeviceKey
 	return append(rows, member), nil
+}
+
+// connectionWorkloadRows seeds token requests from a workload and an assistant, and a server
+// that rejected the credential on initialize, one of each on the last few days.
+func (s *seeder) connectionWorkloadRows() ([]mcpconnectionattempts.Row, error) {
+	admitted := urn.NewWorkloadSubject(s.det("workload-issuer-1"), "repo:acme/payments-api:ref:refs/heads/main")
+	stranger := urn.NewWorkloadSubject(s.det("workload-issuer-1"), "repo:acme/sandbox:ref:refs/heads/experiment")
+	person := urn.NewUserSubject(s.userID("amara"))
+	workload := []mcpconnectionattempts.Option{mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer), mcpconnectionattempts.UserSessionIssuer(s.usIssuer())}
+	server := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppWorkload)
+	sharedServer := mcpconnectionattempts.AuthorizationServerScope(s.orgID(), s.projectID(), s.usIssuer(), mcpconnectionattempts.AppWorkload)
+	assistant := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR)
+	seeded := []struct {
+		scope  mcpconnectionattempts.Scope
+		step   mcpconnectionattempts.Step
+		what   mcpconnectionattempts.Happened
+		caller string
+		opts   []mcpconnectionattempts.Option
+	}{
+		{server, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultSignedIn, "workload", append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&admitted)}, workload...)},
+		{sharedServer, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotAdmitted, "workload", append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&stranger), mcpconnectionattempts.Detail("subject_not_admitted")}, workload...)},
+		{assistant, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSignInMethodNotAccepted, "assistant", []mcpconnectionattempts.Option{mcpconnectionattempts.Grant(oauthwire.GrantTypeClientCredentials), mcpconnectionattempts.Detail("assistant_tokens_not_issued")}},
+		{s.connectionServerScope(), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected, "", []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&person), mcpconnectionattempts.RequestMethod("initialize"), mcpconnectionattempts.Provider(demoConnectionProvider)}},
+	}
+	rows := make([]mcpconnectionattempts.Row, 0, len(seeded))
+	for n, row := range seeded {
+		key := "connection-token-" + strconv.Itoa(n)
+		started := s.now.AddDate(0, 0, -n-1).Add(time.Duration(hash64(s.name(key), "at")%connectionAttemptWindowSeconds) * time.Second)
+		built, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(s.det(key), started, row.scope), row.step, row.what, true, started, row.opts...)
+		if err != nil {
+			return nil, fmt.Errorf("build connection token event: %w", err)
+		}
+		built.TraceID = md5Hex(s.name(key))
+		switch row.step {
+		case mcpconnectionattempts.StepMCPRequest:
+			s.setConnectionClient(&built, key)
+		case mcpconnectionattempts.StepInboundToken:
+			// A workload or assistant asks with an HTTP library from a machine of its own, not a person's device.
+			built.ClientFamily, built.ClientVersion = mcpconnectionattempts.FamilyScript, demoScriptVersion
+			built.DeviceKey = md5Hex(s.name("connection-device-" + row.caller))
+		}
+		rows = append(rows, built)
+	}
+	return rows, nil
 }

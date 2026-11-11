@@ -13,16 +13,16 @@ packages:
   - e2e
 
 catalog:
-  "@ai-sdk/react": ^4.0.161
+  "@ai-sdk/react": ^4.0.166
   "@cfworker/json-schema": ^4.1.1
   "@modelcontextprotocol/sdk": ^1.32.0
-  "@tailwindcss/vite": ^4.3.3
+  "@tailwindcss/vite": ^4.3.4
   "@tanstack/react-query": 5.102.8
   "@types/react": ^19.3.0
   "@types/react-dom": ^19.3.0
-  "@assistant-ui/react": ^0.15.31
+  "@assistant-ui/react": ^0.15.32
   "@vitejs/plugin-react": ^6.1.1
-  ai: ^7.0.157
+  ai: ^7.0.162
   "lucide-react": ^1.28.0
   typescript: 7.0.2
   vite: ^8.3.5
@@ -51,8 +51,8 @@ minimumReleaseAgeExclude:
   - "@chromatic-com/storybook"
 
 overrides:
-  ai: 7.0.157
-  "@ai-sdk/react": 4.0.161
+  ai: 7.0.162
+  "@ai-sdk/react": 4.0.166
   glob@>=10.0 <10.5.0: 10.5.0
   fast-uri@<3.1.8: 3.1.8
   # monaco-editor pins dompurify exactly; 3.4.15 has open XSS advisories.

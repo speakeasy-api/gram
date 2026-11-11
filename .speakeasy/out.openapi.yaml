@@ -62601,6 +62601,96 @@ paths:
         - risk
       x-speakeasy-group: risk.policies
       x-speakeasy-name-override: get
+  /rpc/risk.getPolicyBypassRequestTarget:
+    post:
+      description: Fetch what a request access link asks for (the blocked server and tool) WITHOUT filing the request. Powers the request access page.
+      operationId: getRiskPolicyBypassRequestTarget
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetRiskPolicyBypassRequestTargetRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetRiskPolicyBypassRequestTargetResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getRiskPolicyBypassRequestTarget risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.policyBypassRequests
+      x-speakeasy-name-override: getTarget
+      x-speakeasy-react-hook:
+        name: RiskGetPolicyBypassRequestTarget
+        type: mutation
   /rpc/risk.getPolicyChallenge:
     post:
       description: Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
@@ -88232,7 +88322,7 @@ paths:
         name: WithdrawWorkloadIssuer
   /rpc/workloadIdentities.withdrawSubject:
     delete:
-      description: Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.
+      description: Withdraw an admitted subject and its agent assignment, stopping it authenticating. A subject can be admitted at the organization and in a project independently; withdrawing one leaves the other in force, and the result names the tier removed. Requires workload:write.
       operationId: withdrawWorkloadSubject
       parameters:
         - allowEmptyValue: true
@@ -88270,7 +88360,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+                $ref: '#/components/schemas/WithdrawnWorkloadSubjectPolicy'
           description: OK response.
         "400":
           content:
@@ -94249,6 +94339,7 @@ components:
             - product_telemetry
             - risk_findings
             - tool_call_logs
+            - mcp_connection_logs
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -96424,6 +96515,7 @@ components:
             - product_telemetry
             - risk_findings
             - tool_call_logs
+            - mcp_connection_logs
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -100614,6 +100706,35 @@ components:
           $ref: '#/components/schemas/PromptTemplate'
       required:
         - template
+    GetRiskPolicyBypassRequestTargetRequestBody:
+      type: object
+      properties:
+        request_token:
+          type: string
+          description: Signed request token generated when a risk policy blocks an action.
+      required:
+        - request_token
+    GetRiskPolicyBypassRequestTargetResponseBody:
+      type: object
+      properties:
+        expires_at:
+          type: string
+          description: When the request link expires.
+          format: date-time
+        server_identifier:
+          type: string
+          description: 'How the agent identified the blocked server when it has no URL: its configured name for Claude Code and Codex, or its launch command for Cursor.'
+        server_name:
+          type: string
+          description: Display name of the blocked server, when known.
+        server_url:
+          type: string
+          description: URL of the blocked server without credentials, query, or fragment, when it was reached over HTTP.
+        tool_name:
+          type: string
+          description: The tool the agent tried to call, when known.
+      required:
+        - expires_at
     GetRiskPolicyChallengeResponseBody:
       type: object
       properties:
@@ -104219,7 +104340,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ExternalCredentialSummary'
-          description: The organization's external credentials.
+          description: The external credentials.
       required:
         - credentials
     ListExternalKeysResult:
@@ -105267,14 +105388,20 @@ components:
         next_cursor:
           type: string
           description: Cursor for next page
+        scoped:
+          type: boolean
+          description: True when sessions were withheld because the caller lacks chat:read on one or more projects. The totals still cover every matching session.
         sessions:
           type: array
           items:
             $ref: '#/components/schemas/SessionSummary'
-          description: List of chat session summaries
+          description: List of chat session summaries. Only sessions from projects the caller holds chat:read on are listed.
+        totals:
+          $ref: '#/components/schemas/SessionTotals'
       description: Result of listing org-scoped chat sessions
       required:
         - sessions
+        - scoped
     ListSetupTasksResult:
       type: object
       properties:
@@ -116353,6 +116480,46 @@ components:
         - total_tokens
         - total_cost
         - status
+    SessionTotals:
+      type: object
+      properties:
+        message_count:
+          type: integer
+          description: Number of LLM completion messages across the sessions
+          format: int64
+        session_count:
+          type: integer
+          description: Number of matching chat sessions
+          format: int64
+        tool_call_count:
+          type: integer
+          description: Number of tool calls across the sessions
+          format: int64
+        total_cost:
+          type: number
+          description: Total cost in USD
+          format: double
+        total_input_tokens:
+          type: integer
+          description: Total input tokens used
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Total output tokens used
+          format: int64
+        total_tokens:
+          type: integer
+          description: Total tokens used
+          format: int64
+      description: Aggregate usage over a set of chat sessions
+      required:
+        - session_count
+        - message_count
+        - tool_call_count
+        - total_input_tokens
+        - total_output_tokens
+        - total_tokens
+        - total_cost
     SetAIToolDecisionRequestBody:
       type: object
       properties:
@@ -123952,6 +124119,7 @@ components:
             - product_telemetry
             - risk_findings
             - tool_call_logs
+            - mcp_connection_logs
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -125810,6 +125978,30 @@ components:
       required:
         - id
         - name
+    WithdrawnWorkloadSubjectPolicy:
+      type: object
+      properties:
+        admissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadAdmission'
+          description: Admitted subjects.
+        issuers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadIssuer'
+          description: Trusted issuers, organization tier first.
+        withdrawn_tier:
+          type: string
+          description: 'The tier of the admission that was withdrawn: organization or project.'
+          enum:
+            - organization
+            - project
+      description: The whole trust policy after a subject was withdrawn, with the tier the withdrawn admission belonged to. The same subject may still be admitted at the other tier, which the admissions list shows.
+      required:
+        - withdrawn_tier
+        - issuers
+        - admissions
     WorkOSDomainVerificationIntentOptions:
       type: object
       properties:

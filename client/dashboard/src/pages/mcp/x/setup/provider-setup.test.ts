@@ -6,7 +6,201 @@ import {
   saveProviderProgress,
   loadProviderProgress,
   providerProgressKey,
+  salesforceSourceFingerprint,
 } from "./provider-setup";
+
+describe("Salesforce source-bound progress", () => {
+  const source = {
+    url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+    instanceUrl: "",
+  };
+  const baseline = salesforceSourceFingerprint("upstream", source);
+  it("retains an intentional pending draft against the same source", () => {
+    const state = initialState("salesforce");
+    state.configChanged = true;
+    state.sourceFingerprint = baseline;
+    state.values.salesforceServer = "sobject-all";
+    state.step = "credentials";
+    saveProviderProgress("sf-draft", state);
+    const restored = loadProviderProgress(
+      "salesforce",
+      "sf-draft",
+      initialState("salesforce").values,
+      baseline,
+    );
+    expect(restored.values.salesforceServer).toBe("sobject-all");
+    expect(restored.configChanged).toBe(true);
+    expect(restored.step).toBe("credentials");
+  });
+  it("retains the server and environment when only the saved domain is invalid", () => {
+    const state = initialState("salesforce");
+    state.configChanged = true;
+    state.sourceFingerprint = baseline;
+    Object.assign(state.values, {
+      environment: "sandbox",
+      salesforceServer: "data360",
+      salesforceDomain: "example.my.salesforce.com",
+    });
+    saveProviderProgress("sf-invalid-domain", state);
+    const restored = loadProviderProgress(
+      "salesforce",
+      "sf-invalid-domain",
+      initialState("salesforce").values,
+      baseline,
+    );
+    expect(restored.values.environment).toBe("sandbox");
+    expect(restored.values.salesforceServer).toBe("data360");
+    expect(restored.values.salesforceDomain).toBe("");
+    expect(restored.saved).toBe(false);
+  });
+  it.each([false, true])(
+    "uses the current source when its baseline changes (pending=%s)",
+    (pending) => {
+      const state = initialState("salesforce");
+      state.configChanged = pending;
+      state.sourceFingerprint = baseline;
+      state.values.salesforceServer = "sobject-all";
+      state.done = ["choices", "app"];
+      state.step = "credentials";
+      saveProviderProgress("sf-stale", state);
+      const defaults = {
+        ...state.values,
+        salesforceServer: "sobject-mutations",
+      };
+      const restored = loadProviderProgress(
+        "salesforce",
+        "sf-stale",
+        defaults,
+        salesforceSourceFingerprint("replacement", source),
+      );
+      expect(restored.values.salesforceServer).toBe("sobject-mutations");
+      expect(restored.step).toBe("choices");
+      expect(restored.done).toEqual([]);
+      expect(restored.configChanged).toBe(pending);
+      expect(restored.saved).toBe(false);
+    },
+  );
+  it("uses server values for a completed draft, even against the same baseline", () => {
+    const state = initialState("salesforce");
+    state.sourceFingerprint = baseline;
+    state.values.salesforceServer = "sobject-all";
+    saveProviderProgress("sf-completed", state);
+    expect(
+      loadProviderProgress(
+        "salesforce",
+        "sf-completed",
+        initialState("salesforce").values,
+        baseline,
+      ).values.salesforceServer,
+    ).toBe("sobject-reads");
+  });
+  it("retains pending configuration against the advanced source baseline", () => {
+    const state = initialState("salesforce");
+    const partial = {
+      ...source,
+      url: "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-all",
+    };
+    const partialBaseline = salesforceSourceFingerprint("upstream", partial);
+    Object.assign(state.values, {
+      environment: "sandbox",
+      salesforceServer: "sobject-all",
+    });
+    state.configChanged = true;
+    state.sourceFingerprint = partialBaseline;
+    saveProviderProgress("sf-partial", state);
+    const restored = loadProviderProgress(
+      "salesforce",
+      "sf-partial",
+      {
+        ...initialState("salesforce").values,
+        environment: "sandbox",
+        salesforceServer: "sobject-all",
+      },
+      partialBaseline,
+    );
+    expect(restored.values.environment).toBe("sandbox");
+    expect(restored.values.salesforceServer).toBe("sobject-all");
+    expect(restored.configChanged).toBe(true);
+    expect(restored.saved).toBe(false);
+  });
+  it.each([1, 2, 3])(
+    "drops obsolete revision %s prototype branches instead of restoring them",
+    (revision) => {
+      sessionStorage.setItem(
+        "sf-prototype",
+        JSON.stringify({
+          revision,
+          step: "support",
+          done: ["begin", "choices", "install"],
+          values: {
+            integration: "hosted",
+            path: "support",
+            appChoice: "existing",
+            instanceUrl: "https://example.my.salesforce.com",
+            salesforceServer: "data360",
+            environment: "sandbox",
+          },
+        }),
+      );
+      const restored = loadProviderProgress("salesforce", "sf-prototype");
+      expect(restored.values.integration).toBe("native");
+      expect(restored.values.path).toBe("own");
+      expect(restored.values.appChoice).toBe("new");
+      expect(restored.values.instanceUrl).toBe("");
+      expect(restored.values.salesforceServer).toBe("sobject-reads");
+      expect(restored.saved || restored.authorized || restored.tested).toBe(
+        false,
+      );
+      expect(["begin", "choices"]).toContain(restored.step);
+      expect(restored.done).not.toContain("install");
+    },
+  );
+  it("persists documented app paths and native Salesforce choices in revision 4", () => {
+    const state = initialState("salesforce");
+    Object.assign(state.values, {
+      clientId: "private-id",
+      clientSecret: "private-secret",
+      integration: "hosted",
+      path: "support",
+      instanceUrl: "https://example.my.salesforce.com",
+      appChoice: "existing",
+    });
+    saveProviderProgress("sf-current", state);
+    const saved = JSON.parse(sessionStorage.getItem("sf-current")!);
+    expect(saved.revision).toBe(4);
+    expect(saved.values).not.toHaveProperty("integration");
+    expect(saved.values.path).toBe("support");
+    expect(saved.values).not.toHaveProperty("instanceUrl");
+    expect(saved.values.appChoice).toBe("existing");
+    expect(sessionStorage.getItem("sf-current")).not.toContain("private-");
+  });
+  it("ignores a legacy hosted integration field while retaining documented app and server choices", () => {
+    sessionStorage.setItem(
+      "sf-injected",
+      JSON.stringify({
+        revision: 4,
+        step: "support",
+        done: ["install"],
+        values: {
+          integration: "hosted",
+          path: "support",
+          appChoice: "existing",
+          instanceUrl: "https://example.my.salesforce.com",
+          salesforceServer: "data360",
+          environment: "sandbox",
+        },
+      }),
+    );
+    const state = loadProviderProgress("salesforce", "sf-injected");
+    expect(state.values.integration).toBe("native");
+    expect(state.values.path).toBe("support");
+    expect(state.values.appChoice).toBe("existing");
+    expect(state.values.instanceUrl).toBe("");
+    expect(state.values.salesforceServer).toBe("data360");
+    expect(state.step).toBe("support");
+    expect(state.done).toContain("install");
+  });
+});
 
 describe("Provider setup routing", () => {
   it("recognizes only the official Slack endpoint", () => {
@@ -22,7 +216,6 @@ describe("Provider setup routing", () => {
       expect(setupProviderForUrl(url)).toBeNull();
   });
   it.each([
-    "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
     "https://example.snowflakecomputing.com/api/v2/databases/A/schemas/B/mcp-servers/C",
     "https://example.okta.com/mcp",
   ])("leaves other providers on their existing path: %s", (url) => {
@@ -309,5 +502,58 @@ it.each(["all", "read"])(
     expect(restored.accessChosen).toBe(access === "read");
     expect(restored.values.access).toBe(access);
     sessionStorage.removeItem(key);
+  },
+);
+
+it.each([
+  "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+  "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-all",
+  "https://api.salesforce.com/platform/mcp/v1/data/data360",
+  "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/headless-360",
+  "https://api.salesforce.com/platform/mcp/v1/analytics/tableau-next",
+])("hands off only User Identity Salesforce installs: %s", (url) => {
+  const servers = [{ remotes: [{ url }] }];
+  const status = {
+    status: "completed" as const,
+    key: "sf",
+    name: "Salesforce",
+    remoteUrl: url,
+    mcpServerId: "id",
+    mcpServerParam: "installed",
+  };
+  expect(
+    providerSetupInstallTarget(servers, [{ ...status, identityMode: "user" }]),
+  ).toBe("installed");
+  expect(
+    providerSetupInstallTarget(servers, [{ ...status, identityMode: "agent" }]),
+  ).toBeNull();
+  expect(
+    providerSetupInstallTarget(servers, [{ ...status, identityMode: "none" }]),
+  ).toBeNull();
+});
+
+it.each([
+  "https://app.getgram.ai/mcp/speakeasy-team-salesforce",
+  "https://api.salesforce.com/platform/mcp/v1/sandbox/data/data360",
+  "https://api.salesforce.com/platform/mcp/v1/platform/unknown",
+])(
+  "does not hand an undocumented Salesforce catalog endpoint into guided setup: %s",
+  (url) => {
+    expect(
+      providerSetupInstallTarget(
+        [{ remotes: [{ url }] }],
+        [
+          {
+            status: "completed",
+            key: "sf",
+            name: "Salesforce",
+            identityMode: "user",
+            remoteUrl: url,
+            mcpServerId: "id",
+            mcpServerParam: "installed",
+          },
+        ],
+      ),
+    ).toBeNull();
   },
 );

@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -77,32 +78,43 @@ func (s *Service) handlePlatformWorkloadGrant(ctx context.Context, w http.Respon
 	// project still selects project-tier workload admission; tenancy is checked
 	// below before any credential can be issued.
 	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, workloadTenancy{OrganizationID: issuer.organizationID, ProjectID: projectID, UserSessionIssuerID: shared.issuerID}, []string{urls.Issuer, urls.Token}, assertion)
+	if err != nil && !presented.signatureVerified {
+		return s.refuseUnverifiedWorkloadGrant(ctx, w, logger, presented, err)
+	}
+	// Filed under the issuer's own tenancy: the requested project is unchecked until below.
+	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
+	t := s.trackSharedWorkloadGrant(r, issuer, presented, subject)
+	defer t.Finish(ctx)
 	if err != nil {
+		refuseWorkloadGrantRow(ctx, t, err)
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
 	}
 	if shared.projectID != uuid.Nil && shared.projectID != projectID {
+		t.Refuse(ctx, mcpconnectionattempts.CodeResourceMismatch, mcpconnectionattempts.Detail("project_outside_issuer"))
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "a project in the authorization issuer's tenancy is required")
 	}
 	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && project.OrganizationID != issuer.organizationID) {
+		t.Refuse(ctx, mcpconnectionattempts.CodeResourceMismatch, mcpconnectionattempts.Detail("project_outside_issuer"))
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "a project in the authorization issuer's tenancy is required")
 	}
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return fmt.Errorf("exchange workload platform: %w", err)
 	}
 	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	grants, err := encodePlatformWorkloadPolicy(projectID, version)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return fmt.Errorf("exchange workload platform: %w", err)
 	}
 	credential := workloadSessionCredential{DerivesPolicyAtAdmission: true, DelegatedGrants: grants, DelegatedGrantsVersion: int32(version)}
-	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
 	session := workloadSessionIssuance(workloadSessionTarget{userSessionIssuerID: shared.issuerID, projectID: projectID, organizationID: issuer.organizationID, issuer: shared.issuer, audience: resource}, subject, credential)
 	// The session row inherits its issuer tenancy (organization issuers have
 	// no project_id). Persist the exact target in the immutable resource and
 	// marker so authentication never takes tenancy from caller headers.
 	session.Resource = resource + ":" + projectID.String()
-	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{client: nil, beforeCommit: nil, presented: presented, credential: credential, projectID: &projectID, endpoint: nil, session: session, choosesUpstream: false, requestedAuthClients: nil})
+	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{client: nil, beforeCommit: nil, tracker: t, presented: presented, credential: credential, projectID: &projectID, endpoint: nil, session: session, choosesUpstream: false, requestedAuthClients: nil})
 }
 
 // authorizeWorkloadPlatform implements the builtin-only authentication

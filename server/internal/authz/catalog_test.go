@@ -104,7 +104,7 @@ func TestScopeCatalog_SubScopesMatchExpansions(t *testing.T) {
 
 	write, ok := ScopeEntryFor(ScopeMCPWrite)
 	require.True(t, ok)
-	require.Equal(t, []string{"mcp:connect", "mcp:read"}, write.SubScopes())
+	require.Equal(t, []string{"mcp:read"}, write.SubScopes(), "mcp:write does not imply mcp:connect")
 
 	chatWrite, ok := ScopeEntryFor(ScopeChatWrite)
 	require.True(t, ok)

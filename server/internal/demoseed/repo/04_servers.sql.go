@@ -1783,8 +1783,7 @@ type ServersInsertRoleServerMembershipsParams struct {
 
 // Distribute these servers to the seeded organization roles holding
 // mcp:connect, including disposition-limited connect. mcp:read and
-// mcp:write still allow connecting at the endpoint but do not deliver
-// servers. Store server identities, not legacy toolset memberships. Content
+// mcp:write neither allow connecting nor deliver servers. Store server identities, not legacy toolset memberships. Content
 // has no manual/automatic distinction and never widens a plugin's audience.
 func (q *Queries) ServersInsertRoleServerMemberships(ctx context.Context, arg ServersInsertRoleServerMembershipsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, serversInsertRoleServerMemberships,

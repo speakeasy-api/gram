@@ -1,4 +1,6 @@
 // @vitest-environment node
+import { ListScopesResult$inboundSchema } from "@gram/client/models/components/listscopesresult.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { queryKeyGrants } from "@gram/client/react-query/grants.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -9,6 +11,7 @@ import {
   selectorMatches,
   selectorMatchesStrict,
 } from "./useRBAC";
+import servedCatalogue from "../pages/access/listScopes.fixture.json";
 
 describe("grants query key", () => {
   it("isolates effective grants by session", () => {
@@ -299,10 +302,65 @@ describe("exclusionScopesForScope", () => {
       "assistant:blocked_write",
       "assistant:blocked_read",
     ]);
+    expect(exclusionScopesForScope("workload:read")).toEqual([
+      "workload:blocked_read",
+    ]);
+    expect(exclusionScopesForScope("workload:write")).toEqual([
+      "workload:blocked_write",
+      "workload:blocked_read",
+    ]);
+  });
+
+  // listScopes.fixture.json is written by the server's
+  // TestListScopes_DashboardFixture, so a scope the server pairs with an
+  // exclusion cannot be missing here.
+  it("pairs every scope with the exclusion scope the server declares", () => {
+    const served = ListScopesResult$inboundSchema.parse(servedCatalogue).scopes;
+    const declared = served.filter((entry) => entry.exclusionScope);
+    expect(declared.length).toBeGreaterThan(0);
+    for (const entry of declared) {
+      expect(
+        exclusionScopesForScope(entry.slug as Scope),
+        entry.slug,
+      ).toContain(entry.exclusionScope);
+    }
   });
 });
 
 describe("hasScopeInGrants", () => {
+  it("withdraws workload access for a workload block", () => {
+    const workloadWriter = {
+      scope: "workload:write",
+      selectors: [{ resourceKind: "workload", resourceId: "*" }],
+      subScopes: ["workload:read"],
+    };
+    const blockedRead = {
+      scope: "workload:blocked_read",
+      selectors: [{ resourceKind: "workload", resourceId: "*" }],
+    };
+    const blockedWrite = {
+      scope: "workload:blocked_write",
+      selectors: [{ resourceKind: "workload", resourceId: "*" }],
+    };
+
+    expect(hasScopeInGrants([workloadWriter], "workload:write")).toBe(true);
+    // A read block withdraws both, as the server's write check also
+    // honours it.
+    expect(
+      hasScopeInGrants([workloadWriter, blockedRead], "workload:read"),
+    ).toBe(false);
+    expect(
+      hasScopeInGrants([workloadWriter, blockedRead], "workload:write"),
+    ).toBe(false);
+    // A write block leaves read access in place.
+    expect(
+      hasScopeInGrants([workloadWriter, blockedWrite], "workload:write"),
+    ).toBe(false);
+    expect(
+      hasScopeInGrants([workloadWriter, blockedWrite], "workload:read"),
+    ).toBe(true);
+  });
+
   const skillWildcard = {
     scope: "skill:write",
     selectors: [{ resourceKind: "skill", resourceId: "*" }],

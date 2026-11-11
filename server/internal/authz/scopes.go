@@ -266,6 +266,10 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 // meaning "cannot see or manage". Anything that takes a principal off a
 // server entirely writes all three.
 //
+// mcp:connect is satisfied only by an explicit mcp:connect grant (or root).
+// mcp:read and mcp:write do not imply it: viewing or managing a server is not
+// permission to call its tools, so who may connect is decided per server.
+//
 // mcp:auth is independent of every other scope: server access, authoring and
 // administration imply no use of an auth client.
 var scopeExpansions = map[Scope][]Scope{
@@ -282,7 +286,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeMCPBlockedRead:          nil,
 	ScopeMCPWrite:                nil,
 	ScopeMCPBlockedWrite:         nil,
-	ScopeMCPConnect:              {ScopeMCPRead, ScopeMCPWrite},
+	ScopeMCPConnect:              nil,
 	ScopeMCPBlockedConnect:       nil,
 	ScopeMCPAuth:                 nil,
 	ScopeMCPBlockedAuth:          nil,

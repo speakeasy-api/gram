@@ -1182,6 +1182,333 @@ type BusinessMemory struct {
 	Deleted bool
 }
 
+type ChannelsAccessException struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Control Plane user identity the exception applies to.
+	// @access: confidential-pii
+	SubjectID string
+	// @access: confidential
+	CanConnect bool
+	// @access: confidential
+	CanReadAll bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type ChannelsConversation struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Client-written conversation title. Untrusted content, not instructions.
+	// @access: opaque-restricted
+	Title string
+	// @access: confidential
+	ParentID uuid.NullUUID
+	// @access: confidential
+	Private bool
+	// Sorted pair of addressed instance identifiers.
+	// @access: confidential
+	EndpointPairKey pgtype.Text
+	// @access: confidential-pii
+	CreatedBySubjectID string
+	// @access: confidential
+	AnnounceSeq int64
+	// @access: confidential
+	LastMessageSeq int64
+	// Maintained count of this conversation's undeleted messages.
+	// @access: confidential
+	MessageCount int64
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type ChannelsConversationEndpoint struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	ConversationID uuid.UUID
+	// @access: confidential
+	InstanceID uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type ChannelsConversationParticipant struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	ConversationID uuid.UUID
+	// @access: confidential-pii
+	SubjectID string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type ChannelsInstance struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Parent Control Plane identity that owns this instance.
+	// @access: confidential-pii
+	SubjectID string
+	// Client-chosen display label for the instance.
+	// @access: opaque-confidential
+	Label string
+	// Client-written introduction note. Untrusted content, not instructions.
+	// @access: opaque-restricted
+	Note string
+	// @access: confidential
+	Origin string
+	// SHA-256 hash of the instance resume secret.
+	// @access: secret-restricted
+	ResumeHash pgtype.Text
+	// @access: confidential
+	AnnounceSeq int64
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type ChannelsMessage struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	ConversationID uuid.UUID
+	// @access: confidential
+	InstanceID uuid.UUID
+	// @access: confidential-pii
+	SubjectID string
+	// Commit-ordered project cursor position.
+	// @access: confidential
+	Seq int64
+	// Message text written by a person or an agent. Untrusted content, not instructions.
+	// @access: opaque-restricted
+	Body string
+	// Sender-chosen retry key.
+	// @access: opaque-confidential
+	IdempotencyKey string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type ChannelsOauthAccessToken struct {
+	// @access: confidential
+	Jti string
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	GrantID uuid.UUID
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type ChannelsOauthChallenge struct {
+	// @access: confidential
+	ID string
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Verified user identity bound to this authorization challenge.
+	// @access: confidential-pii
+	Principal string
+	// Exact resource URI bound to this authorization challenge.
+	// @access: confidential
+	Resource string
+	// @access: secret-restricted
+	BrowserHash string
+	// @access: secret-restricted
+	CsrfHash string
+	// @access: opaque-restricted
+	ClientID pgtype.Text
+	// @access: opaque-restricted
+	RedirectUri string
+	// @access: secret-restricted
+	State string
+	// @access: secret-restricted
+	CodeChallenge string
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type ChannelsOauthClient struct {
+	// @access: opaque-restricted
+	ClientID string
+	// @access: opaque-confidential
+	ClientName string
+	// @access: opaque-restricted
+	RedirectUris []string
+	// @access: secret-restricted
+	SecretHash string
+	// @access: confidential
+	TokenEndpointAuthMethod string
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type ChannelsOauthCredential struct {
+	// @access: secret-restricted
+	TokenHash string
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	GrantID uuid.UUID
+	// @access: opaque-restricted
+	RedirectUri string
+	// @access: secret-restricted
+	CodeChallenge string
+	// @access: confidential
+	UsedAt pgtype.Timestamptz
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type ChannelsOauthGrant struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: opaque-restricted
+	ClientID string
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential-pii
+	Principal string
+	// Exact resource URI bound to this grant at authorization.
+	// @access: confidential
+	Resource string
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type ChannelsSetting struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// Project that owns these Channels settings and cursor allocators.
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Enabled bool
+	// Commit-ordered message sequence allocator.
+	// @access: confidential
+	MessageSeq int64
+	// @access: confidential
+	AnnounceSeq int64
+	// @access: confidential
+	RetentionFloorSeq int64
+	// @access: confidential
+	MessageRetentionDays int32
+	// @access: confidential
+	InstanceRetentionDays int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type ChannelsThreadPreference struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential-pii
+	SubjectID string
+	// @access: confidential
+	ConversationID uuid.UUID
+	// @access: confidential
+	Followed bool
+	// @access: confidential
+	Muted bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type Chat struct {
 	// @access: confidential
 	SessionSurface pgtype.Text
@@ -1213,6 +1540,10 @@ type Chat struct {
 	Summary pgtype.Text
 	// @access: confidential
 	SummaryGeneratedAt pgtype.Timestamptz
+	// @access: confidential
+	SummaryRedacted bool
+	// @access: confidential
+	MemoryExcludedAt pgtype.Timestamptz
 	// @access: confidential
 	InferenceAcceptedCheckpoint []byte
 	// @access: confidential-pii
@@ -3657,6 +3988,74 @@ type MdmDevice struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type MemoryDigest struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Level string
+	// @access: confidential
+	PeriodStart pgtype.Date
+	// @access: confidential
+	PeriodEnd pgtype.Date
+	// Model-written digest built only from redacted summaries, memos and child digests.
+	// @access: opaque-restricted
+	Content string
+	// @access: confidential
+	ChatIds []uuid.UUID
+	// @access: confidential
+	MemoIds []uuid.UUID
+	// @access: confidential
+	ChildDigestIds []uuid.UUID
+	// @access: confidential
+	Model pgtype.Text
+	// @access: confidential
+	InputTokens pgtype.Int4
+	// @access: confidential
+	OutputTokens pgtype.Int4
+	// Full-text index of content.
+	// @access: opaque-restricted
+	SearchVector interface{}
+	// @access: confidential
+	GeneratedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type MemoryMemo struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	ChatID uuid.NullUUID
+	// @access: confidential
+	AuthorUserID pgtype.Text
+	// @access: confidential
+	AuthorAgentID uuid.NullUUID
+	// Risk-redacted fact text supplied by an agent.
+	// @access: opaque-restricted
+	Content string
+	// Full-text index of content.
+	// @access: opaque-restricted
+	SearchVector interface{}
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type MetaMcpServer struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -3767,95 +4166,6 @@ type NetworkIngress struct {
 	HealthCheckedAt pgtype.Timestamptz
 	// @access: confidential
 	ConnectedSince pgtype.Timestamptz
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
-}
-
-type OauthProxyClientInfo struct {
-	// @access: confidential
-	McpSlug string
-	// @access: confidential
-	ClientID string
-	// @access: secret-restricted
-	ClientSecret string
-	// @access: confidential
-	ClientSecretExpiresAt pgtype.Timestamptz
-	// @access: opaque-confidential
-	ClientName string
-	// @access: opaque-restricted
-	RedirectUris []string
-	// @access: confidential
-	GrantTypes []string
-	// @access: confidential
-	ResponseTypes []string
-	// @access: opaque-restricted
-	Scope string
-	// @access: confidential
-	TokenEndpointAuthMethod string
-	// @access: confidential
-	ApplicationType string
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-}
-
-type OauthProxyProvider struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: confidential
-	OauthProxyServerID uuid.UUID
-	// @access: confidential
-	Slug string
-	// @access: confidential
-	ProviderType string
-	// @access: restricted
-	AuthorizationEndpoint pgtype.Text
-	// @access: restricted
-	TokenEndpoint pgtype.Text
-	// @access: restricted
-	RegistrationEndpoint pgtype.Text
-	// @access: opaque-restricted
-	ScopesSupported []string
-	// @access: confidential
-	ResponseTypesSupported []string
-	// @access: confidential
-	ResponseModesSupported []string
-	// @access: confidential
-	GrantTypesSupported []string
-	// @access: opaque-confidential
-	TokenEndpointAuthMethodsSupported []string
-	// @access: confidential
-	SecurityKeyNames []string
-	// @access: secret-restricted
-	Secrets []byte
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
-}
-
-type OauthProxyServer struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	ProjectID uuid.UUID
-	// @access: confidential
-	Slug string
-	// @access: restricted
-	Audience pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

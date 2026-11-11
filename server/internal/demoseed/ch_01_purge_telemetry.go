@@ -85,6 +85,7 @@ func (s *seeder) chPurgeAndTelemetry(ctx context.Context, ch driver.Conn) error 
 		{"cursor hook rows", s.chCursorHookRows},
 		{"work units scores", s.chWorkUnitRows},
 		{"hooks fleet rows", s.chHookFleetRows},
+		{"agent owner session rows", s.chOwnerSessionRows},
 	}
 	for _, ins := range inserts {
 		if err := s.chInsertTelemetry(ctx, ch, ins.rows()); err != nil {
@@ -266,14 +267,17 @@ var chRolesJSON = []string{
 
 // chIdentityAttrs is the WorkOS-style identity block (division through
 // hostname) a row carries for demo user idx.
-func chIdentityAttrs(idx int) string {
-	u := demoUsers[idx]
+func chIdentityAttrs(idx int) string { return chUserIdentityAttrs(demoUsers[idx], chRolesJSON[idx]) }
+
+// chUserIdentityAttrs is chIdentityAttrs for any member, with roles as the
+// user.roles JSON array.
+func chUserIdentityAttrs(u demoUser, roles string) string {
 	return `,"user.attributes.division_name":"` + u.division + `"` +
 		`,"user.attributes.department_name":"` + u.department + `"` +
 		`,"user.attributes.job_title":"` + u.title + `"` +
 		`,"user.attributes.employee_type":"` + u.empType + `"` +
 		`,"user.attributes.cost_center_name":"` + u.costCenter + `"` +
-		`,"user.roles":` + chRolesJSON[idx] +
+		`,"user.roles":` + roles +
 		`,"user.groups":["` + u.team + `"]` +
 		`,"gram.hook.hostname":"` + u.hostname + `"`
 }

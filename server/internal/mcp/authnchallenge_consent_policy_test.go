@@ -19,12 +19,14 @@ func TestConsentPolicyExclusionHierarchy(t *testing.T) {
 				t.Parallel()
 				policy := []authz.Grant{
 					authz.NewGrant(authz.ScopeMCPWrite, "example-server"),
+					authz.NewGrant(authz.ScopeMCPConnect, "example-server"),
 					authz.NewGrant(blocked, "example-server"),
 				}
 				allowed, err := consentPolicyConnect(policy, authz.MCPCheck(scope, "example-server", "example-project"))
 				require.NoError(t, err)
-				// mcp:write satisfies all three checks, so the only thing
-				// that can take one away is that scope's own exclusion.
+				// mcp:write and mcp:connect satisfy all three checks, so the
+				// only thing that can take one away is that scope's own
+				// exclusion.
 				exclusion, ok := authz.ExclusionScopeFor(scope)
 				require.True(t, ok)
 				want := blocked != exclusion

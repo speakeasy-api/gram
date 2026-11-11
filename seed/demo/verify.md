@@ -690,6 +690,26 @@ open their effective assignments; the dropdown always offers compact member sear
       off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
       returns to the server or gateway overview, and the skill page has no
       "Served over MCP" section.
+35. **Owner-scoped inspection (local seed only)** — the shared demo visitor
+    holds every scope, so only a session as the persona shows the owner view.
+    The persona's user row and membership exist locally (`kwame@` the local
+    seed domain), and the dev-idp can sign in as them: call `users.create`
+    with that email and `display_name: Kwame Mensah`, pass the returned
+    `user_id` and the `speakeasy` organization's UUID to `memberships.create`,
+    then pass that `user_id` to `devIdp.setCurrentUser` (mode `oauth2-1`), or
+    pick the user in the dev-idp dashboard's Local mode pane. Login resolves
+    users by email, so the session lands on the seeded row.
+    - **Team → Members** lists Kwame Mensah with the Member role only.
+    - **Agents** lists **Deploy watcher** as Active, owned by Kwame Mensah.
+    - **Agent Sessions** as the persona shows exactly five sessions: the three
+      Deploy watcher sessions (actor is the agent, no user) and the two the
+      persona ran. Opening a Deploy watcher session shows the prompt, the
+      tool calls with their JSON results, and the answer.
+    - **Tool Logs** as the persona lists only the `tools:http:acme:*` calls of
+      those five sessions: the agent's rows name Deploy watcher as actor with
+      no person, the persona's rows name them.
+    - As the local admin (who holds both scopes) the same rows appear among
+      everyone else's, and no other member's sessions appear as the persona.
 
 35. **Seeded MCP servers** (names in both orgs; live checks local only)
     - Open an agent's **MCP sign-in** tab and click **Add servers**. Every

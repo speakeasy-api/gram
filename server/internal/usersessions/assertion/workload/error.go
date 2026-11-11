@@ -31,17 +31,24 @@ const (
 type Error struct {
 	Reason Reason
 	Err    error
+
+	// SignatureVerified reports a rejection after the assertion's signature
+	// verified, so its issuer and subject are proven.
+	SignatureVerified bool
+
+	// Subject is the verified sub when SignatureVerified, otherwise empty.
+	Subject string
 }
 
 func (e *Error) Error() string { return fmt.Sprintf("%s: %v", e.Reason, e.Err) }
 func (e *Error) Unwrap() error { return e.Err }
 
 func reject(reason Reason, format string, args ...any) error {
-	return &Error{Reason: reason, Err: fmt.Errorf(format, args...)}
+	return &Error{Reason: reason, Err: fmt.Errorf(format, args...), SignatureVerified: false, Subject: ""}
 }
 
 func rejectWith(reason Reason, err error) error {
-	return &Error{Reason: reason, Err: err}
+	return &Error{Reason: reason, Err: err, SignatureVerified: false, Subject: ""}
 }
 
 // ReasonOf returns the rejection reason, or an empty value for another error.

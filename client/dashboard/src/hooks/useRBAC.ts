@@ -92,6 +92,8 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   "assistant:read": ["assistant:blocked_read"],
   "assistant:write": ["assistant:blocked_write", "assistant:blocked_read"],
   "risk_policy:evaluate": ["risk_policy:bypass"],
+  "workload:read": ["workload:blocked_read"],
+  "workload:write": ["workload:blocked_write", "workload:blocked_read"],
 };
 
 export function exclusionScopesForScope(scope: Scope): readonly string[] {

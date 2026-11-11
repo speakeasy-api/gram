@@ -225,6 +225,8 @@ type UpdateSubjectResponseBody struct {
 // WithdrawSubjectResponseBody is the type of the "workloadIdentities" service
 // "withdrawSubject" endpoint HTTP response body.
 type WithdrawSubjectResponseBody struct {
+	// The tier of the admission that was withdrawn: organization or project.
+	WithdrawnTier *string `form:"withdrawn_tier,omitempty" json:"withdrawn_tier,omitempty" xml:"withdrawn_tier,omitempty"`
 	// Trusted issuers, organization tier first.
 	Issuers []*WorkloadIssuerResponseBody `form:"issuers,omitempty" json:"issuers,omitempty" xml:"issuers,omitempty"`
 	// Admitted subjects.
@@ -4400,10 +4402,13 @@ func NewUpdateSubjectGatewayError(body *UpdateSubjectGatewayErrorResponseBody) *
 	return v
 }
 
-// NewWithdrawSubjectWorkloadIdentityPolicyOK builds a "workloadIdentities"
-// service "withdrawSubject" endpoint result from a HTTP "OK" response.
-func NewWithdrawSubjectWorkloadIdentityPolicyOK(body *WithdrawSubjectResponseBody) *workloadidentities.WorkloadIdentityPolicy {
-	v := &workloadidentities.WorkloadIdentityPolicy{}
+// NewWithdrawSubjectWithdrawnWorkloadSubjectPolicyOK builds a
+// "workloadIdentities" service "withdrawSubject" endpoint result from a HTTP
+// "OK" response.
+func NewWithdrawSubjectWithdrawnWorkloadSubjectPolicyOK(body *WithdrawSubjectResponseBody) *workloadidentities.WithdrawnWorkloadSubjectPolicy {
+	v := &workloadidentities.WithdrawnWorkloadSubjectPolicy{
+		WithdrawnTier: *body.WithdrawnTier,
+	}
 	v.Issuers = make([]*types.WorkloadIssuer, len(body.Issuers))
 	for i, val := range body.Issuers {
 		if val == nil {
@@ -5127,11 +5132,19 @@ func ValidateUpdateSubjectResponseBody(body *UpdateSubjectResponseBody) (err err
 // ValidateWithdrawSubjectResponseBody runs the validations defined on
 // WithdrawSubjectResponseBody
 func ValidateWithdrawSubjectResponseBody(body *WithdrawSubjectResponseBody) (err error) {
+	if body.WithdrawnTier == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("withdrawn_tier", "body"))
+	}
 	if body.Issuers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("issuers", "body"))
 	}
 	if body.Admissions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("admissions", "body"))
+	}
+	if body.WithdrawnTier != nil {
+		if !(*body.WithdrawnTier == "organization" || *body.WithdrawnTier == "project") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.withdrawn_tier", *body.WithdrawnTier, []any{"organization", "project"}))
+		}
 	}
 	for _, e := range body.Issuers {
 		if e != nil {
