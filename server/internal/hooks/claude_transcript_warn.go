@@ -1,9 +1,9 @@
 package hooks
 
-// Asynchronous warn for Claude Cowork. Inside the Cowork VM the hooks binary
-// relays no per-event hook, so a warn policy never sees a prompt before the
-// model does. The transcript the binary ships from Stop is the first point
-// the server sees the prompt. This file evaluates the upload's recent user
+// Asynchronous warn for Claude Cowork. The first message of a Cowork session
+// is typed in chat before the session moves into the Cowork VM, so no prompt
+// hook sees it. The transcript the binary ships from Stop is the first point
+// the server sees that prompt. This file evaluates the upload's recent user
 // prompts against the enforcing policies and returns the warn matches, which
 // the binary hands back to Claude from the same Stop so the user is told in
 // the conversation they just had.
@@ -54,14 +54,16 @@ type claudeTranscriptWarning struct {
 	Message    string `json:"message"`
 }
 
-// claudeTranscriptWarnings evaluates the newly stored upload's recent user
-// prompts and returns one warning per matching warn policy. It never fails
+// claudeTranscriptWarnings evaluates the recent user prompts this upload
+// stored for the first time and returns one warning per matching warn policy.
+// A prompt a per-event hook already stored was enforced by that hook, so it is
+// not warned about again. It never fails
 // the upload: a scan error is logged and yields no warning.
 func (s *Service) claudeTranscriptWarnings(ctx context.Context, authCtx *contextvalues.AuthContext, sessionID string, persisted claudeTranscriptPersisted) []claudeTranscriptWarning {
 	if s.riskScanner == nil || persisted.stored == 0 || authCtx == nil || authCtx.ProjectID == nil {
 		return nil
 	}
-	prompts := claudeTranscriptRecentPrompts(persisted.rows, s.now().UTC())
+	prompts := claudeTranscriptRecentPrompts(persisted.newPrompts, s.now().UTC())
 	if len(prompts) == 0 {
 		return nil
 	}

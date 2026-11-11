@@ -32,6 +32,7 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -248,11 +249,12 @@ func statusForBodyError(err error) int {
 }
 
 // claudeTranscriptPersisted describes one stored upload: how many rows were
-// new, who the session belongs to, and the rows the upload carried.
+// new, who the session belongs to, and the user prompts this upload stored
+// for the first time (not those a per-event hook stored before it).
 type claudeTranscriptPersisted struct {
-	stored   int64
-	metadata SessionMetadata
-	rows     []claudeTranscriptRow
+	stored     int64
+	metadata   SessionMetadata
+	newPrompts []claudeTranscriptRow
 }
 
 // persistClaudeTranscript stores the upload's conversation entries in the
@@ -278,11 +280,49 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 
 	hookSource := conv.Default(s.claudeSessionSurface(ctx, &metadata), agentVariantCowork)
 	chatID := sessionIDToUUID(upload.SessionID)
+	held, err := s.heldClaudePromptKeys(ctx, chatID, projectID, rows)
+	if err != nil {
+		return none, err
+	}
 	stored, err := s.writeClaudeRows(ctx, authCtx, &metadata, chatID, rows, hookSource, claudeTranscriptOrigin, claudeTranscriptTitle(rows, hookSource))
 	if err != nil {
-		return claudeTranscriptPersisted{stored: stored, metadata: metadata, rows: nil}, err
+		return claudeTranscriptPersisted{stored: stored, metadata: metadata, newPrompts: nil}, err
 	}
-	return claudeTranscriptPersisted{stored: stored, metadata: metadata, rows: rows}, nil
+	var newPrompts []claudeTranscriptRow
+	for _, row := range rows {
+		if row.role == "user" && !held[row.externalID] {
+			newPrompts = append(newPrompts, row)
+		}
+	}
+	return claudeTranscriptPersisted{stored: stored, metadata: metadata, newPrompts: newPrompts}, nil
+}
+
+// heldClaudePromptKeys returns the keys of the upload's user rows the chat
+// already holds, written by a per-event hook or an earlier upload. Those
+// prompts were already evaluated when they were stored.
+func (s *Service) heldClaudePromptKeys(ctx context.Context, chatID, projectID uuid.UUID, rows []claudeTranscriptRow) (map[string]bool, error) {
+	keys := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.role == "user" && row.externalID != "" {
+			keys = append(keys, row.externalID)
+		}
+	}
+	held := make(map[string]bool, len(keys))
+	if len(keys) == 0 {
+		return held, nil
+	}
+	existing, err := s.repo.ListChatExternalMessageIDs(ctx, repo.ListChatExternalMessageIDsParams{
+		ChatID:             chatID,
+		ProjectID:          uuid.NullUUID{UUID: projectID, Valid: true},
+		ExternalMessageIds: keys,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list stored claude prompt keys: %w", err)
+	}
+	for _, key := range existing {
+		held[key] = true
+	}
+	return held, nil
 }
 
 // writeClaudeRows stores Claude conversation rows keyed by external message id

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
@@ -136,4 +137,38 @@ func TestClaudeTranscriptRecentPromptsBound(t *testing.T) {
 	prompts := claudeTranscriptRecentPrompts(rows, now)
 	require.Len(t, prompts, claudeTranscriptWarnMaxPrompts)
 	require.Equal(t, fmt.Sprintf("u-%d", claudeTranscriptWarnMaxPrompts+1), prompts[len(prompts)-1].externalID, "the newest prompts are kept")
+}
+
+// A prompt a per-event hook already stored was enforced by that hook, so the
+// transcript that repeats it at Stop does not warn about it again.
+func TestClaudeTranscriptSkipsPromptsAHookStored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: authCtx}
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	h := ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveTranscript))
+
+	sessionID := uuid.NewString()
+	captured := true
+	promptID := "prompt-hooked"
+	text := "row: SENSITIVE_TEST_CONTENT"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Session.TranscriptCapture = &captured
+	payload.Session.TurnID = &promptID
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &text}}
+	_, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
+	require.NoError(t, err)
+
+	scanner := &transcriptWarnScanner{stubResultScanner: stubResultScanner{}, action: "warn", requests: nil}
+	ti.service.riskScanner = scanner
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	lines := []string{
+		`{"type":"user","uuid":"u-1","promptId":"` + promptID + `","timestamp":"` + now + `","message":{"role":"user","content":"row: SENSITIVE_TEST_CONTENT"}}`,
+		`{"type":"assistant","uuid":"a-1","timestamp":"` + now + `","message":{"id":"m","role":"assistant","content":[{"type":"text","text":"Done."}]}}`,
+	}
+	res := transcriptWarnings(t, h, claudeTranscriptUploadBody(sessionID, lines))
+	require.Equal(t, int64(1), res.Stored, "only the assistant text is new")
+	require.Empty(t, res.Warnings)
+	require.Empty(t, scanner.requests, "the hooked prompt is not scanned again")
 }
