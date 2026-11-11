@@ -353,13 +353,21 @@ func TestBindDecidesFromOfferedClientsUnderEnforcement(t *testing.T) {
 	f.offerOnly(several, typeServiceAccount)
 	personal := f.server(unstored)
 	f.offerOnly(personal, typeRemoteSession)
+	// An OAuth client beside a header client: either could serve the server.
+	mixed := f.server(unstored)
+	f.offerOnly(mixed, typeServiceAccount)
+	f.authClient(mixed, typeStaticCredential, uuid.Nil)
+	// A personal client beside a header client: a userless turn can use one.
+	personalOrHeaders := f.server(unstored)
+	f.authClient(personalOrHeaders, typeRemoteSession, f.registration(personalOrHeaders))
+	personalOrHeadersClient := f.authClient(personalOrHeaders, typeStaticCredential, uuid.Nil)
 
 	// The servers holding the offered clients' associations are gaps of their
 	// own, so only these servers' gaps are compared.
 	reasons := func(binding Binding) map[uuid.UUID]GapReason {
 		out := map[uuid.UUID]GapReason{}
 		for _, gap := range binding.Gaps {
-			if slices.Contains([]uuid.UUID{offered, leftover, several, personal}, gap.MCPServerID) {
+			if slices.Contains([]uuid.UUID{offered, leftover, several, personal, mixed, personalOrHeaders}, gap.MCPServerID) {
 				out[gap.MCPServerID] = gap.Reason
 			}
 		}
@@ -372,6 +380,10 @@ func TestBindDecidesFromOfferedClientsUnderEnforcement(t *testing.T) {
 		leftover: GapNoClient,
 		several:  GapSelectionRequired,
 		personal: GapSelectionRequired,
+		mixed:    GapSelectionRequired,
+		// The associated OAuth client is the server's own, and only a user can
+		// use the personal one.
+		personalOrHeaders: GapPersonalRequiresUser,
 	}, reasons(before), "associations decide while the organization does not enforce")
 
 	f.enforce()
@@ -379,8 +391,10 @@ func TestBindDecidesFromOfferedClientsUnderEnforcement(t *testing.T) {
 	choices := f.choices(binding.VersionID)
 	require.Equal(t, offeredClient, choices[offered])
 	require.Equal(t, leftoverClient, choices[leftover])
+	require.Equal(t, personalOrHeadersClient, choices[personalOrHeaders])
 	require.Equal(t, map[uuid.UUID]GapReason{
 		several:  GapSelectionRequired,
 		personal: GapPersonalRequiresUser,
+		mixed:    GapSelectionRequired,
 	}, reasons(binding))
 }

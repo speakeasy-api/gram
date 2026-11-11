@@ -28,12 +28,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 // Context is whether a turn runs for a user it identified.
@@ -113,8 +113,9 @@ type decision struct {
 // static_credential or pass_through auth client, or by nothing.
 //
 // For an organization enforcing upstream auth (typedOnly), associations decide
-// nothing: a server's upstream OAuth clients are the ones its enabled auth
-// clients carry.
+// nothing and every enabled auth client the server offers is a credential it
+// can be served with, as an administrator's choice reads them: the one the
+// context can use is chosen, and several are left to an administrator.
 func decide(row ListProfileServersRow, execCtx Context, typedOnly bool) (decision, *Gap) {
 	gap := func(reason GapReason) (decision, *Gap) {
 		return decision{serverID: uuid.Nil, authClientID: uuid.Nil}, &Gap{MCPServerID: row.McpServerID, Reason: reason}
@@ -131,16 +132,30 @@ func decide(row ListProfileServersRow, execCtx Context, typedOnly bool) (decisio
 		}
 		return choose(uuid.Nil)
 	}
-	registrations := row.RegistrationIds
 	if typedOnly {
-		registrations = []uuid.UUID{}
-		for _, id := range row.AuthClientRegistrationIds {
-			if id != uuid.Nil && !slices.Contains(registrations, id) {
-				registrations = append(registrations, id)
+		usable, personal := []uuid.UUID{}, false
+		for i, id := range row.AuthClientIds {
+			switch {
+			case authz.IsSharedAuthClientType(row.AuthClientTypes[i]):
+				usable = append(usable, id)
+			case execCtx == ContextUserless:
+				personal = true
+			default:
+				usable = append(usable, id)
 			}
 		}
+		switch {
+		case len(usable) == 1:
+			return choose(usable[0])
+		case len(usable) > 1:
+			return gap(GapSelectionRequired)
+		case personal:
+			return gap(GapPersonalRequiresUser)
+		default:
+			return gap(GapNoClient)
+		}
 	}
-	switch len(registrations) {
+	switch len(row.RegistrationIds) {
 	case 0:
 		headers, oauth := []uuid.UUID{}, false
 		for i, id := range row.AuthClientIds {
@@ -156,7 +171,7 @@ func decide(row ListProfileServersRow, execCtx Context, typedOnly bool) (decisio
 		}
 		return choose(headers[0])
 	case 1:
-		registration := registrations[0]
+		registration := row.RegistrationIds[0]
 		candidates, personal := []uuid.UUID{}, false
 		for i, id := range row.AuthClientIds {
 			if row.AuthClientRegistrationIds[i] != registration {
