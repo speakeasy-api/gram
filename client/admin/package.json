@@ -59,6 +59,6 @@
     "react-grab": "^0.2.0",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "^5.0.0"
+    "vitest": "^5.1.0"
   }
 }

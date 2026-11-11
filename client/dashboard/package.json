@@ -128,6 +128,6 @@
     "svix-react": "^1.13.9",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "^5.0.0"
+    "vitest": "^5.1.0"
   }
 }
