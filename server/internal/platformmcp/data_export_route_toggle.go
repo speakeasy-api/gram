@@ -128,6 +128,7 @@ type DataExportRouteToggleService struct {
 	db      *pgxpool.Pool
 	queries *platformrepo.Queries
 	core    *dataexports.RouteEnabledCore
+	level   *dataexports.RouteLevelCore
 	// admin re-checks org:admin live, which is what the dashboard's route
 	// update requires, before anything about the target is read.
 	admin   Authorizer
@@ -139,7 +140,7 @@ func NewDataExportRouteToggleService(logger *slog.Logger, db *pgxpool.Pool, core
 	if logger == nil || db == nil || core == nil || admin == nil || !changes.valid() {
 		return nil, ErrDataExportToggleInvalid
 	}
-	return &DataExportRouteToggleService{logger: logger, db: db, queries: platformrepo.New(db), core: core, admin: admin, changes: changes, now: time.Now}, nil
+	return &DataExportRouteToggleService{logger: logger, db: db, queries: platformrepo.New(db), core: core, level: nil, admin: admin, changes: changes, now: time.Now}, nil
 }
 
 func (s *DataExportRouteToggleService) valid() bool {

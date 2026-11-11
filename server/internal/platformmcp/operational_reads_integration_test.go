@@ -773,6 +773,11 @@ func TestCreateDataExportSetsTheConnectionLogLevel(t *testing.T) {
 	output, err := reader.CreateDataExport(ctx, principal, input)
 	require.NoError(t, err)
 	require.Equal(t, dataexports.MinSeverityWarn, output.Route.MinSeverity)
+	record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionDataExportRouteCreate)
+	require.NoError(t, err)
+	snapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, dataexports.MinSeverityWarn, snapshot["min_severity"], "the create audit records the level")
 
 	listed, err := reader.ListDataExports(ctx, principal, ListDataExportsInput{ProjectID: project.ID.String()})
 	require.NoError(t, err)
