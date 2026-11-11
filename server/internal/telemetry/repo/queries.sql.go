@@ -4916,6 +4916,19 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		}
 	}
 
+	// On the summary path an event-source chip applies to the per-trace event
+	// source. The raw path already pushed it down to rows.
+	if !toolUsageTracesNeedRawScan(arg) {
+		for _, filter := range arg.Filters {
+			if filter.Path != toolUsageEventSourcePath {
+				continue
+			}
+			if pred := filter.Predicate("event_source"); pred != nil {
+				sb = sb.Where(pred)
+			}
+		}
+	}
+
 	// First-class Status filter, applied to the aggregated per-trace outcome columns.
 	if pred := toolUsageOutcomePredicate(arg.Statuses); pred != nil {
 		sb = sb.Where(pred)
@@ -5877,6 +5890,19 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 		}
 	}
 
+	// On the summary path an event-source chip applies to the per-trace event
+	// source the CTE projects. The raw path already pushed it down to rows.
+	if !toolUsageSummaryNeedsRawScan(arg) {
+		for _, filter := range arg.Filters {
+			if filter.Path != toolUsageEventSourcePath {
+				continue
+			}
+			if pred := filter.Predicate("event_source"); pred != nil {
+				sb = sb.Where(pred)
+			}
+		}
+	}
+
 	return sb, nil
 }
 
@@ -6362,12 +6388,26 @@ FROM (%s)`,
 	return "WITH normalized_traces_base AS (" + tracesSQL + ")" + serverIDSQL, finalArgs, nil
 }
 
+// toolUsageTracesNeedRawScan is toolUsageSummaryNeedsRawScan for the trace
+// listing: the two paths must agree on which chips the view can answer.
+func toolUsageTracesNeedRawScan(arg ListToolUsageTracesParams) bool {
+	if arg.Query != "" {
+		return true
+	}
+	for _, filter := range arg.Filters {
+		if !toolUsageSummaryAnswersFilter(filter) {
+			return true
+		}
+	}
+	return false
+}
+
 func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error) {
 	// Fast path: when no free-text query or arbitrary attribute filters are active,
 	// serve the trace list from the trace_summaries materialized view. Free-text
 	// search, custom-attribute filters, and (traceless) trigger events fall through
 	// to the raw telemetry_logs scan below.
-	if arg.Query == "" && len(arg.Filters) == 0 {
+	if !toolUsageTracesNeedRawScan(arg) {
 		return toolUsageTraceRowsFromSummariesCTE(arg)
 	}
 
@@ -6875,11 +6915,41 @@ func toolUsageScanIdentityFilter(arg GetToolUsageSummaryParams) squirrel.Sqlizer
 	return and
 }
 
+// toolUsageEventSourcePath is the attribute the dashboard's "loaded via" skill
+// split filters on. trace_summaries carries the event source per trace, so a
+// chip on it can be answered from the view instead of the raw log scan.
+const toolUsageEventSourcePath = "gram.event.source"
+
+// toolUsageSummaryNeedsRawScan reports whether the summary must be answered
+// from the raw telemetry_logs scan. Only a free-text query or an attribute
+// chip the trace_summaries view cannot answer forces it: the raw scan of a
+// multi-day window costs gigabytes of ClickHouse memory per call.
+func toolUsageSummaryNeedsRawScan(arg GetToolUsageSummaryParams) bool {
+	if arg.Query != "" {
+		return true
+	}
+	for _, filter := range arg.Filters {
+		if !toolUsageSummaryAnswersFilter(filter) {
+			return true
+		}
+	}
+	return false
+}
+
+// toolUsageSummaryAnswersFilter reports whether the trace_summaries path can
+// apply the chip to its per-trace event_source column. Every other chip,
+// http.response.status_code included, still takes the raw scan.
+func toolUsageSummaryAnswersFilter(filter AttributeFilter) bool {
+	if filter.Path != toolUsageEventSourcePath {
+		return false
+	}
+	return filter.Op == "eq" || filter.Op == "not_eq" || filter.Op == "in"
+}
+
 func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {
-	// A free-text query or an attribute chip cannot be answered from the
-	// pre-aggregated view, which carries neither. Those fall through to the raw
-	// scan, exactly as the trace listing does.
-	if arg.Query != "" || len(arg.Filters) > 0 {
+	// A free-text query or an attribute chip the pre-aggregated view does not
+	// carry falls through to the raw scan, exactly as the trace listing does.
+	if toolUsageSummaryNeedsRawScan(arg) {
 		return toolUsageRawNormalizedEventsCTE(arg)
 	}
 
@@ -7070,6 +7140,7 @@ SELECT
 	toUInt8(0) AS blocked,
 	toUInt8(0) AS pending,
 	'' AS hook_source,
+	g_event_source AS event_source,
 	g_account_type AS account_type,
 	g_meta_mcp_server_id AS meta_mcp_server_id,
 	%s AS client_key,
@@ -7207,6 +7278,7 @@ SELECT
 	toUInt8(g_has_block = 1) AS blocked,
 	toUInt8(g_has_block = 0 AND g_has_error = 0 AND g_has_result = 0) AS pending,
 	g_hook_source AS hook_source,
+	'hook' AS event_source,
 	g_account_type AS account_type,
 	g_meta_mcp_server_id AS meta_mcp_server_id,
 	%s AS client_key,
