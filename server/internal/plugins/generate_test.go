@@ -2150,7 +2150,7 @@ func allowVibeHooks(t *testing.T) {
 	SetPinnedHooksBinaryVersionForTest(t, vibeProviderMinHooksBinaryVersion)
 }
 
-func TestGenerateVibeObservabilityPluginPackage(t *testing.T) {
+func TestGenerateVibeObservabilityPluginPackage(t *testing.T) { //nolint:paralleltest // Writes the pinnedHooksBinaryVersion package var.
 	allowVibeHooks(t)
 	cfg := GenerateConfig{
 		OrgName:     "Acme",
@@ -2232,7 +2232,7 @@ func TestGenerateVibeObservabilityPluginPackage(t *testing.T) {
 
 // The published marketplace repo carries the Vibe observability package at
 // <org>-observability-vibe/ next to the other platforms' subtrees.
-func TestGenerateHooksFilesIncludesVibeSubtree(t *testing.T) {
+func TestGenerateHooksFilesIncludesVibeSubtree(t *testing.T) { //nolint:paralleltest // Writes the pinnedHooksBinaryVersion package var.
 	allowVibeHooks(t)
 	cfg := GenerateConfig{
 		OrgName:     "Acme",
@@ -2275,7 +2275,7 @@ func TestDogfoodPluginFilesIncludesPi(t *testing.T) {
 // The published hooks subtree carries one directory per platform and the
 // rollout carries it forward by prefix, so a platform missing from either the
 // generator or the prefix lists silently stops publishing.
-func TestGenerateHooksFilesCoversEveryPlatformSubtree(t *testing.T) {
+func TestGenerateHooksFilesCoversEveryPlatformSubtree(t *testing.T) { //nolint:paralleltest // Writes the pinnedHooksBinaryVersion package var.
 	allowVibeHooks(t)
 	cfg := GenerateConfig{
 		OrgName:     "Acme",
@@ -2470,7 +2470,7 @@ func TestHooksConfigHashIgnoresPublishedMarketplaceName(t *testing.T) {
 // While the pinned hooks binary predates the vibe provider, the Vibe
 // observability package is skipped without failing the whole publish, and
 // platform=vibe returns the sentinel error. Not parallel: writes the pin var.
-func TestGenerateHooksFilesSkipsVibeWhenPinLacksProvider(t *testing.T) {
+func TestGenerateHooksFilesSkipsVibeWhenPinLacksProvider(t *testing.T) { //nolint:paralleltest // Writes the pinnedHooksBinaryVersion package var.
 	prev := pinnedHooksBinaryVersion
 	pinnedHooksBinaryVersion = "0.3.46" // below vibeProviderMinHooksBinaryVersion
 	t.Cleanup(func() { pinnedHooksBinaryVersion = prev })
@@ -2493,7 +2493,7 @@ func TestGenerateHooksFilesSkipsVibeWhenPinLacksProvider(t *testing.T) {
 // An org whose slug makes the manifest name exceed the AP1.0 schema's 64
 // characters skips only the Vibe package; the publish succeeds and
 // platform=vibe returns the sentinel. Not parallel: writes the pin var.
-func TestGenerateVibeManifestNameTooLongSkipsOnlyVibe(t *testing.T) {
+func TestGenerateVibeManifestNameTooLongSkipsOnlyVibe(t *testing.T) { //nolint:paralleltest // Writes the pinnedHooksBinaryVersion package var.
 	allowVibeHooks(t)
 	cfg := GenerateConfig{
 		OrgName:     strings.Repeat("a", 60), // slug 60 chars, name would be 75 > 64
@@ -2512,7 +2512,7 @@ func TestGenerateVibeManifestNameTooLongSkipsOnlyVibe(t *testing.T) {
 	require.False(t, VibeObservabilityPluginAvailable(cfg))
 }
 
-func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
+func TestGeneratedHookScriptsAreValidBash(t *testing.T) { //nolint:paralleltest // Writes the pinnedHooksBinaryVersion package var.
 	allowVibeHooks(t)
 	bashPath, err := exec.LookPath("bash")
 	require.NoError(t, err, "bash is required to syntax-check generated hook scripts")
