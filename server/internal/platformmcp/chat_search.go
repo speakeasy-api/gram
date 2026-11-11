@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -55,9 +56,9 @@ var (
 	errChatSearchTimeout = errors.New("chat search timed out")
 )
 
-// ChatSearchService searches and reads captured chat messages under an
-// explicit transcript grant. It never inherits the metadata listing's
-// org-admin bypass.
+// ChatSearchService searches and reads captured chat messages. A member reaches
+// their own sessions and their owned agents' sessions; an explicit transcript
+// grant widens that to the project. Organization administration never does.
 type ChatSearchService struct {
 	db         *pgxpool.Pool
 	engine     *authz.Engine
@@ -175,10 +176,36 @@ type chatSearchScope struct {
 	ParticipantProvider string   `json:"participant_provider"`
 	ChatIDs             []string `json:"chat_ids"`
 	Source              string   `json:"source"`
+	// Visibility is the member whose own scope the page was read under, or
+	// empty for a project-wide page, so a cursor cannot cross between the two.
+	Visibility string `json:"visibility"`
 }
 
-func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, projectID, projectSlug string) (ResolvedProject, error) {
-	var zero ResolvedProject
+// chatAccess is what a caller may search and read in one project: every
+// session with an unrestricted chat:read grant, otherwise their own sessions
+// and the agent-only sessions of agents they own, as the dashboard decides it.
+type chatAccess struct {
+	project       ResolvedProject
+	ownUserID     string
+	ownedAgentIDs []uuid.UUID
+}
+
+func (a chatAccess) projectWide() bool {
+	return a.ownUserID == ""
+}
+
+// covers reports whether a chat is readable in the member's own scope: their
+// own session, or an agent-only session of an agent they own. AgentOnly is
+// decided in SQL: a demoted mixed session has an empty user id, not a NULL one.
+func (a chatAccess) covers(chat platformrepo.GetPlatformChatSearchChatRow) bool {
+	if a.projectWide() || chat.OwnerUserID == a.ownUserID {
+		return true
+	}
+	return chat.AgentOnly && slices.Contains(a.ownedAgentIDs, chat.AgentID.UUID)
+}
+
+func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, projectID, projectSlug string) (chatAccess, error) {
+	var zero chatAccess
 	if !s.valid() {
 		return zero, ErrUnavailable
 	}
@@ -196,11 +223,6 @@ func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, 
 	if _, ok := authz.GrantsFromContext(ctx); !ok {
 		return zero, ErrUnavailable
 	}
-	// Transcript grants are unrestricted. Refuse before project resolution so
-	// a caller without one cannot probe project existence through error codes.
-	if err := s.engine.Require(ctx, authz.ChatReadCheck(principal.OrganizationID)); err != nil {
-		return zero, &ExternalAuthorizationError{RequiredScope: string(authz.ScopeChatRead), RequestAccessURL: "", cause: err}
-	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return zero, err
 	}
@@ -208,10 +230,24 @@ func (s *ChatSearchService) authorize(ctx context.Context, principal Principal, 
 	if err != nil {
 		return zero, err
 	}
-	if err := s.engine.Require(ctx, authz.ChatReadCheck(project.ID.String())); err != nil {
-		return zero, &ExternalAuthorizationError{RequiredScope: string(authz.ScopeChatRead), RequestAccessURL: "", cause: err}
+	// Project-wide transcript access still takes the unrestricted grant. It is
+	// evaluated rather than required: a member without it is the expected case
+	// and falls back to their own scope, not a denial worth recording.
+	allowed, err := s.engine.Evaluate(ctx, authz.ChatReadCheck(principal.OrganizationID), authz.ChatReadCheck(project.ID.String()))
+	if err != nil {
+		return zero, fmt.Errorf("evaluate chat transcript access: %w", err)
 	}
-	return project, nil
+	if allowed {
+		return chatAccess{project: project, ownUserID: "", ownedAgentIDs: nil}, nil
+	}
+	owned, err := chatrepo.New(s.db).ListOwnedAgentIDs(ctx, chatrepo.ListOwnedAgentIDsParams{
+		OrganizationID: principal.OrganizationID,
+		OwnerUserID:    principal.UserID,
+	})
+	if err != nil {
+		return zero, fmt.Errorf("resolve owned agents for chat search: %w", err)
+	}
+	return chatAccess{project: project, ownUserID: principal.UserID, ownedAgentIDs: owned}, nil
 }
 
 // Search returns one keyset page of matching messages. SQL matches raw stored
@@ -247,10 +283,11 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 	slices.SortFunc(chatIDs, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
 	chatIDs = slices.Compact(chatIDs)
 
-	project, err := s.authorize(ctx, principal, input.ProjectID, input.ProjectSlug)
+	access, err := s.authorize(ctx, principal, input.ProjectID, input.ProjectSlug)
 	if err != nil {
 		return zero, err
 	}
+	project := access.project
 	ctx, cancel := context.WithTimeout(ctx, chatSearchTimeout)
 	defer cancel()
 
@@ -261,7 +298,7 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 	encodedScope, err := json.Marshal(chatSearchScope{
 		ProjectID: project.ID.String(), From: from.UTC().Format(time.RFC3339Nano), To: to.UTC().Format(time.RFC3339Nano),
 		Query: input.Query, SortOrder: input.SortOrder, OwnerUserID: input.OwnerUserID, ParticipantID: input.ParticipantID,
-		ParticipantProvider: input.ParticipantProvider, ChatIDs: scopeIDs, Source: input.Source,
+		ParticipantProvider: input.ParticipantProvider, ChatIDs: scopeIDs, Source: input.Source, Visibility: access.ownUserID,
 	})
 	if err != nil {
 		return zero, fmt.Errorf("encode chat search scope: %w", err)
@@ -282,6 +319,9 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 	rows, err := platformrepo.New(s.db).SearchPlatformChatMessages(ctx, platformrepo.SearchPlatformChatMessagesParams{
 		ProjectID: project.ID, OrganizationID: principal.OrganizationID,
 		FromTime: conv.ToPGTimestamptz(from), ToTime: conv.ToPGTimestamptz(to),
+		// The own scope is ANDed with every caller filter, so owner_user_id,
+		// participant_id and chat_ids can only narrow what the member may see.
+		OwnUserID: access.ownUserID, OwnedAgentIds: access.ownedAgentIDs,
 		ChatIds: chatIDs, OwnerUserID: input.OwnerUserID, Source: input.Source, Pattern: likeContainsPattern(input.Query),
 		ParticipantID: input.ParticipantID, ParticipantProvider: input.ParticipantProvider,
 		HasCursor: input.Cursor != "", OldestFirst: input.SortOrder == chatSearchSortOldestFirst,
@@ -442,10 +482,11 @@ func (s *ChatSearchService) Read(ctx context.Context, principal Principal, input
 	if size < 0 || size > chatReadMaxContext {
 		return zero, errChatSearchInvalid
 	}
-	project, err := s.authorize(ctx, principal, input.ProjectID, input.ProjectSlug)
+	access, err := s.authorize(ctx, principal, input.ProjectID, input.ProjectSlug)
 	if err != nil {
 		return zero, err
 	}
+	project := access.project
 	ctx, cancel := context.WithTimeout(ctx, chatSearchTimeout)
 	defer cancel()
 	queries := platformrepo.New(s.db)
@@ -455,6 +496,12 @@ func (s *ChatSearchService) Read(ctx context.Context, principal Principal, input
 	}
 	if err != nil {
 		return zero, fmt.Errorf("get searched chat: %w", err)
+	}
+	// Someone else's session needs the transcript grant, as the dashboard's
+	// per-chat gate decides it. Chat IDs are unguessable, so naming the missing
+	// scope here reveals nothing a member could not already see in a listing.
+	if !access.covers(chat) {
+		return zero, &ExternalAuthorizationError{RequiredScope: string(authz.ScopeChatRead), RequestAccessURL: "", cause: ErrForbidden}
 	}
 	if err := s.recordAccess(ctx, principal, project.ID, chatID, chat.OwnerUserID); err != nil {
 		return zero, err

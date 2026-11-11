@@ -148,6 +148,11 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  channels: {
+    title: "Channels",
+    url: "channels",
+    icon: "messages-square",
+  },
   assistants: {
     title: "Assistants",
     url: "assistants",

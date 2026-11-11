@@ -1,8 +1,19 @@
+import { salesforceConnection, salesforceMyDomain } from "./salesforce";
 /** Provider setup state only. Network actions live in the page integration. */
-export type Provider = "slack" | "github";
-export const names = { slack: "Slack", github: "GitHub" };
+export type Provider = "slack" | "github" | "salesforce";
+export const names = {
+  slack: "Slack",
+  github: "GitHub",
+  salesforce: "Salesforce",
+};
 const defaultValues = {
   org: "",
+  integration: "native",
+  environment: "production",
+  salesforceServer: "sobject-reads",
+  salesforceDomain: "",
+  instanceUrl: "",
+  path: "own",
   appChoice: "new",
   clientId: "",
   clientSecret: "",
@@ -24,6 +35,7 @@ export type State = {
   showSecret: boolean;
   configChanged: boolean;
   accessChosen: boolean;
+  sourceFingerprint?: string;
 };
 export function initialState(provider: Provider): State {
   return {
@@ -43,6 +55,28 @@ export function initialState(provider: Provider): State {
   };
 }
 export function steps(s: State): { id: string; title: string }[] {
+  if (s.provider === "salesforce") {
+    const start = [
+      { id: "begin", title: "Setup plan" },
+      { id: "choices", title: "Choose your connection" },
+      { id: "salesforce-org", title: "Salesforce organization" },
+    ];
+    if (s.values.path === "support")
+      return [
+        ...start,
+        { id: "install", title: "Install Speakeasy’s app" },
+        { id: "support", title: "Finish with support" },
+      ];
+    return [
+      ...start,
+      { id: "app", title: "App basics" },
+      { id: "oauth", title: "OAuth settings" },
+      { id: "security", title: "Security settings" },
+      { id: "activation", title: "Enable Salesforce MCP" },
+      { id: "credentials", title: "Enter app credentials" },
+      { id: "test", title: "Connect and test" },
+    ];
+  }
   if (s.provider === "github")
     return [
       { id: "begin", title: "Setup plan" },
@@ -72,15 +106,45 @@ export function orgValid(s: State): boolean {
   );
 }
 export function ready(s: State): boolean {
-  return s.saved && (s.provider !== "github" || orgValid(s));
+  return (
+    s.saved &&
+    (s.provider !== "salesforce" ||
+      (s.values.path === "own" &&
+        !s.configChanged &&
+        !!salesforceConnection(s.values))) &&
+    (s.provider !== "github" || orgValid(s))
+  );
 }
 export function validate(s: State): State["errors"] {
   const errors: State["errors"] = {};
   if (s.step === "organization" && !orgValid(s))
     errors.org = "Enter the GitHub organization name, without a URL.";
+  if (
+    s.provider === "salesforce" &&
+    ["choices", "credentials"].includes(s.step)
+  ) {
+    if (!salesforceConnection({ ...s.values, salesforceDomain: "" })) {
+      errors.salesforceServer =
+        "Choose a documented Salesforce server and environment.";
+    }
+  }
+  if (
+    s.provider === "salesforce" &&
+    ["salesforce-org", "credentials"].includes(s.step) &&
+    s.values.salesforceDomain.trim() &&
+    !salesforceMyDomain(s.values.salesforceDomain, s.values.environment)
+  )
+    errors.salesforceDomain =
+      s.values.environment === "sandbox"
+        ? "Enter your sandbox’s Current My Domain URL, such as example--uat.sandbox.my.salesforce.com."
+        : "Enter your production org’s Current My Domain URL, such as example.my.salesforce.com.";
   if (s.step === "credentials") {
-    if (!s.values.clientId.trim()) errors.clientId = "Enter Client ID.";
-    if (!s.values.clientSecret.trim())
+    if (!s.values.clientId.trim())
+      errors.clientId =
+        s.provider === "salesforce"
+          ? "Enter Consumer Key."
+          : "Enter Client ID.";
+    if (s.provider !== "salesforce" && !s.values.clientSecret.trim())
       errors.clientSecret = "Enter Client Secret.";
   }
   return errors;
@@ -92,7 +156,9 @@ export type Action =
       authorized?: boolean;
       tested?: boolean;
       configChanged?: boolean;
+      sourceFingerprint?: string;
     }
+  | { type: "source"; values: Partial<Values>; sourceFingerprint: string }
   | { type: "field"; field: FieldName; value: string; source?: "configuration" }
   | { type: "goto"; step: string; correction?: boolean }
   | { type: "next" }
@@ -109,6 +175,22 @@ export function reduce(s: State, a: Action): State {
         tested: a.tested ?? s.tested,
         configChanged:
           a.tested === true ? false : (a.configChanged ?? s.configChanged),
+        sourceFingerprint: a.sourceFingerprint ?? s.sourceFingerprint,
+      };
+    case "source":
+      return {
+        ...s,
+        values: { ...s.values, ...a.values, clientId: "", clientSecret: "" },
+        sourceFingerprint: a.sourceFingerprint,
+        step: "choices",
+        screen: "setup",
+        done: [],
+        errors: {},
+        saved: false,
+        authorized: false,
+        tested: false,
+        returnToTest: false,
+        showSecret: false,
       };
     case "field": {
       if (s.values[a.field] === a.value) return s;
@@ -124,11 +206,24 @@ export function reduce(s: State, a: Action): State {
           (id) => steps(s).findIndex((t) => t.id === id) < boundary,
         ),
       };
-      if (a.field === "appChoice") {
+      if (
+        a.field === "appChoice" ||
+        (s.provider === "salesforce" &&
+          [
+            "integration",
+            "environment",
+            "salesforceServer",
+            "salesforceDomain",
+            "instanceUrl",
+            "path",
+          ].includes(a.field))
+      ) {
         next.values.clientId = "";
         next.values.clientSecret = "";
         next.showSecret = false;
       }
+      if (s.provider === "salesforce" && a.source !== "configuration")
+        next.configChanged = true;
       if (a.field === "access" && a.source !== "configuration") {
         next.configChanged = true;
         next.accessChosen = true;
@@ -147,6 +242,12 @@ export function reduce(s: State, a: Action): State {
           }
         : s;
     case "next": {
+      if (
+        s.provider === "salesforce" &&
+        s.values.path === "support" &&
+        s.step === "support"
+      )
+        return s;
       const errors = validate(s);
       if (Object.keys(errors).length) return { ...s, errors };
       const list = steps(s),

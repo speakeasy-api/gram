@@ -133,8 +133,7 @@ VALUES
 
 -- Distribute these servers to the seeded organization roles holding
 -- mcp:connect, including disposition-limited connect. mcp:read and
--- mcp:write still allow connecting at the endpoint but do not deliver
--- servers. Store server identities, not legacy toolset memberships. Content
+-- mcp:write neither allow connecting nor deliver servers. Store server identities, not legacy toolset memberships. Content
 -- has no manual/automatic distinction and never widens a plugin's audience.
 -- name: ServersInsertRoleServerMemberships :execrows
 INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)

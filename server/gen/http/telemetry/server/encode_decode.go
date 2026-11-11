@@ -10057,6 +10057,26 @@ func marshalTelemetrySessionSummaryToSessionSummaryResponseBody(v *telemetry.Ses
 	return res
 }
 
+// marshalTelemetrySessionTotalsToSessionTotalsResponseBody builds a value of
+// type *SessionTotalsResponseBody from a value of type
+// *telemetry.SessionTotals.
+func marshalTelemetrySessionTotalsToSessionTotalsResponseBody(v *telemetry.SessionTotals) *SessionTotalsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &SessionTotalsResponseBody{
+		SessionCount:      v.SessionCount,
+		MessageCount:      v.MessageCount,
+		ToolCallCount:     v.ToolCallCount,
+		TotalInputTokens:  v.TotalInputTokens,
+		TotalOutputTokens: v.TotalOutputTokens,
+		TotalTokens:       v.TotalTokens,
+		TotalCost:         v.TotalCost,
+	}
+
+	return res
+}
+
 // marshalTelemetryFilterOptionToFilterOptionResponseBody builds a value of
 // type *FilterOptionResponseBody from a value of type *telemetry.FilterOption.
 func marshalTelemetryFilterOptionToFilterOptionResponseBody(v *telemetry.FilterOption) *FilterOptionResponseBody {

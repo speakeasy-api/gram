@@ -11,6 +11,7 @@ import {
   SessionSummary,
   SessionSummary$inboundSchema,
 } from "./sessionsummary.js";
+import { SessionTotals, SessionTotals$inboundSchema } from "./sessiontotals.js";
 
 /**
  * Result of listing org-scoped chat sessions
@@ -21,9 +22,17 @@ export type ListSessionsResult = {
    */
   nextCursor?: string | undefined;
   /**
-   * List of chat session summaries
+   * True when sessions were withheld because the caller lacks chat:read on one or more projects. The totals still cover every matching session.
+   */
+  scoped: boolean;
+  /**
+   * List of chat session summaries. Only sessions from projects the caller holds chat:read on are listed.
    */
   sessions: Array<SessionSummary>;
+  /**
+   * Aggregate usage over a set of chat sessions
+   */
+  totals?: SessionTotals | undefined;
 };
 
 /** @internal */
@@ -33,7 +42,9 @@ export const ListSessionsResult$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     next_cursor: z.optional(z.string()),
+    scoped: z.boolean(),
     sessions: z.array(SessionSummary$inboundSchema),
+    totals: z.optional(SessionTotals$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
