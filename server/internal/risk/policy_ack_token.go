@@ -156,6 +156,20 @@ func newPolicyAckShortID() (string, error) {
 	return string(out), nil
 }
 
+// policyAckIDFromToken returns the cache id behind a link token: an rpak1.
+// token or a bare short-link id. Lookup and eviction both go through it, so a
+// short link is invalidated after use exactly like a long one.
+func policyAckIDFromToken(token string) (string, bool) {
+	if after, ok := strings.CutPrefix(token, policyAckTokenPrefix); ok {
+		id := after
+		return id, strings.TrimSpace(id) != ""
+	}
+	if isPolicyAckShortID(token) {
+		return token, true
+	}
+	return "", false
+}
+
 // isPolicyAckShortID reports whether a token is a bare short-link id.
 func isPolicyAckShortID(token string) bool {
 	if len(token) != policyAckShortIDLength {
@@ -285,13 +299,8 @@ func lookupPolicyAckRecord(ctx context.Context, c cache.Cache, tokenString strin
 	if c == nil {
 		return nil, fmt.Errorf("%w: cache is not configured", errPolicyAckStoreUnavailable)
 	}
-	id := ""
-	switch {
-	case strings.HasPrefix(tokenString, policyAckTokenPrefix):
-		id = strings.TrimPrefix(tokenString, policyAckTokenPrefix)
-	case isPolicyAckShortID(tokenString):
-		id = tokenString
-	default:
+	id, ok := policyAckIDFromToken(tokenString)
+	if !ok {
 		return nil, fmt.Errorf("invalid risk policy ack token format")
 	}
 	if strings.TrimSpace(id) == "" {
@@ -316,10 +325,10 @@ func lookupPolicyAckRecord(ctx context.Context, c cache.Cache, tokenString strin
 // invalidatePolicyAckToken best-effort deletes a redeemed token so the one-shot
 // link cannot be replayed. Errors are non-fatal (TTL still bounds it).
 func invalidatePolicyAckToken(ctx context.Context, c cache.Cache, tokenString string) {
-	if c == nil || !strings.HasPrefix(tokenString, policyAckTokenPrefix) {
+	id, ok := policyAckIDFromToken(tokenString)
+	if c == nil || !ok {
 		return
 	}
-	id := strings.TrimPrefix(tokenString, policyAckTokenPrefix)
 	// Eviction runs after the DB commit, so it must not be skipped if the
 	// request context is already cancelled (client disconnect / timeout).
 	// Otherwise a declined-but-not-evicted token could later be redeemed. Detach

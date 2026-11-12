@@ -111,7 +111,7 @@ func (s *Service) AcknowledgeRiskPolicyChallenge(ctx context.Context, payload *g
 		if errors.Is(err, errPolicyAckStoreUnavailable) {
 			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy challenge").LogError(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeInvalid, err, "invalid or expired risk policy challenge token")
+		return nil, errPolicyAckInvalid(err)
 	}
 
 	// Bind redemption to the caller: the token is a bearer reference, so a
@@ -219,7 +219,7 @@ func (s *Service) GetRiskPolicyChallenge(ctx context.Context, payload *gen.GetRi
 		if errors.Is(err, errPolicyAckStoreUnavailable) {
 			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy challenge").LogError(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeInvalid, err, "invalid or expired risk policy challenge token")
+		return nil, errPolicyAckInvalid(err)
 	}
 	if !policyAckBelongsTo(record, authCtx) {
 		return nil, errPolicyAckNotYours()
@@ -272,7 +272,7 @@ func (s *Service) DeclineRiskPolicyChallenge(ctx context.Context, payload *gen.D
 		if errors.Is(err, errPolicyAckStoreUnavailable) {
 			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy challenge").LogError(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeInvalid, err, "invalid or expired risk policy challenge token")
+		return nil, errPolicyAckInvalid(err)
 	}
 	if !policyAckBelongsTo(record, authCtx) {
 		return nil, errPolicyAckNotYours()
@@ -326,5 +326,11 @@ func policyAckBelongsTo(record *policyAckRecord, authCtx *contextvalues.AuthCont
 // unknown or expired one. Short-link ids are short enough to probe, so the
 // response must not reveal that a live challenge exists for another user.
 func errPolicyAckNotYours() error {
-	return oops.E(oops.CodeInvalid, errors.New("risk policy ack belongs to another user"), "invalid or expired risk policy challenge token")
+	return errPolicyAckInvalid(errors.New("risk policy ack belongs to another user"))
+}
+
+// errPolicyAckInvalid is the one public answer for a token that cannot be
+// used: unknown, expired, malformed, or issued to someone else.
+func errPolicyAckInvalid(cause error) error {
+	return oops.E(oops.CodeInvalid, cause, "invalid or expired risk policy challenge token")
 }

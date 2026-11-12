@@ -1,6 +1,7 @@
 package risk
 
 import (
+	"errors"
 	"net/url"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestGeneratePolicyAckShortURL(t *testing.T) {
@@ -71,4 +73,43 @@ func TestNewPolicyAckShortIDIsBase62(t *testing.T) {
 		seen[id] = true
 	}
 	require.Len(t, seen, 200)
+}
+
+func TestInvalidatePolicyAckTokenEvictsShortIDs(t *testing.T) {
+	t.Parallel()
+
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	c := cache.NewRedisCacheAdapter(client)
+
+	site, err := url.Parse("https://ai.example.com")
+	require.NoError(t, err)
+	link, _, err := GeneratePolicyAckShortURL(t.Context(), c, site, PolicyAckTokenInput{
+		OrganizationID:   "org-1",
+		ProjectID:        uuid.NewString(),
+		UserID:           "user-1",
+		RiskPolicyID:     uuid.NewString(),
+		PolicyName:       "Government IDs (warn)",
+		ToolName:         nil,
+		CallFingerprint:  "fp",
+		ChallengeMessage: "",
+		RememberFor:      0,
+	}, 0)
+	require.NoError(t, err)
+	id := link[strings.Index(link, "#")+1:]
+
+	invalidatePolicyAckToken(t.Context(), c, id)
+	_, err = lookupPolicyAckRecord(t.Context(), c, id)
+	require.Error(t, err, "a used short link cannot be redeemed again")
+}
+
+func TestPolicyAckNotYoursMatchesInvalidToken(t *testing.T) {
+	t.Parallel()
+
+	var notYours, unknown *oops.ShareableError
+	require.ErrorAs(t, errPolicyAckNotYours(), &notYours)
+	require.ErrorAs(t, errPolicyAckInvalid(errors.New("risk policy ack not found or expired")), &unknown)
+	require.Equal(t, unknown.Code, notYours.Code, "same code")
+	require.Equal(t, unknown.Error(), notYours.Error(), "same public message")
 }

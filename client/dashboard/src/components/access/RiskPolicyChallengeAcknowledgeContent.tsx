@@ -180,7 +180,7 @@ function getAckToken(): string | null {
   const hash = window.location.hash.replace(/^#/, "");
   // The short link (/ack#<id>) carries a bare id as the whole fragment; the
   // long link uses ack_token=<token>.
-  if (hash !== "" && !hash.includes("=")) {
+  if (/^[0-9A-Za-z]{10}$/.test(hash) || hash.startsWith("rpak1.")) {
     return hash;
   }
   const hashParams = new URLSearchParams(hash);
