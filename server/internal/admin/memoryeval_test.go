@@ -35,11 +35,14 @@ func (s *recordingMemoryEvalStarter) StartMemoryEvalRun(_ context.Context, runID
 func seedMemoryEvalCorpusProject(t *testing.T, db *pgxpool.Pool) {
 	t.Helper()
 	spec := demoseed.LocalSpec()
+	keys := []memoryeval.ProjectKey{memoryeval.ProjectMain, memoryeval.ProjectOther}
 	_, err := orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{ID: spec.OrgID, Name: spec.OrgName, Slug: spec.OrgSlug})
 	require.NoError(t, err)
-	id, ok := demoseed.MemoryEvalProjectID(spec, memoryeval.ProjectMain)
-	require.True(t, ok)
-	require.NoError(t, demoseedrepo.New(db).MemoryEvalInsertProject(t.Context(), demoseedrepo.MemoryEvalInsertProjectParams{ProjectID: id, Name: "Team memory eval", Slug: "team-memory-eval", OrgID: spec.OrgID, CreatedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}}))
+	for _, key := range keys {
+		id, ok := demoseed.MemoryEvalProjectID(spec, key)
+		require.True(t, ok)
+		require.NoError(t, demoseedrepo.New(db).MemoryEvalInsertProject(t.Context(), demoseedrepo.MemoryEvalInsertProjectParams{ProjectID: id, Name: "Team memory eval " + string(key), Slug: "team-memory-eval-" + string(key), OrgID: spec.OrgID, CreatedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}}))
+	}
 }
 
 // withMemoryEvalOperator signs ctx in as a staff member, whose email a start

@@ -57,12 +57,12 @@ SELECT count(*) FROM memory_eval_runs
 WHERE status IN ('queued', 'running');
 
 -- name: FailStaleActiveRuns :execrows
--- Fails queued or running runs created before a cutoff older than any live
--- workflow. Nothing else resolves a row whose workflow never started or was
+-- Fails queued or running runs that started (or, if never claimed, were
+-- created) before a cutoff older than any live workflow. Nothing else resolves a row whose workflow never started or was
 -- terminated, and an unresolved row blocks every later start.
 UPDATE memory_eval_runs
 SET status = 'failed', error = @error, finished_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE status IN ('queued', 'running') AND created_at < @created_before;
+WHERE status IN ('queued', 'running') AND COALESCE(started_at, created_at) < @created_before;
 
 -- name: GetRunStatus :one
 -- A live run's status, so a claim that found nothing can tell an orphaned
