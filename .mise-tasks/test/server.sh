@@ -8,6 +8,9 @@ cover=false
 open_html=false
 shard=""
 shard_isolate=""
+shard_changed=""
+plan=""
+print_shard=false
 rerun_fails=""
 args=()
 
@@ -24,6 +27,15 @@ for arg in "$@"; do
       shift ;;
     --shard-isolate=*)
       shard_isolate="${arg#--shard-isolate=}"
+      shift ;;
+    --shard-changed=*)
+      shard_changed="${arg#--shard-changed=}"
+      shift ;;
+    --plan=*)
+      plan="${arg#--plan=}"
+      shift ;;
+    --print-shard)
+      print_shard=true
       shift ;;
     --rerun-fails=*)
       rerun_fails="${arg#--rerun-fails=}"
@@ -61,11 +73,48 @@ if [ "$cover" = true ] && [ -n "$rerun_fails" ]; then
   exit 1
 fi
 
+# --shard-changed=<file> narrows the run to the packages a change reaches in
+# one step: the packages the files listed in <file> belong to (one path per
+# line, relative to the repository root) and the packages importing one of
+# those directly. It only applies together with --shard or --plan. See
+# ci/cmd/shard for the rules; the two lists below are this suite's part of
+# them.
+#
+# A change to one of these selects every package: tests depend on them without
+# importing anything (testenv loads both schemas into every database it
+# starts), or they change how everything is built or run.
+selection_full_on=(
+  go.mod
+  go.sum
+  mise.toml
+  .github/
+  .mise-tasks/
+  server/database/schema.sql
+  server/migrations/
+  server/clickhouse/
+  local/clickhouse/
+)
+# Tests in these packages read a file they do not import.
+selection_readers=(
+  server/gen/http/openapi3.yaml=server/internal/agentmanagement
+  server/gen/http/openapi3.yaml=server/internal/killswitchapi
+  server/gen/http/openapi3.yaml=server/internal/productfeatures
+)
+
+selection=()
+if [ -n "$shard_changed" ]; then
+  selection=(
+    -changed "$shard_changed"
+    -full-on "$(IFS=,; echo "${selection_full_on[*]}")"
+    -readers "$(IFS=,; echo "${selection_readers[*]}")"
+  )
+fi
+
 # --shard=<index>/<total> runs a deterministic subset of the packages that have
 # tests, so CI can spread the suite over several runners. See ci/cmd/shard for
 # how packages are distributed. --shard-isolate=<import path>[,...] gives each
 # listed package a shard of its own, taking the last shards.
-if [ -n "$shard" ] || [ -n "$rerun_fails" ]; then
+if [ -n "$shard" ] || [ -n "$rerun_fails" ] || [ -n "$plan" ]; then
   # Only package patterns are sharded. Everything else reaches 'go test' in the
   # order it was given, including values that follow a flag — the 'TestFoo' in
   # '-run TestFoo' is not a package. Build tags also go to the shard tool so it
@@ -100,9 +149,22 @@ if [ -n "$shard" ] || [ -n "$rerun_fails" ]; then
 
   packages=("${patterns[@]}")
 
+  # --plan=<max shards> prints, as JSON, how many shards the selection needs
+  # and runs nothing. CI builds the server-test matrix from it.
+  if [ -n "$plan" ]; then
+    exec go run -buildvcs=false github.com/speakeasy-api/gram/ci/cmd/shard plan \
+      -max "$plan" "${selection[@]}" "${tags[@]}" "${patterns[@]}"
+  fi
+
   if [ -n "$shard" ]; then
     shard_packages=$(go run -buildvcs=false github.com/speakeasy-api/gram/ci/cmd/shard \
-      -i "$shard" -isolate "$shard_isolate" "${tags[@]}" "${patterns[@]}") || exit $?
+      -i "$shard" -isolate "$shard_isolate" "${selection[@]}" "${tags[@]}" "${patterns[@]}") || exit $?
+
+    # --print-shard lists the shard's packages and runs nothing.
+    if [ "$print_shard" = true ]; then
+      echo "$shard_packages"
+      exit 0
+    fi
 
     packages=()
     while IFS= read -r line; do

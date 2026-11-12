@@ -1924,17 +1924,69 @@ jobs:
       - name: Check for dirty files
         run: mise run git:porcelain
 
+  # Decides how much of the server suite a run covers and how many shards
+  # that takes. A pull request tests the packages its files belong to and the
+  # packages that import one of those directly, on as few shards as that
+  # needs; packages further down the import graph are left to the merge queue,
+  # so a pull request can pass here and still fail there. The whole suite runs
+  # on five shards in the merge queue, with the ci:full label, and when the
+  # change touches something every package depends on (see the lists in
+  # .mise-tasks/test/server.sh).
+  server-test-plan:
+    name: Plan server tests
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      - name: List changed files
+        id: changed
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full')
+        run: |
+          set -euo pipefail
+          # HEAD is the pull request merge commit; its first parent is the base.
+          git fetch --quiet --depth=2 origin "$GITHUB_SHA"
+          git diff --name-only HEAD^1 HEAD > "${RUNNER_TEMP}/changed-files.txt"
+          echo "arg=--shard-changed=${RUNNER_TEMP}/changed-files.txt" >> "$GITHUB_OUTPUT"
+
+      - name: Plan
+        id: plan
+        env:
+          CHANGED_ARG: ${{ steps.changed.outputs.arg }}
+        run: |
+          set -euo pipefail
+          plan=$(mise run test:server --plan=5 ${CHANGED_ARG:+"$CHANGED_ARG"} -tags=inv.debug ./... | tail -n 1)
+          echo "$plan"
+          echo "shards=$(jq -c .shards <<< "$plan")" >> "$GITHUB_OUTPUT"
+
   server-test:
     name: server-test (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    needs: changes
-    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
+    needs: [changes, server-test-plan]
+    # No shards means the change reaches no test package.
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true' && needs.server-test-plan.outputs.shards != '[]'
     strategy:
       # Every shard should report, otherwise a single failure hides the state of
       # the rest of the suite.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: ${{ fromJSON(needs.server-test-plan.outputs.shards) }}
     env:
       GOMAXPROCS: 8
       # The runner VM is destroyed after the job, and the reaper is the one
@@ -1960,16 +2012,28 @@ jobs:
       - name: Install Go deps
         run: mise run install:go
 
+      # The same list server-test-plan sized the shards from; every shard
+      # has to select from it to agree on who tests what.
+      - name: List changed files
+        id: changed
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full')
+        run: |
+          set -euo pipefail
+          git fetch --quiet --depth=2 origin "$GITHUB_SHA"
+          git diff --name-only HEAD^1 HEAD > "${RUNNER_TEMP}/changed-files.txt"
+          echo "arg=--shard-changed=${RUNNER_TEMP}/changed-files.txt" >> "$GITHUB_OUTPUT"
+
       - name: Install discovery wire-test dependencies on its shard
         shell: bash
         run: |
-          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL}" -tags=inv.debug ./...)
+          packages=$(mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} --print-shard ${CHANGED_ARG:+"$CHANGED_ARG"} -tags=inv.debug ./...)
           if grep -qx 'github.com/speakeasy-api/gram/server/internal/mcpregistry' <<< "$packages"; then
             aube install --frozen-lockfile --filter . --filter 'dashboard...'
           fi
         env:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
+          CHANGED_ARG: ${{ steps.changed.outputs.arg }}
 
       # go test keys cached results on the size and modification time of the
       # files a test reads, and a fresh checkout stamps every file with the
@@ -1997,10 +2061,11 @@ jobs:
         # other branches) a failure fails the job as before: those runs mix
         # flakes with the branch's own breakage.
         continue-on-error: ${{ github.event_name == 'merge_group' || github.ref == 'refs/heads/main' }}
-        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} -p=2 ${RACE_FLAG:+"$RACE_FLAG"} -tags=inv.debug ./...
+        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} ${CHANGED_ARG:+"$CHANGED_ARG"} -p=2 ${RACE_FLAG:+"$RACE_FLAG"} -tags=inv.debug ./...
         env:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
+          CHANGED_ARG: ${{ steps.changed.outputs.arg }}
           RACE_FLAG: ${{ (github.event_name == 'merge_group' || github.ref == 'refs/heads/main') && '-race' || '' }}
           # Alongside junit-report.xml, gotestsum writes only the pass, skip,
           # and fail events of 'go test -json' (no output lines) to this file,
@@ -3089,6 +3154,7 @@ jobs:
       - format-check
       - server-build
       - server-checks
+      - server-test-plan
       - server-test
       - demo-seed-safety
       - docker-build-server
