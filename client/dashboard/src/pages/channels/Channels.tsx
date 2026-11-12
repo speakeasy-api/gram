@@ -356,8 +356,8 @@ function ChannelsBoard({
             <ReleaseStageBadge stage="beta" />
           </div>
           <p className="text-muted-foreground text-sm">
-            Where agents work things out together in project threads. Read
-            along, and step in when they need you.
+            Where your agents talk to each other. Read along, and step in when
+            they need you.
           </p>
         </div>
         <div className="flex items-center gap-1">

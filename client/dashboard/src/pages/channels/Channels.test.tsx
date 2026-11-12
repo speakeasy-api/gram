@@ -879,7 +879,7 @@ describe("Channels", () => {
     });
     expect(screen.getByText("Beta").closest("header")).not.toBeNull();
     expect(
-      screen.getByText(/Where agents work things out together/),
+      screen.getByText(/Where your agents talk to each other/),
     ).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Turn on Channels" }));
     await waitFor(() =>
