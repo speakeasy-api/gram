@@ -219,7 +219,7 @@ func (h *ToolCallLogRelayHandler) handleGroups(ctx context.Context, groups []too
 
 		observedAt := h.now().UTC()
 		batches, err := rightSizeProtoBatches(group.messages, maxLogRelayExportBytes, func(batch []toolCallLogRelayMessage) (*collectorlogsv1.ExportLogsServiceRequest, error) {
-			return buildToolCallLogRelayExport(batch, observedAt, destination.includeSensitiveData)
+			return buildToolCallLogRelayExport(batch, toolCallLogEventName, observedAt, destination.includeSensitiveData)
 		})
 		if err != nil {
 			h.recordDropped(ctx, len(group.messages), relayReasonInvalid)
@@ -293,6 +293,7 @@ func (h *ToolCallLogRelayHandler) recordDropped(ctx context.Context, count int, 
 
 func buildToolCallLogRelayExport(
 	messages []toolCallLogRelayMessage,
+	eventName string,
 	observedAt time.Time,
 	includeSensitiveData bool,
 ) (*collectorlogsv1.ExportLogsServiceRequest, error) {
@@ -308,7 +309,7 @@ func buildToolCallLogRelayExport(
 	indexes := make(map[string]int)
 	groups := make([]toolCallLogResourceGroup, 0, 1)
 	for _, message := range messages {
-		record, err := toolCallLogRecord(message.record, observedAt)
+		record, err := toolCallLogRecord(message.record, eventName, observedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -364,7 +365,7 @@ func toolCallLogResource(record *telemetryv1.LogRecord) (*resourcev1.Resource, e
 	}, nil
 }
 
-func toolCallLogRecord(record *telemetryv1.LogRecord, observedAt time.Time) (*logsv1.LogRecord, error) {
+func toolCallLogRecord(record *telemetryv1.LogRecord, eventName string, observedAt time.Time) (*logsv1.LogRecord, error) {
 	attributes, err := decodeTelemetryAttributes(record.GetAttributesJson())
 	if err != nil {
 		return nil, fmt.Errorf("decode tool call log attributes: %w", err)
@@ -392,7 +393,7 @@ func toolCallLogRecord(record *telemetryv1.LogRecord, observedAt time.Time) (*lo
 		Flags:                  0,
 		TraceId:                decodeTelemetryTraceID(record.GetTraceId()),
 		SpanId:                 decodeTelemetrySpanID(record.GetSpanId()),
-		EventName:              toolCallLogEventName,
+		EventName:              eventName,
 	}, nil
 }
 

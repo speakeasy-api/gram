@@ -40,17 +40,9 @@ func NewMetricTransformHandler(
 }
 
 func (h *MetricTransformHandler) Handle(ctx context.Context, item *otelv1.InboundMetric, _ gcp.MessageMetadata) error {
-	out, err := metricFromInbound(item)
+	out, err := transformInboundMetric(ctx, h.instruments, item, h.enrichers)
 	if err != nil {
-		return fmt.Errorf("convert inbound metric: %w", o11y.LogError(ctx, h.logger, err, "failed to convert inbound metric"))
-	}
-
-	enrichments, err := enrich.Metric(ctx, h.instruments, item, h.enrichers)
-	if err != nil {
-		return fmt.Errorf("enrich metric: %w", o11y.LogError(ctx, h.logger, err, "failed to enrich metric"))
-	}
-	if err := applyMetricResourceEnrichments(out, enrichments); err != nil {
-		return fmt.Errorf("apply metric enrichments: %w", o11y.LogError(ctx, h.logger, err, "failed to apply metric enrichments"))
+		return o11y.LogError(ctx, h.logger, err, "failed to transform inbound metric")
 	}
 
 	result := h.metricPublisher.Publish(ctx, out)
@@ -59,6 +51,23 @@ func (h *MetricTransformHandler) Handle(ctx context.Context, item *otelv1.Inboun
 	}
 
 	return nil
+}
+
+// transformInboundMetric turns an inbound metric into what every consumer and relay receives.
+func transformInboundMetric(ctx context.Context, instruments *enrich.Instruments, item *otelv1.InboundMetric, enrichers []enrich.MetricEnricher) (*otelv1.Metric, error) {
+	out, err := metricFromInbound(item)
+	if err != nil {
+		return nil, fmt.Errorf("convert inbound metric: %w", err)
+	}
+
+	enrichments, err := enrich.Metric(ctx, instruments, item, enrichers)
+	if err != nil {
+		return nil, fmt.Errorf("enrich metric: %w", err)
+	}
+	if err := applyMetricResourceEnrichments(out, enrichments); err != nil {
+		return nil, fmt.Errorf("apply metric enrichments: %w", err)
+	}
+	return out, nil
 }
 
 func applyMetricResourceEnrichments(out *otelv1.Metric, enrichments []otelattr.KeyValue) error {
