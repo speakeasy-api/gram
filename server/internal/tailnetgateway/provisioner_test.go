@@ -716,7 +716,7 @@ func TestLocalProvisionerNamesItsArtifacts(t *testing.T) {
 	require.Contains(t, services, "svc:local-ab12-private")
 	require.Equal(t, "Speakeasy local development (local-ab12)", services["svc:local-ab12-private"].Comment)
 	require.Len(t, f.api.KeyRequests(), 1)
-	require.Contains(t, f.api.KeyRequests()[0].Description, "local-ab12", "the admin console shows which stack minted the key")
+	require.Contains(t, f.api.KeyRequests()[0].Description, "local ab12", "the admin console shows which stack minted the key")
 }
 
 func TestLocalProvisionerTeardownLeavesServicesItDoesNotOwn(t *testing.T) {

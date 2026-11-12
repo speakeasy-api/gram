@@ -35,7 +35,9 @@ type Namer interface {
 	MachineName(ctx context.Context, slot int32) (string, error)
 
 	// AuthKeyDescription describes the auth key minted for one slot of a
-	// connection, as the admin console lists it.
+	// connection, as the admin console lists it. Tailscale rejects
+	// descriptions with punctuation, so it uses only letters, digits and
+	// spaces, within maxAuthKeyDescriptionLength.
 	AuthKeyDescription(ctx context.Context, ingressID uuid.UUID, slot int32) (string, error)
 }
 
@@ -46,7 +48,20 @@ const (
 
 	// productionServiceComment is shown next to production services.
 	productionServiceComment = "Speakeasy private MCP ingress"
+
+	// maxAuthKeyDescriptionLength keeps auth key descriptions within the 50
+	// characters Tailscale's admin console accepts.
+	maxAuthKeyDescriptionLength = 50
+
+	// shortIngressIDLength is how much of a connection id an auth key
+	// description shows: enough to find the connection, short enough to fit.
+	shortIngressIDLength = 8
 )
+
+// shortIngressID is the leading hex digits of a connection id.
+func shortIngressID(ingressID uuid.UUID) string {
+	return ingressID.String()[:shortIngressIDLength]
+}
 
 // ProductionNamer names artifacts as customers see them: hostnames as
 // requested, services svc:<hostname>, machines speakeasy-gw-<slot>. It owns
@@ -74,7 +89,7 @@ func (ProductionNamer) MachineName(_ context.Context, slot int32) (string, error
 }
 
 func (ProductionNamer) AuthKeyDescription(_ context.Context, ingressID uuid.UUID, slot int32) (string, error) {
-	return fmt.Sprintf("Speakeasy gateway slot %d (%s)", slot, ingressID), nil
+	return fmt.Sprintf("Speakeasy gateway %s slot %d", shortIngressID(ingressID), slot), nil
 }
 
 // LocalNamer names a local development stack's artifacts after its qualifier,
@@ -132,8 +147,10 @@ func (n LocalNamer) MachineName(_ context.Context, slot int32) (string, error) {
 	return fmt.Sprintf("%s%s-%d", machineNamePrefix, n.qualifier, slot), nil
 }
 
+// AuthKeyDescription names the stack as "local <id>": Tailscale rejects the
+// hyphen in its qualifier.
 func (n LocalNamer) AuthKeyDescription(_ context.Context, ingressID uuid.UUID, slot int32) (string, error) {
-	return fmt.Sprintf("Speakeasy local development %s, slot %d (%s)", n.qualifier, slot, ingressID), nil
+	return fmt.Sprintf("Speakeasy local %s %s slot %d", strings.TrimPrefix(n.qualifier, "local-"), shortIngressID(ingressID), slot), nil
 }
 
 func (n LocalNamer) owns(hostname string) bool {
