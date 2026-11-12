@@ -176,6 +176,12 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"grant session visibility", func() error {
 			return q.LocalGrantSessionVisibility(ctx, repo.LocalGrantSessionVisibilityParams{OrganizationID: spec.OrgID, UserID: dev.ID})
 		}},
+		{"grant local Channels administration", func() error {
+			if _, err := tx.Exec(ctx, localChannelsAccessSQL, spec.OrgID, dev.ID, spec.ProjectID()); err != nil {
+				return fmt.Errorf("grant local Channels access: %w", err)
+			}
+			return nil
+		}},
 		{"grant tool log visibility", func() error {
 			return q.LocalGrantToolLogVisibility(ctx, repo.LocalGrantToolLogVisibilityParams{OrganizationID: spec.OrgID, UserID: dev.ID})
 		}},
@@ -366,6 +372,21 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		logger.WarnContext(ctx, "could not clear the local feature cache; restart the server if entitlements look stale", attr.SlogError(err))
 	}
 }
+
+// Existing system-role grant sets are intentionally not backfilled. Give the
+// local developer explicit Channels scopes without changing other tenants.
+const localChannelsAccessSQL = `
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT $1, 'user:' || $2::text, requested.scope,
+       jsonb_build_object('resource_kind', 'project', 'resource_id', $3::text)
+FROM unnest(ARRAY['channels:connect', 'channels:admin', 'channels:read_all']) AS requested(scope)
+WHERE NOT EXISTS (
+  SELECT 1 FROM principal_grants g
+  WHERE g.organization_id = $1 AND g.principal_urn = 'user:' || $2::text
+    AND g.scope = requested.scope
+    AND g.selectors = jsonb_build_object('resource_kind', 'project', 'resource_id', $3::text)
+)
+`
 
 func emailDomain(email string) string {
 	at := strings.LastIndexByte(email, '@')

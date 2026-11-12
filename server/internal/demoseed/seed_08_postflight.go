@@ -32,7 +32,10 @@ func (s *seeder) postflight(ctx context.Context) error {
 	if err := s.postflightCore(ctx); err != nil {
 		return err
 	}
-	return s.postflightIdentity(ctx)
+	if err := s.postflightIdentity(ctx); err != nil {
+		return err
+	}
+	return s.postflightChannels(ctx)
 }
 
 // postflightCountCheck is one count query and the condition that fails it.
@@ -538,10 +541,13 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		},
 		// Personal accounts are the reading the governance note exists for;
 		// one surviving row would make the pattern look like an edge case.
+		// The roster seeds three; the team memory eval corpus adds Anthropic
+		// ones for jonas and priya (whose roster account is Cursor), so
+		// their private Claude Code sessions stay out of team memory.
 		{
 			what:  "personal accounts",
 			count: byOrg(s.q.PostflightCountPersonalAccounts),
-			fail:  postflightMustEqual(3, "expected 3 personal accounts, found %d"),
+			fail:  postflightMustEqual(5, "expected 5 personal accounts, found %d"),
 		},
 	}
 	if err := s.runPostflightChecks(checks); err != nil {

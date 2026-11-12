@@ -6444,6 +6444,14 @@ ON chats (project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS chats_id_project_id_key
 ON chats (id, project_id);
 
+-- Per-project team memory reads (ListRecallChats, ListDayDigestChats) walk one
+-- project's eligible chat summaries by when they were written. Partial on the
+-- eligibility predicate those queries share, so it stays small while most
+-- chats have no redacted summary.
+CREATE INDEX IF NOT EXISTS chats_memory_summary_idx
+ON chats (project_id, summary_generated_at)
+WHERE summary IS NOT NULL AND summary_redacted IS TRUE AND memory_excluded_at IS NULL AND deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS skill_distributions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -17454,3 +17462,54 @@ COMMENT ON COLUMN channels_oauth_challenges.code_challenge IS '@access: secret-r
 COMMENT ON COLUMN channels_oauth_challenges.expires_at IS '@access: confidential';
 COMMENT ON COLUMN channels_oauth_challenges.created_at IS '@access: confidential';
 COMMENT ON COLUMN channels_oauth_challenges.updated_at IS '@access: confidential';
+
+-- One team memory eval run started from the platform-admin dashboard. Runs
+-- are Speakeasy-internal: they score memory tools and models against the
+-- synthetic eval corpus loaded into the demo organization. organization_id
+-- has no foreign key on purpose, so a demo reseed never erases run history.
+CREATE TABLE IF NOT EXISTS memory_eval_runs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  config jsonb NOT NULL,
+  report jsonb,
+  error TEXT,
+  cost_usd numeric(12, 4),
+  requested_by TEXT NOT NULL,
+  started_at timestamptz,
+  finished_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT memory_eval_runs_pkey PRIMARY KEY (id),
+  CONSTRAINT memory_eval_runs_cost_usd_check CHECK (cost_usd IS NULL OR (cost_usd >= 0 AND cost_usd <> 'NaN'))
+);
+
+COMMENT ON COLUMN memory_eval_runs.id IS '@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.organization_id IS 'Organization the eval corpus was loaded into, normally the demo organization.
+@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.status IS 'queued, running, succeeded or failed.
+@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.config IS 'Answer, judge, summary and digest models plus runs per arm, all Speakeasy-chosen.
+@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.report IS 'Scored results per model and arm over the synthetic corpus: counts, rates, token totals, costs and synthetic secret and canary names.
+@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.error IS 'Why a failed run stopped; may quote a model provider error.
+@access: restricted';
+COMMENT ON COLUMN memory_eval_runs.cost_usd IS 'Model spend the run reported across preparation, answers and grading.
+@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.requested_by IS 'Email of the Speakeasy staff member who started the run.
+@access: confidential-pii';
+COMMENT ON COLUMN memory_eval_runs.started_at IS '@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.finished_at IS '@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.created_at IS '@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.updated_at IS '@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN memory_eval_runs.deleted IS '@access: confidential';
+
+-- Lists runs newest first on the admin page.
+CREATE INDEX IF NOT EXISTS memory_eval_runs_created_at_idx
+ON memory_eval_runs (created_at DESC, id DESC)
+WHERE deleted IS FALSE;

@@ -371,11 +371,13 @@ type PostgresReader struct {
 	riskFindingList           riskFindingListLister
 	chatMetadata              *ChatMetadataService
 	chatSearch                *ChatSearchService
+	teamMemory                *TeamMemoryService
 	organizationGateway       *OrganizationGatewayService
 	inboundEMATrust           *InboundEMATrustService
 	gatewayProxy              *GatewayProxyService
 	gatewaySessions           GatewaySessionManagement
 	agentIdentityReads        *AgentIdentityReadService
+	channelsAccess            *ChannelsAccessService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
@@ -420,11 +422,13 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskFindingList:           nil,
 		chatMetadata:              nil,
 		chatSearch:                nil,
+		teamMemory:                nil,
 		organizationGateway:       nil,
 		inboundEMATrust:           nil,
 		gatewayProxy:              nil,
 		gatewaySessions:           nil,
 		agentIdentityReads:        nil,
+		channelsAccess:            nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
@@ -679,10 +683,28 @@ func (r *PostgresReader) WithChatSearch(service *ChatSearchService) *PostgresRea
 	return r
 }
 
+// WithTeamMemory attaches the project team memory tools.
+func (r *PostgresReader) WithTeamMemory(service *TeamMemoryService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.teamMemory = service
+	}
+	return r
+}
+
 // WithOrganizationGateway serves get_my_organization_gateway.
 func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewayService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.organizationGateway = service
+	}
+	return r
+}
+
+// WithChannelsAccess serves get_my_channels_access. A nil or incomplete
+// service leaves the tool registered as a stub, so it does not appear on and
+// disappear from the catalogue as the rollout flips.
+func (r *PostgresReader) WithChannelsAccess(service *ChannelsAccessService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.channelsAccess = service
 	}
 	return r
 }

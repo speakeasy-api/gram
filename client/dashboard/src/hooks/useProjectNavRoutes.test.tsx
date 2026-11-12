@@ -51,6 +51,7 @@ beforeEach(() => {
     data: { signalsIntelligenceEnabled: false },
   };
   testState.featureFlags = {
+    [FEATURE_FLAGS.channels]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
   };
 });
@@ -66,6 +67,36 @@ const renderNav = () =>
   renderHook(() => useProjectNavRoutes(), { wrapper: MemoryRouter });
 
 describe("useProjectNavRoutes", () => {
+  it.each(["disabled", "loading", "missing", "error"] as const)(
+    "removes the Channels page-action source when its flag becomes %s",
+    (status) => {
+      testState.featureFlags[FEATURE_FLAGS.channels] = { status: "enabled" };
+      const { result, rerender } = renderNav();
+      expect(
+        result.current.find(
+          (entry) => entry.route.href() === routes.channels.href(),
+        )?.scope,
+      ).toEqual([]);
+      testState.featureFlags[FEATURE_FLAGS.channels] =
+        status === "disabled"
+          ? { status: "disabled" }
+          : unavailableFeatureFlag(status);
+      rerender();
+      expect(
+        result.current.some(
+          (entry) => entry.route.href() === routes.channels.href(),
+        ),
+      ).toBe(false);
+      testState.featureFlags[FEATURE_FLAGS.channels] = { status: "enabled" };
+      rerender();
+      expect(
+        result.current.some(
+          (entry) => entry.route.href() === routes.channels.href(),
+        ),
+      ).toBe(true);
+    },
+  );
+
   it("removes Signals Intelligence when entitlement is disabled or a refresh fails", () => {
     testState.productFeatures.data.signalsIntelligenceEnabled = true;
     const { result, rerender } = renderNav();
@@ -219,6 +250,7 @@ describe("useProjectNavRoutes", () => {
     "keeps standard navigation while rollout flags are %s",
     (status) => {
       testState.featureFlags = {
+        [FEATURE_FLAGS.channels]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
       };
 
@@ -260,6 +292,7 @@ describe("useProjectNavRoutes", () => {
 
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
+      [FEATURE_FLAGS.channels]: { status: "enabled" },
       [FEATURE_FLAGS.explore]: { status: "enabled" },
     };
 
@@ -296,5 +329,25 @@ describe("useProjectNavRoutes", () => {
         }),
       ]),
     );
+  });
+});
+
+it("keeps the Channels page discoverable for explicit grants without native scopes", () => {
+  testState.featureFlags[FEATURE_FLAGS.channels] = { status: "enabled" };
+  const { result, rerender } = renderNav();
+  const channels = () =>
+    result.current.find(
+      (entry) => entry.route.href() === routes.channels.href(),
+    );
+  expect(channels()).toMatchObject({
+    scope: [],
+    resourceId: "project_a",
+    projectId: "project_a",
+  });
+  testState.projectId = "project_b";
+  rerender();
+  expect(channels()).toMatchObject({
+    resourceId: "project_b",
+    projectId: "project_b",
   });
 });

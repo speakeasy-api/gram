@@ -610,6 +610,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ListProjectsForToolsetIndexing)
 	temporalWorker.RegisterActivity(activities.ListToolsetsForIndexing)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
+	temporalWorker.RegisterActivity(activities.BuildMemoryDigests)
+	temporalWorker.RegisterActivity(activities.InvalidateMemoryDigests)
 	temporalWorker.RegisterActivity(activities.SyncIdentityMap)
 	temporalWorker.RegisterActivity(activities.SyncTenantDimensions)
 	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)
@@ -655,6 +657,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RecordDueKillswitchExpiries)
 	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
+	temporalWorker.RegisterActivity(activities.CleanupChannelsHistory)
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
 	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
 	temporalWorker.RegisterActivity(activities.SendDirectoryReviewEmails)
@@ -776,6 +779,7 @@ func NewTemporalWorker(
 		temporalWorker.RegisterActivityWithOptions(promotionActivities.dispatch, activity.RegisterOptions{Name: catalogPromotionDispatchActivity})
 	}
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
+	temporalWorker.RegisterWorkflow(MemoryDigestsWorkflow)
 	temporalWorker.RegisterWorkflow(SyncIdentityMapWorkflow)
 	temporalWorker.RegisterWorkflow(SyncTenantDimensionsWorkflow)
 	temporalWorker.RegisterWorkflow(PromoteStagedTelemetryWorkflow)
@@ -817,6 +821,7 @@ func NewTemporalWorker(
 	// Killswitch expiry history and receipt retention
 	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(ChannelsRetentionWorkflow)
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewEmailsWorkflow)
@@ -894,6 +899,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddTrustedDelegationCleanupSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add trusted delegation cleanup schedule", attr.SlogError(err))
+	}
+
+	if err := AddChannelsRetentionSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add channels retention schedule", attr.SlogError(err))
 	}
 
 	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {
@@ -978,6 +987,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add weekly usage summary schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddMemoryDigestsSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add memory digests schedule", attr.SlogError(err))
 	}
 
 	if err := AddAssistantReaperSchedule(ctx, env); err != nil {
