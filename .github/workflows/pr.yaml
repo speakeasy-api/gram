@@ -1493,7 +1493,7 @@ jobs:
       - name: Compute golangci-lint cache key
         id: lint-cache-key
         env:
-          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'go.sum', 'glint/**') }}
+          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'glint/**') }}
         run: echo "inputs=$(go env GOVERSION)-${FILES_HASH}" >> "$GITHUB_OUTPUT"
 
       - name: Restore golangci-lint cache
@@ -1505,7 +1505,9 @@ jobs:
           restore-keys: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-
 
       - name: Start lint timer
-        run: echo "LINT_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+        run: |
+          free -g
+          echo "LINT_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -1522,7 +1524,7 @@ jobs:
           # that before a collection. The soft limit keeps the footprint near
           # the live set and makes such a run faster (same value and reasoning
           # as .mise-tasks/lint/server.sh).
-          GOMEMLIMIT: 4GiB
+          GOMEMLIMIT: 12GiB
 
       - name: Decide whether to save the golangci-lint cache
         id: lint-cache-save
@@ -1603,7 +1605,7 @@ jobs:
       - name: Compute golangci-lint cache key
         id: lint-cache-key
         env:
-          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'go.sum', 'glint/**') }}
+          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'glint/**') }}
         run: echo "inputs=$(go env GOVERSION)-${FILES_HASH}" >> "$GITHUB_OUTPUT"
 
       - name: Restore golangci-lint cache
@@ -1623,7 +1625,7 @@ jobs:
           working-directory: server
           skip-cache: true
         env:
-          GOMEMLIMIT: 4GiB
+          GOMEMLIMIT: 12GiB
 
       - name: Save golangci-lint cache
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
