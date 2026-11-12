@@ -216,7 +216,13 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		if checks[0].probe {
 			return e.mapError(ctx, InvalidCheck(checks[0].Scope, checks[0].ResourceID))
 		}
+		if len(alternatives) == 0 {
+			return e.mapError(ctx, ErrNoChecks)
+		}
 		return e.RequireAnyUnblocked(ctx, alternatives...)
+	}
+	if err := validateShape(checks, false); err != nil {
+		return e.mapError(ctx, err)
 	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
@@ -348,6 +354,9 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err
+	}
+	if err := validateShape(checks, false); err != nil {
+		return e.mapError(ctx, err)
 	}
 	if !enforce {
 		if len(checks) > 0 && !slices.ContainsFunc(checks, unenforcedAllows) {
@@ -526,6 +535,9 @@ func leastPrivilegedAlternative(checks []Check, blocked []bool) (Check, bool) {
 // failures (missing prepared grants, invalid check); a merely unsatisfied check
 // yields (false, nil).
 func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
+	if err := validateShape(checks, true); err != nil {
+		return false, e.mapError(ctx, err)
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return false, err
@@ -562,6 +574,9 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 // is authorized for. When RBAC is not enforced all resource IDs are returned
 // except those of auth-client checks, which are omitted.
 func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
+	if err := validateShape(checks, true); err != nil {
+		return nil, e.mapError(ctx, err)
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
@@ -669,6 +684,9 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 // (same as [Filter]); per-check logs are intentionally avoided so callers can
 // safely use this with large input sets like a full tools/list.
 func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error) {
+	if err := validateShape(checks, true); err != nil {
+		return nil, e.mapError(ctx, err)
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
