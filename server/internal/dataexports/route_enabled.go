@@ -144,6 +144,10 @@ func (c *RouteEnabledCore) SetEnabled(ctx context.Context, tx pgx.Tx, params Set
 	if before.Enabled == params.Enabled {
 		return SetRouteEnabledResult{Before: before, After: before, Changed: false}, nil
 	}
+	level, err := routeMinSeverity(ctx, queries, params.OrganizationID, params.ProjectID, before)
+	if err != nil {
+		return SetRouteEnabledResult{}, err
+	}
 	after, err := queries.SetDataExportRouteEnabled(ctx, repo.SetDataExportRouteEnabledParams{
 		Enabled:        params.Enabled,
 		OrganizationID: params.OrganizationID,
@@ -162,8 +166,8 @@ func (c *RouteEnabledCore) SetEnabled(ctx context.Context, tx pgx.Tx, params Set
 		ActorSlug:           nil,
 		RouteURN:            urn.NewDataExportRoute(after.ID),
 		DataSource:          after.DataSource,
-		RouteSnapshotBefore: routeSnapshot(before),
-		RouteSnapshotAfter:  routeSnapshot(after),
+		RouteSnapshotBefore: routeSnapshot(before, level),
+		RouteSnapshotAfter:  routeSnapshot(after, level),
 	}
 	if params.Enabled {
 		err = c.audit.LogDataExportRouteResume(ctx, tx, event)
