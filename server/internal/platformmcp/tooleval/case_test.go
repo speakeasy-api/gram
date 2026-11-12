@@ -1,0 +1,43 @@
+package tooleval
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestArgsMatch(t *testing.T) {
+	t.Parallel()
+
+	arguments := json.RawMessage(`{"query":"Linear issues","project_slug":"payments","limit":5,"names":["a","b"],"enabled":false}`)
+	require.True(t, argsMatch(nil, arguments))
+	require.True(t, argsMatch(map[string]any{"query": "linear"}, arguments), "strings match by case-insensitive substring")
+	require.True(t, argsMatch(map[string]any{"limit": 5, "names": []any{"a", "b"}, "enabled": false}, arguments), "other values match as JSON")
+	require.False(t, argsMatch(map[string]any{"project_slug": "default"}, arguments))
+	require.False(t, argsMatch(map[string]any{"limit": 6}, arguments))
+	require.False(t, argsMatch(map[string]any{"missing": "x"}, arguments))
+	require.False(t, argsMatch(map[string]any{"limit": "5"}, arguments), "a string never matches a number")
+	require.False(t, argsMatch(map[string]any{"query": "x"}, json.RawMessage(`not json`)))
+}
+
+func TestCaseSeparatesOrientationFromFirstSteps(t *testing.T) {
+	t.Parallel()
+
+	c := Case{ID: "c", Prompt: "p", Expect: []string{"list_projects"}, Allow: []string{"get_mcp"}, Args: nil, File: ""}
+	require.True(t, c.orients("whoami"))
+	require.False(t, c.orients("list_projects"), "an expected tool is the target even when it is an orientation read")
+	require.False(t, c.orients("get_mcp"), "an allowed first step ends the attempt")
+	require.True(t, c.onPath("get_mcp"))
+	require.False(t, c.onPath("disable_mcp"))
+}
+
+// LoadCases rejects duplicate ids and cases without a prompt, so loading
+// every embedded file is the check.
+func TestLoadCasesParsesEveryFile(t *testing.T) {
+	t.Parallel()
+
+	cases, err := LoadCases()
+	require.NoError(t, err)
+	require.NotEmpty(t, cases)
+}

@@ -2147,6 +2147,72 @@ jobs:
         env:
           COUNT_FLAG: ${{ github.event_name != 'pull_request' && '-count=1' || '' }}
 
+  # Asks a model the Platform MCP tool eval cases that this pull request's
+  # tool, instruction or case changes could move, and writes the report to the
+  # job summary. It spends LLM calls, so it is report-only, runs only on pull
+  # requests, and skips when the eval key secret is not available (forks, or
+  # before the secret is configured).
+  platform-tool-eval:
+    name: platform-tool-eval
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.server == 'true'
+    env:
+      TESTCONTAINERS_RYUK_DISABLED: true
+    steps:
+      - name: Check eval key
+        id: key
+        env:
+          EVAL_KEY: ${{ secrets.OPENROUTER_TOOL_EVAL_KEY }}
+        run: |
+          if [ -n "$EVAL_KEY" ]; then
+            echo "configured=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >>"$GITHUB_OUTPUT"
+            echo "::notice::OPENROUTER_TOOL_EVAL_KEY is not available, so the Platform MCP tool eval is skipped."
+          fi
+
+      - name: Checkout
+        if: steps.key.outputs.configured == 'true'
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+        with:
+          # The pull request's merge commit and its first parent, the base
+          # tip, which is what the eval compares against.
+          fetch-depth: 2
+
+      - name: Setup Mise
+        if: steps.key.outputs.configured == 'true'
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        if: steps.key.outputs.configured == 'true'
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      - name: Install Go deps
+        if: steps.key.outputs.configured == 'true'
+        run: mise run install:go
+
+      - name: Run eval
+        if: steps.key.outputs.configured == 'true'
+        run: mise run eval:platform-tools --changed-since HEAD^1 --max-cases 60 --concurrency 4 --out "$RUNNER_TEMP/platform-tool-eval.md"
+        env:
+          OPENROUTER_DEV_KEY: ${{ secrets.OPENROUTER_TOOL_EVAL_KEY }}
+
+      - name: Write summary
+        if: always() && steps.key.outputs.configured == 'true'
+        run: |
+          if [ -f "$RUNNER_TEMP/platform-tool-eval.md" ]; then
+            cat "$RUNNER_TEMP/platform-tool-eval.md" >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "No Platform MCP tool, instruction or eval case changed, or the eval failed before writing a report." >>"$GITHUB_STEP_SUMMARY"
+          fi
+
   docker-build-client:
     name: docker-build-client
     runs-on: blacksmith-4vcpu-ubuntu-2404
