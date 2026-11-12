@@ -197,3 +197,16 @@ func TestCertificateFailureMessage(t *testing.T) {
 	require.Equal(t, "could not obtain a TLS certificate for private.example.ts.net: acme: connection reset; retrying after 2026-11-12 22:53 UTC",
 		certificateFailureMessage("private.example.ts.net", errors.New("acme: connection reset"), retryAt))
 }
+
+// TestCertificateLeaseOutlastsALiveRequest holds the invariant the issuance
+// lease relies on: a slot claims the lease inside a request bounded by
+// certificateFetchTimeout and then releases it within stateStoreTimeout. If
+// the lease could lapse first, another slot could claim it and both would ask
+// Let's Encrypt for a certificate, and the late release would delete the other
+// slot's lease.
+func TestCertificateLeaseOutlastsALiveRequest(t *testing.T) {
+	t.Parallel()
+
+	require.Less(t, certificateFetchTimeout+stateStoreTimeout, certificateLeaseDuration,
+		"the issuance lease must outlast a request and its release")
+}
