@@ -22,7 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -202,7 +202,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		}
 	}
 
-	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, session.ActiveOrganizationID)
+	orgMetadata, err := orgaccount.Describe(ctx, s.logger, s.orgRepo, s.billingRepo, session.ActiveOrganizationID)
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "error getting organization metadata").LogError(ctx, s.logger)
 	}
