@@ -1,5 +1,5 @@
 // oxlint-disable react/only-export-components -- the layout and the hook its sections report through belong together
-import { ReadinessIssueNotice } from "./readiness-issues";
+import { ReadinessIssueMarker } from "./readiness-issues";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { scrollWithinPage } from "@/lib/scroll-within-page";
 import { cn } from "@/lib/utils";
@@ -254,9 +254,7 @@ function SettingsGroupSection({
         {group.title}
       </h2>
       <SettingsGroupContext.Provider value={context}>
-        <div className="mb-6 empty:hidden">
-          <ReadinessIssueNotice anchorId={group.id} />
-        </div>
+        <ReadinessIssueMarker anchorId={group.id} className="mb-6" />
         <div className="space-y-10">{group.content}</div>
       </SettingsGroupContext.Provider>
     </section>

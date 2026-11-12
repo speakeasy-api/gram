@@ -23,7 +23,11 @@ type MintInput = {
 function lastMainMint(): MintInput | undefined {
   return (state.mint.mock.calls as [MintInput][])
     .map(([input]) => input)
-    .filter((input) => !input.target.connectionVersion?.endsWith(":catalog"))
+    .filter(
+      (input) =>
+        !input.target.connectionVersion?.endsWith(":catalog") &&
+        input.target.connectionVersion !== "member-status",
+    )
     .at(-1);
 }
 
@@ -139,6 +143,8 @@ vi.mock("./GatewayDetailsRouting", () => ({
 }));
 vi.mock("./GatewaySettingsTab", () => ({
   GATEWAY_INSTRUCTIONS_SECTION_ID: "instructions",
+  GATEWAY_AUTHENTICATION_SECTION_ID: "authentication",
+  GATEWAY_DISCOVERY_SECTION_ID: "discovery",
 }));
 vi.mock("./useGatewayMemberRows", () => ({
   useGatewayMemberRows: () => ({ rows: [] }),

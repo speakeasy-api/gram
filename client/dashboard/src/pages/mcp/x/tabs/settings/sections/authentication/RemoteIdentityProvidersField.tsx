@@ -11,6 +11,9 @@ import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { AuthRow, ExplainerDialog } from "./AuthRow";
 
+/** Anchors the Authorization servers row, where a gateway links a member's sign-in. */
+export const AUTHORIZATION_SERVERS_FIELD_ID = "authorization-servers";
+
 export function RemoteIdentityProvidersField({
   associatedIssuers,
   isLoading,
@@ -93,6 +96,7 @@ export function RemoteIdentityProvidersField({
 
   return (
     <AuthRow
+      id={AUTHORIZATION_SERVERS_FIELD_ID}
       label="Authorization servers"
       hint={
         <>

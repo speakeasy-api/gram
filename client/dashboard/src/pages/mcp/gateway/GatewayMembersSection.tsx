@@ -1,4 +1,5 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
+import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
 import { Spinner } from "@/components/ui/Spinner";
 import { Page } from "@/components/page-layout";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
@@ -53,7 +54,6 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { GatewayMemberConnect } from "./GatewayMemberConnect";
 import { gatewayTabHref } from "./GatewayDetailsRouting";
-import { GATEWAY_AUTHENTICATION_SECTION_ID } from "./GatewaySettingsTab";
 import {
   MEMBER_STATE_LABEL,
   type MemberViewerState,
@@ -578,7 +578,7 @@ export function GatewayMembersSection({
           viewer={memberStates?.stateFor(row)}
           name={row.server?.name ?? row.member.mcpServerSlug ?? "this server"}
           onConnect={memberStates?.connect}
-          gatewaySignInHref={`${gatewayTabHref(routes, metaMcpServer.id, "settings")}#${GATEWAY_AUTHENTICATION_SECTION_ID}`}
+          gatewaySignInHref={`${gatewayTabHref(routes, metaMcpServer.id, "settings")}#${AUTHORIZATION_SERVERS_FIELD_ID}`}
           credentialHref={
             row.server
               ? `${routes.mcp.details.settings.href(mcpServerRouteParam(row.server))}#settings-sign-in`

@@ -2,6 +2,11 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
+import {
+  READINESS_OUTLINE,
+  ReadinessIssueMarker,
+  useReadinessIssuesFor,
+} from "@/components/detail/readiness-issues";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
@@ -15,20 +20,29 @@ export function AuthRow({
   label,
   hint,
   htmlFor,
+  id,
   children,
   className,
 }: {
   label: ReactNode;
+  /**
+   * The row's anchor. A header issue that links here outlines the row and
+   * names the problem under its hint, so the reader sees which field to change.
+   */
+  id?: string;
   /** One clause. Anything longer belongs behind a popover. */
   hint?: ReactNode;
   htmlFor?: string;
   children: ReactNode;
   className?: string;
 }): JSX.Element {
+  const issue = useReadinessIssuesFor(id).tone;
   return (
     <div
+      id={id}
       className={cn(
-        "grid gap-2 px-6 py-5 sm:grid-cols-[minmax(200px,280px)_1fr] sm:gap-8",
+        "grid scroll-mt-8 gap-2 px-6 py-5 sm:grid-cols-[minmax(200px,280px)_1fr] sm:gap-8",
+        issue && READINESS_OUTLINE[issue],
         className,
       )}
     >
@@ -41,6 +55,7 @@ export function AuthRow({
             {hint}
           </Text>
         ) : null}
+        <ReadinessIssueMarker anchorId={id} className="pt-2" />
       </div>
       <div className="min-w-0 space-y-3">{children}</div>
     </div>

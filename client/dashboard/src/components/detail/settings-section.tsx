@@ -12,7 +12,11 @@ import {
   useMemo,
   useState,
 } from "react";
-import { ReadinessIssueNotice } from "./readiness-issues";
+import {
+  READINESS_BORDER,
+  ReadinessIssueMarker,
+  useReadinessIssuesFor,
+} from "./readiness-issues";
 import { useSettingsSectionHeading } from "./settings-layout";
 
 type SettingsSectionTone = "default" | "danger";
@@ -74,14 +78,12 @@ function SettingsSectionHeader({
   className,
 }: SettingsSectionSlotProps) {
   const { id } = use(SettingsSectionContext);
-  // A header issue that links here says so under the title, so following
-  // "1 issue" lands on a section that shows what is wrong.
+  // A header issue that links here gets its sign under the title, and the
+  // panel takes its colour, so following "1 issue" lands on what is wrong.
   return (
     <div className={cn("space-y-1", className)}>
       {children}
-      <div className="pt-2 empty:hidden">
-        <ReadinessIssueNotice anchorId={id} />
-      </div>
+      <ReadinessIssueMarker anchorId={id} className="pt-1" />
     </div>
   );
 }
@@ -130,13 +132,15 @@ function SettingsSectionPanel({
   children,
   className,
 }: SettingsSectionSlotProps) {
-  const { tone } = use(SettingsSectionContext);
+  const { tone, id } = use(SettingsSectionContext);
+  const issue = useReadinessIssuesFor(id).tone;
 
   return (
     <div
       className={cn(
         "overflow-hidden border bg-card",
         tone === "danger" && "border-destructive/30",
+        issue && READINESS_BORDER[issue],
         className,
       )}
     >

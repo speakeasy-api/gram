@@ -1,4 +1,5 @@
 import { Spinner } from "@/components/ui/Spinner";
+import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
 import { GatewayDiscoverySection } from "./GatewayDiscoverySection";
 import { Check, Copy } from "lucide-react";
 import {
@@ -57,13 +58,15 @@ const INSTRUCTIONS_MAX_LENGTH = 10000;
 
 export const GATEWAY_AUTHENTICATION_SECTION_ID = "authentication";
 export const GATEWAY_INSTRUCTIONS_SECTION_ID = "instructions";
+/** Anchors Tool discovery, which Inspect and the Code Mode check link to. */
+export const GATEWAY_DISCOVERY_SECTION_ID = "discovery";
 
 const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_SERVER_URL_SECTION_ID,
   GATEWAY_AUTHENTICATION_SECTION_ID,
+  AUTHORIZATION_SERVERS_FIELD_ID,
   GATEWAY_INSTRUCTIONS_SECTION_ID,
-  // Gateway Inspect links here.
-  "discovery",
+  GATEWAY_DISCOVERY_SECTION_ID,
   ...SETTINGS_GROUP_IDS,
 ];
 

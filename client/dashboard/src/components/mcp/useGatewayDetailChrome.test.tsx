@@ -69,6 +69,7 @@ vi.mock("@/pages/mcp/gateway/useGatewayMemberRows", () => ({
 }));
 vi.mock("@/pages/mcp/gateway/GatewaySettingsTab", () => ({
   GATEWAY_AUTHENTICATION_SECTION_ID: "authentication",
+  GATEWAY_DISCOVERY_SECTION_ID: "discovery",
 }));
 vi.mock("@/pages/mcp/x/tabs/settings/sections/ServerUrlSection", () => ({
   MCP_SERVER_URL_SECTION_ID: "server-url",

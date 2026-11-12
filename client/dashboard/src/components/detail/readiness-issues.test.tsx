@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { expect, it } from "vitest";
 import {
-  ReadinessIssueNotice,
+  ReadinessIssueMarker,
   ReadinessIssuesProvider,
 } from "./readiness-issues";
 
@@ -26,16 +26,16 @@ const checks = [
 it("shows the header issues that link to this section", () => {
   render(
     <ReadinessIssuesProvider checks={checks}>
-      <ReadinessIssueNotice anchorId="authentication" />
+      <ReadinessIssueMarker anchorId="authentication" />
     </ReadinessIssuesProvider>,
   );
-  expect(screen.getByText("Set up sign-in for Linear")).toBeTruthy();
+  expect(screen.getByText("Set up sign-in for Linear.")).toBeTruthy();
 });
 
 it("shows nothing for a section with no open issue", () => {
   const { container } = render(
     <ReadinessIssuesProvider checks={checks}>
-      <ReadinessIssueNotice anchorId="server-url" />
+      <ReadinessIssueMarker anchorId="server-url" />
     </ReadinessIssuesProvider>,
   );
   expect(container.innerHTML).toBe("");

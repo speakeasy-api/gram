@@ -1,4 +1,5 @@
 import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
+import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
@@ -44,11 +45,11 @@ import { gatewayTabHref } from "./GatewayDetailsRouting";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import {
   GATEWAY_AUTHENTICATION_SECTION_ID,
+  GATEWAY_DISCOVERY_SECTION_ID,
   GATEWAY_INSTRUCTIONS_SECTION_ID,
 } from "./GatewaySettingsTab";
 
 /** The discovery mode section's anchor in `GatewayDiscoverySection`. */
-const GATEWAY_DISCOVERY_SECTION_ID = "discovery";
 import { useGatewayInspection } from "./useGatewayInspection";
 import { useGatewayMemberRows } from "./useGatewayMemberRows";
 import { useGatewayMemberTools } from "./useGatewayMemberTools";
@@ -476,7 +477,7 @@ function GatewayInspectConnection({
                 </span>
                 {reason.needsGatewaySignIn ? (
                   <Link
-                    to={`${settingsHref}#${GATEWAY_AUTHENTICATION_SECTION_ID}`}
+                    to={`${settingsHref}#${AUTHORIZATION_SERVERS_FIELD_ID}`}
                     className="text-foreground shrink-0 underline underline-offset-2"
                   >
                     Set up sign-in

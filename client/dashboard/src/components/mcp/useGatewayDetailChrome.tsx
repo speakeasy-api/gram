@@ -1,4 +1,5 @@
 import { useProject } from "@/contexts/Auth";
+import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import {
@@ -22,7 +23,10 @@ import {
   type GatewayMemberSetupGap,
   useGatewayMemberSetup,
 } from "./useGatewayMemberSetup";
-import { GATEWAY_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/gateway/GatewaySettingsTab";
+import {
+  GATEWAY_AUTHENTICATION_SECTION_ID,
+  GATEWAY_DISCOVERY_SECTION_ID,
+} from "@/pages/mcp/gateway/GatewaySettingsTab";
 import {
   GATEWAY_ADD_SERVERS_HASH,
   GATEWAY_SERVERS_SECTION_ID,
@@ -152,7 +156,7 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
           gatewayTabHref(routes, id, "inspect"),
           (serverId) =>
             memberSettingsHref(serverId, SETTINGS_GROUPS.identity.id),
-          `${gatewayTabHref(routes, id, "settings")}#${GATEWAY_AUTHENTICATION_SECTION_ID}`,
+          `${gatewayTabHref(routes, id, "settings")}#${AUTHORIZATION_SERVERS_FIELD_ID}`,
         ),
         // Only a gateway set to Code Mode can be let down by it.
         ...(metaMcpServer.discoveryMode === "code_mode"
@@ -165,7 +169,7 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
                   : "Code Mode isn't available for this gateway, so agents get Progressive instead. Choose another mode in Settings.",
                 ready: !!metaMcpServer.codeModeEnabled,
                 broken: true,
-                href: `${gatewayTabHref(routes, id, "settings")}#${SETTINGS_GROUPS.tools.id}`,
+                href: `${gatewayTabHref(routes, id, "settings")}#${GATEWAY_DISCOVERY_SECTION_ID}`,
               },
             ]
           : []),
