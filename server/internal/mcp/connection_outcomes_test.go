@@ -771,7 +771,7 @@ func TestConnectionOutcome_ChainCheckRecordsIneligibleIdentity(t *testing.T) {
 	row := rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeIneligibleIdentity)
 	require.Equal(t, state.FlowID, row.AttemptID.String())
 	require.Equal(t, fx.clientA.String(), row.RemoteSessionClientID, "the row names the refused server's client")
-	require.NotEqual(t, fx.clientA.String(), row.UserSessionClientID, "the MCP client stays the one that connected")
+	require.Empty(t, row.UserSessionClientID, "like the other pre-accept consent rows, the MCP client is not named yet")
 	rec.RequireNotEnded()
 }
 

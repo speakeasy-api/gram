@@ -188,7 +188,8 @@ func TestDirectUpstreamChainingRefusalWritesARequestRow(t *testing.T) {
 				require.Error(t, err, "an ineligible account is refused, not challenged")
 			}
 			require.Len(t, chainer.requests, 1)
-			rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.code)
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.code)
+			require.Equal(t, subject.String(), row.SubjectURN)
 			require.Len(t, rec.Rows(), 1)
 		})
 	}
