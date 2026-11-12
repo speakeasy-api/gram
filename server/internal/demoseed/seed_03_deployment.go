@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+
+	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
 
 // seedDeployment: Deployment stack, toolsets, MCP connections, issuers, agents, assistants.
@@ -566,6 +568,8 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 		OrganizationID: org,
 		ProjectID:      proj,
 		Name:           "Assistant triggers " + proj.String(),
+		Issuer:         s.assistantIssuer,
+		JwksUri:        s.assistantIssuer + jwks.Path,
 	}); err != nil {
 		return fmt.Errorf("insert demo assistant workload issuer: %w", err)
 	}
