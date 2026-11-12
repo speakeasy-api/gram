@@ -78,7 +78,7 @@ func (ProductionNamer) AuthKeyDescription(_ context.Context, ingressID uuid.UUID
 }
 
 // LocalNamer names a local development stack's artifacts after its qualifier,
-// dev-<id>, so on a tailnet production also serves they can be told apart and
+// local-<id>, so on a tailnet production also serves they can be told apart and
 // never overwrite, host or delete production's. It owns only hostnames that
 // carry the qualifier.
 type LocalNamer struct {
@@ -100,10 +100,10 @@ func NewLocalNamer(devID string) (LocalNamer, error) {
 	if !devIDPattern.MatchString(devID) {
 		return LocalNamer{qualifier: ""}, fmt.Errorf("invalid network ingress development id %q: use up to 8 lowercase letters or digits", devID)
 	}
-	return LocalNamer{qualifier: "dev-" + devID}, nil
+	return LocalNamer{qualifier: "local-" + devID}, nil
 }
 
-// Hostname prefixes requested with dev-<id>- unless it already carries it.
+// Hostname prefixes requested with local-<id>- unless it already carries it.
 func (n LocalNamer) Hostname(_ context.Context, requested string) (string, error) {
 	if n.owns(requested) {
 		return requested, nil

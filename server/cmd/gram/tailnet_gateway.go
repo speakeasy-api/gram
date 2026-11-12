@@ -77,7 +77,7 @@ func newTailnetGatewayCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:    networkIngressDevIDFlag,
-			Usage:   "Local development only: name this gateway's devices speakeasy-gw-dev-<id>-<slot> and host only dev-<id>-... hostnames",
+			Usage:   "Local development only: name this gateway's devices speakeasy-gw-local-<id>-<slot> and host only local-<id>-... hostnames",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_DEV_ID"},
 		},
 		&cli.StringFlag{

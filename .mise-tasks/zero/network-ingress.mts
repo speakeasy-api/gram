@@ -10,8 +10,8 @@ import { $ } from "zx";
 
 // The local private network joins real tailnets, including ones production
 // gateways also serve. With this id the API server, reconciler and gateway
-// name everything they create there dev-<id>-... (hostnames and services
-// svc:dev-<id>-<hostname>, machines speakeasy-gw-dev-<id>-<slot>), and refuse
+// name everything they create there local-<id>-... (hostnames and services
+// svc:local-<id>-<hostname>, machines speakeasy-gw-local-<id>-<slot>), and refuse
 // to touch anything else.
 const DEV_ID = "GRAM_NETWORK_INGRESS_DEV_ID";
 
@@ -45,7 +45,7 @@ async function run(): Promise<void> {
   await $`touch mise.local.toml`;
   await $`mise set --file mise.local.toml ${DEV_ID}=${id}`;
   console.log(
-    `🔑 ${DEV_ID}=${id} has been set in mise.local.toml; local private network hostnames and machines are named dev-${id}-....`,
+    `🔑 ${DEV_ID}=${id} has been set in mise.local.toml; local private network hostnames and machines are named local-${id}-....`,
   );
 }
 
