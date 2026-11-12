@@ -178,6 +178,9 @@ func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp
 	if err := decodeRiskMutationInput(raw, &input); err != nil {
 		return riskMutationToolRefusal[CreateRiskPolicyToolOutput](err)
 	}
+	if err := validateCreateRiskPolicyKind(input); err != nil {
+		return riskMutationToolRefusal[CreateRiskPolicyToolOutput](err)
+	}
 	input, err = applyRiskPolicyPreset(input)
 	if err != nil {
 		return riskMutationToolRefusal[CreateRiskPolicyToolOutput](err)
@@ -1061,6 +1064,64 @@ func mapRiskPolicyMutationError(err error) error {
 	default:
 		return riskMutationUnavailableWithCause(err)
 	}
+}
+
+// validateCreateRiskPolicyKind enforces which fields each kind of create
+// request takes. The input schema is one flat object, because Anthropic
+// rejects a top-level oneOf, so these rules live here with a refusal that
+// says what to fix.
+func validateCreateRiskPolicyKind(input createRiskPolicyInput) error {
+	policyType := strings.TrimSpace(input.PolicyType)
+	if strings.TrimSpace(input.Preset) != "" {
+		if policyType != "" {
+			return invalidRiskPolicyKind("Name either a preset or a policy_type, not both.")
+		}
+		for _, field := range []struct {
+			name string
+			set  bool
+		}{
+			{"sources", len(input.Sources) > 0},
+			{"presidio_score_threshold", input.PresidioScoreThreshold != nil},
+			{"prompt_injection_rules", len(input.PromptInjectionRules) > 0},
+			{"disabled_rules", len(input.DisabledRules) > 0},
+			{"detection_scopes", len(input.DetectionScopes) > 0},
+		} {
+			if field.set {
+				return invalidRiskPolicyKind(field.name + " cannot override a preset. Use policy_type standard to choose detectors by hand.")
+			}
+		}
+		return nil
+	}
+	switch policyType {
+	case "standard", "prompt_based":
+	case "":
+		return invalidRiskPolicyKind("Name a preset, or set policy_type to standard or prompt_based.")
+	default:
+		return invalidRiskPolicyKind("policy_type must be standard or prompt_based.")
+	}
+	if strings.TrimSpace(input.Name) == "" || input.Enabled == nil {
+		return invalidRiskPolicyKind("A policy_type request needs name and enabled.")
+	}
+	if policyType == "standard" {
+		if len(input.Sources) == 0 {
+			return invalidRiskPolicyKind("policy_type standard needs at least one source.")
+		}
+		if input.Prompt != "" {
+			return invalidRiskPolicyKind("prompt is only for policy_type prompt_based.")
+		}
+		return nil
+	}
+	if strings.TrimSpace(input.Prompt) == "" {
+		return invalidRiskPolicyKind("policy_type prompt_based needs a prompt.")
+	}
+	if len(input.Sources)+len(input.PresidioEntities)+len(input.PromptInjectionRules)+len(input.DisabledRules)+len(input.ApprovedEmailDomains)+len(input.DetectionScopes) > 0 || input.PresidioScoreThreshold != nil {
+		return invalidRiskPolicyKind("policy_type prompt_based takes no detector settings: leave out sources, presidio_entities, presidio_score_threshold, prompt_injection_rules, disabled_rules, approved_email_domains and detection_scopes.")
+	}
+	return nil
+}
+
+func invalidRiskPolicyKind(message string) error {
+	return &RiskMutationError{Code: "invalid_request", Message: message + " No policy was created.", Cause: ErrRiskMutationInvalid}
 }
 
 func invalidRiskPolicyRequest() error {

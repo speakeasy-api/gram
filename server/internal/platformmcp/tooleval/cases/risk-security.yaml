@@ -88,10 +88,18 @@
   prompt: Go ahead and add a policy in Default from the API keys and secrets preset, set it to block. I've already reviewed it.
   expect: [create_risk_policy]
   allow: [list_risk_presets, list_risk_policies]
+  args:
+    project_slug: default
+    preset: secrets_and_credentials
+    action: block
 - id: risk-create-policy-prompt-guardrail
   prompt: Create a block policy in Payments called "No refunds over 10k" that stops the assistant from approving refunds above $10,000.
   expect: [create_risk_policy]
   allow: [list_risk_presets, suggest_risk_policy, list_risk_policies]
+  args:
+    project_slug: payments
+    policy_type: prompt_based
+    action: block
 
 # Policy changes.
 - id: risk-update-policy-to-flag
@@ -121,6 +129,10 @@
   prompt: Our docs use the fake key sk_test_EXAMPLE123 everywhere and Secrets in chats keeps firing on it in Default. Stop flagging that exact value.
   expect: [create_risk_exclusion]
   allow: [list_risk_exclusions, get_risk_policy]
+  args:
+    project_slug: default
+    match_type: exact
+    match_value: sk_test_EXAMPLE123
 - id: risk-disable-exclusion
   prompt: Turn off exclusion 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d in Default for now, but keep it around so we can switch it back on.
   expect: [update_risk_exclusion]

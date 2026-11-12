@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -42,7 +43,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, statu
 	addTool(reg, &mcp.Tool{
 		Name:        "get_risk_policy",
 		Title:       "Get a Risk Policy",
-		Description: "Read one risk policy from an exact project or the organization's literal default project, with closed compatibility metadata. Shadow target counts describe stored policy configuration, not effective access.",
+		Description: "Read one risk policy's own settings: what it detects, what happens when it fires, its severity, scope and audience, and the version a change needs. Exceptions that stop findings are separate rules; list them with list_risk_exclusions. Reads from an exact project or the organization's literal default project, with closed compatibility metadata. Shadow target counts describe stored policy configuration, not effective access.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskGetPolicySchema(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskPolicyInput) (*mcp.CallToolResult, GetRiskPolicyOutput, error) {
@@ -53,7 +54,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, statu
 	addTool(reg, &mcp.Tool{
 		Name:        "list_risk_exclusions",
 		Title:       "List Risk Exclusions",
-		Description: "List bounded, privacy-safe risk exclusions in an exact project or the organization's literal default project. Exact and legacy regex values are never returned.",
+		Description: "List a project's risk exclusions: the exceptions that stop a known value, rule, detector source or entity type from producing findings, for every policy or for one (filter with policy_id). To read a policy's own detectors, action, severity or audience, use get_risk_policy. Lists bounded, privacy-safe exclusions in an exact project or the organization's literal default project. Exact and legacy regex values are never returned.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskListSchema(true),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskExclusionsInput) (*mcp.CallToolResult, ListRiskExclusionsOutput, error) {
@@ -399,37 +400,29 @@ func riskGetPolicySchema() *jsonschema.Schema {
 	}, []string{"policy_id"})
 }
 
+// createRiskPolicySchema is one flat object: Anthropic rejects a top-level
+// oneOf, so the three kinds of request (preset, standard, prompt_based) share
+// one property list, each property says which kind it belongs to, and
+// validateCreateRiskPolicyKind enforces the rules in the handler.
 func createRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
-	standard := riskPolicyCreateCommonProperties(catalog)
-	standard["policy_type"] = describedConstSchema("standard", policycatalog.PolicyTypeDescriptions["standard"])
-	standard["sources"] = describedArraySchema(describedCatalogEnumSchema(catalog, catalog.Sources, "Detector sources to enable. One of:", func(value string) string { return policycatalog.SourceDescriptions[value] }), 1)
-	standard["presidio_entities"] = describedArraySchema(describedCatalogEnumSchema(catalog, catalog.PresidioEntities, "Personal-data entities to detect; required when sources include presidio. One of:", policycatalog.PresidioEntityDescription), 0)
-	standard["presidio_score_threshold"] = &jsonschema.Schema{Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1)), Description: "Minimum Presidio confidence (0-1) a personal-data match must clear; default 0.5."}
-	standard["prompt_injection_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.PromptInjectionRules), 0, true)
-	standard["disabled_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.DisabledRules), 0, true)
-	standard["disabled_rules"].Description = "Individual rules to switch off within the enabled sources, such as secret.aws-access-key or pii.email_address. Leave empty to keep every rule on."
-	standard["approved_email_domains"] = boundedArraySchema(stringSchema("Canonical email domain.", 1, 253), 0, 50, true)
-	standard["approved_email_domains"].Description = "Email domains treated as corporate by the account_identity source; sessions from other domains are flagged."
-	standard["detection_scopes"] = detectionScopesSchema(catalog)
-
-	prompt := riskPolicyCreateCommonProperties(catalog)
-	prompt["policy_type"] = describedConstSchema("prompt_based", policycatalog.PolicyTypeDescriptions["prompt_based"])
-	prompt["prompt"] = stringSchema("Prompt-policy instruction the judge applies to each in-scope message; never logged or placed in receipts.", 1, 4000)
-
-	preset := riskPolicyCreateCommonProperties(catalog)
-	preset["preset"] = describedEnumSchema(presets.IDs(), "Use-case preset to expand into a complete policy; see list_risk_presets. One of:", riskPresetDescription)
-	preset["name"] = stringSchema("Policy name; defaults to the preset label.", 1, 100)
-	preset["presidio_entities"] = describedArraySchema(describedCatalogEnumSchema(catalog, catalog.PresidioEntities, "Replaces the preset's personal-data entities. One of:", policycatalog.PresidioEntityDescription), 1)
-	preset["approved_email_domains"] = boundedArraySchema(stringSchema("Canonical email domain.", 1, 253), 0, 50, true)
-	preset["approved_email_domains"].Description = "Email domains treated as corporate; required for the non_corporate_accounts preset to detect anything."
-	preset["prompt"] = stringSchema("Replaces the preset's judge instruction; only for prompt-based presets.", 1, 4000)
-	delete(preset, "enabled")
-	preset["enabled"] = &jsonschema.Schema{Type: "boolean", Description: "Defaults to true."}
-	return &jsonschema.Schema{Type: "object", OneOf: []*jsonschema.Schema{
-		closedObject(standard, []string{"project_slug", "policy_type", "name", "enabled", "sources", "idempotency_key"}),
-		closedObject(prompt, []string{"project_slug", "policy_type", "name", "enabled", "prompt", "idempotency_key"}),
-		closedObject(preset, []string{"project_slug", "preset", "idempotency_key"}),
-	}}
+	properties := riskPolicyCreateCommonProperties(catalog)
+	properties["policy_type"] = describedEnumSchema([]string{"standard", "prompt_based"}, "Kind of policy to build by hand; required unless preset is named, and left out when it is. One of:", func(value string) string { return policycatalog.PolicyTypeDescriptions[value] })
+	properties["preset"] = describedEnumSchema(presets.IDs(), "Use-case preset to expand into a complete policy, instead of policy_type; see list_risk_presets. With a preset, only name, enabled, action, score, user_message, presidio_entities, approved_email_domains, prompt and mcp_scope may override it. One of:", riskPresetDescription)
+	properties["name"] = stringSchema("Policy name. Required with policy_type; with preset it defaults to the preset label.", 1, 100)
+	properties["enabled"] = &jsonschema.Schema{Type: "boolean", Description: "Whether the policy runs once created. Required with policy_type; with preset it defaults to true."}
+	properties["sources"] = describedArraySchema(describedCatalogEnumSchema(catalog, catalog.Sources, "Detector sources to enable. Required for policy_type standard, and only allowed there. One of:", func(value string) string { return policycatalog.SourceDescriptions[value] }), 0)
+	properties["presidio_entities"] = describedArraySchema(describedCatalogEnumSchema(catalog, catalog.PresidioEntities, "Personal-data entities to detect: required for policy_type standard when sources include presidio; with a standard preset, replaces the preset's entities. Not allowed for prompt_based. One of:", policycatalog.PresidioEntityDescription), 0)
+	properties["presidio_score_threshold"] = &jsonschema.Schema{Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1)), Description: "policy_type standard only, with the presidio source: minimum Presidio confidence (0-1) a personal-data match must clear; default 0.5."}
+	properties["prompt_injection_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.PromptInjectionRules), 0, true)
+	properties["prompt_injection_rules"].Description = "policy_type standard only: prompt-injection rules to enable."
+	properties["disabled_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.DisabledRules), 0, true)
+	properties["disabled_rules"].Description = "policy_type standard only: individual rules to switch off within the enabled sources, such as secret.aws-access-key or pii.email_address. Leave empty to keep every rule on."
+	properties["approved_email_domains"] = boundedArraySchema(stringSchema("Canonical email domain.", 1, 253), 0, 50, true)
+	properties["approved_email_domains"].Description = "policy_type standard or a preset: email domains treated as corporate by the account_identity source; sessions from other domains are flagged. The non_corporate_accounts preset detects nothing without them."
+	properties["detection_scopes"] = detectionScopesSchema(catalog)
+	properties["detection_scopes"].Description = "policy_type standard only. " + properties["detection_scopes"].Description
+	properties["prompt"] = stringSchema("Instruction the judge applies to each in-scope message: required for policy_type prompt_based; with a prompt-based preset, replaces the preset's instruction. Not allowed for standard. Never logged or placed in receipts.", 1, 4000)
+	return closedObject(properties, []string{"project_slug", "idempotency_key"})
 }
 
 func updateRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
@@ -456,31 +449,28 @@ func updateRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	}, []string{"project_slug", "policy_id", "expected_version", "idempotency_key", "patch"})
 }
 
+// createRiskExclusionSchema is one flat object: Anthropic rejects a top-level
+// oneOf, so match_type selects the kind and each property says which kinds
+// take it. The handler enforces the per-kind rules.
 func createRiskExclusionSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
-	common := func(matchType string, matchValue *jsonschema.Schema) map[string]*jsonschema.Schema {
-		return map[string]*jsonschema.Schema{
-			"project_slug": stringSchema("Exact project slug; writes never default a project.", 1, 0), "policy_id": uuidSchema("Optional policy binding."),
-			"match_type": constSchema(matchType), "match_value": matchValue,
-			"enabled": {Type: "boolean"}, "idempotency_key": stringSchema("Caller replay key.", 1, 128),
-		}
+	matchType := enumSchema("exact", "rule_id", "source", "entity_type")
+	matchType.Description = "What match_value names. exact: one literal value, such as a known test key. rule_id: one detector rule. source: one detector source. entity_type: one personal-data entity type."
+	ruleIDFilter := catalogEnumSchema(catalog, catalog.DisabledRules)
+	ruleIDFilter.Description = "Optional: limit the exclusion to one detector rule. Only for match_type exact or source."
+	sourceFilter := catalogEnumSchema(catalog, catalog.Sources)
+	sourceFilter.Description = "Optional: limit the exclusion to one detector source. Only for match_type exact or rule_id; entity_type always uses presidio."
+	matchValue := "For exact, the literal value; it is never returned or logged. For rule_id, one of the values rule_id_filter accepts. For source, one of the values source_filter accepts. For entity_type, one Presidio entity type"
+	if catalog.Schema != "" {
+		matchValue += ": " + strings.Join(catalog.PresidioEntities, ", ")
 	}
-	exact := common("exact", stringSchema("Exact match value; never returned or logged.", 1, 256))
-	exact["rule_id_filter"] = catalogEnumSchema(catalog, catalog.DisabledRules)
-	exact["source_filter"] = catalogEnumSchema(catalog, catalog.Sources)
-	ruleID := common("rule_id", catalogEnumSchema(catalog, catalog.DisabledRules))
-	ruleID["source_filter"] = catalogEnumSchema(catalog, catalog.Sources)
-	source := common("source", catalogEnumSchema(catalog, catalog.Sources))
-	source["rule_id_filter"] = catalogEnumSchema(catalog, catalog.DisabledRules)
-	entityType := common("entity_type", catalogEnumSchema(catalog, catalog.PresidioEntities))
-	entityType["source_filter"] = constSchema("presidio")
-
-	required := []string{"project_slug", "match_type", "match_value", "enabled", "idempotency_key"}
-	return &jsonschema.Schema{Type: "object", OneOf: []*jsonschema.Schema{
-		closedObject(exact, required),
-		closedObject(ruleID, required),
-		closedObject(source, required),
-		closedObject(entityType, required),
-	}}
+	matchValue += "."
+	return closedObject(map[string]*jsonschema.Schema{
+		"project_slug": stringSchema("Exact project slug; writes never default a project.", 1, 0), "policy_id": uuidSchema("Optional policy binding."),
+		"match_type":  matchType,
+		"match_value": stringSchema(matchValue, 1, 256),
+		"enabled":     {Type: "boolean"}, "idempotency_key": stringSchema("Caller replay key.", 1, 128),
+		"rule_id_filter": ruleIDFilter, "source_filter": sourceFilter,
+	}, []string{"project_slug", "match_type", "match_value", "enabled", "idempotency_key"})
 }
 
 func updateRiskExclusionSchema() *jsonschema.Schema {
@@ -570,12 +560,6 @@ func describedCatalogEnumSchema(catalog policycatalog.Catalog, values []string, 
 func describedEnumSchema(values []string, lead string, describe func(string) string) *jsonschema.Schema {
 	schema := enumSchema(values...)
 	schema.Description = lead + "\n" + policycatalog.DescribeValues(values, describe)
-	return schema
-}
-
-func describedConstSchema(value, description string) *jsonschema.Schema {
-	schema := constSchema(value)
-	schema.Description = description
 	return schema
 }
 

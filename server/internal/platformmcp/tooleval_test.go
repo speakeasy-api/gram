@@ -123,13 +123,10 @@ func TestToolEvalCatalogueSnapshotIsCurrent(t *testing.T) {
 // these tools directly to a Claude model fails every turn, and the eval's
 // direct surface leaves them out. Remove an entry once its schema is fixed.
 var toolEvalProviderSchemaExempt = map[string]string{
-	"change_risk_policy_audience": "top-level anyOf requires adding or removing at least one principal",
-	"create_risk_policy":          "top-level oneOf selects a standard, prompt-based or preset policy",
-	"create_risk_exclusion":       "top-level oneOf selects the match type: exact, rule_id, source or entity_type",
-	"search_chats":                "top-level anyOf requires project_id or project_slug",
-	"read_chat":                   "top-level anyOf requires project_id or project_slug",
-	"search_team_memory":          "top-level oneOf requires exactly one of project_id or project_slug",
-	"remember":                    "top-level oneOf requires exactly one of project_id or project_slug",
+	"search_chats":       "top-level anyOf requires project_id or project_slug",
+	"read_chat":          "top-level anyOf requires project_id or project_slug",
+	"search_team_memory": "top-level oneOf requires exactly one of project_id or project_slug",
+	"remember":           "top-level oneOf requires exactly one of project_id or project_slug",
 }
 
 // TestPlatformToolSchemasFitModelProviders fails when a tool gains an input
