@@ -363,7 +363,7 @@ func (p *Provisioner) deleteRenamedServices(ctx context.Context, creds tailscale
 func (p *Provisioner) Observe(ctx context.Context, resources k8s.NetworkIngressResourceNames) (k8s.NetworkIngressObservation, error) {
 	own, err := p.owner(ctx, resources.OwnerID)
 	if err != nil {
-		p.logFailure(ctx, "observe", resources.OwnerID, "", k8s.NetworkIngressErrorInvalidDesiredState, err)
+		p.logFailure(ctx, "observe", resources.OwnerID, "", operationErrorCode(err), err)
 		return errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), err
 	}
 	observation, err := p.observe(ctx, resources.OwnerID, own.organizationID)
@@ -447,19 +447,20 @@ func (p *Provisioner) Delete(ctx context.Context, resources k8s.NetworkIngressRe
 // any devices exist on the customer's tailnet, so missing or unparseable
 // credentials block cleanup rather than silently leaving them behind.
 func (p *Provisioner) DeleteWithCredentials(ctx context.Context, resources k8s.NetworkIngressResourceNames, credentials []byte) error {
-	err := p.deleteWithCredentials(ctx, resources, credentials)
+	own, err := p.owner(ctx, resources.OwnerID)
+	if err != nil {
+		p.logFailure(ctx, "delete", resources.OwnerID, "", operationErrorCode(err), err)
+		return err
+	}
+	err = p.deleteWithCredentials(ctx, own, resources, credentials)
 	// Waiting for hosts to stop is the expected first answer to a delete.
 	if err != nil && !errors.Is(err, k8s.ErrNetworkIngressDeletionPending) {
-		p.logFailure(ctx, "delete", resources.OwnerID, "", "", err)
+		p.logFailure(ctx, "delete", resources.OwnerID, own.organizationID, operationErrorCode(err), err)
 	}
 	return err
 }
 
-func (p *Provisioner) deleteWithCredentials(ctx context.Context, resources k8s.NetworkIngressResourceNames, credentials []byte) error {
-	own, err := p.owner(ctx, resources.OwnerID)
-	if err != nil {
-		return err
-	}
+func (p *Provisioner) deleteWithCredentials(ctx context.Context, own owner, resources k8s.NetworkIngressResourceNames, credentials []byte) error {
 	existing, err := repo.New(p.db).ListNetworkIngressNodes(ctx, repo.ListNetworkIngressNodesParams{NetworkIngressID: resources.OwnerID, OrganizationID: own.organizationID})
 	if err != nil {
 		return fmt.Errorf("list gateway slots: %w", err)
@@ -524,6 +525,29 @@ func (p *Provisioner) deleteWithCredentials(ctx context.Context, resources k8s.N
 		return fmt.Errorf("delete gateway slots: %w", err)
 	}
 	return nil
+}
+
+// operationErrorCode is the bounded code for an error from an operation that
+// reports no observation, such as teardown or the ingress owner lookup, or
+// "" when the error is unclassified. A missing ingress is
+// invalid_desired_state; a database error is not.
+func operationErrorCode(err error) string {
+	switch {
+	case errors.Is(err, k8s.ErrNetworkIngressInvalidDesiredState):
+		return k8s.NetworkIngressErrorInvalidDesiredState
+	case errors.Is(err, k8s.ErrNetworkIngressProviderCredentialsRejected):
+		return k8s.NetworkIngressErrorProviderCredentialsRejected
+	case errors.Is(err, k8s.ErrNetworkIngressProviderForbidden):
+		return k8s.NetworkIngressErrorProviderForbidden
+	case errors.Is(err, k8s.ErrNetworkIngressProviderRateLimited):
+		return k8s.NetworkIngressErrorProviderRateLimited
+	case errors.Is(err, k8s.ErrNetworkIngressProviderAPIUnavailable):
+		return k8s.NetworkIngressErrorProviderAPIUnavailable
+	case encryptionKeyUnavailable(err):
+		return k8s.NetworkIngressErrorEncryptionKeyUnavailable
+	default:
+		return ""
+	}
 }
 
 // logFailure records why a provisioner operation failed. The reconciler's

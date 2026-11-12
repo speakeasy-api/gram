@@ -658,3 +658,21 @@ func TestProvisionerLogsTheCauseOfAFailedApply(t *testing.T) {
 	require.Contains(t, logs.String(), f.ingressID.String())
 	require.NotContains(t, logs.String(), "csecret", "the OAuth client secret never reaches the logs")
 }
+
+func TestProvisionerLogsTheOrganizationOfAFailedTeardown(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovdeletelogs")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	var logs bytes.Buffer
+	provisioner, err := tailnetgateway.NewProvisioner(slog.New(slog.NewJSONHandler(&logs, nil)), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
+		Tag: tailnetgateway.DefaultTag, Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+	})
+	require.NoError(t, err)
+	f.api.Reject = fmt.Errorf("%w: delete service", tailscaleapi.ErrRateLimited)
+
+	require.Error(t, provisioner.DeleteWithCredentials(ctx, f.resources, credentialsJSON(t, "cid", "csecret")))
+	require.Contains(t, logs.String(), f.orgID, "teardown failures name the organization")
+	require.Contains(t, logs.String(), k8s.NetworkIngressErrorProviderRateLimited, "and their bounded error code")
+}

@@ -437,7 +437,8 @@ func providerFailure(err error, code string) *ReconcileError {
 	}
 	switch code {
 	case "invalid_desired_state", "unsupported_provider", "invalid_credentials", "kubernetes_api",
-		k8s.NetworkIngressErrorProviderForbidden, k8s.NetworkIngressErrorProviderRateLimited, k8s.NetworkIngressErrorProviderAPIUnavailable:
+		k8s.NetworkIngressErrorProviderForbidden, k8s.NetworkIngressErrorProviderRateLimited, k8s.NetworkIngressErrorProviderAPIUnavailable,
+		k8s.NetworkIngressErrorEncryptionKeyUnavailable:
 		return reconcileFailure(code)
 	default:
 		return reconcileFailure("provider_error")
