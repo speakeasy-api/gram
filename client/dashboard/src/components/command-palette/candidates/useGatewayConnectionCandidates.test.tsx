@@ -148,15 +148,23 @@ it("does not fetch or return cached resources while closed or unauthorized", () 
   expect(state.queryCalls.at(-1)?.enabled).toBe(false);
   expect(state.infiniteCalls.at(-1)?.enabled).toBe(false);
 });
-it("drains inventory only while open and stops after a page error", () => {
+it("drains inventory only while open and retries a failed page once on reopen", () => {
   state.next = true;
-  const { rerender } = renderHook(() =>
-    useGatewayConnectionCandidates({ enabled: true, inProject: true }),
+  const { rerender } = renderHook(
+    ({ enabled }) =>
+      useGatewayConnectionCandidates({ enabled, inProject: true }),
+    { initialProps: { enabled: true } },
   );
   expect(state.fetchNextPage).toHaveBeenCalledTimes(1);
   state.nextError = true;
-  rerender();
+  rerender({ enabled: true });
   expect(state.fetchNextPage).toHaveBeenCalledTimes(1);
+  rerender({ enabled: false });
+  expect(state.fetchNextPage).toHaveBeenCalledTimes(1);
+  rerender({ enabled: true });
+  expect(state.fetchNextPage).toHaveBeenCalledTimes(2);
+  rerender({ enabled: true });
+  expect(state.fetchNextPage).toHaveBeenCalledTimes(2);
 });
 it("keys both inventories by organization and project and offers org navigation outside a project", () => {
   const { result, rerender } = renderHook(
@@ -164,16 +172,18 @@ it("keys both inventories by organization and project and offers org navigation 
       useGatewayConnectionCandidates({ enabled: true, inProject }),
     { initialProps: { inProject: true } },
   );
-  expect(state.queryCalls.at(-1)?.queryKey).toEqual([
-    "gateways",
-    { gramProject: "project-one" },
-    "org-one",
-  ]);
-  expect(state.infiniteCalls.at(-1)?.queryKey).toEqual([
-    "clients",
-    { gramProject: "project-one", limit: 100 },
-    "org-one",
-  ]);
+  expect(state.queryCalls.at(-1)).toMatchObject({
+    queryKey: ["gateways", { gramProject: "project-one" }, "org-one"],
+    staleTime: 30_000,
+  });
+  expect(state.infiniteCalls.at(-1)).toMatchObject({
+    queryKey: [
+      "clients",
+      { gramProject: "project-one", limit: 100 },
+      "org-one",
+    ],
+    staleTime: 30_000,
+  });
   void result.current[0]!.run("open");
   expect(state.navigate).toHaveBeenLastCalledWith(
     "/acme/projects/project-one/mcp/organization-gateway?tab=connections",
