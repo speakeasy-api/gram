@@ -84,7 +84,7 @@ In the handler's test, add one case without the grant that asserts `oops.CodeFor
 
 ## Adding or changing a permission
 
-1. Edit `authz.Model` in `registry_resources.go`: a `Permission` on the right type (with `Label`, `Description`, `Implies`, `Exclusions`, `Agent`), or a new `ResourceType`. Add it to `SystemRoles[SystemRoleAdmin]` too, and to member only if every user should have it. `Model.Validate` runs when the package loads, so a bad edit fails every test. The scope is always `<kind>:<action>`; leave `LegacyScope` empty, since validation allows it only for the three scopes that predate the registry (`plugin:write`, `log:read`, `mcp:auth`).
+1. Edit `authz.Model` in `registry_resources.go`: a `Permission` on the right type (with `Label`, `Description`, `Implies`, `Exclusions`, `Agent`), or a new `ResourceType`. Add it to `SystemRoles[SystemRoleAdmin]` too, and to member only if every user should have it. `Model.Validate` runs when the package loads, so a bad edit fails every test. A new permission's scope is `<kind>:<action>`, so leave `LegacyScope` empty. Only the three permissions that predate the registry (`plugin:write`, `log:read`, `mcp:auth`) set it, and they keep it until those scopes are deliberately renamed; validation rejects it anywhere else.
 2. `mise run gen:authz`. This rewrites `scopes_gen.go` and `refs_gen.go`, and `TestGeneratedFilesAreCurrent` fails until you run it.
 3. Update the snapshots from `server/`, then review their diffs, because they are the change:
    - `go test ./internal/authz -run TestModel_DerivedTablesGolden -args -update` (writes `testdata/registry_tables.golden.yaml`)
