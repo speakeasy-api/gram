@@ -98,6 +98,10 @@ db-migrations:
   - "server/migrations/**"
   - "server/clickhouse/migrations/**"
 
+magellan:
+  - "magellan/**"
+  - "mise.toml"
+
 glint:
   - ".github/**"
   - "glint/**"

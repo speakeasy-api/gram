@@ -1,0 +1,15 @@
+# Magellan's mise tasks, included from the root mise.toml. The scripts carry
+# their own #USAGE flags and dir; mise ignores a script's own depends here.
+
+["magellan:explore"]
+description = "Magellan: let a Claude Code agent explore your local dashboard and record bugs it can prove"
+file = "magellan/explore.sh"
+depends = ["ensure-stack"]
+
+["magellan:file"]
+description = "Magellan: file a run's findings as Linear Triage issues (dry run unless --file)"
+file = "magellan/file.mts"
+
+["test:magellan"]
+description = "Test the Magellan explore and filing tasks (no model, browser or Linear calls)"
+file = "magellan/test.sh"

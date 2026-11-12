@@ -423,3 +423,6 @@ GRAM_SVIX_API_KEY = { default = "unset" }
 ## Compose project so one shared emulator can isolate identical topic and
 ## subscription IDs from concurrent worktrees.
 GRAM_GCP_PROJECT_ID = "local-dev-project"
+
+[task_config]
+includes = [".mise-tasks", "magellan/tasks.toml"]
