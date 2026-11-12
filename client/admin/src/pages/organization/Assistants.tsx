@@ -389,8 +389,9 @@ export function Assistants({ org }: { org: AdminOrganization }): JSX.Element {
       <div
         ref={tableRef}
         tabIndex={-1}
+        role="group"
         aria-label="Assistants"
-        className="overflow-clip rounded-lg border focus-visible:outline-none"
+        className="focus-visible:ring-ring overflow-clip rounded-lg border focus-visible:ring-2 focus-visible:outline-none"
       >
         <Table cellPadding="condensed">
           <Table.Header table={table} />
