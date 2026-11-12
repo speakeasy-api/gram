@@ -17,33 +17,40 @@ import (
 const cursorAdapter = "cursor"
 
 // shadowMCPInventory is the MCP inventory a Shadow MCP classification
-// consults. A complete list is the session's own snapshot or, while the
-// session has none yet, the device copy. A partial list is what the sender
-// could read before its complete list was ready; it only ever adds install
-// evidence and never proves a server absent.
+// consults. The complete list is the session's own snapshot, the only list
+// that proves a server absent. Without one, two lists stand in as install
+// evidence only: the partial list the sender read before its complete list
+// was ready, and the device copy of the last complete list, which can be
+// days old and miss servers installed since.
 type shadowMCPInventory struct {
-	// entries is the complete inventory, empty when none could be loaded.
+	// entries is the session's complete inventory, empty when none loaded.
 	entries []MCPServerEntry
 
-	// loaded reports whether a complete inventory was found.
+	// loaded reports whether the session's complete inventory was found.
 	loaded bool
 
-	// partial is the session's partial inventory, consulted before a device
-	// copy and never when the session's own snapshot loaded.
+	// partial is the session's partial inventory, consulted only when the
+	// session's own snapshot did not load.
 	partial []MCPServerEntry
+
+	// device is the device copy of the last complete inventory, consulted
+	// after the partial list and only when the session's own snapshot did not
+	// load.
+	device []MCPServerEntry
 }
 
 // find returns the inventory entry that names the server a tool call targets
-// and whether any entry does. A partial list entry counts exactly like a
-// complete list entry; a server missing from both is reported unlisted.
+// and whether any entry does. The session's complete list decides alone when
+// it loaded; otherwise the partial list, then the device copy, are searched,
+// and a server missing from both is reported unlisted.
 func (inventory shadowMCPInventory) find(serverName, rawToolName string) (*MCPServerEntry, bool) {
+	if inventory.loaded {
+		return findInventoryServer(inventory.entries, serverName, rawToolName)
+	}
 	if matched, listed := findInventoryServer(inventory.partial, serverName, rawToolName); listed {
 		return matched, true
 	}
-	if !inventory.loaded {
-		return nil, false
-	}
-	return findInventoryServer(inventory.entries, serverName, rawToolName)
+	return findInventoryServer(inventory.device, serverName, rawToolName)
 }
 
 // findInventoryServer returns the inventory entry that names the server a
@@ -207,9 +214,9 @@ func (s *Service) classifyCanonicalShadowMCP(ctx context.Context, payload *gen.I
 // loadShadowMCPInventory returns the MCP inventory to classify a session's
 // tool call against. The session's own snapshot wins outright. Without one,
 // the session's partial list and the device copy for the scope deviceScope
-// builds are both consulted, the partial list first.
+// builds are loaded as install evidence only.
 func (s *Service) loadShadowMCPInventory(ctx context.Context, sessionID string, deviceScope func() deviceMCPListScope) shadowMCPInventory {
-	inventory := shadowMCPInventory{entries: nil, loaded: false, partial: nil}
+	inventory := shadowMCPInventory{entries: nil, loaded: false, partial: nil, device: nil}
 	if sessionID != "" {
 		if entries, err := s.getCachedMCPList(ctx, sessionID); err == nil {
 			inventory.entries = entries
@@ -221,8 +228,7 @@ func (s *Service) loadShadowMCPInventory(ctx context.Context, sessionID string, 
 		}
 	}
 	if entries, ok := s.getDeviceMCPList(ctx, deviceScope()); ok {
-		inventory.entries = entries
-		inventory.loaded = true
+		inventory.device = entries
 	}
 	return inventory
 }

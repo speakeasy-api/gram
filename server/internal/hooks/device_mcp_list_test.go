@@ -57,7 +57,7 @@ func TestDeviceMCPList_EmptyInventoryIsStored(t *testing.T) {
 	require.Empty(t, entries)
 }
 
-func TestDeviceMCPList_ExpiresAfterADay(t *testing.T) {
+func TestDeviceMCPList_ExpiresAfterFourteenDays(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	scope := testDeviceScope(t, ctx)
@@ -68,11 +68,11 @@ func TestDeviceMCPList_ExpiresAfterADay(t *testing.T) {
 	require.NoError(t, err)
 	require.LessOrEqual(t, ttl, deviceMCPListTTL)
 	require.Greater(t, ttl, deviceMCPListTTL-time.Minute)
-	require.Equal(t, 24*time.Hour, deviceMCPListTTL)
+	require.Equal(t, 14*24*time.Hour, deviceMCPListTTL)
 }
 
-// Once the copy expires the guard has nothing to fall back to: a server only
-// the copy listed is classified without install evidence again.
+// Once the copy's 14-day TTL elapses the guard has nothing to fall back to: a
+// server only the copy listed is classified without install evidence again.
 func TestDeviceMCPList_ExpiredCopyIsNotRead(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -92,9 +92,15 @@ func TestDeviceMCPList_ExpiredCopyIsNotRead(t *testing.T) {
 	scope := ti.service.canonicalDeviceMCPListScope(ctx, authCtx, actor.UserID, payload)
 	_, found := ti.service.getDeviceMCPList(ctx, scope)
 	require.True(t, found, "the copy is readable before it expires")
+	before, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "deny", before.Decision, "the live copy is install evidence")
 
-	// Expire the copy, as its TTL would.
+	// Expire the copy, as its 14-day TTL would.
 	key := deviceMCPListCacheKey(scope)
+	ttl, err := ti.redisClient.TTL(ctx, key).Result()
+	require.NoError(t, err)
+	require.LessOrEqual(t, ttl, 14*24*time.Hour)
 	require.NoError(t, ti.redisClient.PExpire(ctx, key, time.Millisecond).Err())
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		exists, err := ti.redisClient.Exists(ctx, key).Result()
@@ -105,9 +111,9 @@ func TestDeviceMCPList_ExpiredCopyIsNotRead(t *testing.T) {
 	_, found = ti.service.getDeviceMCPList(ctx, scope)
 	require.False(t, found)
 
-	result, err := ti.service.Ingest(ctx, payload)
+	after, err := ti.service.Ingest(ctx, payload)
 	require.NoError(t, err)
-	require.Equal(t, "allow", result.Decision, "an expired copy is no install evidence")
+	require.Equal(t, "allow", after.Decision, "an expired copy is no install evidence")
 }
 
 // sessionMCPListSetFailingCache fails every write of a session MCP list

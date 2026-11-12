@@ -244,6 +244,14 @@ func TestCanonicalTelemetryRows_RecordsBuiltinEvidence(t *testing.T) {
 		{tc: canonicalBuiltinCase{name: "known name", toolName: "mcp__claude-in-chrome__tabs_context_mcp", inventory: []MCPServerEntry{}}, wantEvidence: "known_name"},
 		{tc: canonicalBuiltinCase{name: "unlisted name missing from the inventory", toolName: "mcp__ccd_new_tool__run", inventory: []MCPServerEntry{}}, wantEvidence: "not_in_inventory"},
 		{tc: canonicalBuiltinCase{name: "unlisted name without an inventory", toolName: "mcp__ccd_new_tool__run"}, wantEvidence: "unverified"},
+		{
+			tc:           canonicalBuiltinCase{name: "unlisted name missing from the device copy", toolName: "mcp__ccd_new_tool__run", deviceInventory: []MCPServerEntry{{Source: "claude", Name: "linear"}}},
+			wantEvidence: "unverified",
+		},
+		{
+			tc:        canonicalBuiltinCase{name: "device copy resolves a command", toolName: "mcp__linear__list_issues", deviceInventory: []MCPServerEntry{{Source: "claude", Name: "linear", Command: "npx linear-mcp"}}},
+			wantMatch: "npx linear-mcp",
+		},
 		{tc: canonicalBuiltinCase{name: "vendor bundle command", toolName: "mcp__computer_use__click", command: builtinTestVendorCommand}, wantEvidence: "vendor_bundle", wantMatch: builtinTestVendorCommand},
 		{tc: canonicalBuiltinCase{name: "cursor built-in", adapter: cursorAdapter, toolName: "MCP:browser_click", serverName: "cursor-ide-browser", identity: "cursor-ide-browser"}, wantEvidence: "cursor_builtin"},
 		{
@@ -568,7 +576,7 @@ func TestFindInventoryServer(t *testing.T) {
 func TestInventoryShadowMCPFacts_UnverifiedNeverForKnownNames(t *testing.T) {
 	t.Parallel()
 
-	missing := shadowMCPInventory{entries: nil, loaded: false, partial: nil}
+	missing := shadowMCPInventory{entries: nil, loaded: false, partial: nil, device: nil}
 	require.Equal(t, shadowmcp.BuiltinEvidenceKnownName, shadowmcp.ClassifyServer(inventoryShadowMCPFacts("claude-in-chrome", "", missing)).Evidence)
 	require.Equal(t, shadowmcp.BuiltinEvidenceUnverified, shadowmcp.ClassifyServer(inventoryShadowMCPFacts("ccd_new_tool", "", missing)).Evidence)
 }
@@ -579,7 +587,7 @@ func TestInventoryShadowMCPFacts_UnverifiedNeverForKnownNames(t *testing.T) {
 func TestInventoryShadowMCPFacts_PartialList(t *testing.T) {
 	t.Parallel()
 
-	partial := shadowMCPInventory{entries: nil, loaded: false, partial: []MCPServerEntry{{Source: "claude", Name: "linear", Command: "npx linear-mcp"}}}
+	partial := shadowMCPInventory{entries: nil, loaded: false, partial: []MCPServerEntry{{Source: "claude", Name: "linear", Command: "npx linear-mcp"}}, device: nil}
 	facts := inventoryShadowMCPFacts("linear", "mcp__linear__list_issues", partial)
 	require.Equal(t, "npx linear-mcp", facts.Command)
 	require.True(t, facts.Installed)
@@ -588,12 +596,32 @@ func TestInventoryShadowMCPFacts_PartialList(t *testing.T) {
 
 	require.Equal(t, shadowmcp.BuiltinEvidenceUnverified,
 		shadowmcp.ClassifyServer(inventoryShadowMCPFacts("ccd_new_tool", "mcp__ccd_new_tool__run", partial)).Evidence)
+}
 
-	// A device copy that omits the server does not hide the partial entry.
-	withDevice := partial
-	withDevice.entries = []MCPServerEntry{}
-	withDevice.loaded = true
-	require.True(t, inventoryShadowMCPFacts("linear", "mcp__linear__list_issues", withDevice).Installed)
+// TestInventoryShadowMCPFacts_DeviceCopy: a device copy can be days old, so
+// like a partial list it only adds install evidence. A name it omits stays
+// unverified, and the session's partial list is searched first.
+func TestInventoryShadowMCPFacts_DeviceCopy(t *testing.T) {
+	t.Parallel()
+
+	device := shadowMCPInventory{entries: nil, loaded: false, partial: nil, device: []MCPServerEntry{{Source: "claude", Name: "linear", URL: "https://mcp.example.test/mcp"}}}
+	facts := inventoryShadowMCPFacts("linear", "mcp__linear__list_issues", device)
+	require.Equal(t, "https://mcp.example.test/mcp", facts.URL)
+	require.True(t, facts.Installed)
+	require.False(t, facts.InventoryLoaded)
+
+	require.Equal(t, shadowmcp.BuiltinEvidenceUnverified,
+		shadowmcp.ClassifyServer(inventoryShadowMCPFacts("ccd_new_tool", "mcp__ccd_new_tool__run", device)).Evidence)
+
+	withPartial := device
+	withPartial.partial = []MCPServerEntry{{Source: "claude", Name: "linear", Command: "npx linear-mcp"}}
+	require.Equal(t, "npx linear-mcp", inventoryShadowMCPFacts("linear", "mcp__linear__list_issues", withPartial).Command)
+
+	// The session's complete list decides alone once it loads.
+	complete := withPartial
+	complete.entries = []MCPServerEntry{}
+	complete.loaded = true
+	require.False(t, inventoryShadowMCPFacts("linear", "mcp__linear__list_issues", complete).Installed)
 	require.Equal(t, shadowmcp.BuiltinEvidenceNotInInventory,
-		shadowmcp.ClassifyServer(inventoryShadowMCPFacts("ccd_new_tool", "mcp__ccd_new_tool__run", withDevice)).Evidence)
+		shadowmcp.ClassifyServer(inventoryShadowMCPFacts("ccd_new_tool", "mcp__ccd_new_tool__run", complete)).Evidence)
 }

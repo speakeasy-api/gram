@@ -1302,9 +1302,9 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// the SessionStart-snapshot race (DNO-286); it falls back to the cached
 	// snapshot only when the payload carried none. When the session has no
 	// snapshot yet, its partial list and the device's copy of its last
-	// complete inventory stand in, the partial list only as install evidence.
+	// complete inventory stand in, both only as install evidence.
 	deviceScope := claudeDeviceMCPListScope(metadata, payload)
-	inventory := shadowMCPInventory{entries: nil, loaded: false, partial: nil}
+	inventory := shadowMCPInventory{entries: nil, loaded: false, partial: nil, device: nil}
 	entries, inventoryErr := s.resolveMCPListForEnforcement(ctx, payload, sessionID, deviceScope)
 	if inventoryErr == nil {
 		inventory.entries = entries
@@ -1315,8 +1315,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			inventory.partial = partial
 		}
 		if deviceEntries, ok := s.getDeviceMCPList(ctx, deviceScope); ok {
-			inventory.entries = deviceEntries
-			inventory.loaded = true
+			inventory.device = deviceEntries
 		}
 	}
 
@@ -1332,11 +1331,12 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	}
 
 	// Only a server that cannot be a built-in reaches here without a complete
-	// inventory or a partial list entry for it: a connector named by its UUID,
-	// or a claude.ai connector or plugin server named by its prefix. Its URL
-	// is unknown until the inventory loads and may be Speakeasy-hosted, so
-	// deny with a retry-or-restart message rather than calling it Shadow MCP
-	// outright. A partial list entry is judged like any other entry below.
+	// inventory or a partial list or device copy entry for it: a connector
+	// named by its UUID, or a claude.ai connector or plugin server named by
+	// its prefix. Its URL is unknown until the inventory loads and may be
+	// Speakeasy-hosted, so deny with a retry-or-restart message rather than
+	// calling it Shadow MCP outright. A partial list or device copy entry is
+	// judged like any other entry below.
 	matched, _ := inventory.find(serverPrefix, rawToolName)
 	if !inventory.loaded && matched == nil {
 		auditReason := "missing MCP list snapshot for session"

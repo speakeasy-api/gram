@@ -16,10 +16,12 @@ import (
 
 // deviceMCPListTTL is how long a device's copy of its last complete MCP
 // inventory survives. A session's own inventory is empty for the first
-// seconds while the relay lists the configured servers; a day covers the next
-// session of a normal working day on the same device, and an older copy is
-// too likely to miss servers the user has since installed or removed.
-const deviceMCPListTTL = 24 * time.Hour
+// seconds while the relay lists the configured servers, and a device can sit
+// idle over a holiday or a long trip; 14 days matches how long the hook
+// sender keeps its own on-device MCP list cache. A copy that old can miss
+// servers the user has installed since, so it only ever adds install
+// evidence and never proves a server absent.
+const deviceMCPListTTL = 14 * 24 * time.Hour // 14 days
 
 // deviceMCPListScope identifies whose and which device MCP inventory copy a
 // read or write addresses. Every field is part of the cache key, so a copy is
