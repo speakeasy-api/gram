@@ -10,7 +10,6 @@ import {
   ChevronUp,
   GitBranch,
   Info,
-  Loader2,
   Pin,
   Search,
   SlidersHorizontal,
@@ -68,7 +67,11 @@ import { personalAccountEmail } from "@/components/observe/account-display-utils
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
-import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
+import {
+  isOwnScopeSession,
+  useOwnedAgentIds,
+  useToolLogsAccess,
+} from "@/components/observe/toolLogsAccess";
 import { useSdkClient } from "@/contexts/Sdk";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatActor, chatOwnerLabel } from "@/lib/chat-owner";
@@ -116,6 +119,8 @@ import { formatWorkUnits, workUnitsEfficiency } from "./workUnits";
 import { ToolCallsView } from "./chatLogViews";
 import { EffectsView } from "./EffectsView";
 import { exportTraceDataAsJson } from "./chatExport";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
 
@@ -1165,7 +1170,7 @@ function SessionSummarySection({
         >
           <Button.LeftIcon>
             {summarize.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Spinner className="mr-0 size-3.5" />
             ) : (
               <Sparkles className="size-3.5" />
             )}
@@ -1223,15 +1228,9 @@ function ChatDetailPanel({
   // Risk findings are an org-admin resource (risk.results.list is org-admin
   // gated). Only admins get the risk-windowed "Risky only" view + its data.
   const canViewRisk = isPlatformAdmin || hasScope("org:admin");
-  // A session's tool calls come from the project's raw tool logs, which need
-  // log:read on the project on top of access to the transcript.
-  const canViewToolLogs = useCanViewToolLogs();
+  const toolLogsAccess = useToolLogsAccess();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedView, setView] = useState<ViewMode>("chat");
-  // The Tool calls view reads the project's raw tool logs, so without log:read
-  // (including after a grants refetch takes it away) the transcript shows.
-  const view: ViewMode =
-    selectedView === "tools" && !canViewToolLogs ? "chat" : selectedView;
   const [rawView, setRawView] = useState(false);
   useEffect(() => setRawView(false), [chatId]);
   const [riskyOnly, setRiskyOnly] = useState(false);
@@ -1342,6 +1341,19 @@ function ChatDetailPanel({
       title: title || "Claude Tag session",
     };
   }, [capturedChat, isClaudeTag, tagMetadata.title, tagMetadata.channels]);
+  // A session's tool calls come from the project's raw tool logs. Without
+  // log:read the server returns them only for the viewer's own sessions and
+  // their agents', so the Tool calls view is offered on exactly those.
+  const ownedAgents = useOwnedAgentIds(
+    !toolLogsAccess.projectWide && Boolean(capturedChat?.agentId),
+  );
+  const canViewToolLogs =
+    toolLogsAccess.projectWide ||
+    isOwnScopeSession(capturedChat, user.id, ownedAgents);
+  // Once access goes away (a grants refetch, a new session) the transcript
+  // shows instead of a Tool calls view with nothing behind it.
+  const view: ViewMode =
+    selectedView === "tools" && !canViewToolLogs ? "chat" : selectedView;
   const validFocusedMessageTurn =
     focusedMessageTurn !== undefined &&
     Number.isInteger(focusedMessageTurn) &&
@@ -1441,7 +1453,7 @@ function ChatDetailPanel({
     setActiveOccurrenceKey(null);
   }, [chatId]);
 
-  // Logs fetched before log:read went away are ignored everywhere: the Tool
+  // Logs fetched before access went away are ignored everywhere: the Tool
   // calls view, its count, and the session export.
   const logs = useMemo(
     () =>
@@ -1788,8 +1800,17 @@ function ChatDetailPanel({
   if (chatLoading) {
     return (
       <div className="p-8">
-        <SheetTitle>Loading</SheetTitle>
-        <SheetDescription>Fetching chat session details...</SheetDescription>
+        <SheetTitle className="sr-only">Loading</SheetTitle>
+        <SheetDescription className="sr-only">
+          Fetching chat session details...
+        </SheetDescription>
+        <Skeleton>
+          <div className="h-7 w-64" />
+          <div className="h-4 w-40" />
+          <div className="mt-4 h-24 w-full" />
+          <div className="h-24 w-full" />
+          <div className="h-24 w-full" />
+        </Skeleton>
       </div>
     );
   }
@@ -1932,7 +1953,7 @@ function ChatDetailPanel({
               className="text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors disabled:cursor-default"
             >
               {loadingAllMessages ? (
-                <Loader2 className="size-3.5 animate-spin" />
+                <Spinner className="mr-0 size-3.5" />
               ) : (
                 <ChevronsDown className="size-3.5" />
               )}

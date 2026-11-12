@@ -127,7 +127,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 			page.Reason = oauthui.ReasonOrganizationBlocked
-			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID)))
+			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID, mcpconnectionattempts.ClientIDNotAdmitted)))
 			t.Refuse(ctx, mcpconnectionattempts.CodeCIMDAdmissionDenied)
 			// Checked before the generic *oauthwire.Error branch below, since an
 			// admission denial is policy rather than a spec violation and
@@ -136,7 +136,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, admissionErr.Description())
 		}
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
-			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID)))
+			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID, mcpconnectionattempts.ClientIDNotAdmitted)))
 			t.Refuse(ctx, mcpconnectionattempts.CodeCIMDMetadataInvalid)
 			code := oauthErr.Code
 			if code == oautherr.CodeInvalidClientMetadata || code == oautherr.CodeInvalidRedirectURI {
@@ -153,7 +153,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			// rather than a permanent invalid_client that would make SDKs
 			// stop retrying.
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
-			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID)))
+			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID, mcpconnectionattempts.ClientIDNotAdmitted)))
 			t.Refuse(ctx, mcpconnectionattempts.CodeCIMDFetchFailed)
 			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, page, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
@@ -165,7 +165,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 	page = authorizationErrorPage(client, req.ClientID, endpoint.Slug)
-	t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID)))
+	t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID, mcpconnectionattempts.ClientIDAdmitted)))
 	t.With(mcpconnectionattempts.UserSessionClient(client.ID))
 	if !redirectURIMatches(client, req.RedirectURI) {
 		t.Refuse(ctx, mcpconnectionattempts.CodeRedirectURIMismatch)
@@ -265,7 +265,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeBadRequest, err, "capture OAuth endpoint authority").LogWarn(ctx, logger)
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)
-	challengeState := AuthnChallengeState{CodeReconnect: nil, WorkloadReconnect: nil, ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
+	challengeState := AuthnChallengeState{ConnectPendingSignIn: false, CodeReconnect: nil, WorkloadReconnect: nil, ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 		Browser:                  nil,
 		Federation:               nil,
 		ID:                       challengeID,
@@ -438,7 +438,6 @@ func authorizationErrorPage(client *usersessions_repo.UserSessionClient, clientI
 		Setup:          false,
 		Status:         http.StatusBadRequest,
 		Reason:         oauthui.ReasonDefault,
-		Approval:       false,
 		ErrorID:        "",
 		CallbackURL:    "",
 		Code:           "",

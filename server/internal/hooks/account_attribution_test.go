@@ -501,6 +501,74 @@ func TestLogs_BackfillsChatAccountLinkOnExistingChat(t *testing.T) {
 	require.Equal(t, account.ID, chat.UserAccountID.UUID)
 }
 
+// TestLogs_BackfillsOwnerOnOwnerlessChat covers a shared plugin key with no
+// self-reported email whose first prompt creates the chat before OTEL names
+// the person: attribution must fill the chat's owner or the session stays
+// anonymous.
+func TestLogs_BackfillsOwnerOnOwnerlessChat(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	queries := repo.New(ti.conn)
+
+	userID, email := "owner-"+uuid.NewString(), "owner@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, email)
+
+	sessionID := "backfill-owner-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	_, err := queries.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty(""),
+		UserAccountID:  conv.StringToNullUUID(""),
+		Title:          conv.ToPGText("ownerless chat"),
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	claudeAccountSession(t, ctx, ti, sessionID, email, "org-"+sessionID, "acct-"+sessionID, "device-"+sessionID, now)
+
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, userID, chat.UserID.String)
+	require.Equal(t, email, chat.ExternalUserID.String)
+	require.True(t, chat.UserAccountID.Valid)
+}
+
+// TestLogs_OwnerBackfillKeepsExistingOwner confirms the owner backfill is
+// fill-once: a chat created with an identity keeps it.
+func TestLogs_OwnerBackfillKeepsExistingOwner(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	queries := repo.New(ti.conn)
+
+	sessionID := "keep-owner-" + uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	_, err := queries.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGTextEmpty("original-user"),
+		ExternalUserID: conv.ToPGTextEmpty("original@example.com"),
+		UserAccountID:  conv.StringToNullUUID(""),
+		Title:          conv.ToPGText("owned chat"),
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	claudeAccountSession(t, ctx, ti, sessionID, "other@example.com", "org-"+sessionID, "acct-"+sessionID, "device-"+sessionID, now)
+
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, "original-user", chat.UserID.String)
+	require.Equal(t, "original@example.com", chat.ExternalUserID.String)
+}
+
 // TestLogs_NoAccountIdentityDoesNotCreateUserAccount confirms attribution is a
 // no-op for sessions that carry no provider account id (older clients): no
 // user_accounts row is created and ingest still succeeds.

@@ -5,7 +5,7 @@ import {
   FieldError,
   FieldLabel,
 } from "@/components/ui/Field";
-import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
@@ -28,6 +28,7 @@ import {
   useRemoteSessionIssuersByIds,
 } from "@/lib/remote-identity";
 import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
+import { SetupStepBanner } from "./SetupStepBanner";
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
 
@@ -76,6 +77,7 @@ export function AuthenticationSection({
           )}
         </SettingsSection.Description>
       </SettingsSection.Header>
+      {isUnproxied ? null : <SetupStepBanner mcpServer={mcpServer} />}
       {isUnproxied ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
@@ -318,9 +320,7 @@ function IdentityProviderSetupField({
 function AuthenticationLoadingField() {
   return (
     <AuthRow label="Authentication">
-      <Text muted small>
-        Loading…
-      </Text>
+      <Skeleton label="Loading authentication" className="h-5 w-48" />
     </AuthRow>
   );
 }

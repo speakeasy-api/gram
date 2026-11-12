@@ -9,7 +9,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>{{if .Setup}}Couldn't finish setup{{else if .Approval}}Couldn't approve{{else}}Couldn't connect{{end}} · Speakeasy</title>
+    <title>{{if .Setup}}Couldn't finish setup{{else if .Check}}Couldn't check the connection{{else}}Couldn't connect{{end}} · Speakeasy</title>
     {{/* The stylesheet is the one the MCP consent page uses, compiled from the
     dashboard design system by `aube run -F dashboard build:consent-page` and
     inlined, so every authorization page looks like the dashboard. */}}
@@ -28,12 +28,12 @@ consent page shows, so the person recognizes the flow they started. */ -}}
         server they were connecting. The OAuth error itself stays under
         Technical details: it is written for developers, not for them. */}}
         <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
-          <p class="text-eyebrow text-default-destructive">{{if .Setup}}Couldn't finish setup{{else if .Approval}}Couldn't approve{{else}}Couldn't connect{{end}}</p>
+          <p class="text-eyebrow text-default-destructive">{{if .Setup}}Couldn't finish setup{{else if .Check}}Couldn't check the connection{{else}}Couldn't connect{{end}}</p>
           <h1
             id="page-title"
             class="text-display-xs flex flex-wrap items-baseline gap-x-3 gap-y-1"
           >
-            {{if .Setup}}<span>Organization setup</span>{{else if .Approval}}<span>Change approval</span>{{else}}
+            {{if .Setup}}<span>Organization setup</span>{{else if .Check}}<span>Checking the server's connection</span>{{else}}
             <span>{{if .ClientName}}{{.ClientName}}{{else}}Your MCP client{{end}}</span>
             {{if .ServerName}}
             <span class="text-muted-foreground" aria-hidden="true">&rsaquo;</span>
@@ -45,11 +45,8 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             {{if .Setup}}
             {{if eq .Kind "not-allowed"}}Your account can't continue this organization's setup.
             {{else if eq .Kind "unavailable"}}Speakeasy couldn't finish checking your setup. Please try again.
+            {{else if eq .Kind "internal"}}Speakeasy couldn't finish checking your setup. This is a problem on our side, not something you did.
             {{else}}This setup link is incomplete or no longer valid.{{end}}
-            {{else if .Approval}}
-            {{if eq .Kind "expired"}}This approval link expired or was already used.
-            {{else if eq .Kind "session-changed"}}Your staff sign-in session changed. This approval could not be completed.
-            {{else}}This change could not be approved. The proposal may be unavailable or may have changed.{{end}}
             {{else if eq .Kind "canceled"}}
             Sign-in was canceled. The connection was not completed.
             {{else if eq .Kind "organization-blocked"}}
@@ -75,24 +72,46 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             {{if .ProviderName}}{{.ProviderName}}{{else}}The service this connection uses{{end}}
             isn't available right now, so {{template "client" .}} couldn't connect to
             {{template "server" .}}. This isn't something you did.
-            {{else if eq .Kind "unavailable"}}
+            {{else if or (eq .Kind "unavailable") (eq .Kind "internal")}}
             Speakeasy couldn't finish connecting {{template "client" .}} to
             {{template "server" .}}. This is a problem on our side, not something
             you did.
+            {{else if eq .Kind "check-failed"}}
+            Speakeasy couldn't check this server's connection. This is a problem
+            on our side, not something you did.
+            {{else if eq .Kind "check-unavailable"}}
+            Speakeasy couldn't check this server's connection right now. This is
+            a problem on our side, not something you did.
+            {{else if eq .Kind "check-not-allowed"}}
+            You don't have access to this server, so Speakeasy couldn't check it.
+            {{else if eq .Kind "sign-in-failed"}}
+            Your sign-in service couldn't sign you in. This isn't something you
+            did.
+            {{else if eq .Kind "sign-in-unavailable"}}
+            Your sign-in service isn't available right now. This isn't something
+            you did.
+            {{else if eq .Kind "sign-in-required"}}
+            Your sign-in service needs you to sign in again before
+            {{template "client" .}} can connect to {{template "server" .}}.
+            {{else if eq .Kind "check-needs-admin"}}
+            This server's connection isn't set up correctly, so Speakeasy couldn't
+            check it.
             {{else}}
             {{template "Client" .}} couldn't connect to {{template "server" .}}.
             The connection could not be completed.
             {{end}}
           </p>
+          {{if .ConnectionReference}}
+          <p class="text-xs text-muted-foreground" data-connection-reference>
+            Reference: <span class="font-mono break-all">{{.ConnectionReference}}</span>
+          </p>
+          {{end}}
         </header>
 
         <p class="text-sm border-b px-6 py-6 sm:px-8">
           {{if .Setup}}
           Return to the Speakeasy dashboard and open your organization’s setup.
           Sign in again if needed, or ask an organization administrator for help.
-          {{else if .Approval}}
-          Return to your MCP client to check the proposal and request a new approval link.
-          Use the same staff account that started the request.
           {{else if eq .Kind "organization-blocked"}}
           Ask your organization's administrators to review this connection.
           Share the technical details below with them.
@@ -125,6 +144,25 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           Try connecting again shortly. If it keeps happening, share the
           technical details below with your IT administrators or Speakeasy
           support.
+          {{else if or (eq .Kind "internal") (eq .Kind "check-failed")}}
+          Share the technical details below with Speakeasy support.
+          {{else if eq .Kind "check-unavailable"}}
+          Try again shortly. If it keeps happening, share the technical details
+          below with Speakeasy support.
+          {{else if eq .Kind "check-not-allowed"}}
+          Ask your IT administrators for access. Share the technical details
+          below with them.
+          {{else if eq .Kind "sign-in-failed"}}
+          Try again. If it keeps happening, share the technical details below
+          with your IT administrators.
+          {{else if eq .Kind "sign-in-unavailable"}}
+          Try again in a few minutes. If it keeps happening, share the technical
+          details below with your IT administrators or Speakeasy support.
+          {{else if eq .Kind "sign-in-required"}}
+          Start connecting again, and sign in when your sign-in service asks.
+          {{else if eq .Kind "check-needs-admin"}}
+          Ask your IT administrators to check this server's connection settings.
+          Share the technical details below with them.
           {{else}}
           Try connecting again from {{template "client" .}}. If it still fails,
           share the technical details below with your IT administrators.
@@ -203,10 +241,10 @@ consent page shows, so the person recognizes the flow they started. */ -}}
                 <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.ErrorID}}</dd>
               </div>
               {{end}}
-              {{if .Reference}}
+              {{if .TraceID}}
               <div>
-                <dt class="text-eyebrow">Reference</dt>
-                <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.Reference}}</dd>
+                <dt class="text-eyebrow">Trace ID</dt>
+                <dd class="mt-1 ml-0 font-mono text-sm break-all">{{.TraceID}}</dd>
               </div>
               {{end}}
               <div>
@@ -257,7 +295,11 @@ consent page shows, so the person recognizes the flow they started. */ -}}
         </div>
         {{else if and (not .Setup) (ne .Kind "canceled")}}
         <div class="flex flex-col gap-4 px-6 py-6 sm:px-8">
-          {{if .CallbackURL}}
+          {{if .Check}}
+          <p class="text-sm text-muted-foreground">
+            Use your browser's back button to return to the connect page.
+          </p>
+          {{else if .CallbackURL}}
           <p class="text-sm text-muted-foreground">
             You can close this tab, or go back to {{template "client" .}} so it
             can show this error. Only continue if you recognize

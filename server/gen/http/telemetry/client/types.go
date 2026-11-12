@@ -237,6 +237,9 @@ type GetProjectOverviewRequestBody struct {
 	From string `form:"from" json:"from" xml:"from"`
 	// End time in ISO 8601 format
 	To string `form:"to" json:"to" xml:"to"`
+	// Also return the project home usage breakdowns (usage_by_user,
+	// usage_by_agent, mcp_usage) in the same response
+	IncludeUsage bool `form:"include_usage" json:"include_usage" xml:"include_usage"`
 }
 
 // GetUnproxiedMcpServerUsageRequestBody is the type of the "telemetry" service
@@ -913,6 +916,15 @@ type GetMcpServerActivityRequestBody struct {
 	RecentWindowDays int `form:"recent_window_days" json:"recent_window_days" xml:"recent_window_days"`
 }
 
+// GetOrgMcpServerActivityRequestBody is the type of the "telemetry" service
+// "getOrgMcpServerActivity" endpoint HTTP request body.
+type GetOrgMcpServerActivityRequestBody struct {
+	// Size of the recent-activity window in days. A server with tool calls in the
+	// overall lookback window but none inside this window is flagged as stale.
+	// Defaults to 14.
+	RecentWindowDays int `form:"recent_window_days" json:"recent_window_days" xml:"recent_window_days"`
+}
+
 // ListHooksTracesRequestBody is the type of the "telemetry" service
 // "listHooksTraces" endpoint HTTP request body.
 type ListHooksTracesRequestBody struct {
@@ -1071,10 +1083,18 @@ type GetOrganizationGatewayUsageResponseBody struct {
 type GetProjectOverviewResponseBody struct {
 	// Current period summary metrics
 	Summary *ProjectOverviewSummaryResponseBody `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
-	// Previous period summary metrics for trend calculation
-	Comparison *ProjectOverviewSummaryResponseBody `form:"comparison,omitempty" json:"comparison,omitempty" xml:"comparison,omitempty"`
-	// Indicates whether metrics are session-based or tool-call-based
-	MetricsMode *string `form:"metrics_mode,omitempty" json:"metrics_mode,omitempty" xml:"metrics_mode,omitempty"`
+	// Agent usage grouped by user email, ranked by LLM tokens (top 100, no time
+	// series). Only set when include_usage is true and the caller has org:read.
+	UsageByUser *QueryResultResponseBody `form:"usage_by_user,omitempty" json:"usage_by_user,omitempty" xml:"usage_by_user,omitempty"`
+	// Agent usage grouped by hook source, ranked by LLM tokens (top 10, no time
+	// series). Only set when include_usage is true and usage_by_user has agent
+	// usage.
+	UsageByAgent *QueryResultResponseBody `form:"usage_by_agent,omitempty" json:"usage_by_agent,omitempty" xml:"usage_by_agent,omitempty"`
+	// External end user and tool usage summary. Only set when include_usage is
+	// true and usage_by_user shows no agent usage, which includes when that read
+	// fails or the caller lacks org:read. Do not treat its presence as proof the
+	// project has no agent usage.
+	McpUsage *ProjectMcpUsageResponseBody `form:"mcp_usage,omitempty" json:"mcp_usage,omitempty" xml:"mcp_usage,omitempty"`
 }
 
 // GetUnproxiedMcpServerUsageResponseBody is the type of the "telemetry"
@@ -1137,10 +1157,17 @@ type QueryTumDetailsResponseBody struct {
 // ListSessionsResponseBody is the type of the "telemetry" service
 // "listSessions" endpoint HTTP response body.
 type ListSessionsResponseBody struct {
-	// List of chat session summaries
+	// List of chat session summaries. Only sessions from projects the caller holds
+	// chat:read on are listed.
 	Sessions []*SessionSummaryResponseBody `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
 	// Cursor for next page
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// True when sessions were withheld because the caller lacks chat:read on one
+	// or more projects. The totals still cover every matching session.
+	Scoped *bool `form:"scoped,omitempty" json:"scoped,omitempty" xml:"scoped,omitempty"`
+	// Aggregates over every matching session in the organization. Present only
+	// when scoped is true.
+	Totals *SessionTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
 }
 
 // ListFilterOptionsResponseBody is the type of the "telemetry" service
@@ -1300,6 +1327,15 @@ type GetMcpServerActivityResponseBody struct {
 	RecentWindowDays *int `form:"recent_window_days,omitempty" json:"recent_window_days,omitempty" xml:"recent_window_days,omitempty"`
 	// The overall lookback window size in days (bounded by telemetry retention)
 	LookbackDays *int `form:"lookback_days,omitempty" json:"lookback_days,omitempty" xml:"lookback_days,omitempty"`
+}
+
+// GetOrgMcpServerActivityResponseBody is the type of the "telemetry" service
+// "getOrgMcpServerActivity" endpoint HTTP response body.
+type GetOrgMcpServerActivityResponseBody struct {
+	// One entry per readable project whose activity was read
+	Projects []*ProjectMcpServerActivityResponseBody `form:"projects,omitempty" json:"projects,omitempty" xml:"projects,omitempty"`
+	// The recent-activity window size in days that was applied
+	RecentWindowDays *int `form:"recent_window_days,omitempty" json:"recent_window_days,omitempty" xml:"recent_window_days,omitempty"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -8262,6 +8298,196 @@ type GetMcpServerActivityGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetOrgMcpServerActivityUnauthorizedResponseBody is the type of the
+// "telemetry" service "getOrgMcpServerActivity" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetOrgMcpServerActivityUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrgMcpServerActivityForbiddenResponseBody is the type of the "telemetry"
+// service "getOrgMcpServerActivity" endpoint HTTP response body for the
+// "forbidden" error.
+type GetOrgMcpServerActivityForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrgMcpServerActivityBadRequestResponseBody is the type of the "telemetry"
+// service "getOrgMcpServerActivity" endpoint HTTP response body for the
+// "bad_request" error.
+type GetOrgMcpServerActivityBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrgMcpServerActivityNotFoundResponseBody is the type of the "telemetry"
+// service "getOrgMcpServerActivity" endpoint HTTP response body for the
+// "not_found" error.
+type GetOrgMcpServerActivityNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrgMcpServerActivityConflictResponseBody is the type of the "telemetry"
+// service "getOrgMcpServerActivity" endpoint HTTP response body for the
+// "conflict" error.
+type GetOrgMcpServerActivityConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrgMcpServerActivityUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getOrgMcpServerActivity" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetOrgMcpServerActivityUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrgMcpServerActivityInvalidResponseBody is the type of the "telemetry"
+// service "getOrgMcpServerActivity" endpoint HTTP response body for the
+// "invalid" error.
+type GetOrgMcpServerActivityInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrgMcpServerActivityInvariantViolationResponseBody is the type of the
+// "telemetry" service "getOrgMcpServerActivity" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetOrgMcpServerActivityInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrgMcpServerActivityUnexpectedResponseBody is the type of the "telemetry"
+// service "getOrgMcpServerActivity" endpoint HTTP response body for the
+// "unexpected" error.
+type GetOrgMcpServerActivityUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetOrgMcpServerActivityGatewayErrorResponseBody is the type of the
+// "telemetry" service "getOrgMcpServerActivity" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetOrgMcpServerActivityGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListHooksTracesUnauthorizedResponseBody is the type of the "telemetry"
 // service "listHooksTraces" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -8972,35 +9198,14 @@ type MetaMcpMemberUsageResponseBody struct {
 type ProjectOverviewSummaryResponseBody struct {
 	// Total number of chat sessions
 	TotalChats *int64 `form:"total_chats,omitempty" json:"total_chats,omitempty" xml:"total_chats,omitempty"`
-	// Number of resolved chat sessions
-	ResolvedChats *int64 `form:"resolved_chats,omitempty" json:"resolved_chats,omitempty" xml:"resolved_chats,omitempty"`
-	// Number of failed chat sessions
-	FailedChats *int64 `form:"failed_chats,omitempty" json:"failed_chats,omitempty" xml:"failed_chats,omitempty"`
 	// Total number of tool calls
 	TotalToolCalls *int64 `form:"total_tool_calls,omitempty" json:"total_tool_calls,omitempty" xml:"total_tool_calls,omitempty"`
 	// Number of failed tool calls
 	FailedToolCalls *int64 `form:"failed_tool_calls,omitempty" json:"failed_tool_calls,omitempty" xml:"failed_tool_calls,omitempty"`
 	// Number of MCP servers with at least one tool call in the time period
 	ActiveServersCount *int64 `form:"active_servers_count,omitempty" json:"active_servers_count,omitempty" xml:"active_servers_count,omitempty"`
-	// Number of unique users with activity in the time period
-	ActiveUsersCount *int64 `form:"active_users_count,omitempty" json:"active_users_count,omitempty" xml:"active_users_count,omitempty"`
-	// Top 10 users by activity (# of messages or tool calls depending on
-	// metrics_mode)
-	TopUsers []*TopUserResponseBody `form:"top_users,omitempty" json:"top_users,omitempty" xml:"top_users,omitempty"`
 	// Top 10 MCP servers by tool call count
 	TopServers []*TopServerResponseBody `form:"top_servers,omitempty" json:"top_servers,omitempty" xml:"top_servers,omitempty"`
-	// Breakdown of messages/activity by LLM client/agent
-	LlmClientBreakdown []*LLMClientUsageResponseBody `form:"llm_client_breakdown,omitempty" json:"llm_client_breakdown,omitempty" xml:"llm_client_breakdown,omitempty"`
-}
-
-// TopUserResponseBody is used to define fields on response body types.
-type TopUserResponseBody struct {
-	// User ID (internal or external depending on availability)
-	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// Type of user ID
-	UserType *string `form:"user_type,omitempty" json:"user_type,omitempty" xml:"user_type,omitempty"`
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount *int64 `form:"activity_count,omitempty" json:"activity_count,omitempty" xml:"activity_count,omitempty"`
 }
 
 // TopServerResponseBody is used to define fields on response body types.
@@ -9011,61 +9216,16 @@ type TopServerResponseBody struct {
 	ToolCallCount *int64 `form:"tool_call_count,omitempty" json:"tool_call_count,omitempty" xml:"tool_call_count,omitempty"`
 }
 
-// LLMClientUsageResponseBody is used to define fields on response body types.
-type LLMClientUsageResponseBody struct {
-	// Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
-	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount *int64 `form:"activity_count,omitempty" json:"activity_count,omitempty" xml:"activity_count,omitempty"`
-}
-
-// UnproxiedMcpServerUsageBucketResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerUsageBucketResponseBody struct {
-	// Bucket date (YYYY-MM-DD, UTC)
-	Date *string `form:"date,omitempty" json:"date,omitempty" xml:"date,omitempty"`
-	// Number of observed tool calls in this bucket
-	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
-}
-
-// UnproxiedMcpServerToolUsageRowResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerToolUsageRowResponseBody struct {
-	// The tool's name
-	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
-	// Number of observed calls to this tool
-	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
-	// Number of observed calls that errored
-	FailureCount *int `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
-}
-
-// UnproxiedMcpServerUserUsageRowResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerUserUsageRowResponseBody struct {
-	// The calling user's email, when Shadow MCP could resolve one
-	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
-	// Number of observed calls from this user
-	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
-	// Time of the user's most recent observed call, ISO 8601
-	LastCalledAt *string `form:"last_called_at,omitempty" json:"last_called_at,omitempty" xml:"last_called_at,omitempty"`
-}
-
-// UnproxiedMcpServerClientUsageRowResponseBody is used to define fields on
-// response body types.
-type UnproxiedMcpServerClientUsageRowResponseBody struct {
-	// The hook-reported client/agent surface
-	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
-	// Number of observed calls from this client
-	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
-}
-
-// QueryFilterRequestBody is used to define fields on request body types.
-type QueryFilterRequestBody struct {
-	// Dimension to filter on
-	Dimension string `form:"dimension" json:"dimension" xml:"dimension"`
-	// Match if the dimension equals any of these values (IN semantics; for
-	// multi-valued dimensions like role/group, matches if any element is present).
-	Values []string `form:"values" json:"values" xml:"values"`
+// QueryResultResponseBody is used to define fields on response body types.
+type QueryResultResponseBody struct {
+	// Echoes the requested group_by dimension; empty when none was requested.
+	GroupBy *string `form:"group_by,omitempty" json:"group_by,omitempty" xml:"group_by,omitempty"`
+	// The timeseries bucket interval in seconds.
+	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
+	// Grouped totals over the full time range, ordered by sort_by descending.
+	Table []*QueryRowResponseBody `form:"table,omitempty" json:"table,omitempty" xml:"table,omitempty"`
+	// One series per group value (aligned with table rows), each gap-filled.
+	Timeseries []*QuerySeriesResponseBody `form:"timeseries,omitempty" json:"timeseries,omitempty" xml:"timeseries,omitempty"`
 }
 
 // QueryRowResponseBody is used to define fields on response body types.
@@ -9127,6 +9287,88 @@ type QueryPointResponseBody struct {
 	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
 	// Aggregated measures for this bucket
 	Measures *QueryMeasuresResponseBody `form:"measures,omitempty" json:"measures,omitempty" xml:"measures,omitempty"`
+}
+
+// ProjectMcpUsageResponseBody is used to define fields on response body types.
+type ProjectMcpUsageResponseBody struct {
+	// Number of distinct external end users with activity in the period
+	EndUsersCount *int64 `form:"end_users_count,omitempty" json:"end_users_count,omitempty" xml:"end_users_count,omitempty"`
+	// Top 5 external end users by tool calls
+	TopEndUsers []*ProjectMcpEndUserResponseBody `form:"top_end_users,omitempty" json:"top_end_users,omitempty" xml:"top_end_users,omitempty"`
+	// Top 5 tools by calls
+	TopTools []*ProjectMcpToolUsageResponseBody `form:"top_tools,omitempty" json:"top_tools,omitempty" xml:"top_tools,omitempty"`
+	// Top 5 tools with at least one failure, ranked by failure rate, then by
+	// failures
+	TopFailingTools []*ProjectMcpToolUsageResponseBody `form:"top_failing_tools,omitempty" json:"top_failing_tools,omitempty" xml:"top_failing_tools,omitempty"`
+}
+
+// ProjectMcpEndUserResponseBody is used to define fields on response body
+// types.
+type ProjectMcpEndUserResponseBody struct {
+	// External end user ID
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Number of tool calls
+	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
+}
+
+// ProjectMcpToolUsageResponseBody is used to define fields on response body
+// types.
+type ProjectMcpToolUsageResponseBody struct {
+	// Tool URN, or the tool name for agent hook events
+	Urn *string `form:"urn,omitempty" json:"urn,omitempty" xml:"urn,omitempty"`
+	// Number of calls
+	Calls *int64 `form:"calls,omitempty" json:"calls,omitempty" xml:"calls,omitempty"`
+	// Number of failed calls
+	Failures *int64 `form:"failures,omitempty" json:"failures,omitempty" xml:"failures,omitempty"`
+}
+
+// UnproxiedMcpServerUsageBucketResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerUsageBucketResponseBody struct {
+	// Bucket date (YYYY-MM-DD, UTC)
+	Date *string `form:"date,omitempty" json:"date,omitempty" xml:"date,omitempty"`
+	// Number of observed tool calls in this bucket
+	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
+}
+
+// UnproxiedMcpServerToolUsageRowResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerToolUsageRowResponseBody struct {
+	// The tool's name
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Number of observed calls to this tool
+	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
+	// Number of observed calls that errored
+	FailureCount *int `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+}
+
+// UnproxiedMcpServerUserUsageRowResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerUserUsageRowResponseBody struct {
+	// The calling user's email, when Shadow MCP could resolve one
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Number of observed calls from this user
+	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
+	// Time of the user's most recent observed call, ISO 8601
+	LastCalledAt *string `form:"last_called_at,omitempty" json:"last_called_at,omitempty" xml:"last_called_at,omitempty"`
+}
+
+// UnproxiedMcpServerClientUsageRowResponseBody is used to define fields on
+// response body types.
+type UnproxiedMcpServerClientUsageRowResponseBody struct {
+	// The hook-reported client/agent surface
+	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Number of observed calls from this client
+	CallCount *int `form:"call_count,omitempty" json:"call_count,omitempty" xml:"call_count,omitempty"`
+}
+
+// QueryFilterRequestBody is used to define fields on request body types.
+type QueryFilterRequestBody struct {
+	// Dimension to filter on
+	Dimension string `form:"dimension" json:"dimension" xml:"dimension"`
+	// Match if the dimension equals any of these values (IN semantics; for
+	// multi-valued dimensions like role/group, matches if any element is present).
+	Values []string `form:"values" json:"values" xml:"values"`
 }
 
 // TumDetailsPointResponseBody is used to define fields on response body types.
@@ -9215,6 +9457,24 @@ type SessionSummaryResponseBody struct {
 	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 	// Chat session status
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+}
+
+// SessionTotalsResponseBody is used to define fields on response body types.
+type SessionTotalsResponseBody struct {
+	// Number of matching chat sessions
+	SessionCount *int64 `form:"session_count,omitempty" json:"session_count,omitempty" xml:"session_count,omitempty"`
+	// Number of LLM completion messages across the sessions
+	MessageCount *int64 `form:"message_count,omitempty" json:"message_count,omitempty" xml:"message_count,omitempty"`
+	// Number of tool calls across the sessions
+	ToolCallCount *int64 `form:"tool_call_count,omitempty" json:"tool_call_count,omitempty" xml:"tool_call_count,omitempty"`
+	// Total input tokens used
+	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
+	// Total output tokens used
+	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
+	// Total tokens used
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Total cost in USD
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
 }
 
 // FilterOptionResponseBody is used to define fields on response body types.
@@ -9720,6 +9980,16 @@ type McpServerActivityResponseBody struct {
 	LastToolCallAt *string `form:"last_tool_call_at,omitempty" json:"last_tool_call_at,omitempty" xml:"last_tool_call_at,omitempty"`
 }
 
+// ProjectMcpServerActivityResponseBody is used to define fields on response
+// body types.
+type ProjectMcpServerActivityResponseBody struct {
+	// The project the activity belongs to
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// One entry per MCP server in the project with at least one tool call inside
+	// the recent window
+	Activity []*McpServerActivityResponseBody `form:"activity,omitempty" json:"activity,omitempty" xml:"activity,omitempty"`
+}
+
 // HookTraceSummaryResponseBody is used to define fields on response body types.
 type HookTraceSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
@@ -10023,8 +10293,15 @@ func NewGetOrganizationGatewayUsageRequestBody(p *telemetry.GetOrganizationGatew
 // payload of the "getProjectOverview" endpoint of the "telemetry" service.
 func NewGetProjectOverviewRequestBody(p *telemetry.GetProjectOverviewPayload) *GetProjectOverviewRequestBody {
 	body := &GetProjectOverviewRequestBody{
-		From: p.From,
-		To:   p.To,
+		From:         p.From,
+		To:           p.To,
+		IncludeUsage: p.IncludeUsage,
+	}
+	{
+		var zero bool
+		if body.IncludeUsage == zero {
+			body.IncludeUsage = false
+		}
 	}
 	return body
 }
@@ -11301,6 +11578,21 @@ func NewGetToolUsageFilterOptionsRequestBody(p *telemetry.GetToolUsageFilterOpti
 // payload of the "getMcpServerActivity" endpoint of the "telemetry" service.
 func NewGetMcpServerActivityRequestBody(p *telemetry.GetMcpServerActivityPayload) *GetMcpServerActivityRequestBody {
 	body := &GetMcpServerActivityRequestBody{
+		RecentWindowDays: p.RecentWindowDays,
+	}
+	{
+		var zero int
+		if body.RecentWindowDays == zero {
+			body.RecentWindowDays = 14
+		}
+	}
+	return body
+}
+
+// NewGetOrgMcpServerActivityRequestBody builds the HTTP request body from the
+// payload of the "getOrgMcpServerActivity" endpoint of the "telemetry" service.
+func NewGetOrgMcpServerActivityRequestBody(p *telemetry.GetOrgMcpServerActivityPayload) *GetOrgMcpServerActivityRequestBody {
+	body := &GetOrgMcpServerActivityRequestBody{
 		RecentWindowDays: p.RecentWindowDays,
 	}
 	{
@@ -13569,11 +13861,17 @@ func NewGetOrganizationGatewayUsageGatewayError(body *GetOrganizationGatewayUsag
 // NewGetProjectOverviewResultOK builds a "telemetry" service
 // "getProjectOverview" endpoint result from a HTTP "OK" response.
 func NewGetProjectOverviewResultOK(body *GetProjectOverviewResponseBody) *telemetry.GetProjectOverviewResult {
-	v := &telemetry.GetProjectOverviewResult{
-		MetricsMode: *body.MetricsMode,
-	}
+	v := &telemetry.GetProjectOverviewResult{}
 	v.Summary = unmarshalProjectOverviewSummaryResponseBodyToTelemetryProjectOverviewSummary(body.Summary)
-	v.Comparison = unmarshalProjectOverviewSummaryResponseBodyToTelemetryProjectOverviewSummary(body.Comparison)
+	if body.UsageByUser != nil {
+		v.UsageByUser = unmarshalQueryResultResponseBodyToTelemetryQueryResult(body.UsageByUser)
+	}
+	if body.UsageByAgent != nil {
+		v.UsageByAgent = unmarshalQueryResultResponseBodyToTelemetryQueryResult(body.UsageByAgent)
+	}
+	if body.McpUsage != nil {
+		v.McpUsage = unmarshalProjectMcpUsageResponseBodyToTelemetryProjectMcpUsage(body.McpUsage)
+	}
 
 	return v
 }
@@ -14753,6 +15051,7 @@ func NewQueryTumDetailsGatewayError(body *QueryTumDetailsGatewayErrorResponseBod
 func NewListSessionsResultOK(body *ListSessionsResponseBody) *telemetry.ListSessionsResult {
 	v := &telemetry.ListSessionsResult{
 		NextCursor: body.NextCursor,
+		Scoped:     *body.Scoped,
 	}
 	v.Sessions = make([]*telemetry.SessionSummary, len(body.Sessions))
 	for i, val := range body.Sessions {
@@ -14761,6 +15060,9 @@ func NewListSessionsResultOK(body *ListSessionsResponseBody) *telemetry.ListSess
 			continue
 		}
 		v.Sessions[i] = unmarshalSessionSummaryResponseBodyToTelemetrySessionSummary(val)
+	}
+	if body.Totals != nil {
+		v.Totals = unmarshalSessionTotalsResponseBodyToTelemetrySessionTotals(body.Totals)
 	}
 
 	return v
@@ -17706,6 +18008,174 @@ func NewGetMcpServerActivityGatewayError(body *GetMcpServerActivityGatewayErrorR
 	return v
 }
 
+// NewGetOrgMcpServerActivityResultOK builds a "telemetry" service
+// "getOrgMcpServerActivity" endpoint result from a HTTP "OK" response.
+func NewGetOrgMcpServerActivityResultOK(body *GetOrgMcpServerActivityResponseBody) *telemetry.GetOrgMcpServerActivityResult {
+	v := &telemetry.GetOrgMcpServerActivityResult{
+		RecentWindowDays: *body.RecentWindowDays,
+	}
+	v.Projects = make([]*telemetry.ProjectMcpServerActivity, len(body.Projects))
+	for i, val := range body.Projects {
+		if val == nil {
+			v.Projects[i] = nil
+			continue
+		}
+		v.Projects[i] = unmarshalProjectMcpServerActivityResponseBodyToTelemetryProjectMcpServerActivity(val)
+	}
+
+	return v
+}
+
+// NewGetOrgMcpServerActivityUnauthorized builds a telemetry service
+// getOrgMcpServerActivity endpoint unauthorized error.
+func NewGetOrgMcpServerActivityUnauthorized(body *GetOrgMcpServerActivityUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrgMcpServerActivityForbidden builds a telemetry service
+// getOrgMcpServerActivity endpoint forbidden error.
+func NewGetOrgMcpServerActivityForbidden(body *GetOrgMcpServerActivityForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrgMcpServerActivityBadRequest builds a telemetry service
+// getOrgMcpServerActivity endpoint bad_request error.
+func NewGetOrgMcpServerActivityBadRequest(body *GetOrgMcpServerActivityBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrgMcpServerActivityNotFound builds a telemetry service
+// getOrgMcpServerActivity endpoint not_found error.
+func NewGetOrgMcpServerActivityNotFound(body *GetOrgMcpServerActivityNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrgMcpServerActivityConflict builds a telemetry service
+// getOrgMcpServerActivity endpoint conflict error.
+func NewGetOrgMcpServerActivityConflict(body *GetOrgMcpServerActivityConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrgMcpServerActivityUnsupportedMedia builds a telemetry service
+// getOrgMcpServerActivity endpoint unsupported_media error.
+func NewGetOrgMcpServerActivityUnsupportedMedia(body *GetOrgMcpServerActivityUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrgMcpServerActivityInvalid builds a telemetry service
+// getOrgMcpServerActivity endpoint invalid error.
+func NewGetOrgMcpServerActivityInvalid(body *GetOrgMcpServerActivityInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrgMcpServerActivityInvariantViolation builds a telemetry service
+// getOrgMcpServerActivity endpoint invariant_violation error.
+func NewGetOrgMcpServerActivityInvariantViolation(body *GetOrgMcpServerActivityInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrgMcpServerActivityUnexpected builds a telemetry service
+// getOrgMcpServerActivity endpoint unexpected error.
+func NewGetOrgMcpServerActivityUnexpected(body *GetOrgMcpServerActivityUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetOrgMcpServerActivityGatewayError builds a telemetry service
+// getOrgMcpServerActivity endpoint gateway_error error.
+func NewGetOrgMcpServerActivityGatewayError(body *GetOrgMcpServerActivityGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListHooksTracesResultOK builds a "telemetry" service "listHooksTraces"
 // endpoint result from a HTTP "OK" response.
 func NewListHooksTracesResultOK(body *ListHooksTracesResponseBody) *telemetry.ListHooksTracesResult {
@@ -18206,25 +18676,24 @@ func ValidateGetProjectOverviewResponseBody(body *GetProjectOverviewResponseBody
 	if body.Summary == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
 	}
-	if body.Comparison == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("comparison", "body"))
-	}
-	if body.MetricsMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("metrics_mode", "body"))
-	}
 	if body.Summary != nil {
 		if err2 := ValidateProjectOverviewSummaryResponseBody(body.Summary); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
-	if body.Comparison != nil {
-		if err2 := ValidateProjectOverviewSummaryResponseBody(body.Comparison); err2 != nil {
+	if body.UsageByUser != nil {
+		if err2 := ValidateQueryResultResponseBody(body.UsageByUser); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
-	if body.MetricsMode != nil {
-		if !(*body.MetricsMode == "session" || *body.MetricsMode == "tool_call") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.metrics_mode", *body.MetricsMode, []any{"session", "tool_call"}))
+	if body.UsageByAgent != nil {
+		if err2 := ValidateQueryResultResponseBody(body.UsageByAgent); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.McpUsage != nil {
+		if err2 := ValidateProjectMcpUsageResponseBody(body.McpUsage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -18368,11 +18837,19 @@ func ValidateListSessionsResponseBody(body *ListSessionsResponseBody) (err error
 	if body.Sessions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sessions", "body"))
 	}
+	if body.Scoped == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scoped", "body"))
+	}
 	for _, e := range body.Sessions {
 		if e != nil {
 			if err2 := ValidateSessionSummaryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.Totals != nil {
+		if err2 := ValidateSessionTotalsResponseBody(body.Totals); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -18808,6 +19285,25 @@ func ValidateGetMcpServerActivityResponseBody(body *GetMcpServerActivityResponse
 	for _, e := range body.Activity {
 		if e != nil {
 			if err2 := ValidateMcpServerActivityResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetOrgMcpServerActivityResponseBody runs the validations defined on
+// GetOrgMcpServerActivityResponseBody
+func ValidateGetOrgMcpServerActivityResponseBody(body *GetOrgMcpServerActivityResponseBody) (err error) {
+	if body.Projects == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("projects", "body"))
+	}
+	if body.RecentWindowDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("recent_window_days", "body"))
+	}
+	for _, e := range body.Projects {
+		if e != nil {
+			if err2 := ValidateProjectMcpServerActivityResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -27777,6 +28273,248 @@ func ValidateGetMcpServerActivityGatewayErrorResponseBody(body *GetMcpServerActi
 	return
 }
 
+// ValidateGetOrgMcpServerActivityUnauthorizedResponseBody runs the validations
+// defined on getOrgMcpServerActivity_unauthorized_response_body
+func ValidateGetOrgMcpServerActivityUnauthorizedResponseBody(body *GetOrgMcpServerActivityUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrgMcpServerActivityForbiddenResponseBody runs the validations
+// defined on getOrgMcpServerActivity_forbidden_response_body
+func ValidateGetOrgMcpServerActivityForbiddenResponseBody(body *GetOrgMcpServerActivityForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrgMcpServerActivityBadRequestResponseBody runs the validations
+// defined on getOrgMcpServerActivity_bad_request_response_body
+func ValidateGetOrgMcpServerActivityBadRequestResponseBody(body *GetOrgMcpServerActivityBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrgMcpServerActivityNotFoundResponseBody runs the validations
+// defined on getOrgMcpServerActivity_not_found_response_body
+func ValidateGetOrgMcpServerActivityNotFoundResponseBody(body *GetOrgMcpServerActivityNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrgMcpServerActivityConflictResponseBody runs the validations
+// defined on getOrgMcpServerActivity_conflict_response_body
+func ValidateGetOrgMcpServerActivityConflictResponseBody(body *GetOrgMcpServerActivityConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrgMcpServerActivityUnsupportedMediaResponseBody runs the
+// validations defined on
+// getOrgMcpServerActivity_unsupported_media_response_body
+func ValidateGetOrgMcpServerActivityUnsupportedMediaResponseBody(body *GetOrgMcpServerActivityUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrgMcpServerActivityInvalidResponseBody runs the validations
+// defined on getOrgMcpServerActivity_invalid_response_body
+func ValidateGetOrgMcpServerActivityInvalidResponseBody(body *GetOrgMcpServerActivityInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrgMcpServerActivityInvariantViolationResponseBody runs the
+// validations defined on
+// getOrgMcpServerActivity_invariant_violation_response_body
+func ValidateGetOrgMcpServerActivityInvariantViolationResponseBody(body *GetOrgMcpServerActivityInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrgMcpServerActivityUnexpectedResponseBody runs the validations
+// defined on getOrgMcpServerActivity_unexpected_response_body
+func ValidateGetOrgMcpServerActivityUnexpectedResponseBody(body *GetOrgMcpServerActivityUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetOrgMcpServerActivityGatewayErrorResponseBody runs the validations
+// defined on getOrgMcpServerActivity_gateway_error_response_body
+func ValidateGetOrgMcpServerActivityGatewayErrorResponseBody(body *GetOrgMcpServerActivityGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListHooksTracesUnauthorizedResponseBody runs the validations defined
 // on listHooksTraces_unauthorized_response_body
 func ValidateListHooksTracesUnauthorizedResponseBody(body *ListHooksTracesUnauthorizedResponseBody) (err error) {
@@ -28727,12 +29465,6 @@ func ValidateProjectOverviewSummaryResponseBody(body *ProjectOverviewSummaryResp
 	if body.TotalChats == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_chats", "body"))
 	}
-	if body.ResolvedChats == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resolved_chats", "body"))
-	}
-	if body.FailedChats == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("failed_chats", "body"))
-	}
 	if body.TotalToolCalls == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_tool_calls", "body"))
 	}
@@ -28742,57 +29474,14 @@ func ValidateProjectOverviewSummaryResponseBody(body *ProjectOverviewSummaryResp
 	if body.ActiveServersCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_servers_count", "body"))
 	}
-	if body.ActiveUsersCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("active_users_count", "body"))
-	}
-	if body.TopUsers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("top_users", "body"))
-	}
 	if body.TopServers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("top_servers", "body"))
-	}
-	if body.LlmClientBreakdown == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("llm_client_breakdown", "body"))
-	}
-	for _, e := range body.TopUsers {
-		if e != nil {
-			if err2 := ValidateTopUserResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
 	}
 	for _, e := range body.TopServers {
 		if e != nil {
 			if err2 := ValidateTopServerResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	for _, e := range body.LlmClientBreakdown {
-		if e != nil {
-			if err2 := ValidateLLMClientUsageResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateTopUserResponseBody runs the validations defined on
-// TopUserResponseBody
-func ValidateTopUserResponseBody(body *TopUserResponseBody) (err error) {
-	if body.UserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
-	}
-	if body.UserType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_type", "body"))
-	}
-	if body.ActivityCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("activity_count", "body"))
-	}
-	if body.UserType != nil {
-		if !(*body.UserType == "internal" || *body.UserType == "external") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_type", *body.UserType, []any{"internal", "external"}))
 		}
 	}
 	return
@@ -28810,86 +29499,34 @@ func ValidateTopServerResponseBody(body *TopServerResponseBody) (err error) {
 	return
 }
 
-// ValidateLLMClientUsageResponseBody runs the validations defined on
-// LLMClientUsageResponseBody
-func ValidateLLMClientUsageResponseBody(body *LLMClientUsageResponseBody) (err error) {
-	if body.ClientName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_name", "body"))
+// ValidateQueryResultResponseBody runs the validations defined on
+// QueryResultResponseBody
+func ValidateQueryResultResponseBody(body *QueryResultResponseBody) (err error) {
+	if body.GroupBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group_by", "body"))
 	}
-	if body.ActivityCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("activity_count", "body"))
+	if body.IntervalSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
 	}
-	return
-}
-
-// ValidateUnproxiedMcpServerUsageBucketResponseBody runs the validations
-// defined on UnproxiedMcpServerUsageBucketResponseBody
-func ValidateUnproxiedMcpServerUsageBucketResponseBody(body *UnproxiedMcpServerUsageBucketResponseBody) (err error) {
-	if body.Date == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("date", "body"))
+	if body.Table == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("table", "body"))
 	}
-	if body.CallCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
+	if body.Timeseries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeseries", "body"))
 	}
-	return
-}
-
-// ValidateUnproxiedMcpServerToolUsageRowResponseBody runs the validations
-// defined on UnproxiedMcpServerToolUsageRowResponseBody
-func ValidateUnproxiedMcpServerToolUsageRowResponseBody(body *UnproxiedMcpServerToolUsageRowResponseBody) (err error) {
-	if body.ToolName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_name", "body"))
+	for _, e := range body.Table {
+		if e != nil {
+			if err2 := ValidateQueryRowResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
-	if body.CallCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
-	}
-	if body.FailureCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
-	}
-	return
-}
-
-// ValidateUnproxiedMcpServerUserUsageRowResponseBody runs the validations
-// defined on UnproxiedMcpServerUserUsageRowResponseBody
-func ValidateUnproxiedMcpServerUserUsageRowResponseBody(body *UnproxiedMcpServerUserUsageRowResponseBody) (err error) {
-	if body.UserEmail == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
-	}
-	if body.CallCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
-	}
-	if body.LastCalledAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("last_called_at", "body"))
-	}
-	if body.LastCalledAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_called_at", *body.LastCalledAt, goa.FormatDateTime))
-	}
-	return
-}
-
-// ValidateUnproxiedMcpServerClientUsageRowResponseBody runs the validations
-// defined on UnproxiedMcpServerClientUsageRowResponseBody
-func ValidateUnproxiedMcpServerClientUsageRowResponseBody(body *UnproxiedMcpServerClientUsageRowResponseBody) (err error) {
-	if body.Client == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
-	}
-	if body.CallCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
-	}
-	return
-}
-
-// ValidateQueryFilterRequestBody runs the validations defined on
-// QueryFilterRequestBody
-func ValidateQueryFilterRequestBody(body *QueryFilterRequestBody) (err error) {
-	if body.Values == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
-	}
-	if !(body.Dimension == "department_name" || body.Dimension == "job_title" || body.Dimension == "employee_type" || body.Dimension == "division_name" || body.Dimension == "cost_center_name" || body.Dimension == "email" || body.Dimension == "hostname" || body.Dimension == "model" || body.Dimension == "hook_source" || body.Dimension == "account_type" || body.Dimension == "provider" || body.Dimension == "billing_mode" || body.Dimension == "query_source" || body.Dimension == "skill_name" || body.Dimension == "skill_version" || body.Dimension == "agent_name" || body.Dimension == "mcp_server_name" || body.Dimension == "mcp_tool_name" || body.Dimension == "role" || body.Dimension == "group" || body.Dimension == "project_id") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dimension", body.Dimension, []any{"department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "hostname", "model", "hook_source", "account_type", "provider", "billing_mode", "query_source", "skill_name", "skill_version", "agent_name", "mcp_server_name", "mcp_tool_name", "role", "group", "project_id"}))
-	}
-	if len(body.Values) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 1, true))
+	for _, e := range body.Timeseries {
+		if e != nil {
+			if err2 := ValidateQuerySeriesResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -28985,6 +29622,144 @@ func ValidateQueryPointResponseBody(body *QueryPointResponseBody) (err error) {
 		if err2 := ValidateQueryMeasuresResponseBody(body.Measures); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateProjectMcpUsageResponseBody runs the validations defined on
+// ProjectMcpUsageResponseBody
+func ValidateProjectMcpUsageResponseBody(body *ProjectMcpUsageResponseBody) (err error) {
+	if body.EndUsersCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("end_users_count", "body"))
+	}
+	if body.TopEndUsers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_end_users", "body"))
+	}
+	if body.TopTools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_tools", "body"))
+	}
+	if body.TopFailingTools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_failing_tools", "body"))
+	}
+	for _, e := range body.TopEndUsers {
+		if e != nil {
+			if err2 := ValidateProjectMcpEndUserResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.TopTools {
+		if e != nil {
+			if err2 := ValidateProjectMcpToolUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.TopFailingTools {
+		if e != nil {
+			if err2 := ValidateProjectMcpToolUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateProjectMcpEndUserResponseBody runs the validations defined on
+// ProjectMcpEndUserResponseBody
+func ValidateProjectMcpEndUserResponseBody(body *ProjectMcpEndUserResponseBody) (err error) {
+	if body.UserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
+	}
+	if body.ToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_calls", "body"))
+	}
+	return
+}
+
+// ValidateProjectMcpToolUsageResponseBody runs the validations defined on
+// ProjectMcpToolUsageResponseBody
+func ValidateProjectMcpToolUsageResponseBody(body *ProjectMcpToolUsageResponseBody) (err error) {
+	if body.Urn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("urn", "body"))
+	}
+	if body.Calls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("calls", "body"))
+	}
+	if body.Failures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failures", "body"))
+	}
+	return
+}
+
+// ValidateUnproxiedMcpServerUsageBucketResponseBody runs the validations
+// defined on UnproxiedMcpServerUsageBucketResponseBody
+func ValidateUnproxiedMcpServerUsageBucketResponseBody(body *UnproxiedMcpServerUsageBucketResponseBody) (err error) {
+	if body.Date == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("date", "body"))
+	}
+	if body.CallCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
+	}
+	return
+}
+
+// ValidateUnproxiedMcpServerToolUsageRowResponseBody runs the validations
+// defined on UnproxiedMcpServerToolUsageRowResponseBody
+func ValidateUnproxiedMcpServerToolUsageRowResponseBody(body *UnproxiedMcpServerToolUsageRowResponseBody) (err error) {
+	if body.ToolName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_name", "body"))
+	}
+	if body.CallCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
+	}
+	if body.FailureCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
+	}
+	return
+}
+
+// ValidateUnproxiedMcpServerUserUsageRowResponseBody runs the validations
+// defined on UnproxiedMcpServerUserUsageRowResponseBody
+func ValidateUnproxiedMcpServerUserUsageRowResponseBody(body *UnproxiedMcpServerUserUsageRowResponseBody) (err error) {
+	if body.UserEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
+	}
+	if body.CallCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
+	}
+	if body.LastCalledAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_called_at", "body"))
+	}
+	if body.LastCalledAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_called_at", *body.LastCalledAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUnproxiedMcpServerClientUsageRowResponseBody runs the validations
+// defined on UnproxiedMcpServerClientUsageRowResponseBody
+func ValidateUnproxiedMcpServerClientUsageRowResponseBody(body *UnproxiedMcpServerClientUsageRowResponseBody) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.CallCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("call_count", "body"))
+	}
+	return
+}
+
+// ValidateQueryFilterRequestBody runs the validations defined on
+// QueryFilterRequestBody
+func ValidateQueryFilterRequestBody(body *QueryFilterRequestBody) (err error) {
+	if body.Values == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
+	}
+	if !(body.Dimension == "department_name" || body.Dimension == "job_title" || body.Dimension == "employee_type" || body.Dimension == "division_name" || body.Dimension == "cost_center_name" || body.Dimension == "email" || body.Dimension == "hostname" || body.Dimension == "model" || body.Dimension == "hook_source" || body.Dimension == "account_type" || body.Dimension == "provider" || body.Dimension == "billing_mode" || body.Dimension == "query_source" || body.Dimension == "skill_name" || body.Dimension == "skill_version" || body.Dimension == "agent_name" || body.Dimension == "mcp_server_name" || body.Dimension == "mcp_tool_name" || body.Dimension == "role" || body.Dimension == "group" || body.Dimension == "project_id") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dimension", body.Dimension, []any{"department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "hostname", "model", "hook_source", "account_type", "provider", "billing_mode", "query_source", "skill_name", "skill_version", "agent_name", "mcp_server_name", "mcp_tool_name", "role", "group", "project_id"}))
+	}
+	if len(body.Values) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 1, true))
 	}
 	return
 }
@@ -29105,6 +29880,33 @@ func ValidateSessionSummaryResponseBody(body *SessionSummaryResponseBody) (err e
 		if !(*body.Status == "success" || *body.Status == "error") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"success", "error"}))
 		}
+	}
+	return
+}
+
+// ValidateSessionTotalsResponseBody runs the validations defined on
+// SessionTotalsResponseBody
+func ValidateSessionTotalsResponseBody(body *SessionTotalsResponseBody) (err error) {
+	if body.SessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_count", "body"))
+	}
+	if body.MessageCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message_count", "body"))
+	}
+	if body.ToolCallCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_call_count", "body"))
+	}
+	if body.TotalInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_input_tokens", "body"))
+	}
+	if body.TotalOutputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_output_tokens", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.TotalCost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_cost", "body"))
 	}
 	return
 }
@@ -29810,6 +30612,28 @@ func ValidateMcpServerActivityResponseBody(body *McpServerActivityResponseBody) 
 	}
 	if body.LastToolCallAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_tool_call_at", *body.LastToolCallAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateProjectMcpServerActivityResponseBody runs the validations defined on
+// ProjectMcpServerActivityResponseBody
+func ValidateProjectMcpServerActivityResponseBody(body *ProjectMcpServerActivityResponseBody) (err error) {
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Activity == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("activity", "body"))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	for _, e := range body.Activity {
+		if e != nil {
+			if err2 := ValidateMcpServerActivityResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }

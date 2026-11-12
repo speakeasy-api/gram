@@ -71,6 +71,32 @@ func (q *Queries) PostflightCountAgentOnlyDeviceSyncs(ctx context.Context, orgID
 	return count, err
 }
 
+const postflightCountAgentOwnerSessions = `-- name: PostflightCountAgentOwnerSessions :one
+SELECT count(*)
+FROM chats c
+JOIN agents a ON a.id = c.agent_id AND a.organization_id = c.organization_id
+WHERE c.project_id = $1::uuid AND c.organization_id = $2::text
+  AND c.user_id IS NULL AND c.external_user_id IS NULL
+  AND a.owner_user_id = $3::text
+  AND a.owner_reassignment_required_at IS NULL
+  AND a.deleted IS FALSE
+`
+
+type PostflightCountAgentOwnerSessionsParams struct {
+	ProjectID   uuid.UUID
+	OrgID       string
+	OwnerUserID string
+}
+
+// Agent-credential sessions the owner persona can read: the join mirrors
+// ListOwnedAgentIDs (owner match, not deleted, not latched for reassignment).
+func (q *Queries) PostflightCountAgentOwnerSessions(ctx context.Context, arg PostflightCountAgentOwnerSessionsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountAgentOwnerSessions, arg.ProjectID, arg.OrgID, arg.OwnerUserID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountApprovals = `-- name: PostflightCountApprovals :one
 SELECT count(*) FROM risk_policy_approvals
 WHERE organization_id = $1::text AND deleted IS FALSE
@@ -80,26 +106,6 @@ WHERE organization_id = $1::text AND deleted IS FALSE
 // used, denied and expired.
 func (q *Queries) PostflightCountApprovals(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountApprovals, orgID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const postflightCountApprovalsServers = `-- name: PostflightCountApprovalsServers :one
-
-SELECT count(*)
-FROM mcp_servers s
-JOIN mcp_endpoints e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
-JOIN plugin_servers ps ON ps.mcp_server_id = s.id AND ps.deleted IS FALSE
-JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = s.project_id AND p.is_default IS TRUE AND p.deleted IS FALSE
-WHERE s.project_id = $1::uuid AND s.builtin_backend = 'approvals'
-  AND s.deleted IS FALSE
-`
-
-// The approval policy is only usable when the approvals server it points
-// agents at has an endpoint and sits in the Default plugin.
-func (q *Queries) PostflightCountApprovalsServers(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightCountApprovalsServers, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -863,9 +869,13 @@ func (q *Queries) PostflightCountOutdatedDeviceAgentStateReports(ctx context.Con
 const postflightCountOwnerlessChats = `-- name: PostflightCountOwnerlessChats :one
 SELECT count(*)
 FROM chats WHERE organization_id = $1::text
+  AND NOT (agent_id IS NOT NULL AND user_id IS NULL AND external_user_id IS NULL)
   AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL)
 `
 
+// A session driven by an agent credential carries no user ids by design: the
+// agent is its actor, and its owner reads it through ownership. Only that
+// shape is exempt; an agent-stamped chat with partial user ids is still flagged.
 func (q *Queries) PostflightCountOwnerlessChats(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountOwnerlessChats, orgID)
 	var count int64
@@ -1138,7 +1148,7 @@ func (q *Queries) PostflightOnboardingStackInvalid(ctx context.Context, orgID st
 const postflightSecurityOnboardingInvalid = `-- name: PostflightSecurityOnboardingInvalid :one
 SELECT (
   (SELECT preset FROM organization_onboarding WHERE organization_id = $1::text) IS DISTINCT FROM 'security'
-  OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = $1::text AND hidden_at IS NULL) <> 9
+  OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = $1::text AND hidden_at IS NULL) <> 8
   OR EXISTS (SELECT 1 FROM organization_setup_tasks WHERE organization_id = $1::text
     AND ((task_key IN ('anthropic-admin-controls', 'platform-mcp')) IS DISTINCT FROM (hidden_at IS NOT NULL)))
 )::boolean AS invalid

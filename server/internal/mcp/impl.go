@@ -60,7 +60,6 @@ import (
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -101,6 +100,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -122,9 +122,6 @@ type IdentityResolver interface {
 }
 
 type Service struct {
-	// builtinBackends serve mcp_servers rows whose builtin_backend names
-	// them, such as the approvals server.
-	builtinBackends         map[string]BuiltinBackend
 	assistantWorkloadTokens AssistantWorkloadTokenIssuer
 	codeExecutor            codemode.Executor
 	federatedLoginConsumer  FederatedLoginConsumer
@@ -195,6 +192,9 @@ type Service struct {
 	features feature.Provider
 	// mandatoryShadowLog dedupes mandatory authz shadow disagreement logs.
 	mandatoryShadowLog *onceLog
+	// upstreamIssuerParityLog dedupes upstream issuer disagreement and
+	// re-consent forecast logs.
+	upstreamIssuerParityLog *onceLog
 	// prepareMandatory replaces authz PrepareMandatory for the shadow when
 	// set; tests use it to observe admissions.
 	prepareMandatory func(context.Context) (authz.MandatoryAuthorization, error)
@@ -239,7 +239,6 @@ type Service struct {
 	identityResolver       IdentityResolver
 	identityValidator      *mcpidentity.ValidatorBoundary
 	chatSessionsManager    *chatsessions.Manager
-	externalmcpRepo        *externalmcp_repo.Queries
 	deploymentsRepo        *deployments_repo.Queries
 	enc                    *encryption.Client
 	authz                  *authz.Engine
@@ -266,7 +265,7 @@ type Service struct {
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
 
-	// userSessionRefreshReplayCoordination elects the database rotation winner and claims attemptEndMarker.
+	// userSessionRefreshReplayCoordination elects the database rotation winner, claims attemptEndMarker and keeps member statuses.
 	userSessionRefreshReplayCoordination cache.Cache
 	sessionPolicyCache                   cache.TypedCacheObject[sessionPolicyEntry]
 	// consentToolInventoryCache holds bounded gateway challenge captures and
@@ -299,6 +298,9 @@ type Service struct {
 	// attemptEndings claims once-only endings off the request path.
 	attemptEndings *attemptEndings
 	bindingRefresh *remotesessions.BindingRefreshAttempts
+	// pendingSignIn connects a Platform MCP server's sign-in provider before
+	// its consent page lists sign-in options; nil leaves the page as it is.
+	pendingSignIn PendingSignInConnector
 	// validationMetrics counts the consent page's live validation probes.
 	validationMetrics *remotesessionmetrics.Validation
 	// validationLimiter paces verifies per consent challenge; nil without Redis.
@@ -313,7 +315,12 @@ type Service struct {
 	// Temporal worker, which constructs *Service for its programmatic
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
-	tunnelManager      *tunnelManager
+	// shutdownDrain interrupts tools/call and resources/read work the gateway
+	// runs itself (functions and HTTP tools) when the server shuts down. It is
+	// the remote proxy manager's drain when there is one, so one StartDrain
+	// reaches relayed and executed requests alike.
+	shutdownDrain *shutdowndrain.Drain
+	tunnelManager *tunnelManager
 	// Nil when no Redis was wired; every public tunneled request then fails closed.
 	tunnelPublic *tunnelPublicRuntime
 
@@ -352,6 +359,9 @@ type oauthTokenInputs struct {
 	// the matching tool's *_ACCESS_TOKEN env var, which the gateway forwards
 	// as the Authorization header on the outgoing upstream request.
 	Token string
+
+	// shared marks a credential the server holds for the organization, not the caller.
+	shared bool
 }
 
 // appendRemoteSessionTokenInputs converts a remote_session_issuer_id -> token
@@ -384,6 +394,7 @@ func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID
 			securityKeys:          nil,
 			remoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 			Token:                 entry.Token,
+			shared:                entry.CredentialOwner == remotesessions.CredentialOwnerSelf,
 		})
 	}
 	return dst, nil
@@ -428,10 +439,6 @@ type mcpInputs struct {
 	// toolVariationsGroupID is the effective variation group resolved per
 	// request (mcp_servers, then toolsets, then nil for the project default).
 	toolVariationsGroupID *uuid.UUID
-	// skipProxyTools drops external-MCP passthrough tools from dispatch.
-	// The meta surface sets it: those tools are hidden from its describe
-	// catalog, so execute must not reach them through the hosted path either.
-	skipProxyTools bool
 	// mcpServerID is the fronting mcp_servers row id: the mcp_endpoint's
 	// server, or on the legacy toolset-by-slug path the canonical wrapper when
 	// one exists. Nil otherwise and for internal (agent-workflow) callers.
@@ -488,6 +495,9 @@ type mcpInputs struct {
 	// a method has needed it. Nil until then; the flag is never evaluated
 	// more than once per request.
 	skillsOverMCP *bool
+
+	// upstreamRejection is set by tools/call when an HTTP tool's provider refused the credential sent.
+	upstreamRejection mcpconnectionattempts.Code
 }
 
 // recordServingAnalytics adds the known serving ids to product event properties.
@@ -600,9 +610,12 @@ func NewService(
 	)
 
 	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
+	shutdownDrain := remoteProxyManager.ShutdownDrain()
+	if shutdownDrain == nil {
+		shutdownDrain = shutdowndrain.New()
+	}
 	service := &Service{
 		assistantWorkloadTokens:   nil,
-		builtinBackends:           map[string]BuiltinBackend{},
 		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
@@ -612,6 +625,7 @@ func NewService(
 		authEnforcement:           authenforcement.NewGate(db),
 		consentBindings:           nil,
 		bindingRefresh:            nil,
+		pendingSignIn:             nil,
 		logger:                    logger,
 		tracer:                    tracer,
 		metrics:                   metrics,
@@ -628,7 +642,6 @@ func NewService(
 		mcpMetadataRepo:           metadata_repo.New(db),
 		orgsRepo:                  organizations_repo.New(db),
 		deploymentsRepo:           deployments_repo.New(db),
-		externalmcpRepo:           externalmcp_repo.New(db),
 		auth:                      auth.New(logger, db, sessions, authzEngine),
 		env:                       env,
 		serverURL:                 serverURL,
@@ -641,6 +654,7 @@ func NewService(
 		posthog:                   posthog,
 		features:                  features,
 		mandatoryShadowLog:        newOnceLog(),
+		upstreamIssuerParityLog:   newOnceLog(),
 		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
@@ -659,6 +673,7 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 			platformSvc,
+			shutdownDrain,
 		),
 		oauthRepo:              oauth_repo.New(db),
 		billingTracker:         billingTracker,
@@ -732,6 +747,7 @@ func NewService(
 		autoVerifications:      newAutoVerifications(),
 		remoteSessionRecheck:   newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
 		remoteProxyManager:     remoteProxyManager,
+		shutdownDrain:          shutdownDrain,
 		tunnelManager:          newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
 		tunnelPublic:           newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:            metaRuntimeConfig.withDefaults(),
@@ -802,7 +818,8 @@ func (s *Service) platformBaseURL(ctx context.Context) *url.URL {
 // PublicServerRoute is the chi route pattern for the public MCP endpoint: the
 // JSON-RPC surface of a hosted MCP server. All three Streamable HTTP verbs
 // mount here — POST for JSON-RPC messages, GET for the standalone SSE stream,
-// and DELETE for session termination.
+// and DELETE for session termination. These runtime verbs also accept a single
+// trailing slash for custom-domain Gateway prefix rewrites.
 //
 // The OAuth, metadata, and install routes extend this pattern with a further
 // path segment. They are not the MCP endpoint itself, which is why anything
@@ -912,11 +929,31 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", AgentGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeAgentGateway).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", AgentInstallCodeRoute, oops.ErrHandle(service.logger, service.HandleAgentInstallCode).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", AgentInstallScriptRoute, oops.ErrHandle(service.logger, service.HandleAgentInstallScript).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", PublicServerRoute, oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", PublicServerRoute, oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
-		return service.HandleGetServer(w, r, metadataService)
-	}).ServeHTTP)
-	o11y.AttachHandler(mux, "DELETE", PublicServerRoute, oops.MCPErrHandle(service.logger, service.HandleDeleteServer).ServeHTTP)
+
+	// Gateway prefix rewrites append a slash to custom-domain root requests.
+	// Mount both runtime paths directly so POST bodies never depend on redirects.
+	for _, route := range []struct {
+		method  string
+		handler http.Handler
+	}{
+		{method: http.MethodPost, handler: oops.MCPErrHandle(service.logger, service.ServePublic)},
+		{method: http.MethodGet, handler: oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
+			return service.HandleGetServer(w, r, metadataService)
+		})},
+		{method: http.MethodDelete, handler: oops.MCPErrHandle(service.logger, service.HandleDeleteServer)},
+	} {
+		o11y.AttachHandler(mux, route.method, PublicServerRoute, route.handler.ServeHTTP)
+		o11y.AttachHandler(mux, route.method, PublicServerRoute+"/", func(w http.ResponseWriter, r *http.Request) {
+			// chi also matches empty parameters, even with a nonempty regex.
+			// /mcp// is not a runtime alias and must remain a routing miss.
+			if chi.URLParam(r, "mcpSlug") == "" {
+				http.NotFound(w, r)
+				return
+			}
+
+			route.handler.ServeHTTP(w, r)
+		})
+	}
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
@@ -1505,6 +1542,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 					securityKeys:          []string{},
 					remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 					Token:                 authToken,
+					shared:                false,
 				})
 			}
 		case !cfg.isPublic:
@@ -1621,7 +1659,6 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		wrapperIsPublic:          wrapperIsPublic,
 		metaMcpServerID:          "",
 		clientInfoScope:          "",
-		skipProxyTools:           false,
 		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		toolsetIsPublic:          new(cfg.isPublic),
 		tags:                     tags,
@@ -1629,6 +1666,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		identityCoverageRecorded: hostedCoverageRecorded,
 		toolSelection:            callerToolSelection,
 		skillsOverMCP:            nil,
+		upstreamRejection:        mcpconnectionattempts.Code{},
 	}
 
 	// Call handlers resolve attribution after loading their toolset. Other
@@ -1667,11 +1705,14 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// Some MCP clients (e.g. Claude Desktop) require 401 on initialize to trigger
 	// their OAuth flow, so we can't defer this to individual RPC handlers.
 	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, cfg.isPublic, mcpInputs)
+	// A notification has no response, so its refusal tells no one anything.
+	if (err != nil || !satisfied) && req.ID.IsSet() {
+		s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), failureCode, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+	}
 	if err != nil {
 		return err
 	}
 	if !satisfied {
-		s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), failureCode, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
 		if oauthRequired {
 			w.Header().Set(
 				"WWW-Authenticate",
@@ -1837,6 +1878,8 @@ func (s *Service) enforceHostedToolsCall(ctx context.Context, organizationID str
 				Supported:            nil,
 				Requested:            "",
 				RequiredCapabilities: nil,
+				Reason:               "",
+				Retryable:            nil,
 			},
 		}
 	case killswitches.TransportDispositionInfrastructureRejection:
@@ -2174,11 +2217,11 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
 	case mcpversions.MethodToolsList:
-		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
+		return handleToolsList(ctx, s.logger, s.authz, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
-		s.recordHostedToolsCallRefusal(ctx, payload, err)
+		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		s.recordHostedToolsCallOutcome(ctx, payload, err)
 		return body, err
 	case mcpversions.MethodPromptsList:
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
@@ -2196,7 +2239,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		if uri, ok := skillResourceURI(req.Params); ok && s.skillsOverMCPEnabled(ctx, payload) {
 			return handleSkillResourceRead(ctx, s.logger, s.db, s.skillResolver, s.metrics, s.telemLogger, s.sessionClientInfo, payload, req, uri, time.Now())
 		}
-		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
+		return handleResourcesRead(ctx, s.logger, s.metrics, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
 	case mcpversions.MethodSkillsList:
 		return handleSkillsList(ctx, s.logger, s.db, s.skillResolver, payload, req)
 	case mcpversions.MethodSkillsGet:
@@ -2401,9 +2444,7 @@ func (s *Service) HandleToolsList(
 		ctx,
 		s.logger,
 		s.authz,
-		s.guardianPolicy,
 		s.db,
-		s.env,
 		payload,
 		req,
 		s.posthog,
@@ -2474,7 +2515,6 @@ func (s *Service) HandleToolsCall(
 		s.metrics,
 		s.identityCoverage,
 		s.authz,
-		s.guardianPolicy,
 		s.db,
 		s.env,
 		payload,

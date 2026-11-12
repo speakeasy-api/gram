@@ -2,6 +2,7 @@ import { IdentityLink } from "@/components/identity-link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useSession } from "@/contexts/Auth";
 import { capitalize } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -495,7 +496,13 @@ export function KillswitchRecord({
   if (detailQuery.isLoading) {
     return (
       <RecordShell onClose={onClose}>
-        <p className="text-muted-foreground text-sm">Loading Killswitch…</p>
+        <div role="status" aria-label="Loading Killswitch">
+          <Skeleton>
+            <div className="h-7 w-64" />
+            <div className="h-24 w-full" />
+            <div className="h-24 w-full" />
+          </Skeleton>
+        </div>
       </RecordShell>
     );
   }
@@ -540,9 +547,13 @@ export function KillswitchRecord({
   if (catalogLoading) {
     return (
       <RecordShell onClose={onClose}>
-        <p className="text-muted-foreground text-sm">
-          Loading Killswitch details…
-        </p>
+        <div role="status" aria-label="Loading Killswitch details">
+          <Skeleton>
+            <div className="h-7 w-64" />
+            <div className="h-24 w-full" />
+            <div className="h-24 w-full" />
+          </Skeleton>
+        </div>
       </RecordShell>
     );
   }
@@ -725,9 +736,9 @@ export function KillswitchRecord({
           scope and schedule intersect.
         </p>
         {overlapPreviewStatus === "loading" ? (
-          <p role="status" className="text-muted-foreground text-sm">
-            Refreshing overlaps…
-          </p>
+          <div role="status" aria-label="Refreshing overlaps">
+            <Skeleton className="h-14 w-full" />
+          </div>
         ) : overlapError ? (
           <Alert variant="error">
             <AlertTitle>Unable to load overlaps</AlertTitle>

@@ -78,11 +78,10 @@ type Endpoints struct {
 	UpdateSupportMatrix                     goa.Endpoint
 	GetSupportCoverage                      goa.Endpoint
 	DescribeMcpServerHealth                 goa.Endpoint
+	SetMcpServerScopePin                    goa.Endpoint
 	GetMcpServerToolCalls                   goa.Endpoint
 	GetHookClients                          goa.Endpoint
-	ListExternalMcpMigrationCandidates      goa.Endpoint
-	PreviewExternalMcpMigration             goa.Endpoint
-	MigrateExternalMcpServers               goa.Endpoint
+	GetOrganizationHookFleet                goa.Endpoint
 	ListRegistryPromotionCandidates         goa.Endpoint
 	GetRegistryPromotionCandidate           goa.Endpoint
 	PromoteRegistryCandidate                goa.Endpoint
@@ -113,6 +112,7 @@ type Endpoints struct {
 	ListSignupOffers                        goa.Endpoint
 	CreateSignupOffer                       goa.Endpoint
 	UpdateSignupOffer                       goa.Endpoint
+	ListPlatformMcpFeedback                 goa.Endpoint
 	GetStripeSubscriptionCandidate          goa.Endpoint
 	SetStripeSubscription                   goa.Endpoint
 	ListCustomerUsage                       goa.Endpoint
@@ -122,6 +122,16 @@ type Endpoints struct {
 	EnableUpstreamAuthEnforcement           goa.Endpoint
 	DisableUpstreamAuthEnforcement          goa.Endpoint
 	BackfillMcpAuthGrants                   goa.Endpoint
+	BackfillMcpConnectGrants                goa.Endpoint
+	GetProjectRedeployPreview               goa.Endpoint
+	RedeployProject                         goa.Endpoint
+	ListCustomDomains                       goa.Endpoint
+	ListPlatformExternalCredentials         goa.Endpoint
+	GetGcpIamPlatformCredential             goa.Endpoint
+	CreateGcpIamPlatformCredential          goa.Endpoint
+	UpdateGcpIamPlatformCredential          goa.Endpoint
+	VerifyGcpIamPlatformCredential          goa.Endpoint
+	DeleteGcpIamPlatformCredential          goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -208,11 +218,10 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateSupportMatrix:                     NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
 		GetSupportCoverage:                      NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
 		DescribeMcpServerHealth:                 NewDescribeMcpServerHealthEndpoint(s, a.APIKeyAuth),
+		SetMcpServerScopePin:                    NewSetMcpServerScopePinEndpoint(s, a.APIKeyAuth),
 		GetMcpServerToolCalls:                   NewGetMcpServerToolCallsEndpoint(s, a.APIKeyAuth),
 		GetHookClients:                          NewGetHookClientsEndpoint(s, a.APIKeyAuth),
-		ListExternalMcpMigrationCandidates:      NewListExternalMcpMigrationCandidatesEndpoint(s, a.APIKeyAuth),
-		PreviewExternalMcpMigration:             NewPreviewExternalMcpMigrationEndpoint(s, a.APIKeyAuth),
-		MigrateExternalMcpServers:               NewMigrateExternalMcpServersEndpoint(s, a.APIKeyAuth),
+		GetOrganizationHookFleet:                NewGetOrganizationHookFleetEndpoint(s, a.APIKeyAuth),
 		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesEndpoint(s, a.APIKeyAuth),
 		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateEndpoint(s, a.APIKeyAuth),
 		PromoteRegistryCandidate:                NewPromoteRegistryCandidateEndpoint(s, a.APIKeyAuth),
@@ -243,6 +252,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListSignupOffers:                        NewListSignupOffersEndpoint(s, a.APIKeyAuth),
 		CreateSignupOffer:                       NewCreateSignupOfferEndpoint(s, a.APIKeyAuth),
 		UpdateSignupOffer:                       NewUpdateSignupOfferEndpoint(s, a.APIKeyAuth),
+		ListPlatformMcpFeedback:                 NewListPlatformMcpFeedbackEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscriptionCandidate:          NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
 		SetStripeSubscription:                   NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		ListCustomerUsage:                       NewListCustomerUsageEndpoint(s, a.APIKeyAuth),
@@ -252,6 +262,16 @@ func NewEndpoints(s Service) *Endpoints {
 		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsEndpoint(s, a.APIKeyAuth),
+		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsEndpoint(s, a.APIKeyAuth),
+		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewEndpoint(s, a.APIKeyAuth),
+		RedeployProject:                         NewRedeployProjectEndpoint(s, a.APIKeyAuth),
+		ListCustomDomains:                       NewListCustomDomainsEndpoint(s, a.APIKeyAuth),
+		ListPlatformExternalCredentials:         NewListPlatformExternalCredentialsEndpoint(s, a.APIKeyAuth),
+		GetGcpIamPlatformCredential:             NewGetGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
+		CreateGcpIamPlatformCredential:          NewCreateGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
+		UpdateGcpIamPlatformCredential:          NewUpdateGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
+		VerifyGcpIamPlatformCredential:          NewVerifyGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
+		DeleteGcpIamPlatformCredential:          NewDeleteGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -318,11 +338,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
 	e.GetSupportCoverage = m(e.GetSupportCoverage)
 	e.DescribeMcpServerHealth = m(e.DescribeMcpServerHealth)
+	e.SetMcpServerScopePin = m(e.SetMcpServerScopePin)
 	e.GetMcpServerToolCalls = m(e.GetMcpServerToolCalls)
 	e.GetHookClients = m(e.GetHookClients)
-	e.ListExternalMcpMigrationCandidates = m(e.ListExternalMcpMigrationCandidates)
-	e.PreviewExternalMcpMigration = m(e.PreviewExternalMcpMigration)
-	e.MigrateExternalMcpServers = m(e.MigrateExternalMcpServers)
+	e.GetOrganizationHookFleet = m(e.GetOrganizationHookFleet)
 	e.ListRegistryPromotionCandidates = m(e.ListRegistryPromotionCandidates)
 	e.GetRegistryPromotionCandidate = m(e.GetRegistryPromotionCandidate)
 	e.PromoteRegistryCandidate = m(e.PromoteRegistryCandidate)
@@ -353,6 +372,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListSignupOffers = m(e.ListSignupOffers)
 	e.CreateSignupOffer = m(e.CreateSignupOffer)
 	e.UpdateSignupOffer = m(e.UpdateSignupOffer)
+	e.ListPlatformMcpFeedback = m(e.ListPlatformMcpFeedback)
 	e.GetStripeSubscriptionCandidate = m(e.GetStripeSubscriptionCandidate)
 	e.SetStripeSubscription = m(e.SetStripeSubscription)
 	e.ListCustomerUsage = m(e.ListCustomerUsage)
@@ -362,6 +382,16 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.EnableUpstreamAuthEnforcement = m(e.EnableUpstreamAuthEnforcement)
 	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
 	e.BackfillMcpAuthGrants = m(e.BackfillMcpAuthGrants)
+	e.BackfillMcpConnectGrants = m(e.BackfillMcpConnectGrants)
+	e.GetProjectRedeployPreview = m(e.GetProjectRedeployPreview)
+	e.RedeployProject = m(e.RedeployProject)
+	e.ListCustomDomains = m(e.ListCustomDomains)
+	e.ListPlatformExternalCredentials = m(e.ListPlatformExternalCredentials)
+	e.GetGcpIamPlatformCredential = m(e.GetGcpIamPlatformCredential)
+	e.CreateGcpIamPlatformCredential = m(e.CreateGcpIamPlatformCredential)
+	e.UpdateGcpIamPlatformCredential = m(e.UpdateGcpIamPlatformCredential)
+	e.VerifyGcpIamPlatformCredential = m(e.VerifyGcpIamPlatformCredential)
+	e.DeleteGcpIamPlatformCredential = m(e.DeleteGcpIamPlatformCredential)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -1733,6 +1763,29 @@ func NewDescribeMcpServerHealthEndpoint(s Service, authAPIKeyFn security.AuthAPI
 	}
 }
 
+// NewSetMcpServerScopePinEndpoint returns an endpoint function that calls the
+// method "setMcpServerScopePin" of service "admin".
+func NewSetMcpServerScopePinEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetMcpServerScopePinPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetMcpServerScopePin(ctx, p)
+	}
+}
+
 // NewGetMcpServerToolCallsEndpoint returns an endpoint function that calls the
 // method "getMcpServerToolCalls" of service "admin".
 func NewGetMcpServerToolCallsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -1779,12 +1832,11 @@ func NewGetHookClientsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 	}
 }
 
-// NewListExternalMcpMigrationCandidatesEndpoint returns an endpoint function
-// that calls the method "listExternalMcpMigrationCandidates" of service
-// "admin".
-func NewListExternalMcpMigrationCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewGetOrganizationHookFleetEndpoint returns an endpoint function that calls
+// the method "getOrganizationHookFleet" of service "admin".
+func NewGetOrganizationHookFleetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ListExternalMcpMigrationCandidatesPayload)
+		p := req.(*GetOrganizationHookFleetPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "admin_auth",
@@ -1799,53 +1851,7 @@ func NewListExternalMcpMigrationCandidatesEndpoint(s Service, authAPIKeyFn secur
 		if err != nil {
 			return nil, err
 		}
-		return s.ListExternalMcpMigrationCandidates(ctx, p)
-	}
-}
-
-// NewPreviewExternalMcpMigrationEndpoint returns an endpoint function that
-// calls the method "previewExternalMcpMigration" of service "admin".
-func NewPreviewExternalMcpMigrationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*PreviewExternalMcpMigrationPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "admin_auth",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.AdminSessionToken != nil {
-			key = *p.AdminSessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.PreviewExternalMcpMigration(ctx, p)
-	}
-}
-
-// NewMigrateExternalMcpServersEndpoint returns an endpoint function that calls
-// the method "migrateExternalMcpServers" of service "admin".
-func NewMigrateExternalMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*MigrateExternalMcpServersPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "admin_auth",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.AdminSessionToken != nil {
-			key = *p.AdminSessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.MigrateExternalMcpServers(ctx, p)
+		return s.GetOrganizationHookFleet(ctx, p)
 	}
 }
 
@@ -2540,6 +2546,29 @@ func NewUpdateSignupOfferEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 	}
 }
 
+// NewListPlatformMcpFeedbackEndpoint returns an endpoint function that calls
+// the method "listPlatformMcpFeedback" of service "admin".
+func NewListPlatformMcpFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPlatformMcpFeedbackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPlatformMcpFeedback(ctx, p)
+	}
+}
+
 // NewGetStripeSubscriptionCandidateEndpoint returns an endpoint function that
 // calls the method "getStripeSubscriptionCandidate" of service "admin".
 func NewGetStripeSubscriptionCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -2745,5 +2774,235 @@ func NewBackfillMcpAuthGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.BackfillMcpAuthGrants(ctx, p)
+	}
+}
+
+// NewBackfillMcpConnectGrantsEndpoint returns an endpoint function that calls
+// the method "backfillMcpConnectGrants" of service "admin".
+func NewBackfillMcpConnectGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*BackfillMcpConnectGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.BackfillMcpConnectGrants(ctx, p)
+	}
+}
+
+// NewGetProjectRedeployPreviewEndpoint returns an endpoint function that calls
+// the method "getProjectRedeployPreview" of service "admin".
+func NewGetProjectRedeployPreviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetProjectRedeployPreviewPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetProjectRedeployPreview(ctx, p)
+	}
+}
+
+// NewRedeployProjectEndpoint returns an endpoint function that calls the
+// method "redeployProject" of service "admin".
+func NewRedeployProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RedeployProjectPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RedeployProject(ctx, p)
+	}
+}
+
+// NewListCustomDomainsEndpoint returns an endpoint function that calls the
+// method "listCustomDomains" of service "admin".
+func NewListCustomDomainsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListCustomDomainsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListCustomDomains(ctx, p)
+	}
+}
+
+// NewListPlatformExternalCredentialsEndpoint returns an endpoint function that
+// calls the method "listPlatformExternalCredentials" of service "admin".
+func NewListPlatformExternalCredentialsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPlatformExternalCredentialsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPlatformExternalCredentials(ctx, p)
+	}
+}
+
+// NewGetGcpIamPlatformCredentialEndpoint returns an endpoint function that
+// calls the method "getGcpIamPlatformCredential" of service "admin".
+func NewGetGcpIamPlatformCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGcpIamPlatformCredentialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGcpIamPlatformCredential(ctx, p)
+	}
+}
+
+// NewCreateGcpIamPlatformCredentialEndpoint returns an endpoint function that
+// calls the method "createGcpIamPlatformCredential" of service "admin".
+func NewCreateGcpIamPlatformCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateGcpIamPlatformCredentialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateGcpIamPlatformCredential(ctx, p)
+	}
+}
+
+// NewUpdateGcpIamPlatformCredentialEndpoint returns an endpoint function that
+// calls the method "updateGcpIamPlatformCredential" of service "admin".
+func NewUpdateGcpIamPlatformCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateGcpIamPlatformCredentialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateGcpIamPlatformCredential(ctx, p)
+	}
+}
+
+// NewVerifyGcpIamPlatformCredentialEndpoint returns an endpoint function that
+// calls the method "verifyGcpIamPlatformCredential" of service "admin".
+func NewVerifyGcpIamPlatformCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*VerifyGcpIamPlatformCredentialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.VerifyGcpIamPlatformCredential(ctx, p)
+	}
+}
+
+// NewDeleteGcpIamPlatformCredentialEndpoint returns an endpoint function that
+// calls the method "deleteGcpIamPlatformCredential" of service "admin".
+func NewDeleteGcpIamPlatformCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteGcpIamPlatformCredentialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteGcpIamPlatformCredential(ctx, p)
 	}
 }

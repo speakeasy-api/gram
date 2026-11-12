@@ -1,6 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { Switch } from "@/components/ui/Switch";
+import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
 import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -24,7 +25,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -432,7 +433,7 @@ function ServerAvailabilityDialog({
           >
             {isLoading && (
               <Button.LeftIcon>
-                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                <Spinner className="mr-0" />
               </Button.LeftIcon>
             )}
             <Button.Text>{isLoading ? "Saving" : "Continue"}</Button.Text>
@@ -488,7 +489,7 @@ function DeleteMcpServerDialogContent({
     deleteButtonContent = (
       <>
         <Button.LeftIcon>
-          <Loader2 className="size-4 animate-spin" />
+          <Spinner className="mr-0" />
         </Button.LeftIcon>
         <Button.Text>Deleting</Button.Text>
       </>

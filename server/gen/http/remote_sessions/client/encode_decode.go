@@ -1731,6 +1731,9 @@ func EncodeGetServerIdentityImpactRequest(encoder func(*http.Request) goahttp.En
 		if p.ClientID != nil {
 			values.Add("client_id", *p.ClientID)
 		}
+		if p.ReplaceClient != nil {
+			values.Add("replace_client", fmt.Sprintf("%v", *p.ReplaceClient))
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -3298,6 +3301,7 @@ func marshalRemotesessionsServerIdentityClientConfigurationToServerIdentityClien
 	res := &ServerIdentityClientConfigurationRequestBody{
 		ClientID:                v.ClientID,
 		ClientSecret:            v.ClientSecret,
+		TemplateClientID:        v.TemplateClientID,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
 		Audience:                v.Audience,
 	}
@@ -3417,6 +3421,7 @@ func marshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerId
 	res := &remotesessions.ServerIdentityClientConfiguration{
 		ClientID:                v.ClientID,
 		ClientSecret:            v.ClientSecret,
+		TemplateClientID:        v.TemplateClientID,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
 		Audience:                v.Audience,
 	}
@@ -3594,6 +3599,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		TokenEndpointAuthMethod:         v.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: v.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
+		IdentityProviderConnectionID:    v.IdentityProviderConnectionID,
 		Audience:                        v.Audience,
 		ForwardClientName:               *v.ForwardClientName,
 		LegacyCallbackURL:               *v.LegacyCallbackURL,

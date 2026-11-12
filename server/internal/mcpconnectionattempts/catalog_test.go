@@ -120,6 +120,16 @@ var frozenCodes = []string{
 	"connection_catalog_expired",
 	"tunnel_at_capacity",
 	"caller_credential_missing",
+	"refresh_token_client_mismatch",
+	"refresh_token_used_by_other_app",
+	"stored_session_invalid",
+	"sign_in_revoked_by_admin",
+	"stored_sign_in_unreadable",
+	"approval_needs_admin",
+	"upstream_credential_denied",
+	"upstream_credential_not_chosen",
+	"sign_in_method_not_accepted",
+	"credential_choice_invalid",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.
@@ -278,6 +288,16 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		{CodeNeedsSignIn, WhoPerson, []string{"need to sign in"}, []string{"yet"}},
 		{CodeCIMDAdmissionDenied, WhoAdmin, []string{"this way", "allowed"}, []string{"allowed list", "your organization"}},
 		{CodeCatalogTooLarge, WhoAdmin, []string{"too large", "if you can"}, []string{"gateway"}},
+		{CodeAssertionInvalid, WhoApp, []string{"the app"}, []string{"sign-in setup"}},
+		{CodeRefreshTokenClientMismatch, WhoApp, []string{"different app"}, []string{"connect to the server again"}},
+		{CodeRefreshTokenUsedByOtherApp, WhoPerson, []string{"another app", "connect to the server again"}, []string{"update the app"}},
+		{CodeStoredSessionInvalid, WhoPerson, []string{"our side", "connect to the server again"}, []string{"few minutes"}},
+		{CodeSignInRevokedByAdmin, WhoAdmin, []string{"your admin", "still need access"}, []string{"connect again"}},
+		{CodeStoredSignInUnreadable, WhoPerson, []string{"saved sign-in", "reconnect"}, []string{"try again", "few minutes"}},
+		{CodeUpstreamCredentialDenied, WhoAdmin, []string{"not allowed", "ask for access"}, []string{"this server.", "account"}},
+		{CodeUpstreamCredentialNotChosen, WhoAdmin, []string{"more than one", "choose"}, []string{"the app", "not set up"}},
+		{CodeCredentialChoiceInvalid, WhoApp, []string{"sign-in choice", "does not fit"}, []string{"does not accept", "picked"}},
+		{CodeSignInMethodNotAccepted, WhoApp, []string{"does not accept"}, []string{"ask for it to be allowed", "not allowed"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code.String(), func(t *testing.T) {
@@ -324,6 +344,25 @@ func TestRecorder_StoresWhoFixesFromTheCatalog(t *testing.T) {
 		require.Equal(t, string(OutcomeFailed), outcome)
 		require.Equal(t, resultFailed.String(), result)
 	}
+}
+
+// Expiry and a revocation the person can recover from are not policies, so their step result is failed.
+func TestCatalog_ExpiryAndRevocationAreFailures(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []Code{CodeRefreshTokenExpired, CodeSignInRevoked} {
+		meaning, ok := MeaningOf(code.String())
+		require.True(t, ok, code)
+		require.Equal(t, OutcomeFailed, meaning.Outcome, code)
+		require.Equal(t, resultFailed, meaning.result, code)
+		require.Equal(t, WhoPerson, meaning.WhoFixes, code)
+	}
+
+	byAdmin, ok := MeaningOf(CodeSignInRevokedByAdmin.String())
+	require.True(t, ok)
+	require.Equal(t, OutcomeBlocked, byAdmin.Outcome, "an admin chose to end it")
+	require.Equal(t, resultPolicyBlocked, byAdmin.result)
+	require.Equal(t, WhoAdmin, byAdmin.WhoFixes)
 }
 
 func TestDefine_RefusesADuplicateName(t *testing.T) {

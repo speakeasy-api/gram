@@ -220,7 +220,7 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 			f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
 			session := uuid.New()
 			f.service.attachedConnections = &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: session, OwnerUserID: "user_owner"}, attached: tc.attached, err: nil, asked: nil}
-			source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: session}
+			source := &agentMemberOutageTokens{fakeUpstreamTokens: &fakeUpstreamTokens{issuerID: uuid.New(), bound: session}}
 			f.service.upstreamTokens = source
 			agentID := uuid.New()
 			ctx := admittedAgentContext(t, f.orgID, agentID)
@@ -253,6 +253,16 @@ func TestAgentMemberLegacyClientUsesTheAgentKeysAuthorizer(t *testing.T) {
 
 		})
 	}
+}
+
+// agentMemberOutageTokens injects outages into both token lookup paths.
+// Enforced members use the typed lookup rather than the legacy sign-in lookup.
+type agentMemberOutageTokens struct {
+	*fakeUpstreamTokens
+}
+
+func (f *agentMemberOutageTokens) ResolveAuthClientAccessTokens(ctx context.Context, req remotesessions.AuthClientTokenRequest) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	return f.ResolveClientAccessTokens(ctx, req.Attribution, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable)
 }
 
 // A handback to the upstream client choice reads the connection the permit
@@ -302,7 +312,7 @@ func TestAgentMemberRoutingPreservesAmbiguity(t *testing.T) {
 			uuid.New(): {Token: "second", Resource: resource},
 		}, nil
 	}}
-	_, backend, err := f.service.routeMetaMember(t.Context(), f.service.logger, metaGateContext{agentID: uuid.New(), organizationID: f.orgID, memberChoices: choices}, member, "")
+	_, backend, err := f.service.routeMetaMember(t.Context(), f.service.logger, metaGateContext{agentID: uuid.New(), organizationID: f.orgID, memberChoices: choices}, member, "", false)
 	require.Equal(t, "remote", backend)
 	require.ErrorIs(t, err, errAmbiguousMemberCredential)
 }

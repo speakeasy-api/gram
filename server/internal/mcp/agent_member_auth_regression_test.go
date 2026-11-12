@@ -143,6 +143,7 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 					}
 					clientID = createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "attachment-client", "", issuerIDs)
 					require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, ac.ActiveOrganizationID, projectID, issuerIDs))
+					require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, ac.ActiveOrganizationID, projectID, issuerIDs, []uuid.UUID{clientID}))
 					if state == "sibling_issuer_client" {
 						siblingID := mcpServerBySlug(t, ctx, ti, projectID, fx.denied)
 						_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: siblingID, ProjectID: projectID, Name: conv.ToPGText(fx.denied), Slug: conv.ToPGText(fx.denied), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: mcpservers.VisibilityPrivate})
@@ -340,9 +341,9 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 						}
 					}
 				}
-				// Before enforcement the direct endpoint keeps the issuer-wide
-				// resolution, which a sibling server's client still constrains.
-				if state == "live" || state == "owner_block" || state == "credential_block" || (state == "sibling_issuer_client" && mode == "enforced") {
+				// A sibling server's client on the same issuer never constrains this
+				// server's own endpoint, whatever the enforcement mode.
+				if state == "live" || state == "owner_block" || state == "credential_block" || state == "sibling_issuer_client" {
 					// The same key on the server's own endpoint must reach the
 					// gateway's decision: a block the gateway enforces cannot be
 					// bypassed by calling the server directly.

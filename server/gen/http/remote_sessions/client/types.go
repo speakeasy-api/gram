@@ -71,7 +71,11 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	// How to provide the OAuth client.
 	ClientMode string `form:"client_mode" json:"client_mode" xml:"client_mode"`
 	// An existing visible remote-session client to link. Required only for
-	// existing mode.
+	// existing mode. Linking shares the client with every server that already uses
+	// it: a person holds one upstream grant per client, so signing in through one
+	// server replaces the grant another server obtained. To give this server its
+	// own client on the same upstream registration, use manual mode with
+	// client_configuration.template_client_id instead.
 	ExistingClientID *string `form:"existing_client_id,omitempty" json:"existing_client_id,omitempty" xml:"existing_client_id,omitempty"`
 	// Client settings for auto or manual mode. Forbidden for existing mode.
 	ClientConfiguration *ServerIdentityClientConfigurationRequestBody `form:"client_configuration,omitempty" json:"client_configuration,omitempty" xml:"client_configuration,omitempty"`
@@ -79,6 +83,17 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	// when the provider supports one and falls back to dynamic client
 	// registration; dcr always uses dynamic client registration.
 	RegistrationMethod *string `form:"registration_method,omitempty" json:"registration_method,omitempty" xml:"registration_method,omitempty"`
+	// Replace the selected provider's client already bound to the user session
+	// issuer, rather than reuse it or be refused. Everyone signed in through the
+	// old client must sign in again, on this server and every other server that
+	// uses it. The other servers move to the new client. Refused when a gateway or
+	// a server that is not directly Remote MCP-backed shares the issuer, or when a
+	// server using the client is in another project.
+	ReplaceClient *bool `form:"replace_client,omitempty" json:"replace_client,omitempty" xml:"replace_client,omitempty"`
+	// With replace_client, exactly the other MCP servers that use the client being
+	// replaced, as getServerIdentityImpact listed them. The commit is refused if
+	// they no longer match.
+	ReplaceClientServerIds []string `form:"replace_client_server_ids,omitempty" json:"replace_client_server_ids,omitempty" xml:"replace_client_server_ids,omitempty"`
 }
 
 // DetachServerClientAssociationRequestBody is the type of the "remoteSessions"
@@ -178,6 +193,13 @@ type GetServerIdentityImpactResponseBody struct {
 	// the change touches an organization-level client this counts every such
 	// server on the issuer, affected or not.
 	HiddenServerCount *int `form:"hidden_server_count,omitempty" json:"hidden_server_count,omitempty" xml:"hidden_server_count,omitempty"`
+	// With change detach and mcp_server_id, the clients only that server uses,
+	// which leaving User Identity unbinds from the issuer.
+	DetachClientIds []string `form:"detach_client_ids,omitempty" json:"detach_client_ids,omitempty" xml:"detach_client_ids,omitempty"`
+	// With change detach and mcp_server_id, the clients other consumers also use.
+	// They stay bound, and leaving User Identity only removes that server's
+	// association with them.
+	ReleaseClientIds []string `form:"release_client_ids,omitempty" json:"release_client_ids,omitempty" xml:"release_client_ids,omitempty"`
 }
 
 // ListServerClientAssociationsResponseBody is the type of the "remoteSessions"
@@ -185,6 +207,12 @@ type GetServerIdentityImpactResponseBody struct {
 type ListServerClientAssociationsResponseBody struct {
 	// The server's associated upstream OAuth clients, oldest first.
 	Associations []*ServerClientAssociationResponseBody `form:"associations,omitempty" json:"associations,omitempty" xml:"associations,omitempty"`
+	// The remote_session_client_id of each client bound to the server's user
+	// session issuer that its callers need to sign in through. These are its
+	// associated clients, or when it has none, the bound clients no other server
+	// claims and it has not explicitly detached. Empty when the server requires no
+	// upstream sign-in.
+	RequiredClientIds []string `form:"required_client_ids,omitempty" json:"required_client_ids,omitempty" xml:"required_client_ids,omitempty"`
 }
 
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
@@ -2837,6 +2865,18 @@ type ServerIdentityClientConfigurationRequestBody struct {
 	// The out-of-band OAuth client secret. Manual mode only; encrypted before
 	// persistence.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// An existing remote_session_client of the same issuer, visible to the
+	// project, whose upstream registration the new client reuses. The new client
+	// is an independent record with its own id: it copies the template's stored
+	// client_secret, unless client_secret is supplied, and the callback the
+	// template's registration lists. client_id must equal the template's.
+	// Sessions, grants, user_session_issuer attachments and MCP server
+	// associations are not copied, and the template is unchanged. Refused for a
+	// client metadata document client, a private_key_jwt client, a
+	// credential_owner self client, a client managed by an identity provider
+	// connection, a client the issuer has rejected, and a template whose stored
+	// secret has expired unless client_secret is supplied.
+	TemplateClientID *string `form:"template_client_id,omitempty" json:"template_client_id,omitempty" xml:"template_client_id,omitempty"`
 	// How the client authenticates at the provider token endpoint, or the
 	// preferred method for DCR.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -3039,6 +3079,10 @@ type RemoteSessionClientResponseBody struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string `form:"identity_provider_connection_id,omitempty" json:"identity_provider_connection_id,omitempty" xml:"identity_provider_connection_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -3199,12 +3243,19 @@ func NewCommitServerIdentityConfigurationRequestBody(p *remotesessions.CommitSer
 		ClientMode:         p.ClientMode,
 		ExistingClientID:   p.ExistingClientID,
 		RegistrationMethod: p.RegistrationMethod,
+		ReplaceClient:      p.ReplaceClient,
 	}
 	if p.CreateProvider != nil {
 		body.CreateProvider = marshalRemotesessionsCreateRemoteSessionIssuerFormToCreateRemoteSessionIssuerFormRequestBody(p.CreateProvider)
 	}
 	if p.ClientConfiguration != nil {
 		body.ClientConfiguration = marshalRemotesessionsServerIdentityClientConfigurationToServerIdentityClientConfigurationRequestBody(p.ClientConfiguration)
+	}
+	if p.ReplaceClientServerIds != nil {
+		body.ReplaceClientServerIds = make([]string, len(p.ReplaceClientServerIds))
+		for i, val := range p.ReplaceClientServerIds {
+			body.ReplaceClientServerIds[i] = val
+		}
 	}
 	return body
 }
@@ -4382,6 +4433,18 @@ func NewGetServerIdentityImpactServerIdentityImpactResultOK(body *GetServerIdent
 		}
 		v.Servers[i] = unmarshalServerIdentityImpactServerResponseBodyToRemotesessionsServerIdentityImpactServer(val)
 	}
+	if body.DetachClientIds != nil {
+		v.DetachClientIds = make([]string, len(body.DetachClientIds))
+		for i, val := range body.DetachClientIds {
+			v.DetachClientIds[i] = val
+		}
+	}
+	if body.ReleaseClientIds != nil {
+		v.ReleaseClientIds = make([]string, len(body.ReleaseClientIds))
+		for i, val := range body.ReleaseClientIds {
+			v.ReleaseClientIds[i] = val
+		}
+	}
 
 	return v
 }
@@ -4547,6 +4610,10 @@ func NewListServerClientAssociationsResultOK(body *ListServerClientAssociationsR
 			continue
 		}
 		v.Associations[i] = unmarshalServerClientAssociationResponseBodyToRemotesessionsServerClientAssociation(val)
+	}
+	v.RequiredClientIds = make([]string, len(body.RequiredClientIds))
+	for i, val := range body.RequiredClientIds {
+		v.RequiredClientIds[i] = val
 	}
 
 	return v
@@ -5498,6 +5565,12 @@ func ValidateGetServerIdentityImpactResponseBody(body *GetServerIdentityImpactRe
 			}
 		}
 	}
+	for _, e := range body.DetachClientIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.detach_client_ids[*]", e, goa.FormatUUID))
+	}
+	for _, e := range body.ReleaseClientIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.release_client_ids[*]", e, goa.FormatUUID))
+	}
 	return
 }
 
@@ -5507,12 +5580,18 @@ func ValidateListServerClientAssociationsResponseBody(body *ListServerClientAsso
 	if body.Associations == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("associations", "body"))
 	}
+	if body.RequiredClientIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_client_ids", "body"))
+	}
 	for _, e := range body.Associations {
 		if e != nil {
 			if err2 := ValidateServerClientAssociationResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	for _, e := range body.RequiredClientIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.required_client_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }
@@ -8800,6 +8879,9 @@ func ValidateCreateRemoteSessionIssuerFormRequestBody(body *CreateRemoteSessionI
 // ValidateServerIdentityClientConfigurationRequestBody runs the validations
 // defined on ServerIdentityClientConfigurationRequestBody
 func ValidateServerIdentityClientConfigurationRequestBody(body *ServerIdentityClientConfigurationRequestBody) (err error) {
+	if body.TemplateClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.template_client_id", *body.TemplateClientID, goa.FormatUUID))
+	}
 	if body.TokenEndpointAuthMethod != nil {
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
@@ -9000,6 +9082,9 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.IdentityProviderConnectionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.identity_provider_connection_id", *body.IdentityProviderConnectionID, goa.FormatUUID))
 	}
 	if body.CredentialOwner != nil {
 		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {

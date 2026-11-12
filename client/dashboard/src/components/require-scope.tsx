@@ -1,12 +1,14 @@
 import { useRBAC } from "@/hooks/useRBAC";
 import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { SplashScreen } from "@/components/ui/LogoLoader";
+import { Page, useInPageFrame } from "@/components/page-layout";
 import {
   breadthLabel,
   suggestRolesForScope,
@@ -78,9 +80,10 @@ export function RequireScope(
   const resolveChildren = (disabled: boolean): React.ReactNode =>
     typeof children === "function" ? children({ disabled }) : children;
 
-  // While grants are loading, render nothing to avoid flash of unauthorized
+  // While grants are loading, show the page loader (page level) or nothing,
+  // so the unauthorized state never flashes
   if (isLoading) {
-    if (level === "page") return null;
+    if (level === "page") return <SplashScreen />;
     if (level === "section") return null;
     // For component-level, show disabled state while loading
     return (
@@ -97,7 +100,7 @@ export function RequireScope(
   switch (level) {
     case "page":
       return (
-        <>
+        <RestrictedPageFrame>
           {props.fallback ?? (
             <Unauthorized
               scopes={scopes}
@@ -106,7 +109,7 @@ export function RequireScope(
               projectId={projectId}
             />
           )}
-        </>
+        </RestrictedPageFrame>
       );
 
     case "section":
@@ -124,6 +127,28 @@ export function RequireScope(
         </ScopeDisabled>
       );
   }
+}
+
+/**
+ * Pages are gated from outside their `Page` frame so data hooks never run for
+ * people who can't view them, which left the restricted state without the
+ * page header — and without the project switcher, the one way into a project
+ * the viewer can open. Supply the frame when the gate sits outside one.
+ */
+function RestrictedPageFrame({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
+  if (useInPageFrame()) return <>{children}</>;
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>{children}</Page.Body>
+    </Page>
+  );
 }
 
 /**
@@ -205,42 +230,49 @@ function getRequestableScopes(scopes: Scope[]): RequestAccessFormScope[] {
   );
 }
 
-/**
- * Full-page unauthorized state. Used as the default fallback for page-level RequireScope.
- */
-function Unauthorized({
-  title = "Access restricted",
-  description = "You don't have permission to view this page.",
-  scopes,
-  all,
-  resourceId,
-  projectId,
-}: {
-  title?: string;
-  description?: string;
+type RequestScopeAccessProps = {
   scopes: Scope[];
-  all: boolean;
+  /** When true, every missing scope is requested, not only the first. */
+  all?: boolean;
   resourceId?: string;
-  projectId?: string;
-}) {
-  const [open, setOpen] = React.useState(false);
+};
+
+/**
+ * Asks an organization admin for the scopes the viewer is missing, and says
+ * how that went. Renders nothing when every requestable scope is already held.
+ */
+export function RequestScopeAccess(
+  props: RequestScopeAccessProps,
+): React.JSX.Element | null {
+  // A request is for one resource and one set of scopes. The key remounts
+  // the form when either changes, so "Request sent" for one project does not
+  // carry over to the next.
+  return (
+    <RequestScopeAccessForm
+      key={`${props.resourceId ?? ""}|${props.all ? "all" : "any"}|${props.scopes.join(",")}`}
+      {...props}
+    />
+  );
+}
+
+function RequestScopeAccessForm({
+  scopes,
+  all = false,
+  resourceId,
+}: RequestScopeAccessProps): React.JSX.Element | null {
   const [requestState, setRequestState] = React.useState<
     "idle" | "sending" | "sent" | "no-admin" | "error"
   >("idle");
-
   const { hasScope } = useRBAC();
-  const { catalogue, tasks } = useScopeCatalogue();
   const requestAccessMutation = useRequestAccessMutation();
   // Only request scopes the user is actually missing — an all-scopes gate can
   // trip on a partial grant, and admins shouldn't be asked for held scopes.
   const requestableScopes = getRequestableScopes(scopes).filter(
     (s) => !hasScope(s, resourceId),
   );
-  const canRequestAccess = requestableScopes.length > 0;
+  if (requestableScopes.length === 0) return null;
 
   const handleRequestAccess = async () => {
-    if (!canRequestAccess || requestableScopes.length === 0) return;
-
     setRequestState("sending");
     // An "any scope suffices" gate only needs the first requestable scope; an
     // all-scopes gate must request every missing scope or granting one still
@@ -270,6 +302,82 @@ function Unauthorized({
     setRequestState(reachedServer ? "no-admin" : "error");
   };
 
+  switch (requestState) {
+    case "idle":
+      return (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void handleRequestAccess()}
+          disabled={requestAccessMutation.isPending}
+        >
+          {requestAccessMutation.isPending ? "Sending..." : "Request Access"}
+        </Button>
+      );
+    case "sending":
+      return (
+        <p className="text-muted-foreground text-sm">Sending request...</p>
+      );
+    case "sent":
+      return (
+        <div className="flex flex-col items-center gap-1">
+          <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
+            <Icon name="check" className="size-4" />
+            Request sent
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Your organization admins have been notified.
+          </p>
+        </div>
+      );
+    case "no-admin":
+      return (
+        <p className="text-destructive text-sm">
+          No organization administrator could be notified. Contact an
+          administrator directly to request access.
+        </p>
+      );
+    case "error":
+      return (
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-destructive text-sm">
+            Failed to send request. Please try again.
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setRequestState("idle")}
+          >
+            Retry
+          </Button>
+        </div>
+      );
+  }
+}
+
+/**
+ * Full-page unauthorized state. Used as the default fallback for page-level RequireScope.
+ */
+function Unauthorized({
+  title = "Access restricted",
+  description = "You don't have permission to view this page.",
+  scopes,
+  all,
+  resourceId,
+  projectId,
+}: {
+  title?: string;
+  description?: string;
+  scopes: Scope[];
+  all: boolean;
+  resourceId?: string;
+  projectId?: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+
+  const { hasScope } = useRBAC();
+  const { catalogue, tasks } = useScopeCatalogue();
+
   return (
     <div className="flex h-full min-h-[400px] w-full items-center justify-center">
       <div className="flex max-w-sm flex-col items-center gap-3 text-center">
@@ -279,55 +387,7 @@ function Unauthorized({
         <h2 className="text-lg font-medium">{title}</h2>
         <p className="text-muted-foreground text-sm">{description}</p>
 
-        {/* Request Access Button */}
-        {canRequestAccess && requestState === "idle" && (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => void handleRequestAccess()}
-            disabled={requestAccessMutation.isPending}
-          >
-            {requestAccessMutation.isPending ? "Sending..." : "Request Access"}
-          </Button>
-        )}
-
-        {requestState === "sending" && (
-          <p className="text-muted-foreground text-sm">Sending request...</p>
-        )}
-
-        {requestState === "sent" && (
-          <div className="flex flex-col items-center gap-1">
-            <div className="text-default-success flex items-center gap-1.5 text-sm font-medium">
-              <Icon name="check" className="size-4" />
-              Request sent
-            </div>
-            <p className="text-muted-foreground text-xs">
-              Your organization admins have been notified.
-            </p>
-          </div>
-        )}
-
-        {requestState === "no-admin" && (
-          <p className="text-destructive text-sm">
-            No organization administrator could be notified. Contact an
-            administrator directly to request access.
-          </p>
-        )}
-
-        {requestState === "error" && (
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-destructive text-sm">
-              Failed to send request. Please try again.
-            </p>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setRequestState("idle")}
-            >
-              Retry
-            </Button>
-          </div>
-        )}
+        <RequestScopeAccess scopes={scopes} all={all} resourceId={resourceId} />
 
         {scopes.length > 0 && (
           /* The wrapper keeps the collapsed height (h-7 == trigger height) in

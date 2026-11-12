@@ -195,3 +195,20 @@ func TestCatalogUnknownToolEvidenceIsOmitted(t *testing.T) {
 		require.NotContains(t, string(raw), `"tool_names"`)
 	}
 }
+
+// A registry server's title, such as "Linear", names it on its card and in
+// the dashboard; its reverse-DNS registry name is the fallback.
+func TestCatalogDetailsNameTheServerByItsTitle(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ title, want string }{
+		{title: "Linear", want: "Linear"},
+		{title: "  ", want: "app.linear/mcp"},
+		{title: "", want: "app.linear/mcp"},
+	} {
+		details, err := projectCatalogDetails(CatalogDescriptor{}, "app.linear/mcp", &externalmcp.ServerDetails{
+			Name: "app.linear/mcp", Title: tc.title, RemoteURL: "https://mcp.linear.app/mcp", TransportType: "streamable-http",
+		})
+		require.NoError(t, err)
+		require.Equal(t, tc.want, details.Name)
+	}
+}

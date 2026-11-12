@@ -84,6 +84,8 @@ func (s *seeder) chPurgeAndTelemetry(ctx context.Context, ch driver.Conn) error 
 		{"cursor usage metrics", s.chCursorUsageRows},
 		{"cursor hook rows", s.chCursorHookRows},
 		{"work units scores", s.chWorkUnitRows},
+		{"hooks fleet rows", s.chHookFleetRows},
+		{"agent owner session rows", s.chOwnerSessionRows},
 	}
 	for _, ins := range inserts {
 		if err := s.chInsertTelemetry(ctx, ch, ins.rows()); err != nil {
@@ -130,6 +132,8 @@ var chPurgeOrgTables = []string{
 	"mcp_connection_events",
 	// Target of mcp_connection_attempt_summaries_mv.
 	"mcp_connection_attempt_summaries",
+	// Target of hook_install_summaries_mv.
+	"hook_install_summaries",
 }
 
 // chPurge runs the scoped deletes: telemetry source + every MV target + the
@@ -166,7 +170,8 @@ func (s *seeder) chPurge(ctx context.Context, ch driver.Conn) error {
 				+ (SELECT count() FROM sigint_readings_v2 WHERE organization_id = ?)
 				+ (SELECT count() FROM mcp_connection_events WHERE organization_id = ?)
 				+ (SELECT count() FROM mcp_connection_attempt_summaries WHERE organization_id = ?)
-		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
+				+ (SELECT count() FROM hook_install_summaries WHERE organization_id = ?)
+		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
 		if err != nil {
 			return 0, fmt.Errorf("count remaining demo telemetry, meter ledger, summary, and sensor reading rows: %w", err)
 		}
@@ -262,14 +267,17 @@ var chRolesJSON = []string{
 
 // chIdentityAttrs is the WorkOS-style identity block (division through
 // hostname) a row carries for demo user idx.
-func chIdentityAttrs(idx int) string {
-	u := demoUsers[idx]
+func chIdentityAttrs(idx int) string { return chUserIdentityAttrs(demoUsers[idx], chRolesJSON[idx]) }
+
+// chUserIdentityAttrs is chIdentityAttrs for any member, with roles as the
+// user.roles JSON array.
+func chUserIdentityAttrs(u demoUser, roles string) string {
 	return `,"user.attributes.division_name":"` + u.division + `"` +
 		`,"user.attributes.department_name":"` + u.department + `"` +
 		`,"user.attributes.job_title":"` + u.title + `"` +
 		`,"user.attributes.employee_type":"` + u.empType + `"` +
 		`,"user.attributes.cost_center_name":"` + u.costCenter + `"` +
-		`,"user.roles":` + chRolesJSON[idx] +
+		`,"user.roles":` + roles +
 		`,"user.groups":["` + u.team + `"]` +
 		`,"gram.hook.hostname":"` + u.hostname + `"`
 }

@@ -3,6 +3,8 @@ package feature
 type Flag string
 
 const (
+	// FlagChannels gates the Channels rollout for an organization.
+	FlagChannels Flag = "channels"
 	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
 	// based") risk policy MVP. While set, only opted-in organizations can
 	// create or update nl-type risk policies and have them enforced. The
@@ -237,6 +239,18 @@ const (
 	// Targeted the same way as FlagAuthClientResolver.
 	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
 
+	// FlagUpstreamIssuerFromAssociations makes an MCP server's upstream
+	// clients the source of its upstream issuer for an organization: the one
+	// provider among the server's live client associations routes its
+	// credentials and is hashed into its consent evidence, in place of the
+	// denormalized mcp_servers.remote_session_issuer_id. Off, the column
+	// keeps serving and is the rollback. Either way both values are compared
+	// wherever a request reads the server's associations and no credential
+	// choice governs; elsewhere the request is recorded as a governing choice
+	// or as not having read the associations, and keeps the column.
+	// Targeted the same way as FlagAuthClientResolver.
+	FlagUpstreamIssuerFromAssociations Flag = "upstream-issuer-from-associations"
+
 	// FlagAuthClientUpstreamSelectorWrites lets an organization write grants
 	// whose selector names upstream_client: such grants, connection owner
 	// blocks, agent keys copying them and the attachment backfill. Replicas
@@ -256,7 +270,9 @@ const (
 	// aivendors product ID of the connection's verified CIMD client, or
 	// "unknown") and "organization_id". Release conditions match on those
 	// person properties, so a harness joins or leaves the treatment by editing
-	// a condition. Fails closed to the full catalogue.
+	// a condition. Fails closed to the full catalogue. ChatGPT always gets the
+	// full catalogue, because the ChatGPT app directory rejects tools that run
+	// other tools by name.
 	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
 
 	// FlagPlatformMCPGatewayProxy lets a Platform MCP connection use the

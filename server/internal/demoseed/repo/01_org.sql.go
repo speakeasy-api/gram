@@ -12,6 +12,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const orgCountCustomDomainDiagnostics = `-- name: OrgCountCustomDomainDiagnostics :one
+SELECT count(*) FROM custom_domains WHERE organization_id = $1
+ AND domain = $2 AND dns_configuration_status = 'unconfirmed' AND health_status = 'healthy'
+ AND dns_target_token IS NOT NULL AND dns_checked_at = health_checked_at
+`
+
+type OrgCountCustomDomainDiagnosticsParams struct {
+	OrgID  string
+	Domain string
+}
+
+func (q *Queries) OrgCountCustomDomainDiagnostics(ctx context.Context, arg OrgCountCustomDomainDiagnosticsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, orgCountCustomDomainDiagnostics, arg.OrgID, arg.Domain)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const orgCountSigintDefinitionSnapshots = `-- name: OrgCountSigintDefinitionSnapshots :one
 SELECT count(*) FROM sigint_definition_snapshots WHERE project_id = $1::uuid
 `
@@ -120,6 +138,15 @@ DELETE FROM chat_message_participants WHERE project_id IN (SELECT id FROM projec
 
 func (q *Queries) OrgDeleteChatMessageParticipants(ctx context.Context, orgID string) error {
 	_, err := q.db.Exec(ctx, orgDeleteChatMessageParticipants, orgID)
+	return err
+}
+
+const orgDeleteCustomDomains = `-- name: OrgDeleteCustomDomains :exec
+DELETE FROM custom_domains WHERE organization_id = $1
+`
+
+func (q *Queries) OrgDeleteCustomDomains(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteCustomDomains, orgID)
 	return err
 }
 
@@ -781,7 +808,9 @@ VALUES
   ($6::uuid, $2::text, $7::text,
    'Retired documentation bot', NULL, now() - interval '5 days'),
   ($8::uuid, $2::text, $5::text,
-   'Release notes assistant', NULL, NULL)
+   'Release notes assistant', NULL, NULL),
+  ($9::uuid, $2::text, $10::text,
+   'Deploy watcher', NULL, NULL)
 `
 
 type OrgInsertManagedAgentsParams struct {
@@ -793,6 +822,8 @@ type OrgInsertManagedAgentsParams struct {
 	Agent3 uuid.UUID
 	Owner3 string
 	Agent4 uuid.UUID
+	Agent5 uuid.UUID
+	Owner5 string
 }
 
 // Managed identities are distinct from OAuth client registrations. Existing
@@ -809,6 +840,8 @@ func (q *Queries) OrgInsertManagedAgents(ctx context.Context, arg OrgInsertManag
 		arg.Agent3,
 		arg.Owner3,
 		arg.Agent4,
+		arg.Agent5,
+		arg.Owner5,
 	)
 	return err
 }
@@ -901,7 +934,6 @@ INSERT INTO organization_setup_tasks
   (organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at)
 VALUES
   ($1::text, 'identity-provider', 'todo', NULL, NULL, NULL),
-  ($1::text, 'create-marketplace', 'todo', NULL, NULL, NULL),
   ($1::text, 'distribute-servers', 'todo', NULL, NULL, NULL),
   ($1::text, 'enable-logging', 'todo', NULL, NULL, NULL),
   ($1::text, 'anthropic-observability', 'todo', NULL, NULL, NULL),
@@ -1038,6 +1070,64 @@ func (q *Queries) OrgInsertSigintSensorSignal(ctx context.Context, arg OrgInsert
 		arg.SensorID,
 		arg.SignalID,
 		arg.SortOrder,
+	)
+	return err
+}
+
+const orgPlantCustomDomainDependents = `-- name: OrgPlantCustomDomainDependents :one
+WITH target AS MATERIALIZED (
+  SELECT d.id AS domain_id, m.id AS meta_id, m.project_id, d.organization_id
+  FROM custom_domains d
+  JOIN meta_mcp_servers m ON m.organization_id = d.organization_id
+  WHERE d.organization_id = $1::text AND d.deleted IS FALSE
+    AND m.project_id = $2::uuid AND m.deleted IS FALSE
+  ORDER BY m.id LIMIT 1
+), endpoint AS (
+  INSERT INTO mcp_endpoints (project_id, custom_domain_id, meta_mcp_server_id, slug, is_domain_root)
+  SELECT project_id, domain_id, meta_id, 'reseed-domain-root', TRUE FROM target
+  RETURNING id
+), tools AS (
+  INSERT INTO toolsets (organization_id, project_id, name, slug, mcp_slug, custom_domain_id)
+  SELECT organization_id, project_id, 'Reseed domain ordering', 'reseed-domain-' || kind,
+    'reseed-' || md5(organization_id), CASE WHEN kind = 'custom' THEN domain_id ELSE NULL END
+  FROM target CROSS JOIN (VALUES ('custom'), ('shared')) AS variants(kind)
+  RETURNING id
+)
+SELECT ((SELECT count(*) FROM endpoint) + (SELECT count(*) FROM tools))::integer AS planted
+`
+
+type OrgPlantCustomDomainDependentsParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+// Test fixture: both SET NULL references must disappear before domain deletion.
+func (q *Queries) OrgPlantCustomDomainDependents(ctx context.Context, arg OrgPlantCustomDomainDependentsParams) (int32, error) {
+	row := q.db.QueryRow(ctx, orgPlantCustomDomainDependents, arg.OrgID, arg.ProjectID)
+	var planted int32
+	err := row.Scan(&planted)
+	return planted, err
+}
+
+const orgSeedCustomDomain = `-- name: OrgSeedCustomDomain :exec
+INSERT INTO custom_domains (id, organization_id, domain, verified, activated, provisioner_kind,
+ dns_target_token, dns_configuration_status, dns_routing_method, dns_checked_at, health_status, health_checked_at)
+VALUES ($1, $2, $3, TRUE, FALSE, 'local', $4, 'unconfirmed', 'unknown', statement_timestamp(), 'healthy', statement_timestamp())
+`
+
+type OrgSeedCustomDomainParams struct {
+	ID             uuid.UUID
+	OrgID          string
+	Domain         string
+	DnsTargetToken pgtype.Text
+}
+
+func (q *Queries) OrgSeedCustomDomain(ctx context.Context, arg OrgSeedCustomDomainParams) error {
+	_, err := q.db.Exec(ctx, orgSeedCustomDomain,
+		arg.ID,
+		arg.OrgID,
+		arg.Domain,
+		arg.DnsTargetToken,
 	)
 	return err
 }

@@ -9,11 +9,13 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
-import { Tool, Toolset, getToolSourceLabel } from "@/lib/toolTypes";
+import type { Tool, Toolset } from "@/lib/toolTypes";
+import { getToolSourceLabel } from "@/lib/toolTypes";
 import { Button } from "@/components/ui/Button";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { EditToolDialog, ToolUpdatePayload } from "./EditToolDialog";
+import type { ToolUpdatePayload } from "./EditToolDialog";
+import { EditToolDialog } from "./EditToolDialog";
 
 interface ManageToolsDialogProps {
   open: boolean;

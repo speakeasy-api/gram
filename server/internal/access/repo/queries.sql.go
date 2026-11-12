@@ -1841,7 +1841,10 @@ JOIN grant_matches allowed
 WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.skill_id = cs.id
-    AND blocked.scope = 'skill:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (
+      blocked.scope = 'skill:blocked_read'
+      OR (blocked.scope = 'skill:blocked_write' AND allowed.scope = 'skill:write')
+    )
     AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY cs.display_name, cs.name
@@ -1867,6 +1870,16 @@ type ListAccessibleSkillsForUserRow struct {
 // distributed to a plugin the user holds is still unreachable if RBAC does not
 // allow it, so distribution is not consulted. Principal precedence also
 // matches: a direct grant naming the skill outranks an inherited block.
+//
+// Blocks pair with allows by scope: skill:blocked_read withdraws skill:read and
+// also skill:write, because a write check honours a read block (see
+// scopeExpansions in authz/scopes.go), and skill:blocked_write withdraws
+// skill:write. Callers read the result as "skills this user can reach", which
+// is the skill:read check, and the engine does not withdraw that on
+// skill:blocked_write. So a user whose only grant is skill:write, blocked by
+// skill:blocked_write, is left out here although the engine lets them read the
+// skill. That case is kept as it was until list and single-skill access are
+// reconciled.
 // SELECT DISTINCT only permits ORDER BY over selected columns, and
 // skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
 func (q *Queries) ListAccessibleSkillsForUser(ctx context.Context, arg ListAccessibleSkillsForUserParams) ([]ListAccessibleSkillsForUserRow, error) {
@@ -2944,6 +2957,59 @@ func (q *Queries) ListMemberRolePrincipalsByWorkosUser(ctx context.Context, arg 
 	for rows.Next() {
 		var i ListMemberRolePrincipalsByWorkosUserRow
 		if err := rows.Scan(&i.RoleSlug, &i.PrincipalUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMemberRolePrincipalsByWorkosUsers = `-- name: ListMemberRolePrincipalsByWorkosUsers :many
+SELECT
+  ora.workos_user_id,
+  ora.role_urn::text AS principal_urn
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND ora.workos_user_id = ANY($2::text[])
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+  AND ora.deleted_at IS NULL
+ORDER BY ora.workos_user_id, ora.role_urn
+`
+
+type ListMemberRolePrincipalsByWorkosUsersParams struct {
+	OrganizationID string
+	WorkosUserIds  []string
+}
+
+type ListMemberRolePrincipalsByWorkosUsersRow struct {
+	WorkosUserID string
+	PrincipalUrn string
+}
+
+// The roles several members hold, in one read, for a role save that works
+// out what each member it assigns gains.
+func (q *Queries) ListMemberRolePrincipalsByWorkosUsers(ctx context.Context, arg ListMemberRolePrincipalsByWorkosUsersParams) ([]ListMemberRolePrincipalsByWorkosUsersRow, error) {
+	rows, err := q.db.Query(ctx, listMemberRolePrincipalsByWorkosUsers, arg.OrganizationID, arg.WorkosUserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemberRolePrincipalsByWorkosUsersRow
+	for rows.Next() {
+		var i ListMemberRolePrincipalsByWorkosUsersRow
+		if err := rows.Scan(&i.WorkosUserID, &i.PrincipalUrn); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

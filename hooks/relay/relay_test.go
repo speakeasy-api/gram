@@ -433,6 +433,69 @@ func TestIngestDenyBlocksToolCall(t *testing.T) {
 	require.Contains(t, string(res.Stdout), "blocked by policy X")
 }
 
+// hookDenyOutput is the deny shape Claude Code and Codex read from a
+// PreToolUse or PermissionRequest hook's stdout.
+type hookDenyOutput struct {
+	SystemMessage      string `json:"systemMessage"`
+	HookSpecificOutput struct {
+		PermissionDecision       string `json:"permissionDecision"`
+		PermissionDecisionReason string `json:"permissionDecisionReason"`
+	} `json:"hookSpecificOutput"`
+}
+
+// TestIngestDenyMirrorsReasonForClaudeUser pins the Claude Code deny shape:
+// Claude shows permissionDecisionReason only to the model, so the reason is
+// mirrored into systemMessage for the user to read.
+func TestIngestDenyMirrorsReasonForClaudeUser(t *testing.T) {
+	const message = "blocked by policy X\nRequest access: https://example.test/request"
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: message}
+	})
+	cfg := authedConfig(t, fs.URL)
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Equal(t, 0, res.ExitCode)
+	var out hookDenyOutput
+	require.NoError(t, json.Unmarshal(res.Stdout, &out))
+	require.Equal(t, "deny", out.HookSpecificOutput.PermissionDecision)
+	require.Equal(t, message, out.HookSpecificOutput.PermissionDecisionReason)
+	require.Equal(t, message, out.SystemMessage)
+}
+
+// TestCodexDenyShowsReasonOnce pins the Codex deny shape. Codex renders the
+// deny reason under "Blocked by hook" and renders systemMessage as a second
+// line beneath it, so a mirrored system message printed the block text (and
+// its request-access and block links) twice. The deny carries the reason
+// once, in permissionDecisionReason.
+func TestCodexDenyShowsReasonOnce(t *testing.T) {
+	const message = "This native MCP server is blocked.\nRequest access: https://example.test/request\nView information about why we blocked this request: https://example.test/blocks/1"
+	cases := map[string][]byte{
+		"PreToolUse":        []byte(`{"session_id":"sess-codex-deny","turn_id":"turn-1","cwd":"/work/repo","hook_event_name":"PreToolUse","permission_mode":"on-request","tool_name":"mcp__docs__read","tool_input":{"repo":"a/b"},"tool_use_id":"call_1"}`),
+		"PermissionRequest": []byte(`{"session_id":"sess-codex-deny","turn_id":"turn-1","cwd":"/work/repo","hook_event_name":"PermissionRequest","permission_mode":"on-request","tool_name":"shell","tool_input":{"command":["bash","-lc","ls"]},"tool_use_id":"call_2"}`),
+	}
+	for name, payload := range cases {
+		t.Run(name, func(t *testing.T) {
+			fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+				return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: message}
+			})
+			cfg := authedConfig(t, fs.URL)
+			t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+			res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, payload, "--variant=cli")
+
+			require.Equal(t, 0, res.ExitCode)
+			var out hookDenyOutput
+			require.NoError(t, json.Unmarshal(res.Stdout, &out))
+			require.Equal(t, "deny", out.HookSpecificOutput.PermissionDecision)
+			require.Equal(t, message, out.HookSpecificOutput.PermissionDecisionReason)
+			require.Empty(t, out.SystemMessage, "Codex already shows the deny reason; a system message would repeat it")
+			require.Equal(t, 1, strings.Count(string(res.Stdout), "https://example.test/blocks/1"), "the block link must appear once")
+		})
+	}
+}
+
 func TestIngestDenyBlocksPrompt(t *testing.T) {
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "prompt blocked"}
@@ -653,6 +716,22 @@ func TestAgentKeyReadFromPluginConfig(t *testing.T) {
 	loaded := LoadConfig(cfg)
 	require.Equal(t, "env-org-key", loaded.HooksAPIKey)
 	require.False(t, loaded.AgentKey)
+}
+
+// TestInstallRouteReadFromPluginConfig: the install_route in speakeasy.json
+// reaches the relay config, and the environment can override it.
+func TestInstallRouteReadFromPluginConfig(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"https://gram.test","project":"default","install_route":"download"}`), 0o600))
+
+	cfg, _ := SplitInlineFlags(Config{}, []string{"--config=" + cfgPath})
+	require.Equal(t, "download", cfg.InstallRoute)
+	t.Setenv("SPEAKEASY_AI_HOOKS_INSTALL_ROUTE", "")
+	t.Setenv("GRAM_HOOKS_INSTALL_ROUTE", "")
+	require.Equal(t, "download", LoadConfig(cfg).InstallRoute)
+
+	t.Setenv("SPEAKEASY_AI_HOOKS_INSTALL_ROUTE", "mdm")
+	require.Equal(t, "mdm", LoadConfig(cfg).InstallRoute)
 }
 
 // TestServerErrorBlocksToolCall pins the non-2xx posture with credentials

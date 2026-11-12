@@ -9,6 +9,7 @@ package agent
 
 import (
 	"context"
+	"io"
 
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -36,6 +37,19 @@ type Service interface {
 	// per-user key, or an org install key with the user's email vouched in the
 	// Gram-User-Email header, the same way getPlugins resolves the polling user.
 	GetMyConnections(context.Context, *GetMyConnectionsPayload) (res *GetMyConnectionsResult, err error)
+	// Download the organization's Claude observability plugin as a ZIP for the
+	// enrolled user to upload to claude.ai (Customize > Plugins), so sessions in
+	// Claude's cloud environment are recorded. The plugin carries a hooks-only key
+	// attributed to the enrolled user; each download replaces that user's previous
+	// key. Requires a per-user key, whose owner is the enrolled user. The org
+	// install key is refused: it is shared by every device in the organization, so
+	// it cannot prove which member is asking, and accepting it would let any
+	// holder mint a key attributed to any member and revoke theirs.
+
+	// If body implements [io.WriterTo], that implementation will be used instead.
+	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
+	// implementations.
+	GetClaudeObservabilityPlugin(context.Context, *GetClaudeObservabilityPluginPayload) (res *GetClaudeObservabilityPluginResult, body io.ReadCloser, err error)
 	// Hide an MCP server for the enrolled user, the same preference the gateway
 	// consent page's Hide sets. Gateways leave a hidden server out of the user's
 	// tools, and getMyConnections reports it as hidden. Only servers
@@ -163,7 +177,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"getPlugins", "getMyConnections", "hideMcpServer", "unhideMcpServer", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "reportState", "reportCrash", "createSessionHandoff"}
+var MethodNames = [17]string{"getPlugins", "getMyConnections", "getClaudeObservabilityPlugin", "hideMcpServer", "unhideMcpServer", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "reportState", "reportCrash", "createSessionHandoff"}
 
 // One AI detection target a device-agent scan matched.
 type AIScanMatch struct {
@@ -595,6 +609,19 @@ type DeviceAgentConfiguration struct {
 	// When this remote configuration was last saved. Absent when is_configured is
 	// false.
 	UpdatedAt *string
+}
+
+// GetClaudeObservabilityPluginPayload is the payload type of the agent service
+// getClaudeObservabilityPlugin method.
+type GetClaudeObservabilityPluginPayload struct {
+	ApikeyToken *string
+}
+
+// GetClaudeObservabilityPluginResult is the result type of the agent service
+// getClaudeObservabilityPlugin method.
+type GetClaudeObservabilityPluginResult struct {
+	ContentType        string
+	ContentDisposition string
 }
 
 // GetConfigurationPayload is the payload type of the agent service

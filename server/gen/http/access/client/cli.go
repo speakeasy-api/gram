@@ -771,6 +771,21 @@ func BuildListScopesPayload(accessListScopesApikeyToken string, accessListScopes
 	return v, nil
 }
 
+// BuildListAgentPolicyScopesPayload builds the payload for the access
+// listAgentPolicyScopes endpoint from CLI flags.
+func BuildListAgentPolicyScopesPayload(accessListAgentPolicyScopesSessionToken string) (*access.ListAgentPolicyScopesPayload, error) {
+	var sessionToken *string
+	{
+		if accessListAgentPolicyScopesSessionToken != "" {
+			sessionToken = &accessListAgentPolicyScopesSessionToken
+		}
+	}
+	v := &access.ListAgentPolicyScopesPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListMembersPayload builds the payload for the access listMembers
 // endpoint from CLI flags.
 func BuildListMembersPayload(accessListMembersApikeyToken string, accessListMembersSessionToken string) (*access.ListMembersPayload, error) {
@@ -1484,8 +1499,8 @@ func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAcce
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"message\": \"aaa\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }'")
 		}
-		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "plugin:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "inference:execute" || body.Scope == "log:read" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:write" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "plugin:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "inference:execute" || body.Scope == "log:read" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:write" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest" || body.Scope == "channels:connect" || body.Scope == "channels:admin" || body.Scope == "channels:read_all") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all"}))
 		}
 		if body.Message != nil {
 			if utf8.RuneCountInString(*body.Message) > 1000 {
@@ -1522,7 +1537,7 @@ func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAcce
 
 // BuildListChallengesPayload builds the payload for the access listChallenges
 // endpoint from CLI flags.
-func BuildListChallengesPayload(accessListChallengesOutcome string, accessListChallengesPrincipalUrn string, accessListChallengesScope string, accessListChallengesProjectID string, accessListChallengesResolved string, accessListChallengesIds string, accessListChallengesFrom string, accessListChallengesTo string, accessListChallengesLimit string, accessListChallengesOffset string, accessListChallengesApikeyToken string, accessListChallengesSessionToken string) (*access.ListChallengesPayload, error) {
+func BuildListChallengesPayload(accessListChallengesOutcome string, accessListChallengesPrincipalUrn string, accessListChallengesScope string, accessListChallengesExcludeScopes string, accessListChallengesProjectID string, accessListChallengesResolved string, accessListChallengesIds string, accessListChallengesFrom string, accessListChallengesTo string, accessListChallengesLimit string, accessListChallengesOffset string, accessListChallengesApikeyToken string, accessListChallengesSessionToken string) (*access.ListChallengesPayload, error) {
 	var err error
 	var outcome *string
 	{
@@ -1546,6 +1561,21 @@ func BuildListChallengesPayload(accessListChallengesOutcome string, accessListCh
 	{
 		if accessListChallengesScope != "" {
 			scope = &accessListChallengesScope
+		}
+	}
+	var excludeScopes []string
+	{
+		if accessListChallengesExcludeScopes != "" {
+			err = json.Unmarshal([]byte(accessListChallengesExcludeScopes), &excludeScopes)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for excludeScopes, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]'")
+			}
+			if len(excludeScopes) > 20 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_scopes", excludeScopes, len(excludeScopes), 20, false))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var projectID *string
@@ -1647,6 +1677,7 @@ func BuildListChallengesPayload(accessListChallengesOutcome string, accessListCh
 	v.Outcome = outcome
 	v.PrincipalUrn = principalUrn
 	v.Scope = scope
+	v.ExcludeScopes = excludeScopes
 	v.ProjectID = projectID
 	v.Resolved = resolved
 	v.Ids = ids

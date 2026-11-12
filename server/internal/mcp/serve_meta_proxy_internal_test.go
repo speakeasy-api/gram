@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -12,10 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestMemberResponseRecorderStatusStartsUnset(t *testing.T) {
@@ -229,7 +230,7 @@ func TestRouteMetaMemberToken_SelfCredential(t *testing.T) {
 		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: self("", remotesessions.ErrClientCredentialMisconfigured)}, remoteMember, "https://a.example.com/mcp")
 		memberErr, ok := errors.AsType[*metaMemberError](err)
 		require.True(t, ok, "error: %v", err)
-		require.Contains(t, memberErr.message, "contact the MCP server administrator")
+		require.Contains(t, memberErr.message, "Ask an admin of the server's project to fix the server's credential")
 	})
 
 	t.Run("self credential for another resource names the administrator", func(t *testing.T) {
@@ -375,15 +376,52 @@ func TestChainMetaMember_ChainingServesAnOutage(t *testing.T) {
 	require.ErrorIs(t, err, routeErr, "a self client's failure is never chained around")
 }
 
+// Chaining serves an unreadable sign-in only with the same person's verified identity; without one the reconnect stands.
+func TestChainMetaMember_UnreadableSignInReconnectsWhenChainingFails(t *testing.T) {
+	t.Parallel()
+
+	routed := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: fmt.Errorf("decrypt: %w", remotesessions.ErrStoredSignInUnreadable)}
+	chaining := func(token string) metaGateContext {
+		return metaGateContext{chainUpstream: func(context.Context, metaMember, string) (string, error) { return token, nil }}
+	}
+	member := metaMember{slug: "m"}
+
+	_, token, err := chainMetaMember(t.Context(), chaining("chained"), member, "r", routed, nil)
+	require.NoError(t, err)
+	require.Equal(t, "chained", token)
+
+	_, token, err = chainMetaMember(t.Context(), chaining(""), member, "r", routed, nil)
+	require.Empty(t, token, "never an anonymous call")
+	failure, ok := errors.AsType[memberConnectionError](err)
+	require.True(t, ok, "error: %v", err)
+	require.Equal(t, mcpconnectionattempts.CodeStoredSignInUnreadable, failure.code)
+	require.Contains(t, err.Error(), `server "m" can't use its saved sign-in anymore`)
+}
+
+// Of several held entries for one upstream, an outage answers, whatever the map order.
+func TestRouteUpstreamToken_HeldEntriesAnswerDeterministically(t *testing.T) {
+	t.Parallel()
+
+	const upstream = "https://a.example.com/mcp"
+	unreadable := remotesessions.UpstreamToken{Resource: upstream, CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: fmt.Errorf("decrypt: %w", remotesessions.ErrStoredSignInUnreadable)}
+	outage := remotesessions.UpstreamToken{Resource: upstream, CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: remotesessions.ErrRemoteSessionUnavailable}
+	for range 50 {
+		tokens := map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): unreadable, uuid.New(): outage, uuid.New(): unreadable}
+		_, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), tokens, upstream, false, uuid.NullUUID{})
+		require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+		require.NotErrorIs(t, err, remotesessions.ErrStoredSignInUnreadable)
+	}
+}
+
 func TestMemberAuthFailure_SelfCredentialNamesAdministrator(t *testing.T) {
 	t.Parallel()
 
 	member := metaMember{slug: "m"}
-	err := memberAuthFailure(member, memberDial{anonymous: false, clientCredential: true})
-	require.Contains(t, err.Error(), "contact the MCP server administrator")
+	err := memberAuthFailure(member, memberDial{anonymous: false, clientCredential: true}, http.StatusUnauthorized)
+	require.Contains(t, err.Error(), "Ask an admin of the server's project to fix the server's credential")
 	require.NotContains(t, err.Error(), "reconnect")
 
-	err = memberAuthFailure(member, memberDial{anonymous: false, clientCredential: false})
+	err = memberAuthFailure(member, memberDial{anonymous: false, clientCredential: false}, http.StatusUnauthorized)
 	require.Contains(t, err.Error(), "Ask your administrator to reconnect it")
 }
 
@@ -410,27 +448,11 @@ func TestConnectionOutageMessage(t *testing.T) {
 	}
 }
 
-// Only a person has a connect page to reconnect on.
-func TestMemberReconnectURL_OnlyForPeople(t *testing.T) {
-	t.Parallel()
-
-	member := metaMember{slug: "m", remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
-	gate := func(subject urn.SessionSubject) metaGateContext {
-		return metaGateContext{connectRoot: "https://app.example.test/connect", authentication: &issuerGateAuthentication{subject: subject}}
-	}
-	require.NotEmpty(t, gate(urn.NewUserSubject("user-1")).memberReconnectURL(member))
-	require.Empty(t, gate(urn.NewAgentSubject(uuid.New())).memberReconnectURL(member))
-	require.Empty(t, gate(urn.NewWorkloadSubject(uuid.New(), "workload")).memberReconnectURL(member))
-	require.Empty(t, metaGateContext{connectRoot: "https://app.example.test/connect"}.memberReconnectURL(member))
-	require.NotEmpty(t, metaGateContext{connectRoot: "https://app.example.test/connect", userID: "user-1"}.memberReconnectURL(member), "the Platform gateway serves people, with no authentication set")
-	require.Empty(t, metaGateContext{connectRoot: "https://app.example.test/connect", userID: "user-1", agentID: uuid.New()}.memberReconnectURL(member))
-}
-
 // A caller with no connect page is sent to an administrator, not told to ask a user to open one.
 func TestMemberAuthFailure_NoConnectPageNamesAdministrator(t *testing.T) {
 	t.Parallel()
 
 	member := metaMember{slug: "m"}
-	require.EqualError(t, memberAuthFailure(member, memberDial{anonymous: true}), `server "m" requires authentication and has no credential for this caller. Ask your administrator to connect it`)
-	require.EqualError(t, memberAuthFailure(member, memberDial{}), `server "m" rejected the stored credential. Ask your administrator to reconnect it`)
+	require.EqualError(t, memberAuthFailure(member, memberDial{anonymous: true}, http.StatusUnauthorized), `server "m" requires authentication and has no credential for this caller. Ask your administrator to connect it`)
+	require.EqualError(t, memberAuthFailure(member, memberDial{}, http.StatusUnauthorized), `server "m" rejected the stored credential. Ask your administrator to reconnect it`)
 }

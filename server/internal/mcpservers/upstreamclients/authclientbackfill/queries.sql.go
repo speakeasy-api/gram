@@ -875,7 +875,25 @@ WHERE s.id = $3::uuid
           OR (rp.id IS NULL AND r.url = b.resource)
         ))
         OR (t.id IS NOT NULL
-            AND s.remote_session_issuer_id = b.remote_session_issuer_id
+            AND ARRAY(
+                  -- The one live provider the server's live client associations name.
+                  SELECT DISTINCT c.remote_session_issuer_id
+                  FROM mcp_server_remote_session_clients AS a
+                  JOIN remote_session_clients AS c
+                    ON c.id = a.remote_session_client_id
+                   AND c.deleted IS FALSE
+                   AND (c.project_id = a.project_id
+                        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+                  JOIN remote_session_issuers AS provider
+                    ON provider.id = c.remote_session_issuer_id
+                   AND provider.deleted IS FALSE
+                   AND (provider.project_id = a.project_id
+                        OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+                  WHERE a.mcp_server_id = s.id
+                    AND a.project_id = s.project_id
+                    AND a.organization_id = p.organization_id
+                    AND a.deleted IS FALSE
+                )::uuid[] = ARRAY[b.remote_session_issuer_id]::uuid[]
             AND t.resource_identifier = b.resource)
       )
   )
@@ -1989,7 +2007,25 @@ WHERE b.id = $1::uuid
       OR (rp.id IS NULL AND r.url = b.resource)
     ))
     OR (t.id IS NOT NULL
-        AND s.remote_session_issuer_id = b.remote_session_issuer_id
+        AND ARRAY(
+              -- The one live provider the server's live client associations name.
+              SELECT DISTINCT c.remote_session_issuer_id
+              FROM mcp_server_remote_session_clients AS a
+              JOIN remote_session_clients AS c
+                ON c.id = a.remote_session_client_id
+               AND c.deleted IS FALSE
+               AND (c.project_id = a.project_id
+                    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+              JOIN remote_session_issuers AS provider
+                ON provider.id = c.remote_session_issuer_id
+               AND provider.deleted IS FALSE
+               AND (provider.project_id = a.project_id
+                    OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+              WHERE a.mcp_server_id = s.id
+                AND a.project_id = s.project_id
+                AND a.organization_id = b.organization_id
+                AND a.deleted IS FALSE
+            )::uuid[] = ARRAY[b.remote_session_issuer_id]::uuid[]
         AND t.resource_identifier = b.resource)
   )
 ORDER BY s.id
@@ -2017,8 +2053,8 @@ type ListEMABindingServersRow struct {
 // chains only a request whose own inbound issuer the binding names. It is a
 // remote server whose valid persisted protected resource names the binding's
 // resource, or, with no valid persisted record, whose URL names it; or a
-// tunneled server whose resource identifier names it under its own derived
-// issuer. A remote server whose valid record lists authorization servers
+// tunneled server whose resource identifier names it and whose client
+// associations name the binding's issuer as their one provider. A remote server whose valid record lists authorization servers
 // without the binding's issuer is returned as issuer_not_allowed, since the
 // runtime would refuse it. direct reports that the server's own issuer is the
 // binding's.
@@ -2491,10 +2527,13 @@ JOIN user_session_issuers AS usi
   ON usi.id = s.user_session_issuer_id
 LEFT JOIN projects AS p
   ON p.id = usi.project_id
-WHERE s.deleted IS FALSE
+WHERE usi.deleted IS FALSE
+  AND (usi.project_id IS NULL OR p.deleted IS FALSE)
+  AND (s.organization_id IS NULL OR s.organization_id = CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END)
+  AND s.deleted IS FALSE
   AND s.refresh_expires_at > clock_timestamp()
   AND COALESCE(s.credential_id, s.id) > $1::uuid
-  AND COALESCE(usi.organization_id, p.organization_id) = $2::text
+  AND CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END = $2::text
 ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
 LIMIT $3::int
 `
@@ -2910,6 +2949,22 @@ func (q *Queries) ListRemoteSourceServers(ctx context.Context, arg ListRemoteSou
 }
 
 const listSelectionMappings = `-- name: ListSelectionMappings :many
+WITH scoped_live_credentials AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(session.credential_id, session.id) AS credential_id
+    FROM user_sessions AS session
+    JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE $4::uuid IS NOT NULL
+      AND issuer.id = $4::uuid
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $1::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $1::text AND project.deleted IS FALSE)
+      )
+      AND (session.organization_id IS NULL OR session.organization_id = $1::text)
+      AND session.deleted IS FALSE
+      AND session.refresh_expires_at > clock_timestamp()
+)
 SELECT sel.id,
        sel.project_id,
        sel.credential_id,
@@ -2955,6 +3010,17 @@ SELECT sel.id,
            AND a.remote_session_client_id = sel.remote_session_client_id
            AND a.deleted IS FALSE
        )::boolean AS registration_associated,
+       -- The registration and its issuer are live, which the typed resolver
+       -- requires of a choice whatever the server's associations.
+       EXISTS (
+         SELECT 1
+         FROM remote_session_clients AS c
+         JOIN remote_session_issuers AS rsi
+           ON rsi.id = c.remote_session_issuer_id
+          AND rsi.deleted IS FALSE
+         WHERE c.id = sel.remote_session_client_id
+           AND c.deleted IS FALSE
+       )::boolean AS registration_live,
        ARRAY(
          SELECT link.user_session_issuer_id
          FROM remote_session_client_user_session_issuers AS link
@@ -3175,6 +3241,11 @@ FROM upstream_client_selections AS sel
 WHERE sel.organization_id = $1::text
   AND sel.credential_kind = 'user_session'
   AND sel.deleted IS FALSE
+  AND ($2::uuid[] IS NULL
+       OR sel.mcp_server_id = ANY($2::uuid[]))
+  AND (NOT $3::boolean OR sel.auth_client_id IS NULL)
+  AND ($4::uuid IS NULL
+       OR sel.credential_id IN (SELECT credential_id FROM scoped_live_credentials))
   -- A choice for a deleted server is kept as history but is never served
   -- again, so it is not live coverage.
   AND EXISTS (
@@ -3183,17 +3254,20 @@ WHERE sel.organization_id = $1::text
     WHERE live_server.id = sel.mcp_server_id
       AND live_server.deleted IS FALSE
   )
-  AND sel.id > $2::uuid
-  AND ($3::uuid IS NULL OR sel.id = $3::uuid)
+  AND sel.id > $5::uuid
+  AND ($6::uuid IS NULL OR sel.id = $6::uuid)
 ORDER BY sel.id
-LIMIT $4::int
+LIMIT $7::int
 `
 
 type ListSelectionMappingsParams struct {
-	OrganizationID string
-	Cursor         uuid.UUID
-	OnlyID         uuid.NullUUID
-	PageSize       int32
+	OrganizationID           string
+	ScopeMcpServerIds        []uuid.UUID
+	OnlyUnmapped             bool
+	ScopeUserSessionIssuerID uuid.NullUUID
+	Cursor                   uuid.UUID
+	OnlyID                   uuid.NullUUID
+	PageSize                 int32
 }
 
 type ListSelectionMappingsRow struct {
@@ -3208,6 +3282,7 @@ type ListSelectionMappingsRow struct {
 	NamesHeaders           bool
 	ServerHasAssociations  bool
 	RegistrationAssociated bool
+	RegistrationLive       bool
 	RegistrationIssuerIds  []uuid.UUID
 	CandidateIds           []uuid.UUID
 	ServerHasOauthClients  bool
@@ -3216,7 +3291,9 @@ type ListSelectionMappingsRow struct {
 
 // Every live user session choice for a live server in the organization after
 // the cursor, or the one named by only_id, with what mapping it onto a typed
-// auth client decides from.
+// auth client decides from. A supplied scope_user_session_issuer_id restricts
+// this to that issuer's live credential lineages. only_unmapped independently
+// restricts results to choices that do not yet name a typed auth client.
 //
 // What the upstream client choice reads today (GetUpstreamClientSelection):
 // whether the server has any upstream OAuth client association, whether the
@@ -3235,9 +3312,15 @@ type ListSelectionMappingsRow struct {
 // linked is the server's own configuration and is a candidate too. A mapped
 // choice's client is usable while it is live, enabled, linked to the server
 // and, for an OAuth choice, still the registration's.
+// Compute refreshable lineages once per page, not once per candidate choice.
+// The nullable scope keeps unscoped backfill callers unchanged. Issuer ownership
+// is canonical; legacy sessions may omit their denormalized organization.
 func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMappingsParams) ([]ListSelectionMappingsRow, error) {
 	rows, err := q.db.Query(ctx, listSelectionMappings,
 		arg.OrganizationID,
+		arg.ScopeMcpServerIds,
+		arg.OnlyUnmapped,
+		arg.ScopeUserSessionIssuerID,
 		arg.Cursor,
 		arg.OnlyID,
 		arg.PageSize,
@@ -3261,6 +3344,7 @@ func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMa
 			&i.NamesHeaders,
 			&i.ServerHasAssociations,
 			&i.RegistrationAssociated,
+			&i.RegistrationLive,
 			&i.RegistrationIssuerIds,
 			&i.CandidateIds,
 			&i.ServerHasOauthClients,
@@ -4262,6 +4346,62 @@ func (q *Queries) LockTunneledCredentialSource(ctx context.Context, arg LockTunn
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const mapSelectionGroupToAuthClient = `-- name: MapSelectionGroupToAuthClient :execrows
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE,
+    updated_at = clock_timestamp()
+FROM mcp_auth_clients AS ac
+WHERE sel.id = ANY($1::uuid[])
+  AND sel.mcp_server_id = $2::uuid
+  AND sel.credential_kind = 'user_session'
+  AND sel.organization_id = $3::text
+  AND sel.deleted IS FALSE
+  AND sel.auth_client_id IS NULL
+  AND sel.no_auth = $4::boolean
+  AND sel.remote_session_client_id IS NOT DISTINCT FROM $5::uuid
+  AND ac.id = $6::uuid
+  AND ac.organization_id = sel.organization_id
+  AND ac.deleted IS FALSE
+  AND ac.enabled
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS l
+    WHERE l.auth_client_id = ac.id
+      AND l.mcp_server_id = sel.mcp_server_id
+      AND l.deleted IS FALSE
+  )
+`
+
+type MapSelectionGroupToAuthClientParams struct {
+	Ids                   []uuid.UUID
+	McpServerID           uuid.UUID
+	OrganizationID        string
+	NoAuth                bool
+	RemoteSessionClientID uuid.NullUUID
+	AuthClientID          uuid.UUID
+}
+
+// The caller confirmed one representative with MapSelectionToAuthClient and
+// retains its source/server/client/binding locks for this transaction. The
+// policy is shared by this server/registration/no-auth group; each row must
+// still be unmapped and match the legacy evidence read for this page.
+func (q *Queries) MapSelectionGroupToAuthClient(ctx context.Context, arg MapSelectionGroupToAuthClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, mapSelectionGroupToAuthClient,
+		arg.Ids,
+		arg.McpServerID,
+		arg.OrganizationID,
+		arg.NoAuth,
+		arg.RemoteSessionClientID,
+		arg.AuthClientID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const mapSelectionToAuthClient = `-- name: MapSelectionToAuthClient :execrows

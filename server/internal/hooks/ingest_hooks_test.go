@@ -589,6 +589,25 @@ func TestResolveCanonicalActor_SharedPluginKeyDoesNotUseOwnerIdentity(t *testing
 		"a legacy personal key with a formerly-unrestricted plugins-* name keeps owner attribution")
 }
 
+// The key in a plugin a member uploads to claude.ai is owned by that member,
+// and Claude's cloud environment reports no email, so events attribute to the
+// key owner.
+func TestResolveCanonicalActor_ClaudeWebKeyAttributesToOwner(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	payload := canonicalIngestPayload("claude", "prompt.submitted", "claude-web-actor-test")
+	keyCtx := *authCtx
+	keyCtx.APIKeyName = "plugins-claude-web-hooks-20261102-120102-abc123"
+	keyCtx.OrgWidePluginHooksKey = false
+	actor := ti.service.resolveCanonicalActor(ctx, payload, &keyCtx)
+	require.Equal(t, authCtx.UserID, actor.UserID)
+	require.Equal(t, conv.PtrValOr(authCtx.Email, ""), actor.Email)
+}
+
 func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
 	t.Parallel()
 
@@ -1489,9 +1508,10 @@ func TestIngest_StampsAccountAttributionOnTelemetry(t *testing.T) {
 
 // ingestHookDeviceRow sends a session.started event the way /rpc/hooks.ingest
 // receives it, through HookDeviceTelemetry with header as the request
-// headers, and returns the gram.hook.device.* attributes stored on the
-// resulting telemetry row. replayed marks the event as a spool replay.
-func ingestHookDeviceRow(t *testing.T, header http.Header, replayed bool) map[string]any {
+// headers, and returns the gram.hook.device.* attributes and the endpoint
+// generation stored on the resulting telemetry row. replayed marks the event
+// as a spool replay; adapterVersion is the envelope's source.adapter_version.
+func ingestHookDeviceRow(t *testing.T, header http.Header, replayed bool, adapterVersion string) (map[string]any, string) {
 	t.Helper()
 
 	ctx, ti := newTestHooksService(t)
@@ -1511,6 +1531,9 @@ func ingestHookDeviceRow(t *testing.T, header http.Header, replayed bool) map[st
 	payload := canonicalIngestPayload("claude", "session.started", "hook-device-"+uuid.NewString())
 	payload.Event.OccurredAt = &occurredAt
 	payload.Replayed = &replayed
+	if adapterVersion != "" {
+		payload.Source.AdapterVersion = &adapterVersion
+	}
 
 	result, err := ti.service.Ingest(requestCtx, payload)
 	require.NoError(t, err)
@@ -1523,12 +1546,13 @@ func ingestHookDeviceRow(t *testing.T, header http.Header, replayed bool) map[st
 	var stored struct {
 		Gram struct {
 			Hook struct {
-				Device map[string]any `json:"device"`
+				Device             map[string]any `json:"device"`
+				EndpointGeneration string         `json:"endpoint_generation"`
 			} `json:"hook"`
 		} `json:"gram"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(logs[0].Attributes), &stored))
-	return stored.Gram.Hook.Device
+	return stored.Gram.Hook.Device, stored.Gram.Hook.EndpointGeneration
 }
 
 func TestIngest_StampsHookDeviceAttributesOnTelemetry(t *testing.T) {
@@ -1542,9 +1566,10 @@ func TestIngest_StampsHookDeviceAttributesOnTelemetry(t *testing.T) {
 	header.Set("X-Gram-Device-Harness-Version", "2.0.1")
 	header.Set("X-Gram-Device-Elapsed-Ms", "42")
 
-	device := ingestHookDeviceRow(t, header, false)
+	device, generation := ingestHookDeviceRow(t, header, false, "")
 
 	require.Equal(t, "1.2.3", device["binary_version"], "the binary build must ride on the hook row")
+	require.Equal(t, middleware.HookEndpointGenerationIngestBinary, generation)
 	require.Equal(t, "darwin", device["os"])
 	require.Equal(t, "arm64", device["arch"])
 	require.Equal(t, "claude", device["harness"])
@@ -1556,9 +1581,21 @@ func TestIngest_OmitsHookDeviceAttributesWithoutDeviceHeaders(t *testing.T) {
 	t.Parallel()
 
 	// The legacy curl client sends no X-Gram-Device-* headers.
-	device := ingestHookDeviceRow(t, http.Header{}, false)
+	device, generation := ingestHookDeviceRow(t, http.Header{}, false, "")
 
 	require.Empty(t, device, "rows from senders without device headers must carry no device attributes")
+	require.Equal(t, middleware.HookEndpointGenerationIngestScript, generation)
+}
+
+func TestIngest_FallsBackToEnvelopeAdapterVersion(t *testing.T) {
+	t.Parallel()
+
+	// Binaries that predate the device headers still put their version in
+	// every envelope.
+	device, generation := ingestHookDeviceRow(t, http.Header{}, false, "1.1.0")
+
+	require.Equal(t, map[string]any{"binary_version": "1.1.0"}, device)
+	require.Equal(t, middleware.HookEndpointGenerationIngestBinary, generation)
 }
 
 func TestIngest_OmitsHookDeviceAttributesOnSpoolReplay(t *testing.T) {
@@ -1569,9 +1606,24 @@ func TestIngest_OmitsHookDeviceAttributesOnSpoolReplay(t *testing.T) {
 	header := http.Header{}
 	header.Set("X-Gram-Device-Binary-Version", "1.3.0")
 
-	device := ingestHookDeviceRow(t, header, true)
+	device, generation := ingestHookDeviceRow(t, header, true, "")
 
 	require.Empty(t, device, "replayed rows must not carry the draining binary's version")
+	require.Equal(t, middleware.HookEndpointGenerationIngestBinary, generation)
+}
+
+func TestIngest_StampsCapturingBinaryVersionOnSpoolReplay(t *testing.T) {
+	t.Parallel()
+
+	// The spooled envelope keeps the version of the binary that captured it.
+	header := http.Header{}
+	header.Set("X-Gram-Device-Binary-Version", "1.3.0")
+	header.Set("X-Gram-Device-Os", "darwin")
+
+	device, generation := ingestHookDeviceRow(t, header, true, "1.2.0")
+
+	require.Equal(t, map[string]any{"binary_version": "1.2.0"}, device)
+	require.Equal(t, middleware.HookEndpointGenerationIngestBinary, generation)
 }
 
 func TestIngest_PersistsRenderableToolCalls(t *testing.T) {
@@ -1669,6 +1721,86 @@ func TestIngest_PersistsRenderableToolCalls(t *testing.T) {
 	require.Equal(t, toolCallID, toolResult.ToolCallID.String)
 	require.JSONEq(t, `{"content":"ok"}`, toolResult.Content)
 	require.Equal(t, "custom-adapter", toolResult.Source.String)
+}
+
+// A failed tool call's result row carries the error as its content and the
+// error finish reason, so the session transcript shows the call as failed
+// instead of as a call that returned output. A failure without an error text,
+// or with an empty one, and a completion without output still get a result
+// row: without one the call would read as still running.
+func TestIngest_PersistsFailedToolResultsAsErrors(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "canonical-failed-tools-" + uuid.NewString()
+	toolName := "speakeasy__execute_tool"
+	ingestTool := func(eventType, toolCallID string, data gen.HookToolCallData) {
+		t.Helper()
+		data.ID = &toolCallID
+		data.Name = &toolName
+		payload := canonicalIngestPayload("openclaw", eventType, sessionID)
+		payload.Data = &gen.HookIngestData{ToolCall: &data}
+		res, err := ti.service.Ingest(ctx, payload)
+		require.NoError(t, err)
+		require.Equal(t, "allow", res.Decision)
+	}
+
+	failedID := "call_failed_" + uuid.NewString()
+	ingestTool("tool.requested", failedID, gen.HookToolCallData{Input: map[string]any{"name": "slack_search"}})
+	ingestTool("tool.failed", failedID, gen.HookToolCallData{Error: map[string]any{
+		"content": []any{map[string]any{"type": "text", "text": "MCP error -32603: internal error"}},
+	}})
+	silentID := "call_silent_" + uuid.NewString()
+	ingestTool("tool.requested", silentID, gen.HookToolCallData{Input: map[string]any{"name": "jira_search"}})
+	ingestTool("tool.failed", silentID, gen.HookToolCallData{})
+	emptyErrorID := "call_empty_error_" + uuid.NewString()
+	ingestTool("tool.requested", emptyErrorID, gen.HookToolCallData{Input: map[string]any{"name": "jira_get"}})
+	ingestTool("tool.failed", emptyErrorID, gen.HookToolCallData{Error: map[string]any{}})
+	okID := "call_ok_" + uuid.NewString()
+	ingestTool("tool.requested", okID, gen.HookToolCallData{Input: map[string]any{"name": "list"}})
+	ingestTool("tool.completed", okID, gen.HookToolCallData{Output: map[string]any{"content": "ok"}})
+	quietID := "call_quiet_" + uuid.NewString()
+	ingestTool("tool.requested", quietID, gen.HookToolCallData{Input: map[string]any{"name": "touch"}})
+	ingestTool("tool.completed", quietID, gen.HookToolCallData{})
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    sessionIDToUUID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	results := map[string]chatRepo.ChatMessage{}
+	for _, msg := range msgs {
+		if msg.Role == "tool" {
+			results[msg.ToolCallID.String] = msg
+		}
+	}
+	require.Len(t, results, 5)
+
+	failed := results[failedID]
+	require.Equal(t, "error", failed.FinishReason.String)
+	require.JSONEq(t, `{"content":[{"type":"text","text":"MCP error -32603: internal error"}]}`, failed.Content)
+
+	silent := results[silentID]
+	require.Equal(t, "error", silent.FinishReason.String)
+	require.JSONEq(t, `"The tool call failed without an error message."`, silent.Content)
+
+	emptyError := results[emptyErrorID]
+	require.Equal(t, "error", emptyError.FinishReason.String)
+	require.JSONEq(t, `"The tool call failed without an error message."`, emptyError.Content)
+
+	completed := results[okID]
+	require.Empty(t, completed.FinishReason.String, "a completed call keeps no finish reason")
+	require.JSONEq(t, `{"content":"ok"}`, completed.Content)
+
+	quiet := results[quietID]
+	require.Empty(t, quiet.FinishReason.String, "a completed call keeps no finish reason")
+	require.JSONEq(t, `"The tool call returned no output."`, quiet.Content)
 }
 
 // Codex PermissionRequest normalizes to tool.requested but is only a

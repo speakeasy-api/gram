@@ -33,9 +33,13 @@ type rolesCustomRole struct {
 // generated, never literal, so each tenant's rows stay its own.
 var rolesCustomRoles = []rolesCustomRole{
 	{
+		// Holds both scopes of the "Review other members' sessions"
+		// task, so the role editor and the grant dialog have a complete
+		// sensitive task to show; Engineer below holds mcp:write without
+		// environment:read, an incomplete one.
 		slug: "session-reviewer", name: "Session Reviewer",
-		description: "Reads chat transcripts across the organization for quality review.",
-		scopes:      []string{"chat:read"},
+		description: "Reads chat transcripts across the organization and tool-call logs in the demo project for quality review.",
+		scopes:      []string{"chat:read", "log:read"},
 		members:     []string{"hana", "jonas"},
 		agents:      []string{},
 	},

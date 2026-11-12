@@ -6,9 +6,11 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { organizationQuery } from "@/lib/adminQueries";
+import { GramAdminError } from "@/lib/gramAdminApi";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization, aProject } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -18,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   getOrganization: vi.fn(),
   getProject: vi.fn(),
   listOrganizationProjects: vi.fn(),
+  getProjectRedeployPreview: vi.fn(),
+  redeployProject: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -28,6 +32,8 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganization: mocks.getOrganization,
     getProject: mocks.getProject,
     listOrganizationProjects: mocks.listOrganizationProjects,
+    getProjectRedeployPreview: mocks.getProjectRedeployPreview,
+    redeployProject: mocks.redeployProject,
   };
 });
 
@@ -38,6 +44,17 @@ const PROJECT = aProject({
   // would land on one of those.
   mcp_server_count: 7,
 });
+
+const REDEPLOY_PREVIEW = {
+  organization_id: ORG.id,
+  project_id: PROJECT.id,
+  project_name: PROJECT.name,
+  active_deployment_id: "active-deployment",
+  openapi_assets: 2,
+  function_assets: 3,
+  packages: 4,
+  external_mcps: 5,
+};
 
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { timeZone: "UTC" });
@@ -92,9 +109,132 @@ beforeEach(() => {
   );
 });
 
+beforeEach(() => {
+  mocks.getProjectRedeployPreview.mockReset();
+  mocks.getProjectRedeployPreview.mockResolvedValue(REDEPLOY_PREVIEW);
+  mocks.redeployProject.mockReset();
+  mocks.redeployProject.mockResolvedValue({
+    project_id: PROJECT.id,
+    source_deployment_id: "active-deployment",
+    deployment_id: "new-deployment",
+  });
+});
+
 afterEach(() => {
   cleanup();
   vi.unstubAllEnvs();
+});
+
+describe("Projects redeploy", () => {
+  async function openRedeployDialog(): Promise<{
+    dialog: HTMLElement;
+    pathname: () => string;
+  }> {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/projects`,
+    });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: `Redeploy ${PROJECT.name}`,
+      }),
+    );
+    return {
+      dialog: await screen.findByRole("dialog"),
+      pathname: () => router.state.location.pathname,
+    };
+  }
+
+  it("sends back the deployment the operator reviewed and stays on the page", async () => {
+    const { dialog, pathname } = await openRedeployDialog();
+
+    expect(mocks.getProjectRedeployPreview).toHaveBeenCalledWith(
+      ORG.id,
+      PROJECT.id,
+    );
+    expect(dialog.textContent).toContain("active-deployment");
+    expect(dialog.textContent).toContain(
+      "2 OpenAPI sources are processed again",
+    );
+    expect(dialog.textContent).toContain(
+      "3 function sources redeploy their runners",
+    );
+    expect(dialog.textContent).toContain("4 packages carry over");
+    expect(dialog.textContent).toContain("5 external MCP sources are dropped");
+    expect(dialog.textContent).toContain(
+      "The customer sees this in their deployments and audit log",
+    );
+    expect(mocks.redeployProject).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Redeploy" }));
+
+    await waitFor(() => {
+      expect(mocks.redeployProject).toHaveBeenCalledWith({
+        organization_id: ORG.id,
+        project_id: PROJECT.id,
+        expected_active_deployment_id: "active-deployment",
+      });
+    });
+    expect(mocks.getProject).not.toHaveBeenCalled();
+    expect(pathname()).toBe(`/organizations/${ORG.slug}/projects`);
+  });
+
+  it("uses singular wording for a count of one", async () => {
+    mocks.getProjectRedeployPreview.mockResolvedValue({
+      ...REDEPLOY_PREVIEW,
+      openapi_assets: 1,
+      function_assets: 1,
+      packages: 1,
+      external_mcps: 1,
+    });
+
+    const { dialog } = await openRedeployDialog();
+
+    expect(dialog.textContent).toContain("1 OpenAPI source is processed again");
+    expect(dialog.textContent).toContain(
+      "1 function source redeploys its runner",
+    );
+    expect(dialog.textContent).toContain("1 package carries over");
+    expect(dialog.textContent).toContain("1 external MCP source is dropped");
+  });
+
+  it("does nothing when the operator cancels", async () => {
+    const { dialog } = await openRedeployDialog();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(mocks.redeployProject).not.toHaveBeenCalled();
+    expect(mocks.getProject).not.toHaveBeenCalled();
+  });
+
+  it("opens no dialog when the project cannot be redeployed", async () => {
+    const toastError = vi.spyOn(toast, "error");
+    mocks.getProjectRedeployPreview.mockRejectedValue(
+      new GramAdminError(
+        409,
+        { message: "project has no active deployment to redeploy" },
+        "gram admin 409 Conflict",
+      ),
+    );
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/projects`,
+    });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: `Redeploy ${PROJECT.name}`,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith(
+        "project has no active deployment to redeploy",
+      );
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mocks.redeployProject).not.toHaveBeenCalled();
+  });
 });
 
 describe("Projects", () => {
@@ -107,12 +247,13 @@ describe("Projects", () => {
 
     expect(
       screen.getAllByRole("columnheader").map((header) => header.textContent),
-    ).toEqual(["Name", "Slug", "MCP Servers", "Created"]);
+    ).toEqual(["Name", "Slug", "MCP Servers", "Created", "Actions"]);
     expect(cellsOf(rowFor(link))).toEqual([
       PROJECT.name,
       PROJECT.slug,
       String(PROJECT.mcp_server_count),
       shortDate(PROJECT.created_at),
+      "Redeploy",
     ]);
   });
 

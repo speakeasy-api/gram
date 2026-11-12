@@ -32,13 +32,22 @@ VALUES (@id, @project_id, @organization_id, @user_id::text, @external_user_id::t
         sqlc.narg(session_surface)::text, sqlc.narg(agent_id)::uuid,
         now() - @created_age::interval, now() - @updated_age::interval);
 
--- Columns a message does not set (content_raw, tool_calls, source, model) are
--- passed as NULL, which is what omitting them wrote.
+-- A session an agent credential drove: the agent is the actor and there is no
+-- user to name, as the chat completions path records it. Its owner reads it
+-- through ownership rather than chat:read.
+-- name: ActivityInsertAgentChat :exec
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, agent_id, created_at, updated_at)
+VALUES (@id, @project_id, @organization_id, NULL, NULL, @title::text,
+        sqlc.narg(session_surface)::text, @agent_id::uuid,
+        now() - @created_age::interval, now() - @updated_age::interval);
+
+-- Columns a message does not set (content_raw, tool_calls, source, model,
+-- tool_call_id) are passed as NULL, which is what omitting them wrote.
 -- name: ActivityInsertChatMessage :exec
-INSERT INTO chat_messages (id, chat_id, project_id, role, content, content_raw, tool_calls, source, model, created_at, risk_analyzed_at)
+INSERT INTO chat_messages (id, chat_id, project_id, role, content, content_raw, tool_calls, source, model, tool_call_id, created_at, risk_analyzed_at)
 VALUES (@id, @chat_id, @project_id::uuid, @role, @content,
         sqlc.narg(content_raw)::jsonb, sqlc.narg(tool_calls)::jsonb,
-        sqlc.narg(source)::text, sqlc.narg(model)::text,
+        sqlc.narg(source)::text, sqlc.narg(model)::text, sqlc.narg(tool_call_id)::text,
         now() - @age::interval, now());
 
 -- name: ActivitySetClaudeTagChatSlack :exec
@@ -138,18 +147,19 @@ VALUES
    jsonb_build_object('operation', @operation::text, 'operation_id', @operation_id::uuid),
    now() - @age::interval);
 
--- Expiry carries the version and database-time deadline.
+-- Expiry carries the version and database-time deadline. Speakeasy records it
+-- on its own, so it lands on the audit log page's System view.
 -- name: ActivityInsertKillswitchExpiredAuditLog :exec
 INSERT INTO audit_logs
   (id, organization_id, project_id, actor_id, actor_type, actor_display_name,
-   action, subject_id, subject_type, after_snapshot, metadata, created_at)
+   action, subject_id, subject_type, after_snapshot, metadata, acting_surface, created_at)
 VALUES
   (@id, @organization_id, NULL,
    'system', 'user', 'System', 'killswitch:expire',
    @subject_id,
    'killswitch_prescription', NULL,
    jsonb_build_object('version', 1, 'expired_at', now() - interval '1 day'),
-   now() - interval '23 hours');
+   'system', now() - interval '23 hours');
 
 -- name: ActivityDeleteSpendRuleEvents :exec
 DELETE FROM spend_rule_events WHERE organization_id = @organization_id;

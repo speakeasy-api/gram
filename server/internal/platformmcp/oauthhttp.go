@@ -537,7 +537,7 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 			writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeAccessDenied, "login could not be completed", oauthui.ReasonDefault)
 			return
 		}
-		login, err := s.identity.CompleteIDPLogin(r.Context(), idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
+		login, err := s.identity.CompleteIDPLogin(r.Context(), idpUser, identity.IDPLoginOptions{SkipMembershipSync: false, Attribution: nil})
 		if err != nil {
 			writeBrowserOAuthError(r.Context(), w, http.StatusInternalServerError, "server_error", "login could not be completed", oauthui.ReasonDefault)
 			return
@@ -1645,10 +1645,7 @@ func (s *OAuthHTTP) renderOAuthPage(ctx context.Context, w http.ResponseWriter, 
 }
 
 func oauthPageContentSecurityPolicy(redirectURI, scriptNonce string) string {
-	formAction := "'self'"
-	if uri, err := url.Parse(redirectURI); err == nil && (uri.Scheme == "http" || uri.Scheme == "https") && uri.Host != "" {
-		formAction += " " + uri.Scheme + "://" + uri.Host
-	}
+	formAction := consentpage.FormActionSources(redirectURI)
 	return "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; form-action " + formAction + "; frame-ancestors 'none'"
 }
 
@@ -1684,7 +1681,6 @@ func writePreAuthenticationOAuthError(w http.ResponseWriter, r *http.Request, cl
 		Setup:          false,
 		Status:         http.StatusBadRequest,
 		Reason:         oauthui.ReasonDefault,
-		Approval:       false,
 		ErrorID:        "",
 		CallbackURL:    callback,
 		Code:           oauthError.Code,
@@ -1744,7 +1740,6 @@ func writeBrowserOAuthError(ctx context.Context, w http.ResponseWriter, status i
 		Setup:          false,
 		Status:         status,
 		Reason:         reason,
-		Approval:       false,
 		ErrorID:        "",
 		Code:           code,
 		Description:    description,

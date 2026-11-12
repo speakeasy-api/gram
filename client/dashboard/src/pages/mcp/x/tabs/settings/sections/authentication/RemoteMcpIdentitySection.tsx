@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -22,11 +23,8 @@ import {
   invalidateAllServerClientAssociations,
   useServerClientAssociations,
 } from "@gram/client/react-query/serverClientAssociations.js";
+import { useDetachServerClientAssociationMutation } from "@gram/client/react-query/detachServerClientAssociation.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
-import {
-  invalidateAllGetRemoteMcpServerScopes,
-  useGetRemoteMcpServerScopes,
-} from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import type { GetServerIdentityImpactRequest } from "@gram/client/models/operations/getserveridentityimpact.js";
 import {
@@ -35,7 +33,7 @@ import {
 } from "@gram/client/react-query/remoteMcpServerHeaders.js";
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Loader2, TriangleAlert } from "lucide-react";
+import { ChevronDown, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -48,14 +46,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
+import { useSetupStep } from "./useSetupStep";
 import { HeadersSection } from "../HeadersSection";
 import { useCatalogHeaderSuggestions } from "../useCatalogHeaderSuggestions";
 import { useHeaderDrafts } from "@/lib/remote-identity";
 import { identityModeCards } from "@/lib/remote-identity";
 import { useAgentCredentialDraft } from "@/lib/remote-identity";
-import { RequestedScopesSummary } from "./RequestedScopesSummary";
-import { ResourceScopePinField } from "./ResourceScopePinField";
-import { useResourceScopePin } from "./resourceScopePin";
 import { RepointedServersNotice } from "./RepointedServersNotice";
 import type { AuthTarget } from "./authTarget";
 import {
@@ -93,6 +89,9 @@ export function RemoteMcpIdentitySectionBody({
   const queryClient = useQueryClient();
   const routes = useRoutes();
   const organization = useOrganization();
+  // A Platform MCP "Add credentials" link lands here; the secret it needs is a
+  // header, so open the list instead of leaving it behind a closed disclosure.
+  const setupStep = useSetupStep();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
   const canWrite =
     !rbacLoading && hasScope("mcp:write", target.permissionResourceId);
@@ -106,6 +105,7 @@ export function RemoteMcpIdentitySectionBody({
   const {
     items: clients,
     isLoading: clientsLoading,
+    isRefreshing: clientsRefreshing,
     isError: clientsError,
     error: clientsQueryError,
   } = useAllRemoteSessionClients(
@@ -167,16 +167,34 @@ export function RemoteMcpIdentitySectionBody({
     siblingsQuery.isError ||
     !canWrite;
   const headers = headersQuery.data?.headers ?? [];
+  // mcp:write satisfies mcp:read, but a read block applies independently.
+  const canRead =
+    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
+  const associationsQuery = useServerClientAssociations(
+    { mcpServerId: target.permissionResourceId },
+    undefined,
+    { enabled: canRead, throwOnError: false },
+  );
+  // The issuer's clients may belong to other servers sharing it. Its identity is
+  // the clients the server says its callers need, the same answer requests get,
+  // so a panel that could save stays unresolved until it knows which those are.
+  // Without write access nothing can be saved, and the disabled choices are all
+  // there is to show.
+  const ownClientIds = new Set(associationsQuery.data?.requiredClientIds);
+  const ownClients = clients.filter((linked) => ownClientIds.has(linked.id));
+  const associationsUnavailable =
+    associationsQuery.isError || (canWrite && !canRead);
   const authorizationHeader = findStaticAuthorizationHeader(headers);
   const passThroughAuthorization = findPassThroughAuthorizationHeader(headers);
-  const identityQueryError = headersQuery.isError || clientsError;
+  const identityQueryError =
+    headersQuery.isError || clientsError || associationsUnavailable;
   // A service account client (credential_owner self) is bound the same way as
   // a per-user one, but it is the Service Account choice: one credential every
   // caller shares, obtained by the client rather than pasted as a header.
-  const selfClient = clients.find(
+  const selfClient = ownClients.find(
     (linked) => linked.credentialOwner === "self",
   );
-  const subjectClients = clients.filter(
+  const subjectClients = ownClients.filter(
     (linked) => linked.credentialOwner !== "self",
   );
   const actualMode = identityQueryError
@@ -184,8 +202,13 @@ export function RemoteMcpIdentitySectionBody({
     : selfClient
       ? "agent"
       : deriveIdentityMode(subjectClients.length, headers);
+  // A refresh keeps the panel, and what was typed into it, on screen. Save waits
+  // for it instead, so nothing commits against a list being rechecked.
   const loading =
-    headersQuery.isLoading || clientsLoading || siblingsQuery.isLoading;
+    headersQuery.isLoading ||
+    (clientsLoading && !clientsRefreshing) ||
+    siblingsQuery.isLoading ||
+    associationsQuery.isLoading;
   const identityResolved = !loading && !identityQueryError;
   const [selectedMode, setSelectedMode] = useState<IdentityMode>("none");
   // Raised by Save when it would remove an existing identity, which is the
@@ -249,17 +272,6 @@ export function RemoteMcpIdentitySectionBody({
     configured: actualMode === "user",
     enabled: identityResolved && selectedMode === "user",
   });
-  // mcp:write satisfies mcp:read, but a read block applies independently.
-  const canRead =
-    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
-  const associationsQuery = useServerClientAssociations(
-    { mcpServerId: target.permissionResourceId },
-    undefined,
-    {
-      enabled: canRead && identityResolved && selectedMode === "user",
-      throwOnError: false,
-    },
-  );
   // Other servers using this server's client: rotating or replacing the
   // client changes their sign-in too.
   const connectedAssociation = associationsQuery.data?.associations.find(
@@ -296,36 +308,8 @@ export function RemoteMcpIdentitySectionBody({
     selectedMode === "agent" && isOAuthFormat(saFormat) ? saFormat : null;
   const oauthSelected = oauthFormat !== null;
 
-  // The pin belongs to the server's protected resource; the panel shows it to
-  // writers with a bound client, and scopes.canPin says if they may change it.
-  const scopePin = useResourceScopePin({
-    mcpServerId: target.permissionResourceId,
-    enabled: canWrite && identityResolved && actualMode === "user",
-  });
-  const scopePinSlot =
-    canWrite && selectedMode === "user" && userDraft.connected;
-  // Pinning is off for the org, so the picker can do nothing.
-  const scopePinUnusable = !!scopePin.data && !scopePin.data.discoveryEnabled;
-  const showScopePin = scopePinSlot && !!scopePin.data && !scopePinUnusable;
-  const scopePinDirty = showScopePin && scopePin.dirty;
-  // Writers get the same answer in the pin's status line when the pin shows.
-  const showScopesSummary =
-    canRead &&
-    (!scopePinSlot || scopePinUnusable) &&
-    identityResolved &&
-    actualMode === "user" &&
-    selectedMode === "user" &&
-    userDraft.connectedClientId !== null;
-  const scopesSummaryQuery = useGetRemoteMcpServerScopes(
-    { mcpServerId: target.permissionResourceId },
-    undefined,
-    {
-      enabled: showScopesSummary && target.permissionResourceId !== "",
-      throwOnError: false,
-    },
-  );
-
   const detachIssuer = useDetachUserSessionIssuerMutation();
+  const detachAssociation = useDetachServerClientAssociationMutation();
 
   // Picking a card only changes the draft. Nothing is written, removed or
   // confirmed until Save — the panel has one commit point and this is it.
@@ -396,13 +380,13 @@ export function RemoteMcpIdentitySectionBody({
       mcpServerId: target.mcpServerId,
       change: "replace",
       providerId: userDraft.selected.isNew ? undefined : userDraft.selected.id,
-      clientId:
-        userDraft.choice === "existing"
-          ? (userDraft.existingClientId ?? undefined)
-          : undefined,
+      replaceClient: userDraft.cleared ? true : undefined,
     };
   }
   const sharedIssuerImpact = useSharedIssuerImpact(impactRequest);
+  const replaceClientServerIds = sharedIssuerImpact.servers
+    .filter((server) => server.impact === "resignin")
+    .map((server) => server.id);
   const repointLookupPending = sharedIssuerImpact.pending;
   const needsConfirm =
     destructive || needsSharedIssuerConfirm(sharedIssuerImpact);
@@ -410,14 +394,39 @@ export function RemoteMcpIdentitySectionBody({
   const detachUserIdentity = async (): Promise<boolean> => {
     const userSessionIssuerId = target.userSessionIssuerId;
     if (!userSessionIssuerId) return false;
-    for (const linked of clients) {
+    // The preview runs the commit's decision, so this removes exactly what the
+    // confirmation described.
+    const { detachClientIds, releaseClientIds } = sharedIssuerImpact;
+    if (!detachClientIds || !releaseClientIds) {
+      throw new Error(
+        "Couldn't check which clients this server uses. Reload and try again.",
+      );
+    }
+    // This panel showed a client to remove, so finding none means it is out of
+    // date. Carrying on would report success with sign-in still required.
+    if (detachClientIds.length === 0 && releaseClientIds.length === 0) {
+      throw new Error(
+        "This server's sign-in changed since this page loaded, so nothing was removed. Reload and try again.",
+      );
+    }
+    for (const id of detachClientIds) {
       await detachIssuer.mutateAsync({
         // The generated detach request reuses the attach form's field name;
         // the endpoint it posts to is what distinguishes them.
         request: {
           attachUserSessionIssuerForm: {
-            id: linked.id,
+            id,
             userSessionIssuerId,
+          },
+        },
+      });
+    }
+    for (const remoteSessionClientId of releaseClientIds) {
+      await detachAssociation.mutateAsync({
+        request: {
+          detachServerClientAssociationRequestBody: {
+            mcpServerId: target.mcpServerId ?? target.permissionResourceId,
+            remoteSessionClientId,
           },
         },
       });
@@ -425,7 +434,6 @@ export function RemoteMcpIdentitySectionBody({
     await Promise.all([
       invalidateAllRemoteSessionClients(queryClient),
       invalidateAllServerClientAssociations(queryClient),
-      invalidateAllGetRemoteMcpServerScopes(queryClient),
       invalidateSharedIssuerImpact(queryClient),
     ]);
     return true;
@@ -536,7 +544,7 @@ export function RemoteMcpIdentitySectionBody({
         // Bind the client before dropping the credential, so a failed commit
         // never leaves the server with no identity; the client outranks the
         // header while both exist.
-        if (!(await userDraft.save())) return;
+        if (!(await userDraft.save(replaceClientServerIds))) return;
         await removeAgentCredential();
       } else {
         if (leavingAgent) await removeAgentCredential();
@@ -557,8 +565,8 @@ export function RemoteMcpIdentitySectionBody({
           selectedMode === "user" &&
           (actualMode !== "user" || userDraft.canSave)
         ) {
-          // A pin or header edit alone must not recommit the connected client.
-          await userDraft.save();
+          // A header edit alone must not recommit the connected client.
+          await userDraft.save(replaceClientServerIds);
         }
       }
       // A signing key client made for the Service Account choice and left
@@ -572,20 +580,12 @@ export function RemoteMcpIdentitySectionBody({
     }
     // Headers after identity: it may have just written or removed the
     // Authorization row, and these rows are diffed against what the server
-    // holds once that has landed. The pin is independent of both.
-    const [pinResult, headersResult] = await Promise.allSettled([
-      scopePinDirty ? scopePin.save() : Promise.resolve(false),
-      headerDrafts.save(),
-    ]);
-    if (pinResult.status === "rejected") {
-      toast.error(
-        errorMessage(pinResult.reason, "Failed to save pinned scopes"),
-      );
-    } else if (pinResult.value) {
-      toast.success("Pinned scopes updated");
-    }
-    if (headersResult.status === "rejected") {
-      toast.error(errorMessage(headersResult.reason, "Failed to save headers"));
+    // holds once that has landed.
+    let headersSaved: boolean;
+    try {
+      headersSaved = await headerDrafts.save();
+    } catch (error) {
+      toast.error(errorMessage(error, "Failed to save headers"));
       return;
     }
     // Reported only once the headers have landed: when the draft already
@@ -594,12 +594,13 @@ export function RemoteMcpIdentitySectionBody({
     if (selectedMode === "none" && destructive) {
       toast.success("Identity removed");
     }
-    if (headersResult.value) {
+    if (headersSaved) {
       toast.success("Upstream headers updated");
     }
   };
 
-  const identityError = headersQuery.error ?? clientsQueryError;
+  const identityError =
+    headersQuery.error ?? clientsQueryError ?? associationsQuery.error;
   // A server that answers with a challenge has no business on No Identity, so
   // that card says so rather than a banner underneath the choice.
   const noneWarning =
@@ -629,9 +630,6 @@ export function RemoteMcpIdentitySectionBody({
     // No Identity commits only the removal it implies.
     identityCanSave = destructive;
   }
-  // A locked identity still lets a pin-only edit through.
-  const pinOnlyChange =
-    scopePinDirty && !identityCanSave && !headerDrafts.isDirty;
   // Rows that cannot be written stop the whole commit rather than letting the
   // identity half through and dropping the rest on the floor.
   const headersBlocked =
@@ -643,10 +641,9 @@ export function RemoteMcpIdentitySectionBody({
     !userEditIncomplete &&
     !staticSwitchBlocked &&
     !oauthSwitchBlocked &&
-    (identityCanSave || headerDrafts.isDirty || scopePinDirty);
+    (identityCanSave || headerDrafts.isDirty);
   const savePending =
     detachIssuer.isPending ||
-    scopePin.saving ||
     saving ||
     headerDrafts.saving ||
     (selectedMode === "user"
@@ -833,46 +830,6 @@ export function RemoteMcpIdentitySectionBody({
                   . Changing or rotating it changes their sign-in too.
                 </Text>
               ) : null}
-              {showScopePin && scopePin.data ? (
-                // Commits with the footer's Save, like the rest of the panel.
-                <div className="mt-4 pl-[52px]">
-                  <ResourceScopePinField
-                    pin={scopePin}
-                    scopes={scopePin.data}
-                    connectedClientId={userDraft.connectedClient?.id ?? null}
-                    issuerScopes={userDraft.scopeOptions}
-                    serverName={
-                      linkedServers
-                        .find(
-                          (server) => server.id === target.permissionResourceId,
-                        )
-                        ?.name?.trim() ?? ""
-                    }
-                    // Changing it needs write access to every server sharing the resource.
-                    disabled={!canWrite || !scopePin.data.canPin || savePending}
-                  />
-                </div>
-              ) : scopePinSlot && scopePin.isError ? (
-                <Text muted small className="mt-4 block pl-[52px]">
-                  Couldn't load pinned scopes.
-                </Text>
-              ) : scopePinSlot && !scopePin.data ? (
-                <Text muted small className="mt-4 block pl-[52px]">
-                  Loading pinned scopes…
-                </Text>
-              ) : null}
-              {showScopesSummary && scopesSummaryQuery.data ? (
-                <div className="mt-4 pl-[52px] empty:hidden">
-                  <RequestedScopesSummary
-                    scopes={scopesSummaryQuery.data}
-                    connectedClientId={userDraft.connectedClientId}
-                  />
-                </div>
-              ) : showScopesSummary && scopesSummaryQuery.isError ? (
-                <Text muted small className="mt-4 block pl-[52px]">
-                  Couldn't load requested scopes.
-                </Text>
-              ) : null}
             </div>
           ) : null}
 
@@ -897,7 +854,7 @@ export function RemoteMcpIdentitySectionBody({
             </div>
           ) : null}
 
-          <Collapsible>
+          <Collapsible defaultOpen={setupStep === "credentials"}>
             <CollapsibleTrigger className="group hover:bg-muted/40 flex w-full items-center gap-3 px-6 py-4 text-left">
               <ChevronDown
                 aria-hidden="true"
@@ -985,7 +942,8 @@ export function RemoteMcpIdentitySectionBody({
                   disabled={
                     !canSave ||
                     savePending ||
-                    (identityReadOnly && !pinOnlyChange) ||
+                    clientsRefreshing ||
+                    identityReadOnly ||
                     repointLookupPending
                   }
                   onClick={() => {
@@ -1046,6 +1004,7 @@ export function RemoteMcpIdentitySectionBody({
               variant="destructive-primary"
               disabled={
                 savePending ||
+                clientsRefreshing ||
                 !canWrite ||
                 rbacLoading ||
                 repointLookupPending ||
@@ -1055,7 +1014,7 @@ export function RemoteMcpIdentitySectionBody({
             >
               {savePending ? (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               ) : null}
               <Button.Text>

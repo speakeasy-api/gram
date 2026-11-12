@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -356,6 +357,11 @@ type ChallengeManager struct {
 	// clientCredentialBuilder builds clientCredentials once the manager is
 	// constructed; nil leaves self clients unsupported.
 	clientCredentialBuilder func(*ChallengeManager) ClientCredentialSource
+
+	// features decides per organization whether a client's MCP servers are
+	// the ones it is associated with when its resource is derived; nil keeps
+	// its issuer bindings.
+	features feature.Provider
 }
 
 // RemoteGrant is a grant the remote login callback committed, keyed to the
@@ -491,6 +497,12 @@ func WithProtectedResourceProber(prober *protectedresource.Prober) ChallengeMana
 	return func(m *ChallengeManager) { m.protectedResources = prober }
 }
 
+// WithFeatureFlags evaluates the per-organization rollout flags that decide
+// which MCP servers a client is attached to when its resource is derived.
+func WithFeatureFlags(flags feature.Provider) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.features = flags }
+}
+
 func NewChallengeManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -538,6 +550,7 @@ func NewChallengeManager(
 		assertions:                  unavailableTokenEndpointAssertionSigner{},
 		clientCredentials:           unconfiguredClientCredentialSource{},
 		clientCredentialBuilder:     nil,
+		features:                    nil,
 	}
 	for _, option := range options {
 		option(manager)
@@ -547,7 +560,7 @@ func NewChallengeManager(
 		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, manager.issuerMetadata)
 	}
 	// The manager's own refreshes restate identity with the same verifier.
-	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions), WithRefreshConnectionRecorder(manager.connections))
+	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions), WithRefreshConnectionRecorder(manager.connections), WithRefreshFeatureFlags(manager.features))
 	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
 	manager.rotator.origins = manager.origins
 	if manager.clientCredentialBuilder != nil {
@@ -933,10 +946,19 @@ func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent Paren
 		skipped.Outcome = protectedresource.ProbeOutcomeDBError
 		return none, skipped, ""
 	}
+	// The consent handler validated the exact typed offer before building
+	// this login. Its selected server may offer multiple alternative
+	// registrations, so legacy sibling ownership must not discard its scopes.
+	typedTarget := parent.TypedAuthorization != nil &&
+		parent.TypedAuthorization.ServerID == serverID.UUID &&
+		parent.TypedAuthorization.RemoteSessionClientID == client.ID &&
+		parent.TypedAuthorization.ProjectID == parent.ProjectID &&
+		parent.TypedAuthorization.OrganizationID == parent.OrganizationID &&
+		sameUpstream(resourceURL, parent.Resource)
 	// The gateway qualified the client to its member before the login, so
 	// only the member's URL must still be the resource the grant names.
-	applies := viaMember && sameUpstream(resourceURL, parent.Resource)
-	if !viaMember {
+	applies := typedTarget || (viaMember && sameUpstream(resourceURL, parent.Resource))
+	if !viaMember && !typedTarget {
 		siblingIDs, err := q.ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
 			UserSessionIssuerID: parent.UserSessionIssuerID,
 			ProjectID:           parent.ProjectID,
@@ -1083,8 +1105,9 @@ const (
 	// RemoteSessionActive: the access token is unexpired, or a refresh token
 	// exists to renew it — the runtime gate will accept it.
 	RemoteSessionActive RemoteSessionStatus = "active"
-	// RemoteSessionExpired: the row exists but the access token has expired
-	// with no refresh token, so the runtime gate rejects it
+	// RemoteSessionExpired: the row exists but nothing stored can serve or
+	// renew it (an expired or missing access token with no usable refresh
+	// token, or tokens that can't be decrypted), so the runtime gate rejects it
 	// (ErrNoValidToken). The user must re-link to recover.
 	RemoteSessionExpired RemoteSessionStatus = "expired"
 )
@@ -1140,6 +1163,9 @@ type RemoteSessionState struct {
 	ValidationStatus ValidationOutcome
 	// ValidationReason is the Speakeasy-authored explanation of a non-valid verdict.
 	ValidationReason string
+
+	// SignInUnreadable marks a stored sign-in no token of which can be read; only a new sign-in replaces it.
+	SignInUnreadable bool
 }
 
 // ConnectionOutage reads the outage on record for subject's grant on clientID, and
@@ -1209,13 +1235,29 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
-	return remoteSessionStates(rows), nil
+	return m.remoteSessionStates(rows), nil
 }
 
-// remoteSessionStates keys each status row by its client.
-func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
+// remoteSessionStates keys each status row by its client. A row with nothing
+// resolution can use reports expired, so connecting again rewrites it.
+func (m *ChallengeManager) remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
 	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
+	now := time.Now()
 	for _, row := range rows {
+		status, canRefresh := RemoteSessionStatus(row.Status), row.CanRefresh
+		stored := storedTokenRow(row)
+		read := readStoredTokens(m.enc, stored, now)
+		if status == RemoteSessionActive && !read.usable {
+			status, canRefresh = RemoteSessionExpired, false
+		}
+		// A refresh token this key can't read can't be sent, so Refresh is not offered.
+		if canRefresh {
+			refreshErr := read.refreshErr
+			if !read.refreshRead {
+				_, refreshErr = m.enc.Decrypt(stored.RefreshTokenEncrypted.String)
+			}
+			canRefresh = refreshErr == nil
+		}
 		var accessExpiresAt *time.Time
 		if row.AccessExpiresAt.Valid {
 			expires := row.AccessExpiresAt.Time
@@ -1242,12 +1284,12 @@ func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesFor
 		}
 		label := RemoteSessionAccountLabel(row.UpstreamEmail.String, row.UpstreamDisplayName.String, row.UpstreamSubject.String, row.IdentitySource.String, row.Enrichment)
 		statuses[row.RemoteSessionClientID] = RemoteSessionState{
-			Status:                 RemoteSessionStatus(row.Status),
+			Status:                 status,
 			AutoRefresh:            row.AutoRefresh,
 			AccessExpiresAt:        accessExpiresAt,
 			RefreshExpiresAt:       refreshExpiresAt,
 			AuthorizationExpiresAt: authorizationExpiresAt,
-			CanRefresh:             row.CanRefresh,
+			CanRefresh:             canRefresh,
 			Resource:               row.Resource.String,
 			Scopes:                 row.Scopes,
 			ConnectedAs:            label.Identity(),
@@ -1260,6 +1302,7 @@ func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesFor
 			LastValidatedAt:        lastValidatedAt,
 			ValidationStatus:       ValidationOutcome(row.ValidationStatus.String),
 			ValidationReason:       row.ValidationReason.String,
+			SignInUnreadable:       read.unreadable,
 		}
 	}
 	return statuses
@@ -1323,8 +1366,8 @@ func (m *ChallengeManager) DrainRefreshes(ctx context.Context) error {
 
 // FallbackResourceForClient derives one client's RFC 8707 resource from its
 // attached MCP servers; ambiguous or absent upstreams derive "".
-func (m *ChallengeManager) FallbackResourceForClient(ctx context.Context, clientID uuid.UUID) (string, error) {
-	return m.refresher.FallbackResourceForClient(ctx, clientID)
+func (m *ChallengeManager) FallbackResourceForClient(ctx context.Context, organizationID string, clientID uuid.UUID) (string, error) {
+	return m.refresher.FallbackResourceForClient(ctx, organizationID, clientID)
 }
 
 // ResourceForClientAtUpstream derives one client's RFC 8707 resource for a
@@ -2735,3 +2778,14 @@ type tokenExchangeUnavailableError struct{ err error }
 
 func (e *tokenExchangeUnavailableError) Error() string { return e.err.Error() }
 func (e *tokenExchangeUnavailableError) Unwrap() error { return e.err }
+
+// storedTokenRow is the part of a status row readStoredTokens judges.
+func storedTokenRow(row remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) remotesessions_repo.RemoteSession {
+	var sess remotesessions_repo.RemoteSession
+	sess.AccessTokenEncrypted = row.AccessTokenEncrypted
+	sess.RefreshTokenEncrypted = row.RefreshTokenEncrypted
+	sess.AccessExpiresAt = row.AccessExpiresAt
+	sess.RefreshExpiresAt = row.RefreshExpiresAt
+	sess.AuthorizationExpiresAt = row.AuthorizationExpiresAt
+	return sess
+}

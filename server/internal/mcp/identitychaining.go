@@ -96,6 +96,7 @@ func (s *Service) identityChainingRequestForKind(ctx context.Context, kind mcpid
 func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) (remotesessions.UpstreamToken, error) {
 	var none remotesessions.UpstreamToken
 	endpoint := authentication.endpoint
+	authentication.ownClientsOnly = true
 	// A credential's own choice for the server replaces the issuer derived
 	// for it: the chosen client's issuer is the one it routes and chains by.
 	choice, selected, err := s.directUpstreamChoice(ctx, w, authentication)
@@ -114,7 +115,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		if selected && choice.noAuth() {
 			return none, nil
 		}
-		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
+		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID, selected && !choice.noAuth())
 	}
 	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, backendIssuerID, authentication.chosenClient)
 	switch {
@@ -123,7 +124,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		// chaining binding serves it, and it calls anonymously.
 		return none, nil
 	case !chainable:
-		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
+		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID, selected && !choice.noAuth())
 	}
 
 	tokens, strictErr := s.resolveAccessTokens(ctx, authentication, false)
@@ -143,15 +144,15 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 			return none, s.rejectRemoteSession(ctx, w, authentication, err)
 		}
 		if err != nil {
-			return none, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
+			return none, s.remoteSessionResolveFailed(ctx, logger, authentication, err)
 		}
 		if upstreamTokenPresent(tokens, upstreamResource, tunneled, backendIssuerID) {
-			return routeDirectUpstreamToken(ctx, w, logger, tokens, upstreamResource, tunneled, backendIssuerID)
+			return s.routeDirectUpstreamToken(ctx, w, logger, authentication, tokens, upstreamResource, tunneled, backendIssuerID)
 		}
 	case strictErr != nil:
-		return none, oops.E(oops.CodeUnexpected, strictErr, "resolve remote session").LogError(ctx, logger)
+		return none, s.remoteSessionResolveFailed(ctx, logger, authentication, strictErr)
 	case upstreamTokenPresent(tokens, upstreamResource, tunneled, backendIssuerID):
-		return routeDirectUpstreamToken(ctx, w, logger, tokens, upstreamResource, tunneled, backendIssuerID)
+		return s.routeDirectUpstreamToken(ctx, w, logger, authentication, tokens, upstreamResource, tunneled, backendIssuerID)
 	}
 
 	chained, outcome := s.identityChainer.Acquire(ctx, req)
@@ -161,7 +162,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 	case !outcome.Applicable() && unusable:
 		return none, s.rejectRemoteSession(ctx, w, authentication, strictErr)
 	case !outcome.Applicable():
-		return routeDirectUpstreamToken(ctx, w, logger, tokens, upstreamResource, tunneled, backendIssuerID)
+		return s.routeDirectUpstreamToken(ctx, w, logger, authentication, tokens, upstreamResource, tunneled, backendIssuerID)
 	case outcome.Reason == identitychaining.ReasonReauthenticationRequired:
 		endpoint.LogWith(logger).WarnContext(ctx, "mcp issuer gate rejected: identity chaining requires reauthentication",
 			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
@@ -189,21 +190,39 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 
 // resolveStrictUpstreamToken is the issuer gate's all-or-nothing resolution
 // followed by routing, the behavior without identity chaining.
-func (s *Service) resolveStrictUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) (remotesessions.UpstreamToken, error) {
+//
+// backendIssuerID is the server's column value, or the issuer of the
+// credential's own choice when choiceGoverns. The organization's upstream
+// issuer flag decides whether the column or the server's associations route.
+func (s *Service) resolveStrictUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID, choiceGoverns bool) (remotesessions.UpstreamToken, error) {
 	var none remotesessions.UpstreamToken
 	tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
 	if err != nil {
 		return none, fmt.Errorf("resolve issuer-gated upstream tokens: %w", err)
 	}
-	return routeDirectUpstreamToken(ctx, w, logger, tokens, upstreamResource, tunneled, backendIssuerID)
+	backendIssuerID = s.directUpstreamIssuer(ctx, logger, directUpstreamIssuerInput{
+		organizationID:   authentication.endpoint.OrganizationID,
+		serverID:         authentication.endpoint.proxiedServerID().UUID,
+		site:             upstreamIssuerSiteRoute,
+		tokens:           tokens,
+		upstreamResource: upstreamResource,
+		tunneled:         tunneled,
+		backendIssuerID:  backendIssuerID,
+		choiceGoverns:    choiceGoverns,
+		association:      authentication.serverAssociation,
+	})
+	return s.routeDirectUpstreamToken(ctx, w, logger, authentication, tokens, upstreamResource, tunneled, backendIssuerID)
 }
 
 // routeDirectUpstreamToken routes tokens to the backend, mapping a fail-closed
-// routing outcome to a precondition failure and a self client whose
-// credential could not be obtained to its remedy.
-func routeDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) (remotesessions.UpstreamToken, error) {
+// routing outcome to a precondition failure, a stored sign-in that can't be
+// read to the reconnect challenge, and a self client whose credential could
+// not be obtained to its remedy.
+func (s *Service) routeDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) (remotesessions.UpstreamToken, error) {
 	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, upstreamResource, tunneled, backendIssuerID)
 	switch {
+	case errors.Is(err, remotesessions.ErrStoredSignInUnreadable):
+		return upstreamToken, s.rejectRemoteSession(ctx, w, authentication, err)
 	case errors.As(err, new(*upstreamRoutingError)):
 		// routeUpstreamToken already logged the structured detail.
 		return upstreamToken, oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
@@ -220,7 +239,9 @@ func routeDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger
 // resolved token claims the backend's upstream. Duplicates and self clients
 // whose credential could not be obtained count as present, so routing still
 // fails closed on them rather than chaining around them. A subject's connection
-// in an outage doesn't count: chaining may serve it.
+// held without a token (an outage, an unreadable sign-in, a refused renewal)
+// doesn't count: chaining may serve the same person's verified identity, and
+// the held failure answers when it can't.
 func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) bool {
 	want := strings.TrimRight(upstreamResource, "/")
 	if tunneled {
@@ -228,10 +249,10 @@ func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, ups
 			return false
 		}
 		entry, ok := tokens[backendIssuerID.UUID]
-		return ok && !entry.SessionUnavailable() && grantRoutesToUpstream(entry.Resource, want, true)
+		return ok && !entry.HeldWithoutToken() && grantRoutesToUpstream(entry.Resource, want, true)
 	}
 	for issuerID, entry := range tokens {
-		if !entry.SessionUnavailable() && upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
+		if !entry.HeldWithoutToken() && upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
 			return true
 		}
 	}

@@ -126,6 +126,11 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 			platformTools,
+			// No shutdown drain: the direct path answers dashboard and
+			// playground callers rather than MCP clients, so its calls run
+			// until the server's shutdown deadline instead of being answered
+			// with an MCP server_shutdown error.
+			nil,
 		),
 		scanEvaluator:     scanEvaluator,
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
@@ -395,10 +400,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	if toolset != nil {
 		scanToolsetID = toolset.ID
 	}
-	scanToolName := descriptor.Name
-	if plan.Kind == gateway.ToolKindExternalMCP {
-		scanToolName = descriptor.URN.Name
-	}
 	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:         mcpriskscan.SurfaceInstances,
 		Method:          mcpriskscan.MethodToolsCall,
@@ -407,7 +408,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		ServerID:        "",
 		MetaServerID:    "",
 		ToolsetID:       scanToolsetID,
-		ToolName:        scanToolName,
+		ToolName:        descriptor.Name,
 		ResourceURI:     "",
 		PromptName:      "",
 		ChatID:          chatID,
@@ -420,17 +421,17 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	err = s.toolProxy.Do(ctx, interceptor, bytes.NewReader(requestBodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
-		OAuthToken: "", // Instances do not support OAuth tokens for external MCP
 		GramEmail:  "",
 		GramChatID: "",
 		// Direct invocation — there is no MCP client on the other end.
-		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		Credentials: nil,
 	}, plan, attrRecorder)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}
 	if plan.Kind != gateway.ToolKindPrompt {
-		responsePayload := instanceResponsePayload(plan.Kind, interceptor.headers.Get("content-type"), interceptor.buffer.Bytes())
+		responsePayload := instanceResponsePayload(interceptor.headers.Get("content-type"), interceptor.buffer.Bytes())
 		decision = s.scanEvaluator.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
 		if decision.Denied() {
 			interceptor.buffer.Reset()
@@ -461,8 +462,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
-	// External MCP tools forward the upstream result, whose isError is the verdict.
-	resultIsError := plan.Kind == gateway.ToolKindExternalMCP && dialect.MCPResultIsError(interceptor.buffer.Bytes())
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	var functionCPU *float64
@@ -524,7 +523,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 		attrRecorder[attr.EventSourceKey] = string(tm.EventSourceToolCall)
 		attrRecorder.RecordStatusCode(interceptor.statusCode)
-		attrRecorder[attr.OutcomeKey] = dialect.ToolCallOutcome(interceptor.statusCode, resultIsError)
+		attrRecorder[attr.OutcomeKey] = dialect.ToolCallOutcome(interceptor.statusCode, false)
 		attrRecorder.RecordRequestBody(requestNumBytes)
 		attrRecorder.RecordResponseBody(outputNumBytes)
 		attrRecorder.RecordTraceContext(ctx)
@@ -563,16 +562,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	return nil
 }
 
-func instanceResponsePayload(kind gateway.ToolKind, contentType string, body []byte) mcpriskscan.Payload {
+func instanceResponsePayload(contentType string, body []byte) mcpriskscan.Payload {
 	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil && mediaType == "text/event-stream" {
 		return mcpriskscan.Payload{}
-	}
-	if kind == gateway.ToolKindExternalMCP {
-		payload, err := mcpriskscan.ParseToolResultPayload(body)
-		if err != nil {
-			return mcpriskscan.Payload{}
-		}
-		return payload
 	}
 	// Invalid bytes are replaced, not dropped, so one stray byte cannot hide the text around it.
 	return mcpriskscan.TextResponsePayload([]byte(strings.ToValidUTF8(string(body), "\uFFFD")))

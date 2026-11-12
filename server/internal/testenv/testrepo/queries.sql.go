@@ -721,6 +721,21 @@ func (q *Queries) CountPublishOutboxRowsByTopic(ctx context.Context, arg CountPu
 	return count, err
 }
 
+const countRemoteSessionClientBindingsFixture = `-- name: CountRemoteSessionClientBindingsFixture :one
+SELECT count(*)
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1
+`
+
+// Counts a client's user session issuer bindings, whether or not the client is
+// deleted.
+func (q *Queries) CountRemoteSessionClientBindingsFixture(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countRemoteSessionClientBindingsFixture, remoteSessionClientID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSkillScanRecords = `-- name: CountSkillScanRecords :one
 SELECT count(*)
 FROM risk_results rr
@@ -897,6 +912,28 @@ func (q *Queries) CreateAuthClientHeaderFixture(ctx context.Context, arg CreateA
 		arg.Name,
 		arg.IsSecret,
 		arg.Value,
+	)
+	return err
+}
+
+const createExternalMCPAttachmentFixture = `-- name: CreateExternalMCPAttachmentFixture :exec
+INSERT INTO external_mcp_attachments (deployment_id, name, slug, registry_server_specifier)
+VALUES ($1, $2, $3, $4)
+`
+
+type CreateExternalMCPAttachmentFixtureParams struct {
+	DeploymentID            uuid.UUID
+	Name                    string
+	Slug                    string
+	RegistryServerSpecifier string
+}
+
+func (q *Queries) CreateExternalMCPAttachmentFixture(ctx context.Context, arg CreateExternalMCPAttachmentFixtureParams) error {
+	_, err := q.db.Exec(ctx, createExternalMCPAttachmentFixture,
+		arg.DeploymentID,
+		arg.Name,
+		arg.Slug,
+		arg.RegistryServerSpecifier,
 	)
 	return err
 }
@@ -2495,6 +2532,35 @@ func (q *Queries) GetMCPServerRequiresUpstreamAuthFixture(ctx context.Context, i
 	return requires_upstream_auth, err
 }
 
+const getMCPServerSoleUpstreamIssuerFixture = `-- name: GetMCPServerSoleUpstreamIssuerFixture :one
+SELECT sole.id AS remote_session_issuer_id
+FROM mcp_servers AS s
+LEFT JOIN remote_session_issuers AS sole
+  ON sole.id = (
+    SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
+    FROM mcp_server_remote_session_clients AS a
+    JOIN remote_session_clients AS c
+      ON c.id = a.remote_session_client_id
+     AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS i
+      ON i.id = c.remote_session_issuer_id
+     AND i.deleted IS FALSE
+    WHERE a.mcp_server_id = s.id
+      AND a.deleted IS FALSE
+  )
+WHERE s.id = $1
+`
+
+// Test-only fixture: the one-provider subquery that reader queries copy, kept
+// here so the parity test pins it against upstreamclients.ServerUpstreamIssuers.
+func (q *Queries) GetMCPServerSoleUpstreamIssuerFixture(ctx context.Context, id uuid.UUID) (uuid.NullUUID, error) {
+	row := q.db.QueryRow(ctx, getMCPServerSoleUpstreamIssuerFixture, id)
+	var remote_session_issuer_id uuid.NullUUID
+	err := row.Scan(&remote_session_issuer_id)
+	return remote_session_issuer_id, err
+}
+
 const getOpenRouterAPIKeyStateFixture = `-- name: GetOpenRouterAPIKeyStateFixture :one
 SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
 FROM openrouter_api_keys
@@ -3665,6 +3731,25 @@ INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certifi
 
 func (q *Queries) InsertRetainedLegacyCatalogSourceFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, insertRetainedLegacyCatalogSourceFixture, id)
+	return err
+}
+
+const insertRetiredApprovalsServerFixture = `-- name: InsertRetiredApprovalsServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
+VALUES ($1, $2, 'Speakeasy Approvals', $3, 'approvals', 'private')
+`
+
+type InsertRetiredApprovalsServerFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Slug      pgtype.Text
+}
+
+// A project's approvals server as Speakeasy created it before the server was
+// retired. Such rows stay until a cleanup migration deletes them, and every
+// read path must treat them as gone.
+func (q *Queries) InsertRetiredApprovalsServerFixture(ctx context.Context, arg InsertRetiredApprovalsServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertRetiredApprovalsServerFixture, arg.ID, arg.ProjectID, arg.Slug)
 	return err
 }
 
@@ -6588,6 +6673,86 @@ func (q *Queries) SetCapturedAgentChatSummaryFixture(ctx context.Context, arg Se
 	return err
 }
 
+const setChatAgentFixture = `-- name: SetChatAgentFixture :exec
+UPDATE chats
+SET agent_id = $1
+WHERE id = $2
+`
+
+type SetChatAgentFixtureParams struct {
+	AgentID uuid.NullUUID
+	ID      uuid.UUID
+}
+
+// Test-only fixture: attributes a chat to an agent principal, as capture under
+// an agent credential does, so owner-visibility tests can seed agent sessions.
+func (q *Queries) SetChatAgentFixture(ctx context.Context, arg SetChatAgentFixtureParams) error {
+	_, err := q.db.Exec(ctx, setChatAgentFixture, arg.AgentID, arg.ID)
+	return err
+}
+
+const setChatMemorySweepFixture = `-- name: SetChatMemorySweepFixture :exec
+UPDATE chats
+SET updated_at = $1,
+    summary_generated_at = COALESCE($2, summary_generated_at),
+    memory_excluded_at = COALESCE($3, memory_excluded_at)
+WHERE id = $4
+`
+
+type SetChatMemorySweepFixtureParams struct {
+	UpdatedAt          pgtype.Timestamptz
+	SummaryGeneratedAt pgtype.Timestamptz
+	MemoryExcludedAt   pgtype.Timestamptz
+	ID                 uuid.UUID
+}
+
+// Test-only fixture: backdates a chat and, when given, its summary and
+// memory-exclusion timestamps so the team memory sweep sees it as idle,
+// excluded or stale.
+func (q *Queries) SetChatMemorySweepFixture(ctx context.Context, arg SetChatMemorySweepFixtureParams) error {
+	_, err := q.db.Exec(ctx, setChatMemorySweepFixture,
+		arg.UpdatedAt,
+		arg.SummaryGeneratedAt,
+		arg.MemoryExcludedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const setChatMessagesCreatedAtFixture = `-- name: SetChatMessagesCreatedAtFixture :exec
+UPDATE chat_messages SET created_at = $1 WHERE chat_id = $2
+`
+
+type SetChatMessagesCreatedAtFixtureParams struct {
+	CreatedAt pgtype.Timestamptz
+	ChatID    uuid.UUID
+}
+
+// Test-only fixture: backdates every message in a chat so the team memory
+// sweep reads the chat's last activity as created_at.
+func (q *Queries) SetChatMessagesCreatedAtFixture(ctx context.Context, arg SetChatMessagesCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setChatMessagesCreatedAtFixture, arg.CreatedAt, arg.ChatID)
+	return err
+}
+
+const setCustomDomainHealthWithoutDNSObservation = `-- name: SetCustomDomainHealthWithoutDNSObservation :exec
+UPDATE custom_domains
+SET health_status = 'unhealthy', health_issue = 'check_failed', health_checked_at = $1
+WHERE id = $2 AND organization_id = $3 AND deleted IS FALSE
+`
+
+type SetCustomDomainHealthWithoutDNSObservationParams struct {
+	CheckedAt      pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Models a worker that does not write the independent DNS observation columns.
+func (q *Queries) SetCustomDomainHealthWithoutDNSObservation(ctx context.Context, arg SetCustomDomainHealthWithoutDNSObservationParams) error {
+	_, err := q.db.Exec(ctx, setCustomDomainHealthWithoutDNSObservation, arg.CheckedAt, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const setDelegationProjectFixture = `-- name: SetDelegationProjectFixture :exec
 UPDATE trusted_issuer_sessions SET project_id = $1 WHERE id = $2
 `
@@ -8260,6 +8425,48 @@ type SoftDeleteWorkloadIssuerFixtureParams struct {
 
 func (q *Queries) SoftDeleteWorkloadIssuerFixture(ctx context.Context, arg SoftDeleteWorkloadIssuerFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, softDeleteWorkloadIssuerFixture, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const stampMCPServerUpstreamClientFixture = `-- name: StampMCPServerUpstreamClientFixture :execrows
+WITH client AS (
+    SELECT c.id, c.attachment_scope, c.remote_session_issuer_id
+    FROM remote_session_clients AS c
+    WHERE c.id = $3
+), association AS (
+    INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+    SELECT $2, $4, $1, client.id, client.attachment_scope
+    FROM client
+)
+UPDATE mcp_servers
+SET remote_session_issuer_id = client.remote_session_issuer_id
+FROM client
+WHERE mcp_servers.id = $1
+  AND mcp_servers.project_id = $2
+`
+
+type StampMCPServerUpstreamClientFixtureParams struct {
+	McpServerID           uuid.UUID
+	ProjectID             uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+}
+
+// Test-only fixture: gives an MCP server an upstream client both ways, setting
+// mcp_servers.remote_session_issuer_id to the client's provider and adding the
+// association, so a test survives readers moving from one to the other.
+//
+// Returns the row count so the caller can insist the stamp landed.
+func (q *Queries) StampMCPServerUpstreamClientFixture(ctx context.Context, arg StampMCPServerUpstreamClientFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, stampMCPServerUpstreamClientFixture,
+		arg.McpServerID,
+		arg.ProjectID,
+		arg.RemoteSessionClientID,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return 0, err
 	}

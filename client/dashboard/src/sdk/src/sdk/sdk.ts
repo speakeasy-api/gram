@@ -45,7 +45,6 @@ import { InternalSessionIssuers } from "./internalsessionissuers.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
 import { Killswitches } from "./killswitches.js";
-import { Launcher } from "./launcher.js";
 import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
@@ -63,6 +62,7 @@ import { OrganizationRemoteSessionIssuers } from "./organizationremotesessioniss
 import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
 import { OrganizationUserSessionIssuers } from "./organizationusersessionissuers.js";
+import { OrgEncryption } from "./orgencryption.js";
 import { Otel } from "./otel.js";
 import { Packages } from "./packages.js";
 import { PlatformKillswitches } from "./platformkillswitches.js";
@@ -321,11 +321,6 @@ export class Gram extends ClientSDK {
     return (this._killswitches ??= new Killswitches(this._options));
   }
 
-  private _launcher?: Launcher;
-  get launcher(): Launcher {
-    return (this._launcher ??= new Launcher(this._options));
-  }
-
   private _litellm?: Litellm;
   get litellm(): Litellm {
     return (this._litellm ??= new Litellm(this._options));
@@ -383,6 +378,11 @@ export class Gram extends ClientSDK {
     return (this._oktaServerSuggestions ??= new OktaServerSuggestions(
       this._options,
     ));
+  }
+
+  private _orgEncryption?: OrgEncryption;
+  get orgEncryption(): OrgEncryption {
+    return (this._orgEncryption ??= new OrgEncryption(this._options));
   }
 
   private _organizationAssets?: OrganizationAssets;

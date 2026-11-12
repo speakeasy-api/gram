@@ -4,10 +4,12 @@
 
 import { adminAssignOrganizationOnboardingPlaybook } from "../funcs/adminAssignOrganizationOnboardingPlaybook.js";
 import { adminBackfillMcpAuthGrants } from "../funcs/adminBackfillMcpAuthGrants.js";
+import { adminBackfillMcpConnectGrants } from "../funcs/adminBackfillMcpConnectGrants.js";
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
 import { adminCloneOnboardingPlaybook } from "../funcs/adminCloneOnboardingPlaybook.js";
+import { adminCreateGcpIamPlatformCredential } from "../funcs/adminCreateGcpIamPlatformCredential.js";
 import { adminCreateGlobalIssuer } from "../funcs/adminCreateGlobalIssuer.js";
 import { adminCreateOnboardingPlaybook } from "../funcs/adminCreateOnboardingPlaybook.js";
 import { adminCreateOnboardingUseCase } from "../funcs/adminCreateOnboardingUseCase.js";
@@ -15,6 +17,7 @@ import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
 import { adminCreateRegistryEntry } from "../funcs/adminCreateRegistryEntry.js";
 import { adminCreateSignupOffer } from "../funcs/adminCreateSignupOffer.js";
 import { adminCurateRegistryPromotionCandidate } from "../funcs/adminCurateRegistryPromotionCandidate.js";
+import { adminDeleteGcpIamPlatformCredential } from "../funcs/adminDeleteGcpIamPlatformCredential.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
 import { adminDeleteOnboardingPlaybook } from "../funcs/adminDeleteOnboardingPlaybook.js";
 import { adminDeleteOnboardingUseCase } from "../funcs/adminDeleteOnboardingUseCase.js";
@@ -25,6 +28,7 @@ import { adminEnableOrganization } from "../funcs/adminEnableOrganization.js";
 import { adminEnableUpstreamAuthEnforcement } from "../funcs/adminEnableUpstreamAuthEnforcement.js";
 import { adminExtendTrial } from "../funcs/adminExtendTrial.js";
 import { adminFetchGlobalIssuerMetadata } from "../funcs/adminFetchGlobalIssuerMetadata.js";
+import { adminGetGcpIamPlatformCredential } from "../funcs/adminGetGcpIamPlatformCredential.js";
 import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
@@ -37,11 +41,13 @@ import { adminGetOnboardingStackOptions } from "../funcs/adminGetOnboardingStack
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
+import { adminGetOrganizationHookFleet } from "../funcs/adminGetOrganizationHookFleet.js";
 import { adminGetOrganizationOnboardingPlaybook } from "../funcs/adminGetOrganizationOnboardingPlaybook.js";
 import { adminGetOrganizationOnboardingStack } from "../funcs/adminGetOrganizationOnboardingStack.js";
 import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js";
 import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { adminGetProject } from "../funcs/adminGetProject.js";
+import { adminGetProjectRedeployPreview } from "../funcs/adminGetProjectRedeployPreview.js";
 import { adminGetRegistryEntry } from "../funcs/adminGetRegistryEntry.js";
 import { adminGetRegistryOktaCandidates } from "../funcs/adminGetRegistryOktaCandidates.js";
 import { adminGetRegistryPromotionCandidate } from "../funcs/adminGetRegistryPromotionCandidate.js";
@@ -53,8 +59,8 @@ import { adminGetStripeSubscriptionCandidate } from "../funcs/adminGetStripeSubs
 import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminGetUpstreamOAuthMigrationStatus } from "../funcs/adminGetUpstreamOAuthMigrationStatus.js";
+import { adminListCustomDomains } from "../funcs/adminListCustomDomains.js";
 import { adminListCustomerUsage } from "../funcs/adminListCustomerUsage.js";
-import { adminListExternalMcpMigrationCandidates } from "../funcs/adminListExternalMcpMigrationCandidates.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
 import { adminListOnboardingPlaybooks } from "../funcs/adminListOnboardingPlaybooks.js";
@@ -64,6 +70,8 @@ import { adminListOrganizationActivity } from "../funcs/adminListOrganizationAct
 import { adminListOrganizationMembers } from "../funcs/adminListOrganizationMembers.js";
 import { adminListOrganizationProjects } from "../funcs/adminListOrganizationProjects.js";
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
+import { adminListPlatformExternalCredentials } from "../funcs/adminListPlatformExternalCredentials.js";
+import { adminListPlatformMcpFeedback } from "../funcs/adminListPlatformMcpFeedback.js";
 import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
 import { adminListRegistryOktaUnmapped } from "../funcs/adminListRegistryOktaUnmapped.js";
@@ -74,11 +82,10 @@ import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.
 import { adminListUsers } from "../funcs/adminListUsers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
-import { adminMigrateExternalMcpServers } from "../funcs/adminMigrateExternalMcpServers.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
-import { adminPreviewExternalMcpMigration } from "../funcs/adminPreviewExternalMcpMigration.js";
 import { adminPromoteRegistryCandidate } from "../funcs/adminPromoteRegistryCandidate.js";
 import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
+import { adminRedeployProject } from "../funcs/adminRedeployProject.js";
 import { adminRefreshGlobalIssuerMetadata } from "../funcs/adminRefreshGlobalIssuerMetadata.js";
 import { adminRepairInferenceKey } from "../funcs/adminRepairInferenceKey.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
@@ -88,6 +95,7 @@ import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetAdoptionDashboardUrl } from "../funcs/adminSetAdoptionDashboardUrl.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
+import { adminSetMcpServerScopePin } from "../funcs/adminSetMcpServerScopePin.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
 import { adminSetOrganizationOnboardingStack } from "../funcs/adminSetOrganizationOnboardingStack.js";
@@ -97,6 +105,7 @@ import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminSetStripeSubscription } from "../funcs/adminSetStripeSubscription.js";
 import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
+import { adminUpdateGcpIamPlatformCredential } from "../funcs/adminUpdateGcpIamPlatformCredential.js";
 import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
 import { adminUpdateOnboardingPlaybook } from "../funcs/adminUpdateOnboardingPlaybook.js";
 import { adminUpdateOnboardingUseCase } from "../funcs/adminUpdateOnboardingUseCase.js";
@@ -104,25 +113,28 @@ import { adminUpdateOrganization } from "../funcs/adminUpdateOrganization.js";
 import { adminUpdateSignupOffer } from "../funcs/adminUpdateSignupOffer.js";
 import { adminUpdateSupportMatrix } from "../funcs/adminUpdateSupportMatrix.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
+import { adminVerifyGcpIamPlatformCredential } from "../funcs/adminVerifyGcpIamPlatformCredential.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AdminBackfillMCPAuthGrantsResult } from "../models/components/adminbackfillmcpauthgrantsresult.js";
+import { AdminBackfillMCPConnectGrantsResult } from "../models/components/adminbackfillmcpconnectgrantsresult.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
 import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
-import { AdminExternalMcpMigrationResult } from "../models/components/adminexternalmcpmigrationresult.js";
 import { AdminHookClientsResult } from "../models/components/adminhookclientsresult.js";
+import { AdminHookFleetResult } from "../models/components/adminhookfleetresult.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
 import { AdminInferenceKeyRepairResult } from "../models/components/admininferencekeyrepairresult.js";
 import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
-import { AdminListExternalMcpMigrationCandidatesResult } from "../models/components/adminlistexternalmcpmigrationcandidatesresult.js";
+import { AdminListCustomDomainsResult } from "../models/components/adminlistcustomdomainsresult.js";
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
 import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
 import { AdminListUserOrganizationsResult } from "../models/components/adminlistuserorganizationsresult.js";
 import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
 import { AdminMcpServerHealth } from "../models/components/adminmcpserverhealth.js";
+import { AdminMcpServerResourceScopes } from "../models/components/adminmcpserverresourcescopes.js";
 import { AdminMcpServerToolCalls } from "../models/components/adminmcpservertoolcalls.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingPlaybook } from "../models/components/adminonboardingplaybook.js";
@@ -137,6 +149,8 @@ import { AdminOrganizationOnboardingPlaybook } from "../models/components/admino
 import { AdminOrganizationStats } from "../models/components/adminorganizationstats.js";
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
 import { AdminProjectDetail } from "../models/components/adminprojectdetail.js";
+import { AdminProjectRedeployPreview } from "../models/components/adminprojectredeploypreview.js";
+import { AdminProjectRedeployResult } from "../models/components/adminprojectredeployresult.js";
 import { AdminRegistryEntry } from "../models/components/adminregistryentry.js";
 import { AdminRegistryOktaCandidates } from "../models/components/adminregistryoktacandidates.js";
 import { AdminRegistryOktaUnmapped } from "../models/components/adminregistryoktaunmapped.js";
@@ -154,6 +168,7 @@ import { AdminUpstreamOAuthMigrationOrganizations } from "../models/components/a
 import { AdminUpstreamOAuthMigrationRun } from "../models/components/adminupstreamoauthmigrationrun.js";
 import { AdminUpstreamOAuthMigrationStatus } from "../models/components/adminupstreamoauthmigrationstatus.js";
 import { AssignOrganizationOnboardingPlaybookRequestBody } from "../models/components/assignorganizationonboardingplaybookrequestbody.js";
+import { BackfillMcpConnectGrantsRequestBody } from "../models/components/backfillmcpconnectgrantsrequestbody.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
 import { ChangeTrialEndDateRequestBody } from "../models/components/changetrialenddaterequestbody.js";
@@ -161,6 +176,7 @@ import { CloneOnboardingPlaybookRequestBody } from "../models/components/cloneon
 import { CreateOnboardingPlaybookRequestBody } from "../models/components/createonboardingplaybookrequestbody.js";
 import { CreateOnboardingUseCaseRequestBody } from "../models/components/createonboardingusecaserequestbody.js";
 import { CreateOrganizationRequestBody } from "../models/components/createorganizationrequestbody.js";
+import { CreatePlatformGcpIamCredentialForm } from "../models/components/createplatformgcpiamcredentialform.js";
 import { CreateRegistryEntryRequestBody } from "../models/components/createregistryentryrequestbody.js";
 import { CreateRemoteSessionIssuerForm } from "../models/components/createremotesessionissuerform.js";
 import { CreateSignupOfferRequestBody } from "../models/components/createsignupofferrequestbody.js";
@@ -173,19 +189,21 @@ import { EnableOrganizationRequestBody } from "../models/components/enableorgani
 import { EnableUpstreamAuthEnforcementRequestBody } from "../models/components/enableupstreamauthenforcementrequestbody.js";
 import { ExtendTrialRequestBody } from "../models/components/extendtrialrequestbody.js";
 import { FetchIssuerMetadataRequestBody } from "../models/components/fetchissuermetadatarequestbody.js";
+import { GcpIamCredential } from "../models/components/gcpiamcredential.js";
 import { GetRegistryPromotionCandidateRequestBody } from "../models/components/getregistrypromotioncandidaterequestbody.js";
 import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
 import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
+import { ListExternalCredentialsResult } from "../models/components/listexternalcredentialsresult.js";
+import { ListPlatformMcpFeedbackResponseBody } from "../models/components/listplatformmcpfeedbackresponsebody.js";
 import { ListSignupOffersResponseBody } from "../models/components/listsignupoffersresponsebody.js";
 import { MarkEnterpriseTrialConvertedRequestBody } from "../models/components/markenterprisetrialconvertedrequestbody.js";
 import { MarkEnterpriseTrialConvertedResult } from "../models/components/markenterprisetrialconvertedresult.js";
-import { MigrateExternalMcpServersRequestBody } from "../models/components/migrateexternalmcpserversrequestbody.js";
 import { MigrateRemoteSessionIssuerRequestBody } from "../models/components/migrateremotesessionissuerrequestbody.js";
 import { MigrateRemoteSessionIssuerResult } from "../models/components/migrateremotesessionissuerresult.js";
-import { PreviewExternalMcpMigrationRequestBody } from "../models/components/previewexternalmcpmigrationrequestbody.js";
 import { ProductFeatures } from "../models/components/productfeatures.js";
 import { PromoteRegistryCandidateRequestBody } from "../models/components/promoteregistrycandidaterequestbody.js";
 import { RearmTrialRequestBody } from "../models/components/rearmtrialrequestbody.js";
+import { RedeployProjectRequestBody } from "../models/components/redeployprojectrequestbody.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
 import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
 import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remotesessionissuerduplicatepreflight.js";
@@ -198,6 +216,7 @@ import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runup
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
 import { SetAdoptionDashboardURLRequestBody } from "../models/components/setadoptiondashboardurlrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
+import { SetMcpServerScopePinRequestBody } from "../models/components/setmcpserverscopepinrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
 import { SetOrganizationOnboardingStackRequestBody } from "../models/components/setorganizationonboardingstackrequestbody.js";
@@ -209,14 +228,17 @@ import { StartTrialRequestBody } from "../models/components/starttrialrequestbod
 import { SupportCoverageResult } from "../models/components/supportcoverageresult.js";
 import { SupportMatrix } from "../models/components/supportmatrix.js";
 import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components/triggerorganizationchatanalysisrequestbody.js";
+import { UpdateGcpIamPlatformCredentialRequestBody } from "../models/components/updategcpiamplatformcredentialrequestbody.js";
 import { UpdateOnboardingPlaybookRequestBody } from "../models/components/updateonboardingplaybookrequestbody.js";
 import { UpdateOnboardingUseCaseRequestBody } from "../models/components/updateonboardingusecaserequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
 import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremotesessionissuerform.js";
 import { UpdateSignupOfferRequestBody } from "../models/components/updatesignupofferrequestbody.js";
 import { UpdateSupportMatrixRequestBody } from "../models/components/updatesupportmatrixrequestbody.js";
+import { VerifyPlatformCredentialResult } from "../models/components/verifyplatformcredentialresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
 import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admindescribemcpserverhealth.js";
+import { AdminGetGcpIamPlatformCredentialRequest } from "../models/operations/admingetgcpiamplatformcredential.js";
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
 import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
 import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
@@ -228,10 +250,12 @@ import { AdminGetMeterUsageRequest } from "../models/operations/admingetmeterusa
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminGetOrganizationHookFleetRequest } from "../models/operations/admingetorganizationhookfleet.js";
 import { AdminGetOrganizationOnboardingPlaybookRequest } from "../models/operations/admingetorganizationonboardingplaybook.js";
 import { AdminGetOrganizationOnboardingStackRequest } from "../models/operations/admingetorganizationonboardingstack.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
+import { AdminGetProjectRedeployPreviewRequest } from "../models/operations/admingetprojectredeploypreview.js";
 import { AdminGetRegistryEntryRequest } from "../models/operations/admingetregistryentry.js";
 import { AdminGetRegistryOktaCandidatesRequest } from "../models/operations/admingetregistryoktacandidates.js";
 import { AdminGetSpendBreakdownRequest } from "../models/operations/admingetspendbreakdown.js";
@@ -240,6 +264,7 @@ import { AdminGetStripeSubscriptionRequest } from "../models/operations/adminget
 import { AdminGetStripeSubscriptionCandidateRequest } from "../models/operations/admingetstripesubscriptioncandidate.js";
 import { AdminGetSupportCoverageRequest } from "../models/operations/admingetsupportcoverage.js";
 import { AdminGetUpstreamOAuthMigrationStatusRequest } from "../models/operations/admingetupstreamoauthmigrationstatus.js";
+import { AdminListCustomDomainsRequest } from "../models/operations/adminlistcustomdomains.js";
 import { AdminListCustomerUsageRequest } from "../models/operations/adminlistcustomerusage.js";
 import {
   AdminListGlobalIssuerConvergenceCandidatesRequest,
@@ -260,6 +285,8 @@ import {
   AdminListOrganizationsRequest,
   AdminListOrganizationsResponse,
 } from "../models/operations/adminlistorganizations.js";
+import { AdminListPlatformExternalCredentialsRequest } from "../models/operations/adminlistplatformexternalcredentials.js";
+import { AdminListPlatformMcpFeedbackRequest } from "../models/operations/adminlistplatformmcpfeedback.js";
 import { AdminListProjectMcpServersRequest } from "../models/operations/adminlistprojectmcpservers.js";
 import { AdminListRegistryEntriesRequest } from "../models/operations/adminlistregistryentries.js";
 import { AdminListRegistryPromotionCandidatesRequest } from "../models/operations/adminlistregistrypromotioncandidates.js";
@@ -320,31 +347,16 @@ export class Admin extends ClientSDK {
   }
 
   /**
-   * listExternalMcpMigrationCandidates admin
+   * listCustomDomains admin
    *
    * @remarks
-   * Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.
+   * Lists live custom domains across organizations with their designated CNAME targets and observed DNS routing methods.
    */
-  async listExternalMcpMigrationCandidates(
+  async listCustomDomains(
+    request?: AdminListCustomDomainsRequest | undefined,
     options?: RequestOptions,
-  ): Promise<AdminListExternalMcpMigrationCandidatesResult> {
-    return unwrapAsync(adminListExternalMcpMigrationCandidates(
-      this,
-      options,
-    ));
-  }
-
-  /**
-   * migrateExternalMcpServers admin
-   *
-   * @remarks
-   * Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.
-   */
-  async migrateExternalMcpServers(
-    request: MigrateExternalMcpServersRequestBody,
-    options?: RequestOptions,
-  ): Promise<AdminExternalMcpMigrationResult> {
-    return unwrapAsync(adminMigrateExternalMcpServers(
+  ): Promise<AdminListCustomDomainsResult> {
+    return unwrapAsync(adminListCustomDomains(
       this,
       request,
       options,
@@ -352,16 +364,101 @@ export class Admin extends ClientSDK {
   }
 
   /**
-   * previewExternalMcpMigration admin
+   * createGcpIamPlatformCredential admin
    *
    * @remarks
-   * Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.
+   * Create a platform GCP IAM external credential. Set the wif_* triple for Workload Identity Federation, impersonate_service_account alone for direct impersonation, or neither for Speakeasy's ambient attached identity.
    */
-  async previewExternalMcpMigration(
-    request: PreviewExternalMcpMigrationRequestBody,
+  async createGcpIamPlatformCredential(
+    request: CreatePlatformGcpIamCredentialForm,
     options?: RequestOptions,
-  ): Promise<AdminExternalMcpMigrationResult> {
-    return unwrapAsync(adminPreviewExternalMcpMigration(
+  ): Promise<GcpIamCredential> {
+    return unwrapAsync(adminCreateGcpIamPlatformCredential(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * deleteGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.
+   */
+  async deleteGcpIamPlatformCredential(
+    request: RiskIDRequestBody,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(adminDeleteGcpIamPlatformCredential(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Get a platform GCP IAM external credential by ID.
+   */
+  async getGcpIamPlatformCredential(
+    request: AdminGetGcpIamPlatformCredentialRequest,
+    options?: RequestOptions,
+  ): Promise<GcpIamCredential> {
+    return unwrapAsync(adminGetGcpIamPlatformCredential(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listPlatformExternalCredentials admin
+   *
+   * @remarks
+   * List the platform external credentials (organization_id NULL, project_id NULL) that Speakeasy authenticates into a cloud provider with. Optionally filter by provider.
+   */
+  async listPlatformExternalCredentials(
+    request?: AdminListPlatformExternalCredentialsRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<ListExternalCredentialsResult> {
+    return unwrapAsync(adminListPlatformExternalCredentials(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * updateGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.
+   */
+  async updateGcpIamPlatformCredential(
+    request: UpdateGcpIamPlatformCredentialRequestBody,
+    options?: RequestOptions,
+  ): Promise<GcpIamCredential> {
+    return unwrapAsync(adminUpdateGcpIamPlatformCredential(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * verifyGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Nothing is persisted.
+   */
+  async verifyGcpIamPlatformCredential(
+    request: RiskIDRequestBody,
+    options?: RequestOptions,
+  ): Promise<VerifyPlatformCredentialResult> {
+    return unwrapAsync(adminVerifyGcpIamPlatformCredential(
       this,
       request,
       options,
@@ -396,6 +493,23 @@ export class Admin extends ClientSDK {
   ): Promise<AdminBackfillMCPAuthGrantsResult> {
     return unwrapAsync(adminBackfillMcpAuthGrants(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * backfillMcpConnectGrants admin
+   *
+   * @remarks
+   * Adds an explicit mcp:connect grant, with the same principal, selectors and expiry, for every unexpired mcp:read or mcp:write grant in every organization, ahead of read and write no longer implying connect. Never removes access. Safe to run more than once.
+   */
+  async backfillMcpConnectGrants(
+    request: BackfillMcpConnectGrantsRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminBackfillMCPConnectGrantsResult> {
+    return unwrapAsync(adminBackfillMcpConnectGrants(
+      this,
+      request,
       options,
     ));
   }
@@ -1113,6 +1227,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * getOrganizationHookFleet admin
+   *
+   * @remarks
+   * The hooks installs of one organization: which versions, install routes and endpoints its users' machines use, which machines have gone quiet, and how much traffic still reaches the legacy endpoints.
+   */
+  async getOrganizationHookFleet(
+    request: AdminGetOrganizationHookFleetRequest,
+    options?: RequestOptions,
+  ): Promise<AdminHookFleetResult> {
+    return unwrapAsync(adminGetOrganizationHookFleet(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * bulkUpdateAccountType admin
    *
    * @remarks
@@ -1196,6 +1327,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * listPlatformMcpFeedback admin
+   *
+   * @remarks
+   * List the newest Platform MCP feedback reports across every organization.
+   */
+  async listPlatformMcpFeedback(
+    request?: AdminListPlatformMcpFeedbackRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<ListPlatformMcpFeedbackResponseBody> {
+    return unwrapAsync(adminListPlatformMcpFeedback(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getProject admin
    *
    * @remarks
@@ -1257,6 +1405,57 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminListProjectMcpServersResult> {
     return unwrapAsync(adminListProjectMcpServers(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * redeployProject admin
+   *
+   * @remarks
+   * Clones a project's active deployment and starts processing it. Refuses when the active deployment is no longer the one reviewed. The new deployment becomes active only if processing succeeds.
+   */
+  async redeployProject(
+    request: RedeployProjectRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminProjectRedeployResult> {
+    return unwrapAsync(adminRedeployProject(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getProjectRedeployPreview admin
+   *
+   * @remarks
+   * Returns what redeploying a project would act on, for review before redeployProject.
+   */
+  async getProjectRedeployPreview(
+    request: AdminGetProjectRedeployPreviewRequest,
+    options?: RequestOptions,
+  ): Promise<AdminProjectRedeployPreview> {
+    return unwrapAsync(adminGetProjectRedeployPreview(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setMcpServerScopePin admin
+   *
+   * @remarks
+   * Sets or clears the scopes pinned on the protected resource behind a remote-backed MCP server (admin view, no auth scoping). The pin applies to every live server in the project with the same upstream URL. Audited as the staff member.
+   */
+  async setMcpServerScopePin(
+    request: SetMcpServerScopePinRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminMcpServerResourceScopes> {
+    return unwrapAsync(adminSetMcpServerScopePin(
       this,
       request,
       options,
@@ -1726,7 +1925,7 @@ export class Admin extends ClientSDK {
    * getSupportCoverage admin
    *
    * @remarks
-   * Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.
+   * Observed support coverage for one organization: per-surface evidence for activity, policy enforcement, identity attribution, token usage and shadow MCP exposure, across Speakeasy's MCP gateway and each consuming agent surface.
    */
   async getSupportCoverage(
     request: AdminGetSupportCoverageRequest,

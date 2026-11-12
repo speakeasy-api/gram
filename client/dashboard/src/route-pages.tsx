@@ -6,6 +6,7 @@ import type {
   OrgRouteStructure,
   RouteStructure,
 } from "./routes";
+import Channels from "./pages/channels/Channels";
 import AssistantPage from "./pages/assistants/Assistant";
 import AssistantsIndex, { AssistantsRoot } from "./pages/assistants/Assistants";
 import NewAssistantPage from "./pages/assistants/NewAssistant";
@@ -150,7 +151,8 @@ import RequestAccess from "./pages/access/RequestAccess";
 import Settings from "./pages/settings/Settings";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import RiskOverviewRedirect from "./pages/security/RiskOverviewRedirect";
-import Watchdog from "./pages/security/watchdog/Watchdog";
+import Watchdog, { WatchdogRoot } from "./pages/security/watchdog/Watchdog";
+import SignalDetail from "./pages/security/watchdog/SignalDetail";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
 import {
   ShadowAIRoot,
@@ -247,6 +249,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       },
     },
   },
+  channels: { component: Channels },
   assistants: {
     component: AssistantsRoot,
     indexComponent: AssistantsIndex,
@@ -498,7 +501,16 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           permissions: {
             component: IdentityAgentSection,
           },
+          mcpSignIn: {
+            component: IdentityAgentSection,
+          },
+          auditTrail: {
+            component: IdentityAgentSection,
+          },
           credentials: {
+            component: IdentityAgentSection,
+          },
+          legacyCredentials: {
             component: IdentityAgentSection,
           },
           provisioning: {
@@ -547,7 +559,13 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
     component: OrgMemory,
   },
   watchdog: {
-    component: Watchdog,
+    component: WatchdogRoot,
+    indexComponent: Watchdog,
+    subPages: {
+      signal: {
+        component: SignalDetail,
+      },
+    },
   },
   legacyRiskOverview: {
     component: RiskOverviewRedirect,

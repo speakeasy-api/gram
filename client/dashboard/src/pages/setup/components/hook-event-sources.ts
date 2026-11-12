@@ -1,17 +1,19 @@
 /**
  * Hook events from Anthropic products: Claude Code, Claude Chat (desktop and
  * web), and Claude Cowork (which reports under either of its two source names).
+ * What the Anthropic admin controls card sets up.
  */
-function isAnthropicSource(source: string): boolean {
+export function isAnthropicSource(source: string): boolean {
   return source.startsWith("claude") || source === "cowork";
 }
 
 /**
- * What the Anthropic observability card sets up: the Claude products plus,
- * optionally, Cursor, which imports the plugin from the same marketplace.
+ * Hook events from Cursor. The Cursor admin controls card confirms these, and
+ * so does the other-platforms card: the device agent installs the same plugin
+ * into Cursor, so Cursor is not a dedicated source.
  */
-export function isAnthropicOrCursorSource(source: string): boolean {
-  return isAnthropicSource(source) || source === "cursor";
+export function isCursorSource(source: string): boolean {
+  return source === "cursor";
 }
 
 /**
@@ -26,7 +28,7 @@ function isLiteLLMSource(source: string): boolean {
 // Every source a dedicated card owns. The other-platforms card is "everything
 // else", so a new dedicated card registers here and is excluded there by
 // construction rather than by another hand-written clause.
-const DEDICATED_CARD_SOURCES = [isAnthropicOrCursorSource, isLiteLLMSource];
+const DEDICATED_CARD_SOURCES = [isAnthropicSource, isLiteLLMSource];
 
 /**
  * Everything the device agent covers on the other-platforms card. An event

@@ -384,7 +384,9 @@ describe("KillswitchRecord", () => {
     mocks.catalogDataAvailable = false;
     mocks.catalogLoading = true;
     renderDetail();
-    expect(screen.getByText("Loading Killswitch details…")).not.toBeNull();
+    expect(
+      screen.getByRole("status", { name: "Loading Killswitch details" }),
+    ).not.toBeNull();
     expect(screen.queryByText("Deleted member")).toBeNull();
   });
 

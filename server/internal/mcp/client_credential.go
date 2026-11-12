@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -147,6 +148,9 @@ func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
 // outage recorded by an exchange the attempt itself made can clear on a retry,
 // and the caller that observed that exchange marks it retryable.
 func metaMemberClientCredentialError(member metaMember, err error) error {
+	if errors.Is(err, remotesessions.ErrStoredSignInUnreadable) {
+		return newMemberSignInUnreadableError(member, reconnectAskWhoeverConnected, err)
+	}
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		if _, session := errors.AsType[*remotesessions.SessionOutageError](err); session {
 			return linkedMemberOutage(member, err, "")
@@ -157,7 +161,44 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 		return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential right now. Retry shortly. If it keeps happening, ask your administrator to check its sign-in provider, then contact Speakeasy support", member.slug), nil)
 	}
 
-	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator", member.slug)}
+	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected. Ask an admin of the server's project to fix the server's credential, then retry", member.slug)}
+}
+
+// memberSignInUnreadableError is a member whose saved sign-in can't be read; cause names the remote session.
+type memberSignInUnreadableError struct {
+	memberConnectionError
+
+	// cause is the resolution failure, which carries the remote session.
+	cause error
+}
+
+func (e memberSignInUnreadableError) Unwrap() []error {
+	return []error{e.memberConnectionError, e.cause}
+}
+
+// reconnectAskWhoeverConnected asks for a reconnect when no page to do it on is known.
+const reconnectAskWhoeverConnected = "Ask whoever connected it to reconnect it, then retry"
+
+// reconnectAskUser asks the user to reconnect a member on its connect page.
+func reconnectAskUser(connectURL string) string {
+	return fmt.Sprintf("Ask the user to open %s to reconnect it, then retry", connectURL)
+}
+
+// memberReconnectAsk is who reconnects member and where, in the gateway's own terms.
+func (g metaGateContext) memberReconnectAsk(member metaMember) string {
+	if fix := g.memberFix(member); fix.agent && fix.url != "" {
+		return fix.askEditorToReconnect()
+	}
+	if url := g.memberCallerURL(member); url != "" {
+		return reconnectAskUser(url)
+	}
+	return reconnectAskWhoeverConnected
+}
+
+// newMemberSignInUnreadableError asks for a new sign-in: nothing stored for the member can be read.
+func newMemberSignInUnreadableError(member metaMember, ask string, cause error) error {
+	message := fmt.Sprintf("server %q can't use its saved sign-in anymore. %s", member.slug, ask)
+	return memberSignInUnreadableError{memberConnectionError: memberConnectionError{memberCredentialError{&metaMemberError{message: message}}, mcpconnectionattempts.CodeStoredSignInUnreadable}, cause: cause}
 }
 
 // outageWaitWords is when to retry, in words: a provider can ask for minutes.
@@ -190,6 +231,9 @@ func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 
 // withMemberConnectLink adds the member's connect page to a connection outage.
 func withMemberConnectLink(err error, member metaMember, connectURL string) error {
+	if unreadable, ok := errors.AsType[memberSignInUnreadableError](err); ok && connectURL != "" {
+		return newMemberSignInUnreadableError(member, reconnectAskUser(connectURL), unreadable.cause)
+	}
 	if outage, ok := errors.AsType[memberUnavailableError](err); ok && outage.session != nil && connectURL != "" {
 		return linkedMemberOutage(member, outage.session, connectURL)
 	}

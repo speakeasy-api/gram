@@ -42,8 +42,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration"
+	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -51,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -64,10 +67,16 @@ import (
 )
 
 type Service struct {
-	catalogPromotion     *catalogpromotion.Service
-	registry             *mcpregistry.Service
-	remoteSessions       *remotesessions.Service
-	assets               *assets.Service
+	catalogPromotion *catalogpromotion.Service
+	providerHealth   *mcpconnectionattempts.ProviderHealth
+	registry         *mcpregistry.Service
+	remoteSessions   *remotesessions.Service
+	assets           *assets.Service
+
+	// externalCredentials serves the platform-tier external credential
+	// handlers. Nil leaves those methods unavailable.
+	externalCredentials *externalcredentials.Service
+
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
@@ -105,6 +114,10 @@ type Service struct {
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
 
+	// projectRedeployer redeploys projects. Nil when this server has no
+	// Temporal connection.
+	projectRedeployer ProjectRedeployer
+
 	audit *audit.Logger
 
 	trial   trialemails.Notifier
@@ -113,12 +126,17 @@ type Service struct {
 	supportCoverage SupportCoverageReader
 	mcpServerHealth MCPServerHealthReader
 
+	// scopes reads and writes remote MCP server scope pins.
+	scopes *remotemcp.StaffScopes
 	// HookClientsCache shares snapshot storage with the nightly worker.
 	*HookClientsCache
 
-	// externalMCPMigrator lists and migrates external-MCP-backed servers. Nil
-	// leaves those methods unavailable.
-	externalMCPMigrator *migration.Migrator
+	hookFleet         HookFleetReader
+	hookFleetVersions HookFleetVersions
+
+	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets. Empty leaves targets out of listCustomDomains.
+	customDomainTargetSuffix string
 }
 
 type BillingOperations interface {
@@ -249,7 +267,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{catalogPromotion: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, remoteSessions: nil, assets: nil, externalCredentials: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -269,18 +287,20 @@ func NewService(
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,
 		audit:                audit.NewLogger(),
+		scopes:               remotemcp.NewStaffScopes(logger, db, audit.NewLogger()),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:            trialNotifier,
-		billing:          billing,
-		supportCoverage:  supportCoverage,
-		mcpServerHealth:  mcpServerHealth,
-		HookClientsCache: NewHookClientsCache(logger, adminCache, nil, nil),
-
-		externalMCPMigrator: nil,
+		trial:                    trialNotifier,
+		billing:                  billing,
+		supportCoverage:          supportCoverage,
+		mcpServerHealth:          mcpServerHealth,
+		HookClientsCache:         NewHookClientsCache(logger, adminCache, nil, nil),
+		hookFleet:                nil,
+		hookFleetVersions:        HookFleetVersions{Latest: nil, Minimum: nil},
+		customDomainTargetSuffix: "",
 	}
 }
 
@@ -501,9 +521,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListGlobalIssuerConvergenceCandidates = service.preauthorizeAdmin(server.ListGlobalIssuerConvergenceCandidates)
 	server.GetGlobalIssuerMigratePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerMigratePreflight)
 	server.MigrateToGlobalIssuer = service.strictAdminJSON(server.MigrateToGlobalIssuer, func() any { return new(adminserver.MigrateToGlobalIssuerRequestBody) })
-	server.ListExternalMcpMigrationCandidates = service.preauthorizeAdmin(server.ListExternalMcpMigrationCandidates)
-	server.PreviewExternalMcpMigration = service.strictAdminJSON(server.PreviewExternalMcpMigration, func() any { return new(adminserver.PreviewExternalMcpMigrationRequestBody) })
-	server.MigrateExternalMcpServers = service.strictAdminJSON(server.MigrateExternalMcpServers, func() any { return new(adminserver.MigrateExternalMcpServersRequestBody) })
 	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
 	server.ListRegistryEntries = service.preauthorizeAdmin(server.ListRegistryEntries)
 	server.GetRegistryEntry = service.preauthorizeAdmin(server.GetRegistryEntry)
@@ -517,6 +534,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.SetRegistryEntryPublished = service.strictAdminJSON(server.SetRegistryEntryPublished, func() any { return new(adminserver.SetRegistryEntryPublishedRequestBody) })
 	server.GetSupportMatrix = service.preauthorizeAdmin(server.GetSupportMatrix)
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
+	server.SetMcpServerScopePin = service.strictAdminJSON(server.SetMcpServerScopePin, func() any { return new(adminserver.SetMcpServerScopePinRequestBody) })
 	server.CreateSignupOffer = service.strictAdminJSON(server.CreateSignupOffer, func() any { return new(adminserver.CreateSignupOfferRequestBody) })
 	server.UpdateSignupOffer = service.strictAdminJSON(server.UpdateSignupOffer, func() any { return new(adminserver.UpdateSignupOfferRequestBody) })
 	server.ListUpstreamOAuthMigrationOrganizations = service.preauthorizeAdmin(server.ListUpstreamOAuthMigrationOrganizations)
@@ -524,6 +542,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.RunUpstreamOAuthMigration = service.strictAdminJSON(server.RunUpstreamOAuthMigration, func() any { return new(adminserver.RunUpstreamOAuthMigrationRequestBody) })
 	server.EnableUpstreamAuthEnforcement = service.strictAdminJSON(server.EnableUpstreamAuthEnforcement, func() any { return new(adminserver.EnableUpstreamAuthEnforcementRequestBody) })
 	server.DisableUpstreamAuthEnforcement = service.strictAdminJSON(server.DisableUpstreamAuthEnforcement, func() any { return new(adminserver.DisableUpstreamAuthEnforcementRequestBody) })
+	server.ListPlatformExternalCredentials = service.preauthorizeAdmin(server.ListPlatformExternalCredentials)
+	server.GetGcpIamPlatformCredential = service.preauthorizeAdmin(server.GetGcpIamPlatformCredential)
+	server.CreateGcpIamPlatformCredential = service.strictAdminJSON(server.CreateGcpIamPlatformCredential, func() any { return new(adminserver.CreateGcpIamPlatformCredentialRequestBody) })
+	server.UpdateGcpIamPlatformCredential = service.strictAdminJSON(server.UpdateGcpIamPlatformCredential, func() any { return new(adminserver.UpdateGcpIamPlatformCredentialRequestBody) })
+	server.VerifyGcpIamPlatformCredential = service.strictAdminJSON(server.VerifyGcpIamPlatformCredential, func() any { return new(adminserver.VerifyGcpIamPlatformCredentialRequestBody) })
+	server.DeleteGcpIamPlatformCredential = service.strictAdminJSON(server.DeleteGcpIamPlatformCredential, func() any { return new(adminserver.DeleteGcpIamPlatformCredentialRequestBody) })
 	adminserver.Mount(mux, server)
 
 }
@@ -553,7 +577,7 @@ func (w *adminCallbackWriter) WriteHeader(status int) {
 				SameSite: http.SameSiteLaxMode,
 			}
 			location := w.Header().Get("Location")
-			if strings.HasPrefix(location, "/admin-mcp/connect?state=") || strings.HasPrefix(location, "/admin-mcp/proposals/") {
+			if strings.HasPrefix(location, "/admin-mcp/connect?state=") {
 				mcpCookie.Value = cookie.Value
 			} else {
 				mcpCookie.MaxAge = -1
@@ -828,13 +852,24 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.C(oops.CodeNotFound)
 	}
 
-	return adminProjectDetailFromIDRow(row), nil
+	detail := adminProjectDetailFromIDRow(row)
+	activeDeploymentID, err := deploymentsrepo.New(s.db).GetActiveDeploymentID(ctx, row.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup active deployment").LogError(ctx, s.logger)
+	default:
+		detail.ActiveDeploymentID = new(activeDeploymentID.String())
+	}
+
+	return detail, nil
 }
 
 func adminProjectDetailFromIDRow(row repo.AdminGetProjectDetailByIDRow) *gen.AdminProjectDetail {
 	logo := uuidPtr(row.LogoAssetID)
 	runner := conv.FromPGText[string](row.FunctionsRunnerVersion)
 	return &gen.AdminProjectDetail{
+		ActiveDeploymentID:     nil,
 		ID:                     row.ID.String(),
 		Name:                   row.Name,
 		Slug:                   row.Slug,
@@ -1135,6 +1170,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		SubjectID:              conv.PtrToPGTextEmpty(filter.SubjectID),
 		SubjectIds:             nil,
 		ActingSurface:          conv.PtrToPGTextEmpty(filter.ActingSurface),
+		Origin:                 pgtype.Text{String: "", Valid: false},
 		CreatedFrom:            conv.PtrToPGTimestamptz(filter.From),
 		CreatedTo:              conv.PtrToPGTimestamptz(filter.To),
 	}

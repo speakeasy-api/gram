@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
@@ -127,6 +128,10 @@ type ProxyManager struct {
 	// Connections records refused and failed tools/call requests; nil records nothing.
 	Connections *mcpconnectionattempts.Recorder
 
+	// MaxStreamAge bounds how long a relayed stream stays open before the
+	// proxy closes it for the client to reconnect; zero leaves streams open
+	// until they end on their own.
+	MaxStreamAge   time.Duration
 	logger         *slog.Logger
 	tracer         trace.Tracer
 	db             *pgxpool.Pool
@@ -174,7 +179,7 @@ type ProxyManager struct {
 
 	// drain is shared by every proxy this manager builds, so starting it
 	// reaches every stream relayed by this process.
-	drain *proxy.Drain
+	drain *shutdowndrain.Drain
 }
 
 // NewProxyManager wires the MCP-aware proxy stack with its dependencies.
@@ -209,6 +214,7 @@ func NewProxyManager(
 	return &ProxyManager{
 		TunnelMetrics:                         nil,
 		Connections:                           nil,
+		MaxStreamAge:                          0,
 		logger:                                logger,
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
 		db:                                    db,
@@ -233,7 +239,7 @@ func NewProxyManager(
 		challengeScopes:                       newChallengeScopesState(),
 		afterChallengeScopes:                  nil,
 		protectedResources:                    protectedResources,
-		drain:                                 proxy.NewDrain(),
+		drain:                                 shutdowndrain.New(),
 	}
 }
 
@@ -244,6 +250,16 @@ func NewProxyManager(
 // JSON-RPC error. Call it when the server starts shutting down.
 func (f *ProxyManager) StartDrain(interruptAfter time.Duration) {
 	f.drain.Start(interruptAfter)
+}
+
+// ShutdownDrain returns the drain shared by every proxy this manager builds,
+// so other request paths in the same process can be drained by the same
+// start. A nil manager has no drain.
+func (f *ProxyManager) ShutdownDrain() *shutdowndrain.Drain {
+	if f == nil {
+		return nil
+	}
+	return f.drain
 }
 
 // Build constructs a configured [*proxy.Proxy] for a single request against
@@ -364,7 +380,7 @@ func (f *ProxyManager) BuildTarget(
 	// private — because the property is Speakeasy's own envelope rather than
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
-	connections := newToolsCallConnections(options.connections, f.Connections, identity, upstreamURL, upstreamAuth, headers)
+	connections := newRequestConnections(options.connections, f.Connections, identity, upstreamURL, upstreamAuth, headers)
 	toolsCallPreForwardInterceptors := []proxy.ToolsCallRequestInterceptor(nil)
 	if visibility == mcpservers.VisibilityPrivate {
 		// Private calls use a method-level preflight so even malformed params
@@ -394,6 +410,7 @@ func (f *ProxyManager) BuildTarget(
 			organizationID: organizationID,
 			mcpServerID:    identity.McpServerID,
 			projectID:      projectID,
+			metrics:        f.mcpMetrics,
 			listUpstream:   nil,
 		}
 	}
@@ -483,6 +500,7 @@ func (f *ProxyManager) BuildTarget(
 		NonStreamingTimeout:         proxy.DefaultNonStreamingTimeout,
 		Drain:                       f.drain,
 		StreamingTimeout:            proxy.DefaultStreamingTimeout,
+		MaxStreamAge:                f.MaxStreamAge,
 		Metrics:                     f.proxyMetrics,
 		MaxBufferedBodyBytes:        proxy.DefaultMaxBufferedBodyBytes,
 		Identity:                    identity,
@@ -513,6 +531,7 @@ func (f *ProxyManager) BuildTarget(
 		// nothing to bill, scan, or record as a selected use.
 		ToolsCallFailureInterceptors: connections.withFailures([]proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor}),
 		ToolsCallRefusalInterceptors: connections.refusals(),
+		RequestFailureInterceptors:   connections.requestFailures(),
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},

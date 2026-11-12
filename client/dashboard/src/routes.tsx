@@ -1,9 +1,10 @@
-import { Icon, IconProps } from "@/components/ui/Icon";
-import { IconName } from "@/components/ui/Icon/names";
+import type { IconProps } from "@/components/ui/Icon";
+import { Icon } from "@/components/ui/Icon";
+import type { IconName } from "@/components/ui/Icon/names";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { ReleaseStage } from "./components/release-stage-badge";
+import type { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 
@@ -147,6 +148,12 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  channels: {
+    title: "Channels",
+    url: "channels",
+    icon: "messages-square",
+    stage: "beta",
+  },
   assistants: {
     title: "Assistants",
     url: "assistants",
@@ -164,7 +171,7 @@ const ROUTE_STRUCTURE = {
     },
   },
   signalsIntelligence: {
-    title: "Signals intelligence",
+    title: "Signals Intelligence",
     url: "signals-intelligence",
     icon: "radio",
     stage: "preview",
@@ -571,15 +578,35 @@ const ROUTE_STRUCTURE = {
             title: "Agent Permissions",
             url: "permissions",
           },
+          // Which MCP servers the agent calls, and how Speakeasy signs in to
+          // each. Changed here, not by walking the setup wizard again.
+          mcpSignIn: {
+            title: "Agent MCP Sign-in",
+            url: "mcp-sign-in",
+          },
+          // An agent's activity is the changes made to it and by it, so the
+          // tab is named for what it is. People keep `activity`; an agent's
+          // old `activity` links are sent on to this one.
+          auditTrail: {
+            title: "Agent Audit Trail",
+            url: "audit-trail",
+          },
+          // How the agent proves who it is to Speakeasy: its keys, the
+          // platforms that sign in as it, and issuing another key the way
+          // its first one was issued.
           credentials: {
-            title: "Agent Credentials",
+            title: "Agent Sign-in",
+            url: "sign-in",
+          },
+          // The sections this one was renamed from. Kept so the links and
+          // bookmarks that name them still resolve: the page itself sends
+          // the old segment on to the new one.
+          legacyCredentials: {
+            title: "Agent Sign-in",
             url: "credentials",
           },
-          // The section this one was renamed from. Kept so the links and
-          // bookmarks that name it still resolve: the page itself sends the
-          // old segment on to the new one.
           provisioning: {
-            title: "Agent Credentials",
+            title: "Agent Sign-in",
             url: "provisioning",
           },
           sessions: {
@@ -650,6 +677,13 @@ const ROUTE_STRUCTURE = {
     title: "Watchdog",
     url: "watchdog",
     icon: "radar",
+    // Layout route: renders the signal list (index) or one signal's detail.
+    subPages: {
+      signal: {
+        title: "Signal",
+        url: ":ruleId",
+      },
+    },
   },
   // Retired page: old links and bookmarks, including its drill-downs, land on
   // Watchdog.

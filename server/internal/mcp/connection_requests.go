@@ -103,26 +103,36 @@ func directConnectionOptions(ctx context.Context, r *http.Request, organizationI
 
 // callerSubject preserves the authenticated actor, not the human authorizing an agent.
 func callerSubject(ctx context.Context) mcpconnectionattempts.Option {
+	return mcpconnectionattempts.Subject(resolvedCaller(ctx))
+}
+
+// resolvedCaller is the authenticated actor, or the user when there is none. Nil when neither resolves.
+func resolvedCaller(ctx context.Context) *urn.SessionSubject {
 	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
 		subject, err := urn.ParseSessionSubject(actor.String())
 		if err == nil {
-			return mcpconnectionattempts.Subject(&subject)
+			return &subject
 		}
-		return mcpconnectionattempts.Subject(nil)
+		return nil
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.UserID == "" {
-		return mcpconnectionattempts.Subject(nil)
+		return nil
 	}
 	subject := urn.NewUserSubject(authCtx.UserID)
-	return mcpconnectionattempts.Subject(&subject)
+	return &subject
 }
 
 func (g *metaGateContext) connectionSubject(ctx context.Context) mcpconnectionattempts.Option {
+	return mcpconnectionattempts.Subject(g.resolvedSubject(ctx))
+}
+
+// resolvedSubject is the gateway's authenticated subject, or the caller's when it has none.
+func (g *metaGateContext) resolvedSubject(ctx context.Context) *urn.SessionSubject {
 	if g.authentication != nil {
-		return mcpconnectionattempts.Subject(&g.authentication.subject)
+		return &g.authentication.subject
 	}
-	return callerSubject(ctx)
+	return resolvedCaller(ctx)
 }
 
 // authClientGapHappened separates a setup an admin has to finish from a choice the person can redo.
@@ -145,27 +155,36 @@ func (s *Service) memberConnectionOption(ctx context.Context, gate *metaGateCont
 }
 
 // recordMemberFailure records a member's failed tool call, refining a missing connection to its cause.
-func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext, member metaMember, what mcpconnectionattempts.Code) {
+func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext, member metaMember, what mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 	if what == mcpconnectionattempts.CodeInvalidRemoteSession {
 		what = gate.memberNoCredentialHappened(member)
 	}
 	// Kept beside a provider_refresh row: only this row carries member_id.
-	s.recordRequestOutcome(ctx, gate.connectionScope(ctx), what, gate.request, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate))
+	s.recordRequestOutcome(ctx, gate.connectionScope(ctx), what, gate.request, append([]mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate)}, opts...)...)
+}
+
+// consentRefusalHappened is the code for whoever a consent refusal's message tells to act first.
+// An unchecked remedy is our failed lookup.
+func consentRefusalHappened(remedy staleChoiceRemedy) mcpconnectionattempts.Code {
+	switch remedy {
+	case staleChoiceAskAdmin:
+		return mcpconnectionattempts.CodeApprovalNeedsAdmin
+	case staleChoiceUnchecked:
+		return mcpconnectionattempts.CodeInternalError
+	case staleChoiceReconnect, staleChoiceReconnectThenAdmin:
+	}
+	return mcpconnectionattempts.CodeConsentNotApproved
 }
 
 // resolveFailureHappened says who fixes a member credential that could not be resolved.
 func resolveFailureHappened(err error) mcpconnectionattempts.Code {
 	switch {
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
-		if remotesessions.RefreshBusy(err) {
-			return mcpconnectionattempts.Code{}
-		}
-		if remotesessions.TokenEndpointCausedOutage(err) {
-			return mcpconnectionattempts.CodeRemoteSessionUnavailable
-		}
 		return remotesessions.ConnectionOutageHappened(err)
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
 		return mcpconnectionattempts.CodeCredentialMisconfigured
+	case errors.Is(err, remotesessions.ErrStoredSignInUnreadable):
+		return mcpconnectionattempts.CodeStoredSignInUnreadable
 	case errors.Is(err, remotesessions.ErrNoValidToken):
 		return mcpconnectionattempts.CodeInvalidRemoteSession
 	}
@@ -198,10 +217,18 @@ type memberConnectionError struct {
 
 func (f memberConnectionError) Unwrap() error { return f.error }
 
-// recordHostedToolsCallRefusal records a refused hosted tools/call. Any other error writes nothing.
-func (s *Service) recordHostedToolsCallRefusal(ctx context.Context, payload *mcpInputs, err error) {
-	code, ok := toolsCallRefusal(err)
-	if !ok || payload.mcpServerID == nil {
+// recordHostedToolsCallOutcome records a refused hosted tools/call or one whose provider rejected
+// its credential. Any other outcome writes nothing.
+func (s *Service) recordHostedToolsCallOutcome(ctx context.Context, payload *mcpInputs, err error) {
+	code, refused := toolsCallRefusal(err)
+	if !refused {
+		code = payload.upstreamRejection
+	}
+	if code == (mcpconnectionattempts.Code{}) || payload.mcpServerID == nil {
+		return
+	}
+	// An anonymous caller's rejected bearer says nothing about a person's access.
+	if code == mcpconnectionattempts.CodeProviderRejected && resolvedCaller(ctx) == nil {
 		return
 	}
 	scope := mcpconnectionattempts.ServerScope(payload.organizationID, payload.projectID, *payload.mcpServerID, requestApp(ctx))

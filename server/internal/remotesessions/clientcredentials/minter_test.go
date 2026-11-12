@@ -1,8 +1,12 @@
 package clientcredentials
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
@@ -15,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -293,6 +298,50 @@ func TestCredential_CachesRejectionUntilCredentialsChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "token-after-rotation", cred.Value())
 	require.Len(t, f.tokens.received(), 2)
+}
+
+func TestRememberFailure_LogsProviderDescription(t *testing.T) {
+	t.Parallel()
+
+	rejection := func(status int, description string) error {
+		return fmt.Errorf("client credentials grant: %w", &remotesessions.TokenEndpointError{
+			StatusCode:  status,
+			Code:        oautherr.CodeInvalidClient,
+			Description: description,
+			Transport:   false,
+			Signing:     false,
+		})
+	}
+
+	tests := []struct {
+		name        string
+		err         error
+		wantMessage string
+		wantLogged  any
+	}{
+		{name: "rejection", err: rejection(http.StatusUnauthorized, "provider says why"), wantMessage: "client credentials grant rejected", wantLogged: "provider says why"},
+		{name: "server failure", err: rejection(http.StatusServiceUnavailable, "provider says why"), wantMessage: "client credentials grant failed", wantLogged: "provider says why"},
+		{name: "no description", err: rejection(http.StatusUnauthorized, ""), wantMessage: "client credentials grant rejected", wantLogged: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t, func(int) tokenResponse { return bearerToken("unused") })
+			clientID := f.secretClient(t, oauthwire.AuthMethodClientSecretBasic, []string{})
+
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&logs, nil))
+
+			f.newMinter(t).rememberFailure(t.Context(), logger, f.cacheKeys(t, clientID, ""), tt.err)
+
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal(logs.Bytes(), &entry))
+			require.Equal(t, tt.wantMessage, entry["msg"])
+			require.Equal(t, tt.wantLogged, entry[string(attr.OAuthErrorDescriptionKey)])
+		})
+	}
 }
 
 func TestCredential_MarksClientRejectedByIssuer(t *testing.T) {

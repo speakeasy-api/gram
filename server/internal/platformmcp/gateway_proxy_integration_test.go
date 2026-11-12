@@ -116,16 +116,20 @@ func TestGatewayProxyRefusesWhenFlagIsOff(t *testing.T) {
 	require.Empty(t, proxy.calls)
 }
 
-func TestGatewayProxyRefusesWithoutAnOrganizationGateway(t *testing.T) {
+// The organization issuer only signs people in to the gateway's own URL, so
+// an organization without one still serves its servers to a signed-in caller.
+func TestGatewayProxyServesWithoutAnOrganizationIssuer(t *testing.T) {
 	t.Parallel()
 	ctx, service, proxy, principal := newGatewayProxyFixture(t, false, true)
+	proxy.results[metamcp.ToolListServers] = `{"content":[],"structuredContent":{"servers":[]}}`
 
-	_, err := service.ListMyServers(ctx, principal)
+	gateway, err := service.gateway.Get(ctx, principal)
+	require.NoError(t, err)
+	require.Equal(t, "no_organization_issuer", gateway.UnavailableReason)
 
-	var refusal *ToolRefusalError
-	require.ErrorAs(t, err, &refusal)
-	require.Contains(t, refusal.Payload, "no_organization_issuer")
-	require.Empty(t, proxy.calls)
+	_, err = service.ListMyServers(ctx, principal)
+	require.NoError(t, err)
+	require.Len(t, proxy.calls, 1)
 }
 
 func TestGatewayProxyListsServersAsTheCaller(t *testing.T) {

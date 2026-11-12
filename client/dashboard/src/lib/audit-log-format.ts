@@ -173,6 +173,20 @@ function recordString(value: unknown, key: string): string | undefined {
   return typeof field === "string" && field !== "" ? field : undefined;
 }
 
+/**
+ * The sensitive scopes a role or membership change gave, as the server
+ * recorded them (`sensitive_scopes_added` in the row's metadata). Empty for
+ * every other row.
+ */
+export function sensitiveScopesAdded(log: AuditLog): string[] {
+  if (log.metadata == null || typeof log.metadata !== "object") return [];
+  const added = (log.metadata as Record<string, unknown>)[
+    "sensitive_scopes_added"
+  ];
+  if (!Array.isArray(added)) return [];
+  return added.filter((scope): scope is string => typeof scope === "string");
+}
+
 function humanizeSlug(slug: string): string {
   return slug.replace(/[-_]/g, " ");
 }
@@ -262,6 +276,8 @@ const SUBJECT_TYPE_LABELS: Record<string, string> = {
   otel_forwarding_config: "OpenTelemetry forwarding",
   api_key: "API key",
   chat_session: "Chat session",
+  channels_settings: "Organization",
+  channels_access: "Member",
 };
 
 function subjectTypeLabel(subjectType: string): string {

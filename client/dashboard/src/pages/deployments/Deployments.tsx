@@ -22,12 +22,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
-import { Table, TableProps } from "@/components/ui/Table";
+import type { TableProps } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { cloneElement, Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
 import { useActiveDeployment } from "./useActiveDeployment";
 import { useRedeployDeployment } from "./useRedeployDeployment";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 
 export default function DeploymentsPage(): JSX.Element {
   return (
@@ -37,7 +39,7 @@ export default function DeploymentsPage(): JSX.Element {
       description="Each push deploys every source in the project together, so a deployment is the version its sources and tools arrive in."
       belowHeader={<McpTabs active="deployments" />}
     >
-      <Suspense fallback={<div>Loading...</div>}>
+      <Suspense fallback={<SkeletonTable label="Loading deployments" />}>
         <DeploymentsTable />
       </Suspense>
     </ResourceListPage>

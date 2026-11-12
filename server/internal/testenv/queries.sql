@@ -859,6 +859,13 @@ INSERT INTO chats (id, project_id, organization_id, user_id, external_chat_id, t
 VALUES (@id, @project_id, @organization_id, @user_id, sqlc.narg(external_chat_id), @title, sqlc.narg(cwd), sqlc.narg(user_account_id))
 RETURNING id;
 
+-- name: SetChatAgentFixture :exec
+-- Test-only fixture: attributes a chat to an agent principal, as capture under
+-- an agent credential does, so owner-visibility tests can seed agent sessions.
+UPDATE chats
+SET agent_id = @agent_id
+WHERE id = @id;
+
 -- name: SetCapturedAgentChatSummaryFixture :exec
 -- Test-only fixture: stores a summary so callers can prove metadata reads do not disclose it.
 UPDATE chats
@@ -2322,6 +2329,48 @@ VALUES (
     (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = @remote_session_client_id)
 );
 
+-- name: StampMCPServerUpstreamClientFixture :execrows
+-- Test-only fixture: gives an MCP server an upstream client both ways, setting
+-- mcp_servers.remote_session_issuer_id to the client's provider and adding the
+-- association, so a test survives readers moving from one to the other.
+--
+-- Returns the row count so the caller can insist the stamp landed.
+WITH client AS (
+    SELECT c.id, c.attachment_scope, c.remote_session_issuer_id
+    FROM remote_session_clients AS c
+    WHERE c.id = @remote_session_client_id
+), association AS (
+    INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+    SELECT @project_id, @organization_id, @mcp_server_id, client.id, client.attachment_scope
+    FROM client
+)
+UPDATE mcp_servers
+SET remote_session_issuer_id = client.remote_session_issuer_id
+FROM client
+WHERE mcp_servers.id = @mcp_server_id
+  AND mcp_servers.project_id = @project_id;
+
+-- name: GetMCPServerSoleUpstreamIssuerFixture :one
+-- Test-only fixture: the one-provider subquery that reader queries copy, kept
+-- here so the parity test pins it against upstreamclients.ServerUpstreamIssuers.
+SELECT sole.id AS remote_session_issuer_id
+FROM mcp_servers AS s
+LEFT JOIN remote_session_issuers AS sole
+  ON sole.id = (
+    SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
+    FROM mcp_server_remote_session_clients AS a
+    JOIN remote_session_clients AS c
+      ON c.id = a.remote_session_client_id
+     AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS i
+      ON i.id = c.remote_session_issuer_id
+     AND i.deleted IS FALSE
+    WHERE a.mcp_server_id = s.id
+      AND a.deleted IS FALSE
+  )
+WHERE s.id = @id;
+
 -- name: ClearMCPServerRemoteSessionClientsFixture :exec
 -- Test-only fixture: removes every upstream client association of one MCP
 -- server, so a table-driven test can set each case's associations afresh.
@@ -2382,6 +2431,10 @@ SET deleted_at = clock_timestamp()
 WHERE project_id = @project_id
   AND deployment_id = @deployment_id
   AND tool_urn = @tool_urn;
+
+-- name: CreateExternalMCPAttachmentFixture :exec
+INSERT INTO external_mcp_attachments (deployment_id, name, slug, registry_server_specifier)
+VALUES (@deployment_id, @name, @slug, @registry_server_specifier);
 
 -- name: ExpireUserSessionFixture :execrows
 -- Test-only fixture: expires a session without waiting for its access token TTL.
@@ -2601,3 +2654,38 @@ UPDATE device_agent_state_reports
 SET os = @os
 WHERE organization_id = @organization_id
   AND email = @email;
+
+-- name: InsertRetiredApprovalsServerFixture :exec
+-- A project's approvals server as Speakeasy created it before the server was
+-- retired. Such rows stay until a cleanup migration deletes them, and every
+-- read path must treat them as gone.
+INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
+VALUES (@id, @project_id, 'Speakeasy Approvals', @slug, 'approvals', 'private');
+
+-- name: CountRemoteSessionClientBindingsFixture :one
+-- Counts a client's user session issuer bindings, whether or not the client is
+-- deleted.
+SELECT count(*)
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = @remote_session_client_id;
+
+-- name: SetCustomDomainHealthWithoutDNSObservation :exec
+-- Models a worker that does not write the independent DNS observation columns.
+UPDATE custom_domains
+SET health_status = 'unhealthy', health_issue = 'check_failed', health_checked_at = @checked_at
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;
+
+-- name: SetChatMemorySweepFixture :exec
+-- Test-only fixture: backdates a chat and, when given, its summary and
+-- memory-exclusion timestamps so the team memory sweep sees it as idle,
+-- excluded or stale.
+UPDATE chats
+SET updated_at = @updated_at,
+    summary_generated_at = COALESCE(sqlc.narg(summary_generated_at), summary_generated_at),
+    memory_excluded_at = COALESCE(sqlc.narg(memory_excluded_at), memory_excluded_at)
+WHERE id = @id;
+
+-- name: SetChatMessagesCreatedAtFixture :exec
+-- Test-only fixture: backdates every message in a chat so the team memory
+-- sweep reads the chat's last activity as created_at.
+UPDATE chat_messages SET created_at = @created_at WHERE chat_id = @chat_id;

@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import {
   Sheet,
   SheetContent,
@@ -12,7 +13,6 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { unwrapAsync } from "@gram/client/types/fp.js";
 import { useQueries } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { highlight } from "./cel-highlight";
 import {
@@ -182,7 +182,7 @@ export function CelTrafficPreview({
       <span className="text-muted-foreground">On recent traffic:</span>
       {loading && (
         <span className="text-muted-foreground flex items-center gap-1">
-          <Loader2 className="h-3 w-3 animate-spin" /> sampling messages…
+          <Spinner className="mr-0 h-3 w-3" /> sampling messages…
         </span>
       )}
       {!loading && samples.length === 0 && loadFailed && (

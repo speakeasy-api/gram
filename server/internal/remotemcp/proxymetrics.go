@@ -19,6 +19,10 @@ import (
 // the two emit independently.
 const instrumentMCPToolCall = "mcp.tool.call"
 
+// instrumentToolLookupSkipped counts tools/call refusals for a tool the catalog
+// lacks when another caller's cooldown kept the upstream from being listed.
+const instrumentToolLookupSkipped = "mcp.tool_catalog.lookup_skipped"
+
 // ProxyMetrics holds the proxy-level OpenTelemetry instruments published by
 // the MCP-aware remote-proxy stack. The proxy package's own [proxy.Metrics]
 // is intentionally transport-shaped (method and status_class only);
@@ -28,6 +32,7 @@ const instrumentMCPToolCall = "mcp.tool.call"
 type ProxyMetrics struct {
 	mcpToolCallCounter metric.Int64Counter
 	identityCoverage   *mcpmetrics.IdentityCoverageCounter
+	lookupSkipped      metric.Int64Counter
 }
 
 // NewProxyMetrics constructs the proxy metrics object. Instrument creation
@@ -43,9 +48,19 @@ func NewProxyMetrics(meter metric.Meter, logger *slog.Logger) *ProxyMetrics {
 		logger.ErrorContext(context.Background(), "failed to create mcp tool call counter", attr.SlogError(err))
 	}
 
+	lookupSkipped, err := meter.Int64Counter(
+		instrumentToolLookupSkipped,
+		metric.WithDescription("Tool call refused for an unknown tool without listing the upstream"),
+		metric.WithUnit("{call}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create tool lookup skipped counter", attr.SlogError(err))
+	}
+
 	return &ProxyMetrics{
 		mcpToolCallCounter: counter,
 		identityCoverage:   mcpmetrics.NewIdentityCoverageCounter(meter, logger),
+		lookupSkipped:      lookupSkipped,
 	}
 }
 
@@ -83,4 +98,12 @@ func (m *ProxyMetrics) RecordKillswitchIdentityCoverage(ctx context.Context, sur
 		return
 	}
 	m.identityCoverage.Record(ctx, surface, identity, resource)
+}
+
+// RecordToolLookupSkipped counts one refusal the upstream was not asked about.
+func (m *ProxyMetrics) RecordToolLookupSkipped(ctx context.Context, orgID string) {
+	if m == nil || m.lookupSkipped == nil {
+		return
+	}
+	m.lookupSkipped.Add(ctx, 1, metric.WithAttributes(attr.OrganizationID(orgID)))
 }

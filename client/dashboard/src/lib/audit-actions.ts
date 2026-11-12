@@ -76,6 +76,8 @@ export const AUDIT_ACTIONS = [
   "catalog-promotion:reject",
   "catalog-promotion:restore",
   "catalog-promotion:retry-docs",
+  "channels:update_access",
+  "channels:update_settings",
   "chat_analysis_settings:upsert",
   "chat_session:access",
   "chat_session:handoff_export",
@@ -88,6 +90,8 @@ export const AUDIT_ACTIONS = [
   "dashboard:delete",
   "dashboard:layout",
   "dashboard:update",
+  "data_encryption_key:create",
+  "data_encryption_key:retire",
   "data_export_route:create",
   "data_export_route:delete",
   "data_export_route:pause",
@@ -163,6 +167,7 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:research_start",
   "mcp_approval_request:supersede",
   "mcp_metadata:update",
+  "memory_memo:create",
   "meta-mcp:add_member",
   "meta-mcp:create",
   "meta-mcp:delete",
@@ -206,6 +211,12 @@ export const AUDIT_ACTIONS = [
   "organization:setup_task_updated",
   "organization:webhooks_disabled",
   "organization:webhooks_enabled",
+  "organization_encryption_config:complete_switch",
+  "organization_encryption_config:create",
+  "organization_encryption_config:resume",
+  "organization_encryption_config:rollback_switch",
+  "organization_encryption_config:suspend",
+  "organization_encryption_config:switch_key",
   "organization_invitation:create",
   "organization_invitation:revoke",
   "organization_invitation:update_role",
@@ -313,6 +324,7 @@ export const AUDIT_ACTIONS = [
   "spend_rule:archive",
   "spend_rule:create",
   "spend_rule:update",
+  "team_memory:read",
   "template:create",
   "template:delete",
   "template:update",
@@ -592,6 +604,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "restored catalog promotion candidate";
     case "catalog-promotion:retry-docs":
       return "retried setup documentation for";
+    case "channels:update_access":
+      return "changed Channels access for";
+    case "channels:update_settings":
+      return "changed Channels availability for";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":
@@ -1045,6 +1061,11 @@ export function staticActionPhrase(action: AuditAction): string {
     case "spend_rule:archive":
       return "archived spend rule";
 
+    case "team_memory:read":
+      return "read team memory for";
+    case "memory_memo:create":
+      return "saved team memo";
+
     case "template:create":
       return "created template";
     case "template:update":
@@ -1147,6 +1168,23 @@ export function staticActionPhrase(action: AuditAction): string {
       return "created a device join token for";
     case "workload-device-join-token:redeem":
       return "enrolled a device with a join token for";
+
+    case "data_encryption_key:create":
+      return "created a data encryption key for";
+    case "data_encryption_key:retire":
+      return "retired a data encryption key for";
+    case "organization_encryption_config:create":
+      return "set up";
+    case "organization_encryption_config:switch_key":
+      return "started a key switch for";
+    case "organization_encryption_config:complete_switch":
+      return "completed the key switch for";
+    case "organization_encryption_config:rollback_switch":
+      return "rolled back the key switch for";
+    case "organization_encryption_config:suspend":
+      return "suspended";
+    case "organization_encryption_config:resume":
+      return "resumed";
 
     default:
       return assertNever(action);

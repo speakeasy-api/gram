@@ -40,7 +40,6 @@ export const MCP_FILTER_OPTIONS: OptionsById = {
     { value: "remote", label: "Remote URL" },
     { value: "tunneled", label: "Tunneled" },
     { value: "unproxied", label: "Unproxied" },
-    { value: "built_in", label: "Built-in" },
   ],
   // `plugins` is org data, so its options are supplied at render time via
   // pluginFilterOptions().
@@ -55,8 +54,7 @@ export interface McpFacets {
     | "gateway"
     | "remote"
     | "tunneled"
-    | "unproxied"
-    | "built_in";
+    | "unproxied";
   /** IDs of the plugins this server is a member of. */
   pluginIds: string[];
   /** The mcp_servers id access is recorded against; gateways have none. */

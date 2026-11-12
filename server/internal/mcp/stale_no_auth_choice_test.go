@@ -28,8 +28,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -39,6 +42,7 @@ import (
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -344,8 +348,10 @@ func (g *staleChoiceGateway) postConnect(t *testing.T, ctx context.Context, regi
 	return w, g.ti.service.ServeConsentAction(w, req, endpoint)
 }
 
-// The reconnect text is only given where Connect gets past its member and issuer checks.
-func TestStaleNoAuthReconnectCopyMatchesConnect(t *testing.T) {
+// Under enforcement the reconnect text follows the registrations the server's
+// typed auth clients offer, whether or not the server is associated with one
+// or the gateway's sign-in is bound to it.
+func TestStaleNoAuthReconnectCopyFollowsTypedOffers(t *testing.T) {
 	t.Parallel()
 	t.Run("associated and bound", func(t *testing.T) {
 		t.Parallel()
@@ -367,9 +373,11 @@ func TestStaleNoAuthReconnectCopyMatchesConnect(t *testing.T) {
 		g.ti.service.SetAuthClientPermission(func() bool { return true })
 		connection := g.approve(t, ctx)
 		registration := g.attachTypedOnly(t, ctx, []uuid.UUID{g.issuer})
-		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleAdminCopy)
-		_, err := g.postConnect(t, ctx, registration)
-		require.ErrorContains(t, err, "not configured for any server this gateway serves")
+		seedPrincipalMCPConnectGrant(t, ctx, g.ti, g.org, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), g.serverID)
+		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleReconnectCopy)
+		w, err := g.postConnect(t, ctx, registration)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
 	})
 	t.Run("not bound to the issuer", func(t *testing.T) {
 		t.Parallel()
@@ -380,7 +388,16 @@ func TestStaleNoAuthReconnectCopyMatchesConnect(t *testing.T) {
 		registration := g.attachTypedOnly(t, ctx, nil)
 		_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
 		require.NoError(t, err)
-		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleAdminCopy)
+		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleReconnectCopy)
+	})
+	t.Run("neither associated nor bound", func(t *testing.T) {
+		t.Parallel()
+		ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect)
+		g.enforce(t, ctx)
+		g.ti.service.SetAuthClientPermission(func() bool { return true })
+		connection := g.approve(t, ctx)
+		g.attachTypedOnly(t, ctx, nil)
+		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleReconnectCopy)
 	})
 	t.Run("already connected needs no Connect", func(t *testing.T) {
 		t.Parallel()
@@ -394,6 +411,47 @@ func TestStaleNoAuthReconnectCopyMatchesConnect(t *testing.T) {
 		renewed := g.approve(t, ctx)
 		requireExecuted(t, g.call(t, renewed.token, "source--tool_000"))
 	})
+}
+
+// Resynchronizing a no-auth gateway member's derived authorization server is
+// not a change an approval covers under enforcement, so the frozen approval
+// keeps serving. Without enforcement the same resync asks for the approval
+// again.
+func TestGatewayApprovalAcrossDerivedIssuerResync(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		enforced bool
+		served   bool
+	}{
+		{name: "no-auth member under enforcement", enforced: true, served: true},
+		{name: "no-auth member without enforcement", enforced: false, served: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect)
+			if tc.enforced {
+				g.enforce(t, ctx)
+			}
+			connection := g.approve(t, ctx)
+			requireExecuted(t, g.call(t, connection.token, "source--tool_000"))
+
+			issuer, err := remotesessionsrepo.New(g.ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+				ProjectID: conv.ToNullUUID(g.project), Slug: "resync-" + uuid.NewString()[:8], Issuer: "https://resync-gateway-as.example.com",
+				ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{},
+				TokenEndpointAuthMethodsSupported: []string{}, CodeChallengeMethodsSupported: []string{},
+			})
+			require.NoError(t, err)
+			require.NoError(t, authclientfixtures.New(g.ti.conn).SetServerRemoteSessionIssuerFixture(ctx, authclientfixtures.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: conv.ToNullUUID(issuer.ID), ID: g.serverID}))
+
+			w := g.call(t, connection.token, "source--tool_000")
+			if tc.served {
+				requireExecuted(t, w)
+				return
+			}
+			require.Contains(t, w.Body.String(), "changed since you approved it")
+		})
+	}
 }
 
 func TestStaleNoAuthCachedDescribeMatchesTheCall(t *testing.T) {
@@ -472,14 +530,17 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 					t.Helper()
 					refused, ok := errors.AsType[*codemode.MemberRefusalError](err)
 					require.True(t, ok, "got %v", err)
-					require.Equal(t, tc.message, refused.Message)
+					body, _ := contextvalues.SplitConnectionReference(refused.Message)
+					require.Equal(t, tc.message, body)
 					require.Equal(t, tc.fixable, errors.Is(err, codemode.ErrConsentRequired))
 				}
+				callReferenceLine := ""
 				ran := false
 				mcp.SetTestCodeExecutor(g.ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
 					ran = true
 					_, callErr := host.Call(runCtx, "source--tool_000", json.RawMessage(`{}`))
 					requireRefusal(callErr)
+					_, callReferenceLine = contextvalues.SplitConnectionReference(callErr.Error())
 					_, describeErr := host.Describe(runCtx, "source--tool_000")
 					requireRefusal(describeErr)
 					search, searchErr := host.Search(runCtx, codemode.SearchArgs{Query: "", Server: "source", Limit: 10})
@@ -506,11 +567,56 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 					}
 					return &codemode.ExecutionResult{}, nil
 				}})
+				rec := recordConnections(t, g.ti)
 				w := g.post(t, connection.token, "execute", map[string]any{"code": "call"})
 				require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 				require.True(t, ran, w.Body.String())
+				row := requireSetupChangedRow(t, rec, g.serverID, tc.fixable)
+				require.Equal(t, contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), callReferenceLine)
 			})
 		}
+	}
+}
+
+// requireSetupChangedRow finds the one refused call recorded for a stale choice.
+func requireSetupChangedRow(t *testing.T, rec *mcpconnectionattemptstest.Recording, serverID uuid.UUID, fixable bool) mcpconnectionattempts.Row {
+	t.Helper()
+	var rows []mcpconnectionattempts.Row
+	for _, row := range rec.Rows() {
+		if row.Step == mcpconnectionattempts.StepMCPRequest.String() && row.MemberID == serverID.String() {
+			rows = append(rows, row)
+		}
+	}
+	require.Len(t, rows, 1)
+	require.Equal(t, "setup_changed", rows[0].SubReason)
+	want, who := mcpconnectionattempts.CodeApprovalNeedsAdmin, mcpconnectionattempts.WhoAdmin
+	if fixable {
+		want, who = mcpconnectionattempts.CodeNeedsSignIn, mcpconnectionattempts.WhoPerson
+	}
+	require.Equal(t, want.String(), rows[0].Reason)
+	require.Equal(t, string(who), rows[0].WhoFixes)
+	return rows[0]
+}
+
+// An approved catalog refuses the call before dialing, and that refusal is recorded.
+func TestStaleNoAuthCatalogRefusalRecordsSetupChanged(t *testing.T) {
+	t.Parallel()
+	for _, fixable := range []bool{true, false} {
+		t.Run(fmt.Sprintf("fixable=%t", fixable), func(t *testing.T) {
+			t.Parallel()
+			ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive)
+			connection := g.approve(t, ctx)
+			if fixable {
+				g.attachSignIn(t, ctx, true)
+			} else {
+				registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "unbound-"+uuid.NewString()[:8], "", nil)
+				_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
+				require.NoError(t, err)
+			}
+			rec := recordConnections(t, g.ti)
+			requireStaleError(t, g.call(t, connection.token, "source--tool_000"), map[bool]string{true: staleReconnectCopy, false: staleAdminCopy}[fixable])
+			requireSetupChangedRow(t, rec, g.serverID, fixable)
+		})
 	}
 }
 
@@ -576,6 +682,58 @@ func TestStaleNoAuthDirectServerKeepsReconnectChallenge(t *testing.T) {
 			require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
 		})
 	}
+}
+
+// An administrator detached the only auth client a server offered, leaving the
+// association it was copied from. Under enforcement the server needs no upstream
+// authentication, so a session recorded from typed state reaches the upstream.
+// One recorded from the association, as a stale read of the enforcement state
+// would, names no auth client and fails closed until it reconnects.
+func TestEnforcedNoAuthServerIgnoresALeftoverAssociation(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSelectionFixture(t)
+	issuerID := createUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
+	upstream := newRecordingUpstream(t, "ping")
+	slug := "leftover-" + uuid.NewString()[:8]
+	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
+	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "leftover", "", []uuid.UUID{issuerID})
+	f.associate(t, ctx, server.ID, registration)
+	fixtures := authclientfixtures.New(f.ti.conn)
+	authClient, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server.ID, AuthClientID: authClient, Source: "admin"}))
+	require.NoError(t, fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, server.ID))
+	_, err = productfeaturesrepo.New(f.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, f.ti.service.Service, nil)
+	call := func(bearer string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug, bytes.NewReader(makeMetaRPCBody(t, "tools/call", map[string]any{"name": "ping", "arguments": map[string]any{}}))).WithContext(t.Context())
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	w := call(f.issue(t, ctx, slug, issuerID, createTestUser(t, ctx, f.ti, "leftover-"+uuid.NewString())))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	upstream.requireToolCallAuth(t, "", "the typed session reaches the upstream with no credential")
+	toolCalls := func() int {
+		n := 0
+		for _, req := range upstream.journal() {
+			if req.rpcMethod == mcpversions.MethodToolsCall {
+				n++
+			}
+		}
+		return n
+	}
+	calls := toolCalls()
+
+	w = call(f.issueFrom(t, ctx, slug, issuerID, createTestUser(t, ctx, f.ti, "leftover-"+uuid.NewString()), nil, false))
+	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+	require.Equal(t, calls, toolCalls(), "the refused session's tool call never reaches the upstream")
 }
 
 func TestStaleNoAuthEnforcedRealPermitAllowsReconnect(t *testing.T) {
