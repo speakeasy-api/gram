@@ -182,6 +182,13 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 
 	fqdn := ln.FQDN
 	cert := newCertificateTracker(fqdn, func(ctx context.Context) error {
+		if locker, ok := spec.Store.(certificateLocker); ok {
+			unlock, err := locker.LockCertificate(ctx)
+			if err != nil {
+				return err
+			}
+			defer unlock()
+		}
 		if _, _, err := lc.CertPair(ctx, fqdn); err != nil {
 			return fmt.Errorf("obtain tailnet service certificate: %w", err)
 		}

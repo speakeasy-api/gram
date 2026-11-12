@@ -217,10 +217,15 @@ func (s *PostgresStateStore) WriteTLSCertAndKey(domain string, cert, key []byte)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	// A fixed order keeps two slots writing at once from taking the two row
+	// locks in opposite orders and deadlocking.
 	queries := repo.New(tx)
-	for stateKey, ciphertext := range map[string]string{domain + ".crt": certCiphertext, domain + ".key": keyCiphertext} {
+	for _, entry := range []struct{ stateKey, ciphertext string }{
+		{stateKey: domain + ".crt", ciphertext: certCiphertext},
+		{stateKey: domain + ".key", ciphertext: keyCiphertext},
+	} {
 		if err := queries.UpsertNetworkIngressCertificateState(ctx, repo.UpsertNetworkIngressCertificateStateParams{
-			NetworkIngressID: s.ingressID, OrganizationID: s.orgID, StateKey: stateKey, ValueEncrypted: ciphertext,
+			NetworkIngressID: s.ingressID, OrganizationID: s.orgID, StateKey: entry.stateKey, ValueEncrypted: entry.ciphertext,
 		}); err != nil {
 			return fmt.Errorf("write tailnet TLS certificate: %w", err)
 		}
@@ -280,4 +285,30 @@ func (s *PostgresStateStore) Reset(ctx context.Context) error {
 		return fmt.Errorf("reset tailnet node state: %w", err)
 	}
 	return nil
+}
+
+// LockCertificate holds the connection's certificate lock until the returned
+// function is called, so its slots request the certificate one at a time:
+// tsnet reads the stored certificate before asking Let's Encrypt, so a slot
+// that waited finds the one the holder stored instead of issuing another.
+// The lock is held on one pooled connection for the duration.
+func (s *PostgresStateStore) LockCertificate(ctx context.Context) (func(), error) {
+	conn, err := s.db.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire connection for tailnet certificate lock: %w", err)
+	}
+	if err := repo.New(conn).LockNetworkIngressCertificate(ctx, s.ingressID.String()); err != nil {
+		conn.Release()
+		return nil, fmt.Errorf("lock tailnet certificate: %w", err)
+	}
+	return func() {
+		unlockCtx, cancel := context.WithTimeout(context.Background(), stateStoreTimeout)
+		defer cancel()
+		// A failed unlock leaves the lock to the session; destroying the
+		// connection ends the session and releases it.
+		if err := repo.New(conn).UnlockNetworkIngressCertificate(unlockCtx, s.ingressID.String()); err != nil {
+			_ = conn.Conn().Close(unlockCtx)
+		}
+		conn.Release()
+	}, nil
 }

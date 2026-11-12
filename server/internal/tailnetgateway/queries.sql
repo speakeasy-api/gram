@@ -227,3 +227,12 @@ WHERE network_ingress_id = @network_ingress_id
 DELETE FROM network_ingress_certificate_states
 WHERE network_ingress_id = @network_ingress_id
   AND organization_id = @organization_id;
+
+-- name: LockNetworkIngressCertificate :exec
+-- Session lock serializing certificate issuance across a connection's slots:
+-- a slot that waits for it finds the certificate the holder stored and does
+-- not request another.
+SELECT pg_advisory_lock(hashtextextended('network_ingress_certificate:' || @network_ingress_id::text, 0));
+
+-- name: UnlockNetworkIngressCertificate :exec
+SELECT pg_advisory_unlock(hashtextextended('network_ingress_certificate:' || @network_ingress_id::text, 0));

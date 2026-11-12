@@ -566,6 +566,18 @@ func (q *Queries) ListNetworkIngressNodes(ctx context.Context, arg ListNetworkIn
 	return items, nil
 }
 
+const lockNetworkIngressCertificate = `-- name: LockNetworkIngressCertificate :exec
+SELECT pg_advisory_lock(hashtextextended('network_ingress_certificate:' || $1::text, 0))
+`
+
+// Session lock serializing certificate issuance across a connection's slots:
+// a slot that waits for it finds the certificate the holder stored and does
+// not request another.
+func (q *Queries) LockNetworkIngressCertificate(ctx context.Context, networkIngressID string) error {
+	_, err := q.db.Exec(ctx, lockNetworkIngressCertificate, networkIngressID)
+	return err
+}
+
 const markNetworkIngressRuntime = `-- name: MarkNetworkIngressRuntime :execrows
 UPDATE network_ingresses
 SET runtime = $1
@@ -657,6 +669,15 @@ func (q *Queries) SetNetworkIngressNodeAuthKey(ctx context.Context, arg SetNetwo
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const unlockNetworkIngressCertificate = `-- name: UnlockNetworkIngressCertificate :exec
+SELECT pg_advisory_unlock(hashtextextended('network_ingress_certificate:' || $1::text, 0))
+`
+
+func (q *Queries) UnlockNetworkIngressCertificate(ctx context.Context, networkIngressID string) error {
+	_, err := q.db.Exec(ctx, unlockNetworkIngressCertificate, networkIngressID)
+	return err
 }
 
 const upsertNetworkIngressCertificateState = `-- name: UpsertNetworkIngressCertificateState :exec
