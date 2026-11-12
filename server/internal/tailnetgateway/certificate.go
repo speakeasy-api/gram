@@ -52,6 +52,12 @@ const (
 // refusal, such as "retry after 2026-11-12 22:53:32 UTC".
 var acmeRetryAfterPattern = regexp.MustCompile(`retry after (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})`)
 
+// certificateLocker is implemented by state stores that share a certificate
+// across a connection's slots, so the slots can request it one at a time.
+type certificateLocker interface {
+	LockCertificate(ctx context.Context) (func(), error)
+}
+
 // certificateFetcher obtains the certificate for the node's service name.
 type certificateFetcher func(ctx context.Context) error
 
@@ -64,9 +70,10 @@ type certificateTracker struct {
 	logger *slog.Logger
 	now    func() time.Time
 
-	// ctx is cancelled by Close, stopping any request in flight.
-	ctx    context.Context
-	cancel context.CancelFunc
+	// stop is closed by Close, which cancels any request in flight and
+	// starts no more.
+	stop     chan struct{}
+	stopOnce sync.Once
 
 	// attempts tracks the request goroutine so Close can wait for it.
 	attempts sync.WaitGroup
@@ -89,15 +96,15 @@ type certificateTracker struct {
 	// retryAt is when the next request may start.
 	retryAt time.Time
 
-	// failures counts consecutive failed requests, for backoff.
+	// failures counts consecutive failed requests that back off: refusals
+	// naming their own retry time do not count.
 	failures int
 }
 
 func newCertificateTracker(domain string, fetch certificateFetcher, logger *slog.Logger, now func() time.Time) *certificateTracker {
-	ctx, cancel := context.WithCancel(context.Background())
 	return &certificateTracker{
 		domain: domain, fetch: fetch, logger: logger, now: now,
-		ctx: ctx, cancel: cancel, attempts: sync.WaitGroup{},
+		stop: make(chan struct{}), stopOnce: sync.Once{}, attempts: sync.WaitGroup{},
 		mu: sync.Mutex{}, ready: false, attempting: false, attempted: false,
 		lastErr: nil, retryAt: time.Time{}, failures: 0,
 	}
@@ -113,18 +120,21 @@ func (t *certificateTracker) Poll() (bool, string) {
 	if t.ready {
 		return true, ""
 	}
-	if !t.attempting && !t.now().Before(t.retryAt) && t.ctx.Err() == nil {
+	if !t.attempting && !t.now().Before(t.retryAt) && !t.stopped() {
 		t.attempting = true
 		t.attempts.Go(t.request)
 	}
 	return false, t.reasonLocked()
 }
 
-// Await polls until the certificate is held, the first request has finished
-// without one, wait elapses, or ctx is done.
+// Await polls until the certificate is held, wait elapses, ctx is done, or
+// the next request is due only after wait would have ended anyway. A retry
+// due within the wait, such as the short one while control has not yet
+// listed the service name right after approval, is waited for.
 func (t *certificateTracker) Await(ctx context.Context, wait time.Duration) {
 	waitCtx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
+	deadline := t.now().Add(wait)
 
 	ticker := time.NewTicker(certificateAwaitPollInterval)
 	defer ticker.Stop()
@@ -132,10 +142,7 @@ func (t *certificateTracker) Await(ctx context.Context, wait time.Duration) {
 		if ready, _ := t.Poll(); ready {
 			return
 		}
-		t.mu.Lock()
-		settled := t.attempted && !t.attempting
-		t.mu.Unlock()
-		if settled {
+		if t.nextRequestAfter(deadline) {
 			return
 		}
 
@@ -147,15 +154,41 @@ func (t *certificateTracker) Await(ctx context.Context, wait time.Duration) {
 	}
 }
 
+// nextRequestAfter reports whether a request has settled without a
+// certificate and the next one is not due until after deadline.
+func (t *certificateTracker) nextRequestAfter(deadline time.Time) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.attempted && !t.attempting && t.retryAt.After(deadline)
+}
+
 // Close stops any request in flight and waits for it.
 func (t *certificateTracker) Close() {
-	t.cancel()
+	t.stopOnce.Do(func() { close(t.stop) })
 	t.attempts.Wait()
 }
 
+func (t *certificateTracker) stopped() bool {
+	select {
+	case <-t.stop:
+		return true
+	default:
+		return false
+	}
+}
+
 func (t *certificateTracker) request() {
-	ctx, cancel := context.WithTimeout(t.ctx, certificateFetchTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), certificateFetchTimeout)
 	defer cancel()
+	stopWatch := make(chan struct{})
+	defer close(stopWatch)
+	go func() {
+		select {
+		case <-t.stop:
+			cancel()
+		case <-stopWatch:
+		}
+	}()
 	err := t.fetch(ctx)
 
 	t.mu.Lock()
@@ -164,18 +197,20 @@ func (t *certificateTracker) request() {
 	t.attempted = true
 	if err == nil {
 		t.ready, t.lastErr, t.failures = true, nil, 0
-		t.logger.InfoContext(t.ctx, "obtained tailnet service certificate", attr.SlogHostName(t.domain))
+		t.logger.InfoContext(ctx, "obtained tailnet service certificate", attr.SlogHostName(t.domain))
 		return
 	}
-	if t.ctx.Err() != nil {
+	if t.stopped() {
 		return
 	}
 
 	now := t.now()
-	t.failures++
+	if !isCertificateRateLimited(err) && !isCertificateDomainPending(err) {
+		t.failures++
+	}
 	t.lastErr = err
 	t.retryAt = nextCertificateRetry(now, err, t.failures)
-	t.logger.WarnContext(t.ctx, "could not obtain tailnet service certificate",
+	t.logger.WarnContext(ctx, "could not obtain tailnet service certificate",
 		attr.SlogHostName(t.domain), attr.SlogError(err),
 		attr.SlogRetryAttempt(t.failures), attr.SlogRetryWait(t.retryAt.Sub(now)))
 }
@@ -193,6 +228,12 @@ func isCertificateRateLimited(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "rateLimited")
 }
 
+// isCertificateDomainPending reports whether control has not yet listed the
+// service name among the node's certificate domains, as just after approval.
+func isCertificateDomainPending(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "invalid domain")
+}
+
 // nextCertificateRetry is when to request again after the failures-th failure
 // in a row. A rate-limit refusal names its own retry time; control not yet
 // listing the service name clears within seconds; anything else backs off.
@@ -205,12 +246,12 @@ func nextCertificateRetry(now time.Time, err error, failures int) time.Time {
 		}
 		return now.Add(certificateRetryMax)
 	}
-	if err != nil && strings.Contains(err.Error(), "invalid domain") {
+	if isCertificateDomainPending(err) {
 		return now.Add(certificateDomainRetry)
 	}
 
 	backoff := certificateRetryMin
-	for i := 1; i < failures && backoff < certificateRetryMax; i++ {
+	for i := 1; i < max(failures, 1) && backoff < certificateRetryMax; i++ {
 		backoff *= 2
 	}
 	return now.Add(min(backoff, certificateRetryMax))

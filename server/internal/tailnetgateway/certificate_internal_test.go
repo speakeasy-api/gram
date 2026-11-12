@@ -12,9 +12,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// rateLimitedErr is how a Let's Encrypt refusal reached the gateway on a real
+// errRateLimited is how a Let's Encrypt refusal reached the gateway on a real
 // tailnet.
-var rateLimitedErr = errors.New(`obtain tailnet service certificate: 429 urn:ietf:params:acme:error:rateLimited: too many certificates (50) already issued for "tail7d394.ts.net" in the last 168h0m0s, retry after 2026-11-12 22:53:32 UTC: see https://letsencrypt.org/docs/rate-limits/`)
+var errRateLimited = errors.New(`obtain tailnet service certificate: 429 urn:ietf:params:acme:error:rateLimited: too many certificates (50) already issued for "tail7d394.ts.net" in the last 168h0m0s, retry after 2026-11-12 22:53:32 UTC: see https://letsencrypt.org/docs/rate-limits/`)
 
 // scriptedFetch returns each error in turn, then nil, counting calls.
 type scriptedFetch struct {
@@ -55,7 +55,7 @@ func settle(t *testing.T, tracker *certificateTracker) {
 func TestCertificateTrackerWaitsForTheRetryTimeAfterARateLimit(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
-	fetch := &scriptedFetch{mu: sync.Mutex{}, errs: []error{rateLimitedErr}, calls: 0, called: make(chan struct{}, 4)}
+	fetch := &scriptedFetch{mu: sync.Mutex{}, errs: []error{errRateLimited}, calls: 0, called: make(chan struct{}, 4)}
 	tracker := newCertificateTracker("private.example.ts.net", fetch.fetch, testenv.NewLogger(t), func() time.Time { return now })
 	t.Cleanup(tracker.Close)
 
@@ -93,7 +93,7 @@ func TestCertificateTrackerAwaitReturnsOnceTheFirstRequestSettles(t *testing.T) 
 	ready, _ := tracker.Poll()
 	require.True(t, ready, "a normal start holds the certificate by its first heartbeat")
 
-	failing := &scriptedFetch{mu: sync.Mutex{}, errs: []error{rateLimitedErr}, calls: 0, called: make(chan struct{}, 4)}
+	failing := &scriptedFetch{mu: sync.Mutex{}, errs: []error{errRateLimited}, calls: 0, called: make(chan struct{}, 4)}
 	refused := newCertificateTracker("private.example.ts.net", failing.fetch, testenv.NewLogger(t), time.Now)
 	t.Cleanup(refused.Close)
 	started := time.Now()
@@ -103,11 +103,55 @@ func TestCertificateTrackerAwaitReturnsOnceTheFirstRequestSettles(t *testing.T) 
 	require.False(t, ready)
 }
 
+func TestCertificateTrackerWaitsThroughTheShortRetryAfterApproval(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
+	pending := errors.New(`obtain tailnet service certificate: invalid domain "private.example.ts.net"; must be one of []`)
+	fetch := &scriptedFetch{mu: sync.Mutex{}, errs: []error{pending, errRateLimited}, calls: 0, called: make(chan struct{}, 4)}
+	tracker := newCertificateTracker("private.example.ts.net", fetch.fetch, testenv.NewLogger(t), func() time.Time { return now })
+	t.Cleanup(tracker.Close)
+
+	_, _ = tracker.Poll()
+	<-fetch.called
+	settle(t, tracker)
+	require.False(t, tracker.nextRequestAfter(now.Add(certificateStartWait)),
+		"control lists the service name within seconds of approval, so a start keeps waiting")
+
+	now = now.Add(certificateDomainRetry)
+	_, _ = tracker.Poll()
+	<-fetch.called
+	settle(t, tracker)
+	require.True(t, tracker.nextRequestAfter(now.Add(certificateStartWait)),
+		"a rate limit retries long after the start would have ended, so the start stops waiting")
+}
+
+func TestCertificateTrackerBacksOffOnlyForRealFailures(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
+	reset := errors.New("acme: connection reset")
+	fetch := &scriptedFetch{mu: sync.Mutex{}, errs: []error{errRateLimited, reset}, calls: 0, called: make(chan struct{}, 4)}
+	tracker := newCertificateTracker("private.example.ts.net", fetch.fetch, testenv.NewLogger(t), func() time.Time { return now })
+	t.Cleanup(tracker.Close)
+
+	_, _ = tracker.Poll()
+	<-fetch.called
+	settle(t, tracker)
+	now = time.Date(2026, time.November, 12, 22, 54, 0, 0, time.UTC)
+	_, _ = tracker.Poll()
+	<-fetch.called
+	settle(t, tracker)
+
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	require.Equal(t, 1, tracker.failures, "the rate limit named its own retry time and does not inflate the backoff")
+	require.Equal(t, now.Add(certificateRetryMin), tracker.retryAt, "the first real failure backs off by the minimum")
+}
+
 func TestNextCertificateRetry(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
 
-	require.Equal(t, time.Date(2026, time.November, 12, 22, 53, 32, 0, time.UTC), nextCertificateRetry(now, rateLimitedErr, 1),
+	require.Equal(t, time.Date(2026, time.November, 12, 22, 53, 32, 0, time.UTC), nextCertificateRetry(now, errRateLimited, 1),
 		"a rate limit retries at the time Let's Encrypt names")
 	require.Equal(t, now.Add(certificateRetryMax), nextCertificateRetry(now, errors.New("acme: rateLimited"), 1),
 		"a rate limit without a time waits the longest backoff")
@@ -125,7 +169,7 @@ func TestCertificateFailureMessage(t *testing.T) {
 	retryAt := time.Date(2026, time.November, 12, 22, 53, 32, 0, time.UTC)
 
 	require.Equal(t, "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC",
-		certificateFailureMessage("private.example.ts.net", rateLimitedErr, retryAt))
+		certificateFailureMessage("private.example.ts.net", errRateLimited, retryAt))
 	require.Equal(t, "could not obtain a TLS certificate for private.example.ts.net: acme: connection reset; retrying after 2026-11-12 22:53 UTC",
 		certificateFailureMessage("private.example.ts.net", errors.New("acme: connection reset"), retryAt))
 }

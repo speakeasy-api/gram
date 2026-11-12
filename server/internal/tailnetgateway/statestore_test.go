@@ -1,8 +1,10 @@
 package tailnetgateway_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -220,4 +222,26 @@ func TestPostgresStateStoreTreatsAnIncompleteCertificateAsMissing(t *testing.T) 
 	require.NoError(t, slot0.WriteState(ipn.StateKey(domain+".crt"), []byte("cert-pem")))
 	_, _, err = slot0.ReadTLSCertAndKey(domain)
 	require.ErrorIs(t, err, ipn.ErrStateNotExist)
+}
+
+func TestPostgresStateStoreSerializesCertificateIssuance(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "tailnetstatecertlock")
+	require.NoError(t, err)
+	ingressID, orgID := seedIngress(t, db, "state-cert-lock")
+	slot0 := newStateStore(t, db, ingressID, orgID, 0)
+	slot1 := newStateStore(t, db, ingressID, orgID, 1)
+
+	unlock, err := slot0.LockCertificate(t.Context())
+	require.NoError(t, err)
+
+	waitCtx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer cancel()
+	_, err = slot1.LockCertificate(waitCtx)
+	require.Error(t, err, "another slot waits while one is obtaining the certificate")
+
+	unlock()
+	unlockOther, err := slot1.LockCertificate(t.Context())
+	require.NoError(t, err, "the lock is free once the holder releases it")
+	unlockOther()
 }
