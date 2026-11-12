@@ -1024,6 +1024,8 @@ type AdminMcpServer struct {
 	Name string
 	// The URL clients connect to. Omitted when the server has no routable address.
 	URL *string
+	// The upstream URL for a remote MCP server. Omitted for other server types.
+	UpstreamURL *string
 	// The visibility of the server.
 	Visibility string
 	// What backs the server. toolset_only is a toolset with no mcp_servers row.
@@ -2161,13 +2163,19 @@ type AdminUpstreamOAuthMigrationExecutionProfileGap struct {
 // Where one organization stands in recording, for each assistant, trigger and
 // execution context, the versioned auth client choices its turns use.
 type AdminUpstreamOAuthMigrationExecutionProfiles struct {
-	// Whether every profile is recorded and holds a choice for every server its
-	// assistant reaches.
+	// Whether every profile that is pending is recorded and each holds a choice
+	// for every server its assistant reaches.
 	Complete bool
 	// Assistant and trigger pairs, each with a profile per execution context.
 	Targets int64
 	// Profile versions not yet recorded.
 	PendingVersions int64
+	// Profiles with no version recorded yet, in an organization enforcing upstream
+	// auth. They are not pending: a turn records its own profile when its
+	// credential is issued. Zero until enforcement is on, since a run records
+	// every profile before then. Absent when the serving replica predates the
+	// field, which is not a reported zero.
+	UnexercisedVersions *int64
 	// Servers the profiles hold no choice for, by execution context and reason.
 	// They are never guessed: configure the server's auth clients.
 	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGap
@@ -2301,6 +2309,11 @@ type AdminUpstreamOAuthMigrationStatus struct {
 	Credentials int64
 	// Credential choices the configuration decides that are not yet recorded.
 	PendingSelections int64
+	// Credential and server pairs without a choice that are not pending, because
+	// the credential was issued for the servers approved at consent and is refused
+	// anywhere else. Absent when the serving replica predates the field, which is
+	// not a reported zero.
+	ConsentScopedSelections *int64
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials int64

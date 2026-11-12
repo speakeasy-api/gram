@@ -123,7 +123,7 @@ func registerDiagnosticTools(server *mcp.Server, organizations OrganizationReade
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_project_mcp_servers",
 		Title:       "List Project MCP Servers",
-		Description: "List up to 100 MCP servers for an exact project ID within an exact organization ID. possibly_incomplete means the service returned more; there is no next page. Server URLs are omitted because they may contain customer-specific routing information.",
+		Description: "List up to 100 MCP servers for an exact project ID within an exact organization ID. possibly_incomplete means the service returned more; there is no next page. Server connection and upstream URLs are omitted because they may contain customer-specific routing information.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListProjectMCPServersInput) (*mcp.CallToolResult, ListProjectMCPServersOutput, error) {
 		output := ListProjectMCPServersOutput{Servers: []ProjectMCPServer{}}
