@@ -4,8 +4,9 @@
 -- Every item search_team_memory could return for one project, with the same
 -- visibility rules as SearchTeamMemory minus the full-text match: masked
 -- summaries of live team chats that are not excluded from memory, memos
--- whose source chat passes those checks, and digests. The hybrid arm embeds
--- these to search them by meaning.
+-- whose source chat passes those checks, and digests that are not stale (every
+-- chat, memo and child digest they fold is still visible). The hybrid arm
+-- embeds these to search them by meaning.
 SELECT items.kind::text AS kind, items.id, items.chat_id, items.body::text AS body,
        items.author_user_id::text AS author_user_id, items.level::text AS level, items.period_start,
        items.period_end, items.at::timestamptz AS at
@@ -37,6 +38,44 @@ FROM (
   JOIN projects p ON p.id = d.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
   WHERE d.project_id = @project_id AND d.organization_id = @organization_id
     AND octet_length(d.content) <= 65536
+    AND NOT EXISTS (
+      SELECT 1
+      FROM memory_digests s
+      WHERE s.project_id = d.project_id
+        AND (
+          s.id = d.id
+          OR s.id = ANY(d.child_digest_ids)
+          OR EXISTS (
+            SELECT 1 FROM memory_digests w
+            WHERE w.id = ANY(d.child_digest_ids) AND s.id = ANY(w.child_digest_ids)
+          )
+        )
+        AND (
+          cardinality(s.chat_ids) > (
+            SELECT count(*)
+            FROM chats c
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE c.id = ANY(s.chat_ids)
+              AND c.summary_redacted IS TRUE
+              AND c.summary IS NOT NULL
+              AND c.memory_excluded_at IS NULL
+              AND c.deleted IS FALSE
+              AND (ua.id IS NULL OR ua.account_type <> 'personal')
+          )
+          OR cardinality(s.memo_ids) > (
+            SELECT count(*)
+            FROM memory_memos m
+            LEFT JOIN chats c ON c.id = m.chat_id
+            LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+            WHERE m.id = ANY(s.memo_ids)
+              AND m.deleted IS FALSE
+              AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+          )
+          OR cardinality(s.child_digest_ids) > (
+            SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+          )
+        )
+    )
 ) items
 ORDER BY items.at, items.id;
 
@@ -83,3 +122,11 @@ FROM (
   WHERE m.organization_id = @organization_id AND m.chat_id IS NOT NULL
     AND m.id IN (SELECT unnest(tree.memo_ids) FROM tree)
 ) sources;
+
+-- name: DeleteProjectDigests :execrows
+-- Every digest of the listed projects in one organization. The bench rebuilds
+-- a synthetic corpus's digests with each model it compares, so digests
+-- written by an earlier model must not survive.
+DELETE FROM memory_digests
+WHERE organization_id = @organization_id
+  AND project_id = ANY(@project_ids::uuid[]);
