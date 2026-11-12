@@ -316,6 +316,31 @@ describe("a long project list", () => {
     expect(projectRow("Project 14")).toBeNull();
   });
 
+  it("says how many folded projects carry permissions", () => {
+    mocks.extraProjects = Array.from({ length: 14 }, (_, i) => ({
+      id: `project-${i + 1}`,
+      name: `Project ${i + 1}`,
+      slug: `project-${i + 1}`,
+    }));
+    // Project 12 sits past the clip.
+    renderEditor({
+      ...role,
+      grants: [
+        {
+          scope: "mcp:connect",
+          selectors: [
+            { resourceKind: "mcp", resourceId: "*", projectId: "project-12" },
+          ],
+        },
+      ],
+    });
+    expect(
+      screen.getByRole("button", {
+        name: "Show 5 more projects (1 with permissions)",
+      }),
+    ).toBeTruthy();
+  });
+
   it("shows no control while every project fits", () => {
     mocks.extraProjects = Array.from({ length: 9 }, (_, i) => ({
       id: `project-${i + 1}`,

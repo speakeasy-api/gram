@@ -350,6 +350,26 @@ function McpMatrix({
     clipped && !showAllProjects && !query
       ? projectIds.length - PROJECT_CLIP
       : 0;
+  // A folded project's grants and denies are not drawn anywhere, so the
+  // control says how many of the folded projects carry some.
+  const hiddenWithPermissions =
+    hiddenProjects === 0
+      ? 0
+      : projectIds
+          .slice(PROJECT_CLIP)
+          .filter((projectId) =>
+            rowViews.some(
+              (view) =>
+                view.row.kind !== "all" &&
+                view.row.projectId === projectId &&
+                (LEVELS.some(
+                  (level) =>
+                    mcpAllows(grants, view.row, level) ||
+                    mcpBlocks(grants, view.row, level),
+                ) ||
+                  mcpBlockedTools(grants, view.row).length > 0),
+            ),
+          ).length;
 
   // A project row stays while any of its servers match, so a match never
   // loses the project it sits in.
@@ -931,6 +951,10 @@ function McpMatrix({
                         ? "Show fewer projects"
                         : `Show ${hiddenProjects} more ${
                             hiddenProjects === 1 ? "project" : "projects"
+                          }${
+                            hiddenWithPermissions > 0
+                              ? ` (${hiddenWithPermissions} with permissions)`
+                              : ""
                           }`}
                     </button>
                   </td>
