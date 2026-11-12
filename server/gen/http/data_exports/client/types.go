@@ -180,6 +180,9 @@ type TestRouteResponseBody struct {
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
 	// One result for each signal the route's data source exports.
 	Signals []*TestDataExportRouteSignalResultResponseBody `form:"signals,omitempty" json:"signals,omitempty" xml:"signals,omitempty"`
+	// The speakeasy.test_event.id every record of this test carries, to find them
+	// in the destination.
+	TestEventID *string `form:"test_event_id,omitempty" json:"test_event_id,omitempty" xml:"test_event_id,omitempty"`
 }
 
 // ListDestinationsUnauthorizedResponseBody is the type of the "dataExports"
@@ -3703,9 +3706,10 @@ func NewDeleteRouteGatewayError(body *DeleteRouteGatewayErrorResponseBody) *goa.
 // "testRoute" endpoint result from a HTTP "OK" response.
 func NewTestRouteTestDataExportRouteResultOK(body *TestRouteResponseBody) *dataexports.TestDataExportRouteResult {
 	v := &dataexports.TestDataExportRouteResult{
-		Outcome:    *body.Outcome,
-		StatusCode: body.StatusCode,
-		Message:    *body.Message,
+		Outcome:     *body.Outcome,
+		StatusCode:  body.StatusCode,
+		Message:     *body.Message,
+		TestEventID: *body.TestEventID,
 	}
 	v.Signals = make([]*dataexports.TestDataExportRouteSignalResult, len(body.Signals))
 	for i, val := range body.Signals {
@@ -4149,6 +4153,9 @@ func ValidateTestRouteResponseBody(body *TestRouteResponseBody) (err error) {
 	}
 	if body.Signals == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("signals", "body"))
+	}
+	if body.TestEventID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("test_event_id", "body"))
 	}
 	if body.Outcome != nil {
 		if !(*body.Outcome == "accepted" || *body.Outcome == "refused" || *body.Outcome == "not_found" || *body.Outcome == "unreachable" || *body.Outcome == "error") {

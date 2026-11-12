@@ -13816,7 +13816,7 @@ examples:
           id: "6ecef0d6-e426-4c4c-bafe-7b477e1a37d3"
       responses:
         "200":
-          application/json: {"message": "<value>", "outcome": "unreachable", "signals": []}
+          application/json: {"message": "<value>", "outcome": "unreachable", "signals": [], "test_event_id": "<id>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

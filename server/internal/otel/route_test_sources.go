@@ -54,14 +54,23 @@ func NewRouteTestSources(logger *slog.Logger, meterProvider metric.MeterProvider
 	}
 }
 
-// testMarker is the marker attribute every test record carries.
-func testMarker() otelattr.KeyValue { return attr.TestEvent(true) }
+// testMarks are the attributes every test record, span and data point carries.
+func testMarks(testEventID string) []otelattr.KeyValue {
+	return []otelattr.KeyValue{attr.TestEvent(true), attr.TestEventID(testEventID)}
+}
 
 func otlpTestMarker() *commonv1.KeyValue {
 	return &commonv1.KeyValue{
 		Key:         string(attr.TestEventKey),
 		Value:       &commonv1.AnyValue{Value: &commonv1.AnyValue_BoolValue{BoolValue: true}},
 		KeyStrindex: 0,
+	}
+}
+
+func otlpTestMarks(testEventID string) []*commonv1.KeyValue {
+	return []*commonv1.KeyValue{
+		otlpTestMarker(),
+		{Key: string(attr.TestEventIDKey), Value: otlpStringValue(testEventID), KeyStrindex: 0},
 	}
 }
 
@@ -88,11 +97,12 @@ func (s *toolCallLogTestSource) BuildTestRequests(_ context.Context, destination
 		string(attr.EventSourceKey):    toolCallLogEventSource,
 		string(attr.OrganizationIDKey): destination.OrganizationID,
 		string(attr.TestEventKey):      true,
+		string(attr.TestEventIDKey):    destination.TestEventID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encode tool call log test attributes: %w", err)
 	}
-	resourceAttributes, err := json.Marshal(map[string]any{string(attr.ServiceNameKey): toolCallLogServiceName})
+	resourceAttributes, err := json.Marshal(map[string]any{string(attr.ServiceNameKey): toolCallLogServiceName, string(attr.TestEventKey): true})
 	if err != nil {
 		return nil, fmt.Errorf("encode tool call log test resource: %w", err)
 	}
@@ -103,7 +113,7 @@ func (s *toolCallLogTestSource) BuildTestRequests(_ context.Context, destination
 		TimeUnixNano:           new(now.UnixNano()),
 		ObservedTimeUnixNano:   new(now.UnixNano()),
 		SeverityText:           new("INFO"),
-		Body:                   new(routeTestMessage),
+		Body:                   new(TestEventMessage),
 		AttributesJson:         new(string(attributes)),
 		ResourceAttributesJson: new(string(resourceAttributes)),
 		GramProjectId:          new(destination.ProjectID.String()),
@@ -146,12 +156,11 @@ func (s *riskFindingTestSource) BuildTestRequests(_ context.Context, destination
 		ObservedTimeUnixNano: now,
 		SeverityNumber:       logsv1.SeverityNumber_SEVERITY_NUMBER_INFO,
 		SeverityText:         "INFO",
-		Body:                 otlpStringValue(routeTestMessage),
-		Attributes: []*commonv1.KeyValue{
+		Body:                 otlpStringValue(TestEventMessage),
+		Attributes: append([]*commonv1.KeyValue{
 			{Key: string(attr.OrganizationIDKey), Value: otlpStringValue(destination.OrganizationID), KeyStrindex: 0},
 			{Key: string(attr.ProjectIDKey), Value: otlpStringValue(destination.ProjectID.String()), KeyStrindex: 0},
-			otlpTestMarker(),
-		},
+		}, otlpTestMarks(destination.TestEventID)...),
 		DroppedAttributesCount: 0,
 		Flags:                  0,
 		TraceId:                nil,
@@ -216,7 +225,7 @@ func (s *productTelemetryTestSource) logRequest(ctx context.Context, destination
 				ObservedTimeUnixNano:   uint64(now.UnixNano()),
 				SeverityNumber:         logsv1.SeverityNumber_SEVERITY_NUMBER_INFO,
 				SeverityText:           "INFO",
-				Body:                   otlpStringValue(routeTestMessage),
+				Body:                   otlpStringValue(TestEventMessage),
 				Attributes:             nil,
 				DroppedAttributesCount: 0,
 				Flags:                  0,
@@ -250,7 +259,7 @@ func (s *productTelemetryTestSource) logRequest(ctx context.Context, destination
 	if isConnectionLogRecord(record) || logOriginalScopeName(record) == dialect.GatewayLogScope {
 		return empty, errors.New("product telemetry test log would not reach the product telemetry route")
 	}
-	if err := applyLogEnrichments(record, []otelattr.KeyValue{testMarker()}); err != nil {
+	if err := applyLogEnrichments(record, testMarks(destination.TestEventID)); err != nil {
 		return empty, fmt.Errorf("mark product telemetry test log: %w", err)
 	}
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{record}, destination.IncludeSensitiveData)
@@ -303,7 +312,7 @@ func (s *productTelemetryTestSource) traceRequest(ctx context.Context, destinati
 	if err != nil {
 		return empty, fmt.Errorf("transform product telemetry test span: %w", err)
 	}
-	if err := applySpanEnrichments(span, []otelattr.KeyValue{testMarker()}); err != nil {
+	if err := applySpanEnrichments(span, testMarks(destination.TestEventID)); err != nil {
 		return empty, fmt.Errorf("mark product telemetry test span: %w", err)
 	}
 	request, err := newRelayExportRequest([]*otelv1.Span{span}, destination.IncludeSensitiveData)
@@ -322,7 +331,7 @@ func (s *productTelemetryTestSource) metricRequest(ctx context.Context, destinat
 			Metrics: []*metricsv1.Metric{{
 				Name: productTelemetryTestName,
 				Data: &metricsv1.Metric_Gauge{Gauge: &metricsv1.Gauge{DataPoints: []*metricsv1.NumberDataPoint{{
-					Attributes:   []*commonv1.KeyValue{otlpTestMarker()},
+					Attributes:   otlpTestMarks(destination.TestEventID),
 					TimeUnixNano: uint64(now.UnixNano()),
 					Value:        &metricsv1.NumberDataPoint_AsInt{AsInt: 1},
 				}}}},
@@ -381,7 +390,7 @@ func (c *ConnectionLogTestRequests) Build(ctx context.Context, inbound *otelv1.I
 	if !isConnectionLogRecord(record) {
 		return empty, errors.New("connection log test record has the wrong provenance source")
 	}
-	if err := applyLogEnrichments(record, []otelattr.KeyValue{testMarker()}); err != nil {
+	if err := applyLogEnrichments(record, testMarks(destination.TestEventID)); err != nil {
 		return empty, fmt.Errorf("mark connection log test record: %w", err)
 	}
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{record}, destination.IncludeSensitiveData)

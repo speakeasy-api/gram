@@ -191,6 +191,9 @@ type LogDataExportRouteTestEvent struct {
 	StatusCode int
 	// Signals is each signal's own outcome, one per OTLP request the test sent.
 	Signals []DataExportRouteTestSignal
+	// TestEventMarker is the speakeasy.test_event.id value every record of this
+	// test carries. It names no stored resource, so it is not a URN.
+	TestEventMarker string
 }
 
 // DataExportRouteTestSignal is what one signal's test request got back.
@@ -205,11 +208,12 @@ type dataExportRouteTestMetadata struct {
 	Outcome       string                      `json:"outcome"`
 	StatusCode    int                         `json:"status_code,omitempty"`
 	Signals       []DataExportRouteTestSignal `json:"signals,omitempty"`
+	TestEventID   string                      `json:"test_event_id,omitempty"`
 }
 
 func (l *Logger) LogDataExportRouteTest(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteTestEvent) error {
 	action := ActionDataExportRouteTest
-	metadata, err := marshalAuditPayload(dataExportRouteTestMetadata{DestinationID: event.DestinationURN.ID.String(), Outcome: event.Outcome, StatusCode: event.StatusCode, Signals: event.Signals})
+	metadata, err := marshalAuditPayload(dataExportRouteTestMetadata{DestinationID: event.DestinationURN.ID.String(), Outcome: event.Outcome, StatusCode: event.StatusCode, Signals: event.Signals, TestEventID: event.TestEventMarker})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}

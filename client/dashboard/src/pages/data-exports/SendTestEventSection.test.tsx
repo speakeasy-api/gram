@@ -1,3 +1,4 @@
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { createQueryClient } from "@/contexts/Sdk";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { QueryClientProvider, useMutation } from "@tanstack/react-query";
@@ -25,7 +26,12 @@ const mutate = vi.fn();
 const mutation = {
   mutate,
   data: undefined as
-    | { outcome: string; message: string; signals: SignalResult[] }
+    | {
+        outcome: string;
+        message: string;
+        signals: SignalResult[];
+        testEventId: string;
+      }
     | undefined,
   error: undefined as unknown,
   isPending: false,
@@ -78,20 +84,25 @@ afterEach(() => {
 
 function renderSection(unsavedChanges = false, sendsEverySignal = false) {
   render(
-    <SendTestEventSection
-      projectSlug="default"
-      routeId="route-1"
-      sendsEverySignal={sendsEverySignal}
-      unsavedChanges={unsavedChanges}
-    />,
+    <TooltipProvider>
+      <SendTestEventSection
+        projectSlug="default"
+        routeId="route-1"
+        sendsEverySignal={sendsEverySignal}
+        unsavedChanges={unsavedChanges}
+      />
+    </TooltipProvider>,
   );
 }
+
+const testEventId = "0b1e5f8a-3c2d-4e6f-9a7b-1c2d3e4f5a6b";
 
 function logsResult(outcome: string, message: string) {
   return {
     outcome,
     message,
     signals: [{ signal: "logs", outcome, message }],
+    testEventId,
   };
 }
 
@@ -110,14 +121,23 @@ describe("SendTestEventSection", () => {
     renderSection();
 
     expect(screen.getByText("speakeasy.test_event=true")).toBeTruthy();
-    expect(screen.getByText(/Send one test event to check/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Sends one test event to check the endpoint and API key/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /their message starts with “Speakeasy test event”, so you can filter them out of dashboards and monitors/,
+      ),
+    ).toBeTruthy();
   });
 
   it("says product telemetry sends a log, a trace and a metric", () => {
     renderSection(false, true);
 
     expect(
-      screen.getByText(/Send one test log, trace and metric to check/),
+      screen.getByText(/Sends one test log, trace and metric to check/),
     ).toBeTruthy();
     expect(screen.getByText("speakeasy.test_event=true")).toBeTruthy();
   });
@@ -150,6 +170,32 @@ describe("SendTestEventSection", () => {
     expect(screen.getByText(title)).toBeTruthy();
     expect(screen.getByText(`Message for ${outcome}.`)).toBeTruthy();
     expect(screen.queryByRole("listitem")).toBeNull();
+    expect(screen.getByText("Find it in your destination:")).toBeTruthy();
+    expect(
+      screen.getByText(`speakeasy.test_event.id=${testEventId}`),
+    ).toBeTruthy();
+  });
+
+  it("copies the test event ID", () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    mutation.data = logsResult("accepted", "Accepted.");
+    renderSection();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy test event ID" }));
+
+    expect(writeText).toHaveBeenCalledWith(
+      `speakeasy.test_event.id=${testEventId}`,
+    );
+  });
+
+  it("shows no test event ID before a result", () => {
+    renderSection();
+
+    expect(screen.queryByText("Find it in your destination:")).toBeNull();
   });
 
   it("lists every signal when all were accepted", () => {
@@ -163,6 +209,7 @@ describe("SendTestEventSection", () => {
         statusCode: 200,
         message: "The destination accepted the test event.",
       })),
+      testEventId,
     };
     renderSection(false, true);
 
@@ -195,6 +242,7 @@ describe("SendTestEventSection", () => {
             "No traces endpoint at this address. Check the URL; Speakeasy adds /v1/traces.",
         },
       ],
+      testEventId,
     };
     renderSection(false, true);
 

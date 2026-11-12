@@ -133781,11 +133781,15 @@ components:
                     type: integer
                     description: HTTP status of the signal that set the outcome. Omitted when it did not answer.
                     format: int64
+                test_event_id:
+                    type: string
+                    description: The speakeasy.test_event.id every record of this test carries, to find them in the destination.
             description: What the destination answered to a route's test events. Header values and the response body are never returned.
             required:
                 - outcome
                 - message
                 - signals
+                - test_event_id
         TestDataExportRouteSignalResult:
             type: object
             properties:

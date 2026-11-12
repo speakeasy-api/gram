@@ -128,7 +128,7 @@ describe("ConfigureExportSheet test event", () => {
   it("says product telemetry sends a log, a trace and a metric", () => {
     renderSheet("product_telemetry", destination.id);
     expect(
-      screen.getByText(/Send one test log, trace and metric to check/),
+      screen.getByText(/Sends one test log, trace and metric to check/),
     ).toBeTruthy();
   });
 

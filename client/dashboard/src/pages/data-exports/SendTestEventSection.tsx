@@ -1,6 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
@@ -98,12 +99,15 @@ export function SendTestEventSection({
             ) : (
               <Text muted className="text-sm">
                 {sendsEverySignal
-                  ? "Send one test log, trace and metric to check the endpoint and API key. Each carries "
-                  : "Send one test event to check the endpoint and API key. It carries "}
+                  ? "Sends one test log, trace and metric to check the endpoint and API key."
+                  : "Sends one test event to check the endpoint and API key."}{" "}
+                Test events are marked{" "}
                 <code className="font-mono text-xs">
                   speakeasy.test_event=true
-                </code>
-                , so you can filter it out of dashboards and monitors.
+                </code>{" "}
+                and their message starts with &ldquo;Speakeasy test
+                event&rdquo;, so you can filter them out of dashboards and
+                monitors.
               </Text>
             )}
           </div>
@@ -153,6 +157,24 @@ export function SendTestEventSection({
               </ul>
             ) : null}
           </Alert>
+        ) : null}
+        {result &&
+        !unsavedChanges &&
+        !sendTest.isPending &&
+        !sendTest.isError ? (
+          <div className="flex items-center gap-2">
+            <Text muted className="text-sm">
+              Find it in your destination:
+            </Text>
+            <code className="font-mono text-xs break-all">
+              speakeasy.test_event.id={result.testEventId}
+            </code>
+            <CopyButton
+              size="xs"
+              text={`speakeasy.test_event.id=${result.testEventId}`}
+              tooltip="Copy test event ID"
+            />
+          </div>
         ) : null}
       </div>
     </RequireScope>

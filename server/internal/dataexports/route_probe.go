@@ -79,6 +79,8 @@ type TestDestination struct {
 	EndpointURL          string
 	Headers              map[string]string
 	IncludeSensitiveData bool
+	// TestEventID is shared by every record one test sends, across all its signals.
+	TestEventID string
 }
 
 // SignalTestResult is what one signal's test request got back.
@@ -136,6 +138,7 @@ type RouteTestResult struct {
 	StatusCode    int
 	Message       string
 	Signals       []SignalTestOutcome
+	TestEventID   string
 	DataSource    string
 	DestinationID uuid.UUID
 }
@@ -191,12 +194,14 @@ func (c *RouteTestCore) SendTest(ctx context.Context, params SendRouteTestParams
 	// One allowance covers every signal: a product telemetry test sends three requests.
 	sendCtx, cancel := context.WithTimeout(ctx, routeTestTimeout)
 	defer cancel()
+	testEventID := uuid.NewString()
 	sent, err := c.sender.SendTest(sendCtx, route.DataSource, TestDestination{
 		OrganizationID:       params.OrganizationID,
 		ProjectID:            params.ProjectID,
 		EndpointURL:          destination.EndpointURL,
 		Headers:              destination.Headers,
 		IncludeSensitiveData: destination.IncludeSensitiveData,
+		TestEventID:          testEventID,
 	})
 	if err != nil {
 		return RouteTestResult{}, fmt.Errorf("send data export test event: %w", err)
@@ -206,6 +211,7 @@ func (c *RouteTestCore) SendTest(ctx context.Context, params SendRouteTestParams
 	}
 
 	result := summarizeRouteTest(sent)
+	result.TestEventID = testEventID
 	result.DataSource = route.DataSource
 	result.DestinationID = destination.ID
 	auditSignals := make([]audit.DataExportRouteTestSignal, len(result.Signals))
@@ -224,6 +230,7 @@ func (c *RouteTestCore) SendTest(ctx context.Context, params SendRouteTestParams
 		Outcome:          string(result.Outcome),
 		StatusCode:       result.StatusCode,
 		Signals:          auditSignals,
+		TestEventMarker:  testEventID,
 	}); err != nil {
 		// The event was already sent, so the caller still gets its outcome.
 		logger.ErrorContext(ctx, "audit data export route test", attr.SlogError(err))
@@ -276,6 +283,7 @@ func summarizeRouteTest(sent []SignalTestResult) RouteTestResult {
 		StatusCode:    signals[worst].StatusCode,
 		Message:       signals[worst].Message,
 		Signals:       signals,
+		TestEventID:   "",
 		DataSource:    "",
 		DestinationID: uuid.Nil,
 	}

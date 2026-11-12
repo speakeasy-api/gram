@@ -45,6 +45,7 @@ type SendDataExportTestEventOutput struct {
 	StatusCode    int                             `json:"status_code,omitempty" jsonschema:"HTTP status of the signal that set the outcome; omitted when it did not answer"`
 	Message       string                          `json:"message" jsonschema:"what happened, in plain language, to show the user"`
 	Signals       []SendDataExportTestEventSignal `json:"signals" jsonschema:"one result for each signal the route's data source exports"`
+	TestEventID   string                          `json:"test_event_id" jsonschema:"the speakeasy.test_event.id every record of this test carries; the user can search the destination for it"`
 	ProjectID     string                          `json:"project_id"`
 	RouteID       string                          `json:"route_id"`
 	DataSource    string                          `json:"data_source"`
@@ -153,6 +154,7 @@ func (s *DataExportTestEventService) send(ctx context.Context, principal Princip
 		StatusCode:    result.StatusCode,
 		Message:       result.Message,
 		Signals:       signals,
+		TestEventID:   result.TestEventID,
 		ProjectID:     project.ID.String(),
 		RouteID:       routeID.String(),
 		DataSource:    result.DataSource,

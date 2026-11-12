@@ -372,7 +372,8 @@ var TestDataExportRouteResult = Type("TestDataExportRouteResult", func() {
 	Attribute("status_code", Int, "HTTP status of the signal that set the outcome. Omitted when it did not answer.")
 	Attribute("message", String, "What happened, in plain language.")
 	Attribute("signals", ArrayOf(TestDataExportRouteSignalResult), "One result for each signal the route's data source exports.")
-	Required("outcome", "message", "signals")
+	Attribute("test_event_id", String, "The speakeasy.test_event.id every record of this test carries, to find them in the destination.")
+	Required("outcome", "message", "signals", "test_event_id")
 })
 
 var TestDataExportRouteSignalResult = Type("TestDataExportRouteSignalResult", func() {

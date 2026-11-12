@@ -834,6 +834,8 @@ const (
 
 	// TestEventKey marks every record a data export test sends, so a destination can filter it out.
 	TestEventKey = attribute.Key("speakeasy.test_event")
+	// TestEventIDKey is shared by every record one data export test sends, so a destination can find them.
+	TestEventIDKey = attribute.Key("speakeasy.test_event.id")
 
 	ConnectionDropCountsKey           = attribute.Key("gram.connection.drop_counts")
 	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")
@@ -3263,6 +3265,11 @@ func SlogExtMcpConnectionFinal(v bool) slog.Attr {
 func TestEvent(v bool) attribute.KeyValue { return TestEventKey.Bool(v) }
 func SlogTestEvent(v bool) slog.Attr {
 	return slog.Bool(string(TestEventKey), v)
+}
+
+func TestEventID(v string) attribute.KeyValue { return TestEventIDKey.String(v) }
+func SlogTestEventID(v string) slog.Attr {
+	return slog.String(string(TestEventIDKey), v)
 }
 
 func ExtMcpConnectionUserMessage(v string) attribute.KeyValue {

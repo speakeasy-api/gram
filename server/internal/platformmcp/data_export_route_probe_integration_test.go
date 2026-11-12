@@ -154,6 +154,8 @@ func TestSendDataExportTestEventReportsEverySignalForProductTelemetry(t *testing
 	require.NoError(t, err)
 	require.Equal(t, "accepted", output.Outcome)
 	require.Equal(t, "The destination accepted the test events for logs, traces and metrics.", output.Message)
+	_, err = uuid.Parse(output.TestEventID)
+	require.NoError(t, err)
 	require.Equal(t, dataexports.DataSourceProductTelemetry, output.DataSource)
 	require.Len(t, output.Signals, 3)
 	for i, signal := range []string{"logs", "traces", "metrics"} {

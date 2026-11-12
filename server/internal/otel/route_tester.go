@@ -16,8 +16,9 @@ import (
 
 const routeTestSignalTimeout = 5 * time.Second
 
-// routeTestMessage is the body or message of every test record.
-const routeTestMessage = "This is a test event from Speakeasy. It is not real data."
+// TestEventMessage is the body or message of every test record. Its prefix
+// is how a person reading a destination tells a test from real data.
+const TestEventMessage = "Speakeasy test event: this is not real data."
 
 // routeTestSignalPaths is where each signal goes, as the relays send it.
 var routeTestSignalPaths = map[dataexports.Signal]string{
@@ -106,9 +107,17 @@ func (t *RouteTester) SendTest(ctx context.Context, sourceName string, destinati
 	if !ok || !built {
 		return nil, fmt.Errorf("%w: %q", dataexports.ErrRouteTestUnsupported, sourceName)
 	}
+	if destination.TestEventID == "" {
+		return nil, errors.New("a test needs a test event ID")
+	}
 	requests, err := source.BuildTestRequests(ctx, destination)
 	if err != nil {
 		return nil, fmt.Errorf("build %s test requests: %w", sourceName, err)
+	}
+	for _, request := range requests {
+		if err := markTestRequest(request.Message, destination.TestEventID); err != nil {
+			return nil, fmt.Errorf("mark %s %s test request: %w", sourceName, request.Signal, err)
+		}
 	}
 	signals := make([]dataexports.Signal, len(requests))
 	for i, request := range requests {

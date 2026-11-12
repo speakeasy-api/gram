@@ -79,6 +79,7 @@ func testEventDestination(includeSensitiveData bool) dataexports.TestDestination
 		EndpointURL:          "https://collector.example.com",
 		Headers:              map[string]string{"DD-API-KEY": "secret"},
 		IncludeSensitiveData: includeSensitiveData,
+		TestEventID:          "0b1e5f8a-3c2d-4e6f-9a7b-1c2d3e4f5a6b",
 	}
 }
 
@@ -118,12 +119,13 @@ func TestTestSource_BuildsOneMarkedRecordAndNothingReal(t *testing.T) {
 		require.Nil(t, record.GetBody())
 		attrs := otlpAttributes(record.GetAttributes())
 		require.True(t, attrs["speakeasy.test_event"].GetBoolValue())
+		require.Equal(t, "0b1e5f8a-3c2d-4e6f-9a7b-1c2d3e4f5a6b", attrs["speakeasy.test_event.id"].GetStringValue())
 		require.NotEmpty(t, attrs["log.record.uid"].GetStringValue())
-		require.Equal(t, "This is a test event from Speakeasy. It is not real data.", attrs["speakeasy.mcp_connection.user_message"].GetStringValue())
+		require.Equal(t, "Speakeasy test event: this is not real data.", attrs["speakeasy.mcp_connection.user_message"].GetStringValue())
 		require.Equal(t, dialect.ConnectionLogScope, attrs["speakeasy.original_instrumentation_scope.name"].GetStringValue())
 		for key := range attrs {
 			switch key {
-			case "speakeasy.test_event", "speakeasy.mcp_connection.user_message", "log.record.uid",
+			case "speakeasy.test_event", "speakeasy.test_event.id", "speakeasy.mcp_connection.user_message", "log.record.uid",
 				"speakeasy.original_instrumentation_scope.name", "speakeasy.organization.id", "speakeasy.project.id":
 			default:
 				t.Errorf("unexpected attribute %q on the test record", key)
@@ -166,5 +168,10 @@ func TestTestSource_SendsThroughTheRouteTester(t *testing.T) {
 	require.Len(t, bodies, 1)
 	var request collectorlogsv1.ExportLogsServiceRequest
 	require.NoError(t, proto.Unmarshal(bodies[0], &request))
-	require.Equal(t, "speakeasy.mcp_connection.test", request.GetResourceLogs()[0].GetScopeLogs()[0].GetLogRecords()[0].GetEventName())
+	resource := otlpAttributes(request.GetResourceLogs()[0].GetResource().GetAttributes())
+	require.True(t, resource["speakeasy.test_event"].GetBoolValue())
+	require.Equal(t, "gram-server", resource["service.name"].GetStringValue())
+	record := request.GetResourceLogs()[0].GetScopeLogs()[0].GetLogRecords()[0]
+	require.Equal(t, "speakeasy.mcp_connection.test", record.GetEventName())
+	require.Equal(t, destination.TestEventID, otlpAttributes(record.GetAttributes())["speakeasy.test_event.id"].GetStringValue())
 }

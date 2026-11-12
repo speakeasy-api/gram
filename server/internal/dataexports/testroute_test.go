@@ -125,6 +125,8 @@ func TestTestRouteMapsDestinationAnswers(t *testing.T) {
 			require.Equal(t, tc.outcome, metadata["outcome"])
 			require.InDelta(t, float64(tc.status), metadata["status_code"], 0)
 			require.Equal(t, *route.OtelDestinationID, metadata["otel_destination_id"])
+			require.NotEmpty(t, result.TestEventID)
+			require.Equal(t, result.TestEventID, metadata["test_event_id"])
 		})
 	}
 }
@@ -196,6 +198,8 @@ func TestTestRouteSendsEverySignalForProductTelemetry(t *testing.T) {
 			require.Equal(t, "accepted", result.Signals[i].Outcome)
 		}
 		require.EqualValues(t, 3, received.Load())
+		_, err = uuid.Parse(result.TestEventID)
+		require.NoError(t, err)
 	})
 
 	t.Run("traces not found", func(t *testing.T) {

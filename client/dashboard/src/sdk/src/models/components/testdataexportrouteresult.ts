@@ -51,6 +51,10 @@ export type TestDataExportRouteResult = {
    * HTTP status of the signal that set the outcome. Omitted when it did not answer.
    */
   statusCode?: number | undefined;
+  /**
+   * The speakeasy.test_event.id every record of this test carries, to find them in the destination.
+   */
+  testEventId: string;
 };
 
 /** @internal */
@@ -69,10 +73,12 @@ export const TestDataExportRouteResult$inboundSchema: z.ZodMiniType<
     outcome: TestDataExportRouteResultOutcome$inboundSchema,
     signals: z.array(TestDataExportRouteSignalResult$inboundSchema),
     status_code: z.optional(z.int()),
+    test_event_id: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "status_code": "statusCode",
+      "test_event_id": "testEventId",
     });
   }),
 );

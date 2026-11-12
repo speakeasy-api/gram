@@ -180,6 +180,9 @@ type TestRouteResponseBody struct {
 	Message string `form:"message" json:"message" xml:"message"`
 	// One result for each signal the route's data source exports.
 	Signals []*TestDataExportRouteSignalResultResponseBody `form:"signals" json:"signals" xml:"signals"`
+	// The speakeasy.test_event.id every record of this test carries, to find them
+	// in the destination.
+	TestEventID string `form:"test_event_id" json:"test_event_id" xml:"test_event_id"`
 }
 
 // ListDestinationsUnauthorizedResponseBody is the type of the "dataExports"
@@ -2300,9 +2303,10 @@ func NewUpdateRouteResponseBody(res *dataexports.DataExportRoute) *UpdateRouteRe
 // the "testRoute" endpoint of the "dataExports" service.
 func NewTestRouteResponseBody(res *dataexports.TestDataExportRouteResult) *TestRouteResponseBody {
 	body := &TestRouteResponseBody{
-		Outcome:    res.Outcome,
-		StatusCode: res.StatusCode,
-		Message:    res.Message,
+		Outcome:     res.Outcome,
+		StatusCode:  res.StatusCode,
+		Message:     res.Message,
+		TestEventID: res.TestEventID,
 	}
 	if res.Signals != nil {
 		body.Signals = make([]*TestDataExportRouteSignalResultResponseBody, len(res.Signals))

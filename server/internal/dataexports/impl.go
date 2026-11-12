@@ -756,10 +756,11 @@ func (s *Service) TestRoute(ctx context.Context, payload *gen.TestRoutePayload) 
 		}
 	}
 	return &gen.TestDataExportRouteResult{
-		Outcome:    string(result.Outcome),
-		StatusCode: conv.PtrEmpty(result.StatusCode),
-		Message:    result.Message,
-		Signals:    signals,
+		Outcome:     string(result.Outcome),
+		StatusCode:  conv.PtrEmpty(result.StatusCode),
+		Message:     result.Message,
+		Signals:     signals,
+		TestEventID: result.TestEventID,
 	}, nil
 }
 

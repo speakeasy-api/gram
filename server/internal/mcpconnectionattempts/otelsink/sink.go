@@ -57,7 +57,7 @@ func NewTestSource(requests *otelsvc.ConnectionLogTestRequests, serviceName stri
 func (s *TestSource) DataSource() string { return dataexports.DataSourceMCPConnectionLogs }
 
 func (s *TestSource) BuildTestRequests(ctx context.Context, destination dataexports.TestDestination) ([]otelsvc.RouteTestRequest, error) {
-	record := mcpconnectionattempts.TestExportRecord(time.Now())
+	record := mcpconnectionattempts.TestExportRecord(time.Now(), otelsvc.TestEventMessage)
 	inbound, err := s.records.Prepare(otelpub.WithTenant(ctx, destination.OrganizationID, destination.ProjectID.String()), &record)
 	if err != nil {
 		return nil, fmt.Errorf("prepare connection log test record: %w", err)
