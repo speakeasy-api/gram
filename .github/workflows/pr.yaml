@@ -2202,6 +2202,8 @@ jobs:
 
       - name: Run eval
         if: steps.key.outputs.configured == 'true'
+        # Report-only: a provider or network failure must not fail the PR.
+        continue-on-error: true
         run: mise run eval:platform-tools --changed-since HEAD^1 --max-cases 60 --concurrency 4 --out "$RUNNER_TEMP/platform-tool-eval.md"
         env:
           # Not OPENROUTER_DEV_KEY: mise.toml sets that to a placeholder,

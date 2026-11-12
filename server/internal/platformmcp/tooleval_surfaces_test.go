@@ -37,7 +37,9 @@ func toolEvalCatalogue(t *testing.T, registrar *Registrar) []tooleval.Tool {
 	tools := make([]tooleval.Tool, 0, len(external))
 	for _, descriptor := range external {
 		readOnly := descriptor.Annotations != nil && descriptor.Annotations.ReadOnlyHint
-		tools = append(tools, tooleval.Tool{Name: descriptor.Name, Description: descriptor.Description, InputSchema: descriptor.InputSchema, ReadOnly: readOnly})
+		annotations, err := json.Marshal(descriptor.Annotations)
+		require.NoError(t, err)
+		tools = append(tools, tooleval.Tool{Name: descriptor.Name, Description: descriptor.Description, InputSchema: descriptor.InputSchema, ReadOnly: readOnly, Annotations: annotations})
 	}
 	return tools
 }
@@ -83,9 +85,7 @@ func toolEvalProgressiveSurface(t *testing.T, registrar *Registrar) tooleval.Sur
 
 	var tools []tooleval.Tool
 	for _, tool := range discoveryTools(discoveryProgressive) {
-		schema, ok := tool.InputSchema.(json.RawMessage)
-		require.True(t, ok, "discovery tool %s schema", tool.Name)
-		tools = append(tools, tooleval.Tool{Name: tool.Name, Description: tool.Description, InputSchema: schema, ReadOnly: tool.Annotations.ReadOnlyHint})
+		tools = append(tools, toolEvalDiscoveryTool(t, tool))
 	}
 	catalogue := toolEvalCatalogue(t, registrar)
 	for _, tool := range catalogue {
@@ -141,15 +141,33 @@ func toolEvalDiscoveryOutput(result *mcp.CallToolResult, err error) (tooleval.Di
 	return tooleval.Dispatch{Output: text.Text, Selected: nil}, nil
 }
 
-// toolEvalSnapshot is what clients are shown on each surface, as
+// toolEvalDiscoveryTool is one of the progressive surface's own tools as a
+// client lists it.
+func toolEvalDiscoveryTool(t *testing.T, tool *mcp.Tool) tooleval.Tool {
+	t.Helper()
+	schema, ok := tool.InputSchema.(json.RawMessage)
+	require.True(t, ok, "discovery tool %s schema", tool.Name)
+	annotations, err := json.Marshal(tool.Annotations)
+	require.NoError(t, err)
+	return tooleval.Tool{Name: tool.Name, Description: tool.Description, InputSchema: schema, ReadOnly: tool.Annotations.ReadOnlyHint, Annotations: annotations}
+}
+
+// toolEvalSnapshot is what the eval's agent is shown, as
 // tooleval/catalogue.json stores it.
 func toolEvalSnapshot(t *testing.T, registrar *Registrar) tooleval.Catalogue {
 	t.Helper()
+	var discovery []tooleval.Tool
+	for _, tool := range discoveryTools(discoveryProgressive) {
+		discovery = append(discovery, toolEvalDiscoveryTool(t, tool))
+	}
 	return tooleval.Catalogue{
+		AgentPrompt: tooleval.SystemPrompt(tooleval.Surface{}),
 		Instructions: map[string]string{
 			"direct":      registrar.instructions,
 			"progressive": discoveryInstructions(discoveryProgressive),
 		},
-		Tools: toolEvalCatalogue(t, registrar),
+		Discovery: discovery,
+		FirstRun:  slices.Clone(firstRunTools),
+		Tools:     toolEvalCatalogue(t, registrar),
 	}
 }

@@ -23,7 +23,8 @@ const (
 	// a Platform tool by then counts as reaching none.
 	maxAgentTurns = 8
 
-	// caseTimeout bounds one case's whole agent loop.
+	// caseTimeout bounds one case's whole agent loop. Running out of it
+	// counts as reaching no tool.
 	caseTimeout = 3 * time.Minute
 
 	// stubResult answers an orientation read, so the agent moves on to the tool
@@ -43,6 +44,8 @@ type Tool struct {
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"input_schema"`
 	ReadOnly    bool            `json:"read_only"`
+	// Annotations are the tool's MCP hints, as a client lists them.
+	Annotations json.RawMessage `json:"annotations,omitempty"`
 }
 
 // Call is a Platform tool the agent chose and the arguments it sent.
@@ -235,8 +238,8 @@ func SystemPrompt(surface Surface) string {
 		"Server instructions:\n" + surface.Instructions
 }
 
-func attempt(ctx context.Context, client openrouter.CompletionClient, model string, surface Surface, run int, c Case, tools map[string]Tool, validators map[string]*jsonschema.Resolved) Outcome {
-	ctx, cancel := context.WithTimeout(ctx, caseTimeout)
+func attempt(parent context.Context, client openrouter.CompletionClient, model string, surface Surface, run int, c Case, tools map[string]Tool, validators map[string]*jsonschema.Resolved) Outcome {
+	ctx, cancel := context.WithTimeout(parent, caseTimeout)
 	defer cancel()
 	started := time.Now()
 	outcome := Outcome{Model: model, Surface: surface.Name, Run: run, Case: c}
@@ -252,6 +255,13 @@ turns:
 		outcome.Turns = turn + 1
 		response, err := client.GetCompletion(ctx, completionRequest(model, messages, listed))
 		if err != nil {
+			// An agent that runs out of time has not reached a tool, like one
+			// that runs out of turns: a miss, not an error that drops out of
+			// the rates. A cancelled run is still an error.
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) && parent.Err() == nil {
+				outcome.Answer = fmt.Sprintf("(no tool within %s)", caseTimeout)
+				break
+			}
 			outcome.Err = fmt.Errorf("case %s turn %d: %w", c.ID, turn, err)
 			break
 		}
@@ -303,12 +313,18 @@ func score(o *Outcome, tools map[string]Tool, validators map[string]*jsonschema.
 	}
 	o.Hit = slices.Contains(o.Case.Expect, o.Selected.Tool)
 	o.OnPath = o.Case.onPath(o.Selected.Tool)
-	if !o.Hit {
-		return
-	}
 	var arguments map[string]any
 	if err := json.Unmarshal(nonEmpty(o.Selected.Arguments), &arguments); err != nil {
 		o.SchemaError = "arguments are not a JSON object"
+		return
+	}
+	// Any write sent confirmed on its first call skipped the preview,
+	// whether or not it was the right tool.
+	if tool, ok := tools[o.Selected.Tool]; ok && !tool.ReadOnly {
+		confirmed, _ := arguments["confirmed"].(bool)
+		o.ConfirmedFirst = confirmed
+	}
+	if !o.Hit {
 		return
 	}
 	if validator, ok := validators[o.Selected.Tool]; ok {
@@ -319,10 +335,6 @@ func score(o *Outcome, tools map[string]Tool, validators map[string]*jsonschema.
 		}
 	}
 	o.ArgsMatch = argsMatch(o.Case.Args, nonEmpty(o.Selected.Arguments))
-	if tool, ok := tools[o.Selected.Tool]; ok && !tool.ReadOnly {
-		confirmed, _ := arguments["confirmed"].(bool)
-		o.ConfirmedFirst = confirmed
-	}
 }
 
 func nonEmpty(arguments json.RawMessage) json.RawMessage {

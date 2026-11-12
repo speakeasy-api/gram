@@ -78,9 +78,15 @@ mise run eval:platform-tools --surfaces progressive --cases '^risk-' --out repor
 catalogue and the current cases. It then runs the new or edited cases, the
 cases that name a changed tool in `expect` or `allow`, and the negative
 cases. When the server instructions change, every case runs. With no change,
-the run skips. `--max-cases` caps the run with a stable sample, except when
-the base has no `catalogue.json`: that first run is the baseline and runs
-every case.
+the run skips. Changes every case reads (the agent prompt and environment,
+the server instructions, or the progressive discovery tools) run every case.
+`--max-cases` caps the run, keeping the changed cases first, except when the
+base has no `catalogue.json`: that first run is the baseline and runs every
+case.
+
+A reworded tool can also take requests meant for a neighbouring tool. That
+neighbour's cases run only when they name the changed tool in `expect` or
+`allow`; run without `--changed-since` after a broad rewording.
 
 The direct surface sends every tool on every turn: about 350 KB of
 descriptions and schemas, plus the server instructions. Anthropic models

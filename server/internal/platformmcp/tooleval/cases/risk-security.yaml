@@ -137,18 +137,25 @@
   allow: [list_risk_findings]
   args:
     project_slug: default
+    finding_ids:
+      [
+        b7e1c2d3-1111-4aaa-8bbb-222233334444,
+        b7e1c2d3-5555-4ccc-8ddd-666677778888,
+      ]
 - id: risk-mark-false-positive-one-off
   prompt: That one secrets hit in Payments, finding c9d8e7f6-1234-4abc-9def-0123456789ab, was a placeholder in a doc. Dismiss just that one; I still want the rule to catch real keys.
   expect: [mark_risk_findings_false_positive]
   allow: [list_risk_findings]
   args:
     project_slug: payments
+    finding_ids: [c9d8e7f6-1234-4abc-9def-0123456789ab]
 - id: risk-unmark-false-positive
   prompt: I dismissed finding b7e1c2d3-1111-4aaa-8bbb-222233334444 in Default by mistake. Put it back in the queue.
   expect: [unmark_risk_findings_false_positive]
   allow: [list_risk_findings]
   args:
     project_slug: default
+    finding_ids: [b7e1c2d3-1111-4aaa-8bbb-222233334444]
 
 # Data exports to a SIEM.
 - id: risk-list-data-exports
@@ -163,14 +170,14 @@
   allow: [list_data_exports]
   args:
     data_source: mcp_connection_logs
-    endpoint_url: otlp.acme.example
+    endpoint_url: https://otlp.acme.example/v1/logs
 - id: risk-create-data-export-findings
   prompt: Security wants Payments risk findings streamed to our collector at https://collector.acme.example:4318. Call it "SOC collector".
   expect: [create_data_export]
   allow: [list_data_exports]
   args:
     data_source: risk_findings
-    endpoint_url: collector.acme.example
+    endpoint_url: https://collector.acme.example:4318
 - id: risk-pause-data-export
   prompt: Splunk is under maintenance tonight. Stop sending them data for now, but don't delete anything.
   expect: [pause_data_export]

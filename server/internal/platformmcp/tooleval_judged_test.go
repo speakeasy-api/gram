@@ -47,7 +47,9 @@ func toolEvalEnvInt(t *testing.T, name string, fallback int) int {
 	}
 	n, err := strconv.Atoi(value)
 	require.NoError(t, err, name)
-	require.Positive(t, n, name)
+	// Zero is allowed: TOOLEVAL_MAX_CASES=0 means no cap. Config.Validate
+	// still rejects zero runs or concurrency.
+	require.GreaterOrEqual(t, n, 0, name)
 	return n
 }
 
@@ -85,6 +87,7 @@ func TestToolEvalJudged(t *testing.T) { //nolint:paralleltest // one long run th
 
 	registrar := toolEvalRegistrar(t)
 	var notes []string
+	var filler []tooleval.Case
 	if baseDir := os.Getenv("TOOLEVAL_BASE_DIR"); baseDir != "" {
 		var base tooleval.Catalogue
 		data, err := os.ReadFile(filepath.Join(baseDir, "catalogue.json"))
@@ -92,18 +95,18 @@ func TestToolEvalJudged(t *testing.T) { //nolint:paralleltest // one long run th
 		require.NoError(t, json.Unmarshal(data, &base), "base catalogue")
 		baseCases, err := tooleval.LoadCasesFS(os.DirFS(filepath.Join(baseDir, "cases")))
 		require.NoError(t, err, "base cases")
-		var reason string
-		cases, reason = tooleval.SelectChanged(base, toolEvalSnapshot(t, registrar), baseCases, cases)
+		changed, negatives, reason := tooleval.SelectChanged(base, toolEvalSnapshot(t, registrar), baseCases, cases)
 		t.Log(reason)
-		if len(cases) == 0 {
+		if len(changed) == 0 {
 			t.Skip(reason)
 		}
 		notes = append(notes, "Compared with the base branch: "+reason+".")
+		cases, filler = changed, negatives
 	}
-	if limit := toolEvalEnvInt(t, "TOOLEVAL_MAX_CASES", 0); limit > 0 && len(cases) > limit {
-		notes = append(notes, fmt.Sprintf("Ran a stable sample of %d of the %d selected cases (TOOLEVAL_MAX_CASES).", limit, len(cases)))
-		cases = tooleval.SampleCases(cases, limit)
+	if limit := toolEvalEnvInt(t, "TOOLEVAL_MAX_CASES", 0); limit > 0 && len(cases)+len(filler) > limit {
+		notes = append(notes, fmt.Sprintf("Ran %d of the %d selected cases (TOOLEVAL_MAX_CASES), the cases the change selected first.", limit, len(cases)+len(filler)))
 	}
+	cases = tooleval.CapCases(cases, filler, toolEvalEnvInt(t, "TOOLEVAL_MAX_CASES", 0))
 
 	var surfaces []tooleval.Surface
 	for name := range strings.SplitSeq(toolEvalEnv("TOOLEVAL_SURFACES", "direct,progressive"), ",") {

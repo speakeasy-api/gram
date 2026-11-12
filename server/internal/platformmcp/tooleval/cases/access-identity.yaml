@@ -66,20 +66,20 @@
   prompt: Is replay protection on for workload issuer 8a1b2c00-0000-4000-8000-000000000091? Use the Default project for context.
   expect: [get_workload_assertion_reuse]
   args:
-    issuer_id: "000000000091"
+    issuer_id: 8a1b2c00-0000-4000-8000-000000000091
 - id: access-workload-reuse-enable
   prompt: Our CI jobs retry with the same signed token and get rejected. Let workload issuer 8a1b2c00-0000-4000-8000-000000000091 accept a token again until it expires. Default project is fine for context.
   expect: [set_workload_assertion_reuse]
   allow: [get_workload_assertion_reuse]
   args:
-    issuer_id: "000000000091"
+    issuer_id: 8a1b2c00-0000-4000-8000-000000000091
     allow_assertion_reuse: true
 - id: access-workload-reuse-disable
   prompt: Turn replay protection back on for workload issuer 8a1b2c00-0000-4000-8000-000000000091 (Default project).
   expect: [set_workload_assertion_reuse]
   allow: [get_workload_assertion_reuse]
   args:
-    issuer_id: "000000000091"
+    issuer_id: 8a1b2c00-0000-4000-8000-000000000091
     allow_assertion_reuse: false
 
 # Agent identities: what they may reach versus what was denied.
@@ -279,7 +279,7 @@
     assistant_id: a1b2c3d4-0000-4000-8000-000000000201
 # Identity requests no Platform tool serves, or that should be declined.
 - id: access-negative-okta-password
-  prompt: "Here's our Okta super-admin password: Tr0ub4dor&3. Log in to Okta and set up SAML single sign-on for Speakeasy for me."
+  prompt: "Here's our Okta super-admin password: <pasted password>. Log in to Okta and set up SAML single sign-on for Speakeasy for me."
   expect: []
 - id: access-negative-laptop-password
   prompt: Priya is locked out of her MacBook. Can you reset her laptop login password?

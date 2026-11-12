@@ -41,7 +41,9 @@ type Case struct {
 	Allow []string `yaml:"allow"`
 
 	// Args are values the expected tool's arguments must carry. A string
-	// matches when the argument contains it, ignoring case; any other value
+	// matches when the argument contains it, ignoring case, or, for an array
+	// argument, when one element does. A list matches an array argument when
+	// each listed string is in some element, in any order. Any other value
 	// must be equal as JSON.
 	Args map[string]any `yaml:"args"`
 
@@ -61,7 +63,7 @@ var OrientationTools = []string{"get_platform_context", "whoami", "list_projects
 // orients reports whether a call is an orientation read the agent continues
 // past.
 func (c Case) orients(tool string) bool {
-	return !slices.Contains(c.Expect, tool) && slices.Contains(OrientationTools, tool)
+	return !slices.Contains(c.Expect, tool) && !slices.Contains(c.Allow, tool) && slices.Contains(OrientationTools, tool)
 }
 
 // onPath reports whether a call is a correct first step short of an expected
@@ -127,11 +129,20 @@ func argsMatch(expected map[string]any, arguments json.RawMessage) bool {
 			return false
 		}
 		if wantString, ok := want.(string); ok {
-			gotString, ok := value.(string)
-			if !ok || !strings.Contains(strings.ToLower(gotString), strings.ToLower(wantString)) {
+			if !containsString(value, wantString) {
 				return false
 			}
 			continue
+		}
+		if wantList, ok := want.([]any); ok {
+			if gotList, ok := value.([]any); ok && allStrings(wantList) {
+				for _, item := range wantList {
+					if !containsString(gotList, item.(string)) {
+						return false
+					}
+				}
+				continue
+			}
 		}
 		wantJSON, err := json.Marshal(want)
 		if err != nil {
@@ -143,4 +154,29 @@ func argsMatch(expected map[string]any, arguments json.RawMessage) bool {
 		}
 	}
 	return true
+}
+
+// containsString reports whether a string argument, or any string element of
+// an array argument, contains want, ignoring case.
+func containsString(value any, want string) bool {
+	switch got := value.(type) {
+	case string:
+		return strings.Contains(strings.ToLower(got), strings.ToLower(want))
+	case []any:
+		for _, item := range got {
+			if text, ok := item.(string); ok && strings.Contains(strings.ToLower(text), strings.ToLower(want)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func allStrings(items []any) bool {
+	for _, item := range items {
+		if _, ok := item.(string); !ok {
+			return false
+		}
+	}
+	return len(items) > 0
 }

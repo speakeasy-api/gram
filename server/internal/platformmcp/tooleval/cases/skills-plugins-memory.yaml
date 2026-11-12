@@ -131,7 +131,7 @@
   allow: [list_skills]
   args:
     project_slug: default
-    content: incident-triage
+    content: post a summary in the incident channel
 - id: skill-add-version-group-by-component
   prompt: Change release-notes in Default so the agent groups every change by component before writing the summary.
   expect: [add_skill_version]
@@ -284,14 +284,14 @@
   allow: [list_plugins, get_plugin, find_mcp, get_mcp]
   args:
     project_id: 0b7c3d1e-0000-4000-8000-000000000001
-    plugin_id: "000000000041"
+    plugin_id: 3c4b5a00-0000-4000-8000-000000000041
 - id: plugin-remove-hand-added-github
   prompt: Sam put GitHub into the Engineering plugin in Default by hand on the dashboard. Take it back out of the plugin, but keep the server.
   expect: [remove_plugin_server]
   allow: [list_plugins, get_plugin, find_mcp, get_mcp]
   args:
     project_id: 0b7c3d1e-0000-4000-8000-000000000001
-    plugin_id: "000000000041"
+    plugin_id: 3c4b5a00-0000-4000-8000-000000000041
 
 # Coding sessions: finding, continuing and handing off.
 - id: session-list-mine

@@ -52,7 +52,9 @@ if [ -n "${usage_changed_since:-}" ]; then
     base_dir="$(mktemp -d)"
     git show "$merge_base:$tooleval_path/catalogue.json" >"$base_dir/catalogue.json"
     mkdir "$base_dir/cases"
-    git archive "$merge_base" "$tooleval_path/cases" | tar -x -C "$base_dir/cases" --strip-components=5
+    # The task runs from server/, and git archive names entries relative to
+    # the working directory, so archive from the repository root.
+    git -C "$(git rev-parse --show-toplevel)" archive "$merge_base" "$tooleval_path/cases" | tar -x -C "$base_dir/cases" --strip-components=5
     export TOOLEVAL_BASE_DIR="$base_dir"
   else
     # The first run, where the base has no catalogue yet, is the baseline:

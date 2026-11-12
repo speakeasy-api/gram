@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 // Report holds every outcome and the scores derived from them.
@@ -153,7 +154,7 @@ func (r *Report) Misses() []Miss {
 			order = append(order, k)
 		}
 		m.Total++
-		if o.OnPath || (o.Hit && (o.Case.Negative() || o.SchemaValid)) {
+		if o.OnPath || (o.Hit && (o.Case.Negative() || (o.SchemaValid && (len(o.Case.Args) == 0 || o.ArgsMatch)))) {
 			continue
 		}
 		m.Wrong++
@@ -162,8 +163,10 @@ func (r *Report) Misses() []Miss {
 			m.Chosen["(error)"]++
 		case o.Selected == nil:
 			m.Chosen["(none)"]++
-		case o.Hit:
+		case o.Hit && !o.SchemaValid:
 			m.Chosen[o.Selected.Tool+" (invalid arguments)"]++
+		case o.Hit:
+			m.Chosen[o.Selected.Tool+" (unexpected arguments)"]++
 		default:
 			m.Chosen[o.Selected.Tool]++
 		}
@@ -238,9 +241,7 @@ func (r *Report) writeErrors(b *strings.Builder) {
 			message = rest
 		}
 		message = o.Surface + ": " + message
-		if len(message) > maxErrorBytes {
-			message = message[:maxErrorBytes] + "…"
-		}
+		message = truncate(message, maxErrorBytes)
 		if counts[message] == 0 {
 			order = append(order, message)
 		}
@@ -268,9 +269,7 @@ func (r *Report) writeUnexpectedAnswers(b *strings.Builder) {
 			continue
 		}
 		answer := strings.Join(strings.Fields(o.Answer), " ")
-		if len(answer) > maxAnswerBytes {
-			answer = answer[:maxAnswerBytes] + "…"
-		}
+		answer = truncate(answer, maxAnswerBytes)
 		lines = append(lines, fmt.Sprintf("- %s / %s / %s: %s", o.Model, o.Surface, o.Case.ID, answer))
 	}
 	if len(lines) == 0 {
@@ -278,4 +277,17 @@ func (r *Report) writeUnexpectedAnswers(b *strings.Builder) {
 	}
 	b.WriteString("\n### Answered without a tool\n\n")
 	b.WriteString(strings.Join(lines, "\n") + "\n")
+}
+
+// truncate shortens text to at most limit bytes without splitting a UTF-8
+// character.
+func truncate(text string, limit int) string {
+	if len(text) <= limit {
+		return text
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut] + "…"
 }

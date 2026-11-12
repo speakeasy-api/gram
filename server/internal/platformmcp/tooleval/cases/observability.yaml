@@ -11,27 +11,27 @@
   prompt: Did anyone in Default call anything that deletes a repository this month? Look for tools with "delete" in the name on any server.
   expect: [search_tool_calls]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
     tool_name_contains: delete
 - id: obs-search-calls-by-error-text
   prompt: Find calls in Default over the past week that failed with a "rate limit" error, whichever server they went to.
   expect: [search_tool_calls]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
     error_contains: rate limit
 - id: obs-search-calls-by-custom-attribute
   prompt: Our integrations tag calls with a custom team attribute. Show me Default's calls from the last day where that team is "payments".
   expect: [search_tool_calls]
   allow: [list_attribute_keys]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
 - id: obs-linear-recent-calls
   prompt: Show me the latest individual requests that hit the Linear server today, I need references to send to their support.
   expect: [query_mcp_traces]
   allow: [find_mcp, get_mcp, get_project_overview, get_mcp_diagnostics]
   args:
-    project_id: "000000000001"
-    mcp_id: "000000000012"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
 
 # Network traffic and organization event feed.
 - id: obs-billing-api-traffic
@@ -39,9 +39,9 @@
   expect: [get_mcp_network_traffic]
   allow: [find_mcp, get_mcp]
   args:
-    project_id: "000000000002"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
     target_kind: mcp
-    target_id: "000000000021"
+    target_id: 5f1e2a00-0000-4000-8000-000000000021
 - id: obs-org-event-feed
   prompt: what's been going on across Acme lately? give me the org's recent activity feed
   expect: [list_organization_events]
@@ -57,44 +57,44 @@
   prompt: Before I build any charts, what data can I actually ask questions about in the Default project, and what fields can I group by?
   expect: [describe_analytics_catalog]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
 - id: obs-analytics-dimension-values
   prompt: I want to filter a chart in Default by model. Which model names have actually shown up in the sessions data over the past 7 days?
   expect: [list_analytics_dimension_values]
   allow: [describe_analytics_catalog]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
 - id: obs-analytics-daily-sessions
   prompt: Give me a count of agent sessions per day in Default for the last 14 days, split by model.
   expect: [run_analytics_query]
   allow: [describe_analytics_catalog, list_analytics_dimension_values]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
 - id: obs-analytics-risk-findings-by-week
   prompt: How many risk findings were caught each week in Payments over the last month? Just the numbers, grouped by week.
   expect: [run_analytics_query]
   allow: [describe_analytics_catalog, list_analytics_dimension_values]
   args:
-    project_id: "000000000002"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
 
 # Widgets: list, read, create/update, copy, delete.
 - id: obs-list-widgets
   prompt: What saved charts do we already have in the Default project?
   expect: [list_widgets]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
 - id: obs-get-widget
   prompt: Show me exactly what query and chart settings widget 8a1b2c3d-0000-4000-8000-0000000000b1 in Default uses.
   expect: [get_widget]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
     widget_id: 8a1b2c3d-0000-4000-8000-0000000000b1
 - id: obs-create-widget
   prompt: Save a new chart in Default called "Daily sessions" that plots sessions per day as a line chart.
   expect: [save_widget]
   allow: [describe_analytics_catalog, run_analytics_query, list_widgets]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
     name: Daily sessions
 - id: obs-rename-widget
   prompt: Rename widget 8a1b2c3d-0000-4000-8000-0000000000b1 in Default to "Errors by tool". Keep everything else the same.
@@ -121,7 +121,7 @@
   prompt: which dashboards exist in Payments?
   expect: [list_dashboards]
   args:
-    project_id: "000000000002"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
 - id: obs-get-dashboard
   prompt: What's on the Weekly MCP usage dashboard in Default and how are the cards laid out?
   expect: [get_dashboard]
@@ -133,7 +133,7 @@
   expect: [save_dashboard]
   allow: [list_dashboards]
   args:
-    project_id: "000000000002"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
     name: Billing health
 - id: obs-rename-dashboard
   prompt: Rename the Weekly MCP usage dashboard in Default to "MCP usage by week".
@@ -178,14 +178,14 @@
   prompt: Quick health check on the Payments project. How have its servers been doing this week, and is anything failing?
   expect: [get_project_overview]
   args:
-    project_id: "000000000002"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
 - id: obs-diagnose-linear
   prompt: Linear keeps breaking for people. Is it us, Linear, or the app they're calling from?
   expect: [get_mcp_diagnostics]
   allow: [find_mcp, get_mcp, get_project_overview]
   args:
-    project_id: "000000000001"
-    mcp_id: "000000000012"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
 
 # One server's totals vs breakdown by tool and outcome.
 - id: obs-github-totals
@@ -193,27 +193,27 @@
   expect: [query_mcp_metrics]
   allow: [find_mcp, get_mcp, get_project_overview, get_mcp_diagnostics]
   args:
-    project_id: "000000000001"
-    mcp_id: "000000000011"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
 - id: obs-github-by-tool-outcome
   prompt: GitHub has been failing today. Which of its tools is responsible? Break it down per tool with successes and errors.
   expect: [query_mcp_events]
   allow: [find_mcp, get_mcp, get_project_overview, get_mcp_diagnostics]
   args:
-    project_id: "000000000001"
-    mcp_id: "000000000011"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
 
 # Where a project's calls go: hosted, tunneled, gateway, shadow, local, skills.
 - id: obs-tool-usage-shadow-vs-hosted
   prompt: Over the last month, how much of Default's tool traffic went to shadow MCP servers compared with the ones we host?
   expect: [get_tool_usage_summary]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
 - id: obs-tool-usage-tunneled
   prompt: Which tunneled servers is the team in Payments actually using?
   expect: [get_tool_usage_summary]
   args:
-    project_id: "000000000002"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
 
 # People: who uses a server, finding a person, one person's usage.
 - id: obs-linear-users-today
@@ -221,34 +221,34 @@
   expect: [list_mcp_usage_users]
   allow: [find_mcp, get_mcp, get_project_overview, get_mcp_diagnostics]
   args:
-    project_id: "000000000001"
-    mcp_id: "000000000012"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
 - id: obs-find-person-partial
   prompt: Someone with "priya" in their email shows up in Default's activity. Find them for me.
   expect: [search_users]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
     query: priya
 - id: obs-priya-linear-status
   prompt: Which Linear tools has Priya been using today, and did she run into any errors?
   expect: [get_user_mcp_status]
   allow: [find_mcp, get_mcp, list_mcp_usage_users, get_project_overview]
   args:
-    project_id: "000000000001"
-    mcp_id: "000000000012"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
 - id: obs-sam-activity-summary
   prompt: Give me a rundown of Sam's activity in the Default project over the last month, across all servers. Which of his tools fail most?
   expect: [get_user_metrics_summary]
   allow: [search_users]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
 
 # Telemetry attribute keys.
 - id: obs-attribute-keys
   prompt: Before I filter Default's tool call history, which custom attributes have our integrations been tagging calls with?
   expect: [list_attribute_keys]
   args:
-    project_id: "000000000001"
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
 
 # Related-sounding requests no Platform tool serves.
 - id: obs-negative-postgres-csv

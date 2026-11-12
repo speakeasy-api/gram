@@ -67,6 +67,7 @@
   args:
     project_id: 0b7c3d1e-0000-4000-8000-000000000002
     mcp_id: 5f1e2a00-0000-4000-8000-000000000021
+    tool_urns: [refund_invoice]
 - id: mcp-remove-tool-github
   prompt: People really shouldn't be able to delete repos. Take the delete_repository tool off the GitHub server.
   expect: [remove_tools_from_mcp]
@@ -281,6 +282,7 @@
   allow: [list_my_servers, search_my_tools, describe_tools]
   args:
     server: linear
+    tool: issue
 
 # Requests in this area that no tool serves, or that must be declined.
 - id: mcp-negative-reveal-oauth-secret
