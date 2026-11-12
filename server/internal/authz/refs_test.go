@@ -39,6 +39,8 @@ func TestRefs_MatchTodaysChecks(t *testing.T) {
 		"mcp tool call":      {MCPServer(id, project).ToolCall("tool", "destructive"), MCPToolCallCheck(id, MCPToolCallDimensions{Tool: "tool", Disposition: "destructive", ProjectID: project})},
 		"environment read":   {Environment(id, project).Read(), EnvironmentCheck(ScopeEnvironmentRead, id, project)},
 		"environment write":  {Environment(id, project).Write(), EnvironmentCheck(ScopeEnvironmentWrite, id, project)},
+		"environments read":  {Project(project).Environments().Read(), EnvironmentCheck(ScopeEnvironmentRead, project, project)},
+		"environments write": {Project(project).Environments().Write(), EnvironmentCheck(ScopeEnvironmentWrite, project, project)},
 		"environment create": {Project(project).Environments().Create(), EnvironmentCheck(ScopeEnvironmentWrite, project, project)},
 		"assistant read":     {Assistant(id, project).Read(), AssistantCheck(ScopeAssistantRead, id, project)},
 		"assistant write":    {Assistant(id, project).Write(), AssistantCheck(ScopeAssistantWrite, id, project)},
