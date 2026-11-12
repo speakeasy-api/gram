@@ -18,8 +18,8 @@ const declaredResourceKinds: ReadonlySet<string> = new Set(
  * checkable client-side: the server binds the connection owner.
  */
 export function resourceKindForScope(scope: string): string {
-  const kind = scopeResourceKinds[scope];
-  if (kind !== undefined) return kind;
+  if (Object.hasOwn(scopeResourceKinds, scope))
+    return scopeResourceKinds[scope] as string;
   const prefix = scope.split(":")[0] ?? "";
   if (prefix === "plugin" || prefix === "log") return "project";
   if (prefix === "remote-mcp") return "mcp";

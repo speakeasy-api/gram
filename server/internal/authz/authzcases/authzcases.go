@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -113,9 +114,20 @@ func caseGrant(principal string, scope authz.Scope, resourceID, projectID string
 	return authz.Grant{PrincipalUrn: principal, Scope: scope, Selector: selector, Inferred: false}
 }
 
+// dimensionValues are the values case grants use for optional dimensions.
+var dimensionValues = map[string]string{
+	authz.SelectorKeyDisposition:    authz.DispositionReadOnly,
+	authz.SelectorKeyServerURL:      "https://example.com",
+	authz.SelectorKeyServerIdentity: "identity-1",
+	authz.SelectorKeyTool:           "tool-1",
+}
+
 // atomsFor lists, for scope, a grant on everything, on one project, on one
-// resource, and a direct grant on that resource.
-func atomsFor(scope authz.Scope, inProject bool) []caseAtom {
+// resource, a direct grant on that resource, and, for each optional dimension
+// of the kind, a grant on everything limited by that dimension. The dashboard
+// never sends optional dimensions, so those grants test that a loose allow
+// still matches and a strict exclusion does not.
+func atomsFor(scope authz.Scope, inProject bool, dimensions []string) []caseAtom {
 	project := ""
 	if inProject {
 		project = caseProject
@@ -124,10 +136,16 @@ func atomsFor(scope authz.Scope, inProject bool) []caseAtom {
 	if inProject {
 		atoms = append(atoms, caseAtom{"role " + string(scope) + " on the project", caseGrant(caseRole, scope, authz.WildcardResource, caseProject)})
 	}
-	return append(atoms,
+	atoms = append(atoms,
 		caseAtom{"role " + string(scope) + " on the resource", caseGrant(caseRole, scope, caseResource, project)},
 		caseAtom{"direct " + string(scope) + " on the resource", caseGrant(caseUser, scope, caseResource, project)},
 	)
+	for _, key := range dimensions {
+		grant := caseGrant(caseRole, scope, authz.WildcardResource, project)
+		grant.Selector[key] = dimensionValues[key]
+		atoms = append(atoms, caseAtom{"role " + string(scope) + " on all with " + key + " " + dimensionValues[key], grant})
+	}
+	return atoms
 }
 
 // dashboardCases answers, with the server's evaluator, every check the
@@ -162,6 +180,16 @@ func dashboardCases(r registry.Registry) ([]dashboardCase, error) {
 			continue
 		}
 		inProject := allowedKeys[kind][authz.SelectorKeyProjectID]
+		var dimensions []string
+		for _, key := range slices.Sorted(maps.Keys(allowedKeys[kind])) {
+			if key == authz.SelectorKeyProjectID {
+				continue
+			}
+			if _, ok := dimensionValues[key]; !ok {
+				return nil, fmt.Errorf("kind %s: no case value for dimension %q; add one to dimensionValues", kind, key)
+			}
+			dimensions = append(dimensions, key)
+		}
 
 		var allows, blocks []registry.Scope
 		for _, s := range r.Scopes() {
@@ -195,10 +223,10 @@ func dashboardCases(r registry.Registry) ([]dashboardCase, error) {
 			var blockAtoms []caseAtom
 			for _, block := range blocks {
 				if slices.ContainsFunc(covered, func(s registry.Scope) bool { return slices.Contains(checkExclusions[s], block) }) {
-					blockAtoms = append(blockAtoms, atomsFor(authz.Scope(block), inProject)...)
+					blockAtoms = append(blockAtoms, atomsFor(authz.Scope(block), inProject, dimensions)...)
 				}
 			}
-			for _, allow := range atomsFor(authz.Scope(scope), inProject) {
+			for _, allow := range atomsFor(authz.Scope(scope), inProject, dimensions) {
 				sets = append(sets, caseSet{atoms: []caseAtom{allow}, checks: allows})
 				for _, block := range blockAtoms {
 					sets = append(sets, caseSet{atoms: []caseAtom{allow, block}, checks: covered})
