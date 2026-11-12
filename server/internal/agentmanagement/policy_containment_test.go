@@ -19,6 +19,7 @@ func TestPolicyWritesRequireCallerAndOwnerContainment(t *testing.T) {
 	t.Parallel()
 	read := authz.NewGrant(authz.ScopeMCPRead, "server-a")
 	write := authz.NewGrant(authz.ScopeMCPWrite, "server-a")
+	connect := authz.NewGrant(authz.ScopeMCPConnect, "server-a")
 	wildcard := authz.NewGrant(authz.ScopeMCPRead, "*")
 	toolBlock := authz.NewGrantWithSelector(authz.ScopeMCPBlockedConnect, authz.Selector{
 		authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
@@ -34,14 +35,17 @@ func TestPolicyWritesRequireCallerAndOwnerContainment(t *testing.T) {
 		requested     authz.Grant
 		denial        string
 	}{
-		{name: "implied read and connect", caller: []authz.Grant{write}, owner: []authz.Grant{write}, requested: read},
+		{name: "implied read", caller: []authz.Grant{write}, owner: []authz.Grant{write}, requested: read},
 		{name: "wildcard parents", caller: []authz.Grant{wildcard}, owner: []authz.Grant{wildcard}, requested: read},
 		{name: "management is not resource authority", owner: []authz.Grant{write}, requested: read, denial: "your permissions"},
 		{name: "admin cannot bypass owner", caller: []authz.Grant{write}, requested: read, denial: "owner's permissions"},
 		{name: "wildcard request exceeds caller", caller: []authz.Grant{read}, owner: []authz.Grant{wildcard}, requested: wildcard, denial: "your permissions"},
 		{name: "write exceeds read", caller: []authz.Grant{read}, owner: []authz.Grant{write}, requested: write, denial: "your permissions"},
-		{name: "caller implied connect exclusion", caller: []authz.Grant{write, toolBlock}, owner: []authz.Grant{write}, requested: read, denial: "your permissions"},
-		{name: "owner implied connect exclusion", caller: []authz.Grant{write}, owner: []authz.Grant{write, toolBlock}, requested: read, denial: "owner's permissions"},
+		{name: "write does not imply connect", caller: []authz.Grant{write}, owner: []authz.Grant{write, connect}, requested: connect, denial: "your permissions"},
+		{name: "explicit connect", caller: []authz.Grant{write, connect}, owner: []authz.Grant{read, connect}, requested: connect},
+		{name: "caller connect exclusion", caller: []authz.Grant{write, connect, toolBlock}, owner: []authz.Grant{write, connect}, requested: connect, denial: "your permissions"},
+		{name: "owner connect exclusion", caller: []authz.Grant{write, connect}, owner: []authz.Grant{write, connect, toolBlock}, requested: connect, denial: "owner's permissions"},
+		{name: "connect exclusion leaves read", caller: []authz.Grant{write, toolBlock}, owner: []authz.Grant{write, toolBlock}, requested: read},
 		{name: "nonoverlapping tool", caller: []authz.Grant{write, toolBlock}, owner: []authz.Grant{write, toolBlock}, requested: toolRead},
 		{name: "tool narrowing cannot be omitted", caller: []authz.Grant{toolRead}, owner: []authz.Grant{write}, requested: read, denial: "your permissions"},
 	} {

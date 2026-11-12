@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -62,6 +63,15 @@ func (f selectionFixture) issue(t *testing.T, ctx context.Context, slug string, 
 // server in picks.
 func (f selectionFixture) issuePicked(t *testing.T, ctx context.Context, slug string, issuerID uuid.UUID, subject urn.SessionSubject, picks map[uuid.UUID]uuid.UUID) string {
 	t.Helper()
+	enforced, err := authenforcement.ReadEnforced(ctx, f.ti.conn, f.orgID)
+	require.NoError(t, err)
+	return f.issueFrom(t, ctx, slug, issuerID, subject, picks, enforced)
+}
+
+// issueFrom is issuePicked with what the recorded choices are decided from set
+// by the caller: issuance decides typedOnly from the organization's enforcement.
+func (f selectionFixture) issueFrom(t *testing.T, ctx context.Context, slug string, issuerID uuid.UUID, subject urn.SessionSubject, picks map[uuid.UUID]uuid.UUID, typedOnly bool) string {
+	t.Helper()
 	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  subject,
 		Audience: urn.NewUserSessionIssuer(issuerID).String(),
@@ -88,6 +98,7 @@ func (f selectionFixture) issuePicked(t *testing.T, ctx context.Context, slug st
 		PickedMcpServerIds:  servers,
 		PickedClientIds:     clients,
 		PickedAuthClientIds: nil,
+		TypedOnly:           typedOnly,
 	})
 	require.NoError(t, err)
 	return token

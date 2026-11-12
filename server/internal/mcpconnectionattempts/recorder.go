@@ -16,6 +16,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/hashicorp/golang-lru/v2/simplelru"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/singleflight"
@@ -516,7 +517,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	meter := meterProvider.Meter(meterScope)
 
 	steps, err := meter.Int64Counter(meterSteps,
-		metric.WithDescription("MCP connection attempt steps by outcome, step, reason and who fixes it."),
+		metric.WithDescription("MCP connection attempt steps stored in ClickHouse, by outcome, step, reason, who fixes it and known provider. Rows not stored, including those of organizations with logs off, are not counted."),
 		metric.WithUnit("{step}"))
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterSteps), attr.SlogError(err))
@@ -721,7 +722,6 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 			row.AttemptID = decision.foldID
 		}
 	}
-	r.countStep(ctx, row)
 	if r.capture != nil {
 		if reason, _ := r.organizationAllowed(row.OrganizationID, r.cfg.logsCheckTimeout); reason == "" {
 			r.stampClient(&row)
@@ -1029,9 +1029,11 @@ func (r *Recorder) run() {
 		batch = make([]Row, 0, r.cfg.maxBatch)
 		if len(rows) > 0 {
 			r.surviving(events(rows...), func() {
-				if r.insert(rows) {
+				switch {
+				case r.insert(rows):
+					r.countSteps(rows)
 					r.exportRows(rows)
-				} else if stopping() {
+				case stopping():
 					drainFailed = true
 				}
 			})
@@ -1078,7 +1080,6 @@ func (r *Recorder) run() {
 				row.dropFoldedSubject()
 			}
 			r.unfinished.Add(1)
-			r.countStep(context.Background(), row)
 			add(row)
 		}
 	}
@@ -1158,16 +1159,24 @@ func (r *Recorder) insert(rows []Row) bool {
 	return false
 }
 
-func (r *Recorder) countStep(ctx context.Context, row Row) {
+// countSteps counts stored rows only, so dropped rows, including every row of an
+// organization with logs off, never reach the metric.
+func (r *Recorder) countSteps(rows []Row) {
 	if r.steps == nil {
 		return
 	}
-	r.steps.Add(ctx, 1, metric.WithAttributes(
-		attr.ConnectionOutcome(row.Outcome),
-		attr.ConnectionStep(row.Step),
-		attr.ConnectionReason(row.Reason),
-		attr.ConnectionWhoFixes(row.WhoFixes),
-	))
+	for _, row := range rows {
+		tags := []attribute.KeyValue{
+			attr.ConnectionOutcome(row.Outcome),
+			attr.ConnectionStep(row.Step),
+			attr.ConnectionReason(row.Reason),
+			attr.ConnectionWhoFixes(row.WhoFixes),
+		}
+		if provider := ProviderLabel(row.ProviderHost); provider != "" {
+			tags = append(tags, attr.ConnectionProvider(provider))
+		}
+		r.steps.Add(context.Background(), 1, metric.WithAttributes(tags...))
+	}
 }
 
 func (r *Recorder) drop(ctx context.Context, reason dropReason, n int, cause error) {

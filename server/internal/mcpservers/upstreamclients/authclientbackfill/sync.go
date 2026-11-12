@@ -116,7 +116,7 @@ func SyncServerDerivedCopies(ctx context.Context, tx pgx.Tx, organizationID stri
 	if organizationID == "" {
 		return errors.New("sync server derived copies: no tenant scope")
 	}
-	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0}
+	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: false}
 	report := newReport(true)
 	return syncDerivedCopies(ctx, tx, New(tx), opts, &report, serverIDs)
 }
@@ -128,7 +128,7 @@ func syncSource(ctx context.Context, tx pgx.Tx, organizationID, kind string, sou
 	}
 	q := New(tx)
 
-	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0}
+	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: false}
 	// The report is the decision log the backfill keeps for its operator; a
 	// sync writes the same records and discards the account of them.
 	report := newReport(true)

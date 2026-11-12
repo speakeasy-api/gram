@@ -5,9 +5,11 @@
 import { riskPolicyBypassRequestsApprove } from "../funcs/riskPolicyBypassRequestsApprove.js";
 import { riskPolicyBypassRequestsCreate } from "../funcs/riskPolicyBypassRequestsCreate.js";
 import { riskPolicyBypassRequestsDeny } from "../funcs/riskPolicyBypassRequestsDeny.js";
+import { riskPolicyBypassRequestsGetTarget } from "../funcs/riskPolicyBypassRequestsGetTarget.js";
 import { riskPolicyBypassRequestsList } from "../funcs/riskPolicyBypassRequestsList.js";
 import { riskPolicyBypassRequestsRevoke } from "../funcs/riskPolicyBypassRequestsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { GetRiskPolicyBypassRequestTargetResponseBody } from "../models/components/getriskpolicybypassrequesttargetresponsebody.js";
 import { ListRiskPolicyBypassRequestsResult } from "../models/components/listriskpolicybypassrequestsresult.js";
 import { PolicyBypassRedemption } from "../models/components/policybypassredemption.js";
 import { RiskPolicyBypassRequest } from "../models/components/riskpolicybypassrequest.js";
@@ -23,6 +25,10 @@ import {
   DenyRiskPolicyBypassRequestRequest,
   DenyRiskPolicyBypassRequestSecurity,
 } from "../models/operations/denyriskpolicybypassrequest.js";
+import {
+  GetRiskPolicyBypassRequestTargetRequest,
+  GetRiskPolicyBypassRequestTargetSecurity,
+} from "../models/operations/getriskpolicybypassrequesttarget.js";
 import {
   ListRiskPolicyBypassRequestsRequest,
   ListRiskPolicyBypassRequestsSecurity,
@@ -84,6 +90,25 @@ export class PolicyBypassRequests extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RiskPolicyBypassRequest> {
     return unwrapAsync(riskPolicyBypassRequestsDeny(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getRiskPolicyBypassRequestTarget risk
+   *
+   * @remarks
+   * Fetch what a request access link asks for (the blocked server and tool) WITHOUT filing the request. Powers the request access page.
+   */
+  async getTarget(
+    request: GetRiskPolicyBypassRequestTargetRequest,
+    security?: GetRiskPolicyBypassRequestTargetSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetRiskPolicyBypassRequestTargetResponseBody> {
+    return unwrapAsync(riskPolicyBypassRequestsGetTarget(
       this,
       request,
       security,

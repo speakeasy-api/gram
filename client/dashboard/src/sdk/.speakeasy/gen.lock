@@ -2,14 +2,14 @@ lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
   docVersion: 0.0.1
-  speakeasyVersion: 1.803.0
-  generationVersion: 2.950.2
+  speakeasyVersion: 1.808.1
+  generationVersion: 2.960.8
   releaseVersion: 0.33.8
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.14
-    core: 3.31.6
+    core: 3.31.11
     defaultEnabledRetries: 0.1.0
     deprecations: 2.81.1
     devContainers: 2.90.1
@@ -390,7 +390,6 @@ trackedFiles:
   src/funcs/killswitchesListCapabilities.ts: {}
   src/funcs/killswitchesListMCPServers.ts: {}
   src/funcs/killswitchesPreviewOverlaps.ts: {}
-  src/funcs/launcherJudge.ts: {}
   src/funcs/litellmCreateInstance.ts: {}
   src/funcs/litellmIngestGuardrail.ts: {}
   src/funcs/litellmListInstances.ts: {}
@@ -683,6 +682,7 @@ trackedFiles:
   src/funcs/riskPolicyBypassRequestsApprove.ts: {}
   src/funcs/riskPolicyBypassRequestsCreate.ts: {}
   src/funcs/riskPolicyBypassRequestsDeny.ts: {}
+  src/funcs/riskPolicyBypassRequestsGetTarget.ts: {}
   src/funcs/riskPolicyBypassRequestsList.ts: {}
   src/funcs/riskPolicyBypassRequestsRevoke.ts: {}
   src/funcs/riskPolicyChallengesAcknowledge.ts: {}
@@ -1349,6 +1349,8 @@ trackedFiles:
   src/models/components/getprojectoverviewresult.ts: {}
   src/models/components/getprojectresult.ts: {}
   src/models/components/getprompttemplateresult.ts: {}
+  src/models/components/getriskpolicybypassrequesttargetrequestbody.ts: {}
+  src/models/components/getriskpolicybypassrequesttargetresponsebody.ts: {}
   src/models/components/getriskpolicychallengeresponsebody.ts: {}
   src/models/components/getsessionmetaresult.ts: {}
   src/models/components/getsetupdocsresponsebody.ts: {}
@@ -1430,7 +1432,6 @@ trackedFiles:
   src/models/components/jsonwebkey.ts: {}
   src/models/components/jsonwebkeyset.ts: {}
   src/models/components/jsonwebkeysetdeletepreflight.ts: {}
-  src/models/components/judgerequestbody.ts: {}
   src/models/components/key.ts: {}
   src/models/components/killswitchbatchuserbadgesrequest.ts: {}
   src/models/components/killswitchbatchuserbadgesresult.ts: {}
@@ -1464,9 +1465,6 @@ trackedFiles:
   src/models/components/killswitchstatus.ts: {}
   src/models/components/killswitchsummary.ts: {}
   src/models/components/killswitchuserbadge.ts: {}
-  src/models/components/launchercandidate.ts: {}
-  src/models/components/launchercontext.ts: {}
-  src/models/components/launcherjudgment.ts: {}
   src/models/components/linkskillrequestbody.ts: {}
   src/models/components/listactorattributesresult.ts: {}
   src/models/components/listagentconnectionblocksresult.ts: {}
@@ -1957,6 +1955,7 @@ trackedFiles:
   src/models/components/sessionquarantine.ts: {}
   src/models/components/sessionquarantinereleaserequestbody.ts: {}
   src/models/components/sessionsummary.ts: {}
+  src/models/components/sessiontotals.ts: {}
   src/models/components/setaitooldecisionrequestbody.ts: {}
   src/models/components/setaitooldecisionresult.ts: {}
   src/models/components/setauthclientaudiencerequestbody.ts: {}
@@ -2640,6 +2639,7 @@ trackedFiles:
   src/models/operations/getriskoverview.ts: {}
   src/models/operations/getriskpolicy.ts: {}
   src/models/operations/getriskpolicyapproval.ts: {}
+  src/models/operations/getriskpolicybypassrequesttarget.ts: {}
   src/models/operations/getriskpolicychallenge.ts: {}
   src/models/operations/getrisksignals.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
@@ -2709,7 +2709,6 @@ trackedFiles:
   src/models/operations/killswitcheslistcapabilities.ts: {}
   src/models/operations/killswitcheslistmcpservers.ts: {}
   src/models/operations/killswitchespreviewoverlaps.ts: {}
-  src/models/operations/launcherjudge.ts: {}
   src/models/operations/linkskill.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
   src/models/operations/listagentconnectionblocks.ts: {}
@@ -3706,7 +3705,6 @@ trackedFiles:
   src/react-query/killswitches.ts: {}
   src/react-query/latestDeployment.core.ts: {}
   src/react-query/latestDeployment.ts: {}
-  src/react-query/launcherJudge.ts: {}
   src/react-query/liftKillswitch.ts: {}
   src/react-query/linkSkill.ts: {}
   src/react-query/listAPIKeys.core.ts: {}
@@ -4074,6 +4072,7 @@ trackedFiles:
   src/react-query/riskGetBlock.ts: {}
   src/react-query/riskGetCustomDetectionRule.core.ts: {}
   src/react-query/riskGetCustomDetectionRule.ts: {}
+  src/react-query/riskGetPolicyBypassRequestTarget.ts: {}
   src/react-query/riskGetPolicyChallenge.ts: {}
   src/react-query/riskListApprovals.core.ts: {}
   src/react-query/riskListApprovals.ts: {}
@@ -4487,7 +4486,6 @@ trackedFiles:
   src/sdk/jsonwebkeysets.ts: {}
   src/sdk/keys.ts: {}
   src/sdk/killswitches.ts: {}
-  src/sdk/launcher.ts: {}
   src/sdk/litellm.ts: {}
   src/sdk/mcpapproval.ts: {}
   src/sdk/mcpendpoints.ts: {}
@@ -8660,6 +8658,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getRiskPolicyBypassRequestTarget:
+    speakeasy-default-get-risk-policy-bypass-request-target:
+      requestBody:
+        application/json: {"request_token": "<value>"}
+      responses:
+        "200":
+          application/json: {"expires_at": "2026-11-21T19:04:39.559Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getRiskPolicyChallenge:
     speakeasy-default-get-risk-policy-challenge:
       requestBody:
@@ -9584,17 +9593,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  launcherJudge:
-    speakeasy-default-launcher-judge:
-      requestBody:
-        application/json: {"candidates": [{"id": "<id>", "kind": "<value>", "title": "<value>"}], "query": "<value>"}
-      responses:
-        "200":
-          application/json: {"disabled": true}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   linkSkill:
     speakeasy-default-link-skill:
       requestBody:
@@ -11093,7 +11091,7 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "limit": 50, "sort_by": "total_cost", "to": "2025-12-26T10:00:00Z"}
       responses:
         "200":
-          application/json: {"sessions": []}
+          application/json: {"scoped": true, "sessions": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

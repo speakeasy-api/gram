@@ -461,6 +461,7 @@ func TestRecord_NeverBlocksWhileClickHouseStalls(t *testing.T) {
 		t.Fatal("Step blocked on a stalled ClickHouse")
 	}
 	require.GreaterOrEqual(t, recorder.dropped(t, dropQueueFull)-before, int64(1000-cfg.queueSize))
+	require.Zero(t, stepsCounted(t, recorder), "rows past a full queue are not counted")
 
 }
 
@@ -496,6 +497,7 @@ func TestRecord_FailedInsertIsNotRetried(t *testing.T) {
 
 	require.Equal(t, int64(1), conn.prepares.Load())
 	require.Equal(t, int64(2), recorder.dropped(t, dropInsertFailed))
+	require.Zero(t, stepsCounted(t, recorder), "rows that failed to insert are not counted")
 }
 
 // With ClickHouse stalled, shutdown waits for one failed insert, not one per batch.
@@ -560,16 +562,51 @@ func TestRecord_NilRecorderDoesNothing(t *testing.T) {
 func TestRecord_MetricHasItsTagsAndNoPersonOrgOrHost(t *testing.T) {
 	t.Parallel()
 
-	conn := &scriptedConn{Conn: nil, block: nil, err: errors.New("refused"), prepares: atomic.Int64{}}
-	recorder := newTestRecorder(t, conn, testConfig())
+	recorder := newTestRecorder(t, clickhouseConn(t), testConfig())
 	subject := urn.NewUserSubject("user-test")
 
 	recorder.End(t.Context(), Begin(testScope()), StepProviderSignIn, CodeProviderRateLimited,
 		Provider("https://login.example.com/oauth"), Subject(&subject))
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Equal(t, []map[string]string{{
+		string(attr.ConnectionOutcomeKey):  string(OutcomeFailed),
+		string(attr.ConnectionStepKey):     StepProviderSignIn.String(),
+		string(attr.ConnectionReasonKey):   "provider_rate_limited",
+		string(attr.ConnectionWhoFixesKey): string(WhoProvider),
+		string(attr.ConnectionProviderKey): LabelOther,
+	}}, stepTags(t, recorder))
+}
+
+func TestRecord_MetricKeepsAKnownProvider(t *testing.T) {
+	t.Parallel()
+
+	recorder := newTestRecorder(t, clickhouseConn(t), testConfig())
+	attempt := Begin(testScope())
+	recorder.Step(t.Context(), attempt, StepProviderSignIn, ResultSignedIn, Provider("https://accounts.google.com/o/oauth2"))
+	recorder.End(t.Context(), attempt, StepInboundToken, ResultCodeIssued)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	providers := map[string]bool{}
+	for _, tags := range stepTags(t, recorder) {
+		providers[tags[string(attr.ConnectionProviderKey)]] = true
+	}
+	require.Equal(t, map[string]bool{"accounts.google.com": true, "": true}, providers)
+	for _, tags := range stepTags(t, recorder) {
+		if tags[string(attr.ConnectionStepKey)] == StepInboundToken.String() {
+			_, tagged := tags[string(attr.ConnectionProviderKey)]
+			require.False(t, tagged, "a row that reached no provider has no provider tag")
+		}
+	}
+}
+
+// stepTags returns each step metric point's tags.
+func stepTags(t *testing.T, recorder testRecorder) []map[string]string {
+	t.Helper()
 
 	var collected metricdata.ResourceMetrics
 	require.NoError(t, recorder.reader.Collect(t.Context(), &collected))
-	var keys map[string]string
+	var points []map[string]string
 	for _, scope := range collected.ScopeMetrics {
 		for _, m := range scope.Metrics {
 			if m.Name != meterSteps {
@@ -577,19 +614,16 @@ func TestRecord_MetricHasItsTagsAndNoPersonOrgOrHost(t *testing.T) {
 			}
 			sum, ok := m.Data.(metricdata.Sum[int64])
 			require.True(t, ok)
-			require.Len(t, sum.DataPoints, 1)
-			keys = map[string]string{}
-			for _, kv := range sum.DataPoints[0].Attributes.ToSlice() {
-				keys[string(kv.Key)] = kv.Value.AsString()
+			for _, point := range sum.DataPoints {
+				tags := map[string]string{}
+				for _, kv := range point.Attributes.ToSlice() {
+					tags[string(kv.Key)] = kv.Value.AsString()
+				}
+				points = append(points, tags)
 			}
 		}
 	}
-	require.Equal(t, map[string]string{
-		string(attr.ConnectionOutcomeKey):  string(OutcomeFailed),
-		string(attr.ConnectionStepKey):     StepProviderSignIn.String(),
-		string(attr.ConnectionReasonKey):   "provider_rate_limited",
-		string(attr.ConnectionWhoFixesKey): string(WhoProvider),
-	}, keys)
+	return points
 }
 
 func stepsCounted(t *testing.T, recorder testRecorder) int64 {
@@ -660,6 +694,7 @@ func TestLogs_OnWrites(t *testing.T) {
 	require.Equal(t, uint64(3), events)
 	require.NotZero(t, rollup)
 	require.Zero(t, recorder.dropped(t, dropLogsOff))
+	require.Equal(t, int64(3), stepsCounted(t, recorder))
 }
 
 func TestLogs_OffWritesNothing(t *testing.T) {
@@ -695,7 +730,7 @@ func TestLogs_OffWritesNothing(t *testing.T) {
 			require.Zero(t, events)
 			require.Zero(t, rollup)
 			require.Equal(t, int64(3), recorder.dropped(t, dropLogsOff))
-			require.Equal(t, int64(3), stepsCounted(t, recorder), "the step metric has no org, so it has no gap")
+			require.Zero(t, stepsCounted(t, recorder), "the step metric counts stored rows only")
 		})
 	}
 }
