@@ -51,3 +51,8 @@ func PreviewOverlapsKillswitchesPath() string {
 func BatchUserBadgesKillswitchesPath() string {
 	return "/rpc/killswitches.batchUserBadges"
 }
+
+// BatchAgentBadgesKillswitchesPath returns the URL path to the killswitches service batchAgentBadges HTTP endpoint.
+func BatchAgentBadgesKillswitchesPath() string {
+	return "/rpc/killswitches.batchAgentBadges"
+}
