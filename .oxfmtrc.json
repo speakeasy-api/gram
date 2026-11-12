@@ -12,6 +12,8 @@
     "/client/dashboard/public/external/**",
     "/client/dashboard/src/App.css",
     "/client/dashboard/src/components/tools-badge.tsx",
+    "/client/dashboard/src/hooks/authz-cases.gen.json",
+    "/client/dashboard/src/lib/authz.gen.ts",
     "/client/dashboard/src/lib/constants.ts",
     "/client/dashboard/src/sdk/**",
     "/client/dashboard/src/pages/workload-identities/setup/catalog.gen.json",

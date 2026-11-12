@@ -90,9 +90,9 @@ In the handler's test, add one case without the grant that asserts `oops.CodeFor
    - `go test ./internal/authz -run DocTable -args -update-docs` (writes `docs/rbac.md`)
    - `go test ./internal/access -run TestListScopes_DashboardFixture -args -update` (writes the dashboard's `listScopes.fixture.json`)
 4. `mise run gen:goa-server`, then `mise run gen:sdk`. The design's scope enum reads `authz.ScopeNames()`.
-5. The dashboard still mirrors some tables by hand in `client/dashboard/src/hooks/useRBAC.ts` (`resourceKindForScope`, `exclusionScopesByScope`). Update them, and fix the "Dashboard Grant Reference" in `docs/rbac.md` if a page's gate changes.
+5. The dashboard reads its tables from `client/dashboard/src/lib/authz.gen.ts`, which `gen:authz` writes, and its matcher in `client/dashboard/src/hooks/useRBAC.ts` is checked against the server by `useRBAC.server-cases.test.ts`, which replays `authz-cases.gen.json` (sets of effective grants with the server evaluator's answers, also written by `gen:authz`). If that test fails after a change, fix the matcher in `useRBAC.ts`, never the cases. Fix the "Dashboard Grant Reference" in `docs/rbac.md` if a page's gate changes.
 6. Assess Platform MCP (`maintaining-platform-mcp`) and Command K (`maintaining-command-palette`) if the permission gates a user-facing capability.
-7. `mise run lint:server` and `mise run test:server ./internal/authz/... ./internal/access/...`.
+7. `mise run lint:server`, `mise run test:server ./internal/authz/... ./internal/access/...`, and `aube run -F dashboard test src/hooks/useRBAC` (includes the server-cases parity test).
 
 The invariant suite (`authz/internal/registry/invariants_test.go`) checks every permission automatically: implications hold, nothing else is satisfied, blocks win, and unknown values fail closed. Do not add per-scope tests for those properties.
 

@@ -771,11 +771,11 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 
 func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	scoped := authz.GrantsToScopedGrants(grants)
-	// Direct selectors let clients apply principal precedence: a direct grant
-	// naming a resource outranks a block inherited from a role or everyone.
 	direct := make(map[string][]*gen.Selector)
-	for _, grant := range authz.DirectOverrideGrants(grants) {
-		direct[string(grant.Scope)] = append(direct[string(grant.Scope)], authzSelectorToGen(grant.Selector))
+	for scope, selectors := range authz.DirectSelectorsByScope(grants) {
+		for _, sel := range selectors {
+			direct[string(scope)] = append(direct[string(scope)], authzSelectorToGen(sel))
+		}
 	}
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {

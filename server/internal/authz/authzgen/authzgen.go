@@ -28,10 +28,22 @@ func Files() ([]File, error) {
 	if err := registry.Definitions.Validate(); err != nil {
 		return nil, fmt.Errorf("the authorization registry is invalid: %w", err)
 	}
-	return Render(registry.Definitions)
+	files, err := Render(registry.Definitions)
+	if err != nil {
+		return nil, err
+	}
+	// The cases are answered by the evaluator compiled into this binary, which
+	// reads the tables generated from registry.Definitions, so they are only
+	// rendered for it.
+	cases, err := renderDashboardCases(registry.Definitions)
+	if err != nil {
+		return nil, fmt.Errorf("render dashboard cases: %w", err)
+	}
+	return append(files, File{Path: dashboardCasesPath, Content: cases}), nil
 }
 
-// Render renders every file generated from r.
+// Render renders every file generated from r. Files adds the dashboard's
+// cases, which need the compiled evaluator.
 func Render(r registry.Registry) ([]File, error) {
 	scopes, err := renderScopeConstants(r)
 	if err != nil {
@@ -49,6 +61,7 @@ func Render(r registry.Registry) ([]File, error) {
 		{Path: "internal/authz/scopes_gen.go", Content: scopes},
 		{Path: "internal/authz/refs_gen.go", Content: refs},
 		{Path: "internal/authz/tables_gen.go", Content: tables},
+		{Path: dashboardTablesPath, Content: renderDashboardTables(r)},
 	}, nil
 }
 
