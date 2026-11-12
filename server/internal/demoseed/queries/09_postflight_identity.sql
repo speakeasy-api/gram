@@ -37,7 +37,7 @@ WHERE b.organization_id = @org_id::text AND b.project_id = @project_id::uuid
   AND b.user_session_issuer_id = us.user_session_issuer_id
   AND rs.subject_urn = b.attached_by_subject_id
   AND b.attached_by_subject_id = rs.subject_urn
-  AND rs.access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT'
+  AND rs.access_token_encrypted <> ''
   AND rs.refresh_token_encrypted IS NULL AND rs.auto_refresh IS FALSE;
 
 -- name: PostflightIDSessionBindings :one
@@ -53,7 +53,7 @@ WHERE user_session_issuer_id IN
 SELECT count(*) FROM remote_sessions
 WHERE remote_session_client_id = @remote_session_client_id::uuid
   AND deleted IS FALSE
-  AND access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT' AND refresh_token_encrypted IS NULL
+  AND access_token_encrypted <> '' AND refresh_token_encrypted IS NULL
   AND (validation_status IS NULL
        OR validation_status IN ('valid', 'rejected_by_member', 'inactive', 'unknown'));
 
@@ -485,6 +485,11 @@ WHERE CASE match_kind
   -- the author wanted a wildcard and instead stored a literal matching
   -- nothing at all.
   WHEN 'exact' THEN subject LIKE '%*%'
+    -- A wimse:// or spiffe:// subject needs a trust domain, no user
+    -- information, port, query or fragment, and well-formed percent escapes.
+    OR (subject ~* '^(wimse|spiffe):' AND (
+      subject !~* '^(wimse|spiffe)://[^/?#@:]+(/[^?#]*)?$'
+      OR subject ~ '%(?![0-9A-Fa-f]{2})'))
   WHEN 'wildcard' THEN
     -- Enforced on read, so clearing the issuer flag is a kill switch. A rule
     -- written under an issuer that forbids wildcards is already inert.
@@ -495,6 +500,13 @@ WHERE CASE match_kind
     OR subject NOT LIKE '%*'
     OR left(subject, length(subject) - 1) = ''
     OR left(subject, length(subject) - 1) LIKE '%*%'
+    -- Whitespace before the "*" is part of the stem, so the rule matches
+    -- nothing while looking correct.
+    OR right(left(subject, length(subject) - 1), 1) IN (' ', E'\t', E'\r', E'\n')
+    -- The same identifier syntax, checked on the stem as far as it goes.
+    OR (left(subject, length(subject) - 1) ~* '^(wimse|spiffe):' AND (
+      left(subject, length(subject) - 1) !~* '^(wimse|spiffe)://[^/?#@:]+(/[^?#]*)?$'
+      OR left(subject, length(subject) - 1) ~ '%(?![0-9A-Fa-f]{2})'))
   ELSE TRUE
 END;
 

@@ -44,6 +44,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -65,10 +67,16 @@ import (
 )
 
 type Service struct {
-	catalogPromotion     *catalogpromotion.Service
-	registry             *mcpregistry.Service
-	remoteSessions       *remotesessions.Service
-	assets               *assets.Service
+	catalogPromotion *catalogpromotion.Service
+	providerHealth   *mcpconnectionattempts.ProviderHealth
+	registry         *mcpregistry.Service
+	remoteSessions   *remotesessions.Service
+	assets           *assets.Service
+
+	// externalCredentials serves the platform-tier external credential
+	// handlers. Nil leaves those methods unavailable.
+	externalCredentials *externalcredentials.Service
+
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
@@ -122,6 +130,13 @@ type Service struct {
 	scopes *remotemcp.StaffScopes
 	// HookClientsCache shares snapshot storage with the nightly worker.
 	*HookClientsCache
+
+	hookFleet         HookFleetReader
+	hookFleetVersions HookFleetVersions
+
+	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets. Empty leaves targets out of listCustomDomains.
+	customDomainTargetSuffix string
 }
 
 type BillingOperations interface {
@@ -252,7 +267,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{catalogPromotion: nil, projectRedeployer: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, remoteSessions: nil, assets: nil, externalCredentials: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -278,11 +293,14 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:            trialNotifier,
-		billing:          billing,
-		supportCoverage:  supportCoverage,
-		mcpServerHealth:  mcpServerHealth,
-		HookClientsCache: NewHookClientsCache(logger, adminCache, nil, nil),
+		trial:                    trialNotifier,
+		billing:                  billing,
+		supportCoverage:          supportCoverage,
+		mcpServerHealth:          mcpServerHealth,
+		HookClientsCache:         NewHookClientsCache(logger, adminCache, nil, nil),
+		hookFleet:                nil,
+		hookFleetVersions:        HookFleetVersions{Latest: nil, Minimum: nil},
+		customDomainTargetSuffix: "",
 	}
 }
 
@@ -524,6 +542,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.RunUpstreamOAuthMigration = service.strictAdminJSON(server.RunUpstreamOAuthMigration, func() any { return new(adminserver.RunUpstreamOAuthMigrationRequestBody) })
 	server.EnableUpstreamAuthEnforcement = service.strictAdminJSON(server.EnableUpstreamAuthEnforcement, func() any { return new(adminserver.EnableUpstreamAuthEnforcementRequestBody) })
 	server.DisableUpstreamAuthEnforcement = service.strictAdminJSON(server.DisableUpstreamAuthEnforcement, func() any { return new(adminserver.DisableUpstreamAuthEnforcementRequestBody) })
+	server.ListPlatformExternalCredentials = service.preauthorizeAdmin(server.ListPlatformExternalCredentials)
+	server.GetGcpIamPlatformCredential = service.preauthorizeAdmin(server.GetGcpIamPlatformCredential)
+	server.CreateGcpIamPlatformCredential = service.strictAdminJSON(server.CreateGcpIamPlatformCredential, func() any { return new(adminserver.CreateGcpIamPlatformCredentialRequestBody) })
+	server.UpdateGcpIamPlatformCredential = service.strictAdminJSON(server.UpdateGcpIamPlatformCredential, func() any { return new(adminserver.UpdateGcpIamPlatformCredentialRequestBody) })
+	server.VerifyGcpIamPlatformCredential = service.strictAdminJSON(server.VerifyGcpIamPlatformCredential, func() any { return new(adminserver.VerifyGcpIamPlatformCredentialRequestBody) })
+	server.DeleteGcpIamPlatformCredential = service.strictAdminJSON(server.DeleteGcpIamPlatformCredential, func() any { return new(adminserver.DeleteGcpIamPlatformCredentialRequestBody) })
 	adminserver.Mount(mux, server)
 
 }
@@ -1146,6 +1170,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		SubjectID:              conv.PtrToPGTextEmpty(filter.SubjectID),
 		SubjectIds:             nil,
 		ActingSurface:          conv.PtrToPGTextEmpty(filter.ActingSurface),
+		Origin:                 pgtype.Text{String: "", Valid: false},
 		CreatedFrom:            conv.PtrToPGTimestamptz(filter.From),
 		CreatedTo:              conv.PtrToPGTimestamptz(filter.To),
 	}

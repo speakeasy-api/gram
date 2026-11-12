@@ -903,7 +903,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.agent_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.summary_redacted, c.memory_excluded_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.agent_id, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   a.id AS assistant_id, a.name AS assistant_name, b.original_agent_id AS assistant_agent_id,
   -- Name of the agent principal that produced the session (chats.agent_id,
   -- selected by c.*). Resolved live so a rename shows, and NULL for a deleted
@@ -944,6 +944,8 @@ type GetChatRow struct {
 	PinnedAt                    pgtype.Timestamptz
 	Summary                     pgtype.Text
 	SummaryGeneratedAt          pgtype.Timestamptz
+	SummaryRedacted             bool
+	MemoryExcludedAt            pgtype.Timestamptz
 	InferenceAcceptedCheckpoint []byte
 	InferenceActorKey           []byte
 	UserAccountID               uuid.NullUUID
@@ -989,6 +991,8 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.PinnedAt,
 		&i.Summary,
 		&i.SummaryGeneratedAt,
+		&i.SummaryRedacted,
+		&i.MemoryExcludedAt,
 		&i.InferenceAcceptedCheckpoint,
 		&i.InferenceActorKey,
 		&i.UserAccountID,
@@ -1099,6 +1103,32 @@ func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotals
 		&i.RiskFindings,
 	)
 	return i, err
+}
+
+const getChatMemorySummaryEligibility = `-- name: GetChatMemorySummaryEligibility :one
+SELECT (
+  c.deleted IS FALSE
+  AND c.memory_excluded_at IS NULL
+  AND (ua.id IS NULL OR (ua.account_type IS NOT NULL AND ua.account_type <> 'personal'))
+)::boolean AS eligible
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.id = $1 AND c.project_id = $2
+`
+
+type GetChatMemorySummaryEligibilityParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Whether the background summary judge may summarize a chat: live, not
+// excluded from memory, and not a session of a personal account or of an
+// account whose type is not known yet. Matches the team memory readers' rule.
+func (q *Queries) GetChatMemorySummaryEligibility(ctx context.Context, arg GetChatMemorySummaryEligibilityParams) (bool, error) {
+	row := q.db.QueryRow(ctx, getChatMemorySummaryEligibility, arg.ID, arg.ProjectID)
+	var eligible bool
+	err := row.Scan(&eligible)
+	return eligible, err
 }
 
 const getChatMessageStats = `-- name: GetChatMessageStats :one
@@ -4200,6 +4230,27 @@ func (q *Queries) MarkChatLiteLLMProxied(ctx context.Context, arg MarkChatLiteLL
 	return err
 }
 
+const markChatSummaryEmpty = `-- name: MarkChatSummaryEmpty :exec
+UPDATE chats
+SET summary = NULL,
+    summary_generated_at = NOW(),
+    summary_redacted = TRUE,
+    updated_at = NOW()
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+`
+
+type MarkChatSummaryEmptyParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Records that a chat had nothing to summarize, so it reads as covered until
+// new messages arrive. Project-scoped like UpdateChatSummary.
+func (q *Queries) MarkChatSummaryEmpty(ctx context.Context, arg MarkChatSummaryEmptyParams) error {
+	_, err := q.db.Exec(ctx, markChatSummaryEmpty, arg.ID, arg.ProjectID)
+	return err
+}
+
 const markClaudeTagMessages = `-- name: MarkClaudeTagMessages :exec
 UPDATE chats SET session_surface = 'claude-tag'
 WHERE project_id = $1 AND id = $2 AND session_surface IS DISTINCT FROM 'claude-tag'
@@ -4898,16 +4949,25 @@ func (q *Queries) UpdateAIIntegrationConfigChatCursor(ctx context.Context, arg U
 const updateChatSummary = `-- name: UpdateChatSummary :one
 UPDATE chats
 SET summary = $1,
-    summary_generated_at = NOW(),
+    summary_generated_at = CASE
+      WHEN $2::timestamptz IS NOT NULL AND EXISTS (
+        SELECT 1 FROM chat_messages m
+        WHERE m.chat_id = chats.id AND m.created_at > $2::timestamptz
+      ) THEN $2::timestamptz
+      ELSE NOW()
+    END,
+    summary_redacted = $3,
     updated_at = NOW()
-WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+WHERE chats.id = $4 AND chats.project_id = $5 AND chats.deleted IS FALSE
 RETURNING summary, summary_generated_at
 `
 
 type UpdateChatSummaryParams struct {
-	Summary   pgtype.Text
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	Summary         pgtype.Text
+	CoveredThrough  pgtype.Timestamptz
+	SummaryRedacted bool
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
 }
 
 type UpdateChatSummaryRow struct {
@@ -4915,10 +4975,22 @@ type UpdateChatSummaryRow struct {
 	SummaryGeneratedAt pgtype.Timestamptz
 }
 
-// Persist an on-demand LLM session summary. Project-scoped so a summarize write
-// can never touch another project's chat. Returns the updated row timestamps.
+// Persist an LLM session summary. Project-scoped so a summarize write can
+// never touch another project's chat. summary_redacted records whether the
+// summary was built from the risk-redacted transcript; team memory reads only
+// redacted summaries. covered_through is the newest message the summary read:
+// when a newer message landed while the summary was generated, the summary is
+// stamped with covered_through instead of NOW() so the chat still reads as
+// changed and is summarized again. Otherwise summary_generated_at is the write
+// time, which the sweep's daily cap counts. Returns the updated row timestamps.
 func (q *Queries) UpdateChatSummary(ctx context.Context, arg UpdateChatSummaryParams) (UpdateChatSummaryRow, error) {
-	row := q.db.QueryRow(ctx, updateChatSummary, arg.Summary, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, updateChatSummary,
+		arg.Summary,
+		arg.CoveredThrough,
+		arg.SummaryRedacted,
+		arg.ID,
+		arg.ProjectID,
+	)
 	var i UpdateChatSummaryRow
 	err := row.Scan(&i.Summary, &i.SummaryGeneratedAt)
 	return i, err

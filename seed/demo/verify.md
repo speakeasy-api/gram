@@ -48,6 +48,19 @@ where a value is expected.
    mutation section. Confirm there is no ingress row, credential, or related
    console/network error.
 
+0b. **Custom domain diagnostics**: run `mise run seed` twice, then open the
+organization's `/domains` page in both the local organization and `acme-demo`.
+Confirm the seeded reserved example hostname is verified but not activated.
+DNS configuration must explain that the routing target could not be confirmed
+from public DNS, separately from **Infrastructure: Ready**, with no infrastructure outage warning and no
+**Check again** action for this inactive fixture. Open its DNS records and
+confirm the CNAME destination is shown (the designated destination when a suffix
+is configured, otherwise the shared destination). Repeat at a narrow viewport
+and confirm record values and actions remain readable without horizontal page
+overflow. Check the console for errors. The fixture must not create a public
+route or certificate. Run the demo seed safety tests to verify tenant isolation
+and repeatable delete/reinsert behavior.
+
 0a. **Inbound MCP network traffic seed**: after `mise run seed:demo`, confirm
 `mcp_network_traffic_hourly_summaries` has public and private rows for both
 `mcp` and `meta` server kinds in the demo project, with non-zero request
@@ -666,6 +679,26 @@ open their effective assignments; the dropdown always offers compact member sear
       off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
       returns to the server or gateway overview, and the skill page has no
       "Served over MCP" section.
+35. **Owner-scoped inspection (local seed only)** — the shared demo visitor
+    holds every scope, so only a session as the persona shows the owner view.
+    The persona's user row and membership exist locally (`kwame@` the local
+    seed domain), and the dev-idp can sign in as them: call `users.create`
+    with that email and `display_name: Kwame Mensah`, pass the returned
+    `user_id` and the `speakeasy` organization's UUID to `memberships.create`,
+    then pass that `user_id` to `devIdp.setCurrentUser` (mode `oauth2-1`), or
+    pick the user in the dev-idp dashboard's Local mode pane. Login resolves
+    users by email, so the session lands on the seeded row.
+    - **Team → Members** lists Kwame Mensah with the Member role only.
+    - **Agents** lists **Deploy watcher** as Active, owned by Kwame Mensah.
+    - **Agent Sessions** as the persona shows exactly five sessions: the three
+      Deploy watcher sessions (actor is the agent, no user) and the two the
+      persona ran. Opening a Deploy watcher session shows the prompt, the
+      tool calls with their JSON results, and the answer.
+    - **Tool Logs** as the persona lists only the `tools:http:acme:*` calls of
+      those five sessions: the agent's rows name Deploy watcher as actor with
+      no person, the persona's rows name them.
+    - As the local admin (who holds both scopes) the same rows appear among
+      everyone else's, and no other member's sessions appear as the persona.
 
 ## On failure
 

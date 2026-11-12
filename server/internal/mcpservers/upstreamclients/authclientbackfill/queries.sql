@@ -1747,17 +1747,22 @@ JOIN user_session_issuers AS usi
   ON usi.id = s.user_session_issuer_id
 LEFT JOIN projects AS p
   ON p.id = usi.project_id
-WHERE s.deleted IS FALSE
+WHERE usi.deleted IS FALSE
+  AND (usi.project_id IS NULL OR p.deleted IS FALSE)
+  AND (s.organization_id IS NULL OR s.organization_id = CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END)
+  AND s.deleted IS FALSE
   AND s.refresh_expires_at > clock_timestamp()
   AND COALESCE(s.credential_id, s.id) > @cursor::uuid
-  AND COALESCE(usi.organization_id, p.organization_id) = @organization_id::text
+  AND CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END = @organization_id::text
 ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
 LIMIT @page_size::int;
 
 -- name: ListSelectionMappings :many
 -- Every live user session choice for a live server in the organization after
 -- the cursor, or the one named by only_id, with what mapping it onto a typed
--- auth client decides from.
+-- auth client decides from. A supplied scope_user_session_issuer_id restricts
+-- this to that issuer's live credential lineages. only_unmapped independently
+-- restricts results to choices that do not yet name a typed auth client.
 --
 -- What the upstream client choice reads today (GetUpstreamClientSelection):
 -- whether the server has any upstream OAuth client association, whether the
@@ -1776,6 +1781,25 @@ LIMIT @page_size::int;
 -- linked is the server's own configuration and is a candidate too. A mapped
 -- choice's client is usable while it is live, enabled, linked to the server
 -- and, for an OAuth choice, still the registration's.
+-- Compute refreshable lineages once per page, not once per candidate choice.
+-- The nullable scope keeps unscoped backfill callers unchanged. Issuer ownership
+-- is canonical; legacy sessions may omit their denormalized organization.
+WITH scoped_live_credentials AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(session.credential_id, session.id) AS credential_id
+    FROM user_sessions AS session
+    JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE sqlc.narg('scope_user_session_issuer_id')::uuid IS NOT NULL
+      AND issuer.id = sqlc.narg('scope_user_session_issuer_id')::uuid
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+      AND (session.organization_id IS NULL OR session.organization_id = @organization_id::text)
+      AND session.deleted IS FALSE
+      AND session.refresh_expires_at > clock_timestamp()
+)
 SELECT sel.id,
        sel.project_id,
        sel.credential_id,
@@ -1821,6 +1845,17 @@ SELECT sel.id,
            AND a.remote_session_client_id = sel.remote_session_client_id
            AND a.deleted IS FALSE
        )::boolean AS registration_associated,
+       -- The registration and its issuer are live, which the typed resolver
+       -- requires of a choice whatever the server's associations.
+       EXISTS (
+         SELECT 1
+         FROM remote_session_clients AS c
+         JOIN remote_session_issuers AS rsi
+           ON rsi.id = c.remote_session_issuer_id
+          AND rsi.deleted IS FALSE
+         WHERE c.id = sel.remote_session_client_id
+           AND c.deleted IS FALSE
+       )::boolean AS registration_live,
        ARRAY(
          SELECT link.user_session_issuer_id
          FROM remote_session_client_user_session_issuers AS link
@@ -2041,6 +2076,11 @@ FROM upstream_client_selections AS sel
 WHERE sel.organization_id = @organization_id::text
   AND sel.credential_kind = 'user_session'
   AND sel.deleted IS FALSE
+  AND (sqlc.narg('scope_mcp_server_ids')::uuid[] IS NULL
+       OR sel.mcp_server_id = ANY(sqlc.narg('scope_mcp_server_ids')::uuid[]))
+  AND (NOT @only_unmapped::boolean OR sel.auth_client_id IS NULL)
+  AND (sqlc.narg('scope_user_session_issuer_id')::uuid IS NULL
+       OR sel.credential_id IN (SELECT credential_id FROM scoped_live_credentials))
   -- A choice for a deleted server is kept as history but is never served
   -- again, so it is not live coverage.
   AND EXISTS (
@@ -2126,6 +2166,37 @@ SET auth_client_id = ac.id,
     updated_at = clock_timestamp()
 FROM mcp_auth_clients AS ac
 WHERE sel.id = @id::uuid
+  AND sel.organization_id = @organization_id::text
+  AND sel.deleted IS FALSE
+  AND sel.auth_client_id IS NULL
+  AND sel.no_auth = @no_auth::boolean
+  AND sel.remote_session_client_id IS NOT DISTINCT FROM sqlc.narg('remote_session_client_id')::uuid
+  AND ac.id = @auth_client_id::uuid
+  AND ac.organization_id = sel.organization_id
+  AND ac.deleted IS FALSE
+  AND ac.enabled
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS l
+    WHERE l.auth_client_id = ac.id
+      AND l.mcp_server_id = sel.mcp_server_id
+      AND l.deleted IS FALSE
+  );
+
+-- name: MapSelectionGroupToAuthClient :execrows
+-- The caller confirmed one representative with MapSelectionToAuthClient and
+-- retains its source/server/client/binding locks for this transaction. The
+-- policy is shared by this server/registration/no-auth group; each row must
+-- still be unmapped and match the legacy evidence read for this page.
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE,
+    updated_at = clock_timestamp()
+FROM mcp_auth_clients AS ac
+WHERE sel.id = ANY(@ids::uuid[])
+  AND sel.mcp_server_id = @mcp_server_id::uuid
+  AND sel.credential_kind = 'user_session'
   AND sel.organization_id = @organization_id::text
   AND sel.deleted IS FALSE
   AND sel.auth_client_id IS NULL

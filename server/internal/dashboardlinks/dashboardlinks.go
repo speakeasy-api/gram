@@ -114,6 +114,13 @@ func RiskPolicyChallengeAcknowledge(ackToken string) Link {
 	return page("risk-policy-challenge", "acknowledge").withFragment(url.Values{"ack_token": {ackToken}}.Encode())
 }
 
+// RiskPolicyChallengeAcknowledgeShort is RiskPolicyChallengeAcknowledge in
+// its shortest form, for surfaces that cut a message off after a line or two.
+// The bare ack id is the whole fragment.
+func RiskPolicyChallengeAcknowledgeShort(ackID string) Link {
+	return page("ack").withFragment(ackID)
+}
+
 // RiskPolicyBypassRequest is where a user asks for a risk policy bypass. The
 // token travels in the fragment for the same reason as the acknowledge link.
 func RiskPolicyBypassRequest(requestToken string) Link {

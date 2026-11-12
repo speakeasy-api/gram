@@ -375,12 +375,19 @@ func sessionOf(base *agenthooks.Event) *components.HookIngestSession {
 		turnID = agentTurnPrefix + adapterSlug(base.Provider) + ":" + turnID
 	}
 	s := &components.HookIngestSession{
-		ID:     optStr(base.Session.ID),
-		TurnID: optStr(turnID),
-		Cwd:    optStr(base.Session.CWD),
-		Model:  optStr(base.Session.Model),
+		ID:      optStr(base.Session.ID),
+		TurnID:  optStr(turnID),
+		Cwd:     optStr(base.Session.CWD),
+		Model:   optStr(base.Session.Model),
+		Surface: nil,
 	}
-	if s.ID == nil && s.TurnID == nil && s.Cwd == nil && s.Model == nil {
+	// The server handles Cowork events differently: their rows share keys
+	// with the transcript the Stop hook ships, and a warned prompt is
+	// confirmed by sending it again because Cowork cannot show the link.
+	if inCoworkVM(base) {
+		s.Surface = new(coworkSurface)
+	}
+	if s.ID == nil && s.TurnID == nil && s.Cwd == nil && s.Model == nil && s.Surface == nil {
 		return nil
 	}
 	return s

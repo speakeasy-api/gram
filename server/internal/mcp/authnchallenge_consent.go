@@ -626,7 +626,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	defer t.Finish(ctx)
 
@@ -712,6 +712,13 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		for i := range cards {
 			if cards[i].ClientID == outage {
 				cards[i].ValidationNotice = refreshUnavailableNotice
+			}
+		}
+	}
+	if reconnect := r.URL.Query().Get("refresh_reconnect"); reconnect != "" {
+		for i := range cards {
+			if cards[i].ClientID == reconnect {
+				cards[i].ValidationNotice = refreshReconnectNotice(cards[i].Connected)
 			}
 		}
 	}
@@ -1203,7 +1210,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 
 	// Until the state is consumed the page stays usable, so a refusal does not end the attempt.
 	attempt := challengeState.connectionAttempt(endpoint)
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
 	t.Attach(attempt)
 	defer t.Finish(ctx)
 

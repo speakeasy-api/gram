@@ -424,7 +424,8 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		GramEmail:  "",
 		GramChatID: "",
 		// Direct invocation — there is no MCP client on the other end.
-		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+		Credentials: nil,
 	}, plan, attrRecorder)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)

@@ -5,6 +5,7 @@
     "Block": "/blocks/:id",
     "SharedSkill": "/shared/skills/:token",
     "RiskPolicyChallengeAcknowledge": "/risk-policy-challenge/acknowledge#ack_token=:ackToken",
+    "RiskPolicyChallengeAcknowledgeShort": "/ack#:ackId",
     "RiskPolicyBypassRequest": "/risk-policy-bypass/request#request_token=:requestToken",
     "OrganizationHome": "/:orgSlug",
     "Billing": "/:orgSlug/billing",

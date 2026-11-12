@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestAgentIdentityReadToolsContract(t *testing.T) {
@@ -88,23 +90,33 @@ func TestPassesCallerCredentialThrough(t *testing.T) {
 	require.True(t, passesCallerCredentialThrough(&types.McpServerAuthentication{Clients: []*types.AuthClient{{Enabled: true, ClientType: "pass_through"}}}))
 }
 
-func TestRemoteSessionEnded(t *testing.T) {
+// An assigned connection is expired by the same rule resolution uses: expiry, and whether the key can read it.
+func TestAssignedConnectionExpired(t *testing.T) {
 	t.Parallel()
 
+	enc := testenv.NewEncryptionClient(t)
 	now := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
 	at := func(d time.Duration) pgtype.Timestamptz { return pgtype.Timestamptz{Time: now.Add(d), Valid: true} }
-	refresh := pgtype.Text{String: "encrypted", Valid: true}
+	sealed := func(plain string) string {
+		ciphertext, err := enc.Encrypt([]byte(plain))
+		require.NoError(t, err)
+		return ciphertext
+	}
+	access, refresh := sealed("access"), pgtype.Text{String: sealed("refresh"), Valid: true}
+	unreadable := pgtype.Text{String: "not-ciphertext", Valid: true}
 	for name, tc := range map[string]struct {
 		session remotesessionsrepo.RemoteSession
 		want    bool
 	}{
-		"no expiry recorded":                {session: remotesessionsrepo.RemoteSession{}, want: false},
-		"access token expired, no refresh":  {session: remotesessionsrepo.RemoteSession{AccessExpiresAt: at(-time.Minute)}, want: true},
-		"access token expired, refreshes":   {session: remotesessionsrepo.RemoteSession{AccessExpiresAt: at(-time.Minute), RefreshTokenEncrypted: refresh}, want: false},
-		"refresh token expired":             {session: remotesessionsrepo.RemoteSession{AccessExpiresAt: at(-time.Minute), RefreshTokenEncrypted: refresh, RefreshExpiresAt: at(-time.Second)}, want: true},
-		"refresh lapsed, access still good": {session: remotesessionsrepo.RemoteSession{AccessExpiresAt: at(time.Minute), RefreshTokenEncrypted: refresh, RefreshExpiresAt: at(-time.Second)}, want: false},
-		"authorization deadline passed":     {session: remotesessionsrepo.RemoteSession{AccessExpiresAt: at(time.Hour), RefreshTokenEncrypted: refresh, AuthorizationExpiresAt: at(-time.Second)}, want: true},
+		"no expiry recorded":                {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: access}, want: false},
+		"access token expired, no refresh":  {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: access, AccessExpiresAt: at(-time.Minute)}, want: true},
+		"access token expired, refreshes":   {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: access, AccessExpiresAt: at(-time.Minute), RefreshTokenEncrypted: refresh}, want: false},
+		"refresh token expired":             {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: access, AccessExpiresAt: at(-time.Minute), RefreshTokenEncrypted: refresh, RefreshExpiresAt: at(-time.Second)}, want: true},
+		"refresh lapsed, access still good": {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: access, AccessExpiresAt: at(time.Minute), RefreshTokenEncrypted: refresh, RefreshExpiresAt: at(-time.Second)}, want: false},
+		"authorization deadline passed":     {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: access, AccessExpiresAt: at(time.Hour), RefreshTokenEncrypted: refresh, AuthorizationExpiresAt: at(-time.Second)}, want: true},
+		"nothing stored can be read":        {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: at(time.Hour), RefreshTokenEncrypted: unreadable}, want: true},
+		"unreadable access, refresh renews": {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: at(time.Hour), RefreshTokenEncrypted: refresh}, want: false},
 	} {
-		require.Equal(t, tc.want, remoteSessionEnded(tc.session, now), name)
+		require.Equal(t, tc.want, !remotesessions.StoredSignInUsable(enc, tc.session, now), name)
 	}
 }

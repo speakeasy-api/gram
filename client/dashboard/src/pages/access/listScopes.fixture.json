@@ -70,6 +70,40 @@
       "agent_eligible": true
     },
     {
+      "slug": "channels:connect",
+      "label": "Connect to Channels",
+      "description": "Connect to Channels and exchange messages as an authorized instance.",
+      "resource_type": "project",
+      "category": "project",
+      "sensitive": false,
+      "sub_scopes": [],
+      "visibility": "user_visible",
+      "agent_eligible": false
+    },
+    {
+      "slug": "channels:admin",
+      "label": "Manage Channels",
+      "description": "Manage Channels settings and member access without reading other members' messages.",
+      "resource_type": "project",
+      "category": "project",
+      "sensitive": false,
+      "sub_scopes": [],
+      "visibility": "user_visible",
+      "agent_eligible": false
+    },
+    {
+      "slug": "channels:read_all",
+      "label": "Read all Channels messages",
+      "description": "Read other members' private Channels conversations in the project.",
+      "resource_type": "project",
+      "category": "project",
+      "sensitive": true,
+      "sensitivity": "conversations",
+      "sub_scopes": [],
+      "visibility": "user_visible",
+      "agent_eligible": false
+    },
+    {
       "slug": "project:read",
       "label": "View projects",
       "description": "View projects and project-related resources.",
@@ -122,7 +156,7 @@
       "resource_type": "mcp",
       "category": "mcp",
       "sensitive": false,
-      "sub_scopes": ["mcp:connect"],
+      "sub_scopes": [],
       "visibility": "user_visible",
       "agent_eligible": true,
       "exclusion_scope": "mcp:blocked_read"
@@ -145,7 +179,7 @@
       "resource_type": "mcp",
       "category": "mcp",
       "sensitive": false,
-      "sub_scopes": ["mcp:connect", "mcp:read"],
+      "sub_scopes": ["mcp:read"],
       "visibility": "user_visible",
       "agent_eligible": true,
       "exclusion_scope": "mcp:blocked_write"
@@ -405,7 +439,7 @@
     {
       "slug": "chat:read",
       "label": "View agent sessions",
-      "description": "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.",
+      "description": "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions and those of agents they own or edit.",
       "resource_type": "chat",
       "category": "session",
       "sensitive": true,
@@ -417,12 +451,34 @@
     {
       "slug": "chat:write",
       "label": "Manage agent sessions",
-      "description": "Rename, delete, and give feedback on other members' agent sessions, and read their transcripts. Everyone keeps their own.",
+      "description": "Rename, delete, and give feedback on other members' agent sessions, and read their transcripts. Everyone keeps their own sessions and those of agents they own or edit.",
       "resource_type": "chat",
       "category": "session",
       "sensitive": true,
       "sensitivity": "conversations",
       "sub_scopes": ["chat:read"],
+      "visibility": "user_visible",
+      "agent_eligible": false
+    },
+    {
+      "slug": "memory:read",
+      "label": "Team memory",
+      "description": "Search and recall the project's team memory: masked session summaries, memos and digests from every member. The built-in Admin role holds it by default; other roles need an explicit grant.",
+      "resource_type": "project",
+      "category": "session",
+      "sensitive": false,
+      "sub_scopes": [],
+      "visibility": "user_visible",
+      "agent_eligible": false
+    },
+    {
+      "slug": "memory:write",
+      "label": "Team memos",
+      "description": "Save memos to the project's team memory, attributed to you.",
+      "resource_type": "project",
+      "category": "session",
+      "sensitive": false,
+      "sub_scopes": ["memory:read"],
       "visibility": "user_visible",
       "agent_eligible": false
     },
@@ -440,7 +496,7 @@
     {
       "slug": "log:read",
       "label": "View tool logs",
-      "description": "View the project's tool-call logs and traces, including tool arguments, results, and prompt text from every member. Not implied by project or organization admin access.",
+      "description": "View every member's tool-call logs and traces in the project, including tool arguments, results, and prompt text. Everyone keeps the logs of their own sessions and of agents they own. Not implied by project or organization admin access.",
       "resource_type": "project",
       "category": "log",
       "sensitive": true,

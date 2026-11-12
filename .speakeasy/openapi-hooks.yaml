@@ -504,6 +504,9 @@ components:
         model:
           type: string
           description: Model identifier reported by the local agent.
+        surface:
+          type: string
+          description: Product surface that sent the event, set when it changes how the server handles the event. "cowork" is Claude Cowork. Its Stop hook also ships the session transcript, so the server keys the event's conversation row by the id the transcript shares (the prompt id in turn_id, or the tool call id) and each prompt and tool call is stored once. Cowork cannot show the acknowledgement link, so a warned prompt there is confirmed by sending the same message again. Unknown values are ignored.
         turn_id:
           type: string
           description: Generation, request, or turn identifier.
@@ -732,10 +735,11 @@ components:
       properties:
         decision:
           type: string
-          description: Whether the local hook should allow or deny the action.
+          description: Whether the local hook should allow or deny the action. "ask" (tool calls from Claude Cowork only) asks the person to allow the call in the agent's own permission prompt; a client that does not support it must deny.
           enum:
             - allow
             - deny
+            - ask
         effects:
           type: object
           description: Optional side-effect hints for hook SDKs.
@@ -927,8 +931,6 @@ tags:
     description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys
     description: Managing system api keys.
-  - name: launcher
-    description: Rank command palette candidates by the intent behind the text the user typed.
   - name: litellm
     description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
   - name: mcpApproval
@@ -953,6 +955,8 @@ tags:
     description: 'MCP servers suggested from the organization''s Okta applications: catalog entries whose staff-curated Okta mapping matches a synced, assigned application. Administrators accept by creating the server through the usual remote MCP flow, or dismiss; dismissals are remembered per organization and audited.'
   - name: organizations
     description: Organization membership, invitations, and directory.
+  - name: orgEncryption
+    description: 'Manage the key encryption key that protects an organization''s data: Speakeasy-managed by default, or a customer-managed GCP KMS key.'
   - name: otel
     description: Receives OpenTelemetry signals from LLM providers and harnesses.
   - name: packages

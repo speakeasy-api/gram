@@ -29,20 +29,27 @@ import (
 // this narrows the window rather than closing it; pass every server the caller
 // knows it will decide.
 func PreflightServerAssociations(ctx context.Context, tx pgx.Tx, organizationID string, serverIDs ...uuid.UUID) error {
+	return PreflightServerAssociationsWithRegistrations(ctx, tx, organizationID, serverIDs, nil)
+}
+
+// PreflightServerAssociationsWithRegistrations also gates registrations the
+// caller may associate with these servers. Merge both sets before taking any
+// gate, so a later capture cannot acquire a newly discovered gate out of order.
+func PreflightServerAssociationsWithRegistrations(ctx context.Context, tx pgx.Tx, organizationID string, serverIDs, extraRegistrationIDs []uuid.UUID) error {
 	if organizationID == "" {
 		return errors.New("preflight server associations: no tenant scope")
 	}
-	servers := dedupeServers(serverIDs)
-	if len(servers) == 0 {
+	servers, registrations := dedupeServers(serverIDs), dedupeServers(extraRegistrationIDs)
+	if len(servers) == 0 && len(registrations) == 0 {
 		return nil
 	}
-	_, err := gateOAuthRegistrations(ctx, New(tx), organizationID, servers)
+	_, err := gateOAuthRegistrations(ctx, New(tx), organizationID, servers, registrations...)
 	return err
 }
 
 // gateOAuthRegistrations serializes the OAuth registrations the given servers
 // reach and reports them.
-func gateOAuthRegistrations(ctx context.Context, q *Queries, organizationID string, servers []uuid.UUID) ([]uuid.UUID, error) {
+func gateOAuthRegistrations(ctx context.Context, q *Queries, organizationID string, servers []uuid.UUID, extraRegistrationIDs ...uuid.UUID) ([]uuid.UUID, error) {
 	// The writer scope expands shared EMA registrations, not organization-wide
 	// OAuth registrations. Serialize the complete OAuth registration set before
 	// any typed client/link write, including clients that do not exist yet.
@@ -50,6 +57,7 @@ func gateOAuthRegistrations(ctx context.Context, q *Queries, organizationID stri
 	if err != nil {
 		return nil, fmt.Errorf("list OAuth synchronization scope: %w", err)
 	}
+	registrations = dedupeServers(append(registrations, extraRegistrationIDs...))
 	if err := q.LockOAuthRegistrationSyncScope(ctx, LockOAuthRegistrationSyncScopeParams{OrganizationID: organizationID, RegistrationIds: registrations}); err != nil {
 		return nil, fmt.Errorf("lock OAuth registration synchronization scope: %w", err)
 	}
@@ -140,7 +148,7 @@ func SyncServerAssociations(ctx context.Context, tx pgx.Tx, organizationID strin
 	if err := q.LockServerOAuthClientsForSync(ctx, LockServerOAuthClientsForSyncParams{OrganizationID: organizationID, McpServerIds: servers, RegistrationIds: registrations}); err != nil {
 		return fmt.Errorf("lock OAuth clients for synchronization: %w", err)
 	}
-	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0}
+	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: false}
 	// The report is the decision log the backfill keeps for its operator; a
 	// sync writes the same records and discards the account of them.
 	report := newReport(true)

@@ -75,6 +75,8 @@ import (
 )
 
 type platformMCPConfig struct {
+	// CustomDomainTargetSuffix is the normalized parent of designated CNAME destinations.
+	CustomDomainTargetSuffix string
 	// GatewaySessions shares dashboard session scoping and pagination.
 	GatewaySessions platformmcp.GatewaySessionManagement
 	// AgentAuthorizationChecks is the dashboard's authorization check listing
@@ -152,6 +154,8 @@ type platformMCPConfig struct {
 	// CodeExecutor runs Platform MCP execute programs for connections the
 	// discovery flag serves Code Mode. Nil keeps Code Mode unavailable.
 	CodeExecutor codemode.Executor
+	// ChannelsAccess is optional discovery; Channels authentication is composed separately.
+	ChannelsAccess *platformmcp.ChannelsAccessService
 	// RiskAnalysisDescriber reports the run state of a project's Watchdog
 	// analysis. Nil keeps get_risk_analysis_status visible as a stub rather
 	// than reporting a state nothing observed.
@@ -423,6 +427,12 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.SessionRecallConnectionLimitName, ratelimit.PerMinute(platformmcp.SessionRecallsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.SessionRecallOrganizationLimitName, ratelimit.PerMinute(platformmcp.SessionRecallsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		// Team memory returns masked summaries and memos; its own allowance
+		// keeps it from starving session recall and the reverse.
+		TeamMemory: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.TeamMemoryConnectionLimitName, ratelimit.PerMinute(platformmcp.TeamMemoryCallsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.TeamMemoryOrganizationLimitName, ratelimit.PerMinute(platformmcp.TeamMemoryCallsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		// The second drill-down cap: what a connection may accumulate over ten
 		// minutes, rather than how often it may call. Both buckets refill over
 		// that window, so a caller paging steadily under the per-minute rate
@@ -549,6 +559,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
+		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
@@ -560,6 +571,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
+		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
@@ -569,12 +581,14 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithRiskFindingList(platformmcp.NewRiskFindingListService(config.DB, config.RiskFindingList, config.JWTSigningKey), budgets.RiskFindings).
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
-		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
+		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, config.Authz, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
+		WithTeamMemory(platformmcp.NewTeamMemoryService(config.DB, config.Authz, config.AuditLogger, budgets.TeamMemory, platformmcp.NewChatSearchRedactor())).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
-		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
+		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Encryption, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
 		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
+		WithChannelsAccess(config.ChannelsAccess).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
@@ -1226,6 +1240,12 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.SessionRecallConnectionLimitName, ratelimit.PerMinute(platformmcp.SessionRecallsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.SessionRecallOrganizationLimitName, ratelimit.PerMinute(platformmcp.SessionRecallsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		// Team memory returns masked summaries and memos; its own allowance
+		// keeps it from starving session recall and the reverse.
+		TeamMemory: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.TeamMemoryConnectionLimitName, ratelimit.PerMinute(platformmcp.TeamMemoryCallsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.TeamMemoryOrganizationLimitName, ratelimit.PerMinute(platformmcp.TeamMemoryCallsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		// The second drill-down cap: what a connection may accumulate over ten
 		// minutes, rather than how often it may call. Both buckets refill over
 		// that window, so a caller paging steadily under the per-minute rate
@@ -1333,6 +1353,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
+		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
@@ -1344,6 +1365,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
+		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
@@ -1353,12 +1375,14 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithRiskFindingList(platformmcp.NewRiskFindingListService(config.DB, config.RiskFindingList, config.JWTSigningKey), budgets.RiskFindings).
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
-		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
+		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, config.Authz, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
+		WithTeamMemory(platformmcp.NewTeamMemoryService(config.DB, config.Authz, config.AuditLogger, budgets.TeamMemory, platformmcp.NewChatSearchRedactor())).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
-		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
+		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Encryption, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
 		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
+		WithChannelsAccess(config.ChannelsAccess).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))

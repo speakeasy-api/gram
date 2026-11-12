@@ -32,6 +32,8 @@ const dashboardPaths = (
   SharedSkill: STANDALONE_ROUTES.sharedSkill,
   RiskPolicyChallengeAcknowledge:
     STANDALONE_ROUTES.riskPolicyChallengeAcknowledge,
+  RiskPolicyChallengeAcknowledgeShort:
+    STANDALONE_ROUTES.riskPolicyChallengeAcknowledgeShort,
   RiskPolicyBypassRequest: STANDALONE_ROUTES.riskPolicyBypassRequest,
   OrganizationHome: org.home.href(),
   Billing: org.billing.href(),

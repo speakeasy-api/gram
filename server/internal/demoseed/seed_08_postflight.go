@@ -14,6 +14,14 @@ import (
 // postflight asserts the demo data landed and nothing leaked outside the demo
 // org. Any failure rolls the whole Postgres seed back.
 func (s *seeder) postflight(ctx context.Context) error {
+	domains, err := s.q.OrgCountCustomDomainDiagnostics(ctx, repo.OrgCountCustomDomainDiagnosticsParams{OrgID: s.orgID(), Domain: s.spec.CustomDomain})
+	if err != nil {
+		return fmt.Errorf("count custom domain diagnostics: %w", err)
+	}
+	if domains != 1 {
+		return fmt.Errorf("expected one illustrative custom domain, got %d", domains)
+	}
+
 	count, err := s.q.PostflightCountRegistryPromotionCandidates(ctx, repo.PostflightCountRegistryPromotionCandidatesParams{OrgID: s.orgID(), ProjectID: s.projectID()})
 	if err != nil {
 		return fmt.Errorf("count synthetic catalogue promotion candidates: %w", err)
@@ -24,7 +32,10 @@ func (s *seeder) postflight(ctx context.Context) error {
 	if err := s.postflightCore(ctx); err != nil {
 		return err
 	}
-	return s.postflightIdentity(ctx)
+	if err := s.postflightIdentity(ctx); err != nil {
+		return err
+	}
+	return s.postflightChannels(ctx)
 }
 
 // postflightCountCheck is one count query and the condition that fails it.
@@ -120,6 +131,20 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 	}
 
 	checks := []postflightCountCheck{
+		{
+			what: "paused Gemini connection without credentials",
+			count: func() (int64, error) {
+				return s.q.ActivityCountSafeGeminiComplianceConfig(ctx, repo.ActivityCountSafeGeminiComplianceConfigParams{OrganizationID: org, ProjectID: proj})
+			},
+			fail: postflightMustEqual(1, "expected 1 paused Gemini connection without credentials, found %d"),
+		},
+		{
+			what: "Gemini text chat messages",
+			count: func() (int64, error) {
+				return s.q.ActivityCountGeminiComplianceMessages(ctx, repo.ActivityCountGeminiComplianceMessagesParams{ProjectID: proj, ChatID: s.det("gemini-compliance-chat")})
+			},
+			fail: postflightMustEqual(2, "expected 2 Gemini text chat messages, found %d"),
+		},
 		{
 			what: "inference hook messages",
 			count: func() (int64, error) {
@@ -339,8 +364,8 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		return err
 	}
 
-	if memberCount != int64(len(demoUsers)) {
-		return fmt.Errorf("demo seed postflight: expected %d members, found %d", len(demoUsers), memberCount)
+	if members := len(demoMembers()); memberCount != int64(members) {
+		return fmt.Errorf("demo seed postflight: expected %d members, found %d", members, memberCount)
 	}
 	if toolCount != int64(len(toolNames)) {
 		return fmt.Errorf("demo seed postflight: expected %d http tools, found %d", len(toolNames), toolCount)
@@ -394,7 +419,21 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 					OrgID:     org,
 				})
 			},
-			fail: postflightMustEqual(2, "expected 2 chats attributed to a live agent, found %d (channel sessions would render with no actor)"),
+			fail: postflightMustEqual(2+ownerAgentSessionCount(), fmt.Sprintf("expected %d chats attributed to a live agent, found %%d (channel sessions would render with no actor)", 2+ownerAgentSessionCount())),
+		},
+		// The owner read path (ListOwnedAgentIDs) resolves these through the
+		// agent's owner, so each must join an agent that is live and not
+		// latched for reassignment, or the persona sees nothing.
+		{
+			what: "agent owner sessions",
+			count: func() (int64, error) {
+				return s.q.PostflightCountAgentOwnerSessions(ctx, repo.PostflightCountAgentOwnerSessionsParams{
+					ProjectID:   proj,
+					OrgID:       org,
+					OwnerUserID: s.userID(demoAgentOwner.handle),
+				})
+			},
+			fail: postflightMustEqual(ownerAgentSessionCount(), fmt.Sprintf("expected %d agent-credential sessions readable through ownership, found %%d", ownerAgentSessionCount())),
 		},
 		// Every table that carries both the demo org id and a project id must
 		// agree with the demo constants: a mismatch means an insert escaped
@@ -516,10 +555,13 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		},
 		// Personal accounts are the reading the governance note exists for;
 		// one surviving row would make the pattern look like an edge case.
+		// The roster seeds three; the team memory eval corpus adds Anthropic
+		// ones for jonas and priya (whose roster account is Cursor), so
+		// their private Claude Code sessions stay out of team memory.
 		{
 			what:  "personal accounts",
 			count: byOrg(s.q.PostflightCountPersonalAccounts),
-			fail:  postflightMustEqual(3, "expected 3 personal accounts, found %d"),
+			fail:  postflightMustEqual(5, "expected 5 personal accounts, found %d"),
 		},
 	}
 	if err := s.runPostflightChecks(checks); err != nil {

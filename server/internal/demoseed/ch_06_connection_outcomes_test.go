@@ -13,7 +13,7 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 	s := &seeder{spec: DefaultSpec(), now: time.Now()}
 	rows, err := s.connectionRequestRows()
 	require.NoError(t, err)
-	require.Len(t, rows, connectionAttemptDays*len(connectionRequestEndings))
+	require.Len(t, rows, ConnectionAttemptDays*len(connectionRequestEndings))
 	steps := make(map[string]bool)
 	outcomes := make(map[string]bool)
 	attempts := make(map[string]bool)
@@ -39,7 +39,7 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 			require.Regexp(t, `^[0-9a-f]{32}$`, row.DeviceKey)
 		}
 		require.NotEqual(t, "rejected_by_member", row.Reason, "request outcomes must match a live request producer")
-		if row.Step == "mcp_request" && (row.Reason == "provider_server_error" || row.Reason == "tool_permission_denied" || row.Reason == "usage_limit_reached" || row.Reason == "provider_rejected" || row.Reason == "mcp_tool_calls_paused") {
+		if row.Step == "mcp_request" && (row.Reason == "provider_server_error" || row.Reason == "tool_permission_denied" || row.Reason == "usage_limit_reached" || row.Reason == "provider_rejected" || row.Reason == "mcp_tool_calls_paused" || row.Reason == "stored_sign_in_unreadable") {
 			refusalKinds[row.Reason+"/"+row.ServerKind] = true
 			require.Equal(t, s.projectID(), row.ProjectID)
 			switch row.ServerKind {
@@ -90,6 +90,7 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 		"inbound_token/sign_in_revoked_by_admin",
 		"inbound_token/refreshed",
 		"mcp_request/invalid_remote_session",
+		"mcp_request/stored_sign_in_unreadable",
 		"mcp_request/remote_session_unavailable",
 		"provider_refresh/refreshed",
 		"provider_refresh/invalid_grant",

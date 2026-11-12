@@ -15512,6 +15512,241 @@ func DecodeGetHookClientsResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildGetOrganizationHookFleetRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "getOrganizationHookFleet"
+// endpoint
+func (c *Client) BuildGetOrganizationHookFleetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOrganizationHookFleetAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getOrganizationHookFleet", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetOrganizationHookFleetRequest returns an encoder for requests sent
+// to the admin getOrganizationHookFleet server.
+func EncodeGetOrganizationHookFleetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetOrganizationHookFleetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getOrganizationHookFleet", "*admin.GetOrganizationHookFleetPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		values.Add("window_days", fmt.Sprintf("%v", p.WindowDays))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetOrganizationHookFleetResponse returns a decoder for responses
+// returned by the admin getOrganizationHookFleet endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetOrganizationHookFleetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetOrganizationHookFleetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetOrganizationHookFleetResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			res := NewGetOrganizationHookFleetAdminHookFleetResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetOrganizationHookFleetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetOrganizationHookFleetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetOrganizationHookFleetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetOrganizationHookFleetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetOrganizationHookFleetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetOrganizationHookFleetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetOrganizationHookFleetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetOrganizationHookFleetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				}
+				err = ValidateGetOrganizationHookFleetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				}
+				return nil, NewGetOrganizationHookFleetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetOrganizationHookFleetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				}
+				err = ValidateGetOrganizationHookFleetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				}
+				return nil, NewGetOrganizationHookFleetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationHookFleet", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetOrganizationHookFleetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+			}
+			err = ValidateGetOrganizationHookFleetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+			}
+			return nil, NewGetOrganizationHookFleetGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationHookFleet", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRegistryPromotionCandidatesRequest instantiates a HTTP request
 // object with method and path set to call the "admin" service
 // "listRegistryPromotionCandidates" endpoint
@@ -25646,6 +25881,1733 @@ func DecodeRedeployProjectResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildListCustomDomainsRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "listCustomDomains" endpoint
+func (c *Client) BuildListCustomDomainsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListCustomDomainsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listCustomDomains", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListCustomDomainsRequest returns an encoder for requests sent to the
+// admin listCustomDomains server.
+func EncodeListCustomDomainsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListCustomDomainsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listCustomDomains", "*admin.ListCustomDomainsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		if p.OrganizationID != nil {
+			values.Add("organization_id", *p.OrganizationID)
+		}
+		if p.DNSRoutingMethod != nil {
+			values.Add("dns_routing_method", *p.DNSRoutingMethod)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListCustomDomainsResponse returns a decoder for responses returned by
+// the admin listCustomDomains endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListCustomDomainsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListCustomDomainsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListCustomDomainsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
+			}
+			err = ValidateListCustomDomainsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
+			}
+			res := NewListCustomDomainsAdminListCustomDomainsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListCustomDomainsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
+			}
+			err = ValidateListCustomDomainsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
+			}
+			return nil, NewListCustomDomainsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListCustomDomainsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
+			}
+			err = ValidateListCustomDomainsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
+			}
+			return nil, NewListCustomDomainsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListCustomDomainsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
+			}
+			err = ValidateListCustomDomainsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
+			}
+			return nil, NewListCustomDomainsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListCustomDomainsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
+			}
+			err = ValidateListCustomDomainsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
+			}
+			return nil, NewListCustomDomainsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListCustomDomainsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
+			}
+			err = ValidateListCustomDomainsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
+			}
+			return nil, NewListCustomDomainsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListCustomDomainsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
+			}
+			err = ValidateListCustomDomainsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
+			}
+			return nil, NewListCustomDomainsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListCustomDomainsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
+			}
+			err = ValidateListCustomDomainsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
+			}
+			return nil, NewListCustomDomainsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListCustomDomainsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
+				}
+				err = ValidateListCustomDomainsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
+				}
+				return nil, NewListCustomDomainsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListCustomDomainsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
+				}
+				err = ValidateListCustomDomainsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
+				}
+				return nil, NewListCustomDomainsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listCustomDomains", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListCustomDomainsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
+			}
+			err = ValidateListCustomDomainsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
+			}
+			return nil, NewListCustomDomainsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listCustomDomains", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListPlatformExternalCredentialsRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "listPlatformExternalCredentials" endpoint
+func (c *Client) BuildListPlatformExternalCredentialsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListPlatformExternalCredentialsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listPlatformExternalCredentials", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListPlatformExternalCredentialsRequest returns an encoder for requests
+// sent to the admin listPlatformExternalCredentials server.
+func EncodeListPlatformExternalCredentialsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListPlatformExternalCredentialsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listPlatformExternalCredentials", "*admin.ListPlatformExternalCredentialsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		if p.Provider != nil {
+			values.Add("provider", *p.Provider)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListPlatformExternalCredentialsResponse returns a decoder for
+// responses returned by the admin listPlatformExternalCredentials endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeListPlatformExternalCredentialsResponse may return the following
+// errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListPlatformExternalCredentialsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListPlatformExternalCredentialsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformExternalCredentials", err)
+			}
+			err = ValidateListPlatformExternalCredentialsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformExternalCredentials", err)
+			}
+			res := NewListPlatformExternalCredentialsListExternalCredentialsResultOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ListPlatformExternalCredentialsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformExternalCredentials", err)
+			}
+			err = ValidateListPlatformExternalCredentialsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformExternalCredentials", err)
+			}
+			return nil, NewListPlatformExternalCredentialsUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body ListPlatformExternalCredentialsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformExternalCredentials", err)
+			}
+			err = ValidateListPlatformExternalCredentialsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformExternalCredentials", err)
+			}
+			return nil, NewListPlatformExternalCredentialsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListPlatformExternalCredentialsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformExternalCredentials", err)
+			}
+			err = ValidateListPlatformExternalCredentialsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformExternalCredentials", err)
+			}
+			return nil, NewListPlatformExternalCredentialsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListPlatformExternalCredentialsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformExternalCredentials", err)
+			}
+			err = ValidateListPlatformExternalCredentialsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformExternalCredentials", err)
+			}
+			return nil, NewListPlatformExternalCredentialsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListPlatformExternalCredentialsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformExternalCredentials", err)
+			}
+			err = ValidateListPlatformExternalCredentialsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformExternalCredentials", err)
+			}
+			return nil, NewListPlatformExternalCredentialsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListPlatformExternalCredentialsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformExternalCredentials", err)
+			}
+			err = ValidateListPlatformExternalCredentialsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformExternalCredentials", err)
+			}
+			return nil, NewListPlatformExternalCredentialsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListPlatformExternalCredentialsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformExternalCredentials", err)
+			}
+			err = ValidateListPlatformExternalCredentialsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformExternalCredentials", err)
+			}
+			return nil, NewListPlatformExternalCredentialsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListPlatformExternalCredentialsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformExternalCredentials", err)
+			}
+			err = ValidateListPlatformExternalCredentialsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformExternalCredentials", err)
+			}
+			return nil, NewListPlatformExternalCredentialsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListPlatformExternalCredentialsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listPlatformExternalCredentials", err)
+				}
+				err = ValidateListPlatformExternalCredentialsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listPlatformExternalCredentials", err)
+				}
+				return nil, NewListPlatformExternalCredentialsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListPlatformExternalCredentialsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listPlatformExternalCredentials", err)
+				}
+				err = ValidateListPlatformExternalCredentialsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listPlatformExternalCredentials", err)
+				}
+				return nil, NewListPlatformExternalCredentialsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listPlatformExternalCredentials", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListPlatformExternalCredentialsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformExternalCredentials", err)
+			}
+			err = ValidateListPlatformExternalCredentialsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformExternalCredentials", err)
+			}
+			return nil, NewListPlatformExternalCredentialsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listPlatformExternalCredentials", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetGcpIamPlatformCredentialRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "getGcpIamPlatformCredential" endpoint
+func (c *Client) BuildGetGcpIamPlatformCredentialRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetGcpIamPlatformCredentialAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getGcpIamPlatformCredential", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetGcpIamPlatformCredentialRequest returns an encoder for requests
+// sent to the admin getGcpIamPlatformCredential server.
+func EncodeGetGcpIamPlatformCredentialRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetGcpIamPlatformCredentialPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getGcpIamPlatformCredential", "*admin.GetGcpIamPlatformCredentialPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetGcpIamPlatformCredentialResponse returns a decoder for responses
+// returned by the admin getGcpIamPlatformCredential endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetGcpIamPlatformCredentialResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetGcpIamPlatformCredentialResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetGcpIamPlatformCredentialResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGcpIamPlatformCredential", err)
+			}
+			err = ValidateGetGcpIamPlatformCredentialResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGcpIamPlatformCredential", err)
+			}
+			res := NewGetGcpIamPlatformCredentialGcpIamCredentialOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetGcpIamPlatformCredentialUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGcpIamPlatformCredential", err)
+			}
+			err = ValidateGetGcpIamPlatformCredentialUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGcpIamPlatformCredential", err)
+			}
+			return nil, NewGetGcpIamPlatformCredentialUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body GetGcpIamPlatformCredentialUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGcpIamPlatformCredential", err)
+			}
+			err = ValidateGetGcpIamPlatformCredentialUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGcpIamPlatformCredential", err)
+			}
+			return nil, NewGetGcpIamPlatformCredentialUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetGcpIamPlatformCredentialForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGcpIamPlatformCredential", err)
+			}
+			err = ValidateGetGcpIamPlatformCredentialForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGcpIamPlatformCredential", err)
+			}
+			return nil, NewGetGcpIamPlatformCredentialForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetGcpIamPlatformCredentialBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGcpIamPlatformCredential", err)
+			}
+			err = ValidateGetGcpIamPlatformCredentialBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGcpIamPlatformCredential", err)
+			}
+			return nil, NewGetGcpIamPlatformCredentialBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetGcpIamPlatformCredentialNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGcpIamPlatformCredential", err)
+			}
+			err = ValidateGetGcpIamPlatformCredentialNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGcpIamPlatformCredential", err)
+			}
+			return nil, NewGetGcpIamPlatformCredentialNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetGcpIamPlatformCredentialConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGcpIamPlatformCredential", err)
+			}
+			err = ValidateGetGcpIamPlatformCredentialConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGcpIamPlatformCredential", err)
+			}
+			return nil, NewGetGcpIamPlatformCredentialConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetGcpIamPlatformCredentialUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGcpIamPlatformCredential", err)
+			}
+			err = ValidateGetGcpIamPlatformCredentialUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGcpIamPlatformCredential", err)
+			}
+			return nil, NewGetGcpIamPlatformCredentialUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetGcpIamPlatformCredentialInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGcpIamPlatformCredential", err)
+			}
+			err = ValidateGetGcpIamPlatformCredentialInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGcpIamPlatformCredential", err)
+			}
+			return nil, NewGetGcpIamPlatformCredentialInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetGcpIamPlatformCredentialInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getGcpIamPlatformCredential", err)
+				}
+				err = ValidateGetGcpIamPlatformCredentialInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getGcpIamPlatformCredential", err)
+				}
+				return nil, NewGetGcpIamPlatformCredentialInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetGcpIamPlatformCredentialUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getGcpIamPlatformCredential", err)
+				}
+				err = ValidateGetGcpIamPlatformCredentialUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getGcpIamPlatformCredential", err)
+				}
+				return nil, NewGetGcpIamPlatformCredentialUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getGcpIamPlatformCredential", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetGcpIamPlatformCredentialGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getGcpIamPlatformCredential", err)
+			}
+			err = ValidateGetGcpIamPlatformCredentialGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getGcpIamPlatformCredential", err)
+			}
+			return nil, NewGetGcpIamPlatformCredentialGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getGcpIamPlatformCredential", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCreateGcpIamPlatformCredentialRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "createGcpIamPlatformCredential" endpoint
+func (c *Client) BuildCreateGcpIamPlatformCredentialRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateGcpIamPlatformCredentialAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "createGcpIamPlatformCredential", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateGcpIamPlatformCredentialRequest returns an encoder for requests
+// sent to the admin createGcpIamPlatformCredential server.
+func EncodeCreateGcpIamPlatformCredentialRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.CreateGcpIamPlatformCredentialPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "createGcpIamPlatformCredential", "*admin.CreateGcpIamPlatformCredentialPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewCreateGcpIamPlatformCredentialRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "createGcpIamPlatformCredential", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateGcpIamPlatformCredentialResponse returns a decoder for responses
+// returned by the admin createGcpIamPlatformCredential endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeCreateGcpIamPlatformCredentialResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateGcpIamPlatformCredentialResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateGcpIamPlatformCredentialResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createGcpIamPlatformCredential", err)
+			}
+			err = ValidateCreateGcpIamPlatformCredentialResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createGcpIamPlatformCredential", err)
+			}
+			res := NewCreateGcpIamPlatformCredentialGcpIamCredentialOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body CreateGcpIamPlatformCredentialUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createGcpIamPlatformCredential", err)
+			}
+			err = ValidateCreateGcpIamPlatformCredentialUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createGcpIamPlatformCredential", err)
+			}
+			return nil, NewCreateGcpIamPlatformCredentialUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body CreateGcpIamPlatformCredentialUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createGcpIamPlatformCredential", err)
+			}
+			err = ValidateCreateGcpIamPlatformCredentialUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createGcpIamPlatformCredential", err)
+			}
+			return nil, NewCreateGcpIamPlatformCredentialUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateGcpIamPlatformCredentialForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createGcpIamPlatformCredential", err)
+			}
+			err = ValidateCreateGcpIamPlatformCredentialForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createGcpIamPlatformCredential", err)
+			}
+			return nil, NewCreateGcpIamPlatformCredentialForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateGcpIamPlatformCredentialBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createGcpIamPlatformCredential", err)
+			}
+			err = ValidateCreateGcpIamPlatformCredentialBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createGcpIamPlatformCredential", err)
+			}
+			return nil, NewCreateGcpIamPlatformCredentialBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateGcpIamPlatformCredentialNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createGcpIamPlatformCredential", err)
+			}
+			err = ValidateCreateGcpIamPlatformCredentialNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createGcpIamPlatformCredential", err)
+			}
+			return nil, NewCreateGcpIamPlatformCredentialNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateGcpIamPlatformCredentialConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createGcpIamPlatformCredential", err)
+			}
+			err = ValidateCreateGcpIamPlatformCredentialConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createGcpIamPlatformCredential", err)
+			}
+			return nil, NewCreateGcpIamPlatformCredentialConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateGcpIamPlatformCredentialUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createGcpIamPlatformCredential", err)
+			}
+			err = ValidateCreateGcpIamPlatformCredentialUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createGcpIamPlatformCredential", err)
+			}
+			return nil, NewCreateGcpIamPlatformCredentialUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateGcpIamPlatformCredentialInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createGcpIamPlatformCredential", err)
+			}
+			err = ValidateCreateGcpIamPlatformCredentialInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createGcpIamPlatformCredential", err)
+			}
+			return nil, NewCreateGcpIamPlatformCredentialInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateGcpIamPlatformCredentialInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "createGcpIamPlatformCredential", err)
+				}
+				err = ValidateCreateGcpIamPlatformCredentialInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "createGcpIamPlatformCredential", err)
+				}
+				return nil, NewCreateGcpIamPlatformCredentialInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateGcpIamPlatformCredentialUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "createGcpIamPlatformCredential", err)
+				}
+				err = ValidateCreateGcpIamPlatformCredentialUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "createGcpIamPlatformCredential", err)
+				}
+				return nil, NewCreateGcpIamPlatformCredentialUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "createGcpIamPlatformCredential", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateGcpIamPlatformCredentialGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "createGcpIamPlatformCredential", err)
+			}
+			err = ValidateCreateGcpIamPlatformCredentialGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "createGcpIamPlatformCredential", err)
+			}
+			return nil, NewCreateGcpIamPlatformCredentialGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "createGcpIamPlatformCredential", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateGcpIamPlatformCredentialRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "updateGcpIamPlatformCredential" endpoint
+func (c *Client) BuildUpdateGcpIamPlatformCredentialRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateGcpIamPlatformCredentialAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "updateGcpIamPlatformCredential", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateGcpIamPlatformCredentialRequest returns an encoder for requests
+// sent to the admin updateGcpIamPlatformCredential server.
+func EncodeUpdateGcpIamPlatformCredentialRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.UpdateGcpIamPlatformCredentialPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "updateGcpIamPlatformCredential", "*admin.UpdateGcpIamPlatformCredentialPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewUpdateGcpIamPlatformCredentialRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "updateGcpIamPlatformCredential", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateGcpIamPlatformCredentialResponse returns a decoder for responses
+// returned by the admin updateGcpIamPlatformCredential endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeUpdateGcpIamPlatformCredentialResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateGcpIamPlatformCredentialResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateGcpIamPlatformCredentialResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			err = ValidateUpdateGcpIamPlatformCredentialResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			res := NewUpdateGcpIamPlatformCredentialGcpIamCredentialOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body UpdateGcpIamPlatformCredentialUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			err = ValidateUpdateGcpIamPlatformCredentialUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			return nil, NewUpdateGcpIamPlatformCredentialUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body UpdateGcpIamPlatformCredentialUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			err = ValidateUpdateGcpIamPlatformCredentialUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			return nil, NewUpdateGcpIamPlatformCredentialUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateGcpIamPlatformCredentialForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			err = ValidateUpdateGcpIamPlatformCredentialForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			return nil, NewUpdateGcpIamPlatformCredentialForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateGcpIamPlatformCredentialBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			err = ValidateUpdateGcpIamPlatformCredentialBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			return nil, NewUpdateGcpIamPlatformCredentialBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateGcpIamPlatformCredentialNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			err = ValidateUpdateGcpIamPlatformCredentialNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			return nil, NewUpdateGcpIamPlatformCredentialNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateGcpIamPlatformCredentialConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			err = ValidateUpdateGcpIamPlatformCredentialConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			return nil, NewUpdateGcpIamPlatformCredentialConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateGcpIamPlatformCredentialUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			err = ValidateUpdateGcpIamPlatformCredentialUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			return nil, NewUpdateGcpIamPlatformCredentialUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateGcpIamPlatformCredentialInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			err = ValidateUpdateGcpIamPlatformCredentialInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			return nil, NewUpdateGcpIamPlatformCredentialInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateGcpIamPlatformCredentialInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "updateGcpIamPlatformCredential", err)
+				}
+				err = ValidateUpdateGcpIamPlatformCredentialInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "updateGcpIamPlatformCredential", err)
+				}
+				return nil, NewUpdateGcpIamPlatformCredentialInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateGcpIamPlatformCredentialUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "updateGcpIamPlatformCredential", err)
+				}
+				err = ValidateUpdateGcpIamPlatformCredentialUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "updateGcpIamPlatformCredential", err)
+				}
+				return nil, NewUpdateGcpIamPlatformCredentialUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "updateGcpIamPlatformCredential", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateGcpIamPlatformCredentialGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			err = ValidateUpdateGcpIamPlatformCredentialGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "updateGcpIamPlatformCredential", err)
+			}
+			return nil, NewUpdateGcpIamPlatformCredentialGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "updateGcpIamPlatformCredential", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildVerifyGcpIamPlatformCredentialRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "verifyGcpIamPlatformCredential" endpoint
+func (c *Client) BuildVerifyGcpIamPlatformCredentialRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: VerifyGcpIamPlatformCredentialAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "verifyGcpIamPlatformCredential", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeVerifyGcpIamPlatformCredentialRequest returns an encoder for requests
+// sent to the admin verifyGcpIamPlatformCredential server.
+func EncodeVerifyGcpIamPlatformCredentialRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.VerifyGcpIamPlatformCredentialPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "verifyGcpIamPlatformCredential", "*admin.VerifyGcpIamPlatformCredentialPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewVerifyGcpIamPlatformCredentialRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "verifyGcpIamPlatformCredential", err)
+		}
+		return nil
+	}
+}
+
+// DecodeVerifyGcpIamPlatformCredentialResponse returns a decoder for responses
+// returned by the admin verifyGcpIamPlatformCredential endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeVerifyGcpIamPlatformCredentialResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeVerifyGcpIamPlatformCredentialResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body VerifyGcpIamPlatformCredentialResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			err = ValidateVerifyGcpIamPlatformCredentialResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			res := NewVerifyGcpIamPlatformCredentialVerifyPlatformCredentialResultOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body VerifyGcpIamPlatformCredentialUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			err = ValidateVerifyGcpIamPlatformCredentialUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			return nil, NewVerifyGcpIamPlatformCredentialUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body VerifyGcpIamPlatformCredentialUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			err = ValidateVerifyGcpIamPlatformCredentialUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			return nil, NewVerifyGcpIamPlatformCredentialUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body VerifyGcpIamPlatformCredentialForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			err = ValidateVerifyGcpIamPlatformCredentialForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			return nil, NewVerifyGcpIamPlatformCredentialForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body VerifyGcpIamPlatformCredentialBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			err = ValidateVerifyGcpIamPlatformCredentialBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			return nil, NewVerifyGcpIamPlatformCredentialBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body VerifyGcpIamPlatformCredentialNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			err = ValidateVerifyGcpIamPlatformCredentialNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			return nil, NewVerifyGcpIamPlatformCredentialNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body VerifyGcpIamPlatformCredentialConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			err = ValidateVerifyGcpIamPlatformCredentialConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			return nil, NewVerifyGcpIamPlatformCredentialConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body VerifyGcpIamPlatformCredentialUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			err = ValidateVerifyGcpIamPlatformCredentialUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			return nil, NewVerifyGcpIamPlatformCredentialUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body VerifyGcpIamPlatformCredentialInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			err = ValidateVerifyGcpIamPlatformCredentialInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			return nil, NewVerifyGcpIamPlatformCredentialInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body VerifyGcpIamPlatformCredentialInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "verifyGcpIamPlatformCredential", err)
+				}
+				err = ValidateVerifyGcpIamPlatformCredentialInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "verifyGcpIamPlatformCredential", err)
+				}
+				return nil, NewVerifyGcpIamPlatformCredentialInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body VerifyGcpIamPlatformCredentialUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "verifyGcpIamPlatformCredential", err)
+				}
+				err = ValidateVerifyGcpIamPlatformCredentialUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "verifyGcpIamPlatformCredential", err)
+				}
+				return nil, NewVerifyGcpIamPlatformCredentialUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "verifyGcpIamPlatformCredential", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body VerifyGcpIamPlatformCredentialGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			err = ValidateVerifyGcpIamPlatformCredentialGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "verifyGcpIamPlatformCredential", err)
+			}
+			return nil, NewVerifyGcpIamPlatformCredentialGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "verifyGcpIamPlatformCredential", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteGcpIamPlatformCredentialRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "deleteGcpIamPlatformCredential" endpoint
+func (c *Client) BuildDeleteGcpIamPlatformCredentialRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteGcpIamPlatformCredentialAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "deleteGcpIamPlatformCredential", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteGcpIamPlatformCredentialRequest returns an encoder for requests
+// sent to the admin deleteGcpIamPlatformCredential server.
+func EncodeDeleteGcpIamPlatformCredentialRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.DeleteGcpIamPlatformCredentialPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "deleteGcpIamPlatformCredential", "*admin.DeleteGcpIamPlatformCredentialPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewDeleteGcpIamPlatformCredentialRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "deleteGcpIamPlatformCredential", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDeleteGcpIamPlatformCredentialResponse returns a decoder for responses
+// returned by the admin deleteGcpIamPlatformCredential endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeDeleteGcpIamPlatformCredentialResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteGcpIamPlatformCredentialResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body DeleteGcpIamPlatformCredentialUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			err = ValidateDeleteGcpIamPlatformCredentialUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			return nil, NewDeleteGcpIamPlatformCredentialUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body DeleteGcpIamPlatformCredentialUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			err = ValidateDeleteGcpIamPlatformCredentialUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			return nil, NewDeleteGcpIamPlatformCredentialUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteGcpIamPlatformCredentialForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			err = ValidateDeleteGcpIamPlatformCredentialForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			return nil, NewDeleteGcpIamPlatformCredentialForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteGcpIamPlatformCredentialBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			err = ValidateDeleteGcpIamPlatformCredentialBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			return nil, NewDeleteGcpIamPlatformCredentialBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteGcpIamPlatformCredentialNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			err = ValidateDeleteGcpIamPlatformCredentialNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			return nil, NewDeleteGcpIamPlatformCredentialNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteGcpIamPlatformCredentialConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			err = ValidateDeleteGcpIamPlatformCredentialConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			return nil, NewDeleteGcpIamPlatformCredentialConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteGcpIamPlatformCredentialUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			err = ValidateDeleteGcpIamPlatformCredentialUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			return nil, NewDeleteGcpIamPlatformCredentialUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteGcpIamPlatformCredentialInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			err = ValidateDeleteGcpIamPlatformCredentialInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			return nil, NewDeleteGcpIamPlatformCredentialInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteGcpIamPlatformCredentialInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "deleteGcpIamPlatformCredential", err)
+				}
+				err = ValidateDeleteGcpIamPlatformCredentialInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "deleteGcpIamPlatformCredential", err)
+				}
+				return nil, NewDeleteGcpIamPlatformCredentialInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteGcpIamPlatformCredentialUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "deleteGcpIamPlatformCredential", err)
+				}
+				err = ValidateDeleteGcpIamPlatformCredentialUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "deleteGcpIamPlatformCredential", err)
+				}
+				return nil, NewDeleteGcpIamPlatformCredentialUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "deleteGcpIamPlatformCredential", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteGcpIamPlatformCredentialGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			err = ValidateDeleteGcpIamPlatformCredentialGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "deleteGcpIamPlatformCredential", err)
+			}
+			return nil, NewDeleteGcpIamPlatformCredentialGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "deleteGcpIamPlatformCredential", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -26864,6 +28826,55 @@ func unmarshalAdminDeviceAgentCellResponseBodyToAdminAdminDeviceAgentCell(v *Adm
 	return res
 }
 
+// unmarshalAdminHookFleetVersionResponseBodyToAdminAdminHookFleetVersion
+// builds a value of type *admin.AdminHookFleetVersion from a value of type
+// *AdminHookFleetVersionResponseBody.
+func unmarshalAdminHookFleetVersionResponseBodyToAdminAdminHookFleetVersion(v *AdminHookFleetVersionResponseBody) *admin.AdminHookFleetVersion {
+	res := &admin.AdminHookFleetVersion{
+		Version:  *v.Version,
+		Status:   *v.Status,
+		Installs: *v.Installs,
+	}
+
+	return res
+}
+
+// unmarshalAdminHookFleetBucketResponseBodyToAdminAdminHookFleetBucket builds
+// a value of type *admin.AdminHookFleetBucket from a value of type
+// *AdminHookFleetBucketResponseBody.
+func unmarshalAdminHookFleetBucketResponseBodyToAdminAdminHookFleetBucket(v *AdminHookFleetBucketResponseBody) *admin.AdminHookFleetBucket {
+	res := &admin.AdminHookFleetBucket{
+		Value:    *v.Value,
+		Installs: *v.Installs,
+		Events:   *v.Events,
+	}
+
+	return res
+}
+
+// unmarshalAdminHookFleetInstallResponseBodyToAdminAdminHookFleetInstall
+// builds a value of type *admin.AdminHookFleetInstall from a value of type
+// *AdminHookFleetInstallResponseBody.
+func unmarshalAdminHookFleetInstallResponseBodyToAdminAdminHookFleetInstall(v *AdminHookFleetInstallResponseBody) *admin.AdminHookFleetInstall {
+	res := &admin.AdminHookFleetInstall{
+		ProjectID:          *v.ProjectID,
+		UserEmail:          *v.UserEmail,
+		Hostname:           *v.Hostname,
+		Harness:            *v.Harness,
+		Version:            *v.Version,
+		VersionStatus:      *v.VersionStatus,
+		EndpointGeneration: *v.EndpointGeneration,
+		InstallRoute:       *v.InstallRoute,
+		FirstSeen:          *v.FirstSeen,
+		LastSeen:           *v.LastSeen,
+		Events:             *v.Events,
+		Errors:             *v.Errors,
+		Quiet:              *v.Quiet,
+	}
+
+	return res
+}
+
 // unmarshalAdminRegistryPromotionCandidateResponseBodyToAdminAdminRegistryPromotionCandidate
 // builds a value of type *admin.AdminRegistryPromotionCandidate from a value
 // of type *AdminRegistryPromotionCandidateResponseBody.
@@ -27607,6 +29618,48 @@ func unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamO
 	}
 	if v.Enforcement != nil {
 		res.Enforcement = unmarshalAdminUpstreamAuthEnforcementResponseBodyToAdminAdminUpstreamAuthEnforcement(v.Enforcement)
+	}
+
+	return res
+}
+
+// unmarshalAdminCustomDomainResponseBodyToAdminAdminCustomDomain builds a
+// value of type *admin.AdminCustomDomain from a value of type
+// *AdminCustomDomainResponseBody.
+func unmarshalAdminCustomDomainResponseBodyToAdminAdminCustomDomain(v *AdminCustomDomainResponseBody) *admin.AdminCustomDomain {
+	res := &admin.AdminCustomDomain{
+		ID:                     *v.ID,
+		OrganizationID:         *v.OrganizationID,
+		OrganizationName:       *v.OrganizationName,
+		OrganizationSlug:       *v.OrganizationSlug,
+		Domain:                 *v.Domain,
+		Verified:               *v.Verified,
+		Activated:              *v.Activated,
+		DNSTargetToken:         v.DNSTargetToken,
+		DNSTarget:              v.DNSTarget,
+		DNSRoutingMethod:       v.DNSRoutingMethod,
+		DNSConfigurationStatus: v.DNSConfigurationStatus,
+		DNSCheckedAt:           v.DNSCheckedAt,
+		HealthStatus:           v.HealthStatus,
+		HealthIssue:            v.HealthIssue,
+		HealthCheckedAt:        v.HealthCheckedAt,
+		CreatedAt:              *v.CreatedAt,
+	}
+
+	return res
+}
+
+// unmarshalExternalCredentialSummaryResponseBodyToAdminExternalCredentialSummary
+// builds a value of type *admin.ExternalCredentialSummary from a value of type
+// *ExternalCredentialSummaryResponseBody.
+func unmarshalExternalCredentialSummaryResponseBodyToAdminExternalCredentialSummary(v *ExternalCredentialSummaryResponseBody) *admin.ExternalCredentialSummary {
+	res := &admin.ExternalCredentialSummary{
+		ID:             *v.ID,
+		OrganizationID: *v.OrganizationID,
+		Provider:       *v.Provider,
+		Name:           *v.Name,
+		CreatedAt:      *v.CreatedAt,
+		UpdatedAt:      *v.UpdatedAt,
 	}
 
 	return res

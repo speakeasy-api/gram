@@ -8,6 +8,7 @@ import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
 export const STANDALONE_ROUTES = {
   riskPolicyBypassRequest: "/risk-policy-bypass/request",
   riskPolicyChallengeAcknowledge: "/risk-policy-challenge/acknowledge",
+  riskPolicyChallengeAcknowledgeShort: "/ack",
   block: "/blocks/:id",
   sharedSkill: `${SHARED_SKILL_BASE_PATH}/:token`,
 } as const;

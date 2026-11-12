@@ -469,6 +469,602 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/customDomains.list:
+        get:
+            description: Lists live custom domains across organizations with their designated CNAME targets and observed DNS routing methods.
+            operationId: adminListCustomDomains
+            parameters:
+                - allowEmptyValue: true
+                  description: Only the domain owned by this organization.
+                  in: query
+                  name: organization_id
+                  schema:
+                    description: Only the domain owned by this organization.
+                    type: string
+                - allowEmptyValue: true
+                  description: Only domains last observed using this routing method. unknown also matches domains not yet checked.
+                  in: query
+                  name: dns_routing_method
+                  schema:
+                    description: Only domains last observed using this routing method. unknown also matches domains not yet checked.
+                    enum:
+                        - per_domain_cname
+                        - shared_cname
+                        - a_record
+                        - unknown
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminListCustomDomainsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listCustomDomains admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listCustomDomains
+            x-speakeasy-react-hook:
+                name: AdminListCustomDomains
+    /admin/externalCredentials.createGcpIam:
+        post:
+            description: Create a platform GCP IAM external credential. Set the wif_* triple for Workload Identity Federation, impersonate_service_account alone for direct impersonation, or neither for Speakeasy's ambient attached identity.
+            operationId: adminCreateGcpIamPlatformCredential
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePlatformGcpIamCredentialForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpIamCredential'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: createGcpIamPlatformCredential admin
+            tags:
+                - admin
+            x-speakeasy-name-override: createGcpIamPlatformCredential
+    /admin/externalCredentials.deleteGcpIam:
+        post:
+            description: Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.
+            operationId: adminDeleteGcpIamPlatformCredential
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: deleteGcpIamPlatformCredential admin
+            tags:
+                - admin
+            x-speakeasy-name-override: deleteGcpIamPlatformCredential
+    /admin/externalCredentials.getGcpIam:
+        get:
+            description: Get a platform GCP IAM external credential by ID.
+            operationId: adminGetGcpIamPlatformCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the credential to get.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the credential to get.
+                    format: uuid
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpIamCredential'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getGcpIamPlatformCredential admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getGcpIamPlatformCredential
+    /admin/externalCredentials.list:
+        get:
+            description: List the platform external credentials (organization_id NULL, project_id NULL) that Speakeasy authenticates into a cloud provider with. Optionally filter by provider.
+            operationId: adminListPlatformExternalCredentials
+            parameters:
+                - allowEmptyValue: true
+                  description: Only return credentials for this provider.
+                  in: query
+                  name: provider
+                  schema:
+                    description: Only return credentials for this provider.
+                    enum:
+                        - aws_iam
+                        - gcp_iam
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExternalCredentialsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listPlatformExternalCredentials admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listPlatformExternalCredentials
+    /admin/externalCredentials.updateGcpIam:
+        post:
+            description: Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.
+            operationId: adminUpdateGcpIamPlatformCredential
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateGcpIamPlatformCredentialRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpIamCredential'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: updateGcpIamPlatformCredential admin
+            tags:
+                - admin
+            x-speakeasy-name-override: updateGcpIamPlatformCredential
+    /admin/externalCredentials.verifyGcpIam:
+        post:
+            description: Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Nothing is persisted.
+            operationId: adminVerifyGcpIamPlatformCredential
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VerifyPlatformCredentialResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: verifyGcpIamPlatformCredential admin
+            tags:
+                - admin
+            x-speakeasy-name-override: verifyGcpIamPlatformCredential
     /admin/hookClients.get:
         get:
             description: 'Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization''s new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.'
@@ -4202,6 +4798,99 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organizationHookFleet.get:
+        get:
+            description: 'The hooks installs of one organization: which versions, install routes and endpoints its users'' machines use, which machines have gone quiet, and how much traffic still reaches the legacy endpoints.'
+            operationId: adminGetOrganizationHookFleet
+            parameters:
+                - allowEmptyValue: true
+                  description: Organization to report on.
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    description: Organization to report on.
+                    type: string
+                - allowEmptyValue: true
+                  description: Window in days.
+                  in: query
+                  name: window_days
+                  schema:
+                    default: 30
+                    description: Window in days.
+                    format: int64
+                    maximum: 89
+                    minimum: 1
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminHookFleetResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getOrganizationHookFleet admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getOrganizationHookFleet
+            x-speakeasy-react-hook:
+                name: AdminGetOrganizationHookFleet
     /admin/organizations.bulkUpdateAccountType:
         post:
             tags:
@@ -20205,12 +20894,12 @@ paths:
             operationId: getAIIntegrationConfig
             parameters:
                 - allowEmptyValue: true
-                  description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+                  description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
                   in: query
                   name: provider
                   required: true
                   schema:
-                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -20296,18 +20985,115 @@ paths:
             x-speakeasy-name-override: getConfig
             x-speakeasy-react-hook:
                 name: AIIntegrationConfig
+    /rpc/aiIntegrations.listOrgUnits:
+        get:
+            description: List the Google Workspace organizational units a saved gemini_compliance connection can export, using its stored service account and delegated admin. Requires the admin.directory.orgunit.readonly delegation scope.
+            operationId: listAIIntegrationOrgUnits
+            parameters:
+                - allowEmptyValue: true
+                  description: AI provider identifier. Only gemini_compliance is supported.
+                  in: query
+                  name: provider
+                  required: true
+                  schema:
+                    description: AI provider identifier. Only gemini_compliance is supported.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAIIntegrationOrgUnitsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listOrgUnits aiIntegrations
+            tags:
+                - aiIntegrations
+            x-speakeasy-name-override: listOrgUnits
+            x-speakeasy-react-hook:
+                name: AIIntegrationOrgUnits
     /rpc/aiIntegrations.listSchedules:
         get:
             description: List the sync schedules and their scheduler state for a provider's org-wide AI integration config. Returns an empty list when no config is set.
             operationId: listAIIntegrationSchedules
             parameters:
                 - allowEmptyValue: true
-                  description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+                  description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
                   in: query
                   name: provider
                   required: true
                   schema:
-                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -24240,6 +25026,16 @@ paths:
                         - security
                     type: string
                 - allowEmptyValue: true
+                  description: 'Who initiated the entries to list: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+                  in: query
+                  name: origin
+                  schema:
+                    description: 'Who initiated the entries to list: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+                    enum:
+                        - user
+                        - system
+                    type: string
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -24353,6 +25149,16 @@ paths:
                     enum:
                         - configuration
                         - security
+                    type: string
+                - allowEmptyValue: true
+                  description: 'Who initiated the entries to compute facet values from, matching the list being filtered: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+                  in: query
+                  name: origin
+                  schema:
+                    description: 'Who initiated the entries to compute facet values from, matching the list being filtered: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+                    enum:
+                        - user
+                        - system
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -43515,101 +44321,6 @@ paths:
             x-speakeasy-name-override: previewOverlaps
             x-speakeasy-react-hook:
                 name: PreviewKillswitchOverlaps
-    /rpc/launcher.judge:
-        post:
-            description: Judge which of the supplied command palette candidates the typed query refers to, what kind of action it asks for, and whether the intent is settled enough to act on Enter. Returns probability distributions rather than text. When no intent service is configured the response carries disabled=true and the palette falls back to fuzzy ordering.
-            operationId: launcherJudge
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/JudgeRequestBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/LauncherJudgment'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: judge launcher
-            tags:
-                - launcher
-            x-speakeasy-name-override: judge
-            x-speakeasy-react-hook:
-                name: LauncherJudge
     /rpc/litellm.createInstance:
         post:
             description: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
@@ -50456,6 +51167,974 @@ paths:
             x-speakeasy-name-override: restore
             x-speakeasy-react-hook:
                 name: RestoreOktaServerSuggestion
+    /rpc/orgEncryption.completeSwitch:
+        post:
+            description: 'Complete an in-flight key switch now instead of waiting for the grace period: drop the previous key''s wraps. Requires org:admin. After this the previous key is no longer needed to read the organization''s data.'
+            operationId: completeOrgEncryptionKeySwitch
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: completeSwitch orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: completeSwitch
+            x-speakeasy-react-hook:
+                name: CompleteOrgEncryptionKeySwitch
+    /rpc/orgEncryption.createGcpKey:
+        post:
+            description: Register a customer-managed GCP KMS symmetric key the organization can switch to. Requires org:admin. The key is not used until the organization switches to it.
+            operationId: createOrgEncryptionGcpKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateOrgEncryptionGcpKeyForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionKey'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: createGcpKey orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: createGcpKey
+            x-speakeasy-react-hook:
+                name: CreateOrgEncryptionGcpKey
+    /rpc/orgEncryption.deleteKey:
+        delete:
+            description: Delete a customer-managed encryption key. Requires org:admin. Refused with a conflict while the key is the organization's key, is being switched to or away from, or still wraps any data encryption key, because the data it protects would become unreadable. Speakeasy-managed keys cannot be deleted.
+            operationId: deleteOrgEncryptionKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to delete.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to delete.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteKey orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: deleteKey
+            x-speakeasy-react-hook:
+                name: DeleteOrgEncryptionKey
+    /rpc/orgEncryption.getConfig:
+        get:
+            description: Get the organization's encryption configuration. Requires org:read. Not found until a feature has encrypted data for the organization.
+            operationId: getOrgEncryptionConfig
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: getConfig orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: getConfig
+            x-speakeasy-react-hook:
+                name: OrgEncryptionConfig
+    /rpc/orgEncryption.listKeys:
+        get:
+            description: List the organization's encryption keys, Speakeasy-managed and customer-managed. Requires org:read.
+            operationId: listOrgEncryptionKeys
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrgEncryptionKeysResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: listKeys orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: listKeys
+            x-speakeasy-react-hook:
+                name: OrgEncryptionKeys
+    /rpc/orgEncryption.resume:
+        post:
+            description: Resume a suspended organization after its key was fixed. Requires org:admin. Speakeasy first proves the key unwraps every data encryption key; the hourly health probe also resumes on its own once the key works again.
+            operationId: resumeOrgEncryption
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: resume orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: resume
+            x-speakeasy-react-hook:
+                name: ResumeOrgEncryption
+    /rpc/orgEncryption.rollbackSwitch:
+        post:
+            description: 'Roll back an in-flight key switch: return to the previous key and drop the wraps made under the new one. Requires org:admin.'
+            operationId: rollbackOrgEncryptionKeySwitch
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: rollbackSwitch orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: rollbackSwitch
+            x-speakeasy-react-hook:
+                name: RollbackOrgEncryptionKeySwitch
+    /rpc/orgEncryption.rotateDataKey:
+        post:
+            description: Replace a use case's data encryption key with a new one. Requires org:admin. Values encrypted before the rotation stay readable and are re-encrypted under the new key when next written.
+            operationId: rotateOrgEncryptionDataKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RotateOrgEncryptionDataKeyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: rotateDataKey orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: rotateDataKey
+            x-speakeasy-react-hook:
+                name: RotateOrgEncryptionDataKey
+    /rpc/orgEncryption.switchKey:
+        post:
+            description: Start switching the organization to a customer-managed key. Requires org:admin. Speakeasy verifies the key, then wraps every data encryption key under it; the previous key keeps everything readable until the switch completes, either through completeSwitch or automatically after the grace period, or rolls back.
+            operationId: switchOrgEncryptionKey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SwitchOrgEncryptionKeyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrgEncryptionConfig'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: switchKey orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: switchKey
+            x-speakeasy-react-hook:
+                name: SwitchOrgEncryptionKey
+    /rpc/orgEncryption.verifyKey:
+        post:
+            description: 'Probe that Speakeasy can reach an encryption key and use it: encrypt a probe payload and decrypt it again. Performs real KMS operations, billed to the key''s owner and recorded in their audit log. Nothing is persisted. Rate limited per organization. Requires org:admin.'
+            operationId: verifyOrgEncryptionKey
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the key to verify.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the key to verify.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VerifyOrgEncryptionKeyResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'rate_limit_exceeded: rate limit exceeded'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: verifyKey orgEncryption
+            tags:
+                - orgEncryption
+            x-speakeasy-name-override: verifyKey
+            x-speakeasy-react-hook:
+                name: VerifyOrgEncryptionKey
     /rpc/organizationAssets.uploadImage:
         post:
             description: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.
@@ -64234,7 +65913,7 @@ paths:
                 name: AttachUserSessionIssuer
     /rpc/remoteSessionClients.create:
         post:
-            description: Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.
+            description: 'Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer. With template_client_id, the new client instead reuses a stored client''s upstream registration: the server copies that client''s secret and callback into the new record, and neither is returned to the caller.'
             operationId: createRemoteSessionClient
             parameters:
                 - allowEmptyValue: true
@@ -69983,6 +71662,95 @@ paths:
                 - risk
             x-speakeasy-group: risk.policies
             x-speakeasy-name-override: get
+    /rpc/risk.getPolicyBypassRequestTarget:
+        post:
+            description: Fetch what a request access link asks for (the blocked server and tool) WITHOUT filing the request. Powers the request access page.
+            operationId: getRiskPolicyBypassRequestTarget
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetRiskPolicyBypassRequestTargetRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetRiskPolicyBypassRequestTargetResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getRiskPolicyBypassRequestTarget risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.policyBypassRequests
+            x-speakeasy-name-override: getTarget
+            x-speakeasy-react-hook:
+                name: RiskGetPolicyBypassRequestTarget
+                type: mutation
     /rpc/risk.getPolicyChallenge:
         post:
             description: Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
@@ -95376,7 +97144,7 @@ paths:
                 name: WithdrawWorkloadIssuer
     /rpc/workloadIdentities.withdrawSubject:
         delete:
-            description: Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.
+            description: Withdraw an admitted subject and its agent assignment, stopping it authenticating. A subject can be admitted at the organization and in a project independently; withdrawing one leaves the other in force, and the result names the tier removed. Requires workload:write.
             operationId: withdrawWorkloadSubject
             parameters:
                 - allowEmptyValue: true
@@ -95414,7 +97182,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+                                $ref: '#/components/schemas/WithdrawnWorkloadSubjectPolicy'
                     description: OK response.
                 "400":
                     content:
@@ -95956,12 +97724,15 @@ components:
                     type: string
                     description: ISO 8601 timestamp when the config was created. Omitted when no config is set.
                     format: date-time
+                delegated_user:
+                    type: string
+                    description: 'gemini_compliance only: the Google Workspace admin email the service account acts as. Omitted for other providers.'
                 enabled:
                     type: boolean
                     description: Whether the provider integration is active.
                 external_organization_id:
                     type: string
-                    description: Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); omitted for providers that do not need one.
+                    description: Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); for gemini_compliance, the Google Vault matter exports are created in. Omitted for providers that do not need one.
                 has_api_key:
                     type: boolean
                     description: Whether an API key is currently stored. The key itself is never returned.
@@ -95990,6 +97761,12 @@ components:
                     type: string
                     description: ISO 8601 timestamp for the next scheduled usage poll. Omitted when no config is set.
                     format: date-time
+                org_unit_id:
+                    type: string
+                    description: 'gemini_compliance only: the selected Google Workspace organizational unit. Omitted until one is saved.'
+                org_unit_path:
+                    type: string
+                    description: 'gemini_compliance only: the selected organizational unit''s path; "/" is the whole organization. Omitted until one is saved.'
                 organization_id:
                     type: string
                     description: Organization the config belongs to.
@@ -95998,7 +97775,7 @@ components:
                     description: Project used as the telemetry write target. Omitted when no config is set.
                 provider:
                     type: string
-                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
                 updated_at:
                     type: string
                     description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
@@ -96009,6 +97786,26 @@ components:
                 - provider
                 - enabled
                 - has_api_key
+        AIIntegrationOrgUnit:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Admin-entered description. Omitted when empty.
+                id:
+                    type: string
+                    description: Organizational unit ID, e.g. id:03ph8a2z1a2b3c4.
+                name:
+                    type: string
+                    description: Display name. Empty when Google omits it.
+                path:
+                    type: string
+                    description: Full path; "/" is the root, covering the whole organization.
+            description: A Google Workspace organizational unit the delegated admin can read.
+            required:
+                - id
+                - path
+                - name
         AIIntegrationScheduleState:
             type: object
             properties:
@@ -96775,6 +98572,71 @@ components:
                     format: int64
             required:
                 - projects_signaled
+        AdminCustomDomain:
+            type: object
+            properties:
+                activated:
+                    type: boolean
+                    description: Whether the domain is provisioned in ingress.
+                created_at:
+                    type: string
+                    description: When the domain was registered.
+                    format: date-time
+                dns_checked_at:
+                    type: string
+                    description: When DNS configuration was observed. Absent until a DNS observation has run.
+                    format: date-time
+                dns_configuration_status:
+                    type: string
+                    description: 'Advisory public DNS observation: matched, wrong_target, unconfirmed, not_found, check_failed, or not_configured. Does not establish endpoint availability.'
+                dns_routing_method:
+                    type: string
+                    description: 'How the latest health check observed the domain''s DNS routing traffic. One of: per_domain_cname, shared_cname, a_record (also covers flattened CNAME, ALIAS and ANAME records, which resolve to addresses), unknown. Absent until the first health check.'
+                dns_target:
+                    type: string
+                    description: The domain's designated CNAME target (<dns_target_token>.<suffix>). Absent when the admin server has no target suffix configured or the token is not yet assigned.
+                dns_target_token:
+                    type: string
+                    description: The random DNS label of the domain's designated CNAME target. Absent until assigned.
+                domain:
+                    type: string
+                    description: The custom domain name.
+                health_checked_at:
+                    type: string
+                    description: When the domain health was last checked.
+                    format: date-time
+                health_issue:
+                    type: string
+                    description: Why the domain was last observed as unhealthy.
+                health_status:
+                    type: string
+                    description: 'Infrastructure and certificate status: unknown, healthy, or unhealthy. Unknown until a complete observation has run, or when an older worker has overwritten the health result.'
+                id:
+                    type: string
+                    description: The custom domain ID.
+                    format: uuid
+                organization_id:
+                    type: string
+                    description: The organization that owns the domain.
+                organization_name:
+                    type: string
+                    description: The organization name.
+                organization_slug:
+                    type: string
+                    description: The organization slug.
+                verified:
+                    type: boolean
+                    description: Whether the domain passed DNS verification.
+            description: A live custom domain with its designated CNAME target and the DNS routing method health checks last observed.
+            required:
+                - id
+                - organization_id
+                - organization_name
+                - organization_slug
+                - domain
+                - verified
+                - activated
+                - created_at
         AdminCustomerUsage:
             type: object
             properties:
@@ -97000,6 +98862,188 @@ components:
                 - sessions
                 - inference
                 - device_agents
+        AdminHookFleetBucket:
+            type: object
+            properties:
+                events:
+                    type: integer
+                    description: Hook events sent with this value across every install. Zero for routes.
+                    format: int64
+                installs:
+                    type: integer
+                    description: Installs whose latest value is this one.
+                    format: int64
+                value:
+                    type: string
+                    description: The route or endpoint generation. Empty when unknown.
+            description: Installs and events for one value of a breakdown.
+            required:
+                - value
+                - installs
+                - events
+        AdminHookFleetInstall:
+            type: object
+            properties:
+                endpoint_generation:
+                    type: string
+                    description: 'The hooks endpoint the install last sent to: legacy_unkeyed, legacy_keyed, ingest_script or ingest_binary. Empty for delivery failure reports only.'
+                errors:
+                    type: integer
+                    description: Delivery failures the install reported in the window.
+                    format: int64
+                events:
+                    type: integer
+                    description: Hook events recorded in the window.
+                    format: int64
+                first_seen:
+                    type: string
+                    description: First hook in the window.
+                    format: date-time
+                harness:
+                    type: string
+                    description: The agent the hooks run in, such as claude, codex or cursor.
+                hostname:
+                    type: string
+                    description: The machine's hostname. Empty when the install sent none.
+                install_route:
+                    type: string
+                    description: How the hooks were installed, such as marketplace or download. Empty when unknown.
+                last_seen:
+                    type: string
+                    description: Most recent hook.
+                    format: date-time
+                project_id:
+                    type: string
+                    description: The project the install reports to. Empty for traffic that named no project.
+                quiet:
+                    type: boolean
+                    description: True when the install has sent nothing for quiet_after_days or longer.
+                user_email:
+                    type: string
+                    description: The user the install reports as. Empty when the install sent no identity.
+                version:
+                    type: string
+                    description: The hooks binary version. Empty for the legacy curl hooks and for installs that sent no version.
+                version_status:
+                    type: string
+                    description: How the version compares to the release Speakeasy ships.
+                    enum:
+                        - current
+                        - behind
+                        - unsupported
+                        - unknown
+            description: 'One hooks install: a project, user, machine and harness. Version, generation and route are the latest the install sent.'
+            required:
+                - project_id
+                - user_email
+                - hostname
+                - harness
+                - version
+                - version_status
+                - endpoint_generation
+                - install_route
+                - first_seen
+                - last_seen
+                - events
+                - errors
+                - quiet
+        AdminHookFleetResult:
+            type: object
+            properties:
+                generations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminHookFleetBucket'
+                    description: Installs and events per endpoint generation, largest first.
+                installs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminHookFleetInstall'
+                    description: Installs, most recently seen first.
+                latest_version:
+                    type: string
+                    description: The hooks release Speakeasy currently ships. Versions below it are behind.
+                legacy_events:
+                    type: integer
+                    description: Hook events sent to the legacy endpoints in the window.
+                    format: int64
+                minimum_version:
+                    type: string
+                    description: The oldest supported hooks version. Versions below it are unsupported. Absent when no minimum is set.
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                quiet_after_days:
+                    type: integer
+                    description: Days without traffic after which an install counts as quiet.
+                    format: int64
+                quiet_installs:
+                    type: integer
+                    description: Returned installs that have gone quiet. Only a window longer than quiet_after_days can return quiet installs.
+                    format: int64
+                routes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminHookFleetBucket'
+                    description: Installs per install route, largest first.
+                since:
+                    type: string
+                    description: Start of the window. Counts cover the whole UTC day it falls on.
+                    format: date-time
+                total_installs:
+                    type: integer
+                    description: Installs returned. Not the organization's full install count when truncated is true.
+                    format: int64
+                truncated:
+                    type: boolean
+                    description: True when the organization has more installs than the response holds. Breakdowns then cover only the installs returned.
+                versions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminHookFleetVersion'
+                    description: Installs per version, newest version first.
+                window_days:
+                    type: integer
+                    description: Length of the window in days.
+                    format: int64
+            description: The hooks installs of one organization over a window, with version, route and endpoint breakdowns.
+            required:
+                - organization_id
+                - window_days
+                - since
+                - latest_version
+                - quiet_after_days
+                - truncated
+                - total_installs
+                - quiet_installs
+                - legacy_events
+                - versions
+                - routes
+                - generations
+                - installs
+        AdminHookFleetVersion:
+            type: object
+            properties:
+                installs:
+                    type: integer
+                    description: Installs whose latest version is this one.
+                    format: int64
+                status:
+                    type: string
+                    description: How the version compares to the release Speakeasy ships.
+                    enum:
+                        - current
+                        - behind
+                        - unsupported
+                        - unknown
+                version:
+                    type: string
+                    description: The hooks binary version, or empty for installs with no version.
+            description: Installs on one hooks version.
+            required:
+                - version
+                - status
+                - installs
         AdminInferenceHookCell:
             type: object
             properties:
@@ -97147,6 +99191,16 @@ components:
                 - period_start
                 - period_end
                 - spend_usd
+        AdminListCustomDomainsResult:
+            type: object
+            properties:
+                custom_domains:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminCustomDomain'
+                    description: Every matching live custom domain, ordered by domain name. Organizations have at most one live custom domain, so the list is not paginated.
+            required:
+                - custom_domains
         AdminListOrganizationActivityResult:
             type: object
             properties:
@@ -99427,7 +101481,7 @@ components:
                     format: int64
                 auth_clients_error:
                     type: string
-                    description: Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.
+                    description: Why recording typed auth clients failed, when it did. For an organization enforcing upstream auth, the run recorded no credential choices, since those are decided from the typed auth clients. Otherwise the upstream OAuth migration itself is unaffected.
                 auth_clients_written:
                     type: integer
                     description: Typed auth clients recorded.
@@ -104240,7 +106294,7 @@ components:
                     $ref: '#/components/schemas/CreateRemoteSessionIssuerForm'
                 existing_client_id:
                     type: string
-                    description: An existing visible remote-session client to link. Required only for existing mode.
+                    description: 'An existing visible remote-session client to link. Required only for existing mode. Linking shares the client with every server that already uses it: a person holds one upstream grant per client, so signing in through one server replaces the grant another server obtained. To give this server its own client on the same upstream registration, use manual mode with client_configuration.template_client_id instead.'
                     format: uuid
                 mcp_server_id:
                     type: string
@@ -104660,6 +106714,7 @@ components:
                         - product_telemetry
                         - risk_findings
                         - tool_call_logs
+                        - mcp_connection_logs
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -105310,6 +107365,26 @@ components:
             required:
                 - slug
                 - name
+        CreateOrgEncryptionGcpKeyForm:
+            type: object
+            properties:
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Speakeasy principal, as reported by externalCredentials.getGcpSetupInfo, that the customer granted roles/iam.serviceAccountTokenCreator on the credential's service account. That service account, in the customer's project, is what holds roles/cloudkms.cryptoKeyEncrypterDecrypter on the key; Speakeasy is never granted on the key directly. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The organization's gcp_iam external credential Speakeasy reaches the key with.
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                resource_name:
+                    type: string
+                    description: 'The GCP KMS crypto key resource name, without a version: projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>. The key must have purpose ENCRYPT_DECRYPT.'
+            required:
+                - external_credential_id
+                - name
+                - resource_name
         CreateOrganizationRemoteSessionClientForm:
             type: object
             properties:
@@ -105695,6 +107770,10 @@ components:
                         pattern: ^[!#-[\]-~]+$
                         maxLength: 128
                     description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+                template_client_id:
+                    type: string
+                    description: 'An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template''s stored client_secret, unless client_secret is supplied, and the callback the template''s registration lists. client_id must equal the template''s. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, a client the issuer has rejected, and a template whose stored secret has expired unless client_secret is supplied.'
+                    format: uuid
                 token_endpoint_auth_audience_format:
                     type: string
                     description: Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
@@ -105715,7 +107794,7 @@ components:
                         type: string
                         format: uuid
                     description: The user_session_issuers to attach this client to via the join table. Omit or pass an empty array to create a standalone client with no attachments.
-            description: Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.
+            description: Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer, or names a stored client in template_client_id whose secret and callback the server copies without returning them.
             required:
                 - remote_session_issuer_id
                 - client_id
@@ -106812,6 +108891,22 @@ components:
                     type: string
                     description: When the custom domain was created.
                     format: date-time
+                dns_checked_at:
+                    type: string
+                    description: When DNS configuration was observed. Infrastructure health belongs to the same observation only when this matches health_checked_at.
+                    format: date-time
+                dns_configuration_status:
+                    type: string
+                    description: 'Advisory public DNS configuration: matched, wrong_target, unconfirmed, not_found, check_failed, or not_configured. Does not establish ownership or public availability.'
+                dns_routing_method:
+                    type: string
+                    description: 'How the latest health check observed this domain''s DNS routing traffic to Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers flattened CNAME, ALIAS and ANAME records, which resolve to addresses), unknown. Absent until the first health check.'
+                dns_target:
+                    type: string
+                    description: The designated CNAME target for this domain (<dns_target_token>.<suffix>). Pointing the domain here lets Speakeasy move it without DNS changes. Absent when per-domain targets are not configured or the token is not yet assigned.
+                dns_target_token:
+                    type: string
+                    description: The random DNS label identifying this domain's designated CNAME target. Assigned when the domain is registered and unchanged for its lifetime. Absent until assigned.
                 domain:
                     type: string
                     description: The custom domain name
@@ -107045,6 +109140,7 @@ components:
                         - product_telemetry
                         - risk_findings
                         - tool_call_logs
+                        - mcp_connection_logs
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -107174,7 +109270,7 @@ components:
             properties:
                 provider:
                     type: string
-                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
             required:
                 - provider
         DeleteGlobalToolVariationForm:
@@ -111429,6 +113525,35 @@ components:
                 - organization_id
                 - project_id
                 - mcp_server_id
+        GetRiskPolicyBypassRequestTargetRequestBody:
+            type: object
+            properties:
+                request_token:
+                    type: string
+                    description: Signed request token generated when a risk policy blocks an action.
+            required:
+                - request_token
+        GetRiskPolicyBypassRequestTargetResponseBody:
+            type: object
+            properties:
+                expires_at:
+                    type: string
+                    description: When the request link expires.
+                    format: date-time
+                server_identifier:
+                    type: string
+                    description: 'How the agent identified the blocked server when it has no URL: its configured name for Claude Code and Codex, or its launch command for Cursor.'
+                server_name:
+                    type: string
+                    description: Display name of the blocked server, when known.
+                server_url:
+                    type: string
+                    description: URL of the blocked server without credentials, query, or fragment, when it was reached over HTTP.
+                tool_name:
+                    type: string
+                    description: The tool the agent tried to call, when known.
+            required:
+                - expires_at
         GetRiskPolicyChallengeResponseBody:
             type: object
             properties:
@@ -112396,6 +114521,9 @@ components:
                 model:
                     type: string
                     description: Model identifier reported by the local agent.
+                surface:
+                    type: string
+                    description: Product surface that sent the event, set when it changes how the server handles the event. "cowork" is Claude Cowork. Its Stop hook also ships the session transcript, so the server keys the event's conversation row by the id the transcript shares (the prompt id in turn_id, or the tool call id) and each prompt and tool call is stored once. Cowork cannot show the acknowledgement link, so a warned prompt there is confirmed by sending the same message again. Unknown values are ignored.
                 turn_id:
                     type: string
                     description: Generation, request, or turn identifier.
@@ -113295,10 +115423,11 @@ components:
             properties:
                 decision:
                     type: string
-                    description: Whether the local hook should allow or deny the action.
+                    description: Whether the local hook should allow or deny the action. "ask" (tool calls from Claude Cowork only) asks the person to allow the call in the agent's own permission prompt; a client that does not support it must deny.
                     enum:
                         - allow
                         - deny
+                        - ask
                 effects:
                     type: object
                     description: Optional side-effect hints for hook SDKs.
@@ -113843,24 +115972,6 @@ components:
             required:
                 - client_count
                 - client_ids
-        JudgeRequestBody:
-            type: object
-            properties:
-                candidates:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/LauncherCandidate'
-                    description: Fuzzy-prefiltered candidates to rank.
-                    maxItems: 32
-                context:
-                    $ref: '#/components/schemas/LauncherContext'
-                query:
-                    type: string
-                    description: Text typed into the command palette so far.
-                    maxLength: 200
-            required:
-                - query
-                - candidates
         Key:
             type: object
             properties:
@@ -114402,74 +116513,6 @@ components:
             required:
                 - client_name
                 - activity_count
-        LauncherCandidate:
-            type: object
-            properties:
-                detail:
-                    type: string
-                    description: Short state description, such as 'MCP server · disabled'.
-                    maxLength: 160
-                id:
-                    type: string
-                    description: Caller-chosen stable identifier echoed back in the judgment.
-                    maxLength: 200
-                kind:
-                    type: string
-                    description: The candidate kind, such as page, mcp_server, plugin or marketplace.
-                    maxLength: 64
-                title:
-                    type: string
-                    description: Display title of the candidate.
-                    maxLength: 120
-                verbs:
-                    type: array
-                    items:
-                        type: string
-                        maxLength: 32
-                    description: Verbs the caller may run on this candidate, such as open, enable, disable or publish.
-                    maxItems: 8
-            description: One item the palette could open or act on.
-            required:
-                - id
-                - kind
-                - title
-        LauncherContext:
-            type: object
-            properties:
-                route:
-                    type: string
-                    description: The current dashboard route path.
-                    maxLength: 512
-            description: The dashboard location the palette was opened from.
-        LauncherJudgment:
-            type: object
-            properties:
-                action:
-                    type: object
-                    description: Probability that the query asks for each of open, enable, disable, publish or unclear.
-                    additionalProperties:
-                        type: number
-                        format: double
-                disabled:
-                    type: boolean
-                    description: True when no intent service is configured; the other fields are then absent. When false, target, action, ready and latency_ms are always present.
-                latency_ms:
-                    type: integer
-                    description: Round trip time to the intent service in milliseconds.
-                    format: int64
-                ready:
-                    type: number
-                    description: Probability that the query is unambiguous enough to act on the best candidate on Enter.
-                    format: double
-                target:
-                    type: object
-                    description: Probability that each candidate id, or 'none', is the item the user means.
-                    additionalProperties:
-                        type: number
-                        format: double
-            description: Probability distributions over the supplied candidates and verbs.
-            required:
-                - disabled
         LinkSkillRequestBody:
             type: object
             properties:
@@ -114526,6 +116569,17 @@ components:
                     description: Detected AI tools aggregated per target, most recently seen first.
             required:
                 - detections
+        ListAIIntegrationOrgUnitsResult:
+            type: object
+            properties:
+                org_units:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AIIntegrationOrgUnit'
+                    description: Units the saved delegated admin can read, including the root.
+            description: Organizational units available to a gemini_compliance connection, sorted by path.
+            required:
+                - org_units
         ListAIIntegrationSchedulesResult:
             type: object
             properties:
@@ -114723,6 +116777,12 @@ components:
                     enum:
                         - configuration
                         - security
+                origin:
+                    type: string
+                    description: 'Who initiated the entries to compute facet values from, matching the list being filtered: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+                    enum:
+                        - user
+                        - system
                 project_slug:
                     type: string
                     description: Project slug to filter facet values to a specific project.
@@ -114774,6 +116834,12 @@ components:
                     type: string
                     description: Inclusive start of the window to list changes from. Omit for the whole history.
                     format: date-time
+                origin:
+                    type: string
+                    description: 'Who initiated the entries to list: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+                    enum:
+                        - user
+                        - system
                 project_slug:
                     type: string
                     description: Project slug to filter audit logs to a specific project.
@@ -115242,7 +117308,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ExternalCredentialSummary'
-                    description: The organization's external credentials.
+                    description: The external credentials.
             required:
                 - credentials
         ListExternalKeysResult:
@@ -115712,6 +117778,16 @@ components:
                 - suggestions
                 - open_count
                 - total_count
+        ListOrgEncryptionKeysResult:
+            type: object
+            properties:
+                keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrgEncryptionKey'
+                    description: The organization's encryption keys, newest first.
+            required:
+                - keys
         ListOrganizationMcpServersResult:
             type: object
             properties:
@@ -116057,6 +118133,9 @@ components:
                         - org:blocked_admin
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
                         - project:read
                         - project:blocked_read
                         - project:write
@@ -116088,6 +118167,8 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - memory:read
+                        - memory:write
                         - inference:execute
                         - log:read
                         - agent:read
@@ -116114,6 +118195,9 @@ components:
                             - org:blocked_admin
                             - org:device_agent_sync
                             - org:hooks_ingest
+                            - channels:connect
+                            - channels:admin
+                            - channels:read_all
                             - project:read
                             - project:blocked_read
                             - project:write
@@ -116145,6 +118229,8 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
+                            - memory:read
+                            - memory:write
                             - inference:execute
                             - log:read
                             - agent:read
@@ -116311,14 +118397,20 @@ components:
                 next_cursor:
                     type: string
                     description: Cursor for next page
+                scoped:
+                    type: boolean
+                    description: True when sessions were withheld because the caller lacks chat:read on one or more projects. The totals still cover every matching session.
                 sessions:
                     type: array
                     items:
                         $ref: '#/components/schemas/SessionSummary'
-                    description: List of chat session summaries
+                    description: List of chat session summaries. Only sessions from projects the caller holds chat:read on are listed.
+                totals:
+                    $ref: '#/components/schemas/SessionTotals'
             description: Result of listing org-scoped chat sessions
             required:
                 - sessions
+                - scoped
         ListSetupTasksResult:
             type: object
             properties:
@@ -119730,6 +121822,102 @@ components:
                 - type
                 - summary
                 - env_variables
+        OrgEncryptionConfig:
+            type: object
+            properties:
+                config_state:
+                    type: string
+                    description: 'active: one key protects all data. switching: data is readable under both the current and previous key. suspended: the key is unusable and every encrypt and decrypt fails.'
+                    enum:
+                        - active
+                        - switching
+                        - suspended
+                id:
+                    type: string
+                    description: The ID of the configuration.
+                    format: uuid
+                key_id:
+                    type: string
+                    description: The ID of the current key encryption key.
+                    format: uuid
+                key_mode:
+                    type: string
+                    description: Who controls the current key.
+                    enum:
+                        - speakeasy_managed
+                        - customer_managed
+                last_check_at:
+                    type: string
+                    description: When the hourly health probe last checked the keys.
+                    format: date-time
+                last_check_error:
+                    type: string
+                    description: The error from the last health probe, when it failed.
+                previous_key_id:
+                    type: string
+                    description: The ID of the key being switched away from, while a switch is in flight.
+                    format: uuid
+                suspended_at:
+                    type: string
+                    description: When the configuration was suspended.
+                    format: date-time
+                suspended_reason:
+                    type: string
+                    description: The provider error that caused the suspension.
+                switch_completed_at:
+                    type: string
+                    description: When the last switch completed.
+                    format: date-time
+                switch_started_at:
+                    type: string
+                    description: When the in-flight or last switch started.
+                    format: date-time
+            description: Which key encryption key protects the organization's data, and whether it is usable.
+            required:
+                - id
+                - key_mode
+                - config_state
+                - key_id
+        OrgEncryptionKey:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the key was registered.
+                    format: date-time
+                customer_grant_reference:
+                    type: string
+                    description: The Speakeasy principal the customer granted roles/iam.serviceAccountTokenCreator on the credential's service account. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Speakeasy reaches the key with. Omitted for Speakeasy-managed keys.
+                    format: uuid
+                id:
+                    type: string
+                    description: The ID of the key.
+                    format: uuid
+                managed:
+                    type: boolean
+                    description: Whether Speakeasy minted and controls the key.
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+                provider:
+                    type: string
+                    description: The cloud KMS provider of the key.
+                    enum:
+                        - gcp_kms
+                resource_name:
+                    type: string
+                    description: The GCP KMS crypto key resource name (projects/.../cryptoKeys/...).
+            description: A symmetric KMS key that can protect the organization's data.
+            required:
+                - id
+                - name
+                - provider
+                - resource_name
+                - managed
+                - created_at
         Organization:
             type: object
             properties:
@@ -123004,6 +125192,10 @@ components:
                     type: string
                     description: The remote_session_client id.
                     format: uuid
+                identity_provider_connection_id:
+                    type: string
+                    description: The identity provider connection that manages this client. Null for a client administrators manage directly. A managed client is changed through its connection and cannot be duplicated or used as a template.
+                    format: uuid
                 json_web_key_set_id:
                     type: string
                     description: The organization JSON Web Key Set attached to this client, set on create or through attachKeySet and detachKeySet. Null when no key set is attached.
@@ -123716,6 +125908,9 @@ components:
                         - workload:write
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
             description: Form for requesting access to a scope.
             required:
                 - scope
@@ -124224,7 +126419,7 @@ components:
             properties:
                 provider:
                     type: string
-                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
                 schedule:
                     type: string
                     description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
@@ -125974,6 +128169,9 @@ components:
                         - org:blocked_admin
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
                         - project:read
                         - project:blocked_read
                         - project:write
@@ -126005,6 +128203,8 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - memory:read
+                        - memory:write
                         - inference:execute
                         - log:read
                         - agent:read
@@ -126201,6 +128401,14 @@ components:
                 - previous_keys
                 - previous_keys_retired
                 - marketplace_republished
+        RotateOrgEncryptionDataKeyRequestBody:
+            type: object
+            properties:
+                use_case:
+                    type: string
+                    description: The use case whose data encryption key to rotate.
+            required:
+                - use_case
         RotateRequestBody:
             type: object
             properties:
@@ -126415,6 +128623,9 @@ components:
                         - org:blocked_admin
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
                         - project:read
                         - project:blocked_read
                         - project:write
@@ -126446,6 +128657,8 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - memory:read
+                        - memory:write
                         - inference:execute
                         - log:read
                         - agent:read
@@ -126495,6 +128708,9 @@ components:
                             - org:blocked_admin
                             - org:device_agent_sync
                             - org:hooks_ingest
+                            - channels:connect
+                            - channels:admin
+                            - channels:read_all
                             - project:read
                             - project:blocked_read
                             - project:write
@@ -126526,6 +128742,8 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
+                            - memory:read
+                            - memory:write
                             - inference:execute
                             - log:read
                             - agent:read
@@ -127415,6 +129633,10 @@ components:
                         pattern: ^[!#-[\]-~]+$
                         maxLength: 128
                     description: Each value must be an RFC 6749 scope token.
+                template_client_id:
+                    type: string
+                    description: 'An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template''s stored client_secret, unless client_secret is supplied, and the callback the template''s registration lists. client_id must equal the template''s. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, a client the issuer has rejected, and a template whose stored secret has expired unless client_secret is supplied.'
+                    format: uuid
                 token_endpoint_auth_method:
                     type: string
                     description: How the client authenticates at the provider token endpoint, or the preferred method for DCR.
@@ -127422,7 +129644,7 @@ components:
                         - client_secret_basic
                         - client_secret_post
                         - none
-            description: Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
+            description: Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id, client_secret and template_client_id and uses scope, audience, and token_endpoint_auth_method as registration preferences.
         ServerIdentityImpactForm:
             type: object
             properties:
@@ -127735,6 +129957,46 @@ components:
                 - total_tokens
                 - total_cost
                 - status
+        SessionTotals:
+            type: object
+            properties:
+                message_count:
+                    type: integer
+                    description: Number of LLM completion messages across the sessions
+                    format: int64
+                session_count:
+                    type: integer
+                    description: Number of matching chat sessions
+                    format: int64
+                tool_call_count:
+                    type: integer
+                    description: Number of tool calls across the sessions
+                    format: int64
+                total_cost:
+                    type: number
+                    description: Total cost in USD
+                    format: double
+                total_input_tokens:
+                    type: integer
+                    description: Total input tokens used
+                    format: int64
+                total_output_tokens:
+                    type: integer
+                    description: Total output tokens used
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: Total tokens used
+                    format: int64
+            description: Aggregate usage over a set of chat sessions
+            required:
+                - session_count
+                - message_count
+                - tool_call_count
+                - total_input_tokens
+                - total_output_tokens
+                - total_tokens
+                - total_cost
         SetAIToolDecisionRequestBody:
             type: object
             properties:
@@ -128453,7 +130715,7 @@ components:
                     description: Whether the schedule should be polled.
                 provider:
                     type: string
-                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
                 schedule:
                     type: string
                     description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
@@ -131667,6 +133929,15 @@ components:
                 - vendor
                 - family
                 - surface
+        SwitchOrgEncryptionKeyRequestBody:
+            type: object
+            properties:
+                external_key_id:
+                    type: string
+                    description: The ID of the registered encryption key to switch to.
+                    format: uuid
+            required:
+                - external_key_id
         SyncDirectoryGroupsResult:
             type: object
             properties:
@@ -134955,6 +137226,7 @@ components:
                         - product_telemetry
                         - risk_findings
                         - tool_call_logs
+                        - mcp_connection_logs
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -136128,6 +138400,7 @@ components:
                         - product_telemetry
                         - risk_findings
                         - tool_call_logs
+                        - mcp_connection_logs
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -137008,19 +139281,25 @@ components:
             properties:
                 api_key:
                     type: string
-                    description: Provider API key. Stored encrypted at rest; never returned on reads.
+                    description: Provider API key. For gemini_compliance, the Google service account JSON key file, unchanged. Empty keeps the saved key. Stored encrypted at rest; never returned on reads.
                 billing_mode:
                     type: string
                     description: 'How the provider org is billed: ''metered'', ''flat_rate'', or ''unknown''. Free-form; omit to leave the existing value unchanged.'
+                delegated_user:
+                    type: string
+                    description: 'gemini_compliance only: the Google Workspace admin email the service account acts as through domain-wide delegation. Omit to keep the saved value.'
                 enabled:
                     type: boolean
-                    description: Whether the integration should be active.
+                    description: Whether the integration should be active. gemini_compliance stays inactive until an organizational unit is saved.
                 external_organization_id:
                     type: string
-                    description: Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID).
+                    description: Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID). Optional for gemini_compliance (an open Google Vault matter UUID); omit it and Speakeasy finds or creates its own matter.
+                org_unit_id:
+                    type: string
+                    description: 'gemini_compliance only: the Google Workspace organizational unit to export, from listOrgUnits. Select the root unit for the whole organization. Syncing starts once one is saved. Omit to keep the saved value.'
                 provider:
                     type: string
-                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+                    description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
             required:
                 - provider
                 - api_key
@@ -138045,6 +140324,32 @@ components:
                 - events
                 - latest_unix_nano
                 - total_count
+        VerifyOrgEncryptionKeyResult:
+            type: object
+            properties:
+                detail:
+                    type: string
+                    description: Human-readable detail about the probe outcome, including the failure reason when it did not verify.
+                key_probe_outcome:
+                    type: string
+                    description: The machine-readable outcome of the probe.
+                    enum:
+                        - verified
+                        - credential_unusable
+                        - invalid_resource_name
+                        - key_not_found
+                        - permission_denied
+                        - key_unusable
+                        - round_trip_failed
+                        - unavailable
+                        - unexpected
+                verified:
+                    type: boolean
+                    description: Whether the key encrypted the probe payload and decrypted it again.
+            description: Result of a live probe that Speakeasy can encrypt and decrypt with a key.
+            required:
+                - verified
+                - key_probe_outcome
         VerifyPlatformCredentialResult:
             type: object
             properties:
@@ -138176,6 +140481,30 @@ components:
             required:
                 - id
                 - name
+        WithdrawnWorkloadSubjectPolicy:
+            type: object
+            properties:
+                admissions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadAdmission'
+                    description: Admitted subjects.
+                issuers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadIssuer'
+                    description: Trusted issuers, organization tier first.
+                withdrawn_tier:
+                    type: string
+                    description: 'The tier of the admission that was withdrawn: organization or project.'
+                    enum:
+                        - organization
+                        - project
+            description: The whole trust policy after a subject was withdrawn, with the tier the withdrawn admission belonged to. The same subject may still be admitted at the other tier, which the admissions list shows.
+            required:
+                - withdrawn_tier
+                - issuers
+                - admissions
         WorkOSDomainVerificationIntentOptions:
             type: object
             properties:
@@ -138861,8 +141190,6 @@ tags:
       description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
     - name: keys
       description: Managing system api keys.
-    - name: launcher
-      description: Rank command palette candidates by the intent behind the text the user typed.
     - name: litellm
       description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
     - name: mcpApproval
@@ -138887,6 +141214,8 @@ tags:
       description: 'MCP servers suggested from the organization''s Okta applications: catalog entries whose staff-curated Okta mapping matches a synced, assigned application. Administrators accept by creating the server through the usual remote MCP flow, or dismiss; dismissals are remembered per organization and audited.'
     - name: organizations
       description: Organization membership, invitations, and directory.
+    - name: orgEncryption
+      description: 'Manage the key encryption key that protects an organization''s data: Speakeasy-managed by default, or a customer-managed GCP KMS key.'
     - name: otel
       description: Receives OpenTelemetry signals from LLM providers and harnesses.
     - name: packages

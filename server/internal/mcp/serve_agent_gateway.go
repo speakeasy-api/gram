@@ -196,7 +196,7 @@ func (s *Service) resolveMemberTokensSkipping(ctx context.Context, gate *metaGat
 		if err == nil && gate.agentID != uuid.Nil && member.chosenClientID.Valid {
 			usable := false
 			for _, token := range tokens {
-				usable = usable || token.Token != "" || token.SessionUnavailable()
+				usable = usable || token.Token != "" || token.HeldWithoutToken()
 			}
 			if !usable {
 				if shared := sharedCredentialError(member, tokens); shared != nil {
@@ -325,6 +325,10 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	// caller: the agent's sign-in step does not set it.
 	if err != nil && clientType == authClientTypeServiceAccount {
 		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err)}
+	}
+	if errors.Is(err, remotesessions.ErrStoredSignInUnreadable) {
+		// The cause names the remote session for the connection row.
+		return nil, memberSignInUnreadableError{memberConnectionError: memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}, cause: err}
 	}
 	if err != nil {
 		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
@@ -455,10 +459,14 @@ type agentServerTarget struct {
 func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentServerTarget, issuer uuid.UUID, registration uuid.NullUUID, clientType string) (authClientConnectionOwner, contextvalues.UpstreamCredential, error) {
 	var none authClientConnectionOwner
 	var noCredential contextvalues.UpstreamCredential
+	mode, err := s.authClientMode(ctx, target.organizationID)
+	if err != nil {
+		return none, noCredential, err
+	}
 	rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
 		ProposeAllClients: false,
 		Proposed:          true, ProposedNoAuth: false, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedRegistrationID: registration, CredentialKind: upstreamclients.CredentialKindUserSession,
-		CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{target.serverID}, OrganizationID: target.organizationID,
+		CredentialID: uuid.Nil, McpServerIds: []uuid.UUID{target.serverID}, OrganizationID: target.organizationID, TypedOnly: mode == feature.AuthClientResolverEnforced,
 	})
 	if err != nil {
 		return none, noCredential, fmt.Errorf("load agent member auth client: %w", err)
@@ -467,10 +475,6 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 		return none, noCredential, agentServerGapError(target.slug)
 	}
 	res := decideAuthClient(rows[0])
-	mode, err := s.authClientMode(ctx, target.organizationID)
-	if err != nil {
-		return none, noCredential, err
-	}
 	// Before typed enforcement, configured legacy credential headers remain
 	// served by the proxy even when no catalog client has been provisioned.
 	// This does not waive the enforced catalog/permit barrier.

@@ -123,6 +123,7 @@ var cardTools = map[string]cardSpec{
 	"create_mcp_access_role":          {kind: cardKindReceipt, route: "O/access/roles", label: "Open roles"},
 	"update_mcp_access_role":          {kind: cardKindReceipt, route: "O/access/roles", label: "Open roles"},
 	"configure_inference_access_role": {kind: cardKindReceipt, route: "O/access/roles", label: "Open roles"},
+	"configure_memory_access_role":    {kind: cardKindReceipt, route: "O/access/roles", label: "Open roles"},
 	"assign_mcp_access_role":          {kind: cardKindReceipt, route: "O/access/assignments", label: "Open assignments"},
 	"list_directory_review_items":     {kind: cardKindList, route: "O/access/members", label: "Open members"},
 	"resolve_directory_review_item":   {kind: cardKindReceipt, route: "O/access/members", label: "Open members"},
@@ -188,6 +189,7 @@ const (
 
 // textOnlyTools keep their plain result, each with the reason.
 var textOnlyTools = map[string]string{
+	"get_my_channels_access":               "Channels connection admission and endpoint instructions have no standalone dashboard resource.",
 	"run_analytics_query":                  textOnlyAnalytics,
 	"query_mcp_events":                     textOnlyAnalytics,
 	"query_mcp_metrics":                    textOnlyAnalytics,
@@ -213,6 +215,7 @@ var textOnlyTools = map[string]string{
 	"list_gateway_sessions":                textOnlyLog,
 	"search_chats":                         textOnlyLog,
 	"read_chat":                            textOnlyLog,
+	"search_team_memory":                   textOnlyLog,
 	"find_signal_sessions":                 textOnlyLog,
 	"list_skill_feedback":                  textOnlyLog,
 	"list_skill_suggestion_feedback":       textOnlyLog,
@@ -235,6 +238,7 @@ var textOnlyTools = map[string]string{
 	"get_workload_assertion_reuse":         textOnlyForModel,
 	"get_inbound_ema_trust":                textOnlyForModel,
 	"get_network_ingress":                  textOnlyForModel,
+	"get_custom_domain_status":             textOnlyForModel,
 	"describe_tools":                       textOnlyForModel,
 	"execute_tool":                         "returns another MCP server's own result, which that server presents",
 	"search_speakeasy_docs":                "returns doc passages for the model to read and cite; it is also a first-run tool, and its card link would push tools/list past the host budget",
@@ -255,6 +259,7 @@ var textOnlyTools = map[string]string{
 	"list_my_mcp_access":                   textOnlyMember,
 	"send_platform_mcp_feedback":           textOnlyNothing,
 	"record_workflow_run":                  textOnlyNothing,
+	"remember":                             textOnlyForModel,
 }
 
 // cardRouteParam fills one {name} route segment. Exact keys are read from

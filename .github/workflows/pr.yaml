@@ -1152,7 +1152,7 @@ jobs:
 
       # Mise supplies atlas; the SHA-pinned actions download a separate atlas-action wrapper.
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@aa7315fafe4a8df2a4be36614894a1a3f71cdc69 # v1.17.6
+        uses: ariga/atlas-action/migrate/lint@be526fa360e6cb745546681470f4760dbbc49cf8 # v1.17.12
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -1164,7 +1164,7 @@ jobs:
           ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@aa7315fafe4a8df2a4be36614894a1a3f71cdc69 # v1.17.6
+        uses: ariga/atlas-action/migrate/lint@be526fa360e6cb745546681470f4760dbbc49cf8 # v1.17.12
         with:
           working-directory: server
           dir: file://clickhouse/migrations
@@ -2352,11 +2352,28 @@ jobs:
           path: node_modules/.vitest-cache
           key: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}
 
+  # One job per workflow target so the slow dashboard SDK does not serialize
+  # the others. `speakeasy run --parallel` cannot do this in one job: its
+  # targets share .speakeasy/temp, and the first to finish deletes it.
   sdk-gen-check:
-    name: Check SDK is up-to-date
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    name: Check SDK is up-to-date (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
     needs: changes
     if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.sdk-gen == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: gram-internal
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - target: gram-admin
+            runner: blacksmith-2vcpu-ubuntu-2404
+            checks: true
+          # The overlay tests run here to balance job lengths: they take
+          # about as long as the spec check left in the gram-admin job.
+          - target: hooks-go
+            runner: blacksmith-2vcpu-ubuntu-2404
+            overlay-tests: true
     env:
       SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
     steps:
@@ -2391,22 +2408,29 @@ jobs:
       # The hooks-go target's compile step resolves the root Go module's
       # dependencies, including test dependencies.
       - name: Restore Go module cache
+        if: matrix.target == 'hooks-go' || matrix.checks
         uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Test generated artifact conflict resolution
+        if: matrix.checks
         run: mise run test:gen-resolve
 
       - name: Test SDK overlays
+        if: matrix.overlay-tests
         run: mise run test:sdk-overlays
 
       - name: Test SDK generation check
+        if: matrix.checks
         run: mise run test:gen-sdk
 
       - name: Check transformed SDK specs
+        if: matrix.checks
         run: mise run gen:sdk --check
 
       - name: Regenerate SDK
-        run: mise run gen:sdk
+        env:
+          TARGET: ${{ matrix.target }}
+        run: mise run gen:sdk --target "$TARGET"
 
       # Prevent perpetual failure for code samples digest.
       - name: Restore .speakeasy/workflow.lock

@@ -11,14 +11,14 @@ Command K is a first-class discovery surface. A route, sidebar item, overview pa
 
 Paths below are relative to `client/dashboard/src/`.
 
-| Concern                               | Source                                                                                                                                    |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Project navigation pages and gates    | `hooks/useProjectNavRoutes.ts`, consumed by sidebar and `App.tsx`                                                                         |
-| Organization navigation registration  | `App.tsx` (`RouteProvider`, `routesToNavActions`)                                                                                         |
-| Resource source registration and RBAC | `components/command-palette/candidates/index.ts`                                                                                          |
-| Candidate shape and privacy           | `components/command-palette/candidates/types.ts` (`isSendable`)                                                                           |
-| Example resource sources              | `components/command-palette/candidates/useSkillCandidates.ts`, `components/command-palette/candidates/useAgentIdentityCandidates.ts`      |
-| Matching, intent prefilter, display   | `components/command-palette/ranker.ts`, `components/command-palette/useLauncherJudge.ts`, `components/command-palette/CommandPalette.tsx` |
+| Concern                               | Source                                                                                                                               |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Project navigation pages and gates    | `hooks/useProjectNavRoutes.ts`, consumed by sidebar and `App.tsx`                                                                    |
+| Organization navigation registration  | `App.tsx` (`RouteProvider`, `routesToNavActions`)                                                                                    |
+| Resource source registration and RBAC | `components/command-palette/candidates/index.ts`                                                                                     |
+| Candidate shape                       | `components/command-palette/candidates/types.ts`                                                                                     |
+| Example resource sources              | `components/command-palette/candidates/useSkillCandidates.ts`, `components/command-palette/candidates/useAgentIdentityCandidates.ts` |
+| Local matching and display            | `components/command-palette/ranker.ts`, `components/command-palette/CommandPalette.tsx`                                              |
 
 ## Implementation and review checklist
 
@@ -26,7 +26,7 @@ Paths below are relative to `client/dashboard/src/`.
 2. **Update rather than duplicate.** If an existing source already covers the changed resource, check that labels, keywords, routes, query keys, and gates remain correct. Cosmetic changes or an extra overview field do not require a new candidate source. Do not demand a mutating verb merely because the UI adds a button; assess safety separately.
 3. **Mirror access and tenancy.** Gate list requests and returned candidates consistently with the resource page and its API. Match org/project/resource-scoped RBAC, product flags, rollout and support/impersonation restrictions. Include the actual tenant/project in query keys. Cached results must not leak across access or tenant changes. Disable queries and pagination while the palette is closed. A failing source must not blank the palette or repeatedly retry in an effect.
 4. **Cover more than page one.** For bounded inventories, drain list pagination while open, or use a server-side search that can find any authorized resource. Test a match from a later page and pagination failures. Never crawl high-volume telemetry/history on each palette opening merely to satisfy this rule.
-5. **Preserve privacy.** Identity candidates use `fuzzyOnly: true` and/or the existing `person` kind. Verify they cannot enter intent-service requests through `isSendable`, including recently visited identity pages. Do not put secrets or sensitive payloads in titles, detail, or keywords.
+5. **Preserve privacy.** Candidate matching stays local to the dashboard. Do not add remote ranking or send candidate titles, detail, or keywords to another service without an explicit privacy review. Never put secrets or sensitive payloads in those fields.
 6. **Prove it.** Test name/alias matching data, canonical navigation, later-page inclusion where applicable, closed-palette behavior, unauthorized/feature-disabled states, and project/organization scoping. Reuse existing route helpers and query caches.
 
 Run focused checks from the repo root:

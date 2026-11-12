@@ -92,6 +92,7 @@ describe("organizationHostRedirectTarget", () => {
     "/risk-policy-bypass/request",
     "/risk-policy-challenge/acknowledge",
     "/risk-policy-challenge/acknowledge/",
+    "/ack",
   ])("stays on the hand-off page %s", (pathname) => {
     expect(
       organizationHostRedirectTarget("https://ai.example.com", {

@@ -3,16 +3,22 @@
 // reports the pairs existing configuration does not decide. It records
 // through the same statement issuance uses, so a run is idempotent and agrees
 // with what a new sign-in would record. It runs after the association
-// backfill, since a choice is only recorded for an associated client.
+// backfill, since a choice is only recorded for an associated client. For an
+// organization enforcing upstream auth, coverage and writes read the auth
+// clients a server offers instead of its associations, as issuance does there.
 package selectionbackfill
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -35,11 +41,13 @@ const (
 	OutcomeUnusableClient Outcome = "unusable_client"
 
 	// OutcomeClient is a pair whose server has exactly one associated client
-	// the credential's issuer also binds; that client is chosen.
+	// the credential's issuer also binds; that client is chosen. Under
+	// enforcement the server's clients are the ones it offers.
 	OutcomeClient Outcome = "client"
 
-	// OutcomeNoAuth is a pair whose server has no associated client; an
-	// explicit no-auth choice is recorded.
+	// OutcomeNoAuth is a pair whose server has no associated client, or under
+	// enforcement offers no enabled OAuth-backed auth client; an explicit
+	// no-auth choice is recorded.
 	OutcomeNoAuth Outcome = "no_auth"
 
 	// OutcomeAmbiguous is a pair with several eligible clients. Only the
@@ -83,7 +91,9 @@ func Classify(row ListUpstreamClientSelectionCoverageRow) Outcome {
 
 // Options controls one run.
 type Options struct {
-	// OrganizationID limits the run to one organization when non-empty.
+	// OrganizationID limits trusted offline maintenance to one organization
+	// when non-empty. Empty is the existing all-organization maintenance mode;
+	// request-driven lifecycle reconciliation requires a non-empty tenant.
 	OrganizationID string
 
 	// Apply records the decided choices; otherwise the run only predicts.
@@ -158,6 +168,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 		credentials, err := q.ListLiveUserSessionCredentials(ctx, ListLiveUserSessionCredentialsParams{
 			Cursor:         cursor,
 			OrganizationID: opts.OrganizationID,
+			IssuerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			PageSize:       int32(pageSize), // #nosec G115 -- bounded by defaultPageSize or an operator flag
 		})
 		if err != nil {
@@ -167,10 +178,19 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			return report, nil
 		}
 		for _, credential := range credentials {
+			// Read for each credential, right before its choices are decided,
+			// so a run that outlives an enforcement change writes the rest under
+			// the new state, and a run with no organization decides every
+			// credential by its own organization.
+			typedOnly, err := authenforcement.ReadEnforced(ctx, db, credential.OrganizationID)
+			if err != nil {
+				return report, fmt.Errorf("read enforcement for credential %s: %w", credential.CredentialID, err)
+			}
 			coverageParams := ListUpstreamClientSelectionCoverageParams{
 				UserSessionIssuerID: credential.UserSessionIssuerID,
 				CredentialKind:      upstreamclients.CredentialKindUserSession,
 				CredentialID:        credential.CredentialID,
+				TypedOnly:           typedOnly,
 			}
 			coverage, err := q.ListUpstreamClientSelectionCoverage(ctx, coverageParams)
 			if err != nil {
@@ -186,16 +206,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 				}
 			}
 			if opts.Apply {
-				written, err := sessions.RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{
-					UserSessionIssuerID: credential.UserSessionIssuerID,
-					CredentialKind:      upstreamclients.CredentialKindUserSession,
-					CredentialID:        credential.CredentialID,
-					Source:              upstreamclients.SelectionSourceBackfill,
-					PickedMcpServerIds:  []uuid.UUID{},
-					PickedClientIds:     []uuid.UUID{},
-					PickedAuthClientIds: nil,
-					ScopeMcpServerIds:   nil,
-				})
+				written, err := recordCredentialSelections(ctx, sessions, credential.UserSessionIssuerID, []uuid.UUID{credential.CredentialID}, nil, typedOnly)
 				if err != nil {
 					return report, fmt.Errorf("record selections for credential %s: %w", credential.CredentialID, err)
 				}
@@ -224,4 +235,103 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			return report, fmt.Errorf("backfill interrupted: %w", err)
 		}
 	}
+}
+
+// ReconcileIssuerInLockedTransaction records missing choices and names typed
+// clients on existing choices for one issuer's live credential lineages. The
+// caller holds the complete server/source writer scope and registration gates.
+// It uses migration selection policy without granting permissions.
+func ReconcileIssuerInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID) error {
+	_, err := ReconcileIssuerScopeInLockedTransaction(ctx, tx, organizationID, issuerID, nil, nil)
+	return err
+}
+
+// ReconcileIssuerScopeInLockedTransaction limits existing credentials to the
+// maintenance servers. Moved lineages instead record full target reach: moving
+// their issuer changes their audience even on servers needing no typed sync.
+// A nil server scope retains full reach; an empty scope records/maps nothing
+// for existing credentials. The returned count reports guarded bulk rows whose
+// legacy evidence changed before their mapping write.
+func ReconcileIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, fullReachCredentialIDs []uuid.UUID) (int64, error) {
+	if err := RecordIssuerScopeInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs, fullReachCredentialIDs); err != nil {
+		return 0, err
+	}
+	if serverIDs != nil && len(serverIDs) == 0 && len(fullReachCredentialIDs) == 0 {
+		return 0, nil
+	}
+	skipped, err := authclientbackfill.ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs)
+	if err != nil {
+		return skipped, fmt.Errorf("map issuer credential choices: %w", err)
+	}
+	return skipped, nil
+}
+
+// RecordIssuerScopeInLockedTransaction records the missing choices of one
+// issuer's live credential lineages and maps nothing, with the scoping
+// ReconcileIssuerScopeInLockedTransaction describes. A caller about to change
+// what the issuer binds records first: each credential is then decided by the
+// bindings it was served through, and a recorded choice is never replaced.
+func RecordIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, fullReachCredentialIDs []uuid.UUID) error {
+	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
+		return errors.New("reconcile issuer credentials: no transaction or tenant scope")
+	}
+	if serverIDs != nil && len(serverIDs) == 0 && len(fullReachCredentialIDs) == 0 {
+		return nil
+	}
+	typedOnly, err := authenforcement.ReadEnforced(ctx, tx, organizationID)
+	if err != nil {
+		return fmt.Errorf("read enforcement for issuer selection recording: %w", err)
+	}
+	fullReach := make(map[uuid.UUID]bool, len(fullReachCredentialIDs))
+	for _, id := range fullReachCredentialIDs {
+		fullReach[id] = true
+	}
+	q, sessions := New(tx), usersessionsrepo.New(tx)
+	cursor := uuid.Nil
+	for {
+		credentials, err := q.ListLiveUserSessionCredentials(ctx, ListLiveUserSessionCredentialsParams{
+			Cursor: cursor, OrganizationID: organizationID, PageSize: defaultPageSize, IssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("list issuer credentials: %w", err)
+		}
+		var existingIDs, movedIDs []uuid.UUID
+		for _, credential := range credentials {
+			if fullReach[credential.CredentialID] {
+				movedIDs = append(movedIDs, credential.CredentialID)
+			} else {
+				existingIDs = append(existingIDs, credential.CredentialID)
+			}
+			cursor = credential.CredentialID
+		}
+		if _, err := recordCredentialSelections(ctx, sessions, issuerID, existingIDs, serverIDs, typedOnly); err != nil {
+			return fmt.Errorf("record existing issuer credential choices: %w", err)
+		}
+		if _, err := recordCredentialSelections(ctx, sessions, issuerID, movedIDs, nil, typedOnly); err != nil {
+			return fmt.Errorf("record moved issuer credential choices: %w", err)
+		}
+		if len(credentials) < defaultPageSize {
+			return nil
+		}
+	}
+}
+
+func recordCredentialSelections(ctx context.Context, q *usersessionsrepo.Queries, issuerID uuid.UUID, credentialIDs, serverIDs []uuid.UUID, typedOnly bool) (int64, error) {
+	if len(credentialIDs) == 0 || (serverIDs != nil && len(serverIDs) == 0) {
+		return 0, nil
+	}
+	written, err := q.RecordUpstreamClientSelectionsForCredentials(ctx, usersessionsrepo.RecordUpstreamClientSelectionsForCredentialsParams{
+		CredentialIds:       credentialIDs,
+		UserSessionIssuerID: issuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		// These choices are inferred for existing credentials, not explicit
+		// administrator choices; consolidation uses the same backfill source.
+		Source:             upstreamclients.SelectionSourceBackfill,
+		PickedMcpServerIds: []uuid.UUID{}, PickedClientIds: []uuid.UUID{},
+		PickedAuthClientIds: nil, ScopeMcpServerIds: serverIDs, TypedOnly: typedOnly,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("record credential selections: %w", err)
+	}
+	return written, nil
 }

@@ -561,5 +561,8 @@ func memberMCPReauthorizationReason(status remotesessions.RemoteSessionState, no
 	if status.ValidationStatus == remotesessions.ValidationOutcomeRejectedByMember || status.ValidationStatus == remotesessions.ValidationOutcomeInactive {
 		return "authorization_rejected"
 	}
+	if status.SignInUnreadable {
+		return "sign_in_unreadable"
+	}
 	return "access_expired"
 }

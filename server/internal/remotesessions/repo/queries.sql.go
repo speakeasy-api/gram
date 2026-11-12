@@ -360,6 +360,7 @@ WITH due AS (
   FROM remote_sessions AS s
   JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
   JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
   CROSS JOIN LATERAL (
     -- A project-tier issuer takes its organization from its project; an
     -- organization-tier issuer has no project and carries it on the row.
@@ -400,11 +401,18 @@ WITH due AS (
       -- clients, org-level clients of its organization, or clients from the
       -- tenantless global catalog), so a binding row that ever crossed
       -- tenants cannot put this credential under a foreign organization's
-      -- refresh policy. An organization-tier issuer owns no project, so only
-      -- the org-level and global arms can match for one.
+      -- refresh policy. An organization-tier issuer can also reach clients
+      -- owned by a live project in its organization.
       AND (
-        c.project_id = usi.project_id
+        (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+      )
+      -- A direct binding does not validate the upstream provider's ownership.
+      -- Only the client's own project or an org/global provider available to
+      -- this tenant may receive the stored refresh token.
+      AND (
+        i.project_id = c.project_id
+        OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
       AND (
         EXISTS (
@@ -3697,6 +3705,7 @@ SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remo
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
 WHERE s.id = $1
   AND s.deleted IS FALSE
   AND s.refresh_token_encrypted IS NOT NULL
@@ -3745,8 +3754,15 @@ WHERE s.id = $1
       (usi.project_id IS NULL OR p.id IS NOT NULL)
       AND COALESCE(p.organization_id, usi.organization_id) = $4
       AND (
-        c.project_id = usi.project_id
+        (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+      )
+      -- A direct binding does not validate the upstream provider's ownership.
+      -- Only the client's own project or an org/global provider available to
+      -- this tenant may receive the stored refresh token.
+      AND (
+        i.project_id = c.project_id
+        OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
       AND (
         EXISTS (
@@ -11235,6 +11251,8 @@ SELECT
   s.last_validated_at,
   s.validation_status,
   s.validation_reason,
+  s.access_token_encrypted,
+  s.refresh_token_encrypted,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -11293,6 +11311,8 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 	LastValidatedAt        pgtype.Timestamptz
 	ValidationStatus       pgtype.Text
 	ValidationReason       pgtype.Text
+	AccessTokenEncrypted   string
+	RefreshTokenEncrypted  pgtype.Text
 	CanRefresh             bool
 	Status                 string
 }
@@ -11367,6 +11387,8 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 			&i.LastValidatedAt,
 			&i.ValidationStatus,
 			&i.ValidationReason,
+			&i.AccessTokenEncrypted,
+			&i.RefreshTokenEncrypted,
 			&i.CanRefresh,
 			&i.Status,
 		); err != nil {
@@ -11399,6 +11421,8 @@ SELECT
   s.last_validated_at,
   s.validation_status,
   s.validation_reason,
+  s.access_token_encrypted,
+  s.refresh_token_encrypted,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -11449,6 +11473,8 @@ type ListRemoteSessionStatusesInTenantRow struct {
 	LastValidatedAt        pgtype.Timestamptz
 	ValidationStatus       pgtype.Text
 	ValidationReason       pgtype.Text
+	AccessTokenEncrypted   string
+	RefreshTokenEncrypted  pgtype.Text
 	CanRefresh             bool
 	Status                 string
 }
@@ -11491,6 +11517,8 @@ func (q *Queries) ListRemoteSessionStatusesInTenant(ctx context.Context, arg Lis
 			&i.LastValidatedAt,
 			&i.ValidationStatus,
 			&i.ValidationReason,
+			&i.AccessTokenEncrypted,
+			&i.RefreshTokenEncrypted,
 			&i.CanRefresh,
 			&i.Status,
 		); err != nil {
@@ -12583,6 +12611,65 @@ func (q *Queries) LockRemoteSessionClientForSessionWrite(ctx context.Context, id
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const lockRemoteSessionClientTemplate = `-- name: LockRemoteSessionClientTemplate :one
+SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
+FROM remote_session_clients AS c
+WHERE c.id = $1
+  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND c.organization_id = $3))
+  AND c.deleted IS FALSE
+FOR SHARE
+`
+
+type LockRemoteSessionClientTemplateParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Reads the client a new client is created from, holding it against a
+// concurrent secret rotation, re-registration or rejection until the copy
+// commits. FOR SHARE lets other copies and foreign-key checks proceed. Same
+// visibility as GetRemoteSessionClientByID.
+func (q *Queries) LockRemoteSessionClientTemplate(ctx context.Context, arg LockRemoteSessionClientTemplateParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, lockRemoteSessionClientTemplate, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CallbackBaseUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
+		&i.CredentialOwner,
+		&i.DisplayName,
+		&i.ForwardClientName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const lockRemoteSessionClientUserSessionIssuerLink = `-- name: LockRemoteSessionClientUserSessionIssuerLink :exec

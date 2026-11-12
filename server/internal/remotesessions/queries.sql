@@ -1175,6 +1175,18 @@ WHERE c.id = @id
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND c.deleted IS FALSE;
 
+-- name: LockRemoteSessionClientTemplate :one
+-- Reads the client a new client is created from, holding it against a
+-- concurrent secret rotation, re-registration or rejection until the copy
+-- commits. FOR SHARE lets other copies and foreign-key checks proceed. Same
+-- visibility as GetRemoteSessionClientByID.
+SELECT c.*
+FROM remote_session_clients AS c
+WHERE c.id = @id
+  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
+  AND c.deleted IS FALSE
+FOR SHARE;
+
 -- name: GetUserSessionIssuerForProject :one
 SELECT id, project_id
 FROM user_session_issuers
@@ -1839,6 +1851,8 @@ SELECT
   s.last_validated_at,
   s.validation_status,
   s.validation_reason,
+  s.access_token_encrypted,
+  s.refresh_token_encrypted,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
@@ -2489,6 +2503,7 @@ WITH due AS (
   FROM remote_sessions AS s
   JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
   JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
   CROSS JOIN LATERAL (
     -- A project-tier issuer takes its organization from its project; an
     -- organization-tier issuer has no project and carries it on the row.
@@ -2529,11 +2544,18 @@ WITH due AS (
       -- clients, org-level clients of its organization, or clients from the
       -- tenantless global catalog), so a binding row that ever crossed
       -- tenants cannot put this credential under a foreign organization's
-      -- refresh policy. An organization-tier issuer owns no project, so only
-      -- the org-level and global arms can match for one.
+      -- refresh policy. An organization-tier issuer can also reach clients
+      -- owned by a live project in its organization.
       AND (
-        c.project_id = usi.project_id
+        (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+      )
+      -- A direct binding does not validate the upstream provider's ownership.
+      -- Only the client's own project or an org/global provider available to
+      -- this tenant may receive the stored refresh token.
+      AND (
+        i.project_id = c.project_id
+        OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
       AND (
         EXISTS (
@@ -2621,6 +2643,7 @@ SELECT sqlc.embed(s), c.project_id AS client_project_id
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
 WHERE s.id = @id
   AND s.deleted IS FALSE
   AND s.refresh_token_encrypted IS NOT NULL
@@ -2669,8 +2692,15 @@ WHERE s.id = @id
       (usi.project_id IS NULL OR p.id IS NOT NULL)
       AND COALESCE(p.organization_id, usi.organization_id) = @organization_id
       AND (
-        c.project_id = usi.project_id
+        (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+      )
+      -- A direct binding does not validate the upstream provider's ownership.
+      -- Only the client's own project or an org/global provider available to
+      -- this tenant may receive the stored refresh token.
+      AND (
+        i.project_id = c.project_id
+        OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
       AND (
         EXISTS (
@@ -6111,6 +6141,8 @@ SELECT
   s.last_validated_at,
   s.validation_status,
   s.validation_reason,
+  s.access_token_encrypted,
+  s.refresh_token_encrypted,
   (s.refresh_token_encrypted IS NOT NULL
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,

@@ -518,13 +518,13 @@
           "verify": false
         },
         "blocking": {
-          "status": "impossible",
-          "note": "no policy enforcement in Cowork",
-          "verify": false
+          "status": "supported",
+          "note": "per-event hooks enforce, as in Claude Code",
+          "verify": true
         },
         "mcp-redaction": {
           "status": "impossible",
-          "note": "no policy enforcement in Cowork",
+          "note": "tool results are not rewritten in Cowork",
           "verify": true
         },
         "prompt-redaction": {

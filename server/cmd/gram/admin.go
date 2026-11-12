@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
@@ -41,11 +42,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -333,6 +337,7 @@ func newAdminCommand() *cli.Command {
 	flags = append(flags, platformHostsCLIFlag())
 	flags = append(flags, orgDefaultHostFlags()...)
 	flags = append(flags, posthogFlags()...)
+	flags = append(flags, customDomainTargetSuffixFlag())
 
 	return &cli.Command{
 		Name:  "admin",
@@ -525,6 +530,7 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), telemetry.NewMCPServerHealth(db, chDB), siteURL, registryService)
+			adminService.SetProviderHealth(mcpconnectionattempts.NewProviderHealth(logger, chDB))
 			var projectRedeployer admin.ProjectRedeployer
 			if temporalEnv != nil {
 				projectRedeployer = deployments.NewStaffRedeployer(logger, tracerProvider, db, temporalEnv, audit.NewLogger())
@@ -534,9 +540,19 @@ func newAdminCommand() *cli.Command {
 			adminService.SetMCPServerURL(mcpServerURL)
 			adminService.SetHookClients(telemetry.NewHookClients(chDB))
 			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(redisClient))
+			latestHooksVersion, err := semver.NewVersion(plugins.LatestHooksVersion())
+			if err != nil {
+				return fmt.Errorf("parse latest hooks version: %w", err)
+			}
+			adminService.SetHookFleet(telemetry.NewHookFleet(chDB), admin.HookFleetVersions{Latest: latestHooksVersion, Minimum: nil})
 			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
 			adminService.SetStripeDashboardMode(c.String("stripe-api-key"))
+			customDomainTargetSuffix, err := customDomainTargetSuffixFromCLI(c)
+			if err != nil {
+				return err
+			}
+			adminService.SetCustomDomainTargetSuffix(customDomainTargetSuffix)
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {
 				return err
@@ -559,6 +575,7 @@ func newAdminCommand() *cli.Command {
 				platformAssets = assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage)
 				adminService.SetAssetService(platformAssets)
 			}
+			adminService.SetExternalCredentialService(externalcredentials.NewPlatformService(logger, tracerProvider, db, newGCPIdentity(ctx, logger, c)))
 			admin.Attach(mux, adminService)
 			if c.Bool("admin-mcp-enabled") {
 				key := c.String("admin-mcp-signing-key")

@@ -245,6 +245,10 @@ type Service interface {
 	// binary version) each organization's new sessions use per day, inference hook
 	// traffic per Claude app, and device agent versions per day.
 	GetHookClients(context.Context, *GetHookClientsPayload) (res *AdminHookClientsResult, err error)
+	// The hooks installs of one organization: which versions, install routes and
+	// endpoints its users' machines use, which machines have gone quiet, and how
+	// much traffic still reaches the legacy endpoints.
+	GetOrganizationHookFleet(context.Context, *GetOrganizationHookFleetPayload) (res *AdminHookFleetResult, err error)
 	// List observed remote MCP candidates and durable promotion delivery status.
 	// Active excludes endpoints already in the catalogue; candidate includes all
 	// unpublished active entries. No source URLs or credentials are returned.
@@ -388,6 +392,32 @@ type Service interface {
 	// the active deployment is no longer the one reviewed. The new deployment
 	// becomes active only if processing succeeds.
 	RedeployProject(context.Context, *RedeployProjectPayload) (res *AdminProjectRedeployResult, err error)
+	// Lists live custom domains across organizations with their designated CNAME
+	// targets and observed DNS routing methods.
+	ListCustomDomains(context.Context, *ListCustomDomainsPayload) (res *AdminListCustomDomainsResult, err error)
+	// List the platform external credentials (organization_id NULL, project_id
+	// NULL) that Speakeasy authenticates into a cloud provider with. Optionally
+	// filter by provider.
+	ListPlatformExternalCredentials(context.Context, *ListPlatformExternalCredentialsPayload) (res *ListExternalCredentialsResult, err error)
+	// Get a platform GCP IAM external credential by ID.
+	GetGcpIamPlatformCredential(context.Context, *GetGcpIamPlatformCredentialPayload) (res *GcpIamCredential, err error)
+	// Create a platform GCP IAM external credential. Set the wif_* triple for
+	// Workload Identity Federation, impersonate_service_account alone for direct
+	// impersonation, or neither for Speakeasy's ambient attached identity.
+	CreateGcpIamPlatformCredential(context.Context, *CreateGcpIamPlatformCredentialPayload) (res *GcpIamCredential, err error)
+	// Replace a platform GCP IAM external credential's name and configuration.
+	// Refused while managed signing keys still sign through it. Changing the
+	// impersonated account or wif_* identity is also refused while organization
+	// encryption keys or issuer keys still reach KMS through it; renames stay
+	// allowed.
+	UpdateGcpIamPlatformCredential(context.Context, *UpdateGcpIamPlatformCredentialPayload) (res *GcpIamCredential, err error)
+	// Run a live 'who am I' probe against a platform GCP IAM credential's resolved
+	// identity and report the effective principal. Nothing is persisted.
+	VerifyGcpIamPlatformCredential(context.Context, *VerifyGcpIamPlatformCredentialPayload) (res *VerifyPlatformCredentialResult, err error)
+	// Soft-delete a platform GCP IAM external credential. Refused while managed
+	// signing keys, organization encryption keys or live issuer keys still use it.
+	// Deleting a missing credential succeeds.
+	DeleteGcpIamPlatformCredential(context.Context, *DeleteGcpIamPlatformCredentialPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -410,7 +440,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [107]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject"}
+var MethodNames = [115]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential"}
 
 type AdminAuditLog struct {
 	// Internal staff-only audit activity; persisted but never published to the
@@ -495,6 +525,53 @@ type AdminChatAnalysisSettings struct {
 // triggerOrganizationChatAnalysis method.
 type AdminChatAnalysisTriggerResult struct {
 	ProjectsSignaled int
+}
+
+// A live custom domain with its designated CNAME target and the DNS routing
+// method health checks last observed.
+type AdminCustomDomain struct {
+	// The custom domain ID.
+	ID string
+	// The organization that owns the domain.
+	OrganizationID string
+	// The organization name.
+	OrganizationName string
+	// The organization slug.
+	OrganizationSlug string
+	// The custom domain name.
+	Domain string
+	// Whether the domain passed DNS verification.
+	Verified bool
+	// Whether the domain is provisioned in ingress.
+	Activated bool
+	// The random DNS label of the domain's designated CNAME target. Absent until
+	// assigned.
+	DNSTargetToken *string
+	// The domain's designated CNAME target (<dns_target_token>.<suffix>). Absent
+	// when the admin server has no target suffix configured or the token is not
+	// yet assigned.
+	DNSTarget *string
+	// How the latest health check observed the domain's DNS routing traffic. One
+	// of: per_domain_cname, shared_cname, a_record (also covers flattened CNAME,
+	// ALIAS and ANAME records, which resolve to addresses), unknown. Absent until
+	// the first health check.
+	DNSRoutingMethod *string
+	// Advisory public DNS observation: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish endpoint
+	// availability.
+	DNSConfigurationStatus *string
+	// When DNS configuration was observed. Absent until a DNS observation has run.
+	DNSCheckedAt *string
+	// Infrastructure and certificate status: unknown, healthy, or unhealthy.
+	// Unknown until a complete observation has run, or when an older worker has
+	// overwritten the health result.
+	HealthStatus *string
+	// Why the domain was last observed as unhealthy.
+	HealthIssue *string
+	// When the domain health was last checked.
+	HealthCheckedAt *string
+	// When the domain was registered.
+	CreatedAt string
 }
 
 // One paying organization's estimated usage at current PAYG list prices.
@@ -610,6 +687,97 @@ type AdminHookClientsResult struct {
 	DeviceAgents []*AdminDeviceAgentCell
 }
 
+// Installs and events for one value of a breakdown.
+type AdminHookFleetBucket struct {
+	// The route or endpoint generation. Empty when unknown.
+	Value string
+	// Installs whose latest value is this one.
+	Installs int64
+	// Hook events sent with this value across every install. Zero for routes.
+	Events int64
+}
+
+// One hooks install: a project, user, machine and harness. Version, generation
+// and route are the latest the install sent.
+type AdminHookFleetInstall struct {
+	// The project the install reports to. Empty for traffic that named no project.
+	ProjectID string
+	// The user the install reports as. Empty when the install sent no identity.
+	UserEmail string
+	// The machine's hostname. Empty when the install sent none.
+	Hostname string
+	// The agent the hooks run in, such as claude, codex or cursor.
+	Harness string
+	// The hooks binary version. Empty for the legacy curl hooks and for installs
+	// that sent no version.
+	Version string
+	// How the version compares to the release Speakeasy ships.
+	VersionStatus string
+	// The hooks endpoint the install last sent to: legacy_unkeyed, legacy_keyed,
+	// ingest_script or ingest_binary. Empty for delivery failure reports only.
+	EndpointGeneration string
+	// How the hooks were installed, such as marketplace or download. Empty when
+	// unknown.
+	InstallRoute string
+	// First hook in the window.
+	FirstSeen string
+	// Most recent hook.
+	LastSeen string
+	// Hook events recorded in the window.
+	Events int64
+	// Delivery failures the install reported in the window.
+	Errors int64
+	// True when the install has sent nothing for quiet_after_days or longer.
+	Quiet bool
+}
+
+// AdminHookFleetResult is the result type of the admin service
+// getOrganizationHookFleet method.
+type AdminHookFleetResult struct {
+	// The organization ID.
+	OrganizationID string
+	// Length of the window in days.
+	WindowDays int
+	// Start of the window. Counts cover the whole UTC day it falls on.
+	Since string
+	// The hooks release Speakeasy currently ships. Versions below it are behind.
+	LatestVersion string
+	// The oldest supported hooks version. Versions below it are unsupported.
+	// Absent when no minimum is set.
+	MinimumVersion *string
+	// Days without traffic after which an install counts as quiet.
+	QuietAfterDays int
+	// True when the organization has more installs than the response holds.
+	// Breakdowns then cover only the installs returned.
+	Truncated bool
+	// Installs returned. Not the organization's full install count when truncated
+	// is true.
+	TotalInstalls int64
+	// Returned installs that have gone quiet. Only a window longer than
+	// quiet_after_days can return quiet installs.
+	QuietInstalls int64
+	// Hook events sent to the legacy endpoints in the window.
+	LegacyEvents int64
+	// Installs per version, newest version first.
+	Versions []*AdminHookFleetVersion
+	// Installs per install route, largest first.
+	Routes []*AdminHookFleetBucket
+	// Installs and events per endpoint generation, largest first.
+	Generations []*AdminHookFleetBucket
+	// Installs, most recently seen first.
+	Installs []*AdminHookFleetInstall
+}
+
+// Installs on one hooks version.
+type AdminHookFleetVersion struct {
+	// The hooks binary version, or empty for installs with no version.
+	Version string
+	// How the version compares to the release Speakeasy ships.
+	Status string
+	// Installs whose latest version is this one.
+	Installs int64
+}
+
 // One (organization, day, surface) cell of the inference hook grid.
 type AdminInferenceHookCell struct {
 	// The organization ID.
@@ -679,6 +847,14 @@ type AdminInferenceSpendMonth struct {
 	// Exclusive end of the UTC calendar month.
 	PeriodEnd string
 	SpendUsd  string
+}
+
+// AdminListCustomDomainsResult is the result type of the admin service
+// listCustomDomains method.
+type AdminListCustomDomainsResult struct {
+	// Every matching live custom domain, ordered by domain name. Organizations
+	// have at most one live custom domain, so the list is not paginated.
+	CustomDomains []*AdminCustomDomain
 }
 
 // AdminListOrganizationActivityResult is the result type of the admin service
@@ -1852,7 +2028,9 @@ type AdminUpstreamOAuthMigrationRun struct {
 	// key policies once every client is recorded. The auth-permission-defaults
 	// backfill grants the rest.
 	AuthPermissionGrantsWritten *int64
-	// Why recording typed auth clients failed, when it did. The upstream OAuth
+	// Why recording typed auth clients failed, when it did. For an organization
+	// enforcing upstream auth, the run recorded no credential choices, since those
+	// are decided from the typed auth clients. Otherwise the upstream OAuth
 	// migration itself is unaffected.
 	AuthClientsError *string
 	// The organization's status after the run.
@@ -2096,6 +2274,26 @@ type CloneOnboardingPlaybookPayload struct {
 	Name *string
 }
 
+// CreateGcpIamPlatformCredentialPayload is the payload type of the admin
+// service createGcpIamPlatformCredential method.
+type CreateGcpIamPlatformCredentialPayload struct {
+	AdminSessionToken *string
+	// A human-readable name for the credential.
+	Name string
+	// The service account Speakeasy impersonates. Set alone for direct
+	// impersonation, or as the hop alongside the wif_* fields.
+	ImpersonateServiceAccount *string
+	// Workload Identity Federation pool ID. Set together with the other wif_*
+	// fields.
+	WifPoolID *string
+	// Workload Identity Federation provider ID. Set together with the other wif_*
+	// fields.
+	WifProviderID *string
+	// GCP project number backing the WIF pool. Set together with the other wif_*
+	// fields.
+	WifProjectNumber *string
+}
+
 // CreateGlobalIssuerPayload is the payload type of the admin service
 // createGlobalIssuer method.
 type CreateGlobalIssuerPayload struct {
@@ -2273,6 +2471,14 @@ type CurateRegistryPromotionCandidatePayload struct {
 	RetryKey          string
 }
 
+// DeleteGcpIamPlatformCredentialPayload is the payload type of the admin
+// service deleteGcpIamPlatformCredential method.
+type DeleteGcpIamPlatformCredentialPayload struct {
+	// The ID of the credential to delete.
+	ID                string
+	AdminSessionToken *string
+}
+
 // DeleteGlobalIssuerPayload is the payload type of the admin service
 // deleteGlobalIssuer method.
 type DeleteGlobalIssuerPayload struct {
@@ -2360,11 +2566,61 @@ type ExtendTrialPayload struct {
 	Days int
 }
 
+// Provider-independent summary of an external credential.
+type ExternalCredentialSummary struct {
+	// The ID of the external credential.
+	ID string
+	// The organization that owns the credential.
+	OrganizationID string
+	// The cloud provider of the credential.
+	Provider string
+	// A human-readable name for the credential.
+	Name string
+	// When the credential was created.
+	CreatedAt string
+	// When the credential was last updated.
+	UpdatedAt string
+}
+
 // FetchGlobalIssuerMetadataPayload is the payload type of the admin service
 // fetchGlobalIssuerMetadata method.
 type FetchGlobalIssuerMetadataPayload struct {
 	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
 	Issuer            string
+	AdminSessionToken *string
+}
+
+// GcpIamCredential is the result type of the admin service
+// getGcpIamPlatformCredential method.
+type GcpIamCredential struct {
+	// The service account Speakeasy impersonates (impersonation approach, or the
+	// WIF hop).
+	ImpersonateServiceAccount *string
+	// Workload Identity Federation pool ID.
+	WifPoolID *string
+	// Workload Identity Federation provider ID.
+	WifProviderID *string
+	// GCP project number backing the WIF pool.
+	WifProjectNumber *string
+	// The ID of the external credential.
+	ID string
+	// The organization that owns the credential.
+	OrganizationID string
+	// The cloud provider of the credential.
+	Provider string
+	// A human-readable name for the credential.
+	Name string
+	// When the credential was created.
+	CreatedAt string
+	// When the credential was last updated.
+	UpdatedAt string
+}
+
+// GetGcpIamPlatformCredentialPayload is the payload type of the admin service
+// getGcpIamPlatformCredential method.
+type GetGcpIamPlatformCredentialPayload struct {
+	// The ID of the credential to get.
+	ID                string
 	AdminSessionToken *string
 }
 
@@ -2468,6 +2724,16 @@ type GetOrganizationChatAnalysisSettingsPayload struct {
 type GetOrganizationFeaturesPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// GetOrganizationHookFleetPayload is the payload type of the admin service
+// getOrganizationHookFleet method.
+type GetOrganizationHookFleetPayload struct {
+	AdminSessionToken *string
+	// Organization to report on.
+	OrganizationID string
+	// Window in days.
+	WindowDays int
 }
 
 // GetOrganizationOnboardingPlaybookPayload is the payload type of the admin
@@ -2700,6 +2966,17 @@ type IssuerMigratePreflight struct {
 	TargetTenantClientCount int
 }
 
+// ListCustomDomainsPayload is the payload type of the admin service
+// listCustomDomains method.
+type ListCustomDomainsPayload struct {
+	AdminSessionToken *string
+	// Only the domain owned by this organization.
+	OrganizationID *string
+	// Only domains last observed using this routing method. unknown also matches
+	// domains not yet checked.
+	DNSRoutingMethod *string
+}
+
 // ListCustomerUsagePayload is the payload type of the admin service
 // listCustomerUsage method.
 type ListCustomerUsagePayload struct {
@@ -2707,6 +2984,13 @@ type ListCustomerUsagePayload struct {
 	// Chart bucketing. monthly gives one bucket per billing cycle over the last
 	// six cycles. daily and weekly bucket the current cycle.
 	Interval string
+}
+
+// ListExternalCredentialsResult is the result type of the admin service
+// listPlatformExternalCredentials method.
+type ListExternalCredentialsResult struct {
+	// The external credentials.
+	Credentials []*ExternalCredentialSummary
 }
 
 // ListGlobalIssuerConvergenceCandidatesPayload is the payload type of the
@@ -2853,6 +3137,14 @@ type ListOrganizationsPayload struct {
 	// 1-based page number for offset paging (default 1). Supplying it selects
 	// offset paging.
 	Page *int
+}
+
+// ListPlatformExternalCredentialsPayload is the payload type of the admin
+// service listPlatformExternalCredentials method.
+type ListPlatformExternalCredentialsPayload struct {
+	// Only return credentials for this provider.
+	Provider          *string
+	AdminSessionToken *string
 }
 
 // ListPlatformMcpFeedbackPayload is the payload type of the admin service
@@ -3454,6 +3746,28 @@ type TriggerOrganizationChatAnalysisPayload struct {
 	OrganizationID    string
 }
 
+// UpdateGcpIamPlatformCredentialPayload is the payload type of the admin
+// service updateGcpIamPlatformCredential method.
+type UpdateGcpIamPlatformCredentialPayload struct {
+	// The ID of the credential to update.
+	ID                string
+	AdminSessionToken *string
+	// A human-readable name for the credential.
+	Name string
+	// The service account Speakeasy impersonates. Set alone for direct
+	// impersonation, or as the hop alongside the wif_* fields.
+	ImpersonateServiceAccount *string
+	// Workload Identity Federation pool ID. Set together with the other wif_*
+	// fields.
+	WifPoolID *string
+	// Workload Identity Federation provider ID. Set together with the other wif_*
+	// fields.
+	WifProviderID *string
+	// GCP project number backing the WIF pool. Set together with the other wif_*
+	// fields.
+	WifProjectNumber *string
+}
+
 // UpdateGlobalIssuerPayload is the payload type of the admin service
 // updateGlobalIssuer method.
 type UpdateGlobalIssuerPayload struct {
@@ -3610,6 +3924,31 @@ type UpdateSupportMatrixPayload struct {
 type UploadPlatformImagePayload struct {
 	AdminSessionToken *string
 	ContentType       string
+}
+
+// VerifyGcpIamPlatformCredentialPayload is the payload type of the admin
+// service verifyGcpIamPlatformCredential method.
+type VerifyGcpIamPlatformCredentialPayload struct {
+	// The ID of the credential to verify.
+	ID                string
+	AdminSessionToken *string
+}
+
+// VerifyPlatformCredentialResult is the result type of the admin service
+// verifyGcpIamPlatformCredential method.
+type VerifyPlatformCredentialResult struct {
+	// Whether the credential's identity resolved successfully.
+	Verified bool
+	// The effective principal the identity resolves to (e.g. a service-account
+	// email). May be empty when the resolution source cannot report it.
+	Principal *string
+	// How the identity was resolved. Lets the caller tell an in-cluster attached
+	// identity apart from local Application Default Credentials or an impersonated
+	// service account.
+	IdentitySource *string
+	// Human-readable detail about the probe outcome (e.g. why the principal is
+	// unavailable, or the failure reason).
+	Detail *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -471,6 +471,588 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: logout
+  /admin/customDomains.list:
+    get:
+      description: Lists live custom domains across organizations with their designated CNAME targets and observed DNS routing methods.
+      operationId: adminListCustomDomains
+      parameters:
+        - allowEmptyValue: true
+          description: Only the domain owned by this organization.
+          in: query
+          name: organization_id
+          schema:
+            description: Only the domain owned by this organization.
+            type: string
+        - allowEmptyValue: true
+          description: Only domains last observed using this routing method. unknown also matches domains not yet checked.
+          in: query
+          name: dns_routing_method
+          schema:
+            description: Only domains last observed using this routing method. unknown also matches domains not yet checked.
+            enum:
+              - per_domain_cname
+              - shared_cname
+              - a_record
+              - unknown
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminListCustomDomainsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listCustomDomains admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listCustomDomains
+      x-speakeasy-react-hook:
+        name: AdminListCustomDomains
+  /admin/externalCredentials.createGcpIam:
+    post:
+      description: Create a platform GCP IAM external credential. Set the wif_* triple for Workload Identity Federation, impersonate_service_account alone for direct impersonation, or neither for Speakeasy's ambient attached identity.
+      operationId: adminCreateGcpIamPlatformCredential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlatformGcpIamCredentialForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GcpIamCredential'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: createGcpIamPlatformCredential admin
+      tags:
+        - admin
+      x-speakeasy-name-override: createGcpIamPlatformCredential
+  /admin/externalCredentials.deleteGcpIam:
+    post:
+      description: Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.
+      operationId: adminDeleteGcpIamPlatformCredential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: deleteGcpIamPlatformCredential admin
+      tags:
+        - admin
+      x-speakeasy-name-override: deleteGcpIamPlatformCredential
+  /admin/externalCredentials.getGcpIam:
+    get:
+      description: Get a platform GCP IAM external credential by ID.
+      operationId: adminGetGcpIamPlatformCredential
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the credential to get.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the credential to get.
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GcpIamCredential'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: getGcpIamPlatformCredential admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getGcpIamPlatformCredential
+  /admin/externalCredentials.list:
+    get:
+      description: List the platform external credentials (organization_id NULL, project_id NULL) that Speakeasy authenticates into a cloud provider with. Optionally filter by provider.
+      operationId: adminListPlatformExternalCredentials
+      parameters:
+        - allowEmptyValue: true
+          description: Only return credentials for this provider.
+          in: query
+          name: provider
+          schema:
+            description: Only return credentials for this provider.
+            enum:
+              - aws_iam
+              - gcp_iam
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListExternalCredentialsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: listPlatformExternalCredentials admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listPlatformExternalCredentials
+  /admin/externalCredentials.updateGcpIam:
+    post:
+      description: Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.
+      operationId: adminUpdateGcpIamPlatformCredential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGcpIamPlatformCredentialRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GcpIamCredential'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: updateGcpIamPlatformCredential admin
+      tags:
+        - admin
+      x-speakeasy-name-override: updateGcpIamPlatformCredential
+  /admin/externalCredentials.verifyGcpIam:
+    post:
+      description: Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Nothing is persisted.
+      operationId: adminVerifyGcpIamPlatformCredential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyPlatformCredentialResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: verifyGcpIamPlatformCredential admin
+      tags:
+        - admin
+      x-speakeasy-name-override: verifyGcpIamPlatformCredential
   /admin/hookClients.get:
     get:
       description: 'Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization''s new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.'
@@ -4152,6 +4734,97 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: updateOrganization
+  /admin/organizationHookFleet.get:
+    get:
+      description: 'The hooks installs of one organization: which versions, install routes and endpoints its users'' machines use, which machines have gone quiet, and how much traffic still reaches the legacy endpoints.'
+      operationId: adminGetOrganizationHookFleet
+      parameters:
+        - allowEmptyValue: true
+          description: Organization to report on.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Organization to report on.
+            type: string
+        - allowEmptyValue: true
+          description: Window in days.
+          in: query
+          name: window_days
+          schema:
+            default: 30
+            description: Window in days.
+            format: int64
+            maximum: 89
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminHookFleetResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getOrganizationHookFleet admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getOrganizationHookFleet
+      x-speakeasy-react-hook:
+        name: AdminGetOrganizationHookFleet
   /admin/organizations.bulkUpdateAccountType:
     post:
       tags:
@@ -8896,6 +9569,71 @@ components:
           format: int64
       required:
         - projects_signaled
+    AdminCustomDomain:
+      type: object
+      properties:
+        activated:
+          type: boolean
+          description: Whether the domain is provisioned in ingress.
+        created_at:
+          type: string
+          description: When the domain was registered.
+          format: date-time
+        dns_checked_at:
+          type: string
+          description: When DNS configuration was observed. Absent until a DNS observation has run.
+          format: date-time
+        dns_configuration_status:
+          type: string
+          description: 'Advisory public DNS observation: matched, wrong_target, unconfirmed, not_found, check_failed, or not_configured. Does not establish endpoint availability.'
+        dns_routing_method:
+          type: string
+          description: 'How the latest health check observed the domain''s DNS routing traffic. One of: per_domain_cname, shared_cname, a_record (also covers flattened CNAME, ALIAS and ANAME records, which resolve to addresses), unknown. Absent until the first health check.'
+        dns_target:
+          type: string
+          description: The domain's designated CNAME target (<dns_target_token>.<suffix>). Absent when the admin server has no target suffix configured or the token is not yet assigned.
+        dns_target_token:
+          type: string
+          description: The random DNS label of the domain's designated CNAME target. Absent until assigned.
+        domain:
+          type: string
+          description: The custom domain name.
+        health_checked_at:
+          type: string
+          description: When the domain health was last checked.
+          format: date-time
+        health_issue:
+          type: string
+          description: Why the domain was last observed as unhealthy.
+        health_status:
+          type: string
+          description: 'Infrastructure and certificate status: unknown, healthy, or unhealthy. Unknown until a complete observation has run, or when an older worker has overwritten the health result.'
+        id:
+          type: string
+          description: The custom domain ID.
+          format: uuid
+        organization_id:
+          type: string
+          description: The organization that owns the domain.
+        organization_name:
+          type: string
+          description: The organization name.
+        organization_slug:
+          type: string
+          description: The organization slug.
+        verified:
+          type: boolean
+          description: Whether the domain passed DNS verification.
+      description: A live custom domain with its designated CNAME target and the DNS routing method health checks last observed.
+      required:
+        - id
+        - organization_id
+        - organization_name
+        - organization_slug
+        - domain
+        - verified
+        - activated
+        - created_at
     AdminCustomerUsage:
       type: object
       properties:
@@ -9111,6 +9849,188 @@ components:
         - sessions
         - inference
         - device_agents
+    AdminHookFleetBucket:
+      type: object
+      properties:
+        events:
+          type: integer
+          description: Hook events sent with this value across every install. Zero for routes.
+          format: int64
+        installs:
+          type: integer
+          description: Installs whose latest value is this one.
+          format: int64
+        value:
+          type: string
+          description: The route or endpoint generation. Empty when unknown.
+      description: Installs and events for one value of a breakdown.
+      required:
+        - value
+        - installs
+        - events
+    AdminHookFleetInstall:
+      type: object
+      properties:
+        endpoint_generation:
+          type: string
+          description: 'The hooks endpoint the install last sent to: legacy_unkeyed, legacy_keyed, ingest_script or ingest_binary. Empty for delivery failure reports only.'
+        errors:
+          type: integer
+          description: Delivery failures the install reported in the window.
+          format: int64
+        events:
+          type: integer
+          description: Hook events recorded in the window.
+          format: int64
+        first_seen:
+          type: string
+          description: First hook in the window.
+          format: date-time
+        harness:
+          type: string
+          description: The agent the hooks run in, such as claude, codex or cursor.
+        hostname:
+          type: string
+          description: The machine's hostname. Empty when the install sent none.
+        install_route:
+          type: string
+          description: How the hooks were installed, such as marketplace or download. Empty when unknown.
+        last_seen:
+          type: string
+          description: Most recent hook.
+          format: date-time
+        project_id:
+          type: string
+          description: The project the install reports to. Empty for traffic that named no project.
+        quiet:
+          type: boolean
+          description: True when the install has sent nothing for quiet_after_days or longer.
+        user_email:
+          type: string
+          description: The user the install reports as. Empty when the install sent no identity.
+        version:
+          type: string
+          description: The hooks binary version. Empty for the legacy curl hooks and for installs that sent no version.
+        version_status:
+          type: string
+          description: How the version compares to the release Speakeasy ships.
+          enum:
+            - current
+            - behind
+            - unsupported
+            - unknown
+      description: 'One hooks install: a project, user, machine and harness. Version, generation and route are the latest the install sent.'
+      required:
+        - project_id
+        - user_email
+        - hostname
+        - harness
+        - version
+        - version_status
+        - endpoint_generation
+        - install_route
+        - first_seen
+        - last_seen
+        - events
+        - errors
+        - quiet
+    AdminHookFleetResult:
+      type: object
+      properties:
+        generations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHookFleetBucket'
+          description: Installs and events per endpoint generation, largest first.
+        installs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHookFleetInstall'
+          description: Installs, most recently seen first.
+        latest_version:
+          type: string
+          description: The hooks release Speakeasy currently ships. Versions below it are behind.
+        legacy_events:
+          type: integer
+          description: Hook events sent to the legacy endpoints in the window.
+          format: int64
+        minimum_version:
+          type: string
+          description: The oldest supported hooks version. Versions below it are unsupported. Absent when no minimum is set.
+        organization_id:
+          type: string
+          description: The organization ID.
+        quiet_after_days:
+          type: integer
+          description: Days without traffic after which an install counts as quiet.
+          format: int64
+        quiet_installs:
+          type: integer
+          description: Returned installs that have gone quiet. Only a window longer than quiet_after_days can return quiet installs.
+          format: int64
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHookFleetBucket'
+          description: Installs per install route, largest first.
+        since:
+          type: string
+          description: Start of the window. Counts cover the whole UTC day it falls on.
+          format: date-time
+        total_installs:
+          type: integer
+          description: Installs returned. Not the organization's full install count when truncated is true.
+          format: int64
+        truncated:
+          type: boolean
+          description: True when the organization has more installs than the response holds. Breakdowns then cover only the installs returned.
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHookFleetVersion'
+          description: Installs per version, newest version first.
+        window_days:
+          type: integer
+          description: Length of the window in days.
+          format: int64
+      description: The hooks installs of one organization over a window, with version, route and endpoint breakdowns.
+      required:
+        - organization_id
+        - window_days
+        - since
+        - latest_version
+        - quiet_after_days
+        - truncated
+        - total_installs
+        - quiet_installs
+        - legacy_events
+        - versions
+        - routes
+        - generations
+        - installs
+    AdminHookFleetVersion:
+      type: object
+      properties:
+        installs:
+          type: integer
+          description: Installs whose latest version is this one.
+          format: int64
+        status:
+          type: string
+          description: How the version compares to the release Speakeasy ships.
+          enum:
+            - current
+            - behind
+            - unsupported
+            - unknown
+        version:
+          type: string
+          description: The hooks binary version, or empty for installs with no version.
+      description: Installs on one hooks version.
+      required:
+        - version
+        - status
+        - installs
     AdminInferenceHookCell:
       type: object
       properties:
@@ -9258,6 +10178,16 @@ components:
         - period_start
         - period_end
         - spend_usd
+    AdminListCustomDomainsResult:
+      type: object
+      properties:
+        custom_domains:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminCustomDomain'
+          description: Every matching live custom domain, ordered by domain name. Organizations have at most one live custom domain, so the list is not paginated.
+      required:
+        - custom_domains
     AdminListOrganizationActivityResult:
       type: object
       properties:
@@ -11489,7 +12419,7 @@ components:
           format: int64
         auth_clients_error:
           type: string
-          description: Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.
+          description: Why recording typed auth clients failed, when it did. For an organization enforcing upstream auth, the run recorded no credential choices, since those are decided from the typed auth clients. Otherwise the upstream OAuth migration itself is unaffected.
         auth_clients_written:
           type: integer
           description: Typed auth clients recorded.
@@ -11946,6 +12876,26 @@ components:
       required:
         - url
         - ownership_confirmed
+    CreatePlatformGcpIamCredentialForm:
+      type: object
+      properties:
+        impersonate_service_account:
+          type: string
+          description: The service account Speakeasy impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+        name:
+          type: string
+          description: A human-readable name for the credential.
+        wif_pool_id:
+          type: string
+          description: Workload Identity Federation pool ID. Set together with the other wif_* fields.
+        wif_project_number:
+          type: string
+          description: GCP project number backing the WIF pool. Set together with the other wif_* fields.
+        wif_provider_id:
+          type: string
+          description: Workload Identity Federation provider ID. Set together with the other wif_* fields.
+      required:
+        - name
     CreateRegistryEntryRequestBody:
       type: object
       properties:
@@ -12289,6 +13239,41 @@ components:
       required:
         - id
         - days
+    ExternalCredentialSummary:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the credential was created.
+          format: date-time
+        id:
+          type: string
+          description: The ID of the external credential.
+          format: uuid
+        name:
+          type: string
+          description: A human-readable name for the credential.
+        organization_id:
+          type: string
+          description: The organization that owns the credential.
+        provider:
+          type: string
+          description: The cloud provider of the credential.
+          enum:
+            - aws_iam
+            - gcp_iam
+        updated_at:
+          type: string
+          description: When the credential was last updated.
+          format: date-time
+      description: Provider-independent summary of an external credential.
+      required:
+        - id
+        - organization_id
+        - provider
+        - name
+        - created_at
+        - updated_at
     FetchIssuerMetadataRequestBody:
       type: object
       properties:
@@ -12297,6 +13282,53 @@ components:
           description: Issuer URL to fetch metadata for (e.g. https://login.linear.com).
       required:
         - issuer
+    GcpIamCredential:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the credential was created.
+          format: date-time
+        id:
+          type: string
+          description: The ID of the external credential.
+          format: uuid
+        impersonate_service_account:
+          type: string
+          description: The service account Speakeasy impersonates (impersonation approach, or the WIF hop).
+        name:
+          type: string
+          description: A human-readable name for the credential.
+        organization_id:
+          type: string
+          description: The organization that owns the credential.
+        provider:
+          type: string
+          description: The cloud provider of the credential.
+          enum:
+            - aws_iam
+            - gcp_iam
+        updated_at:
+          type: string
+          description: When the credential was last updated.
+          format: date-time
+        wif_pool_id:
+          type: string
+          description: Workload Identity Federation pool ID.
+        wif_project_number:
+          type: string
+          description: GCP project number backing the WIF pool.
+        wif_provider_id:
+          type: string
+          description: Workload Identity Federation provider ID.
+      description: A GCP IAM external credential.
+      required:
+        - id
+        - organization_id
+        - provider
+        - name
+        - created_at
+        - updated_at
     GetRegistryPromotionCandidateRequestBody:
       type: object
       properties:
@@ -12450,6 +13482,16 @@ components:
         - trusted_user_session_issuer_count
         - can_migrate
         - target_tenant_client_count
+    ListExternalCredentialsResult:
+      type: object
+      properties:
+        credentials:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalCredentialSummary'
+          description: The external credentials.
+      required:
+        - credentials
     ListGlobalRemoteSessionIssuersResult:
       type: object
       properties:
@@ -13687,6 +14729,31 @@ components:
           type: string
       required:
         - organization_id
+    UpdateGcpIamPlatformCredentialRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the credential to update.
+          format: uuid
+        impersonate_service_account:
+          type: string
+          description: The service account Speakeasy impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+        name:
+          type: string
+          description: A human-readable name for the credential.
+        wif_pool_id:
+          type: string
+          description: Workload Identity Federation pool ID. Set together with the other wif_* fields.
+        wif_project_number:
+          type: string
+          description: GCP project number backing the WIF pool. Set together with the other wif_* fields.
+        wif_provider_id:
+          type: string
+          description: Workload Identity Federation provider ID. Set together with the other wif_* fields.
+      required:
+        - id
+        - name
     UpdateOnboardingPlaybookRequestBody:
       type: object
       properties:
@@ -13902,6 +14969,28 @@ components:
       required:
         - revision
         - draft
+    VerifyPlatformCredentialResult:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Human-readable detail about the probe outcome (e.g. why the principal is unavailable, or the failure reason).
+        identity_source:
+          type: string
+          description: How the identity was resolved. Lets the caller tell an in-cluster attached identity apart from local Application Default Credentials or an impersonated service account.
+          enum:
+            - metadata_server
+            - application_default_credentials
+            - impersonation
+        principal:
+          type: string
+          description: The effective principal the identity resolves to (e.g. a service-account email). May be empty when the resolution source cannot report it.
+        verified:
+          type: boolean
+          description: Whether the credential's identity resolved successfully.
+      description: Result of a live 'who am I' probe against a platform credential's resolved identity.
+      required:
+        - verified
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey

@@ -398,6 +398,12 @@ const RouteProvider = () => {
           path={STANDALONE_ROUTES.riskPolicyChallengeAcknowledge}
           element={<RiskPolicyChallengeAcknowledge />}
         />
+        {/* Short form of the acknowledge link, /ack#<token>, for surfaces
+            that cut a hook message off after a line or two (Claude Cowork). */}
+        <Route
+          path={STANDALONE_ROUTES.riskPolicyChallengeAcknowledgeShort}
+          element={<RiskPolicyChallengeAcknowledge />}
+        />
         <Route path={STANDALONE_ROUTES.block} element={<BlockPage />} />
         <Route
           path={STANDALONE_ROUTES.sharedSkill}
