@@ -100,6 +100,12 @@ export interface ScopeCell {
   own?: ResourceAudienceEntry;
   /** This row's own block naming this server, the one this page can lift. */
   ownBlock?: ResourceAudienceEntry;
+  /**
+   * Every block of this row's own naming this server that takes this scope
+   * away: `ownBlock`, and a block on a scope this one satisfies (a view block
+   * on the manage line). Allowing the scope has to lift all of them.
+   */
+  ownBlocks: ResourceAudienceEntry[];
 }
 
 export interface AccessRow {
@@ -132,7 +138,14 @@ function reaches(entry: ResourceAudienceEntry, row: AccessRow): boolean {
 }
 
 function emptyCell(scope: ScopeKey, principalUrn: string): ScopeCell {
-  return { scope, principalUrn, grants: [], blocks: [], direct: [] };
+  return {
+    scope,
+    principalUrn,
+    grants: [],
+    blocks: [],
+    direct: [],
+    ownBlocks: [],
+  };
 }
 
 /**
@@ -227,6 +240,9 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
         // it: a view block takes manage as well.
         for (const key of SATISFIED_BY[blocked]) {
           row.cells[key].blocks.push(entry);
+          if (own && entry.appliesTo === "resource") {
+            row.cells[key].ownBlocks.push(entry);
+          }
         }
         if (own && entry.appliesTo === "resource") {
           row.cells[blocked].ownBlock = entry;

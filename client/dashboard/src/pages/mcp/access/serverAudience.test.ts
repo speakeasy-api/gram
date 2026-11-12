@@ -175,6 +175,27 @@ describe("principal precedence", () => {
     expect(effectiveReach(reaching, [], hana)?.capabilities).toEqual(["view"]);
   });
 
+  it("keeps narrowed connect when a view block takes whole-server manage", () => {
+    // The view block takes view and manage; the narrowed connect rule is
+    // independent of both and still reaches its tools.
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "manage" }),
+      entry({
+        principalUrn: "role:organization:gtm",
+        level: "use",
+        tools: ["search"],
+      }),
+      entry({
+        principalUrn: "role:global:admin",
+        displayName: "Admin",
+        level: "blocked_view",
+        appliesTo: "resource",
+      }),
+    ];
+
+    expect(effectiveReach(reaching)?.capabilities).toEqual(["use"]);
+  });
+
   it("does not let a rule covering every server outrank a block", () => {
     const reaching = [adminBlock, ownRule({ appliesTo: "all_resources" })];
 

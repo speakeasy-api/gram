@@ -120,9 +120,11 @@ function isBlock(entry: { level: AudienceLevel }): boolean {
 
 /** The block level that takes away exactly these capabilities, if any. */
 function blockLevelFor(capabilities: AudienceLevel[]): AudienceLevel | null {
-  const wanted = [...capabilities].sort().join(",");
+  const key = (levels: AudienceLevel[]) =>
+    [...levels].sort((a, b) => a.localeCompare(b)).join(",");
+  const wanted = key(capabilities);
   for (const [level, taken] of Object.entries(BLOCKED_CAPABILITIES)) {
-    if ([...taken].sort().join(",") === wanted) return level as AudienceLevel;
+    if (key(taken) === wanted) return level as AudienceLevel;
   }
   return null;
 }
@@ -335,13 +337,16 @@ export function effectiveReach(
   // A capability held over every tool, versus one held over a few: the second
   // is worth naming separately rather than implying it everywhere.
   const wholeServer = granting.filter((entry) => !isNarrowed(entry));
-  const capabilities = [
-    ...new Set(
-      (wholeServer.length > 0 ? wholeServer : granting).flatMap((entry) =>
-        capabilitiesOf(entry.level),
-      ),
-    ),
-  ].filter((capability) => !blocked.has(capability));
+  const surviving = (entries: ResourceAudienceEntry[]) =>
+    [
+      ...new Set(entries.flatMap((entry) => capabilitiesOf(entry.level))),
+    ].filter((capability) => !blocked.has(capability));
+  // When a block takes everything the whole-server rules give, a narrowed
+  // rule can still leave something (connect to a few tools, say).
+  let capabilities = surviving(wholeServer.length > 0 ? wholeServer : granting);
+  if (capabilities.length === 0 && wholeServer.length > 0) {
+    capabilities = surviving(granting);
+  }
   // Everything this server offered them has been taken away, so they do not
   // reach it at all.
   if (capabilities.length === 0) return null;

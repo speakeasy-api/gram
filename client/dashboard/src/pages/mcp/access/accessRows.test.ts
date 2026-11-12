@@ -121,12 +121,14 @@ describe("scope resolution", () => {
   it("takes manage away with a view block, since manage includes view", () => {
     const row = rowFor([
       role("Engineering", { level: "manage" }),
+      role("Engineering", { level: "use" }),
       role("Engineering", { appliesTo: "resource", level: "blocked_view" }),
     ]);
 
     expect(scopeState(row, "view", catalog).granted).toBe(false);
     expect(scopeState(row, "manage", catalog).granted).toBe(false);
-    expect(scopeState(row, "use", catalog).granted).toBe(false);
+    // Connect is implied by neither, so the view block leaves it.
+    expect(scopeState(row, "use", catalog).granted).toBe(true);
   });
 
   it("leaves view standing under a manage block", () => {
