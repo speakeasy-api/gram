@@ -183,20 +183,25 @@ function RemoteMcpToolsSectionInner({
     connectUrl,
     headers,
   } = connection;
-  const { healthFor } = useToolHealth({ mcpServerId });
+  const { healthFor, isLoading: isHealthLoading } = useToolHealth({
+    mcpServerId,
+  });
 
+  // Alphabetical, whatever order the server (hosted or remote) lists them in.
   const tools = useMemo<InspectTool[]>(
     () =>
-      Object.entries(listed ?? {}).map(([name, tool]) => ({
-        name,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        annotations: tool.annotations,
-        stored: metadataByTool[name],
-        unavailable: tool.unavailable
-          ? { reason: tool.unavailableReason }
-          : undefined,
-      })),
+      Object.entries(listed ?? {})
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([name, tool]) => ({
+          name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          annotations: tool.annotations,
+          stored: metadataByTool[name],
+          unavailable: tool.unavailable
+            ? { reason: tool.unavailableReason }
+            : undefined,
+        })),
     [listed, metadataByTool],
   );
 
@@ -269,6 +274,7 @@ function RemoteMcpToolsSectionInner({
         ) : undefined
       }
       healthFor={healthFor}
+      isHealthLoading={isHealthLoading}
       accessHref={accessHref}
       runTool={
         connectUrl

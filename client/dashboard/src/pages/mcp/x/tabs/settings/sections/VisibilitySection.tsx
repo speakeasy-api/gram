@@ -2,21 +2,27 @@ import {
   FooterSaveButton,
   SettingsSection,
 } from "@/components/detail/settings-section";
+import { useReportUnsavedChanges } from "@/components/detail/settings-layout";
+import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
 import { ServerUsageConfirmation } from "@/components/mcp-server-usage/ServerUsageConfirmation";
 import { useServerUsageConfirmation } from "@/components/mcp-server-usage/useServerUsageConfirmation";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
 import { isKnownEnumValue } from "@/lib/enum";
-import { getTunneledMcpServerArgs } from "@/lib/sources";
+import { getTunneledMcpServerArgs, mcpServerRouteParam } from "@/lib/sources";
 import { cn } from "@/lib/utils";
 import { useHostedVisibilityGuard } from "@/pages/mcp/x/hosted/useHostedVisibilityGuard";
-import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import {
+  mcpServerTabHref,
+  standsInForToolset,
+} from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { useRoutes } from "@/routes";
 import {
   HOSTED_PUBLIC_DESCRIPTION,
-  isOnOffServer,
   useMcpServerVisibilityUpdate,
 } from "@/pages/mcp/x/mcpServerVisibility";
 import type {
@@ -25,10 +31,15 @@ import type {
 } from "@gram/client/models/components/mcpserver.js";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
+import { useUpdateTunneledMcpServerMutation } from "@gram/client/react-query/updateTunneledMcpServer.js";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { toast } from "sonner";
 import { MCP_PUBLIC_ACCESS_SECTION_ID } from "./PublicAccessSection";
+import { invalidateTunneledMcpSourceViews } from "./sourceInvalidation";
 
+/** The Availability (on or off) section; readiness links land here. */
 export const MCP_VISIBILITY_SECTION_ID = "visibility";
 
 type Option = {
@@ -37,7 +48,8 @@ type Option = {
   description: string;
 };
 
-// Remote and unproxied servers are either on or off.
+// Every server is either on or off. "Enabled" writes private when the server
+// was off; a server that is already on keeps its private or public choice.
 const AVAILABILITY_OPTIONS: Option[] = [
   {
     value: "private",
@@ -51,29 +63,27 @@ const AVAILABILITY_OPTIONS: Option[] = [
   },
 ];
 
-const DISABLED_OPTION: Option = {
-  value: "disabled",
-  label: "Disabled",
-  description: "The server is offline. No one can connect to it.",
-};
-const PRIVATE_OPTION: Option = {
-  value: "private",
-  label: "Private",
-  description: "Only people and agents with access can connect.",
-};
-const PUBLIC_OPTION: Option = {
-  value: "public",
-  label: "Public",
-  description:
-    "Anyone can connect anonymously, without signing in. Every tool is open to the public internet.",
-};
+// Hosted and tunneled servers, once on, also choose who may connect.
+const VISIBILITY_OPTIONS: Option[] = [
+  {
+    value: "private",
+    label: "Private",
+    description: "Only people and agents with access can connect.",
+  },
+  {
+    value: "public",
+    label: "Public",
+    description:
+      "Anyone can connect anonymously, without signing in. Every tool is open to the public internet.",
+  },
+];
 
 /**
- * Who can reach the server: off, people with access, or anyone. Remote
- * servers only switch on and off; unproxied servers can't be switched at all. The choice waits for Save, then
- * asks for confirmation wherever the change could cut clients off.
+ * Whether the server is on. Every server kind shows this at the top of
+ * General; unproxied servers can't be switched at all. The choice waits for
+ * Save, then asks for confirmation, since either way changes who is cut off.
  */
-export function VisibilitySection({
+export function AvailabilitySection({
   mcpServer,
 }: {
   mcpServer: McpServer;
@@ -87,24 +97,9 @@ export function VisibilitySection({
     apply: updateVisibility,
     isApplying: updating,
   });
-  const isTunneled = !!mcpServer.tunneledMcpServerId;
-  const { data: tunneledSource } = useGetTunneledMcpServer(
-    getTunneledMcpServerArgs(mcpServer.tunneledMcpServerId ?? ""),
-    undefined,
-    { enabled: isTunneled },
-  );
-  // Public needs the tunnel source owner's consent first (double opt-in).
-  const publicBlocked = isTunneled && !(tunneledSource?.allowPublic ?? false);
-
-  const onOff = isOnOffServer(mcpServer);
-  const options = onOff
-    ? AVAILABILITY_OPTIONS
-    : [DISABLED_OPTION, PRIVATE_OPTION, PUBLIC_OPTION];
-  // An on/off server that is public counts as on; saving "on" leaves it public.
+  // A public server counts as on; saving "on" leaves it public.
   const current: McpServerVisibility =
-    onOff && mcpServer.visibility === "public"
-      ? "private"
-      : mcpServer.visibility;
+    mcpServer.visibility === "public" ? "private" : mcpServer.visibility;
   const known = isKnownEnumValue(
     KnownUpdateMcpServerFormVisibility,
     mcpServer.visibility,
@@ -121,42 +116,22 @@ export function VisibilitySection({
     useState<McpServerVisibility | null>(null);
 
   const dirty = draft !== current;
+  useReportUnsavedChanges(canWrite && dirty);
   const save = () => {
     if (!canWrite || !dirty || updating) return;
     if (hosted) guard.request(draft);
-    else if (draft === "disabled" || current === "disabled")
-      setPendingAvailability(draft);
-    else updateVisibility(draft);
+    else setPendingAvailability(draft);
   };
 
-  const describe = (option: Option): string => {
-    if (option.value !== "public") return option.description;
-    if (publicBlocked)
-      return "Allow public access on the tunnel source first. Anyone could then connect without signing in.";
-    if (hosted && guard.publicUnavailable) return "Loading environment data…";
-    return hosted ? HOSTED_PUBLIC_DESCRIPTION : option.description;
-  };
-  const optionBlocked = (option: Option) =>
-    option.value === "public" &&
-    (publicBlocked || (hosted && guard.publicUnavailable));
-
-  const title = onOff ? "Availability" : "Visibility";
-  const currentOption = options.find((option) => option.value === current);
+  const currentOption = AVAILABILITY_OPTIONS.find(
+    (option) => option.value === current,
+  );
 
   let hint: React.ReactNode = null;
   if (!hasWriteScope) {
     hint = "Only people who can edit MCP servers can change this.";
   } else if (!known) {
-    hint = `Refresh the page before changing this server’s ${title.toLowerCase()}.`;
-  } else if (publicBlocked) {
-    hint = (
-      <Link
-        to={{ hash: MCP_PUBLIC_ACCESS_SECTION_ID }}
-        className="text-foreground underline underline-offset-2"
-      >
-        Allow public access below
-      </Link>
-    );
+    hint = "Refresh the page before changing this server’s availability.";
   }
 
   // Clients connect straight to the vendor, so Speakeasy has no switch that
@@ -183,80 +158,25 @@ export function VisibilitySection({
   return (
     <SettingsSection id={MCP_VISIBILITY_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>{title}</SettingsSection.Title>
+        <SettingsSection.Title>Availability</SettingsSection.Title>
         <SettingsSection.Description>
-          {onOff
-            ? "Turn the server off to stop every connection without deleting anything."
-            : "Choose who can connect to this server."}
+          Turn the server off to stop every connection without deleting
+          anything.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
           {canWrite ? (
-            <RadioGroup
-              aria-label={title}
+            <OptionRadios
+              label="Availability"
+              options={AVAILABILITY_OPTIONS}
               value={draft}
-              onValueChange={(value) => {
-                const next = options.find((option) => option.value === value);
-                if (next && !optionBlocked(next)) setDraft(next.value);
-              }}
+              current={current}
               disabled={updating}
-              className="gap-0 divide-y"
-            >
-              {options.map((option) => {
-                const blocked = optionBlocked(option);
-                const id = `mcp-visibility-${option.value}`;
-                return (
-                  <label
-                    key={option.value}
-                    htmlFor={id}
-                    className={cn(
-                      "flex items-start gap-3 py-3 first:pt-0 last:pb-0",
-                      blocked ? "cursor-not-allowed" : "cursor-pointer",
-                    )}
-                  >
-                    <RadioGroupItem
-                      id={id}
-                      value={option.value}
-                      disabled={blocked}
-                      className="mt-0.5"
-                    />
-                    <span className="min-w-0 space-y-0.5">
-                      <Text
-                        as="span"
-                        small
-                        className={cn(
-                          "block font-medium",
-                          blocked && "opacity-60",
-                        )}
-                      >
-                        {option.label}
-                        {option.value === current ? (
-                          <span className="text-muted-foreground font-normal">
-                            {" "}
-                            · Current
-                          </span>
-                        ) : null}
-                      </Text>
-                      <Text as="span" muted small className="block max-w-2xl">
-                        {describe(option)}
-                      </Text>
-                    </span>
-                  </label>
-                );
-              })}
-            </RadioGroup>
+              onChange={setDraft}
+            />
           ) : (
-            <div className="space-y-0.5">
-              <Text small className="font-medium">
-                {currentOption?.label ?? "Unknown"}
-              </Text>
-              {currentOption ? (
-                <Text muted small className="block max-w-2xl">
-                  {describe(currentOption)}
-                </Text>
-              ) : null}
-            </div>
+            <CurrentOption option={currentOption} />
           )}
         </SettingsSection.Body>
         <SettingsSection.Footer>
@@ -284,6 +204,285 @@ export function VisibilitySection({
         }}
       />
     </SettingsSection>
+  );
+}
+
+/**
+ * Who may connect to a hosted or tunneled server that is on: people with
+ * access, or anyone. A tunneled server going public also records the tunnel
+ * source's consent, in the same Save.
+ */
+export function VisibilitySection({
+  mcpServer,
+}: {
+  mcpServer: McpServer;
+}): JSX.Element {
+  const { hasWriteScope, canWrite, updateVisibility, updating } =
+    useMcpServerVisibilityUpdate(mcpServer);
+  const hosted = standsInForToolset(mcpServer);
+  const guard = useHostedVisibilityGuard({
+    server: mcpServer,
+    hosted,
+    apply: updateVisibility,
+    isApplying: updating,
+  });
+  const isTunneled = !!mcpServer.tunneledMcpServerId;
+  const { data: tunneledSource } = useGetTunneledMcpServer(
+    getTunneledMcpServerArgs(mcpServer.tunneledMcpServerId ?? ""),
+    undefined,
+    { enabled: isTunneled },
+  );
+  const queryClient = useQueryClient();
+  const routes = useRoutes();
+  const teamAccessHref = mcpServerTabHref(
+    routes,
+    mcpServerRouteParam(mcpServer),
+    "team-access",
+  );
+  const allowPublicUpdate = useUpdateTunneledMcpServerMutation();
+  const [allowingPublic, setAllowingPublic] = useState(false);
+  const pending = updating || allowingPublic;
+
+  const off = mcpServer.visibility === "disabled";
+  const current = mcpServer.visibility;
+  const known = isKnownEnumValue(
+    KnownUpdateMcpServerFormVisibility,
+    mcpServer.visibility,
+  );
+
+  const [draft, setDraft] = useState<McpServerVisibility>(current);
+  useEffect(() => {
+    setDraft(current);
+  }, [mcpServer.id, current]);
+
+  const dirty = !off && draft !== current;
+  useReportUnsavedChanges(canWrite && dirty);
+  const goingPublic = dirty && draft === "public";
+
+  const save = async () => {
+    if (!canWrite || !dirty || pending) return;
+    if (hosted) {
+      guard.request(draft);
+      return;
+    }
+    // Public needs the tunnel source's consent; it is given with this Save.
+    if (draft === "public" && isTunneled && !tunneledSource?.allowPublic) {
+      if (!tunneledSource) return;
+      setAllowingPublic(true);
+      try {
+        await allowPublicUpdate.mutateAsync({
+          request: {
+            updateTunneledMcpServerForm: {
+              id: tunneledSource.id,
+              allowPublic: true,
+            },
+          },
+        });
+        await invalidateTunneledMcpSourceViews(queryClient);
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Couldn't allow public access on the tunnel",
+        );
+        return;
+      } finally {
+        setAllowingPublic(false);
+      }
+    }
+    updateVisibility(draft);
+  };
+
+  const describe = (option: Option): React.ReactNode => {
+    if (option.value === "private") {
+      return (
+        <>
+          {option.description}{" "}
+          <Link
+            to={teamAccessHref}
+            className="text-foreground underline underline-offset-2"
+          >
+            Manage who has access
+          </Link>
+        </>
+      );
+    }
+    if (hosted && guard.publicUnavailable) return "Loading environment data…";
+    return hosted ? HOSTED_PUBLIC_DESCRIPTION : option.description;
+  };
+  const publicUnavailable =
+    (hosted && guard.publicUnavailable) || (isTunneled && !tunneledSource);
+  const currentOption = VISIBILITY_OPTIONS.find(
+    (option) => option.value === current,
+  );
+
+  let hint: React.ReactNode = null;
+  if (!hasWriteScope) {
+    hint = "Only people who can edit MCP servers can change this.";
+  } else if (!known) {
+    hint = "Refresh the page before changing this server’s visibility.";
+  } else if (off) {
+    hint = (
+      <>
+        The server is off.{" "}
+        <Link
+          to={{ hash: SETTINGS_GROUPS.general.id }}
+          className="text-foreground underline underline-offset-2"
+        >
+          Turn it on under Availability
+        </Link>{" "}
+        to choose who can connect.
+      </>
+    );
+  }
+
+  return (
+    <SettingsSection id={MCP_PUBLIC_ACCESS_SECTION_ID}>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Visibility</SettingsSection.Title>
+        <SettingsSection.Description>
+          Choose who can connect to this server.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          {canWrite && !off ? (
+            <OptionRadios
+              label="Visibility"
+              options={VISIBILITY_OPTIONS}
+              value={draft}
+              current={current}
+              disabled={pending}
+              blocked={(option) =>
+                option.value === "public" && publicUnavailable
+              }
+              describe={describe}
+              onChange={setDraft}
+            />
+          ) : off ? (
+            <Text muted small className="block max-w-2xl">
+              No one can connect while the server is off.
+            </Text>
+          ) : (
+            <CurrentOption option={currentOption} describe={describe} />
+          )}
+          {goingPublic && isTunneled ? (
+            <Alert variant="warning" dismissible={false}>
+              Anyone on the internet will be able to call every tool this tunnel
+              exposes, with no sign-in. Only make it public if the upstream
+              server is safe to expose.
+            </Alert>
+          ) : null}
+        </SettingsSection.Body>
+        <SettingsSection.Footer>
+          <SettingsSection.FooterHint>{hint}</SettingsSection.FooterHint>
+          {canWrite && !off ? (
+            <SettingsSection.FooterActions>
+              <FooterSaveButton
+                pending={pending}
+                disabled={!dirty || pending}
+                onClick={() => void save()}
+              />
+            </SettingsSection.FooterActions>
+          ) : null}
+        </SettingsSection.Footer>
+      </SettingsSection.Panel>
+      {guard.dialogs}
+    </SettingsSection>
+  );
+}
+
+function OptionRadios({
+  label,
+  options,
+  value,
+  current,
+  disabled,
+  blocked = () => false,
+  describe = (option) => option.description,
+  onChange,
+}: {
+  label: string;
+  options: Option[];
+  value: McpServerVisibility;
+  current: McpServerVisibility;
+  disabled: boolean;
+  blocked?: (option: Option) => boolean;
+  describe?: (option: Option) => React.ReactNode;
+  onChange: (value: McpServerVisibility) => void;
+}): JSX.Element {
+  return (
+    <RadioGroup
+      aria-label={label}
+      value={value}
+      onValueChange={(next) => {
+        const option = options.find((candidate) => candidate.value === next);
+        if (option && !blocked(option)) onChange(option.value);
+      }}
+      disabled={disabled}
+      className="gap-0 divide-y"
+    >
+      {options.map((option) => {
+        const isBlocked = blocked(option);
+        const id = `mcp-visibility-${option.value}`;
+        return (
+          <div
+            key={option.value}
+            className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
+          >
+            <RadioGroupItem
+              id={id}
+              value={option.value}
+              disabled={isBlocked}
+              className="mt-0.5"
+            />
+            <span className="min-w-0 space-y-0.5">
+              <label
+                htmlFor={id}
+                className={cn(
+                  "block text-sm font-medium",
+                  isBlocked
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer",
+                )}
+              >
+                {option.label}
+                {option.value === current ? (
+                  <span className="text-muted-foreground font-normal">
+                    {" "}
+                    · Current
+                  </span>
+                ) : null}
+              </label>
+              <Text as="span" muted small className="block max-w-2xl">
+                {describe(option)}
+              </Text>
+            </span>
+          </div>
+        );
+      })}
+    </RadioGroup>
+  );
+}
+
+function CurrentOption({
+  option,
+  describe = (shown) => shown.description,
+}: {
+  option: Option | undefined;
+  describe?: (option: Option) => React.ReactNode;
+}): JSX.Element {
+  return (
+    <div className="space-y-0.5">
+      <Text small className="font-medium">
+        {option?.label ?? "Unknown"}
+      </Text>
+      {option ? (
+        <Text muted small className="block max-w-2xl">
+          {describe(option)}
+        </Text>
+      ) : null}
+    </div>
   );
 }
 

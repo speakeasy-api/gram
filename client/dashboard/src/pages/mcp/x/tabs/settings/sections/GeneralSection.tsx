@@ -26,6 +26,7 @@ import {
   FooterSaveButton,
   SettingsSection,
 } from "@/components/detail/settings-section";
+import { useReportUnsavedChanges } from "@/components/detail/settings-layout";
 
 // Matches MCP_SERVER_NAME_MAX_LENGTH on the legacy page. The limit is enforced
 // here, not by the mcp_servers.name column.
@@ -128,6 +129,7 @@ function GeneralSectionContent({
   const nameDirty = trimmedDraft !== (mcpServer.name ?? "").trim();
   const upstreamDirty = !!upstream?.dirty;
   const dirty = nameDirty || metadataForm.brandingDirty || upstreamDirty;
+  useReportUnsavedChanges(dirty);
   const saving =
     update.isPending || metadataForm.isLoading || !!upstream?.pending;
   const supportsEditing = isKnownEnumValue(

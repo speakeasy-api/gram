@@ -172,7 +172,15 @@ describe("tunnel agent readiness", () => {
         description,
         href,
         // A tunnel that is down fails requests now; it is not a step left.
-        ...(ready === false ? { broken: true } : {}),
+        ...(ready === false
+          ? {
+              broken: true,
+              chipLabel:
+                overview === "No connected tunnel agents"
+                  ? "Tunnel offline"
+                  : "Tunnel can't reach server",
+            }
+          : {}),
       });
     },
   );
@@ -187,6 +195,8 @@ describe("tunnel agent readiness", () => {
       }),
     ).toMatchObject({
       ready: null,
+      // Pending, so the header names no step until it settles.
+      pending: true,
       description: "Checking for connected tunnel agents.",
     });
   });

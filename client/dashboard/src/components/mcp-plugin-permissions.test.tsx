@@ -59,6 +59,9 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
         : "disabled",
   }),
 }));
+vi.mock("./mcp/useMcpServerReachability", () => ({
+  useMcpServerReachability: () => ({ kind: "off" }),
+}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-a" }),
   useProject: () => ({ id: "project-a", slug: "project-slug" }),
@@ -260,7 +263,6 @@ function DetailChrome() {
         <span key={item.title}>{item.title}</span>
       ))}
       <McpServerReadinessBar checks={chrome.readinessChecks} />
-      {chrome.identity}
       {chrome.installLinks.map((link) => (
         <a key={link.url} href={link.url}>
           {link.label}
@@ -569,74 +571,6 @@ describe("MCP server readiness", () => {
   });
 });
 
-describe("remote MCP server Identity summary", () => {
-  const remote = {
-    id: "server-a",
-    name: "Server",
-    remoteMcpServerId: "remote-source-a",
-  };
-  function setFeatures(features: typeof identityGate.features): void {
-    identityGate.features = features;
-  }
-  afterEach(() => {
-    setFeatures({
-      isPending: false,
-      isError: false,
-      data: { upstreamAuthEnforced: false },
-    });
-  });
-
-  it("reports the credentials status when enforcement is on", () => {
-    state.mcpServer = remote;
-    setFeatures({
-      isPending: false,
-      isError: false,
-      data: { upstreamAuthEnforced: true },
-    });
-    render(<DetailChrome />, { wrapper: MemoryRouter });
-    expect(
-      screen.getByRole("link", { name: /Identity: Credentials set up/ }),
-    ).toBeTruthy();
-    expect(screen.queryByRole("link", { name: /Identity: Manual/ })).toBeNull();
-  });
-
-  it("keeps the legacy identity mode when enforcement is off", () => {
-    state.mcpServer = remote;
-    render(<DetailChrome />, { wrapper: MemoryRouter });
-    expect(screen.getByRole("link", { name: /Identity: Manual/ })).toBeTruthy();
-    expect(
-      screen.queryByRole("link", { name: /Credentials set up/ }),
-    ).toBeNull();
-  });
-
-  it.each([
-    [
-      "loading",
-      { isPending: true, isError: false, data: undefined },
-      "Loading…",
-    ],
-    [
-      "failed",
-      { isPending: false, isError: true, data: undefined },
-      "Identity unavailable",
-    ],
-    [
-      "unreadable",
-      { isPending: false, isError: false, data: {} },
-      "Identity unavailable",
-    ],
-  ] as const)(
-    "shows no identity mode while enforcement is %s",
-    (_state, features, text) => {
-      state.mcpServer = remote;
-      setFeatures(features);
-      render(<DetailChrome />, { wrapper: MemoryRouter });
-      expect(screen.getByText(text)).toBeTruthy();
-      expect(screen.queryByRole("link", { name: /^Identity:/ })).toBeNull();
-    },
-  );
-});
-
 describe("remote MCP server readiness under enforcement", () => {
   const remote = {
     id: "server-a",
@@ -684,7 +618,7 @@ describe("remote MCP server readiness under enforcement", () => {
     expect(authenticationCheck().getAttribute("title")).toBe(description);
   });
 
-  it("is not ready and does not probe the upstream while enforcement loads", () => {
+  it("is still checking and does not probe the upstream while enforcement loads", () => {
     state.mcpServer = remote;
     identityGate.features = {
       isPending: true,
@@ -692,9 +626,10 @@ describe("remote MCP server readiness under enforcement", () => {
       data: undefined,
     };
     render(<DetailChrome />, { wrapper: MemoryRouter });
-    expect(authenticationCheck().getAttribute("data-ready")).toBe("false");
+    // Undetermined, not a step left, so the header waits for it.
+    expect(authenticationCheck().getAttribute("data-ready")).toBe("null");
     expect(authenticationCheck().getAttribute("title")).toBe(
-      "The identity status is not available yet.",
+      "Checking how Speakeasy signs in to this server.",
     );
     expect(identityGate.probe).not.toHaveBeenCalledWith(
       "remote-source-a",

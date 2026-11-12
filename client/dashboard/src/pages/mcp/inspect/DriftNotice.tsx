@@ -20,7 +20,6 @@ export function DriftNotice({
   isSyncing: boolean;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
-  const count = drift.length;
   return (
     <div className="flex flex-col gap-3">
       <button
@@ -30,10 +29,7 @@ export function DriftNotice({
         className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-left text-sm"
       >
         <StatusDot tone="warning" />
-        <span>
-          {count} {count === 1 ? "tool has" : "tools have"} changed on the
-          server since Speakeasy saved its tool list
-        </span>
+        <span>{driftSummary(drift)}</span>
         <span className="text-foreground flex items-center gap-0.5 font-medium">
           Review
           <ChevronRight
@@ -50,4 +46,30 @@ export function DriftNotice({
       ) : null}
     </div>
   );
+}
+
+/**
+ * What changed, by kind: "1 tool was removed on the server", or
+ * "2 tools were added and 1 tool changed on the server".
+ */
+function driftSummary(drift: ToolDrift[]): string {
+  const count = (kind: ToolDrift["kind"]) =>
+    drift.filter((entry) => entry.kind === kind).length;
+  const tools = (n: number, verb: string) =>
+    n === 1 ? `1 tool ${verb}` : `${n} tools ${verb}`;
+  const added = count("new");
+  const changed = count("changed");
+  const removed = count("removed");
+  const parts = [
+    added > 0 ? tools(added, added === 1 ? "was added" : "were added") : "",
+    changed > 0 ? tools(changed, "changed") : "",
+    removed > 0
+      ? tools(removed, removed === 1 ? "was removed" : "were removed")
+      : "",
+  ].filter(Boolean);
+  const joined =
+    parts.length > 1
+      ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`
+      : (parts[0] ?? "");
+  return `${joined} on the server`;
 }

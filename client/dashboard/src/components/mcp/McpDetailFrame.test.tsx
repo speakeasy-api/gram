@@ -1,9 +1,8 @@
-import type { ReadinessCheck } from "@/components/mcp-server-readiness-bar";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { McpDetailFrame } from "./McpDetailFrame";
-import type { McpDetailChrome } from "./mcpDetailChrome";
+import type { McpDetailChrome, McpReadinessCheck } from "./mcpDetailChrome";
 
 vi.mock("@/components/page-layout", () => {
   const Pass = ({ children }: { children?: React.ReactNode }) => (
@@ -15,7 +14,7 @@ vi.mock("@/components/page-layout", () => {
 
 afterEach(cleanup);
 
-function renderChip(checks: ReadinessCheck[]) {
+function renderChip(checks: McpReadinessCheck[]) {
   const chrome: McpDetailChrome = {
     name: "Example",
     icon: () => null,
@@ -83,10 +82,40 @@ it("reads Ready when every required check is done", () => {
   expect(screen.getByText("Ready")).toBeTruthy();
 });
 
-it("names what is broken before any step left", () => {
+it("counts issues and steps together, so the chip matches the list", () => {
   renderChip([check("url", false), check("tunnel", false, false, true)]);
-  expect(screen.getByText("1 issue: tunnel")).toBeTruthy();
+  expect(
+    screen.getByRole("button", {
+      name: "2 to fix: url, tunnel. Open checklist",
+    }),
+  ).toBeTruthy();
+});
+
+it("uses a broken check's short label when it is the only one", () => {
+  renderChip([
+    check("url", true),
+    { ...check("availability", false, false, true), chipLabel: "Turned off" },
+  ]);
+  expect(screen.getByText("Turned off")).toBeTruthy();
+});
+
+it("names no step while another check is still pending", () => {
+  // Whichever query settles first, the chip says the same thing.
+  renderChip([check("url", false), { ...check("auth", null), pending: true }]);
+  expect(screen.getByText("Checking…")).toBeTruthy();
   expect(screen.queryByText(/step/)).toBeNull();
+});
+
+it("labels each open row in words and closes when a row is followed", () => {
+  renderChip([
+    { ...check("url", false), href: "/settings#server-url" },
+    { ...check("plugin", false, true), href: "/plugins" },
+  ]);
+  fireEvent.click(screen.getByText("1 step left: url"));
+  expect(screen.getByText("To do")).toBeTruthy();
+  expect(screen.getByText("Optional")).toBeTruthy();
+  fireEvent.click(screen.getByRole("link", { name: /url/ }));
+  expect(screen.queryByText("To do")).toBeNull();
 });
 
 it("counts several broken checks as issues", () => {

@@ -1,4 +1,3 @@
-import { type ReadinessCheck } from "@/components/mcp-server-readiness-bar";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
@@ -19,20 +18,26 @@ import {
 import type { MemberRow } from "@/pages/mcp/gateway/memberRows";
 import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
 import { mcpServerTabHref } from "@/pages/mcp/x/MCPServerDetailsRouting";
-import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
-import { mcpServerRouteParam } from "@/lib/sources";
 import {
   type GatewayMemberSetupGap,
   useGatewayMemberSetup,
 } from "./useGatewayMemberSetup";
 import { GATEWAY_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/gateway/GatewaySettingsTab";
+import {
+  GATEWAY_ADD_SERVERS_HASH,
+  GATEWAY_SERVERS_SECTION_ID,
+} from "@/pages/mcp/gateway/GatewayMembersSection";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useRoutes } from "@/routes";
 import { useGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { Network } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { McpDetailChrome } from "./mcpDetailChrome";
+import {
+  MCP_ENVIRONMENT_VARIABLES_SECTION_ID,
+  type McpDetailChrome,
+  type McpReadinessCheck,
+} from "./mcpDetailChrome";
 import { buildMcpDetailNavItems } from "./mcpDetailNavItems";
 import { useLocation, useParams } from "react-router";
 
@@ -89,15 +94,23 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
       row.classification === "hosted" || row.classification === "proxied",
   ).length;
 
-  const readinessChecks: ReadinessCheck[] = metaMcpServer
+  // A member's own settings, linked by id: two servers can share a slug.
+  const memberSettingsHref = (serverId: string, anchor: string) =>
+    `${mcpServerTabHref(routes, serverId, "settings")}#${anchor}`;
+  const overviewHref = gatewayTabHref(routes, id, "overview");
+
+  const readinessChecks: McpReadinessCheck[] = metaMcpServer
     ? [
         {
           key: "server-url",
           label: "Gateway URL",
-          description: mcpUrl
-            ? "Endpoint is live and ready to connect to."
-            : "Add an endpoint so this gateway has a URL to connect to.",
-          ready: !!mcpUrl,
+          description: isLoadingEndpoints
+            ? "Checking this gateway's URL."
+            : mcpUrl
+              ? "Endpoint is live and ready to connect to."
+              : "Add an endpoint so this gateway has a URL to connect to.",
+          ready: isLoadingEndpoints ? null : !!mcpUrl,
+          pending: isLoadingEndpoints,
           href: `${gatewayTabHref(routes, id, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
         },
         {
@@ -112,25 +125,24 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
                 : rows.length > 0
                   ? "None of this gateway's members can be served. Add a hosted or proxied MCP server."
                   : "Add MCP servers for this gateway to front.",
-          // Member management lives on the Overview tab.
           ready: isLoadingMembers || membersFailed ? null : servable > 0,
-          href: gatewayTabHref(routes, id, "overview"),
+          pending: isLoadingMembers,
+          chipLabel: rows.length > 0 ? "No servable members" : "No members",
+          // Member management lives on the Overview tab: an empty gateway
+          // opens the Add servers sheet, otherwise the list is shown.
+          href:
+            rows.length > 0
+              ? `${overviewHref}#${GATEWAY_SERVERS_SECTION_ID}`
+              : `${overviewHref}#${GATEWAY_ADD_SERVERS_HASH}`,
         },
         // Only hosted members carry environment variables of their own.
         ...(rows.some((row) => row.classification === "hosted")
           ? [
-              memberSetupCheck(
-                memberSetup,
-                isLoadingMembers,
-                (gap) =>
-                  `${mcpServerTabHref(
-                    routes,
-                    mcpServerRouteParam({
-                      id: gap.serverId,
-                      slug: gap.serverSlug,
-                    }),
-                    "settings",
-                  )}#${MCP_AUTHENTICATION_SECTION_ID}`,
+              memberSetupCheck(memberSetup, isLoadingMembers, (gap) =>
+                memberSettingsHref(
+                  gap.serverId,
+                  MCP_ENVIRONMENT_VARIABLES_SECTION_ID,
+                ),
               ),
             ]
           : []),
@@ -138,6 +150,8 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
           rows,
           memberStates,
           gatewayTabHref(routes, id, "inspect"),
+          (serverId) =>
+            memberSettingsHref(serverId, SETTINGS_GROUPS.identity.id),
         ),
         // Only a gateway set to Code Mode can be let down by it.
         ...(metaMcpServer.discoveryMode === "code_mode"
@@ -206,7 +220,7 @@ function memberSetupCheck(
   setup: ReturnType<typeof useGatewayMemberSetup>,
   loadingMembers: boolean,
   settingsHref: (gap: GatewayMemberSetupGap) => string,
-): ReadinessCheck {
+): McpReadinessCheck {
   const item = { key: "member-setup", label: "Member setup", broken: true };
   const [first] = setup.gaps;
   if (first) {
@@ -226,6 +240,7 @@ function memberSetupCheck(
       ...item,
       description: "Checking that each member is set up.",
       ready: null,
+      pending: true,
     };
   }
   if (setup.failed) {
@@ -253,9 +268,11 @@ function memberAccessChecks(
   rows: MemberRow[],
   states: GatewayMemberStates,
   inspectHref: string,
-): ReadinessCheck[] {
-  const checks: ReadinessCheck[] = [];
+  signInSettingsHref: (serverId: string) => string,
+): McpReadinessCheck[] {
+  const checks: McpReadinessCheck[] = [];
   let checking = false;
+  let checkFailed = false;
   for (const row of rows) {
     const state = states.stateFor(row);
     if (!state) continue;
@@ -271,16 +288,41 @@ function memberAccessChecks(
         href: inspectHref,
       });
     }
+    // A failed check says nothing about the member, so it is no issue.
+    if (state.kind === "unavailable" && state.checkFailed) {
+      checkFailed = true;
+      continue;
+    }
     if (state.kind === "unavailable") {
+      // The server's own words go in the tooltip, never the message.
+      const description = state.needsCredential
+        ? `${name} needs a shared credential before the gateway can list its tools.`
+        : state.fromServer
+          ? `The gateway couldn't list ${name}'s tools. Inspect shows what went wrong.`
+          : state.why;
       checks.push({
         key: `member-unavailable-${slug}`,
         label: `${name}'s tools couldn't be read`,
-        description: state.why,
+        description,
+        detail: state.fromServer ? state.why : undefined,
         ready: false,
         broken: true,
-        href: inspectHref,
+        href:
+          state.needsCredential && row.server
+            ? signInSettingsHref(row.server.id)
+            : inspectHref,
       });
     }
+  }
+  if (checkFailed && !checking) {
+    checks.push({
+      key: "member-access",
+      label: "Member access",
+      description:
+        "Couldn't check what each member gives you. Inspect can try again.",
+      ready: null,
+      href: inspectHref,
+    });
   }
   if (checking) {
     checks.push({
@@ -288,6 +330,7 @@ function memberAccessChecks(
       label: "Member access",
       description: "Checking what each member gives you.",
       ready: null,
+      pending: true,
     });
   }
   return checks;

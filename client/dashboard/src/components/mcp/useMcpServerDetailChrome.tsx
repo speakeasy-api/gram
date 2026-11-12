@@ -5,14 +5,22 @@ import {
   serverMatchesRef,
 } from "@/pages/mcp/overview/serverMatchesRef";
 import type { HostedServerRef } from "@/pages/mcp/overview/MCPOverviewTab";
-import type { McpDetailChrome } from "./mcpDetailChrome";
+import {
+  MCP_ENVIRONMENT_VARIABLES_SECTION_ID,
+  type McpDetailChrome,
+  type McpReadinessCheck,
+} from "./mcpDetailChrome";
+import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
+import {
+  type McpServerReachability,
+  useMcpServerReachability,
+} from "./useMcpServerReachability";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { setupProviderForUrl } from "@/pages/mcp/x/setup/provider-setup";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
-import { type ReadinessCheck } from "@/components/mcp-server-readiness-bar";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
 import { getMcpServerArgs } from "@/lib/sources";
@@ -59,14 +67,13 @@ import {
   ShieldCheck,
   Wrench,
 } from "lucide-react";
-import { useMcpServerAuthenticationReadiness } from "@/hooks/useMcpServerAuthenticationReadiness";
+import {
+  type McpServerAuthenticationReadiness,
+  useMcpServerAuthenticationReadiness,
+} from "@/hooks/useMcpServerAuthenticationReadiness";
 import { useLocation, useParams } from "react-router";
 
-import {
-  McpServerCardStatus,
-  RemoteIdentitySummary,
-  UpstreamCredentialsIdentitySummary,
-} from "./McpDetailRows";
+import { McpServerCardStatus } from "./McpDetailRows";
 import {
   buildMcpDetailNavItems,
   type McpDetailTabDef,
@@ -120,10 +127,11 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       enabled: mcpServerId !== "",
     });
   const endpoints = endpointsResult?.mcpEndpoints ?? [];
-  const { mcpUrl, installPageUrl } = useResolvedMcpServerUrl(
-    endpoints,
-    isLoadingEndpoints,
-  );
+  const {
+    mcpUrl,
+    installPageUrl,
+    loading: isResolvingUrl,
+  } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
   const {
     privateMcpUrls,
     privateInstallPageUrls,
@@ -165,15 +173,17 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   );
 
   const authReadiness = useMcpServerAuthenticationReadiness(mcpServer);
-  const {
-    remoteIdentityMode,
-    passThroughAuthorization,
-    identityUnavailable,
-    isLoadingRemoteIdentity,
-    upstreamAuth,
-    upstreamAuthQuery,
-    identityProbeStatus,
-  } = authReadiness;
+  // The listing Inspect makes, shared from the cache: an endpoint only counts
+  // as live once the server behind it answers.
+  const reachability = useMcpServerReachability({
+    mcpUrl,
+    mcpServerId: mcpServer?.id,
+    userSessionIssuerId: mcpServer?.userSessionIssuerId,
+    enabled:
+      !!mcpServer?.remoteMcpServerId &&
+      mcpServer.visibility !== "disabled" &&
+      !!mcpUrl,
+  });
 
   // Mirrors PluginStatusBanner's isTrulyPublished: server membership in a
   // plugin alone isn't "included" if the marketplace repo was never
@@ -271,7 +281,21 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     sourceDescription = "Backed by an unproxied MCP server.";
   }
 
-  const readinessChecks: ReadinessCheck[] = mcpServer
+  const settingsHref = mcpServerTabHref(routes, idOrSlug, "settings");
+  const isDisabled = mcpServer?.visibility === "disabled";
+  const tunnelCheck = isTunneledBacked
+    ? tunnelAgentReadiness({
+        connections: tunnelConnections.data,
+        loading: tunnelConnections.isLoading,
+        error: tunnelConnections.isError,
+        agentSetupHref: `${settingsHref}#${MCP_AGENT_SETUP_SECTION_ID}`,
+        overviewHref: mcpServerTabHref(routes, idOrSlug, "overview"),
+      })
+    : undefined;
+
+  // Fixed order, and each check says when it is still loading, so the chip
+  // reads the same however the queries race.
+  const readinessChecks: McpReadinessCheck[] = mcpServer
     ? [
         // Unproxied servers have no switch: clients reach the vendor directly.
         ...(isUnproxied
@@ -280,42 +304,37 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
               {
                 key: "availability",
                 label: "Availability",
-                description:
-                  mcpServer.visibility === "disabled"
-                    ? "This server is turned off, so every connection to it fails. Turn it on in Settings."
-                    : "Turned on and accepting connections.",
-                ready: mcpServer.visibility !== "disabled",
+                description: isDisabled
+                  ? "This server is turned off, so every connection to it fails. Turn it on in Settings."
+                  : "Turned on and accepting connections.",
+                ready: !isDisabled,
                 broken: true,
-                href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_VISIBILITY_SECTION_ID}`,
+                chipLabel: "Turned off",
+                href: `${settingsHref}#${MCP_VISIBILITY_SECTION_ID}`,
               },
             ]),
-        {
-          key: "server-url",
-          label: "Server URL",
-          description: isUnproxied
-            ? "Not applicable — unproxied servers have no Speakeasy-hosted endpoint."
-            : mcpServer.networkAccessMode ===
-                  McpServerNetworkAccessMode.PrivateOnly &&
-                !privateUrlAssessable
-              ? !canReadPrivateUrls
-                ? "Private URL visibility requires organization admin access."
-                : isLoadingPrivateUrls
-                  ? "Checking private URL availability."
-                  : "Private URL availability could not be checked."
-              : serverUrlReady
-                ? "Endpoint is live and ready to connect to."
-                : mcpServer.networkAccessMode ===
-                    McpServerNetworkAccessMode.PrivateOnly
-                  ? "Bring private ingress online so this server has a URL to connect to."
-                  : "Add an endpoint so this server has a URL to connect to.",
-          ready: isUnproxied || serverUrlReady,
-          href: isUnproxied
-            ? undefined
-            : `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
-        },
+        serverUrlCheck({
+          unproxied: isUnproxied,
+          disabled: isDisabled,
+          tunnelAgentDown: tunnelCheck?.broken === true,
+          privateOnly:
+            mcpServer.networkAccessMode ===
+            McpServerNetworkAccessMode.PrivateOnly,
+          canReadPrivateUrls,
+          privateUrlAssessable,
+          loadingUrl:
+            isLoadingEndpoints ||
+            isResolvingUrl ||
+            (canReadPrivateUrls && isLoadingPrivateUrls),
+          serverUrlReady,
+          reachability,
+          settingsHref,
+        }),
         {
           key: "authentication",
           label: "Authentication",
+          // A step may point somewhere more exact, so it comes after.
+          href: `${settingsHref}#${MCP_AUTHENTICATION_SECTION_ID}`,
           ...(hosted
             ? hostedAuthenticationCheck({
                 canonical: isCanonical,
@@ -324,12 +343,11 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
                 toolsetFailed: canonicalToolsetFailed,
                 settling: isPendingEnvironments || isPendingMetadata,
                 missingRequiredEnvVars,
+                envVarsHref: `${settingsHref}#${MCP_ENVIRONMENT_VARIABLES_SECTION_ID}`,
               })
-            : {
-                description: authReadiness.description,
-                ready: authReadiness.ready,
-              }),
-          href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
+            : isTunneledBacked
+              ? tunneledAuthenticationCheck(!!mcpServer.userSessionIssuerId)
+              : sourceAuthenticationCheck(authReadiness)),
         },
         {
           key: "source",
@@ -338,15 +356,19 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
           // A hosted server's tools are its own; it has no source to connect.
           ready: hosted || isSourceBacked,
         },
-        ...(isTunneledBacked
+        ...(tunnelCheck ? [tunnelCheck] : []),
+        // Inspect's drift notice, from the listing it already made. Stored
+        // hints are a record to keep current, not something broken.
+        ...(reachability.kind === "reachable" && reachability.driftCount > 0
           ? [
-              tunnelAgentReadiness({
-                connections: tunnelConnections.data,
-                loading: tunnelConnections.isLoading,
-                error: tunnelConnections.isError,
-                agentSetupHref: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`,
-                overviewHref: mcpServerTabHref(routes, idOrSlug, "overview"),
-              }),
+              {
+                key: "tool-drift",
+                label: "Tool list out of date",
+                description: `${reachability.driftCount} ${reachability.driftCount === 1 ? "tool has" : "tools have"} changed on the server since Speakeasy saved its tool list. Review and sync them in Inspect.`,
+                ready: false,
+                optional: true,
+                href: mcpServerTabHref(routes, idOrSlug, "inspect"),
+              },
             ]
           : []),
         ...(canReadPlugins
@@ -413,32 +435,6 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     },
   });
 
-  const identity =
-    mcpServer && isRemoteBacked ? (
-      upstreamAuth !== "legacy" ? (
-        <UpstreamCredentialsIdentitySummary
-          status={upstreamAuthQuery.data?.status}
-          authenticationRequired={
-            identityProbeStatus === "authentication-required"
-          }
-          unavailable={upstreamAuth === "error" || upstreamAuthQuery.isError}
-          loading={upstreamAuth === "loading" || upstreamAuthQuery.isPending}
-          settingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
-        />
-      ) : (
-        <RemoteIdentitySummary
-          mode={remoteIdentityMode}
-          passThroughAuthorization={!!passThroughAuthorization}
-          authenticationRequired={
-            identityProbeStatus === "authentication-required"
-          }
-          unavailable={identityUnavailable}
-          loading={isLoadingRemoteIdentity}
-          settingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
-        />
-      )
-    ) : undefined;
-
   if (!mcpServer) return null;
   const kindLabel = isRemoteBacked
     ? "Remote MCP"
@@ -464,13 +460,175 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     setupGuide: upstreamUrl ? (
       <SetupGuideCard serverUrl={upstreamUrl} />
     ) : undefined,
-    identity,
     installLinks: effectiveInstallPageLinks,
     aside: pluginRef ? (
       <PluginStatusBanner variant="header" server={pluginRef} />
     ) : undefined,
     items,
   };
+}
+
+type CheckState = Pick<
+  McpReadinessCheck,
+  "description" | "ready" | "pending" | "broken" | "optional" | "chipLabel"
+> & { href?: string; detail?: string };
+
+/**
+ * The Server URL step. An endpoint only reads as live when the server could
+ * use it: not while the server is off or its tunnel agent is gone, and for a
+ * remote server not until the server behind it has answered.
+ */
+function serverUrlCheck({
+  unproxied,
+  disabled,
+  tunnelAgentDown,
+  privateOnly,
+  canReadPrivateUrls,
+  privateUrlAssessable,
+  loadingUrl,
+  serverUrlReady,
+  reachability,
+  settingsHref,
+}: {
+  unproxied: boolean;
+  disabled: boolean;
+  tunnelAgentDown: boolean;
+  privateOnly: boolean;
+  canReadPrivateUrls: boolean;
+  privateUrlAssessable: boolean;
+  loadingUrl: boolean;
+  serverUrlReady: boolean;
+  reachability: McpServerReachability;
+  settingsHref: string;
+}): McpReadinessCheck {
+  const item = { key: "server-url", label: "Server URL" };
+  const urlHref = `${settingsHref}#${MCP_SERVER_URL_SECTION_ID}`;
+  const state = ((): CheckState => {
+    if (unproxied) {
+      return {
+        description:
+          "Not applicable — unproxied servers have no Speakeasy-hosted endpoint.",
+        ready: true,
+      };
+    }
+    // The Availability and Tunnel agent checks name the fix; this one waits.
+    if (disabled) {
+      return {
+        description: "Unavailable while the server is off.",
+        ready: null,
+      };
+    }
+    if (tunnelAgentDown) {
+      return { description: "Waiting for tunnel agent.", ready: null };
+    }
+    if (loadingUrl) {
+      return {
+        description: "Checking this server's URL.",
+        ready: null,
+        pending: true,
+      };
+    }
+    if (privateOnly && !privateUrlAssessable) {
+      return {
+        description: !canReadPrivateUrls
+          ? "Private URL visibility requires organization admin access."
+          : "Private URL availability could not be checked.",
+        ready: null,
+      };
+    }
+    if (!serverUrlReady) {
+      return {
+        description: privateOnly
+          ? "Bring private ingress online so this server has a URL to connect to."
+          : "Add an endpoint so this server has a URL to connect to.",
+        ready: false,
+        href: urlHref,
+      };
+    }
+    switch (reachability.kind) {
+      case "checking":
+        return {
+          description: "Checking that the server answers.",
+          ready: null,
+          pending: true,
+        };
+      case "unknown":
+        return {
+          description: "Couldn't check that the server answers.",
+          ready: null,
+        };
+      case "unreachable":
+        return {
+          description:
+            "Speakeasy can't reach the server behind this URL, so every connection fails. Check its upstream URL in Settings.",
+          ready: false,
+          broken: true,
+          chipLabel: "Can't reach server",
+          detail: reachability.detail,
+          // The upstream URL is edited in General.
+          href: `${settingsHref}#${SETTINGS_GROUPS.general.id}`,
+        };
+      case "reachable":
+      case "off":
+        return {
+          description: "Endpoint is live and ready to connect to.",
+          ready: true,
+        };
+    }
+  })();
+  return { ...item, href: urlHref, ...state };
+}
+
+/**
+ * A remote server's Authentication step, held back until its identity
+ * queries settle. A server that asks for sign-in with nothing to sign in
+ * with fails every call, so that is an issue, not a step.
+ */
+function sourceAuthenticationCheck(
+  auth: McpServerAuthenticationReadiness,
+): CheckState {
+  if (auth.loading) {
+    return {
+      description: "Checking how Speakeasy signs in to this server.",
+      ready: null,
+      pending: true,
+    };
+  }
+  if (auth.unavailable) {
+    return {
+      description: "Sign-in setup could not be checked.",
+      ready: null,
+    };
+  }
+  if (!auth.ready && auth.identityProbeStatus === "authentication-required") {
+    return {
+      description:
+        "The server asks for sign-in, but no identity is set, so every call fails. Choose how Speakeasy signs in under Settings.",
+      ready: false,
+      broken: true,
+      chipLabel: "Needs sign-in",
+    };
+  }
+  return { description: auth.description, ready: auth.ready };
+}
+
+/**
+ * A tunneled server's Authentication step. Speakeasy sign-in is a choice:
+ * without it anyone who knows the URL can connect.
+ */
+function tunneledAuthenticationCheck(hasIssuer: boolean): CheckState {
+  return hasIssuer
+    ? {
+        description:
+          "Speakeasy sign-in is on. Upstream authorization servers are optional.",
+        ready: true,
+      }
+    : {
+        description:
+          "Anyone who knows the URL can connect. Turn on sign-in in Settings to require it.",
+        ready: false,
+        optional: true,
+      };
 }
 
 /**
@@ -485,6 +643,7 @@ function hostedAuthenticationCheck({
   toolsetFailed,
   settling,
   missingRequiredEnvVars,
+  envVarsHref,
 }: {
   /** Only the toolset's own wrapper has its variables checked here. */
   canonical: boolean;
@@ -494,7 +653,9 @@ function hostedAuthenticationCheck({
   toolsetFailed: boolean;
   settling: boolean;
   missingRequiredEnvVars: number;
-}): Pick<ReadinessCheck, "description" | "ready"> {
+  /** Where the toolset's environment variables are set. */
+  envVarsHref: string;
+}): CheckState {
   if (!canonical) {
     return { description: "Speakeasy handles sign-in.", ready: true };
   }
@@ -515,12 +676,14 @@ function hostedAuthenticationCheck({
     return {
       description: "Checking required environment variables.",
       ready: null,
+      pending: true,
     };
   }
   if (missingRequiredEnvVars > 0) {
     return {
       description: `Set ${missingRequiredEnvVars} required environment variable${missingRequiredEnvVars > 1 ? "s" : ""} so the tools can reach their API.`,
       ready: false,
+      href: envVarsHref,
     };
   }
   return {

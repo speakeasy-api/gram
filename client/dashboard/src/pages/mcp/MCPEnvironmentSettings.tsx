@@ -34,6 +34,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle, Link, Plus, Shield } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useReportUnsavedChanges } from "@/components/detail/settings-layout";
 import { AddVariableSheet } from "./AddVariableSheet";
 import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
 import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
@@ -470,16 +471,17 @@ export function MCPAuthenticationTab({
   const hasUserEdits = (envVar: EnvironmentVariable): boolean => {
     const entry = environmentConfigs.find((e) => e.variableName === envVar.key);
 
-    // Determine the original state based on environment entry
-    const originalState: EnvVarState =
-      entry?.providedBy === "user"
+    // The original state: the saved entry's, or for a variable with no
+    // entry yet, the state it loaded with.
+    const originalState: EnvVarState | undefined = entry
+      ? entry.providedBy === "user"
         ? "user-provided"
-        : entry?.providedBy === "none"
+        : entry.providedBy === "none"
           ? "omitted"
-          : "system";
+          : "system"
+      : loadedEnvVars.find((loaded) => loaded.id === envVar.id)?.state;
 
-    // Check if state has changed (only if there was an existing entry)
-    if (entry && envVar.state !== originalState) {
+    if (originalState !== undefined && envVar.state !== originalState) {
       return true;
     }
 
@@ -514,14 +516,10 @@ export function MCPAuthenticationTab({
     return false;
   };
 
-  // Check if there are any unsaved changes (including unmapped required vars and user edits)
-  const hasAnyUnsavedChanges = useMemo(
-    () => {
-      return envVars.some(hasUnsavedChanges);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- hasUnsavedChanges is an inline fn; its reactive deps are listed explicitly
-    [envVars, editingState, environmentConfigs, selectedEnvironmentView],
-  );
+  // Unsaved means the user changed something since load. An unmapped
+  // required variable alone is not an edit, but Save still writes its entry.
+  const hasAnyUnsavedChanges = envVars.some(hasUserEdits);
+  useReportUnsavedChanges(hasAnyUnsavedChanges);
 
   // Save all variables with unsaved changes
   const handleSaveAll = async () => {
@@ -691,7 +689,7 @@ export function MCPAuthenticationTab({
       {showOAuth && <ToolsetOAuthSection toolset={toolset} />}
 
       <PageSection
-        heading="Environment Variables"
+        heading="Environment variables"
         description="Environments store key-value pairs passed to the backend when users connect. They can be shared across multiple MCP servers. Use the state button to set each variable as User Provided (set at runtime), System (set here), or Omitted (not included)."
         headingExtra={
           missingRequiredCount > 0 ? (

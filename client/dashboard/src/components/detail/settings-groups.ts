@@ -17,3 +17,10 @@ export const SETTINGS_GROUPS = {
 export const SETTINGS_GROUP_IDS: readonly string[] = Object.values(
   SETTINGS_GROUPS,
 ).map((group) => group.id);
+
+/**
+ * A hosted server's environment variables block. The readiness checklist links
+ * here, so the id is stable.
+ */
+export const SETTINGS_ENVIRONMENT_VARIABLES_ID =
+  "settings-environment-variables";

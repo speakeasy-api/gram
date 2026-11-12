@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { VisibilitySection } from "./VisibilitySection";
+import { AvailabilitySection, VisibilitySection } from "./VisibilitySection";
 
 const rbac = vi.hoisted(() => ({
   canWrite: true,
@@ -71,6 +71,13 @@ vi.mock("@gram/client/react-query/getTunneledMcpServer.js", () => ({
       : undefined,
   }),
 }));
+const updateTunnel = vi.hoisted(() => vi.fn(async () => ({})));
+vi.mock("@gram/client/react-query/updateTunneledMcpServer.js", () => ({
+  useUpdateTunneledMcpServerMutation: () => ({ mutateAsync: updateTunnel }),
+}));
+vi.mock("./sourceInvalidation", () => ({
+  invalidateTunneledMcpSourceViews: vi.fn(async () => {}),
+}));
 const hostedRequest = vi.hoisted(() => vi.fn());
 vi.mock("@/pages/mcp/x/hosted/useHostedVisibilityGuard", () => ({
   useHostedVisibilityGuard: () => ({
@@ -124,12 +131,15 @@ const base = {
   updatedAt: new Date(0),
 };
 
-function renderSection(mcpServer: McpServer): void {
+function renderSection(
+  mcpServer: McpServer,
+  Section: typeof AvailabilitySection = AvailabilitySection,
+): void {
   latestServer.current = mcpServer;
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={["/mcp/example/settings"]}>
       <QueryClientProvider client={new QueryClient()}>
-        <VisibilitySection mcpServer={mcpServer} />
+        <Section mcpServer={mcpServer} />
       </QueryClientProvider>
     </MemoryRouter>,
   );
@@ -138,6 +148,7 @@ function renderSection(mcpServer: McpServer): void {
 afterEach(() => {
   cleanup();
   updateServer.mockReset();
+  updateTunnel.mockClear();
   hostedRequest.mockReset();
   rbac.canWrite = true;
   rbac.writableResource = undefined;
@@ -145,7 +156,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("VisibilitySection", () => {
+describe("AvailabilitySection and VisibilitySection", () => {
   it("switches a remote server on and off, and waits for Save", () => {
     renderSection({ ...base, remoteMcpServerId: "remote-1" } as McpServer);
 
@@ -187,24 +198,95 @@ describe("VisibilitySection", () => {
     );
   });
 
-  it("offers Public on a tunneled server only once the source allows it", () => {
-    renderSection({ ...base, tunneledMcpServerId: "tunnel-1" } as McpServer);
-
-    expect(screen.getByRole("heading", { name: "Visibility" })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: /Public/ })).toHaveProperty(
-      "disabled",
-      true,
-    );
-    expect(
-      screen
-        .getByRole("link", { name: "Allow public access below" })
-        .getAttribute("href"),
-    ).toBe("/#public-access");
+  it("puts every server kind's on and off under Availability", () => {
+    for (const kind of [
+      { remoteMcpServerId: "remote-1" },
+      { tunneledMcpServerId: "tunnel-1" },
+      { id: "hosted-1", toolsetId: "hosted-1" },
+    ]) {
+      renderSection({ ...base, ...kind } as McpServer);
+      expect(
+        screen.getByRole("heading", { name: "Availability" }),
+      ).toBeTruthy();
+      expect(screen.getAllByRole("radio").map((r) => r.id)).toEqual([
+        "mcp-visibility-private",
+        "mcp-visibility-disabled",
+      ]);
+      cleanup();
+    }
   });
 
-  it("makes a tunneled server public without a confirmation", async () => {
+  it("offers only Private and Public under Visibility, and links Private to Team Access", () => {
+    renderSection(
+      { ...base, tunneledMcpServerId: "tunnel-1" } as McpServer,
+      VisibilitySection,
+    );
+
+    expect(screen.getByRole("heading", { name: "Visibility" })).toBeTruthy();
+    expect(screen.getAllByRole("radio").map((r) => r.id)).toEqual([
+      "mcp-visibility-private",
+      "mcp-visibility-public",
+    ]);
+    expect(
+      screen
+        .getByRole("link", { name: "Manage who has access" })
+        .getAttribute("href"),
+    ).toMatch(/\/mcp\/server-1\/team-access$/);
+  });
+
+  it("sends people to Availability while the server is off", () => {
+    renderSection(
+      {
+        ...base,
+        tunneledMcpServerId: "tunnel-1",
+        visibility: "disabled",
+      } as McpServer,
+      VisibilitySection,
+    );
+
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /Save/ })).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: "Turn it on under Availability" })
+        .getAttribute("href"),
+    ).toBe("/mcp/example/settings#settings-general");
+  });
+
+  it("makes a tunneled server public in one Save, warning inline first", async () => {
+    renderSection(
+      { ...base, tunneledMcpServerId: "tunnel-1" } as McpServer,
+      VisibilitySection,
+    );
+
+    expect(screen.queryByText(/Anyone on the internet/)).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: /Public/ }));
+    expect(screen.getByText(/Anyone on the internet/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await waitFor(() =>
+      expect(updateServer).toHaveBeenCalledWith({
+        request: {
+          updateMcpServerForm: expect.objectContaining({
+            visibility: "public",
+          }),
+        },
+      }),
+    );
+    // The tunnel source's consent goes with the same Save.
+    expect(updateTunnel).toHaveBeenCalledWith({
+      request: {
+        updateTunneledMcpServerForm: { id: "tunnel-1", allowPublic: true },
+      },
+    });
+  });
+
+  it("skips the consent write when the tunnel already allows public", async () => {
     tunnelSource.allowPublic = true;
-    renderSection({ ...base, tunneledMcpServerId: "tunnel-1" } as McpServer);
+    renderSection(
+      { ...base, tunneledMcpServerId: "tunnel-1" } as McpServer,
+      VisibilitySection,
+    );
 
     fireEvent.click(screen.getByRole("radio", { name: /Public/ }));
     fireEvent.click(screen.getByRole("button", { name: /Save/ }));
@@ -217,6 +299,7 @@ describe("VisibilitySection", () => {
         },
       }),
     );
+    expect(updateTunnel).not.toHaveBeenCalled();
   });
 
   it("hands a hosted server's change to the toolset confirmations", () => {
@@ -229,6 +312,15 @@ describe("VisibilitySection", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Disabled/ }));
     fireEvent.click(screen.getByRole("button", { name: /Save/ }));
     expect(hostedRequest).toHaveBeenCalledWith("disabled");
+    cleanup();
+
+    renderSection(
+      { ...base, id: "hosted-1", toolsetId: "hosted-1" } as McpServer,
+      VisibilitySection,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /Public/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    expect(hostedRequest).toHaveBeenCalledWith("public");
     expect(updateServer).not.toHaveBeenCalled();
   });
 

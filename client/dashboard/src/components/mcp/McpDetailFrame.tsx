@@ -1,6 +1,5 @@
 import { useIconDither } from "@/components/icon-dither";
 import { Page } from "@/components/page-layout";
-import type { ReadinessCheck } from "@/components/mcp-server-readiness-bar";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { CopyButton } from "@/components/ui/CopyButton";
 import {
@@ -9,12 +8,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { scrollWithinPage } from "@/lib/scroll-within-page";
 import { useIsDarkTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { Check, Circle, ExternalLink } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
-import { Link } from "react-router";
-import type { McpDetailChrome } from "./mcpDetailChrome";
+import { Check, Circle, CircleDashed, ExternalLink } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link, useLocation } from "react-router";
+import type { McpDetailChrome, McpReadinessCheck } from "./mcpDetailChrome";
+
+/** Link state that asks the frame to show the section a link lands on. */
+const HIGHLIGHT_STATE = { highlightLinkedSection: true } as const;
 
 /**
  * The frame every MCP detail page shares, servers and gateways alike: the
@@ -40,6 +43,7 @@ export function McpDetailFrame({
   contentRef?: React.Ref<HTMLDivElement>;
 }): JSX.Element {
   const activeTab = chrome?.items.find((item) => item.active)?.key;
+  useHighlightLinkedSection();
 
   return (
     <Page>
@@ -58,7 +62,8 @@ export function McpDetailFrame({
         <HeaderBand>
           <div className="flex flex-wrap items-start justify-between gap-6">
             {chrome ? <TitleBlock chrome={chrome} /> : <TitleSkeleton />}
-            {chrome?.aside}
+            {/* Settings has its own Publishing area; one plugin box per view. */}
+            {activeTab === "settings" ? null : chrome?.aside}
           </div>
         </HeaderBand>
 
@@ -66,7 +71,7 @@ export function McpDetailFrame({
           aria-label="Server sections"
           className="border-border bg-card shrink-0 border-b"
         >
-          <div className="mx-auto flex w-full max-w-[1334px] gap-7 overflow-x-auto px-8">
+          <div className="mx-auto flex w-full max-w-[1334px] gap-7 overflow-x-auto px-4 sm:px-8">
             {(chrome?.items ?? []).map((item) => (
               <Link
                 key={item.key}
@@ -89,7 +94,7 @@ export function McpDetailFrame({
             reset it to the top (useTabScrollReset). */}
         <div
           data-page-bound=""
-          className="min-h-0 w-full flex-1 overflow-y-auto px-8"
+          className="min-h-0 w-full flex-1 overflow-y-auto px-4 sm:px-8"
         >
           {/* Inspect gets a definite height, so it can fill the view and
               scroll inside itself. Other tabs grow with their content, so the
@@ -138,7 +143,7 @@ function HeaderBand({ children }: { children: ReactNode }): JSX.Element {
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 -z-10 size-full [mask-image:linear-gradient(to_right,transparent_28%,rgba(0,0,0,0.55)_58%,black_88%)]"
       />
-      <div className="mx-auto w-full max-w-[1334px] px-8 pt-10 pb-8">
+      <div className="mx-auto w-full max-w-[1334px] px-4 pt-10 pb-8 sm:px-8">
         {children}
       </div>
     </header>
@@ -147,14 +152,15 @@ function HeaderBand({ children }: { children: ReactNode }): JSX.Element {
 
 function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
   return (
-    <div className="flex max-w-[640px] flex-col gap-5">
+    <div className="flex max-w-[640px] min-w-0 flex-col gap-5">
       <div className="flex min-w-0 items-center gap-4">
         {chrome.icon("size-10 shrink-0 object-contain")}
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-eyebrow">
             {chrome.kindLabel ? `Connect · ${chrome.kindLabel}` : "Connect"}
           </span>
-          <h1 className="font-display truncate text-[34px] leading-9 font-light tracking-tight">
+          {/* Long names wrap rather than run off a narrow screen. */}
+          <h1 className="font-display text-[26px] leading-8 font-light tracking-tight break-words sm:text-[34px] sm:leading-9">
             {chrome.name}
           </h1>
         </div>
@@ -193,75 +199,58 @@ function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
 }
 
 /**
- * Quiet when the server is ready; otherwise names the steps left and opens
- * the checklist, each step linking to where it's fixed.
+ * Quiet when the server is ready; otherwise names what is left and opens
+ * the checklist, each item linking to where it's fixed. It waits for every
+ * pending check, so it never names a step another check is about to change.
  */
 function ReadinessChip({
   chrome,
 }: {
   chrome: McpDetailChrome;
 }): JSX.Element | null {
-  const required = chrome.readinessChecks.filter((check) => !check.optional);
+  const [open, setOpen] = useState(false);
   if (chrome.readinessChecks.length === 0) return null;
-  // A check that can't be determined yet is neither a step left nor done.
-  const failing = required.filter((check) => check.ready === false);
-  // Broken now outranks a step not yet taken, so the chip names those first.
-  const issues = failing.filter((check) => check.broken);
-  const steps = failing.filter((check) => !check.broken);
-  const checking =
-    failing.length === 0 && required.some((check) => check.ready === null);
-  const label = summarize(issues, "issue") ?? summarize(steps, "step left");
-  const shown = issues.length > 0 ? issues : steps;
-  const pendingNames = shown.map((check) => check.label).join(", ");
-  const tone =
-    issues.length > 0
-      ? "destructive"
-      : steps.length > 0
-        ? "warning"
-        : checking
-          ? "neutral"
-          : "success";
+  const summary = summarizeReadiness(chrome.readinessChecks);
+  const pendingNames = summary.open.map((check) => check.label).join(", ");
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        className="flex h-6 min-w-0 items-center gap-2 leading-6 hover:underline"
+        className="flex h-6 min-w-0 items-center gap-2 leading-6 whitespace-nowrap hover:underline"
         aria-label={
-          shown.length > 1
-            ? `${label}: ${pendingNames}. Open checklist`
+          summary.open.length > 0
+            ? `${summary.label}: ${pendingNames}. Open checklist`
             : undefined
         }
-        title={shown.length > 1 ? pendingNames : undefined}
+        title={summary.open.length > 0 ? pendingNames : undefined}
       >
-        <StatusDot tone={tone} />
+        <StatusDot tone={summary.tone} />
         <span
           className={cn(
-            failing.length === 0
+            summary.open.length === 0
               ? "text-muted-foreground"
               : "text-foreground font-medium",
           )}
         >
-          {label ?? (checking ? "Checking…" : "Ready")}
+          {summary.label}
         </span>
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="flex w-[360px] flex-col gap-1 p-2"
+        className="flex w-[360px] max-w-[calc(100vw-2rem)] flex-col gap-1 p-2"
       >
         <span className="text-eyebrow px-2 pt-1 pb-2">Readiness</span>
         <ul className="flex flex-col">
           {chrome.readinessChecks.map((check) => (
             <li key={check.key}>
-              <ReadinessRow check={check} />
+              <ReadinessRow
+                check={check}
+                settled={!summary.checking}
+                onNavigate={() => setOpen(false)}
+              />
             </li>
           ))}
         </ul>
-        {chrome.identity ? (
-          // In the popover the identity pill reads as text, not a boxed button.
-          <div className="border-border mt-1 flex flex-col gap-2 border-t px-2 pt-3 pb-2 [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-0">
-            {chrome.identity}
-          </div>
-        ) : null}
         {/* The guide card hides itself when the provider has no guide, so it
             gets no rule of its own: an empty one would double the line. */}
         {chrome.setupGuide ? (
@@ -272,56 +261,215 @@ function ReadinessChip({
   );
 }
 
-/** "1 issue: Availability" or "2 issues"; null when there are none. */
-function summarize(
-  checks: ReadinessCheck[],
-  noun: "issue" | "step left",
-): string | null {
-  const [first] = checks;
-  if (!first) return null;
-  if (checks.length === 1) return `1 ${noun}: ${first.label}`;
-  return noun === "issue"
-    ? `${checks.length} issues`
-    : `${checks.length} steps left`;
+/**
+ * What the chip says. Every open item is counted, so the number always
+ * matches the list: issues (broken now) and steps (not yet taken) together.
+ */
+function summarizeReadiness(checks: McpReadinessCheck[]): {
+  label: string;
+  tone: "destructive" | "warning" | "neutral" | "success";
+  open: McpReadinessCheck[];
+  checking: boolean;
+} {
+  const required = checks.filter((check) => !check.optional);
+  if (required.some((check) => check.pending)) {
+    return { label: "Checking…", tone: "neutral", open: [], checking: true };
+  }
+  const open = required.filter((check) => check.ready === false);
+  const issues = open.filter((check) => check.broken).length;
+  const [only] = open;
+  if (!only) {
+    // A check that can't be determined is neither a step left nor done.
+    return required.some((check) => check.ready === null)
+      ? { label: "Checking…", tone: "neutral", open, checking: false }
+      : { label: "Ready", tone: "success", open, checking: false };
+  }
+  const tone = issues > 0 ? "destructive" : "warning";
+  if (open.length === 1) {
+    const label =
+      only.chipLabel ??
+      (only.broken ? "1 issue" : `1 step left: ${only.label}`);
+    return { label, tone, open, checking: false };
+  }
+  const label =
+    issues === open.length
+      ? `${open.length} issues`
+      : issues === 0
+        ? `${open.length} steps left`
+        : `${open.length} to fix`;
+  return { label, tone, open, checking: false };
 }
 
-function ReadinessRow({ check }: { check: ReadinessCheck }): JSX.Element {
+/** The row's state in words, so color is never the only signal. */
+function rowState(
+  check: McpReadinessCheck,
+  settled: boolean,
+): { tag: string | undefined; icon: ReactNode } {
+  if (check.ready === true) {
+    return {
+      tag: undefined,
+      icon: (
+        <Check className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
+      ),
+    };
+  }
+  if (check.ready === null) {
+    return {
+      tag: check.pending ? "Checking" : undefined,
+      icon: (
+        <CircleDashed className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
+      ),
+    };
+  }
+  if (check.optional) {
+    return {
+      tag: "Optional",
+      icon: (
+        <Circle className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
+      ),
+    };
+  }
+  // Until every check settles, an open step isn't counted yet either.
+  const tag = !settled ? undefined : check.broken ? "Issue" : "To do";
+  return {
+    tag,
+    icon: (
+      <Circle
+        className={cn(
+          "mt-0.5 size-3.5 shrink-0",
+          check.broken
+            ? "text-destructive"
+            : "text-[var(--fill-warning-default)]",
+        )}
+      />
+    ),
+  };
+}
+
+function ReadinessRow({
+  check,
+  settled,
+  onNavigate,
+}: {
+  check: McpReadinessCheck;
+  settled: boolean;
+  onNavigate: () => void;
+}): JSX.Element {
+  const { tag, icon } = rowState(check, settled);
   const body = (
     <span className="flex items-start gap-2.5 px-2 py-2">
-      {check.ready ? (
-        <Check className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
-      ) : (
-        <Circle
-          className={cn(
-            "mt-0.5 size-3.5 shrink-0",
-            check.optional
-              ? "text-muted-foreground"
-              : check.broken
-                ? "text-destructive"
-                : "text-warning-foreground",
-          )}
-        />
-      )}
-      <span className="flex min-w-0 flex-col">
-        <span className="text-foreground text-sm">
-          {check.label}
-          {check.optional ? (
-            <span className="text-muted-foreground"> · optional</span>
-          ) : null}
-        </span>
-        <span className="text-muted-foreground text-xs leading-4">
+      {icon}
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-foreground text-sm">{check.label}</span>
+        <span
+          className="text-muted-foreground text-xs leading-4"
+          title={check.detail}
+        >
           {check.description}
         </span>
       </span>
+      {tag ? (
+        <span
+          className={cn(
+            "mt-0.5 shrink-0 text-xs",
+            tag === "Issue"
+              ? "text-destructive"
+              : tag === "To do"
+                ? "text-foreground"
+                : "text-muted-foreground",
+          )}
+        >
+          {tag}
+        </span>
+      ) : null}
     </span>
   );
-  return check.href && !check.ready ? (
-    <Link to={check.href} className="hover:bg-muted block hover:no-underline">
+  return check.href && check.ready === false ? (
+    <Link
+      to={check.href}
+      state={HIGHLIGHT_STATE}
+      onClick={onNavigate}
+      className="hover:bg-muted block hover:no-underline"
+    >
       {body}
     </Link>
   ) : (
     body
   );
+}
+
+/**
+ * After a readiness link lands, scrolls to the section its hash names and
+ * flashes an outline round it, so the eye finds what to change. Tabs mount
+ * their sections late, so it looks for the target for a couple of seconds.
+ * With reduced motion the scroll jumps and the outline holds, then goes.
+ */
+function useHighlightLinkedSection(): void {
+  const location = useLocation();
+  const highlight =
+    (location.state as { highlightLinkedSection?: boolean } | null)
+      ?.highlightLinkedSection === true;
+  const targetId = location.hash.replace(/^#/, "");
+
+  useEffect(() => {
+    if (!highlight || !targetId) return;
+    const reduced =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const behavior: ScrollBehavior = reduced ? "auto" : "smooth";
+    let frame = 0;
+    let tries = 0;
+    const timers: number[] = [];
+    let userScrolled = false;
+    const stopFollowing = () => {
+      userScrolled = true;
+    };
+    const find = () => {
+      const target = document.getElementById(targetId);
+      if (!target) {
+        if (tries++ < 120) frame = requestAnimationFrame(find);
+        return;
+      }
+      // Sections above can still be loading and push the target down, so
+      // line it up again a few times, unless the viewer starts scrolling.
+      const align = () => {
+        if (!userScrolled) scrollWithinPage(target, { behavior });
+      };
+      align();
+      timers.push(window.setTimeout(align, 400));
+      timers.push(window.setTimeout(align, 1000));
+      // Flash once the scroll has landed. The outline lives only in the
+      // animation, so nothing is left behind.
+      timers.push(
+        window.setTimeout(() => {
+          target.animate?.(
+            [
+              { outline: "2px solid var(--color-ring)", outlineOffset: "4px" },
+              {
+                outline: "2px solid var(--color-ring)",
+                outlineOffset: "4px",
+                offset: 0.6,
+              },
+              { outline: "2px solid transparent", outlineOffset: "4px" },
+            ],
+            { duration: 1600, easing: reduced ? "steps(1, end)" : "ease-out" },
+          );
+        }, 400),
+      );
+    };
+    frame = requestAnimationFrame(find);
+    const events = ["wheel", "touchmove", "keydown"] as const;
+    for (const name of events) {
+      window.addEventListener(name, stopFollowing, { passive: true });
+    }
+    return () => {
+      cancelAnimationFrame(frame);
+      for (const timer of timers) window.clearTimeout(timer);
+      for (const name of events) {
+        window.removeEventListener(name, stopFollowing);
+      }
+    };
+    // location.key re-runs it for a second click on the same link.
+  }, [highlight, targetId, location.key]);
 }
 
 function TitleSkeleton(): JSX.Element {

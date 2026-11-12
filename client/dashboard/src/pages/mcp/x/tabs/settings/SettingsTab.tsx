@@ -1,6 +1,7 @@
 import { useScrollToSettingsHash } from "@/hooks/useScrollToSettingsHash";
 import { SettingsLayout } from "@/components/detail/settings-layout";
 import {
+  SETTINGS_ENVIRONMENT_VARIABLES_ID,
   SETTINGS_GROUP_IDS,
   SETTINGS_GROUPS,
 } from "@/components/detail/settings-groups";
@@ -59,10 +60,7 @@ import {
 } from "./sections/authentication/UpstreamCredentialsSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
 import { NetworkAccessSection } from "./sections/NetworkAccessSection";
-import {
-  MCP_PUBLIC_ACCESS_SECTION_ID,
-  PublicAccessSection,
-} from "./sections/PublicAccessSection";
+import { MCP_PUBLIC_ACCESS_SECTION_ID } from "./sections/PublicAccessSection";
 import { PublicRateLimitsSection } from "./sections/PublicRateLimitsSection";
 import {
   MCP_RESOURCE_IDENTIFIER_SECTION_ID,
@@ -75,6 +73,7 @@ import {
 } from "./sections/RemoteMcpSessionsSection";
 import { ToolFilteringSection } from "./sections/ToolFilteringSection";
 import {
+  AvailabilitySection,
   MCP_VISIBILITY_SECTION_ID,
   VisibilitySection,
 } from "./sections/VisibilitySection";
@@ -92,6 +91,7 @@ const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_SERVER_URL_SECTION_ID,
   MCP_PERFORMANCE_SECTION_ID,
   MCP_ENVIRONMENT_SECTION_ID,
+  SETTINGS_ENVIRONMENT_VARIABLES_ID,
   MCP_AUTHENTICATION_SECTION_ID,
   MCP_RESOURCE_IDENTIFIER_SECTION_ID,
   MCP_PUBLIC_ACCESS_SECTION_ID,
@@ -214,7 +214,12 @@ export function SettingsTab({
         groups={[
           {
             ...G.general,
-            content: <GeneralSection mcpServer={mcpServer} />,
+            content: (
+              <>
+                <AvailabilitySection mcpServer={mcpServer} />
+                <GeneralSection mcpServer={mcpServer} />
+              </>
+            ),
           },
           {
             ...G.access,
@@ -230,10 +235,16 @@ export function SettingsTab({
                       <ToolsetOAuthSection toolset={hostedToolset} />
                     </div>
                     <div id={MCP_ENVIRONMENT_SECTION_ID}>
-                      <MCPAuthenticationTab
-                        toolset={hostedToolset}
-                        showOAuth={false}
-                      />
+                      {/* A stable anchor for the readiness checklist. */}
+                      <div
+                        id={SETTINGS_ENVIRONMENT_VARIABLES_ID}
+                        className="scroll-mt-8"
+                      >
+                        <MCPAuthenticationTab
+                          toolset={hostedToolset}
+                          showOAuth={false}
+                        />
+                      </div>
                     </div>
                   </>
                 ),
@@ -326,10 +337,10 @@ export function SettingsTab({
             ...G.general,
             content: (
               <>
-                {/* On or off is about the server itself, not who may reach
-                    it, so it leads General and there is no Access area. */}
+                {/* Remote servers only switch on and off, so there is no
+                    Access area. */}
                 <AvailabilityAnchor>
-                  <VisibilitySection mcpServer={mcpServer} />
+                  <AvailabilitySection mcpServer={mcpServer} />
                 </AvailabilityAnchor>
                 <GeneralSection
                   mcpServer={mcpServer}
@@ -408,13 +419,16 @@ export function SettingsTab({
           ...G.general,
           content: (
             <>
-              {/* Tunneled servers pick who may connect, which is Access.
-                  The rest only switch on and off, which leads General. */}
+              {/* Every server leads with on or off. Tunneled servers also
+                  pick who may connect, which is Access; the rest have no
+                  Access area, so its old links land here. */}
               {onOff ? (
                 <AvailabilityAnchor>
-                  <VisibilitySection mcpServer={mcpServer} />
+                  <AvailabilitySection mcpServer={mcpServer} />
                 </AvailabilityAnchor>
-              ) : null}
+              ) : (
+                <AvailabilitySection mcpServer={mcpServer} />
+              )}
               <GeneralSection mcpServer={mcpServer} />
             </>
           ),
@@ -425,13 +439,11 @@ export function SettingsTab({
             <>
               <VisibilitySection mcpServer={mcpServer} />
               {tunneledMcpServer ? (
-                <Fragment key={tunneledMcpServer.id}>
-                  <PublicAccessSection tunneledMcpServer={tunneledMcpServer} />
-                  <PublicRateLimitsSection
-                    tunneledMcpServerId={tunneledMcpServer.id}
-                    projectId={mcpServer.projectId}
-                  />
-                </Fragment>
+                <PublicRateLimitsSection
+                  key={tunneledMcpServer.id}
+                  tunneledMcpServerId={tunneledMcpServer.id}
+                  projectId={mcpServer.projectId}
+                />
               ) : null}
             </>
           ),

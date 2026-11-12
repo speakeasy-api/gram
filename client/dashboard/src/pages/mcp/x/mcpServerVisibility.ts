@@ -23,7 +23,9 @@ import { toast } from "sonner";
 
 /**
  * Remote and unproxied servers only switch on and off ("Availability");
- * hosted and tunneled servers choose who may connect ("Visibility").
+ * hosted and tunneled servers, once on, also choose who may connect
+ * ("Visibility": private or public). Off is stored as visibility "disabled"
+ * for every kind.
  */
 export function isOnOffServer(mcpServer: McpServer): boolean {
   return !standsInForToolset(mcpServer) && !mcpServer.tunneledMcpServerId;

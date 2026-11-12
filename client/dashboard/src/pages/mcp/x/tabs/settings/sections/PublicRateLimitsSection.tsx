@@ -188,14 +188,14 @@ function PublicRateLimits({
         {tunneledMcpServer.allowPublic ? null : (
           <>
             {" "}
-            Applies once{" "}
+            Applies once the server&apos;s{" "}
             <Link
               to={`#${MCP_PUBLIC_ACCESS_SECTION_ID}`}
               className="underline underline-offset-2"
             >
-              Public Access
+              visibility
             </Link>{" "}
-            is enabled.
+            is public.
           </>
         )}
       </Text>

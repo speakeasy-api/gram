@@ -4,7 +4,7 @@ import { mcpConnectionUrl } from "@/lib/utils";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import type { MemberRow } from "./memberRows";
 import { authCacheKey, gatewayRPC } from "./useGatewayInspection";
@@ -42,6 +42,10 @@ export interface GatewayMemberSignIn {
   /** True when there is a page the viewer can open to connect. */
   canConnect: boolean;
   isLoading: boolean;
+  /** A read is in flight, including a refresh of data already shown. */
+  isFetching: boolean;
+  /** The status has been read at least once. */
+  hasStatus: boolean;
   isError: boolean;
   refetch: () => void;
 }
@@ -120,6 +124,8 @@ export function useGatewayMemberSignIn(
     },
     canConnect: !!pageUrl,
     isLoading: enabled && query.isLoading,
+    isFetching: enabled && query.isFetching,
+    hasStatus: !!status,
     isError: query.isError,
     refetch: () => void refetch(),
   };
@@ -137,7 +143,20 @@ export type MemberViewerState =
   | { kind: "checking" }
   | { kind: "available" }
   | { kind: "sign_in" }
-  | { kind: "unavailable"; why: string; retry?: () => void };
+  | {
+      kind: "unavailable";
+      why: string;
+      /**
+       * `why` is the server's own text, fit for a tooltip but not for the
+       * main message.
+       */
+      fromServer?: boolean;
+      /** The server needs a shared credential set on its own settings. */
+      needsCredential?: boolean;
+      /** The check itself failed, so nothing is known about the server. */
+      checkFailed?: boolean;
+      retry?: () => void;
+    };
 
 /** The words both Overview and Inspect use for a member's state. */
 export const MEMBER_STATE_LABEL: Record<MemberViewerState["kind"], string> = {
@@ -146,6 +165,14 @@ export const MEMBER_STATE_LABEL: Record<MemberViewerState["kind"], string> = {
   sign_in: "Sign in needed",
   unavailable: "Unavailable",
 };
+
+/**
+ * The gateway's wording when a member has no credential it can use for this
+ * caller, which an admin fixes on the member's own sign-in settings. Matched
+ * on text because the error carries no code.
+ */
+const NEEDS_CREDENTIAL =
+  /requires authentication and has no credential|rejected the stored credential|rejected the credential configured/i;
 
 const describedServerSchema = z.object({
   isError: z.boolean().optional(),
@@ -199,6 +226,30 @@ export function useGatewayMemberStates(
 
   const slugOf = (row: MemberRow) =>
     row.server?.slug ?? row.member.mcpServerSlug;
+
+  // A member added after the status was read is missing from it. Read it
+  // again once per member set, and call such members checking meanwhile, so
+  // a new member never reads as one the gateway doesn't serve.
+  const memberKey = rows
+    .flatMap((row) => slugOf(row) ?? [])
+    .sort((a, b) => a.localeCompare(b))
+    .join(",");
+  const missingFromStatus =
+    signIn.hasStatus &&
+    rows.some(
+      (row) =>
+        (row.classification === "hosted" || row.classification === "proxied") &&
+        !signIn.statusFor(slugOf(row)),
+    );
+  const [refetchedFor, setRefetchedFor] = useState<string | null>(null);
+  const awaitingRefetch = missingFromStatus && refetchedFor !== memberKey;
+  const refetchSignIn = signIn.refetch;
+  const statusFetching = signIn.isFetching;
+  useEffect(() => {
+    if (!awaitingRefetch || !sessionReady || statusFetching) return;
+    setRefetchedFor(memberKey);
+    refetchSignIn();
+  }, [awaitingRefetch, sessionReady, statusFetching, memberKey, refetchSignIn]);
   const checked = rows.filter(
     (row) =>
       row.classification === "proxied" &&
@@ -251,10 +302,14 @@ export function useGatewayMemberStates(
         return {
           kind: "unavailable",
           why: "Couldn't check this server for you.",
+          checkFailed: true,
           retry: token.error ? token.refetch : signIn.refetch,
         };
       }
       const status = signIn.statusFor(slugOf(row));
+      // A member added since the status was read waits for the new read.
+      if (!status && (signIn.isFetching || awaitingRefetch))
+        return { kind: "checking" };
       if (!status) {
         // Not served to this viewer, e.g. a private server they can't use.
         return {
@@ -274,6 +329,8 @@ export function useGatewayMemberStates(
         return {
           kind: "unavailable",
           why: status.detail || "This server can't be used right now.",
+          fromServer: !!status.detail,
+          needsCredential: NEEDS_CREDENTIAL.test(status.detail ?? ""),
           retry: signIn.refetch,
         };
       }
@@ -287,6 +344,8 @@ export function useGatewayMemberStates(
         return {
           kind: "unavailable",
           why: check.error.message,
+          fromServer: true,
+          needsCredential: NEEDS_CREDENTIAL.test(check.error.message),
           retry: () => void check.refetch(),
         };
       }

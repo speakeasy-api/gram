@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { useState } from "react";
 import type { GatewayInspection } from "./useGatewayInspection";
@@ -82,6 +83,7 @@ vi.mock("./useGatewayMemberTools", () => ({
 vi.mock("./useGatewayMemberStates", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./useGatewayMemberStates")>()),
   useGatewayMemberStates: () => ({
+    stateFor: () => undefined,
     signIn: {
       needsSignIn: (slug: string | undefined) =>
         !!slug && state.unconnected.includes(slug),
@@ -198,10 +200,8 @@ it("applies discovery choices to the URL and the minted connection", async () =>
       </MemoryRouter>
     </TooltipProvider>,
   );
-  fireEvent.click(
-    screen.getByRole("button", { name: "Preview a mode: Progressive" }),
-  );
-  fireEvent.click(await screen.findByRole("button", { name: /^Direct/ }));
+  const modes = screen.getByRole("group", { name: "Preview a mode" });
+  fireEvent.click(within(modes).getByRole("button", { name: /^Direct/ }));
   expect(lastMainMint()).toEqual(
     expect.objectContaining({
       target: expect.objectContaining({ discoveryMode: "direct" }),
@@ -212,11 +212,12 @@ it("applies discovery choices to the URL and the minted connection", async () =>
       "?keep=value&discovery_mode=direct",
     ),
   );
-  fireEvent.click(
-    screen.getByRole("button", { name: "Preview a mode: Direct" }),
+  expect(within(modes).getByRole("button", { pressed: true }).textContent).toBe(
+    "Direct",
   );
+  // Picking the gateway's own mode drops the preview.
   fireEvent.click(
-    await screen.findByRole("button", { name: /gateway default/ }),
+    within(modes).getByRole("button", { name: /gateway default/ }),
   );
   expect(lastMainMint()).toEqual(
     expect.objectContaining({
@@ -256,10 +257,10 @@ it.each([
         </MemoryRouter>
       </TooltipProvider>,
     );
+    const modes = screen.getByRole("group", { name: "Preview a mode" });
     expect(
-      screen.getByRole("button", { name: `Preview a mode: ${label}` })
-        .textContent,
-    ).toBe(label);
+      within(modes).getByRole("button", { pressed: true }).textContent,
+    ).toBe(`${label} (gateway default)`);
     expect(lastMainMint()).toEqual(
       expect.objectContaining({
         target: expect.objectContaining({ discoveryMode: undefined }),

@@ -223,7 +223,6 @@ function StandardAuthenticationSectionBody({
   } else {
     authenticationFields = (
       <>
-        <UserIdentitySessionControls userSessionIssuer={userSessionIssuer} />
         <SharedAuthorizationServerField
           userSessionIssuer={userSessionIssuer}
           mcpUrl={target.mcpUrl}
@@ -239,6 +238,8 @@ function StandardAuthenticationSectionBody({
           onDelete={handleDelete}
           readOnly={userSessionIssuer.projectId === ""}
         />
+        {/* Last: its footer Save closes the panel. */}
+        <UserIdentitySessionControls userSessionIssuer={userSessionIssuer} />
       </>
     );
   }

@@ -1,4 +1,4 @@
-import type { ReadinessCheck } from "@/components/mcp-server-readiness-bar";
+import type { McpReadinessCheck } from "@/components/mcp/mcpDetailChrome";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
 import type { TunneledMcpConnection } from "@gram/client/models/components/tunneledmcpconnection.js";
 import type { TunneledMcpServerConnections } from "@gram/client/models/components/tunneledmcpserverconnections.js";
@@ -178,13 +178,14 @@ export function tunnelAgentReadiness({
   error: boolean;
   agentSetupHref: string;
   overviewHref: string;
-}): ReadinessCheck {
+}): McpReadinessCheck {
   const item = { key: "tunnel-agent", label: "Tunnel agent" };
   if (loading) {
     return {
       ...item,
       description: "Checking for connected tunnel agents.",
       ready: null,
+      pending: true,
       href: overviewHref,
     };
   }
@@ -205,6 +206,7 @@ export function tunnelAgentReadiness({
           "No tunnel agent is connected, so requests to this server fail. View tunnel agent setup to connect one.",
         ready: false,
         broken: true,
+        chipLabel: "Tunnel offline",
         href: agentSetupHref,
       };
     case "unreachable":
@@ -215,6 +217,7 @@ export function tunnelAgentReadiness({
         description: `${status.detail} Review tunnel agent setup.`,
         ready: false,
         broken: true,
+        chipLabel: "Tunnel can't reach server",
         href: agentSetupHref,
       };
     case "reachable":

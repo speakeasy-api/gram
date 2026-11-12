@@ -190,6 +190,7 @@ export function MCPOverviewTab({
             timeRangeMs={timeRangeMs}
             expandedChart={expandedChart}
             onExpand={setExpandedChart}
+            isLoading={isLoading}
           />
 
           <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">

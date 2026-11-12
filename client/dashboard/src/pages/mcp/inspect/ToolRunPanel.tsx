@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/Button";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { CopyButton } from "@/components/ui/CopyButton";
 import { Input } from "@/components/ui/Input";
 import {
   Select,
@@ -10,9 +9,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { Switch } from "@/components/ui/Switch";
-import { TextArea } from "@/components/ui/Textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -20,8 +19,15 @@ import {
 } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { useMutation } from "@tanstack/react-query";
-import { ChevronRight, Info } from "lucide-react";
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { Check, ChevronRight, Copy, Info } from "lucide-react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router";
 import type { McpToolRun } from "./runMcpTool";
 import {
@@ -34,6 +40,7 @@ import {
   isDestructive,
   unavailableReasonLabel,
   type InspectTool,
+  type ToolDraft,
 } from "./types";
 import {
   HEALTH_WINDOW_LABEL,
@@ -41,43 +48,99 @@ import {
   type ToolHealth,
 } from "./useToolHealth";
 
+/** Fields whose text must parse as JSON before the tool can run. */
+function isJsonField(field: ToolField): boolean {
+  return field.kind === "json" || field.kind === "arguments";
+}
+
+/** The error for one JSON field's text, or undefined when it parses. */
+function jsonFieldError(field: ToolField, raw: string): string | undefined {
+  if (!isJsonField(field) || raw.trim() === "") return undefined;
+  const parsed = toArguments([field], { [field.name]: raw });
+  return parsed.ok ? undefined : parsed.error;
+}
+
+function withoutKey(
+  record: Record<string, string>,
+  key: string,
+): Record<string, string> {
+  const next = { ...record };
+  delete next[key];
+  return next;
+}
+
 /**
  * The form for one tool, built from its input schema, plus the outcome of the
  * last run. Runs only on an explicit click; destructive tools confirm first.
+ * The draft lives with the caller, so switching tabs or tools keeps it.
  */
 export function ToolRunPanel({
   tool,
-  toolbar,
   health,
+  isHealthLoading,
   run,
   accessHref,
+  draft,
+  onDraftChange,
 }: {
   tool: InspectTool;
-  /** Sits left of "Run as you" on the panel's top row. */
-  toolbar?: ReactNode;
   health: ToolHealth | undefined;
+  isHealthLoading?: boolean;
   /** Where the rule that blocks this tool can be changed. */
   accessHref?: string;
   /** Undefined when this panel can only describe the tool, not run it. */
   run: ((args: Record<string, unknown>) => Promise<McpToolRun>) | undefined;
+  draft: ToolDraft;
+  onDraftChange: (update: (draft: ToolDraft) => ToolDraft) => void;
 }): JSX.Element {
   const fields = useMemo(() => extractFields(tool.inputSchema), [tool]);
-  const visibleFields = fields.filter((field) => field.kind !== "const");
-  const [values, setValues] = useState<Record<string, string>>({});
+  // Required arguments first; the rest keep the schema's order.
+  const visibleFields = useMemo(
+    () =>
+      fields
+        .filter((field) => field.kind !== "const")
+        .sort((a, b) => Number(b.required) - Number(a.required)),
+    [fields],
+  );
+  const values = draft.values;
   const [confirming, setConfirming] = useState(false);
   const [formError, setFormError] = useState<string>();
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const responseRef = useRef<HTMLDivElement>(null);
+  const justRan = useRef(false);
   const execution = useMutation({
     mutationFn: (args: Record<string, unknown>) => {
       if (!run) throw new Error("This tool can't be run here.");
       return run(args);
     },
+    onSuccess: (result) => {
+      justRan.current = true;
+      onDraftChange((current) => ({ ...current, result }));
+    },
   });
+
+  // A finished run lands below the form: bring its header into view and move
+  // focus there, so keyboard and screen reader users hear the outcome.
+  useEffect(() => {
+    if (!justRan.current || !draft.result) return;
+    justRan.current = false;
+    const header = responseRef.current;
+    if (!header) return;
+    header.scrollIntoView?.({ block: "nearest" });
+    header.focus({ preventScroll: true });
+  }, [draft.result]);
 
   const destructive = isDestructive(tool);
   const blocked = !!tool.unavailable;
   const canRun = !!run && !blocked && !execution.isPending;
 
   const submit = () => {
+    const errors: Record<string, string> = {};
+    for (const field of visibleFields) {
+      const error = jsonFieldError(field, values[field.name] ?? "");
+      if (error) errors[field.name] = error;
+    }
+    setFieldErrors(errors);
     const parsed = toArguments(fields, values);
     if (!parsed.ok) {
       setFormError(parsed.error);
@@ -91,10 +154,108 @@ export function ToolRunPanel({
     execution.mutate(parsed.args);
   };
 
+  const footerError =
+    formError ?? (execution.error ? execution.error.message : undefined);
+
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-3">
-        {toolbar}
+    <div className="flex min-h-full flex-col">
+      <div className="flex flex-1 flex-col gap-5 px-6 py-5">
+        <div className="flex flex-col gap-1.5">
+          <span className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="min-w-0 font-mono text-sm font-medium break-all">
+              {tool.name}
+            </span>
+            {destructive ? (
+              <span className="text-muted-foreground font-mono text-[10px] leading-4 tracking-wide uppercase">
+                Destructive
+              </span>
+            ) : null}
+          </span>
+          {tool.description ? (
+            <p className="text-muted-foreground line-clamp-4 text-[13px] leading-5 whitespace-pre-line">
+              {tool.description}
+            </p>
+          ) : null}
+          <HealthLine health={health} isLoading={isHealthLoading} />
+          {blocked ? (
+            <p className="text-sm">
+              <span className="text-destructive">
+                {unavailableReasonLabel(tool.unavailable?.reason)}, so you
+                can&apos;t run this tool.
+              </span>{" "}
+              {accessHref ? (
+                <Link
+                  to={accessHref}
+                  className="text-foreground font-medium underline underline-offset-2"
+                >
+                  Review access
+                </Link>
+              ) : (
+                <span className="text-muted-foreground">
+                  Ask an admin of this server for access.
+                </span>
+              )}
+            </p>
+          ) : null}
+        </div>
+
+        <form
+          aria-label="Arguments"
+          className="border-border flex flex-col gap-4 border-t pt-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <span className="text-eyebrow">Arguments</span>
+          {visibleFields.length === 0 ? (
+            <p className="text-muted-foreground text-[13px]">
+              This tool takes no arguments.
+            </p>
+          ) : (
+            visibleFields.map((field) => (
+              <FieldInput
+                key={field.name}
+                field={field}
+                value={values[field.name] ?? ""}
+                error={fieldErrors[field.name]}
+                disabled={!canRun}
+                onChange={(value) => {
+                  onDraftChange((current) => ({
+                    ...current,
+                    values: { ...current.values, [field.name]: value },
+                  }));
+                  if (fieldErrors[field.name])
+                    setFieldErrors((current) =>
+                      withoutKey(current, field.name),
+                    );
+                }}
+                onBlur={(value) => {
+                  const error = jsonFieldError(field, value);
+                  setFieldErrors((current) =>
+                    error
+                      ? { ...current, [field.name]: error }
+                      : withoutKey(current, field.name),
+                  );
+                }}
+              />
+            ))
+          )}
+        </form>
+
+        {draft.result ? (
+          <RunResult run={draft.result} headerRef={responseRef} />
+        ) : null}
+      </div>
+
+      {/* The one primary action, pinned to the panel's bottom edge so it
+          stays in reach however long the form runs. */}
+      <div className="border-border bg-card sticky bottom-0 z-10 flex items-center justify-end gap-3 border-t px-6 py-3">
+        {footerError ? (
+          <p role="alert" className="text-destructive mr-auto text-xs">
+            {footerError}
+          </p>
+        ) : null}
         <Button
           size="sm"
           className="font-sans text-[13px] font-medium tracking-normal normal-case"
@@ -107,77 +268,6 @@ export function ToolRunPanel({
           </Button.Text>
         </Button>
       </div>
-      <div className="flex flex-col gap-1.5">
-        <span className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="min-w-0 font-mono text-sm font-medium break-all">
-            {tool.name}
-          </span>
-          {destructive ? (
-            <span className="text-muted-foreground font-mono text-[10px] leading-4 tracking-wide uppercase">
-              Destructive
-            </span>
-          ) : null}
-        </span>
-        {tool.description ? (
-          <p className="text-muted-foreground line-clamp-4 text-[13px] leading-5 whitespace-pre-line">
-            {tool.description}
-          </p>
-        ) : null}
-        <HealthLine health={health} />
-        {blocked ? (
-          <p className="text-sm">
-            <span className="text-destructive">
-              {unavailableReasonLabel(tool.unavailable?.reason)}, so you
-              can&apos;t run this tool.
-            </span>{" "}
-            {accessHref ? (
-              <Link
-                to={accessHref}
-                className="text-foreground font-medium underline underline-offset-2"
-              >
-                Review access
-              </Link>
-            ) : (
-              <span className="text-muted-foreground">
-                Ask an admin of this server for access.
-              </span>
-            )}
-          </p>
-        ) : null}
-      </div>
-
-      <form
-        aria-label="Arguments"
-        className="border-border flex flex-col gap-4 border-t pt-5"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-      >
-        <span className="text-eyebrow">Arguments</span>
-        {visibleFields.length === 0 ? (
-          <p className="text-muted-foreground text-[13px]">
-            This tool takes no arguments.
-          </p>
-        ) : (
-          visibleFields.map((field) => (
-            <FieldInput
-              key={field.name}
-              field={field}
-              value={values[field.name] ?? ""}
-              disabled={!canRun}
-              onChange={(value) =>
-                setValues((current) => ({ ...current, [field.name]: value }))
-              }
-            />
-          ))
-        )}
-        {formError ? (
-          <p className="text-destructive text-sm">{formError}</p>
-        ) : null}
-      </form>
-
-      {execution.data ? <RunResult run={execution.data} /> : null}
 
       <ConfirmDialog
         open={confirming}
@@ -196,29 +286,53 @@ export function ToolRunPanel({
   );
 }
 
+/** A failure rate: the number in mono, the words in the sentence's font. */
+export function FailedRate({
+  rate,
+  className,
+}: {
+  rate: number;
+  className?: string;
+}): JSX.Element {
+  return (
+    <span className={cn("font-sans", className)}>
+      <span className="font-mono tabular-nums">{(rate * 100).toFixed(1)}%</span>{" "}
+      failed
+    </span>
+  );
+}
+
 function HealthLine({
   health,
+  isLoading,
 }: {
   health: ToolHealth | undefined;
+  isLoading?: boolean;
 }): JSX.Element {
+  if (isLoading) {
+    return <Skeleton className="h-4 w-48" />;
+  }
   if (!health || health.calls === 0) {
     return (
-      <p className="text-muted-foreground text-xs">
+      <p className="text-muted-foreground font-sans text-xs">
         No calls in the {HEALTH_WINDOW_LABEL}
       </p>
     );
   }
-  const rate = `${(health.failureRate * 100).toFixed(1)}%`;
   return (
-    <p className="text-muted-foreground text-xs tabular-nums">
-      {health.calls.toLocaleString()} calls
+    <p className="text-muted-foreground font-sans text-xs">
+      <span className="font-mono tabular-nums">
+        {health.calls.toLocaleString()}
+      </span>{" "}
+      {health.calls === 1 ? "call" : "calls"}
       {health.failureRate > 0 ? (
         <>
           {" "}
           ·{" "}
-          <span className={cn(isFailing(health) && "text-destructive")}>
-            {rate} failed
-          </span>
+          <FailedRate
+            rate={health.failureRate}
+            className={cn(isFailing(health) && "text-destructive")}
+          />
         </>
       ) : null}{" "}
       in the {HEALTH_WINDOW_LABEL}
@@ -229,16 +343,21 @@ function HealthLine({
 function FieldInput({
   field,
   value,
+  error,
   disabled,
   onChange,
+  onBlur,
 }: {
   field: ToolField;
   value: string;
+  error: string | undefined;
   disabled: boolean;
   onChange: (value: string) => void;
+  onBlur: (value: string) => void;
 }): JSX.Element {
   const id = useId();
   const labelId = `${id}-label`;
+  const errorId = `${id}-error`;
   const label = (
     <span className="flex items-baseline justify-between gap-2">
       <label id={labelId} htmlFor={id} className="font-mono text-xs">
@@ -248,9 +367,7 @@ function FieldInput({
       <span className="text-muted-foreground flex items-center gap-1 font-mono text-[11px]">
         {field.typeLabel}
         {field.schema !== undefined &&
-        (field.kind === "json" ||
-          field.kind === "text-or-json" ||
-          field.kind === "arguments") ? (
+        (isJsonField(field) || field.kind === "text-or-json") ? (
           <Tooltip>
             <TooltipTrigger
               type="button"
@@ -274,8 +391,12 @@ function FieldInput({
       {field.description}
     </p>
   ) : null;
+  const errorProps = error
+    ? { "aria-invalid": true, "aria-describedby": errorId }
+    : {};
 
-  let control: JSX.Element | null;
+  // One field look for every kind: the Input frame, 36px tall for one line.
+  let control: ReactNode;
   switch (field.kind) {
     case "const":
       // Never rendered: the panel filters these out and sends the value.
@@ -284,7 +405,10 @@ function FieldInput({
     case "enum":
       control = (
         <Select value={value} onValueChange={onChange} disabled={disabled}>
-          <SelectTrigger id={id} className="w-full">
+          <SelectTrigger
+            id={id}
+            className="bg-surface-primary-default h-9 w-full px-3"
+          >
             <SelectValue placeholder="Choose a value" />
           </SelectTrigger>
           <SelectContent>
@@ -313,14 +437,18 @@ function FieldInput({
     case "json":
     case "arguments":
       control = (
-        <TextArea
+        <Input
           id={id}
+          multiline
+          lines={field.kind === "arguments" ? 6 : 3}
           value={value}
           onChange={onChange}
+          onBlur={(event) => onBlur(event.target.value)}
           disabled={disabled}
-          rows={field.kind === "arguments" ? 6 : 3}
+          error={!!error}
           placeholder={field.example ?? "{}"}
-          className="font-mono text-xs"
+          className="px-3 py-1.5 font-mono"
+          {...errorProps}
         />
       );
       break;
@@ -332,13 +460,17 @@ function FieldInput({
           id={id}
           value={value}
           onChange={onChange}
+          onBlur={(event) => onBlur(event.target.value)}
           disabled={disabled}
+          error={!!error}
           type={field.kind === "number" ? "number" : "text"}
           placeholder={
             field.kind === "text-or-json" && field.example
               ? `Text, or JSON like ${field.example}`
               : undefined
           }
+          className="h-9 px-3 py-0"
+          {...errorProps}
         />
       );
   }
@@ -347,12 +479,23 @@ function FieldInput({
     <div className="flex flex-col gap-1.5">
       {label}
       {control}
+      {error ? (
+        <p id={errorId} className="text-destructive text-xs leading-4">
+          {error}
+        </p>
+      ) : null}
       {hint}
     </div>
   );
 }
 
-function RunResult({ run }: { run: McpToolRun }): JSX.Element {
+function RunResult({
+  run,
+  headerRef,
+}: {
+  run: McpToolRun;
+  headerRef: React.RefObject<HTMLDivElement | null>;
+}): JSX.Element {
   const [open, setOpen] = useState(false);
   const value =
     run.value === undefined ? undefined : JSON.stringify(run.value, null, 2);
@@ -362,15 +505,23 @@ function RunResult({ run }: { run: McpToolRun }): JSX.Element {
       aria-label="Response"
       className="border-border flex flex-col gap-3 border-t pt-5"
     >
-      <div className="flex items-center justify-between gap-2">
+      <div
+        ref={headerRef}
+        tabIndex={-1}
+        // Clears the pinned Run footer when scrolled into view.
+        className="focus-visible:outline-foreground flex scroll-mb-20 items-center justify-between gap-2 outline-none focus-visible:outline-1 focus-visible:outline-offset-2"
+      >
         <span className="text-eyebrow">Response</span>
         <span className="flex items-center gap-2 text-xs">
           <StatusDot tone={run.ok ? "success" : "destructive"} />
           <span className={cn(!run.ok && "text-destructive")}>
             {run.ok ? "Succeeded" : "Failed"}
           </span>
-          <span className="text-muted-foreground tabular-nums">
-            {run.durationMs.toLocaleString()} ms
+          <span className="text-muted-foreground">
+            <span className="font-mono tabular-nums">
+              {run.durationMs.toLocaleString()}
+            </span>{" "}
+            ms
           </span>
         </span>
       </div>
@@ -420,11 +571,7 @@ function RunResult({ run }: { run: McpToolRun }): JSX.Element {
               <span className="text-muted-foreground flex items-center gap-1">
                 Trace{" "}
                 <span className="font-mono">{run.traceId.slice(0, 12)}…</span>
-                <CopyButton
-                  text={run.traceId}
-                  size="xs"
-                  tooltip="Copy trace ID"
-                />
+                <CopyTrace traceId={run.traceId} />
               </span>
             ) : null}
           </div>
@@ -450,5 +597,51 @@ function RunResult({ run }: { run: McpToolRun }): JSX.Element {
         ) : null}
       </div>
     </section>
+  );
+}
+
+const COPIED_MS = 1500;
+
+/**
+ * Copies the full trace ID. The tooltip opens above, clear of the "Trace"
+ * label, and says "Copied" for a moment after a click.
+ */
+function CopyTrace({ traceId }: { traceId: string }): JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  return (
+    <>
+      <Tooltip open={copied ? true : undefined}>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label="Copy trace ID"
+            onClick={() => {
+              void navigator.clipboard?.writeText(traceId);
+              setCopied(true);
+              window.clearTimeout(timer.current);
+              timer.current = window.setTimeout(
+                () => setCopied(false),
+                COPIED_MS,
+              );
+            }}
+            className="hover:text-foreground flex size-6 items-center justify-center"
+          >
+            {copied ? (
+              <Check className="size-3.5" />
+            ) : (
+              <Copy className="size-3.5" />
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="end">
+          {copied ? "Copied" : "Copy trace ID"}
+        </TooltipContent>
+      </Tooltip>
+      <span className="sr-only" aria-live="polite">
+        {copied ? "Copied" : ""}
+      </span>
+    </>
   );
 }

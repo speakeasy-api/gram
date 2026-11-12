@@ -6,12 +6,18 @@ import { useGatewayDetailChrome } from "./useGatewayDetailChrome";
 const state = vi.hoisted(() => ({
   rows: [] as {
     classification: string;
-    server?: { slug?: string; name?: string };
+    server?: { id?: string; slug?: string; name?: string };
     member?: { id: string; mcpServerSlug?: string };
   }[],
   memberStates: {} as Record<
     string,
-    { kind: string; why?: string } | undefined
+    | {
+        kind: string;
+        why?: string;
+        fromServer?: boolean;
+        needsCredential?: boolean;
+      }
+    | undefined
   >,
   isLoadingMembers: false,
   membersFailed: false,
@@ -182,8 +188,10 @@ it("flags a hosted member missing environment variables as broken", () => {
   expect(check.textContent).toContain(
     "Acme Support Tools needs 1 environment variable set before its tools can run.",
   );
+  // Linked by id, since two servers can share a slug, to the block that
+  // sets the variables.
   expect(check.getAttribute("data-href")).toContain(
-    "/mcp/acme-support/settings#authentication",
+    "/mcp/srv-1/settings#settings-environment-variables",
   );
 });
 
@@ -249,6 +257,42 @@ it("flags a member whose tools couldn't be read as broken", () => {
   expect(check.getAttribute("data-ready")).toBe("false");
   expect(check.getAttribute("data-broken")).toBe("true");
   expect(check.textContent).toContain("Slack didn't answer.");
+});
+
+it("puts a missing shared credential in plain words, linked to the member's sign-in settings", () => {
+  state.rows = [
+    {
+      ...remote("slack", "Slack"),
+      server: { id: "srv-slack", slug: "slack", name: "Slack" },
+    },
+  ];
+  const raw =
+    'server "slack" requires authentication and has no credential for this caller. Ask your administrator to connect it';
+  state.memberStates = {
+    slack: {
+      kind: "unavailable",
+      why: raw,
+      fromServer: true,
+      needsCredential: true,
+    },
+  };
+  renderReadiness();
+  const check = row("Slack's tools couldn't be read");
+  expect(check.textContent).toContain(
+    "Slack needs a shared credential before the gateway can list its tools.",
+  );
+  // The server's text never leads.
+  expect(check.textContent).not.toContain(raw);
+  expect(check.getAttribute("data-href")).toContain(
+    "/mcp/srv-slack/settings#settings-sign-in",
+  );
+});
+
+it("links an empty gateway's Members step to the Add servers sheet", () => {
+  renderReadiness();
+  expect(row("Members").getAttribute("data-href")).toContain(
+    "/overview#add-servers",
+  );
 });
 
 it("holds the header back while member access is checked, and stays quiet when healthy", () => {

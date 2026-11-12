@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -90,20 +91,22 @@ function renderSection(
   props: Partial<ComponentProps<typeof RemoteMcpToolsSection>> = {},
 ): void {
   render(
-    <MemoryRouter>
-      <TooltipProvider>
-        <RemoteMcpToolsSection
-          mcpUrl="https://mcp.example/mcp/custom-slug"
-          isResolvingUrl={false}
-          mcpServerId="mcp-server-1"
-          userSessionIssuerId={undefined}
-          isDisabled={false}
-          authSettingsHref="/settings#authentication"
-          platformSlug="server"
-          {...props}
-        />
-      </TooltipProvider>
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <TooltipProvider>
+          <RemoteMcpToolsSection
+            mcpUrl="https://mcp.example/mcp/custom-slug"
+            isResolvingUrl={false}
+            mcpServerId="mcp-server-1"
+            userSessionIssuerId={undefined}
+            isDisabled={false}
+            authSettingsHref="/settings#authentication"
+            platformSlug="server"
+            {...props}
+          />
+        </TooltipProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -219,7 +222,7 @@ describe("RemoteMcpToolsSection tool search", () => {
     };
     renderSection();
 
-    const field = screen.getByRole("textbox", {
+    const field = screen.getByRole("combobox", {
       name: "Search tools",
       hidden: true,
     });
@@ -236,7 +239,34 @@ describe("RemoteMcpToolsSection tool search", () => {
 
     fireEvent.keyDown(field, { key: "Escape" });
     expect(screen.getByText("search")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Search tools" })).toBeTruthy();
+    // Focus returns to the search button rather than dropping to the page.
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Search tools" }),
+    );
+  });
+
+  it("moves an active row with the arrow keys and picks it with Enter", () => {
+    mocks.needsAuth = false;
+    mocks.tools = {
+      archive: { unavailable: false },
+      search: { unavailable: false },
+    };
+    renderSection();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search tools" }));
+    const field = screen.getByRole("combobox", { name: "Search tools" });
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    const active = document.getElementById(
+      field.getAttribute("aria-activedescendant") ?? "",
+    );
+    expect(active?.textContent).toContain("search");
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(
+      screen.getByRole("option", { name: /search/, selected: true }),
+    ).toBeTruthy();
+    // Focus stays in the field while the arrows move.
+    expect(document.activeElement).toBe(field);
   });
 
   it("collapses on blur only when the query is empty", () => {
@@ -245,7 +275,7 @@ describe("RemoteMcpToolsSection tool search", () => {
     renderSection();
 
     fireEvent.click(screen.getByRole("button", { name: "Search tools" }));
-    const field = screen.getByRole("textbox", { name: "Search tools" });
+    const field = screen.getByRole("combobox", { name: "Search tools" });
     fireEvent.change(field, { target: { value: "se" } });
     fireEvent.blur(field);
     expect(screen.queryByRole("button", { name: "Search tools" })).toBeNull();

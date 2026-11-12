@@ -36,6 +36,7 @@ import {
   FooterSaveButton,
   SettingsSection,
 } from "@/components/detail/settings-section";
+import { useReportUnsavedChanges } from "@/components/detail/settings-layout";
 import {
   Collapsible,
   CollapsibleContent,
@@ -638,6 +639,11 @@ export function RemoteMcpIdentitySectionBody({
     !staticSwitchBlocked &&
     !oauthSwitchBlocked &&
     (identityCanSave || headerDrafts.isDirty);
+  // Leaving the tab with a different identity picked, or edits staged under
+  // it, asks first.
+  useReportUnsavedChanges(
+    selectedMode !== actualMode || identityCanSave || headerDrafts.isDirty,
+  );
   const savePending =
     detachIssuer.isPending ||
     saving ||

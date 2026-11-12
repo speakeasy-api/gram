@@ -3,6 +3,7 @@ import type {
   ProxiedMcpToolUnavailableReason,
 } from "@/hooks/useProxiedMcpTools";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
+import type { McpToolRun } from "./runMcpTool";
 
 /** One tool as Inspect shows it, whatever kind of server it came from. */
 export interface InspectTool {
@@ -50,3 +51,14 @@ export function unavailableReasonLabel(
       return "Not available to you";
   }
 }
+
+/**
+ * What the run panel keeps for one tool while the user moves around Inspect:
+ * the arguments typed so far and the last run's outcome.
+ */
+export interface ToolDraft {
+  values: Record<string, string>;
+  result?: McpToolRun;
+}
+
+export const EMPTY_DRAFT: ToolDraft = { values: {} };

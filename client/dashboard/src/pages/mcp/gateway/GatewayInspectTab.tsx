@@ -9,6 +9,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
@@ -18,7 +19,6 @@ import {
   platformEndpointSlug,
   useResolvedMcpServerUrl,
 } from "@/hooks/useToolsetUrl";
-import { enumPresentation } from "@/lib/enum";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { getServerURL, mcpConnectionUrl } from "@/lib/utils";
@@ -28,7 +28,7 @@ import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js"
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
-import { InspectWorkbench, LensChoice } from "../inspect/InspectWorkbench";
+import { InspectWorkbench } from "../inspect/InspectWorkbench";
 import { runMcpTool } from "../inspect/runMcpTool";
 import type { InspectTool } from "../inspect/types";
 import { useToolHealth } from "../inspect/useToolHealth";
@@ -52,6 +52,19 @@ const modeLabels: Record<Mode, string> = {
   direct: "Direct",
   code_mode: "Code Mode",
 };
+
+const modeHints: Record<Mode, string> = {
+  direct: "Every tool listed up front",
+  progressive: "Agents look tools up as they need them",
+  code_mode: "Agents write code that calls tools",
+};
+
+/** The gateway's saved mode; anything unknown serves as Progressive. */
+function savedMode(mode: MetaMcpServer["discoveryMode"]): Mode {
+  if (mode === "direct") return "direct";
+  if (mode === "code_mode") return "code_mode";
+  return "progressive";
+}
 
 /** The tool that runs a member's tool behind a Progressive gateway. */
 const EXECUTE_TOOL = "execute_tool";
@@ -192,10 +205,12 @@ function GatewayInspectConnection({
   );
 
   const { rows } = useGatewayMemberRows(metaMcpServer.id);
-  const { healthFor } = useToolHealth({ metaMcpServerId: metaMcpServer.id });
+  const { healthFor, isLoading: isHealthLoading } = useToolHealth({
+    metaMcpServerId: metaMcpServer.id,
+  });
   // Members that need the viewer's own account: connecting lists them again.
   // The same viewer status Overview and the header read, so all three agree.
-  const { signIn } = useGatewayMemberStates(
+  const { signIn, stateFor } = useGatewayMemberStates(
     metaMcpServer,
     endpoints,
     isLoadingEndpoints,
@@ -263,83 +278,94 @@ function GatewayInspectConnection({
           (!!catalog.data && catalog.data.servers === undefined)
         : false;
 
-  const defaultLabel = enumPresentation(
-    modeLabels,
-    metaMcpServer.discoveryMode,
-    "Progressive",
-  );
-  const modeOptions: {
-    value: ModeChoice;
-    label: string;
-    hint?: string;
-    disabled?: boolean;
-  }[] = [
-    { value: "default", label: defaultLabel, hint: "gateway default" },
-    { value: "direct", label: "Direct", hint: "every tool listed up front" },
-    {
-      value: "progressive",
-      label: "Progressive",
-      hint: "agents look tools up as they need them",
-    },
-    ...(metaMcpServer.codeModeEnabled || choice === "code_mode"
-      ? [
-          {
-            value: "code_mode" as const,
-            label: "Code Mode",
-            hint: "agents write code that calls tools",
-            disabled: !metaMcpServer.codeModeEnabled,
-          },
-        ]
-      : []),
-  ];
+  const defaultMode = savedMode(metaMcpServer.discoveryMode);
+  const shownMode: Mode = choice === "default" ? defaultMode : choice;
+  const modeOptions = (["direct", "progressive", "code_mode"] as const)
+    .filter(
+      (value) =>
+        value !== "code_mode" ||
+        metaMcpServer.codeModeEnabled ||
+        shownMode === "code_mode",
+    )
+    .map((value) => ({
+      value,
+      label:
+        value === defaultMode ? (
+          <>
+            {modeLabels[value]}
+            <span className="sr-only"> (gateway default)</span>
+          </>
+        ) : (
+          modeLabels[value]
+        ),
+      tooltip:
+        value === "code_mode" && !metaMcpServer.codeModeEnabled
+          ? "Code Mode isn't turned on for this gateway"
+          : value === defaultMode
+            ? `Gateway default. ${modeHints[value]}`
+            : modeHints[value],
+      disabled: value === "code_mode" && !metaMcpServer.codeModeEnabled,
+    }));
 
   const lens = (
-    <div className="flex flex-wrap items-baseline justify-between gap-3">
-      <Text className="text-base">
-        What <span className="font-medium">you</span> get in{" "}
-        {hasIssuer ? (
-          <LensChoice
-            label="Preview a mode"
-            value={choice}
-            options={modeOptions}
-            onChange={chooseMode}
-            footnote={
-              <>
-                Previewing doesn&apos;t change the gateway. Change the default
-                in <Link to={settingsHref}>Settings</Link>.
-              </>
-            }
-          />
-        ) : (
-          <span className="font-medium">{defaultLabel}</span>
-        )}
-        {/* "Code Mode" already ends in the word. */}
-        {(choice === "default" ? metaMcpServer.discoveryMode : choice) ===
-        "code_mode"
-          ? null
-          : " mode"}
-        {data ? (
-          <span className="text-muted-foreground">
-            {" · "}
-            <SimpleTooltip
-              tooltip={`Agents load ${surfaceCount === 1 ? "this tool's description" : "these tool descriptions"} as soon as they connect: about ${formatTokens(tokens ?? 0)} tokens of their context.`}
-            >
-              <span className="decoration-muted-foreground/60 cursor-help underline decoration-dotted underline-offset-4">
-                {surfaceCount} {mode === "direct" ? "" : "gateway "}
-                {surfaceCount === 1 ? "tool" : "tools"}
-              </span>
-            </SimpleTooltip>
-            {mode === "direct"
-              ? null
-              : ` · ${memberToolCount} server ${memberToolCount === 1 ? "tool" : "tools"} ${mode === "code_mode" ? "callable from code" : "reached through them"}`}
-          </span>
-        ) : null}
-      </Text>
-      {data?.instructions ? (
-        <InstructionsLink
-          instructions={data.instructions}
-          editHref={`${settingsHref}#${GATEWAY_INSTRUCTIONS_SECTION_ID}`}
-        />
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Text className="text-base">
+          What <span className="font-medium">you</span> get in{" "}
+          <span className="font-medium">{modeLabels[shownMode]}</span>
+          {/* "Code Mode" already ends in the word. */}
+          {shownMode === "code_mode" ? null : " mode"}
+          {data ? (
+            <span className="text-muted-foreground">
+              {" · "}
+              <SimpleTooltip
+                tooltip={`Agents load ${surfaceCount === 1 ? "this tool's description" : "these tool descriptions"} as soon as they connect: about ${formatTokens(tokens ?? 0)} tokens of their context.`}
+              >
+                <span className="decoration-muted-foreground/60 cursor-help underline decoration-dotted underline-offset-4">
+                  {surfaceCount} {mode === "direct" ? "" : "gateway "}
+                  {surfaceCount === 1 ? "tool" : "tools"}
+                </span>
+              </SimpleTooltip>
+              {mode === "direct"
+                ? null
+                : ` · ${memberToolCount} server ${memberToolCount === 1 ? "tool" : "tools"} ${mode === "code_mode" ? "callable from code" : "reached through them"}`}
+            </span>
+          ) : null}
+        </Text>
+        <div className="flex flex-wrap items-center gap-4">
+          {data?.instructions ? (
+            <InstructionsLink
+              instructions={data.instructions}
+              editHref={`${settingsHref}#${GATEWAY_INSTRUCTIONS_SECTION_ID}`}
+            />
+          ) : null}
+          {/* The mode travels in the minted session token, so only a
+              gateway with sign-in can preview another one. */}
+          {hasIssuer ? (
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground text-xs">Preview</span>
+              <SegmentedControl
+                ariaLabel="Preview a mode"
+                value={shownMode}
+                options={modeOptions}
+                onChange={(next) =>
+                  chooseMode(next === defaultMode ? "default" : next)
+                }
+                className="h-8"
+              />
+            </div>
+          ) : null}
+        </div>
+      </div>
+      {choice !== "default" ? (
+        <Text muted small>
+          Previewing {modeLabels[shownMode]}. The gateway still uses{" "}
+          {modeLabels[defaultMode]}; change the default in{" "}
+          <Link to={settingsHref} className="underline underline-offset-2">
+            Settings
+          </Link>
+          .
+        </Text>
       ) : null}
     </div>
   );
@@ -362,6 +388,18 @@ function GatewayInspectConnection({
       </Text>
     ) : null;
   const unconnected = failedMembers.filter((m) => signIn.needsSignIn(m.slug));
+  // Tools behind these servers can't be counted, so the summary counts the
+  // servers: the ones whose tools couldn't be read, plus any the shared
+  // member status says need sign-in or are unavailable.
+  const attentionSlugs = new Set([
+    ...failedMembers.map((m) => m.slug),
+    ...rows
+      .filter((row) => {
+        const kind = stateFor(row)?.kind;
+        return kind === "sign_in" || kind === "unavailable";
+      })
+      .map((row) => row.server?.slug ?? row.member.mcpServerSlug),
+  ]);
   const broken = failedMembers.filter((m) => !signIn.needsSignIn(m.slug));
   // Same words as the Overview's Status column, so both pages agree.
   const memberSignIn =
@@ -543,6 +581,12 @@ function GatewayInspectConnection({
         state={state}
         notice={notice}
         healthFor={healthFor}
+        isHealthLoading={isHealthLoading}
+        unavailableStat={{
+          label: "Servers need attention",
+          value: attentionSlugs.size,
+          isLoading: members.some((m) => m.isLoading),
+        }}
         accessHref={gatewayTabHref(routes, metaMcpServer.id, "team-access")}
         runTool={
           connectUrl && mode !== "code_mode"

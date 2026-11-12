@@ -13,7 +13,10 @@ import {
 } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { SettingsLayout } from "@/components/detail/settings-layout";
+import {
+  SettingsLayout,
+  useReportUnsavedChanges,
+} from "@/components/detail/settings-layout";
 import {
   SETTINGS_GROUP_IDS,
   SETTINGS_GROUPS,
@@ -161,6 +164,7 @@ function GatewayNameSection({
 
   const trimmedDraft = nameDraft.trim();
   const dirty = trimmedDraft !== metaMcpServer.name.trim();
+  useReportUnsavedChanges(dirty);
   const saveDisabled =
     !dirty ||
     trimmedDraft === "" ||
@@ -266,6 +270,7 @@ export function GatewayInstructionsSection({
 
   const trimmedDraft = draft.trim();
   const dirty = trimmedDraft !== stored.trim();
+  useReportUnsavedChanges(canWrite && supportsEditing && dirty);
   // Mirror the server's normalization (NUL strip + trim) so the counter and
   // the limit agree with what will be stored.
   const characterCount = Array.from(trimmedDraft.replaceAll("\0", "")).length;

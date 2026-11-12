@@ -80,6 +80,7 @@ vi.mock("./sections/ToolFilteringSection", () => ({
 
 vi.mock("./sections/VisibilitySection", () => ({
   MCP_VISIBILITY_SECTION_ID: "visibility",
+  AvailabilitySection: () => <h2>Availability</h2>,
   VisibilitySection: () => <h2>Visibility</h2>,
 }));
 vi.mock("@/hooks/useRBAC", () => ({
@@ -104,7 +105,6 @@ vi.mock("./sections/CallerIdentitySection", () => ({
 }));
 vi.mock("./sections/PublicAccessSection", () => ({
   MCP_PUBLIC_ACCESS_SECTION_ID: "public-access",
-  PublicAccessSection: () => <h2>Public Access</h2>,
 }));
 vi.mock("./sections/TunnelKeySection", () => ({
   MCP_TUNNEL_KEY_SECTION_ID: "tunnel-key",
@@ -203,7 +203,7 @@ describe("SettingsTab", () => {
     ).toEqual({
       // On or off is about the server itself, so it leads General and the
       // server has no Access area.
-      General: ["Visibility", "General"],
+      General: ["Availability", "General"],
       Publishing: ["Publishing"],
       // Upstream headers are the Identity panel's Custom Headers disclosure,
       // not a section of their own.
@@ -218,8 +218,9 @@ describe("SettingsTab", () => {
     expect(
       renderAreas(server({ tunneledMcpServerId: "tunneled-source-1" })),
     ).toEqual({
-      General: ["General"],
-      Access: ["Visibility", "Public Access", "Public Rate Limits"],
+      // Every server leads with on or off; who may connect is Access.
+      General: ["Availability", "General"],
+      Access: ["Visibility", "Public Rate Limits"],
       Publishing: ["Publishing"],
       "Sign-in and identity": [
         "Authentication",
@@ -241,7 +242,7 @@ describe("SettingsTab", () => {
     expect(
       renderAreas(server({ unproxiedMcpServerId: "unproxied-source-1" })),
     ).toEqual({
-      General: ["Visibility", "General"],
+      General: ["Availability", "General"],
       Publishing: ["Publishing"],
       "Sign-in and identity": ["Authentication"],
       "Danger zone": ["Danger Zone"],
@@ -251,7 +252,7 @@ describe("SettingsTab", () => {
   it("lands old Access links on Availability when the area is gone", () => {
     renderTab(server({ remoteMcpServerId: "remote-source-1" }));
     expect(document.getElementById("settings-access")?.textContent).toContain(
-      "Visibility",
+      "Availability",
     );
   });
 
@@ -297,7 +298,7 @@ describe("SettingsTab upstream identity gate", () => {
   it("shows only the credentials as Identity on a remote server when enforced", () => {
     setEnforcement("enforced");
     expect(renderSettings(remoteServer())).toEqual([
-      "Visibility",
+      "Availability",
       "General",
       "Publishing",
       "Identity",
@@ -348,9 +349,9 @@ describe("SettingsTab upstream identity gate", () => {
       server({ tunneledMcpServerId: "tunneled-source-1" }),
     );
     expect(headings.slice(0, 7)).toEqual([
+      "Availability",
       "General",
       "Visibility",
-      "Public Access",
       "Public Rate Limits",
       "Publishing",
       "Authentication",
@@ -376,7 +377,7 @@ describe("SettingsTab upstream identity gate", () => {
       expect(
         renderSettings(server({ unproxiedMcpServerId: "unproxied-source-1" })),
       ).toEqual([
-        "Visibility",
+        "Availability",
         "General",
         "Publishing",
         "Authentication",

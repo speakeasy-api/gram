@@ -25,6 +25,9 @@ const REMOTE_SERVER = {
 vi.mock("@/hooks/useProviderSetupRollout", () => ({
   useProviderSetupRollout: () => state.rollout,
 }));
+vi.mock("./useMcpServerReachability", () => ({
+  useMcpServerReachability: () => ({ kind: "off" }),
+}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org" }),
   useProject: () => ({ id: "project" }),

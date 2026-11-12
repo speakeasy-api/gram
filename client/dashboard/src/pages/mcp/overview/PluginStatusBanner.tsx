@@ -134,16 +134,17 @@ function WritablePluginStatusBanner({
   // detail page shouldn't crash the whole page via the error boundary when
   // it does. The existing `if (!data) return null` below already degrades
   // gracefully on a failed fetch.
-  const { data, isFetching: isPluginsFetching } = usePlugins(scope, undefined, {
+  const { data } = usePlugins(scope, undefined, {
     throwOnError: false,
   });
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false);
   // Polled so the banner picks up the Temporal generator-rollout schedule's
-  // auto-sync without a manual refresh.
-  const { data: publishStatus, isFetching: isPublishStatusFetching } =
-    usePublishStatus(scope, undefined, {
-      refetchInterval: 5_000,
-    });
+  // auto-sync without a manual refresh. The poll is silent: a spinner keyed
+  // to it would reappear every 5s beside the status and never settle. Saving
+  // shows its own spinner on the Publish button.
+  const { data: publishStatus } = usePublishStatus(scope, undefined, {
+    refetchInterval: 5_000,
+  });
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
@@ -180,7 +181,6 @@ function WritablePluginStatusBanner({
   if (!data) return null;
 
   const plugins = data.plugins;
-  const isRefetching = (isPluginsFetching || isPublishStatusFetching) && !!data;
   const memberPlugins = plugins.filter((plugin) =>
     plugin.servers?.some((s) => serverMatchesRef(s, server)),
   );
@@ -387,6 +387,14 @@ function WritablePluginStatusBanner({
       ? "Marketplace needs setup"
       : "Not in a plugin";
 
+  // Plugins are optional, so a server in none is neutral; one in a plugin
+  // nobody can install yet is the case worth a warning.
+  const statusTone = isTrulyPublished
+    ? "success"
+    : isPublished
+      ? "warning"
+      : "neutral";
+
   const statusHint = isTrulyPublished
     ? memberPlugins.map((plugin) => plugin.name).join(", ")
     : isPublished && !marketplaceReady
@@ -407,11 +415,8 @@ function WritablePluginStatusBanner({
           <SettingsSection.Body>
             <div className="space-y-0.5">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <StatusDot tone={isTrulyPublished ? "success" : "warning"} />
+                <StatusDot tone={statusTone} />
                 {statusLabel}
-                {isRefetching && (
-                  <Spinner className="text-muted-foreground size-3" />
-                )}
               </div>
               <Text muted small className="block max-w-2xl pl-4">
                 {statusHint}
@@ -455,11 +460,8 @@ function WritablePluginStatusBanner({
             className="flex shrink-0 items-center gap-2 text-sm whitespace-nowrap"
             title={statusHint}
           >
-            <StatusDot tone={isTrulyPublished ? "success" : "warning"} />
+            <StatusDot tone={statusTone} />
             {statusLabel}
-            {isRefetching && (
-              <Spinner className="text-muted-foreground size-3" />
-            )}
           </span>
           {pickerControls}
         </div>
@@ -492,9 +494,6 @@ function WritablePluginStatusBanner({
                   ? "Marketplace needs setup"
                   : "Not published to any plugin"}
             </Text>
-            {isRefetching && (
-              <Spinner className="text-muted-foreground ml-1 h-3.5 w-3.5" />
-            )}
           </div>
           <Text variant="small" className="text-muted-foreground pl-6">
             {isTrulyPublished

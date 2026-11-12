@@ -1,8 +1,15 @@
 import { useGatewayDetailChrome } from "@/components/mcp/useGatewayDetailChrome";
 import { McpDetailFrame } from "@/components/mcp/McpDetailFrame";
+import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import {
+  RouteNotFoundState,
+  SecondaryRouteAction,
+} from "@/components/route-not-found-state";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
+import { isNotNotFound } from "@/lib/query-errors";
+import { isNotFoundError } from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import { useGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
@@ -19,7 +26,63 @@ import { GatewayOverviewTab } from "./GatewayOverviewTab";
 import { GatewaySettingsTab } from "./GatewaySettingsTab";
 import { GatewaySkillsTab } from "./GatewaySkillsTab";
 
+/**
+ * Reads the gateway before the detail chrome mounts: a deleted or unknown id
+ * answers 404, which gets its own page here instead of the error boundary.
+ */
 export default function GatewayDetails(): JSX.Element {
+  const { gatewayId } = useParams<{ gatewayId: string }>();
+  const id = gatewayId ?? "";
+  const { data, error } = useGetMetaMcpServer({ id }, undefined, {
+    enabled: id !== "",
+    throwOnError: isNotNotFound,
+  });
+  if (isNotFoundError(error)) return <GatewayNotFound id={id} />;
+  // The chrome reads the same query without the not-found guard, so it
+  // mounts only once the gateway is known to exist.
+  if (id !== "" && !data && !error) {
+    return (
+      <McpDetailFrame
+        chrome={null}
+        breadcrumbs={{
+          substitutions: { [id]: "Gateway" },
+          skipSegments: ["gateway", ...GATEWAY_TAB_URLS],
+        }}
+      >
+        {null}
+      </McpDetailFrame>
+    );
+  }
+  return <GatewayDetailsContent />;
+}
+
+function GatewayNotFound({ id }: { id: string }): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <Page>
+      <Page.Header>
+        {/* The missing gateway's id is not a name: leave it, and the tab, out. */}
+        <Page.Header.Breadcrumbs
+          substitutions={{ [id]: "Gateway not found" }}
+          skipSegments={["gateway", ...GATEWAY_TAB_URLS]}
+        />
+      </Page.Header>
+      <Page.Body>
+        <RouteNotFoundState
+          title="Gateway not found"
+          description="It may have been deleted."
+          action={
+            <routes.mcp.Link>
+              <SecondaryRouteAction>Back to MCP</SecondaryRouteAction>
+            </routes.mcp.Link>
+          }
+        />
+      </Page.Body>
+    </Page>
+  );
+}
+
+function GatewayDetailsContent(): JSX.Element {
   const { gatewayId } = useParams<{ gatewayId: string }>();
   const location = useLocation();
   const routes = useRoutes();
@@ -32,7 +95,10 @@ export default function GatewayDetails(): JSX.Element {
     data: metaMcpServer,
     isLoading,
     isError,
-  } = useGetMetaMcpServer({ id }, undefined, { enabled: id !== "" });
+  } = useGetMetaMcpServer({ id }, undefined, {
+    enabled: id !== "",
+    throwOnError: isNotNotFound,
+  });
 
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ metaMcpServerId: id }, undefined, {

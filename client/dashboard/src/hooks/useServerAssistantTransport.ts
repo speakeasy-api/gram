@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -30,6 +30,8 @@ export interface UseServerAssistantTransportResult {
   allowed: boolean;
   /** Connection error message, if resolving the managed assistant failed. */
   error: string | null;
+  /** Re-attempts the failed read or provisioning call behind `error`. */
+  retry: () => void;
   /**
    * True when the project has no managed assistant yet and the caller lacks
    * `assistant:write`. UI should surface "ask an admin to enable this" rather
@@ -38,6 +40,8 @@ export interface UseServerAssistantTransportResult {
    */
   needsAdmin: boolean;
 }
+
+const UNAVAILABLE_MESSAGE = "Project assistant is unavailable.";
 
 // Several components call this hook at once (the dock plus each chat list).
 // Each instance would otherwise fire its own write-scoped ensure on the same
@@ -153,11 +157,16 @@ export function useServerAssistantTransport(
 
   const queryClient = useQueryClient();
   const organizationId = organization.id;
-  const ensure = useEnsureManagedAssistantMutation();
+  // The ensure fires on page load, not on a user action, so a failure must not
+  // raise the global "Request failed" toast. The dock shows `error` inline
+  // with a retry when the user opens it.
+  const ensure = useEnsureManagedAssistantMutation({ onError: () => {} });
   const ensureMutateAsync = ensure.mutateAsync;
 
   const [provisionedId, setProvisionedId] = useState<string>("");
   const [provisionError, setProvisionError] = useState<string | null>(null);
+  // Bumped by `retry` to re-run the provisioning effect after a failure.
+  const [retryNonce, setRetryNonce] = useState(0);
 
   // Latch invariant: holds the slug whose ensure call has already fired this
   // session, so re-renders after the read settles don't replay it. Reset when
@@ -205,12 +214,11 @@ export function useServerAssistantTransport(
         // re-fire ensure. Without this, a transient 500 or a 409 from the
         // managed-name conflict would stick until full page reload.
         provisionedForSlugRef.current = null;
-        setProvisionError(
-          "Couldn't connect to the Project Assistant. Try reopening the sidebar.",
-        );
+        setProvisionError(UNAVAILABLE_MESSAGE);
       },
     );
   }, [
+    retryNonce,
     authorized,
     organizationId,
     projectSlug,
@@ -227,9 +235,16 @@ export function useServerAssistantTransport(
     : "";
   const ready = assistantId !== "";
   const needsAdmin = authorized && is404 && !rbacLoading && !canCreate;
-  const error = isOtherError
-    ? "Couldn't connect to the Project Assistant. Try reopening the sidebar."
-    : provisionError;
+  const error = isOtherError ? UNAVAILABLE_MESSAGE : provisionError;
+  const refetchManaged = getQuery.refetch;
+  const retry = useCallback(() => {
+    if (isOtherError) {
+      void refetchManaged();
+      return;
+    }
+    setProvisionError(null);
+    setRetryNonce((n) => n + 1);
+  }, [isOtherError, refetchManaged]);
 
   const transport = useMemo<ElementsTransportFactory | undefined>(() => {
     if (!ready) return undefined;
@@ -257,6 +272,7 @@ export function useServerAssistantTransport(
     ready,
     allowed: canRead,
     error,
+    retry,
     needsAdmin,
   };
 }

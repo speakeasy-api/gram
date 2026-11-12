@@ -26,7 +26,7 @@ import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
@@ -268,6 +268,11 @@ function MemberNameCell({ row }: { row: MemberRow }): JSX.Element {
 }
 
 /** Member management (list, reorder, add, remove) rendered on the Overview tab. */
+/** Anchors the Servers list on a gateway's Overview tab. */
+export const GATEWAY_SERVERS_SECTION_ID = "gateway-servers";
+/** Landing on the Overview with this hash opens the Add servers sheet. */
+export const GATEWAY_ADD_SERVERS_HASH = "add-servers";
+
 export function GatewayMembersSection({
   metaMcpServer,
   memberStates,
@@ -293,6 +298,11 @@ export function GatewayMembersSection({
   const toolsets = useToolsets();
 
   const [addOpen, setAddOpen] = useState(false);
+  // The header's readiness checklist links an empty gateway here.
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === `#${GATEWAY_ADD_SERVERS_HASH}`) setAddOpen(true);
+  }, [location.hash, location.key]);
   const batchState = useMemo<AddBatchState>(
     () => ({ wrappers: new Map(), orders: new Map(), completed: new Set() }),
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- reset retry caches when navigating to another gateway
@@ -575,91 +585,93 @@ export function GatewayMembersSection({
 
   return (
     <>
-      <Page.Section>
-        {/* Section heading under the Overview page title: no eyebrow, smaller
+      <div id={GATEWAY_SERVERS_SECTION_ID}>
+        <Page.Section>
+          {/* Section heading under the Overview page title: no eyebrow, smaller
             serif. */}
-        <Page.Section.Title area="" className="text-display-xs">
-          Servers
-        </Page.Section.Title>
-        <Page.Section.Description>
-          Agents see these servers in this order.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          <RequireScope
-            scope="mcp:write"
-            resourceId={metaMcpServer.id}
-            level="component"
-          >
-            <Button size="sm" onClick={() => setAddOpen(true)}>
-              <Button.LeftIcon>
-                <Plus />
-              </Button.LeftIcon>
-              <Button.Text>Add servers</Button.Text>
-            </Button>
-          </RequireScope>
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          {isLoading ? (
-            <SkeletonTable />
-          ) : isError ? (
-            <div role="alert">
-              <InlineEmptyState
-                icon="triangle-alert"
-                heading="Couldn't load servers"
-                description="Check your connection, then try again."
-                action={
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => void refetch()}
-                  >
-                    <Button.Text>Retry</Button.Text>
-                  </Button>
-                }
-              />
-            </div>
-          ) : (
-            <Table columns={columns}>
-              <Table.Header columns={columns} />
-              {rows.length === 0 ? (
-                <Table.NoResultsMessage>
-                  {/* No padding of its own: Table.NoResultsMessage already
+          <Page.Section.Title area="" className="text-display-xs">
+            Servers
+          </Page.Section.Title>
+          <Page.Section.Description>
+            Agents see these servers in this order.
+          </Page.Section.Description>
+          <Page.Section.CTA>
+            <RequireScope
+              scope="mcp:write"
+              resourceId={metaMcpServer.id}
+              level="component"
+            >
+              <Button size="sm" onClick={() => setAddOpen(true)}>
+                <Button.LeftIcon>
+                  <Plus />
+                </Button.LeftIcon>
+                <Button.Text>Add servers</Button.Text>
+              </Button>
+            </RequireScope>
+          </Page.Section.CTA>
+          <Page.Section.Body>
+            {isLoading ? (
+              <SkeletonTable />
+            ) : isError ? (
+              <div role="alert">
+                <InlineEmptyState
+                  icon="triangle-alert"
+                  heading="Couldn't load servers"
+                  description="Check your connection, then try again."
+                  action={
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void refetch()}
+                    >
+                      <Button.Text>Retry</Button.Text>
+                    </Button>
+                  }
+                />
+              </div>
+            ) : (
+              <Table columns={columns}>
+                <Table.Header columns={columns} />
+                {rows.length === 0 ? (
+                  <Table.NoResultsMessage>
+                    {/* No padding of its own: Table.NoResultsMessage already
                       insets the cell, and a second layer here made this empty
                       state sit lower than every other one. */}
-                  <div className="flex flex-col items-center gap-3">
-                    <Text muted>
-                      Add servers so agents can use their tools through this
-                      gateway.
-                    </Text>
-                    <RequireScope
-                      scope="mcp:write"
-                      resourceId={metaMcpServer.id}
-                      level="component"
-                    >
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setAddOpen(true)}
+                    <div className="flex flex-col items-center gap-3">
+                      <Text muted>
+                        Add servers so agents can use their tools through this
+                        gateway.
+                      </Text>
+                      <RequireScope
+                        scope="mcp:write"
+                        resourceId={metaMcpServer.id}
+                        level="component"
                       >
-                        <Button.LeftIcon>
-                          <Plus className="size-4" />
-                        </Button.LeftIcon>
-                        <Button.Text>Add servers</Button.Text>
-                      </Button>
-                    </RequireScope>
-                  </div>
-                </Table.NoResultsMessage>
-              ) : (
-                <Table.Body
-                  columns={columns}
-                  data={rows}
-                  rowKey={(row) => row.member.id}
-                />
-              )}
-            </Table>
-          )}
-        </Page.Section.Body>
-      </Page.Section>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setAddOpen(true)}
+                        >
+                          <Button.LeftIcon>
+                            <Plus className="size-4" />
+                          </Button.LeftIcon>
+                          <Button.Text>Add servers</Button.Text>
+                        </Button>
+                      </RequireScope>
+                    </div>
+                  </Table.NoResultsMessage>
+                ) : (
+                  <Table.Body
+                    columns={columns}
+                    data={rows}
+                    rowKey={(row) => row.member.id}
+                  />
+                )}
+              </Table>
+            )}
+          </Page.Section.Body>
+        </Page.Section>
+      </div>
 
       <AddServersSheet
         key={metaMcpServer.id}
