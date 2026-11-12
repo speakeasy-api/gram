@@ -8,7 +8,7 @@ import { defineConfig } from "@playwright/test";
 // a browser. https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
 export default defineConfig({
   testDir: "./tests",
-  testMatch: "registry-editor.spec.ts",
+  testMatch: ["registry-editor.spec.ts", "admin-layout.spec.ts"],
   workers: 1,
   outputDir: "./.playwright",
   timeout: 30_000,
