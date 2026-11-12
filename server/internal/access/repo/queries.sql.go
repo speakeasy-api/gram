@@ -1733,7 +1733,10 @@ WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.server_id = s.id
     AND blocked.strict
-    AND blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (
+      blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+      OR (allowed.scope = 'mcp:write' AND blocked.scope = 'mcp:blocked_read')
+    )
     AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY s.name
@@ -1761,9 +1764,12 @@ type ListAccessibleMCPServersForUserRow struct {
 // server, so plugin membership is deliberately not consulted.
 //
 // The shape mirrors the authorization engine's own: a permission is an allow
-// grant for a scope minus a blocked_ grant for THAT SAME scope proving the same
-// server (see authz/expressions.go). mcp:blocked_connect withdraws
-// mcp:connect; it does not withdraw mcp:read. A grant made directly to the
+// grant for a scope minus a blocked_ grant proving the same server for that
+// scope or for one it implies (see authz/expressions.go): mcp:blocked_write
+// withdraws mcp:write, and mcp:blocked_read withdraws mcp:read and also
+// mcp:write, because a write check honours a read block (see scopeExpansions
+// in authz/scopes.go). mcp:blocked_connect withdraws mcp:connect only;
+// connect is implied by neither read nor write. A grant made directly to the
 // user that names this server outranks a block inherited from a role or
 // user:all, while the user's own blocks always apply (authz/precedence.go).
 func (q *Queries) ListAccessibleMCPServersForUser(ctx context.Context, arg ListAccessibleMCPServersForUserParams) ([]ListAccessibleMCPServersForUserRow, error) {

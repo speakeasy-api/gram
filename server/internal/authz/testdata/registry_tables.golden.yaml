@@ -73,7 +73,8 @@ expansions:
   mcp:blocked_auth: []
   mcp:blocked_connect: []
   mcp:blocked_read: []
-  mcp:blocked_write: []
+  mcp:blocked_write:
+    - mcp:blocked_read
   mcp:connect: []
   mcp:read:
     - mcp:write

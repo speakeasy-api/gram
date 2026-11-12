@@ -119,8 +119,8 @@ describe("revokeScopeWrite", () => {
   });
 
   it("blocks view without touching a block already written for manage", () => {
-    // The mcp:blocked_* scopes are independent, so each line's block stands
-    // on its own rather than one making another redundant.
+    // Each line's block is written for that line, even where a view block
+    // would also cover manage, so lifting one line later leaves the other.
     const { direct, rows } = state([
       role({ level: "manage" }),
       role({ appliesTo: "resource", level: "blocked_manage" }),
@@ -315,8 +315,8 @@ describe("revokeRowWrite", () => {
   });
 
   it("blocks every scope for a principal an organization-wide rule reaches", () => {
-    // Blocks are independent, so "no access at all" has to say so three
-    // times rather than leaning on one block to cover the rest.
+    // Connect's block stands alone, so "no access at all" writes a block for
+    // each line rather than leaning on the view block to cover the rest.
     const { direct, rows } = state([role()]);
 
     const write = revokeRowWrite(direct, rows[0]!, "Acme Ops");

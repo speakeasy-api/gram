@@ -105,9 +105,9 @@ describe("scope resolution", () => {
     ).toBe(false);
   });
 
-  it("takes away only the scope a block names", () => {
-    // The mcp:blocked_* scopes are independent, so closing connect leaves
-    // view and manage exactly as the role left them.
+  it("takes away only connect when connect is blocked", () => {
+    // Connect is implied by neither view nor manage, so closing it leaves
+    // both exactly as the role left them.
     const row = rowFor([
       role("Engineering", { level: "manage" }),
       role("Engineering", { appliesTo: "resource", level: "blocked" }),
@@ -116,6 +116,27 @@ describe("scope resolution", () => {
     expect(scopeState(row, "use", catalog).granted).toBe(false);
     expect(scopeState(row, "view", catalog).granted).toBe(true);
     expect(scopeState(row, "manage", catalog).granted).toBe(true);
+  });
+
+  it("takes manage away with a view block, since manage includes view", () => {
+    const row = rowFor([
+      role("Engineering", { level: "manage" }),
+      role("Engineering", { appliesTo: "resource", level: "blocked_view" }),
+    ]);
+
+    expect(scopeState(row, "view", catalog).granted).toBe(false);
+    expect(scopeState(row, "manage", catalog).granted).toBe(false);
+    expect(scopeState(row, "use", catalog).granted).toBe(false);
+  });
+
+  it("leaves view standing under a manage block", () => {
+    const row = rowFor([
+      role("Engineering", { level: "manage" }),
+      role("Engineering", { appliesTo: "resource", level: "blocked_manage" }),
+    ]);
+
+    expect(scopeState(row, "view", catalog).granted).toBe(true);
+    expect(scopeState(row, "manage", catalog).granted).toBe(false);
   });
 
   it("honours a block that covers every server, which this page cannot lift", () => {
