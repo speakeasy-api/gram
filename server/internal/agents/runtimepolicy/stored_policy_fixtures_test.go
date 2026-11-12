@@ -66,7 +66,7 @@ func TestStoredPolicyFixtures_DecodeAtEveryVersion(t *testing.T) {
 
 			encoded, err := EncodeDelegatedPolicy(version, policy)
 			require.NoError(t, err, "v%d %q", version, name)
-			require.JSONEq(t, compact.String(), string(encoded), "v%d %q no longer re-encodes to its stored bytes", version, name)
+			require.Equal(t, compact.String(), string(encoded), "v%d %q no longer re-encodes to its stored bytes", version, name)
 
 			grants := make([]string, 0, len(policy.RuntimeGrants()))
 			for _, grant := range policy.RuntimeGrants() {
@@ -92,6 +92,7 @@ func TestStoredPolicyFixtures_NoneBeyondCurrentVersion(t *testing.T) {
 		var version DelegatedPolicyVersion
 		_, err := fmt.Sscanf(entry.Name(), "v%d.json", &version)
 		require.NoError(t, err, "unexpected file %s", entry.Name())
+		require.GreaterOrEqual(t, version, DelegatedPolicyVersion1, "fixture %s is for a version this reader does not support", entry.Name())
 		require.LessOrEqual(t, version, CurrentDelegatedPolicyVersion, "fixture %s is for a version this reader does not support", entry.Name())
 	}
 }
