@@ -49,6 +49,12 @@ func RiskPolicyActionEnum() {
 	Enum("flag", "confirm", "warn", "block", "quarantine", "require_approval")
 }
 
+// RiskPolicyResultActionEnum is RiskPolicyActionEnum without the deprecated
+// "warn" input alias. Responses always carry the canonical "confirm".
+func RiskPolicyResultActionEnum() {
+	Enum("flag", "confirm", "block", "quarantine", "require_approval")
+}
+
 // RiskPolicyTypeEnum applies the allowed-values constraint to a policy_type
 // attribute. "standard" is the regex/presidio/custom detection policy;
 // "prompt_based" is an LLM-judge policy that evaluates `prompt`
@@ -203,8 +209,8 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
-	Attribute("action", String, "Policy action: flag (log only), confirm (block until the user confirms they want to go ahead; they bypass it themselves and the confirmation is audited; warn is its deprecated former name), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
-		RiskPolicyActionEnum()
+	Attribute("action", String, "Policy action: flag (log only), confirm (block until the user confirms they want to go ahead; they bypass it themselves and the confirmation is audited; formerly named warn), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
+		RiskPolicyResultActionEnum()
 		Default("flag")
 	})
 	Attribute("audience_type", String, "Policy audience type: everyone or targeted.", func() {

@@ -66,7 +66,7 @@ export class PolicyChallenges extends ClientSDK {
    * getRiskPolicyChallenge risk
    *
    * @remarks
-   * Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the approval page (shows what was flagged and Approve/Deny actions).
+   * Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the confirmation page (shows what was flagged and the Confirm and Keep blocked actions).
    */
   async get(
     request: GetRiskPolicyChallengeRequest,

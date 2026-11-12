@@ -20,6 +20,8 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { AddServerGuardrailDialog } from "./AddServerGuardrailDialog";
 import { ServerRiskEvents } from "./ServerRiskEvents";
+import { enumPresentation } from "@/lib/enum";
+import { canonicalPolicyAction } from "@/pages/security/policy-data";
 
 type GuardrailsView = "policies" | "events";
 
@@ -28,7 +30,6 @@ const VIEW_PARAM = "view";
 const ACTION_LABELS: Record<RiskPolicy["action"], string> = {
   flag: "Log",
   confirm: "Block until confirmed",
-  warn: "Block until confirmed",
   block: "Block",
   quarantine: "Quarantine",
   require_approval: "Require approval",
@@ -206,7 +207,11 @@ function PolicyRows({
             </div>
           </div>
           <span className="text-muted-foreground font-mono text-xs">
-            {ACTION_LABELS[policy.action]}
+            {enumPresentation(
+              ACTION_LABELS,
+              canonicalPolicyAction(policy.action),
+              "Unknown",
+            )}
           </span>
           <SeverityBadge score={policy.score} />
           <span className="text-muted-foreground font-mono text-xs uppercase">

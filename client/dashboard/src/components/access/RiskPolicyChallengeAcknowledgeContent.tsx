@@ -234,7 +234,7 @@ function ChallengeReview({
       </Stack>
       <Text muted small className="text-center">
         Confirming lets the agent retry this exact action and is recorded in the
-        audit log. Keep blocked leaves it blocked.
+        audit log. Keeping it blocked leaves the action blocked.
       </Text>
     </Stack>
   );

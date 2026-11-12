@@ -71656,7 +71656,7 @@ paths:
                 type: mutation
     /rpc/risk.getPolicyChallenge:
         post:
-            description: Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the approval page (shows what was flagged and Approve/Deny actions).
+            description: Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the confirmation page (shows what was flagged and the Confirm and Keep blocked actions).
             operationId: getRiskPolicyChallenge
             parameters:
                 - allowEmptyValue: true
@@ -126837,12 +126837,11 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag (log only), confirm (block until the user confirms they want to go ahead; they bypass it themselves and the confirmation is audited; warn is its deprecated former name), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
+                    description: 'Policy action: flag (log only), confirm (block until the user confirms they want to go ahead; they bypass it themselves and the confirmation is audited; formerly named warn), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
                     default: flag
                     enum:
                         - flag
                         - confirm
-                        - warn
                         - block
                         - quarantine
                         - require_approval

@@ -509,9 +509,9 @@ type CreateRiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), confirm (block until the user confirms they
 	// want to go ahead; they bypass it themselves and the confirmation is audited;
-	// warn is its deprecated former name), block (deny in real-time), quarantine
-	// (deny and freeze the hook session), or require_approval (hold the call until
-	// a listed approver approves it). MCP-scoped policies support flag, block and
+	// formerly named warn), block (deny in real-time), quarantine (deny and freeze
+	// the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
 	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
@@ -628,9 +628,9 @@ type GetRiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), confirm (block until the user confirms they
 	// want to go ahead; they bypass it themselves and the confirmation is audited;
-	// warn is its deprecated former name), block (deny in real-time), quarantine
-	// (deny and freeze the hook session), or require_approval (hold the call until
-	// a listed approver approves it). MCP-scoped policies support flag, block and
+	// formerly named warn), block (deny in real-time), quarantine (deny and freeze
+	// the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
 	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
@@ -717,9 +717,9 @@ type UpdateRiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), confirm (block until the user confirms they
 	// want to go ahead; they bypass it themselves and the confirmation is audited;
-	// warn is its deprecated former name), block (deny in real-time), quarantine
-	// (deny and freeze the hook session), or require_approval (hold the call until
-	// a listed approver approves it). MCP-scoped policies support flag, block and
+	// formerly named warn), block (deny in real-time), quarantine (deny and freeze
+	// the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
 	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
@@ -12602,9 +12602,9 @@ type RiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), confirm (block until the user confirms they
 	// want to go ahead; they bypass it themselves and the confirmation is audited;
-	// warn is its deprecated former name), block (deny in real-time), quarantine
-	// (deny and freeze the hook session), or require_approval (hold the call until
-	// a listed approver approves it). MCP-scoped policies support flag, block and
+	// formerly named warn), block (deny in real-time), quarantine (deny and freeze
+	// the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
 	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
@@ -23939,8 +23939,8 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "warn", "block", "quarantine", "require_approval"}))
+		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -24123,8 +24123,8 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "warn", "block", "quarantine", "require_approval"}))
+		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -24240,8 +24240,8 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "warn", "block", "quarantine", "require_approval"}))
+		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -39876,8 +39876,8 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "warn", "block", "quarantine", "require_approval"}))
+		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {

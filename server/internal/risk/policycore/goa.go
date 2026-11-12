@@ -65,7 +65,7 @@ func ToGoa(policy Policy) *types.RiskPolicy {
 		DisabledRules:          policy.DisabledRules,
 		CustomRuleIds:          policy.CustomRuleIDs,
 		Enabled:                policy.Enabled,
-		Action:                 policy.Action,
+		Action:                 CanonicalAction(policy.Action),
 		AudienceType:           policy.AudienceType,
 		AudiencePrincipalUrns:  policy.AudiencePrincipalURNs,
 		McpScope:               mcpScope,

@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/Button";
 import { useSlugs } from "@/contexts/Sdk";
 import { StepContainer } from "../step-container";
 import {
+  canonicalPolicyAction,
   ruleCategoryMeta,
   POLICY_MESSAGE_TYPE_META,
   type DetectorMode,
@@ -393,8 +394,9 @@ export function ConfigurePoliciesStep({
           }
           continue;
         }
-        const serverAction = isPolicyAction(existing.action)
-          ? existing.action
+        const existingAction = canonicalPolicyAction(existing.action);
+        const serverAction = isPolicyAction(existingAction)
+          ? existingAction
           : next[cat].action;
         // Scope hydration needs the category recommendations; until they
         // load, leave the local selection alone rather than showing a scope

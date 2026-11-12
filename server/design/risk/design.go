@@ -1084,7 +1084,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("getRiskPolicyChallenge", func() {
-		Description("Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the approval page (shows what was flagged and Approve/Deny actions).")
+		Description("Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the confirmation page (shows what was flagged and the Confirm and Keep blocked actions).")
 		Security(security.Session)
 
 		Payload(func() {

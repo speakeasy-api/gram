@@ -27477,7 +27477,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    create-risk-policy-bypass-request: Create or refresh a risk policy bypass request from a signed request URL token.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-bypass-request-target: Fetch what a request access link asks for (the blocked server and tool) WITHOUT filing the request. Powers the request access page.`)
 	fmt.Fprintln(os.Stderr, `    acknowledge-risk-policy-challenge: Confirm a blocked action for a confirm (formerly warn) risk policy from a confirmation-link token. Records the confirmation so the user's retried action proceeds; self-service (no admin approval).`)
-	fmt.Fprintln(os.Stderr, `    get-risk-policy-challenge: Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the approval page (shows what was flagged and Approve/Deny actions).`)
+	fmt.Fprintln(os.Stderr, `    get-risk-policy-challenge: Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the confirmation page (shows what was flagged and the Confirm and Keep blocked actions).`)
 	fmt.Fprintln(os.Stderr, `    decline-risk-policy-challenge: Decline a confirm policy challenge from a confirmation-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-block: Get a tool call block by its risk result ID for the durable block page.`)
 	fmt.Fprintln(os.Stderr, `    submit-risk-block-feedback: Record thumbs-up/thumbs-down feedback for a tool call block from the block page.`)
@@ -28288,7 +28288,7 @@ func riskGetRiskPolicyChallengeUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the approval page (shows what was flagged and Approve/Deny actions).`)
+	fmt.Fprintln(os.Stderr, `Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the confirmation page (shows what was flagged and the Confirm and Keep blocked actions).`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

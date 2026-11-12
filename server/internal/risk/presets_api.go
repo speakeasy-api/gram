@@ -132,7 +132,7 @@ Rules:
 - Choose the preset whose coverage best matches the description. Set "preset_id" to its id.
 - If no preset fits, set "preset_id" to "" and write "prompt": a precise instruction for a policy model that flags a message when the described behaviour occurs. Name what is in scope and what is not.
 - "name": 2-6 words, title case, specific to the request.
-- "action": "flag" (log only), "confirm" (block until the user confirms they want to go ahead), "block" (deny the request) or "quarantine" (deny and freeze the session until an administrator releases it). Only escalate above the preset default when the description asks to stop, block, deny, prevent or quarantine something.
+- "action": "flag" (log only), "confirm" (block until the user confirms they want to go ahead), "block" (deny the request) or "quarantine" (deny and freeze the session until an administrator releases it). Only escalate above the preset default when the description asks to stop, block, deny, prevent or quarantine something, or to ask the user to confirm before going ahead. Choose "confirm" when the description asks for confirmation or a check with the user before proceeding.
 - "score": severity 0.1-10 by impact; keep the preset default unless the description signals higher or lower impact.
 - "confidence": 0-1, how well the chosen preset (or bespoke prompt) covers the description.
 - "rationale": one sentence for the administrator.

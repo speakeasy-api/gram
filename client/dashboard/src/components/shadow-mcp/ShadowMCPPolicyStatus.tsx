@@ -35,7 +35,7 @@ function policyStatusText(
         label: "Confirming",
         icon: "shield-alert",
         description:
-          "Confirm policy is enabled. Users must confirm before they can use a server without allow rules.",
+          "Confirm policy is enabled. Users in the policy's audience must confirm before they can use a server without allow rules.",
       };
     case "flagging":
       return {

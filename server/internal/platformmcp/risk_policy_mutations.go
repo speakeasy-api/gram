@@ -394,12 +394,19 @@ func normalizeRiskPolicyPatchForReceipt(patch map[string]json.RawMessage) (map[s
 				return nil, err
 			}
 			normalized[field] = value
-		case "name", "action":
+		case "name":
 			var value string
 			if json.Unmarshal(raw, &value) != nil {
 				return nil, invalidRiskPolicyRequest()
 			}
 			normalized[field] = strings.TrimSpace(value)
+		case "action":
+			var value string
+			if json.Unmarshal(raw, &value) != nil {
+				return nil, invalidRiskPolicyRequest()
+			}
+			// "warn" and "confirm" are one action, so they hash the same.
+			normalized[field] = policycore.CanonicalAction(strings.TrimSpace(value))
 		case "user_message":
 			var value string
 			if json.Unmarshal(raw, &value) != nil {

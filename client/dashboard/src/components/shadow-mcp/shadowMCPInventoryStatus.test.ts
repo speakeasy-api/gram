@@ -96,7 +96,9 @@ describe("shadowMCPPolicyState", () => {
   });
 
   it("reads the legacy warn action as confirm", () => {
-    expect(shadowMCPPolicyState([policy({ action: "warn" })])).toBe("warning");
+    expect(
+      shadowMCPPolicyState([policy({ action: unrecognized("warn") })]),
+    ).toBe("warning");
   });
 
   it("prioritizes warning policies over flagging policies", () => {

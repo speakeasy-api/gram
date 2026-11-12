@@ -125,8 +125,8 @@ type Service interface {
 	// action proceeds; self-service (no admin approval).
 	AcknowledgeRiskPolicyChallenge(context.Context, *AcknowledgeRiskPolicyChallengePayload) (res *AcknowledgeRiskPolicyChallengeResult, err error)
 	// Fetch the details of a confirm policy challenge from a confirmation-link
-	// token, WITHOUT confirming it. Powers the approval page (shows what was
-	// flagged and Approve/Deny actions).
+	// token, WITHOUT confirming it. Powers the confirmation page (shows what was
+	// flagged and the Confirm and Keep blocked actions).
 	GetRiskPolicyChallenge(context.Context, *GetRiskPolicyChallengePayload) (res *GetRiskPolicyChallengeResult, err error)
 	// Decline a confirm policy challenge from a confirmation-link token:
 	// invalidate the link and mark the challenge declined. The blocked action
