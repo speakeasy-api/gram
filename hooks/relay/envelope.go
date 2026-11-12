@@ -384,7 +384,7 @@ func sessionOf(base *agenthooks.Event) *components.HookIngestSession {
 	// The server handles Cowork events differently: their rows share keys
 	// with the transcript the Stop hook ships, and a warned prompt is
 	// confirmed by sending it again because Cowork cannot show the link.
-	if coworkTranscriptMode(base) {
+	if inCoworkVM(base) {
 		s.Surface = new(coworkSurface)
 	}
 	if s.ID == nil && s.TurnID == nil && s.Cwd == nil && s.Model == nil && s.Surface == nil {

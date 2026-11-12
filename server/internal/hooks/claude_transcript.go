@@ -1,15 +1,17 @@
 package hooks
 
 // Claude transcript intake. Claude's unified Chat/Cowork mode runs plugin
-// hooks only inside the Cowork VM, where the per-event hooks cannot be relied
-// on to describe the whole session. When the standard Claude plugin's hooks
-// binary runs there, it relays no per-event hook and instead, each time Stop
-// fires, uploads the transcript lines written since its last successful
-// upload. This endpoint stores those lines as the session's chat history.
+// hooks only inside the Cowork VM, so the per-event hooks miss part of the
+// session: the first prompt, typed in chat before the session moved to
+// Cowork, and the assistant's text. Alongside the per-event hooks, the
+// standard Claude plugin's hooks binary uploads, each time Stop fires, the
+// transcript lines written since its last successful upload. This endpoint
+// stores what the hooks did not.
 //
-// Every stored row is keyed by the transcript entry's uuid, so re-sent lines
-// (a retry after a failed upload, or a fresh VM that starts from offset zero)
-// are idempotent.
+// Prompts and tool calls are keyed by the ids the hooks also use (prompt id,
+// tool_use id), and other entries by the transcript entry's uuid, so a line
+// the hooks already stored, or a re-sent line (a retry after a failed upload,
+// or a fresh VM that starts from offset zero), is stored once.
 
 import (
 	"bytes"

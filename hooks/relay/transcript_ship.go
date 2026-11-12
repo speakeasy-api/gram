@@ -1,11 +1,13 @@
 package relay
 
 // Transcript shipping for Claude's Cowork VM. Claude's unified Chat/Cowork
-// mode runs plugin hooks only inside the Cowork VM, where the per-event hooks
-// cannot be relied on to describe the whole session. When the standard Claude
-// plugin runs there (coworkTranscriptMode), the relay relays no per-event hook
-// and instead, each time Stop fires, uploads the transcript lines written
-// since the last successful upload to the dedicated transcript endpoint.
+// mode runs plugin hooks only inside the Cowork VM, so the per-event hooks
+// miss part of the session: the first prompt, typed in chat before the
+// session moved to Cowork, and the assistant's text. When the standard Claude
+// plugin runs there (inCoworkVM), the relay relays prompt and tool events as
+// it does everywhere else and, each time Stop fires, also uploads the
+// transcript lines written since the last successful upload to the dedicated
+// transcript endpoint.
 //
 // The transcript file is its own durable queue: a per-transcript byte offset
 // advances only once the server has settled a chunk, so a failed upload is
@@ -234,17 +236,18 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) []t
 	return warnings
 }
 
-// coworkTranscriptMode reports whether a Claude Code event fires inside
-// Claude's Cowork VM, where the relay ships the session transcript from Stop
-// and relays no per-event hook. Claude Code names its surface in
+// inCoworkVM reports whether a Claude Code event fires inside Claude's
+// Cowork VM. There the relay marks envelopes with session.surface "cowork",
+// ships the session transcript from Stop, and skips the sign-in preflight and
+// the observe-only handlers. Claude Code names its surface in
 // CLAUDE_CODE_ENTRYPOINT, which every hook process inherits: "remote_cowork"
 // in the Cowork VM, "cli" in a terminal. Every event of a session reads the
-// same value, so one session never mixes per-event rows with transcript rows;
-// deciding from the transcript instead could, because its first lines are
-// still being written when the first events fire. agenthooks reports the
+// same value, so one session is never treated as Cowork for some events and
+// not others; deciding from the transcript instead could, because its first
+// lines are still being written when the first events fire. agenthooks reports the
 // Cowork VM as the remote variant, which Claude Code on the web shares, so the
 // variant cannot decide either.
-func coworkTranscriptMode(base *agenthooks.Event) bool {
+func inCoworkVM(base *agenthooks.Event) bool {
 	return base.Provider == agenthooks.ProviderClaudeCode &&
 		strings.EqualFold(strings.TrimSpace(os.Getenv("CLAUDE_CODE_ENTRYPOINT")), coworkVMEntrypoint)
 }

@@ -90,7 +90,7 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 	// typed in chat before the session moved to Cowork, and assistant text.
 	// The envelopes carry session.surface "cowork", so the server keys prompts and
 	// tool calls by the ids the transcript shares and stores each once. The
-	// observe-only handlers stay off there. See coworkTranscriptMode.
+	// observe-only handlers stay off there. See inCoworkVM.
 	runner.OnPromptSubmitted(r.onPrompt)
 	runner.OnToolPre(r.onToolPre)
 	runner.OnPermission(r.onPermission)
@@ -526,7 +526,7 @@ func cursorMCPEcho(base *agenthooks.Event, toolName string) bool {
 }
 
 func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks.StopDecision, error) {
-	if coworkTranscriptMode(&e.Event) {
+	if inCoworkVM(&e.Event) {
 		warnings := r.shipTranscript(ctx, e)
 		// A Stop that follows a warning continuation ships the reply but never
 		// continues again, so a replayed upload cannot loop Claude.
@@ -543,7 +543,7 @@ func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks
 // where it answers with the neutral decision instead.
 func outsideCowork[E any, D any](h func(context.Context, E) (D, error), neutral func() D) func(context.Context, E) (D, error) {
 	return func(ctx context.Context, e E) (D, error) {
-		if coworkTranscriptMode(agenthooks.EventOf(e)) {
+		if inCoworkVM(agenthooks.EventOf(e)) {
 			return neutral(), nil
 		}
 		return h(ctx, e)
@@ -554,7 +554,7 @@ func outsideCowork[E any, D any](h func(context.Context, E) (D, error), neutral 
 // Cowork VM.
 func observeOutsideCowork[E any](h func(context.Context, E) error) func(context.Context, E) error {
 	return func(ctx context.Context, e E) error {
-		if coworkTranscriptMode(agenthooks.EventOf(e)) {
+		if inCoworkVM(agenthooks.EventOf(e)) {
 			return nil
 		}
 		return h(ctx, e)

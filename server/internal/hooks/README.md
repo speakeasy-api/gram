@@ -111,11 +111,15 @@ rule, uploads are answered by the dashboard and stay queued in the VM.
 `/ahp`. The body's `schema_version` selects the transcript format;
 `claude.transcript.v1` (raw Claude Code JSONL lines) is the only one accepted.
 This endpoint is the one exception to dispatching on canonical feature events:
-the backend parses the provider's own transcript format, because inside the
-Cowork VM the binary relays no per-event hooks to translate.
+the backend parses the provider's own transcript format, because the hooks
+never see the parts of a Cowork session the transcript fills in (the first
+prompt and the assistant's text).
 
-Each entry's uuid keys its rows (`external_message_id` prefixed
-`claude-transcript:`), so a re-sent line is never stored twice.
+Prompts and tool calls are keyed by the ids the hooks also use
+(`claude-prompt:<prompt id>`, `claude-tool-call:<tool_use id>`,
+`claude-tool-result:<tool_use id>`); other entries are keyed by the entry's
+uuid (`claude-transcript:<uuid>`). A line the hooks already stored, or a
+re-sent line, is never stored twice.
 
 ### Warn policies in Cowork
 
