@@ -314,3 +314,26 @@ func withTestScope(p Permission, s authz.Scope) Permission {
 	p.LegacyScope = s
 	return p
 }
+
+// A loosely matched type inside a project must require project_id, so a check
+// cannot leave the project out and pass a grant bounded to another project.
+// Strictly matched types fail closed on a missing key and may leave it optional.
+func TestRegistryValidate_RequiresParentDimension(t *testing.T) {
+	t.Parallel()
+
+	inProject := func(match authz.MatchMode, required bool) ResourceType {
+		thing := validTestType("thing", validTestPermission("read"))
+		thing.Parent = "project"
+		thing.Match = match
+		thing.Dimensions = []Dimension{{Key: authz.SelectorKeyProjectID, Values: nil, Required: required}}
+		return thing
+	}
+	project := validTestType("project", validTestPermission("read"))
+
+	err := validTestRegistry(project, inProject(authz.MatchLoose, false)).Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `thing: dimension "project_id" names the parent project, so it must be Required`)
+
+	require.NoError(t, validTestRegistry(project, inProject(authz.MatchLoose, true)).Validate())
+	require.NoError(t, validTestRegistry(project, inProject(authz.MatchStrict, false)).Validate())
+}
