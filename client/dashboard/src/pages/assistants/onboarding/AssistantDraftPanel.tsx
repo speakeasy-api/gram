@@ -231,11 +231,7 @@ export function AssistantDraftPanel(): JSX.Element {
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
           >
             <Stack gap={6}>
-              <AssistantIdentitySettings
-                key={a.id}
-                assistant={a}
-                onUpdated={() => void draft.refetchAssistant()}
-              />
+              <AssistantIdentitySettings key={a.id} assistant={a} />
               <AssistantUpstreamCredentials
                 assistantId={a.id}
                 canWrite={canWrite}

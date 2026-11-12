@@ -251,7 +251,6 @@ var textOnlyTools = map[string]string{
 	"search_users":                         textOnlyPicker,
 	"continue_session":                     textOnlyForModel,
 	"select_assistant_runtime":             textOnlyAssistant,
-	"upgrade_assistant_workload_identity":  textOnlyAssistant,
 	"choose_assistant_upstream_credential": textOnlyAssistant,
 	"get_my_install_instructions":          textOnlyMember,
 	"get_my_mcp_access":                    textOnlyMember,

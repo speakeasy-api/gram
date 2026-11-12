@@ -3908,3 +3908,48 @@ func BuildDeleteGcpIamPlatformCredentialPayload(adminDeleteGcpIamPlatformCredent
 
 	return v, nil
 }
+
+// BuildListOrganizationAssistantsPayload builds the payload for the admin
+// listOrganizationAssistants endpoint from CLI flags.
+func BuildListOrganizationAssistantsPayload(adminListOrganizationAssistantsOrganizationID string, adminListOrganizationAssistantsAdminSessionToken string) (*admin.ListOrganizationAssistantsPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminListOrganizationAssistantsOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminListOrganizationAssistantsAdminSessionToken != "" {
+			adminSessionToken = &adminListOrganizationAssistantsAdminSessionToken
+		}
+	}
+	v := &admin.ListOrganizationAssistantsPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildMigrateOrganizationAssistantIdentitiesPayload builds the payload for
+// the admin migrateOrganizationAssistantIdentities endpoint from CLI flags.
+func BuildMigrateOrganizationAssistantIdentitiesPayload(adminMigrateOrganizationAssistantIdentitiesBody string, adminMigrateOrganizationAssistantIdentitiesAdminSessionToken string) (*admin.MigrateOrganizationAssistantIdentitiesPayload, error) {
+	var err error
+	var body MigrateOrganizationAssistantIdentitiesRequestBody
+	{
+		err = json.Unmarshal([]byte(adminMigrateOrganizationAssistantIdentitiesBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminMigrateOrganizationAssistantIdentitiesAdminSessionToken != "" {
+			adminSessionToken = &adminMigrateOrganizationAssistantIdentitiesAdminSessionToken
+		}
+	}
+	v := &admin.MigrateOrganizationAssistantIdentitiesPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

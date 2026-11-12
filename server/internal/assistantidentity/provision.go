@@ -10,25 +10,26 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
-	"github.com/speakeasy-api/gram/server/internal/agents/lifecycle"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Provision points an assistant at an agent and binds its existing root
-// triggers: a new agent, or the existing one p.AgentID names. An assistant
-// that already has a binding only gets its unbound root triggers bound. The
-// caller owns the transaction; a failed call must roll it back.
+// Provision points an assistant at a new dedicated agent and binds its
+// existing root triggers. An assistant that already has a binding only gets
+// its unbound root triggers bound. The caller owns the transaction; a failed
+// call must roll it back.
 //
 // A new agent starts with the project-wide ceiling from initialGrants. Users
 // refine that policy on the agent afterwards; it is never re-synchronised.
 func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
-	if p.ActorUserID == "" || p.ActorUserID == urn.AllUsersPrincipalID {
-		return ErrActorIneligible
+	actor, err := provisionActor(p)
+	if err != nil {
+		return err
 	}
 	q := repo.New(tx)
 	assistant, err := q.LockAssistant(ctx, repo.LockAssistantParams{ProjectID: p.ProjectID, AssistantID: p.AssistantID})
@@ -39,55 +40,56 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 		return fmt.Errorf("lock assistant: %w", ErrNotFound)
 	}
 
-	if p.AgentID != uuid.Nil && p.AgentName != "" {
-		return ErrInvalidIdentity
-	}
-	existing, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{ProjectID: p.ProjectID, AssistantID: p.AssistantID})
+	_, err = q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{ProjectID: p.ProjectID, AssistantID: p.AssistantID})
 	switch {
 	case err == nil:
-		if p.AgentName != "" || (p.AgentID != uuid.Nil && p.AgentID != existing.OriginalAgentID) {
-			return ErrInvalidIdentity
-		}
-		return s.bindExistingRoots(ctx, tx, p)
+		return s.bindExistingRoots(ctx, tx, p, actor)
 	case !errors.Is(err, pgx.ErrNoRows):
 		return fmt.Errorf("read assistant binding: %w", err)
 	}
 
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, p.ActorUserID)
-	var agent agentrepo.Agent
-	var grants []authz.Grant
-	if p.AgentID != uuid.Nil {
-		// An existing agent keeps its policy; it only gains administration of
-		// the assistant it now backs.
-		agent, err = s.selectAgent(ctx, tx, p)
-		if err != nil {
-			return err
-		}
-		grants = assistantSelfAdminGrants(p.AssistantID)
-	} else {
-		agent, err = s.createAgent(ctx, tx, p, conv.FromPGTextOrEmpty[string](assistant.CreatedByUserID), actor)
-		if err != nil {
-			return err
-		}
-		grants = initialGrants(p.ProjectID, p.AssistantID)
-		// A dedicated agent may inherit inference only within this project and
-		// only when both the provisioning actor and its owner already have it.
-		// Existing agents keep their explicitly managed policy unchanged.
-		for _, user := range []string{p.ActorUserID, agent.OwnerUserID} {
-			allowed, err := canDelegateInference(ctx, tx, p.OrganizationID, p.ProjectID, user)
+	owner := conv.FromPGTextOrEmpty[string](assistant.CreatedByUserID)
+	// Staff never own customer agents: the creator must still be a member.
+	delegators := []string{p.ActorUserID, owner}
+	if p.Staff != nil {
+		active := false
+		if owner != "" {
+			active, err = orgrepo.New(tx).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{OrganizationID: p.OrganizationID, UserID: owner})
 			if err != nil {
-				return err
-			}
-			if !allowed {
-				break
-			}
-			if user == agent.OwnerUserID {
-				grant := authz.NewGrant(authz.ScopeInferenceExecute, authz.WildcardResource)
-				grant.Selector[authz.SelectorKeyProjectID] = p.ProjectID.String()
-				grants = append(grants, grant)
-				break
+				return fmt.Errorf("check assistant creator membership: %w", err)
 			}
 		}
+		if !active {
+			return ErrOwnerUnavailable
+		}
+		delegators = []string{owner}
+	} else if owner == "" {
+		owner = p.ActorUserID
+		delegators[1] = owner
+	}
+	agent, err := s.createAgent(ctx, tx, p, owner, actor)
+	if err != nil {
+		return err
+	}
+	grants := initialGrants(p.ProjectID, p.AssistantID)
+	// A dedicated agent may inherit inference only within this project and
+	// only when everyone delegating it already has it: the provisioning user
+	// and the owner, or the owner alone when staff provision.
+	inherit := true
+	for _, user := range delegators {
+		allowed, err := canDelegateInference(ctx, tx, p.OrganizationID, p.ProjectID, user)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			inherit = false
+			break
+		}
+	}
+	if inherit {
+		grant := authz.NewGrant(authz.ScopeInferenceExecute, authz.WildcardResource)
+		grant.Selector[authz.SelectorKeyProjectID] = p.ProjectID.String()
+		grants = append(grants, grant)
 	}
 	agentURN := urn.NewAgentIdentity(agent.ID.String())
 	agents := agentrepo.New(tx)
@@ -103,7 +105,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 			return fmt.Errorf("write assistant agent grant: %w", err)
 		}
 		if err := s.audit.LogAgentPolicyGrant(ctx, tx, audit.LogAgentPolicyGrantEvent{
-			OrganizationID: p.OrganizationID, AgentURN: agentURN, Actor: actor, ActorDisplayName: nil,
+			OrganizationID: p.OrganizationID, AgentURN: agentURN, Actor: actor.principal, ActorDisplayName: actor.displayName,
 			Action: audit.ActionAgentPolicyGrantCreate, Name: agent.Name, Before: nil,
 			After: &audit.AgentPolicyGrantSnapshot{ID: row.ID, Scope: row.Scope, Effect: "allow", Selector: grant.Selector},
 		}); err != nil {
@@ -117,69 +119,45 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 		return fmt.Errorf("create assistant binding: %w", err)
 	}
 	if err := s.audit.LogAssistantIdentityProvision(ctx, tx, audit.LogAssistantIdentityProvisionEvent{
-		OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, Actor: actor, ActorDisplayName: nil, ActorSlug: nil,
+		OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, Actor: actor.principal, ActorDisplayName: actor.displayName, ActorSlug: nil,
 		AssistantURN: urn.NewAssistant(p.AssistantID), AssistantName: assistant.Name, AgentURN: agentURN,
 	}); err != nil {
 		return fmt.Errorf("audit assistant identity provisioning: %w", err)
 	}
-	return s.bindExistingRoots(ctx, tx, p)
+	return s.bindExistingRoots(ctx, tx, p, actor)
 }
 
-// createAgent creates the assistant's agent, owned by the assistant's creator
-// (the actor when the creator is unknown).
-func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams, creator string, actor urn.Principal) (agentrepo.Agent, error) {
-	owner := creator
-	if owner == "" {
-		owner = p.ActorUserID
+// provisionActor is who a provisioning is attributed to: the staff member, or
+// the authenticated user.
+func provisionActor(p ProvisionParams) (auditActor, error) {
+	if p.Staff != nil {
+		if p.ActorUserID != "" || p.Staff.Principal.ID == "" {
+			return auditActor{}, ErrActorIneligible
+		}
+		return auditActor{principal: p.Staff.Principal, displayName: p.Staff.DisplayName}, nil
 	}
-	name := p.AgentName
-	if name == "" {
-		name = "Assistant " + p.AssistantID.String()
+	if p.ActorUserID == "" || p.ActorUserID == urn.AllUsersPrincipalID {
+		return auditActor{}, ErrActorIneligible
 	}
+	return auditActor{principal: urn.NewPrincipal(urn.PrincipalTypeUser, p.ActorUserID), displayName: nil}, nil
+}
+
+// createAgent creates the assistant's agent, owned by owner.
+func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams, owner string, actor auditActor) (agentrepo.Agent, error) {
 	agent, err := agentrepo.New(tx).CreateAgent(ctx, agentrepo.CreateAgentParams{
 		OrganizationID: p.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: p.ProjectID, Valid: true},
 		OwnerUserID:    owner,
-		Name:           name,
+		Name:           "Assistant " + p.AssistantID.String(),
 	})
 	if err != nil {
 		return agentrepo.Agent{}, fmt.Errorf("create assistant agent: %w", err)
 	}
 	if err := s.audit.LogAgent(ctx, tx, audit.LogAgentEvent{
-		OrganizationID: p.OrganizationID, AgentURN: urn.NewAgentIdentity(agent.ID.String()), Actor: actor, ActorDisplayName: nil,
+		OrganizationID: p.OrganizationID, AgentURN: urn.NewAgentIdentity(agent.ID.String()), Actor: actor.principal, ActorDisplayName: actor.displayName,
 		Action: audit.ActionAgentCreate, Name: agent.Name, Before: nil, After: agentownership.AgentAuditSnapshot(agent),
 	}); err != nil {
 		return agentrepo.Agent{}, fmt.Errorf("audit assistant agent: %w", err)
-	}
-	return agent, nil
-}
-
-// selectAgent locks an existing agent of the assistant's project for the
-// assistant to point at. Like any other use of an agent, the actor must own it
-// or hold agent:authorize on it.
-func (s *Service) selectAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams) (agentrepo.Agent, error) {
-	agent, err := agentrepo.New(tx).GetAgentByIDForUpdate(ctx, agentrepo.GetAgentByIDForUpdateParams{OrganizationID: p.OrganizationID, ID: p.AgentID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return agentrepo.Agent{}, ErrAgentUnauthorized
-	}
-	if err != nil {
-		return agentrepo.Agent{}, fmt.Errorf("lock selected agent: %w", err)
-	}
-	if agent.OwnerUserID != p.ActorUserID {
-		principals, err := authz.ResolveUserPrincipals(ctx, tx, p.OrganizationID, p.ActorUserID)
-		if err != nil {
-			return agentrepo.Agent{}, fmt.Errorf("resolve actor principals: %w", err)
-		}
-		grants, err := authz.LoadGrants(ctx, tx, p.OrganizationID, principals)
-		if err != nil {
-			return agentrepo.Agent{}, fmt.Errorf("load actor grants: %w", err)
-		}
-		if !authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeAgentAuthorize, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}) {
-			return agentrepo.Agent{}, ErrAgentUnauthorized
-		}
-	}
-	if !agent.ProjectID.Valid || agent.ProjectID.UUID != p.ProjectID || lifecycle.Derive(agent) != lifecycle.Active || agent.OwnerReassignmentRequiredAt.Valid {
-		return agentrepo.Agent{}, ErrInvalidIdentity
 	}
 	return agent, nil
 }
@@ -206,14 +184,14 @@ func assistantSelfAdminGrants(assistant uuid.UUID) []authz.Grant {
 	return []authz.Grant{authz.NewGrant(authz.ScopeAssistantWrite, assistant.String())}
 }
 
-func (s *Service) bindExistingRoots(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
+func (s *Service) bindExistingRoots(ctx context.Context, tx pgx.Tx, p ProvisionParams, actor auditActor) error {
 	// Locks every root in ID order before any issuer lock is taken.
 	roots, err := repo.New(tx).ListAssistantRoots(ctx, repo.ListAssistantRootsParams{ProjectID: p.ProjectID, AssistantID: p.AssistantID.String()})
 	if err != nil {
 		return fmt.Errorf("list assistant root triggers: %w", err)
 	}
 	for _, root := range roots {
-		if err := s.bindRoot(ctx, tx, p.ProjectID, root, false, auditActor{principal: urn.NewPrincipal(urn.PrincipalTypeUser, p.ActorUserID), displayName: nil}); err != nil {
+		if err := s.bindRoot(ctx, tx, p.ProjectID, root, false, actor); err != nil {
 			return err
 		}
 	}

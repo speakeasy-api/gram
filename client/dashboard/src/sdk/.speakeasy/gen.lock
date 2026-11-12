@@ -188,7 +188,6 @@ trackedFiles:
   src/funcs/assistantsSendMessage.ts: {}
   src/funcs/assistantsSetExecutionProfileChoice.ts: {}
   src/funcs/assistantsUpdate.ts: {}
-  src/funcs/assistantsUpgradeIdentity.ts: {}
   src/funcs/auditlogsList.ts: {}
   src/funcs/auditlogsListFacets.ts: {}
   src/funcs/authCallback.ts: {}
@@ -2224,7 +2223,6 @@ trackedFiles:
   src/models/components/updatewidgetrequestbody.ts: {}
   src/models/components/updateworkloadissuerform.ts: {}
   src/models/components/updateworkloadsubjectform.ts: {}
-  src/models/components/upgradeassistantidentityrequestbody.ts: {}
   src/models/components/uploadchatattachmentresult.ts: {}
   src/models/components/uploadfunctionsresult.ts: {}
   src/models/components/uploadimageresult.ts: {}
@@ -3144,7 +3142,6 @@ trackedFiles:
   src/models/operations/updatewidget.ts: {}
   src/models/operations/updateworkloadissuer.ts: {}
   src/models/operations/updateworkloadsubject.ts: {}
-  src/models/operations/upgradeassistantidentity.ts: {}
   src/models/operations/uploadchatattachment.ts: {}
   src/models/operations/uploadfunctions.ts: {}
   src/models/operations/uploadimage.ts: {}
@@ -3257,7 +3254,6 @@ trackedFiles:
   src/react-query/assistantsList.core.ts: {}
   src/react-query/assistantsList.ts: {}
   src/react-query/assistantsUpdate.ts: {}
-  src/react-query/assistantsUpgradeIdentity.ts: {}
   src/react-query/attachAuthClientToMcpServer.ts: {}
   src/react-query/attachOrganizationRemoteSessionClientKeySet.ts: {}
   src/react-query/attachRemoteSessionClientKeySet.ts: {}

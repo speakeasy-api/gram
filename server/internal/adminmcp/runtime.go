@@ -135,6 +135,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	providerHealthReader, _ := reader.(ProviderHealthReader)
 	hookFleetReader, _ := reader.(HookFleetReader)
 	customDomainReader, _ := reader.(CustomDomainReader)
+	assistantReader, _ := reader.(AssistantReader)
 	var promotions *catalogpromotion.Service
 	if provider, ok := reader.(interface {
 		CatalogPromotionService() *catalogpromotion.Service
@@ -171,6 +172,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	registerProviderHealthTools(server, providerHealthReader)
 	registerHookFleetTools(server, reader, hookFleetReader)
 	registerCustomDomainTools(server, reader, customDomainReader)
+	registerAssistantTools(server, reader, assistantReader)
 	return runtime
 }
 
