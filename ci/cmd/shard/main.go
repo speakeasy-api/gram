@@ -173,10 +173,17 @@ func run(argv []string, stdout, stderr io.Writer) error {
 		isolated = strings.Split(*isolateList, ",")
 	}
 	if !chosen.everything {
-		// An isolated package the change does not reach has no shard to take.
-		isolated = slices.DeleteFunc(isolated, func(name string) bool {
-			return !slices.ContainsFunc(pkgs, func(p pkg) bool { return p.ImportPath == name })
-		})
+		// A narrowed run does not isolate: the plan subcommand sizes it
+		// without reserving shards, and the reason to isolate a package (it
+		// dominates a full run) does not hold for a handful of packages.
+		isolated = nil
+
+		measured = 0
+		for _, p := range pkgs {
+			if _, ok := timings[p.ImportPath]; ok {
+				measured++
+			}
+		}
 	}
 
 	selected, err := pick(pkgs, isolated, index, total)

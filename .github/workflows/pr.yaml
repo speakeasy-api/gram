@@ -89,7 +89,7 @@ jobs:
           check pystreams
       # The changesets release pull request is rebuilt on top of main after
       # every merge, so it gets a new head commit as often as main does. It
-      # only deletes changesets, bumps "version" fields and appends to
+      # only deletes changeset files, bumps "version" fields and appends to
       # changelogs, none of which the builds, tests or linters below read, and
       # the merge queue runs the whole workflow before it lands. Anything else
       # in its diff (or the ci:full label) restores the normal gates.
@@ -100,7 +100,7 @@ jobs:
           set -euo pipefail
           # HEAD is the pull request merge commit; its first parent is main.
           git fetch --quiet --depth=2 origin "$GITHUB_SHA"
-          other_files=$(git diff --name-only HEAD^1 HEAD | grep -Ev '^\.changeset/|(^|/)CHANGELOG\.md$|(^|/)package\.json$' || true)
+          other_files=$(git diff --name-only HEAD^1 HEAD | grep -Ev '^\.changeset/[^/]+\.md$|(^|/)CHANGELOG\.md$|(^|/)package\.json$' || true)
           other_lines=$(git diff --unified=0 HEAD^1 HEAD -- '*package.json' | grep -E '^[+-]' | grep -Ev '^(\+\+\+|---) |^[+-][[:space:]]*"version": "[^"]+",?$' || true)
           if [[ -z "$other_files" && -z "$other_lines" ]]; then
             echo "version-only=true" >> "$GITHUB_OUTPUT"

@@ -39,10 +39,15 @@ test("mtimeForObject is deterministic and old enough to cache", () => {
 
 test("parseTree keeps paths with spaces and tabs intact", () => {
   const entries = parseTree(
-    "100644 blob aaaa\tdir/a file.txt\x00040000 tree bbbb\tdir\0",
+    "100644 blob aaaa\tdir/a file\twith tab.txt\x00040000 tree bbbb\tdir\0",
   );
   assert.deepEqual(entries, [
-    { mode: "100644", type: "blob", oid: "aaaa", file: "dir/a file.txt" },
+    {
+      mode: "100644",
+      type: "blob",
+      oid: "aaaa",
+      file: "dir/a file\twith tab.txt",
+    },
     { mode: "040000", type: "tree", oid: "bbbb", file: "dir" },
   ]);
 });
