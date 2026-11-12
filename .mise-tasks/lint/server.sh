@@ -82,6 +82,15 @@ mkdir -p "$GOLANGCI_LINT_CACHE"
 touch "$GOLANGCI_LINT_CACHE"
 find "$gcl_cache_root" -mindepth 1 -maxdepth 1 -type d -name 'glint-*' -mtime +14 -exec rm -rf {} +
 
+# Before per-build directories, gcl wrote its cache straight into the default
+# root. Nothing reads those entries now, so remove them. Only the default root
+# is cleaned: a GOLANGCI_LINT_CACHE set by hand may be shared with stock
+# golangci-lint, whose entries use the same layout.
+if [ "$gcl_cache_root" = "${XDG_CACHE_HOME:-$HOME/.cache}/gcl" ]; then
+    find "$gcl_cache_root" -mindepth 1 -maxdepth 1 -type d -name '[0-9a-f][0-9a-f]' -exec rm -rf {} +
+    rm -f "$gcl_cache_root/README" "$gcl_cache_root/trim.txt"
+fi
+
 gcl_stamp=
 if [ -r "$gcl_fingerprint_file" ]; then
     IFS= read -r gcl_stamp < "$gcl_fingerprint_file"
