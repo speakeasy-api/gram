@@ -123,7 +123,9 @@ export function McpDetailFrame({
                 <div className="mb-6">{chrome.overviewSetup}</div>
               ) : null}
               {activeTab === "overview" && chrome?.overviewBanner ? (
-                <div className="mb-6">{chrome.overviewBanner}</div>
+                // The banner renders nothing for viewers who can't manage
+                // plugins, so the gap goes with it.
+                <div className="mb-6 empty:hidden">{chrome.overviewBanner}</div>
               ) : null}
               {children}
             </ReadinessIssuesProvider>
@@ -254,7 +256,8 @@ function AddressList({
         className="w-auto max-w-[calc(100vw-2rem)] p-1"
       >
         <ul className="flex flex-col">
-          {addresses.map((address) => (
+          {/* The first is the URL already shown beside the button. */}
+          {addresses.slice(1).map((address) => (
             <li
               key={address.url}
               className="flex items-center justify-between gap-4 px-2 py-1.5"

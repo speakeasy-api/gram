@@ -7,6 +7,7 @@ import {
 } from "@/pages/mcp/x/MCPServerDetails";
 import { useMcpServerVisibilityUpdate } from "@/pages/mcp/x/mcpServerVisibility";
 import { Switch } from "@/components/ui/Switch";
+import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { type IdentityMode } from "@/lib/remote-identity";
 import { IdentityExplainerDialog } from "@/lib/remote-identity";
@@ -23,7 +24,7 @@ import {
   UNKNOWN_STATUS,
   UPSTREAM_AUTH_STATUS,
 } from "@/lib/auth-clients";
-import { enumPresentation } from "@/lib/enum";
+import { enumPresentation, isKnownEnumValue } from "@/lib/enum";
 import * as React from "react";
 import { Link } from "react-router";
 
@@ -349,20 +350,33 @@ export function McpServerHeaderStatus({
     return <MCPServerStatusDropdown server={server} />;
   }
   const on = server.visibility === "private" || server.visibility === "public";
+  // A state this build doesn't know is neither on nor off: say so, and
+  // leave the switch alone until a refresh.
+  const known = isKnownEnumValue(
+    KnownUpdateMcpServerFormVisibility,
+    server.visibility,
+  );
   const name = server.name || "this server";
   return (
     <>
-      <label className="text-muted-foreground flex h-6 items-center gap-2 text-sm leading-6">
+      <label
+        className="text-muted-foreground flex h-6 items-center gap-2 text-sm leading-6"
+        title={
+          known
+            ? undefined
+            : "Refresh the page to see whether this server is on."
+        }
+      >
         <Switch
           checked={on}
-          disabled={!canWrite || updating}
+          disabled={!known || !canWrite || updating}
           aria-label={on ? `Turn off ${name}` : `Turn on ${name}`}
           onCheckedChange={(checked) => {
             if (checked) updateVisibility("private");
             else setConfirmOff(true);
           }}
         />
-        {on ? "On" : "Off"}
+        {!known ? "Unknown" : on ? "On" : "Off"}
       </label>
       <ConfirmDialog
         open={confirmOff}

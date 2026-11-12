@@ -473,7 +473,7 @@ function WritablePluginStatusBanner({
     <StatusBanner tone={isTrulyPublished ? "success" : "warning"}>
       {/* State, why plugins, and the picker on the left; the clients it
           reaches on the right. */}
-      <div className="flex items-center justify-between gap-6 px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-6 px-5 py-4">
         <div className="flex min-w-0 flex-col gap-3">
           <div className="flex min-w-0 flex-col gap-0.5">
             <div className="flex items-center gap-2">

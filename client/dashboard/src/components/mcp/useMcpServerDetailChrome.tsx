@@ -11,6 +11,8 @@ import {
   type McpReadinessCheck,
 } from "./mcpDetailChrome";
 import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
+import { UNKNOWN_STATUS, UPSTREAM_AUTH_STATUS } from "@/lib/auth-clients";
+import { enumPresentation } from "@/lib/enum";
 import type { IdentityMode } from "@/lib/remote-identity";
 import {
   type McpServerReachability,
@@ -498,28 +500,22 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     ),
     kindLabel,
     statusControl: <McpServerHeaderStatus server={mcpServer} />,
-    primaryUrl: publicRoutesEnabled ? mcpUrl : privateMcpUrls[0],
+    // With no public URL yet, a ready private ingress stands in.
+    primaryUrl: (publicRoutesEnabled ? mcpUrl : undefined) ?? privateMcpUrls[0],
     // The primary URL first, then the rest: private ingress beside a public
     // route, or a Speakeasy URL beside a custom domain.
     addresses: orderAddresses(
-      publicRoutesEnabled ? mcpUrl : privateMcpUrls[0],
+      (publicRoutesEnabled ? mcpUrl : undefined) ?? privateMcpUrls[0],
       [
         ...(publicRoutesEnabled ? publicAddresses : []),
         ...privateMcpUrls.map((url) => ({ url, label: "Private network" })),
       ],
     ),
-    identity:
-      (isRemoteBacked || isTunneledBacked) &&
-      !authReadiness.isLoadingRemoteIdentity &&
-      !authReadiness.identityUnavailable
-        ? {
-            label: authReadiness.passThroughAuthorization
-              ? "Needs cleanup"
-              : IDENTITY_LABEL[authReadiness.remoteIdentityMode],
-            href: `${settingsHref}#${SETTINGS_GROUPS.identity.id}`,
-            warn: !!authReadiness.passThroughAuthorization,
-          }
-        : undefined,
+    identity: identitySummary(
+      isRemoteBacked || isTunneledBacked,
+      authReadiness,
+      `${settingsHref}#${SETTINGS_GROUPS.identity.id}`,
+    ),
     readinessChecks,
     // The upstream endpoint is what the guide catalog indexes; a server
     // with no upstream has no guide to point at.
@@ -552,6 +548,42 @@ const IDENTITY_LABEL: Record<IdentityMode, string> = {
   agent: "Shared credential",
   none: "Manual",
 };
+
+/**
+ * Whose account the server acts as, in the words Settings uses. Under
+ * enforced upstream auth that is the credentials status, as in Settings'
+ * credentials section; otherwise the identity mode. Nothing until settled.
+ */
+function identitySummary(
+  signsInUpstream: boolean,
+  auth: McpServerAuthenticationReadiness,
+  href: string,
+): McpDetailChrome["identity"] {
+  if (!signsInUpstream || auth.loading || auth.unavailable) return undefined;
+  if (auth.isLoadingRemoteIdentity || auth.identityUnavailable)
+    return undefined;
+  if (auth.upstreamAuth === "enforced") {
+    const status = auth.upstreamAuthQuery.data?.status;
+    if (status === undefined) return undefined;
+    const presentation = enumPresentation(
+      UPSTREAM_AUTH_STATUS,
+      status,
+      UNKNOWN_STATUS,
+    );
+    return {
+      label: presentation.label,
+      href,
+      warn: presentation.tone === "warning",
+    };
+  }
+  return {
+    label: auth.passThroughAuthorization
+      ? "Needs cleanup"
+      : IDENTITY_LABEL[auth.remoteIdentityMode],
+    href,
+    warn: !!auth.passThroughAuthorization,
+  };
+}
 
 /** The primary URL first, each address once; one address needs no list. */
 function orderAddresses(

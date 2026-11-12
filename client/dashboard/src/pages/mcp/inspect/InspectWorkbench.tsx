@@ -757,7 +757,7 @@ function ToolList({
               <button
                 type="button"
                 aria-label="Clear search"
-                onClick={() => closeSearch(false)}
+                onClick={() => closeSearch(true)}
                 className="text-muted-foreground hover:text-foreground shrink-0 p-0.5"
               >
                 <X className="size-3" />

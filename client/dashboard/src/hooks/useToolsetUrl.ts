@@ -351,6 +351,13 @@ export function useMcpEndpointAddresses(
       if (endpoint.customDomainId) {
         const match = domains.find((d) => d?.id === endpoint.customDomainId);
         if (match) {
+          // A domain-root endpoint also answers at the domain itself.
+          if (endpoint.isDomainRoot) {
+            custom.push({
+              url: `https://${match.domain}/`,
+              label: "Custom domain",
+            });
+          }
           custom.push({
             url: customDomainMcpEndpointUrl(match.domain, endpoint.slug),
             label: "Custom domain",

@@ -289,7 +289,9 @@ function GatewayInspectConnection({
     ? Math.round(JSON.stringify(data.tools).length / 4)
     : undefined;
   const surfaceCount = data?.tools.length ?? 0;
-  const memberToolCount = members.reduce((n, m) => n + m.tools.length, 0);
+  // Counted from the list as shown, so tools hidden for an unconnected
+  // member never count as reachable.
+  const memberToolCount = tools.length - (data?.tools.length ?? 0);
   const servedMembers =
     mode === "code_mode" ? catalog.data?.servers : data?.servers;
   const unserved =
@@ -449,7 +451,9 @@ function GatewayInspectConnection({
   ]);
   // Until the viewer's sign-in status loads, a member that only needs the
   // viewer to connect would read as broken and flash the error banner.
-  const broken = signIn.isLoading
+  // A refresh counts too: stale status could call a member ready while its
+  // catalog already failed for want of sign-in.
+  const broken = signIn.isFetching
     ? []
     : failedMembers.filter((m) => !signIn.needsSignIn(m.slug));
   const memberServer = (slug: string) =>
