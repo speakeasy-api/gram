@@ -33,7 +33,7 @@ export type AdminUpstreamOAuthMigrationExecutionProfiles = {
    */
   targets: number;
   /**
-   * Profiles with no version recorded yet, in an organization enforcing upstream auth. They are not pending: a turn records its own profile when its credential is issued. Zero until enforcement is on, since a run records every profile before then. Absent means none.
+   * Profiles with no version recorded yet, in an organization enforcing upstream auth. They are not pending: a turn records its own profile when its credential is issued. Zero until enforcement is on, since a run records every profile before then. Absent when the serving replica predates the field, which is not a reported zero.
    */
   unexercisedVersions?: number | undefined;
 };

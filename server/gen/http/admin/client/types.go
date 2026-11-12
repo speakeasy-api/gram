@@ -2978,7 +2978,8 @@ type GetUpstreamOAuthMigrationStatusResponseBody struct {
 	PendingSelections *int64 `form:"pending_selections,omitempty" json:"pending_selections,omitempty" xml:"pending_selections,omitempty"`
 	// Credential and server pairs without a choice that are not pending, because
 	// the credential was issued for the servers approved at consent and is refused
-	// anywhere else. Absent means none.
+	// anywhere else. Absent when the serving replica predates the field, which is
+	// not a reported zero.
 	ConsentScopedSelections *int64 `form:"consent_scoped_selections,omitempty" json:"consent_scoped_selections,omitempty" xml:"consent_scoped_selections,omitempty"`
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
@@ -3051,7 +3052,8 @@ type EnableUpstreamAuthEnforcementResponseBody struct {
 	PendingSelections *int64 `form:"pending_selections,omitempty" json:"pending_selections,omitempty" xml:"pending_selections,omitempty"`
 	// Credential and server pairs without a choice that are not pending, because
 	// the credential was issued for the servers approved at consent and is refused
-	// anywhere else. Absent means none.
+	// anywhere else. Absent when the serving replica predates the field, which is
+	// not a reported zero.
 	ConsentScopedSelections *int64 `form:"consent_scoped_selections,omitempty" json:"consent_scoped_selections,omitempty" xml:"consent_scoped_selections,omitempty"`
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
@@ -3089,7 +3091,8 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 	PendingSelections *int64 `form:"pending_selections,omitempty" json:"pending_selections,omitempty" xml:"pending_selections,omitempty"`
 	// Credential and server pairs without a choice that are not pending, because
 	// the credential was issued for the servers approved at consent and is refused
-	// anywhere else. Absent means none.
+	// anywhere else. Absent when the serving replica predates the field, which is
+	// not a reported zero.
 	ConsentScopedSelections *int64 `form:"consent_scoped_selections,omitempty" json:"consent_scoped_selections,omitempty" xml:"consent_scoped_selections,omitempty"`
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
@@ -26846,7 +26849,8 @@ type AdminUpstreamOAuthMigrationExecutionProfilesResponseBody struct {
 	// Profiles with no version recorded yet, in an organization enforcing upstream
 	// auth. They are not pending: a turn records its own profile when its
 	// credential is issued. Zero until enforcement is on, since a run records
-	// every profile before then. Absent means none.
+	// every profile before then. Absent when the serving replica predates the
+	// field, which is not a reported zero.
 	UnexercisedVersions *int64 `form:"unexercised_versions,omitempty" json:"unexercised_versions,omitempty" xml:"unexercised_versions,omitempty"`
 	// Servers the profiles hold no choice for, by execution context and reason.
 	// They are never guessed: configure the server's auth clients.
@@ -26901,7 +26905,8 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	PendingSelections *int64 `form:"pending_selections,omitempty" json:"pending_selections,omitempty" xml:"pending_selections,omitempty"`
 	// Credential and server pairs without a choice that are not pending, because
 	// the credential was issued for the servers approved at consent and is refused
-	// anywhere else. Absent means none.
+	// anywhere else. Absent when the serving replica predates the field, which is
+	// not a reported zero.
 	ConsentScopedSelections *int64 `form:"consent_scoped_selections,omitempty" json:"consent_scoped_selections,omitempty" xml:"consent_scoped_selections,omitempty"`
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.

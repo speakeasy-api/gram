@@ -33,7 +33,7 @@ export type AdminUpstreamOAuthMigrationStatus = {
    */
   authClients?: AdminUpstreamOAuthMigrationAuthClients | undefined;
   /**
-   * Credential and server pairs without a choice that are not pending, because the credential was issued for the servers approved at consent and is refused anywhere else. Absent means none.
+   * Credential and server pairs without a choice that are not pending, because the credential was issued for the servers approved at consent and is refused anywhere else. Absent when the serving replica predates the field, which is not a reported zero.
    */
   consentScopedSelections?: number | undefined;
   /**

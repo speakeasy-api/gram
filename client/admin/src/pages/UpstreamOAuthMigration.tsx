@@ -702,8 +702,8 @@ function ExecutionProfileStatus({
     unexercisedVersions > 0 ? (
       <p className="text-muted-foreground text-xs">
         {unexercisedVersions}{" "}
-        {unexercisedVersions === 1 ? "profile" : "profiles"} not used by a turn
-        yet, recorded on first use
+        {unexercisedVersions === 1 ? "profile" : "profiles"} with no version
+        recorded yet, recorded on first use
       </p>
     ) : null;
   if (p.complete) {
