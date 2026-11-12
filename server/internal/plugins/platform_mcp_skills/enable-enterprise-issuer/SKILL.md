@@ -106,8 +106,8 @@ to vouch; the dashboard flags such servers as needing attention. The MCP server'
 turns enterprise-managed authorization on or off for that server and shows the
 sign-in, who vouches, and what the vendor has to trust.
 Then call `get_xaa_readiness` with the exact project and MCP server IDs for
-enterprise authorization readiness. Do not substitute a Platform MCP registration
-ID or generic registration readiness for this check.
+enterprise authorization readiness. Do not substitute generic MCP readiness
+for this check.
 An enabled issuer or a saved vendor setting does not prove live user access.
 Only a separately authorized test using the connected MCP can establish that;
 never impersonate another user or create test data without permission.

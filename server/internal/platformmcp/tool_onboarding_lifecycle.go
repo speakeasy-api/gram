@@ -10,14 +10,14 @@ import (
 )
 
 type AttachPlatformMCPIdentityProviderToolInput struct {
-	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional owning project slug; defaults to the organization's default project (a project assistant always uses its own)"`
-	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
-	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms connecting this MCP server to its advertised sign-in provider; never include credentials, client secrets, OAuth codes, or tokens"`
+	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"optional owning project slug; defaults to the organization's default project (a project assistant always uses its own)"`
+	MCPID       string `json:"mcp_id" jsonschema:"MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"`
+	Confirmed   bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms connecting this MCP server to its advertised sign-in provider; never include credentials, client secrets, OAuth codes, or tokens"`
 }
 
 type AttachPlatformMCPIdentityProviderToolOutput struct {
 	ProjectSlug      string `json:"project_slug"`
-	RegistrationID   string `json:"registration_id"`
+	MCPID            string `json:"mcp_id"`
 	Attached         bool   `json:"attached"`
 	ProviderURL      string `json:"provider_url,omitempty"`
 	NextAction       string `json:"next_action"`
@@ -64,7 +64,7 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 		if err != nil {
 			return nil, AttachPlatformMCPIdentityProviderToolOutput{}, err
 		}
-		if input.RegistrationID == "" {
+		if input.MCPID == "" {
 			return nil, AttachPlatformMCPIdentityProviderToolOutput{}, ErrOnboardingInvalid
 		}
 		if !input.Confirmed {
@@ -83,23 +83,30 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 			return identityProviderAttachmentUnavailableResult()
 		}
 
-		attachment, err := registrations.AttachDefaultIdentityProvider(ctx, principal, input.ProjectSlug, input.RegistrationID)
+		registrationID, err := registrations.registrationIDForMCP(ctx, principal, input.ProjectSlug, input.MCPID, "attach_platform_mcp_identity_provider")
+		if err != nil {
+			if result, ok := operationBudgetToolResult(err); ok {
+				return result, AttachPlatformMCPIdentityProviderToolOutput{}, nil
+			}
+			return identityProviderAttachmentUnavailableResult()
+		}
+		attachment, err := registrations.AttachDefaultIdentityProvider(ctx, principal, input.ProjectSlug, registrationID)
 		if err != nil {
 			if result, ok := identityProviderAttachmentError(err); ok {
 				return result, AttachPlatformMCPIdentityProviderToolOutput{}, nil
 			}
 			return identityProviderAttachmentUnavailableResult()
 		}
-		authorization, err := registrations.DashboardAuthorization(ctx, principal, input.ProjectSlug, input.RegistrationID)
+		authorization, err := registrations.DashboardAuthorization(ctx, principal, input.ProjectSlug, registrationID)
 		if err != nil {
 			return identityProviderAttachmentAuthorizationUnavailableResult()
 		}
-		return cardResult(signInCard(authorization.ServerName, authorization.Logo, authorization.URL)), identityProviderAttachmentOutput(input.ProjectSlug, input.RegistrationID, attachment, authorization.URL), nil
+		return cardResult(signInCard(authorization.ServerName, authorization.Logo, authorization.URL)), identityProviderAttachmentOutput(input.ProjectSlug, input.MCPID, attachment, authorization.URL), nil
 	})
 }
 
-func identityProviderAttachmentOutput(projectSlug, registrationID string, attachment CatalogIdentityProviderAttachmentResult, authorizationURL string) AttachPlatformMCPIdentityProviderToolOutput {
-	return AttachPlatformMCPIdentityProviderToolOutput{ProjectSlug: projectSlug, RegistrationID: registrationID, Attached: attachment.Attached, ProviderURL: attachment.ProviderURL, NextAction: "open_authorization_url", Message: "This MCP server is now connected to its sign-in provider. Open this link to authorize it: " + authorizationURL + ". Use Connect or Authorize there, then check the MCP server again.", AuthorizationURL: authorizationURL}
+func identityProviderAttachmentOutput(projectSlug, mcpID string, attachment CatalogIdentityProviderAttachmentResult, authorizationURL string) AttachPlatformMCPIdentityProviderToolOutput {
+	return AttachPlatformMCPIdentityProviderToolOutput{ProjectSlug: projectSlug, MCPID: mcpID, Attached: attachment.Attached, ProviderURL: attachment.ProviderURL, NextAction: "open_authorization_url", Message: "This MCP server is now connected to its sign-in provider. Open this link to authorize it: " + authorizationURL + ". Use Connect or Authorize there, then check the MCP server again.", AuthorizationURL: authorizationURL}
 }
 
 func identityProviderAttachmentUnavailableResult() (*mcp.CallToolResult, AttachPlatformMCPIdentityProviderToolOutput, error) {

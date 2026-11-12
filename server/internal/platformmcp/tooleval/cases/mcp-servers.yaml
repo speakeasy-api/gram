@@ -146,6 +146,8 @@
   prompt: The Linear server advertises its own OAuth sign-in. Connect it to that provider so each person logs in with their own Linear account. Yes, I'm sure.
   expect: [attach_platform_mcp_identity_provider]
   allow: [find_mcp, get_mcp, inspect_mcp_candidate, get_mcp_connection_settings]
+  args:
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
 - id: mcp-setup-handoff-sentry
   prompt: We added Sentry from the catalog to Default but never finished its source and auth setup. I'll do the rest myself in the dashboard, so give me the link.
   expect: [get_setup_handoff]
@@ -191,12 +193,14 @@
   allow: [find_mcp, get_mcp]
   args:
     project_slug: default
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
 - id: mcp-client-admission-set-linear
   prompt: For the Linear server, only the well-known apps should be allowed to sign in. Turn away anything that isn't on the list, but keep the server running. I accept that unlisted apps get blocked.
   expect: [set_mcp_client_admission]
   allow: [find_mcp, get_mcp, get_mcp_client_admission]
   args:
     project_slug: default
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
     mode: presets
 - id: mcp-client-admission-open-github
   prompt: Let any MCP client that identifies itself sign in to the GitHub server, not just the known apps.
@@ -204,6 +208,7 @@
   allow: [find_mcp, get_mcp, get_mcp_client_admission]
   args:
     project_slug: default
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
     mode: open
 
 # Is a server working, and how to fix it.
@@ -211,22 +216,28 @@
   prompt: Is the Linear server working right now?
   expect: [get_mcp_readiness]
   allow: [find_mcp, get_mcp]
+  args:
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
 - id: mcp-readiness-github-yes-no
   prompt: Quick yes or no before I announce it to the team. Is GitHub ready for people to use?
   expect: [get_mcp_readiness]
   allow: [find_mcp, get_mcp]
+  args:
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
 - id: mcp-repair-plan-linear
   prompt: The Linear server is broken. What steps do I need to take to fix it?
   expect: [get_mcp_repair_plan]
   allow: [find_mcp, get_mcp, get_mcp_readiness, get_mcp_diagnostics]
   args:
     project_slug: default
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
 - id: mcp-repair-plan-github-checklist
   prompt: I don't care why it broke. Just give me the safe next steps to get the GitHub server healthy again.
   expect: [get_mcp_repair_plan]
   allow: [find_mcp, get_mcp, get_mcp_readiness]
   args:
     project_slug: default
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
 
 # Redeploying a project's sources.
 - id: mcp-redeploy-payments

@@ -119,7 +119,7 @@ func TestRuntimeInitializeDropsInstructionsForToolsHiddenFromChatGPT(t *testing.
 	require.Less(t, len(chatGPT.Instructions), len(other.Instructions))
 	require.Contains(t, chatGPT.Instructions, "attach_platform_mcp_identity_provider", "golden-path guidance stays")
 	require.Contains(t, chatGPT.Instructions, "no plugin is needed for that", "self-serve guidance stays")
-	require.Contains(t, chatGPT.Instructions, "get_my_install_instructions with the registration ID", "ChatGPT can install in another app")
+	require.Contains(t, chatGPT.Instructions, "get_my_install_instructions with its mcp_id", "ChatGPT can install in another app")
 	for _, descriptor := range runtime.registrar.Descriptors() {
 		if slices.Contains(chatGPTToolAllowlist, descriptor.Name) {
 			continue

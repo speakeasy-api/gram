@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
 
 func newBrowserCatalogRegistrationHarness(t *testing.T, ctx context.Context, conn *pgxpool.Pool, providerKey string) (Principal, ResolvedProject, *Registrar) {
@@ -85,17 +84,8 @@ func TestCatalogRegistrationToolReAddsBrowserCatalogServerAfterDashboardDelete(t
 	})
 	require.NoError(t, err)
 
-	registrationID, err := uuid.Parse(first.RegistrationID)
-	require.NoError(t, err)
-	registration, err := platformrepo.New(conn).GetPlatformMCPCatalogRegistrationByID(ctx, platformrepo.GetPlatformMCPCatalogRegistrationByIDParams{
-		ID:             registrationID,
-		OrganizationID: principal.OrganizationID,
-		ProjectID:      project.ID,
-	})
-	require.NoError(t, err)
-	require.True(t, registration.McpServerID.Valid)
 	_, err = mcpserversrepo.New(conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{
-		ID:        registration.McpServerID.UUID,
+		ID:        uuid.MustParse(first.MCPID),
 		ProjectID: project.ID,
 	})
 	require.NoError(t, err)
@@ -107,7 +97,7 @@ func TestCatalogRegistrationToolReAddsBrowserCatalogServerAfterDashboardDelete(t
 		"idempotency_key": "browser-catalog-second-add",
 	})
 	require.NoError(t, err)
-	require.NotEqual(t, first.RegistrationID, second.RegistrationID, "the stale registration must be replaced, not reused")
+	require.NotEqual(t, first.MCPID, second.MCPID, "the stale registration must be replaced, not reused")
 	require.False(t, second.AlreadyRegistered, "a server re-added after deletion is new")
 	require.Equal(t, "continue_dashboard_setup", second.NextAction)
 	require.Regexp(t, `^https://dashboard\.example\.test/.+/settings\?setup=oauth-client#authentication$`, second.DashboardSetupURL)
@@ -244,12 +234,12 @@ func TestCatalogRegistrationToolReportsAServerAlreadyInTheProject(t *testing.T) 
 	require.False(t, first.Replayed)
 
 	again := register("catalog-already-second")
-	require.Equal(t, first.RegistrationID, again.RegistrationID)
+	require.Equal(t, first.MCPID, again.MCPID)
 	require.True(t, again.AlreadyRegistered)
 	require.False(t, again.Replayed)
 
 	retry := register("catalog-already-first")
-	require.Equal(t, first.RegistrationID, retry.RegistrationID)
+	require.Equal(t, first.MCPID, retry.MCPID)
 	require.True(t, retry.Replayed)
 	require.False(t, retry.AlreadyRegistered, "a retry reports the original outcome")
 

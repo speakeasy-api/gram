@@ -842,14 +842,54 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
--- name: GetPlatformMCPCatalogRegistrationProject :one
--- The project a live registration belongs to, so a caller can name the
--- server it added by registration ID alone.
-SELECT project_id
-FROM platform_mcp_catalog_registrations
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND deleted IS FALSE;
+-- name: GetPlatformMCPServerProject :one
+-- The live project a live MCP server belongs to, so a caller can name a
+-- server by its ID alone.
+SELECT m.project_id
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+WHERE m.id = @mcp_server_id
+  AND m.deleted IS FALSE;
+
+-- name: GetPlatformMCPServerRegistrationForCaller :one
+-- The Platform setup record behind an MCP server named by its ID: the newest
+-- live registration of that server, as GetPlatformMCPInventoryItem picks it.
+-- registration_id is the nil UUID when the server was not added through
+-- Platform setup. added_by_caller applies the same ownership rule as
+-- GetPlatformMCPCatalogRegistrationForLifecycle, so a refusal can say the
+-- server belongs to another member instead of calling it unknown.
+SELECT
+    m.id AS mcp_server_id,
+    COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+    COALESCE(
+        registration.user_id = @user_id
+        OR (registration.user_id IS NULL AND created_connection.subject_urn = @subject_urn),
+        FALSE
+    )::boolean AS added_by_caller
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT registration.id, registration.user_id, registration.connection_id
+    FROM platform_mcp_catalog_registrations AS registration
+    WHERE registration.organization_id = @organization_id
+      AND registration.project_id = m.project_id
+      AND registration.mcp_server_id = m.id
+      AND registration.deleted IS FALSE
+    ORDER BY registration.created_at DESC, registration.id DESC
+    LIMIT 1
+) AS registration ON TRUE
+LEFT JOIN platform_mcp_connections AS created_connection
+  ON created_connection.id = registration.connection_id
+ AND created_connection.organization_id = @organization_id
+WHERE m.id = @mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE;
 
 -- name: GetPlatformMCPRegistrationAwaitingSignIn :one
 -- The live registration behind an MCP server whose sign-in provider is not

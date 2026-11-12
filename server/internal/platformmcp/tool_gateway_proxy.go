@@ -219,7 +219,7 @@ func proxiedResultText(result proxiedToolResult) string {
 // does not exist: connecting the server to the app directly.
 const gatewayProxyOff = "Running tools on your MCP servers through this Speakeasy connection (list_my_servers, search_my_tools, describe_tools and execute_tool) is not available for your organization right now. " +
 	"Speakeasy controls whether it is available; it is not an organization setting, so an administrator cannot switch it on. " +
-	"Your servers still work when connected to this app directly: call get_my_install_instructions with the server's project_id, its mcp_id or the registration_id setup returned, and client_family set to this app (claude_code, claude_cowork, codex, cursor, opencode, or other), then show the user each step's link and snippet as written."
+	"Your servers still work when connected to this app directly: call get_my_install_instructions with the server's mcp_id and client_family set to this app (claude_code, claude_cowork, codex, cursor, opencode, or other), then show the user each step's link and snippet as written."
 
 func gatewayProxyUnavailable(message string) error {
 	payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: gatewayProxyFeature, Message: message})
