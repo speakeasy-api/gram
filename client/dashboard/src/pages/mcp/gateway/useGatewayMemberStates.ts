@@ -142,7 +142,7 @@ export function useGatewayMemberSignIn(
  * minted, so a settings change only shows once the dashboard mints again: the
  * session token goes too, not just the status call.
  */
-export function refreshGatewayMemberStates(
+function refreshGatewayMemberStates(
   queryClient: QueryClient,
 ): Promise<unknown> {
   return Promise.all([

@@ -50,7 +50,7 @@ export function codeModeCallSnippet(
 }
 
 /** Text naming what an empty argument wants, e.g. `<owner/repo>`. */
-export function placeholderFor(field: ToolField): string {
+function placeholderFor(field: ToolField): string {
   const schema = isRecord(field.schema) ? field.schema : {};
   const example = Array.isArray(schema.examples)
     ? schema.examples.find((value) => typeof value === "string")
