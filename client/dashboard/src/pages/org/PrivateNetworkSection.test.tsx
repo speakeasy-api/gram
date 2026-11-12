@@ -524,6 +524,48 @@ describe("PrivateNetworkSection", () => {
     ).toBe(false);
   });
 
+  it("explains a missing certificate and waits instead of offering a retry", () => {
+    state.ingress = {
+      id: "ingress-1",
+      organizationId: "org-1",
+      provider: "tailscale",
+      hostname: "private-mcp",
+      endpointNamespaceKind: "platform",
+      enabled: true,
+      identityRequired: false,
+      credentialsConfigured: true,
+      status: "error",
+      lastError: "provider_certificate_unavailable",
+      createdAt: new Date(0),
+      updatedAt: new Date(1_000),
+    };
+
+    render(<PrivateNetworkSection />);
+
+    expect(
+      screen.getByText(/hasn.t\s+obtained an HTTPS certificate for/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/weekly allowance of new certificates/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Latest check:/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retry provisioning" }),
+    ).toBeNull();
+    expect(
+      state.ingressOptions?.refetchInterval?.({
+        state: {
+          data: {
+            ingress: {
+              status: "error",
+              lastError: "provider_certificate_unavailable",
+            },
+          },
+        },
+      }),
+    ).toBe(30_000);
+  });
+
   it("keeps cached cleanup controls visible when polling fails", () => {
     state.ingressError = true;
     state.ingress = {
