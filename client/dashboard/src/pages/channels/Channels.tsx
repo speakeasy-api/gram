@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
+import { ChannelsHome } from "./ChannelsHome";
 import { ChannelsSettings } from "./ChannelsSettings";
 import { ConversationList, type ListFilter } from "./ConversationList";
 import { ConversationPane } from "./Conversation";
@@ -29,9 +30,14 @@ import {
   audienceOf,
   conversationsFrom,
   directThreadBetween,
-  presenceGroups,
+  presenceOf,
+  setupProgressOf,
 } from "./model";
-import { useChannelsWorkspace, useReadMarks } from "./useChannels";
+import {
+  useChannelsWorkspace,
+  useReadMarks,
+  useSetupHidden,
+} from "./useChannels";
 
 export default function Channels(): JSX.Element {
   const organization = useOrganization();
@@ -95,6 +101,10 @@ function ChannelsBoard({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<ListFilter>("all");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [setupHidden, hideSetup] = useSetupHidden(
+    `speakeasy.channels.setup-hidden.v1.${organizationId}.${projectId}.${userId}`,
+  );
+  const connectRef = useRef<HTMLElement>(null);
   const [presenceOpen, setPresenceOpen] = useState(false);
   // A retried send must reuse its key so the server recognizes the retry.
   const pendingPost = useRef<
@@ -134,15 +144,21 @@ function ChannelsBoard({
     (conversation) => conversation.id === selectedId,
   );
   const history = historyOf(store, selectedId);
-  const groups = useMemo(
+  const presence = useMemo(
     () =>
       data
-        ? presenceGroups(data, { viewerId: userId, resolve: resolveOwner })
-        : [],
+        ? presenceOf(data, { viewerId: userId, resolve: resolveOwner })
+        : { agents: [], readers: [] },
     [data, userId, resolveOwner],
   );
-  const online = groups.reduce(
-    (total, group) => total + group.entries.length,
+  const progress = useMemo(
+    () =>
+      data ? setupProgressOf(data) : { agentsSeen: 0, agentsTalking: false },
+    [data],
+  );
+  const homeUnread = conversations.reduce(
+    (total, conversation) =>
+      conversation.muted ? total : total + conversation.unread,
     0,
   );
 
@@ -158,17 +174,6 @@ function ChannelsBoard({
       ),
     [setSearchParams],
   );
-
-  // A wide window shows the list and a conversation side by side, so the page
-  // opens on the newest activity instead of an empty panel. A narrow window
-  // shows one at a time, where that would hide the list behind a conversation
-  // nobody asked for.
-  const newest = conversations[0]?.id;
-  useEffect(() => {
-    if (selectedId || !newest) return;
-    if (!window.matchMedia("(min-width: 1024px)").matches) return;
-    selectThread(newest);
-  }, [selectedId, newest, selectThread]);
 
   // The snapshot carries only a bounded tail, so an opened conversation reads
   // its own newest page. Doing it once per conversation keeps a long list from
@@ -255,6 +260,21 @@ function ChannelsBoard({
     if (created) selectThread((created as ChannelThread).id);
   };
 
+  // Connecting lives on Home, so every "Connect an agent" leads there.
+  const showConnect = () => {
+    selectThread("");
+    requestAnimationFrame(() =>
+      connectRef.current?.scrollIntoView({ block: "start" }),
+    );
+  };
+
+  const markAllRead = () => {
+    for (const conversation of conversations) {
+      if (conversation.unread > 0 && conversation.lastMessage)
+        markRead(conversation.id, conversation.lastMessage.id);
+    }
+  };
+
   const status =
     workspace.error instanceof ChannelsRequestError
       ? workspace.error.status
@@ -321,8 +341,8 @@ function ChannelsBoard({
             <ReleaseStageBadge stage="beta" />
           </div>
           <p className="text-muted-foreground text-sm">
-            Channels lets people and agents collaborate in project threads and
-            direct messages.
+            Where agents work things out together in project threads. Read
+            along, and step in when they need you.
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -332,10 +352,10 @@ function ChannelsBoard({
               variant="tertiary"
               icon="users"
               className="xl:hidden"
-              tooltip="People and agents connected to Channels right now"
+              tooltip="Agents connected to Channels right now"
               onClick={() => setPresenceOpen(true)}
             >
-              <Button.Text>{`${online} online`}</Button.Text>
+              <Button.Text>{`${presence.agents.length} ${presence.agents.length === 1 ? "agent" : "agents"} online`}</Button.Text>
             </Button>
           ) : null}
           <Button
@@ -432,6 +452,7 @@ function ChannelsBoard({
             conversations={conversations}
             selectedId={selectedId}
             onSelect={selectThread}
+            homeUnread={homeUnread}
             onCreate={(title) => {
               const create = () => createThread(title);
               lastAttempt.current = create;
@@ -445,67 +466,84 @@ function ChannelsBoard({
             more={workspace.moreConversations}
             onLoadMore={workspace.loadMoreConversations}
           />
-          <ConversationPane
-            className={cn("min-w-0 lg:flex", !selected && "hidden")}
-            conversation={selected}
-            history={history}
-            snapshot={data}
-            viewerId={userId}
-            resolveOwner={resolveOwner}
-            audience={
-              selected
-                ? audienceOf(selected, data, userId, resolveOwner)
-                : undefined
-            }
-            parentTitle={
-              selected?.parentId
-                ? conversations.find(
-                    (conversation) => conversation.id === selected.parentId,
-                  )?.title
-                : undefined
-            }
-            onOpenParent={
-              selected?.parentId
-                ? () => selectThread(selected.parentId!)
-                : undefined
-            }
-            draft={draft}
-            onDraftChange={setDraft}
-            onSend={() => attempt(send)}
-            sending={workspace.isActing}
-            maxBytes={workspace.limits.messageBytes}
-            canParticipate={workspace.canParticipate}
-            reconnecting={workspace.reconnecting}
-            lastReadAt={workspace.lastReadAt}
-            onToggleFollow={() =>
-              attempt(() =>
-                workspace.run({
-                  operation: "channels_follow",
-                  args: { threadId: selectedId, follow: !selected?.followed },
-                }),
-              )
-            }
-            onToggleMute={() =>
-              attempt(() =>
-                workspace.run({
-                  operation: "channels_follow",
-                  args: { threadId: selectedId, muted: !selected?.muted },
-                }),
-              )
-            }
-            onLoadOlder={() => workspace.loadOlder(selectedId)}
-            onConnectAgent={() => setSettingsOpen(true)}
-            onBack={() => selectThread("")}
-            notice={notice}
-          />
+          {!selected ? (
+            <ChannelsHome
+              className="hidden lg:block"
+              conversations={conversations}
+              snapshot={data}
+              presence={presence}
+              progress={progress}
+              viewerId={userId}
+              resolveOwner={resolveOwner}
+              setupHidden={setupHidden}
+              onHideSetup={hideSetup}
+              onOpen={selectThread}
+              onMarkAllRead={markAllRead}
+              connectRef={connectRef}
+              notice={notice}
+            />
+          ) : (
+            <ConversationPane
+              className="min-w-0 lg:flex"
+              conversation={selected}
+              history={history}
+              snapshot={data}
+              viewerId={userId}
+              resolveOwner={resolveOwner}
+              audience={
+                selected
+                  ? audienceOf(selected, data, userId, resolveOwner)
+                  : undefined
+              }
+              parentTitle={
+                selected?.parentId
+                  ? conversations.find(
+                      (conversation) => conversation.id === selected.parentId,
+                    )?.title
+                  : undefined
+              }
+              onOpenParent={
+                selected?.parentId
+                  ? () => selectThread(selected.parentId!)
+                  : undefined
+              }
+              draft={draft}
+              onDraftChange={setDraft}
+              onSend={() => attempt(send)}
+              sending={workspace.isActing}
+              maxBytes={workspace.limits.messageBytes}
+              canParticipate={workspace.canParticipate}
+              reconnecting={workspace.reconnecting}
+              lastReadAt={workspace.lastReadAt}
+              onToggleFollow={() =>
+                attempt(() =>
+                  workspace.run({
+                    operation: "channels_follow",
+                    args: { threadId: selectedId, follow: !selected?.followed },
+                  }),
+                )
+              }
+              onToggleMute={() =>
+                attempt(() =>
+                  workspace.run({
+                    operation: "channels_follow",
+                    args: { threadId: selectedId, muted: !selected?.muted },
+                  }),
+                )
+              }
+              onLoadOlder={() => workspace.loadOlder(selectedId)}
+              onConnectAgent={showConnect}
+              onBack={() => selectThread("")}
+              notice={notice}
+            />
+          )}
           <PresenceRail
             className="hidden min-w-0 border-l xl:flex"
-            groups={groups}
-            sessionInstanceId={workspace.sessionInstanceId}
+            presence={presence}
             canParticipate={workspace.canParticipate}
             busy={workspace.isActing}
             onMessage={(instanceId) => attempt(() => startDirect(instanceId))}
-            onConnectAgent={() => setSettingsOpen(true)}
+            onConnectAgent={showConnect}
           />
         </div>
       ) : null}
@@ -518,8 +556,7 @@ function ChannelsBoard({
           <PresenceRail
             className="flex-1"
             titled={false}
-            groups={groups}
-            sessionInstanceId={workspace.sessionInstanceId}
+            presence={presence}
             canParticipate={workspace.canParticipate}
             busy={workspace.isActing}
             onMessage={(instanceId) => {
@@ -528,7 +565,7 @@ function ChannelsBoard({
             }}
             onConnectAgent={() => {
               setPresenceOpen(false);
-              setSettingsOpen(true);
+              showConnect();
             }}
           />
         </SheetContent>

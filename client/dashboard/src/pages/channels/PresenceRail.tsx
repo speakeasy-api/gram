@@ -1,15 +1,15 @@
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/utils";
-import type { PresenceGroup } from "./model";
+import type { Presence } from "./model";
 
 /**
  * Who is here right now. Presence is a lease an agent renews, so this answers
- * "is anything listening?" — not "is an agent running right now".
+ * "is anything listening?" — not "is an agent running right now". Agents are
+ * listed by the name they chose; who connected them is secondary.
  */
 export function PresenceRail({
-  groups,
-  sessionInstanceId,
+  presence,
   canParticipate,
   busy,
   onMessage,
@@ -18,8 +18,7 @@ export function PresenceRail({
   titled = true,
   className,
 }: {
-  groups: PresenceGroup[];
-  sessionInstanceId?: string;
+  presence: Presence;
   canParticipate: boolean;
   busy: boolean;
   onMessage: (instanceId: string) => void;
@@ -33,59 +32,51 @@ export function PresenceRail({
         <h2 className="text-eyebrow px-4 pt-4 pb-2">Online now</h2>
       ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-        {groups.length === 0 ? (
+        {presence.agents.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            Nobody is connected. Agents appear here while they hold a session.
+            No agents are connected. They show up here, under the name they
+            choose, while they are connected.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {presence.agents.map((entry) => (
+              <li key={entry.instance.id} className="group/entry flex gap-2">
+                <span
+                  className="bg-success-default mt-1.5 size-1.5 shrink-0 rounded-full"
+                  aria-hidden
+                />
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-sm">{entry.name}</span>
+                  {entry.instance.note ? (
+                    <p className="text-muted-foreground text-xs break-words whitespace-pre-wrap">
+                      {entry.instance.note}
+                    </p>
+                  ) : null}
+                  <p className="text-muted-foreground/70 truncate text-xs">
+                    {entry.isYours ? "Yours" : entry.owner}
+                  </p>
+                </div>
+                {canParticipate ? (
+                  <Button
+                    size="xs"
+                    variant="tertiary"
+                    icon="at-sign"
+                    aria-label={`Message ${entry.name}`}
+                    tooltip={`Message ${entry.name} privately`}
+                    disabled={busy}
+                    onClick={() => onMessage(entry.instance.id)}
+                    className="opacity-0 transition-opacity focus-visible:opacity-100 group-hover/entry:opacity-100 [@media(hover:none)]:opacity-100"
+                  />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        {presence.readers.length > 0 ? (
+          <p className="text-muted-foreground mt-4 text-xs">
+            Reading along: {presence.readers.join(", ")}
           </p>
         ) : null}
-        {groups.map((group) => (
-          <section key={group.subjectId} className="mb-4">
-            <h3 className="text-muted-foreground mb-1 truncate text-xs">
-              {group.owner}
-            </h3>
-            <ul className="space-y-2">
-              {group.entries.map((entry) => (
-                <li key={entry.instance.id} className="group/entry flex gap-2">
-                  <span
-                    className="bg-success-default mt-1.5 size-1.5 shrink-0 rounded-full"
-                    aria-hidden
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="min-w-0 truncate text-sm">
-                        {entry.name}
-                      </span>
-                      {entry.instance.id === sessionInstanceId ? (
-                        <span className="text-muted-foreground shrink-0 text-xs">
-                          you
-                        </span>
-                      ) : null}
-                    </div>
-                    {entry.instance.note ? (
-                      <p className="text-muted-foreground text-xs break-words whitespace-pre-wrap">
-                        {entry.instance.note}
-                      </p>
-                    ) : null}
-                  </div>
-                  {entry.instance.id === sessionInstanceId ||
-                  !entry.isAgent ||
-                  !canParticipate ? null : (
-                    <Button
-                      size="xs"
-                      variant="tertiary"
-                      icon="at-sign"
-                      aria-label={`Message ${entry.name}`}
-                      tooltip={`Message ${entry.name} privately`}
-                      disabled={busy}
-                      onClick={() => onMessage(entry.instance.id)}
-                      className="opacity-0 transition-opacity focus-visible:opacity-100 group-hover/entry:opacity-100 [@media(hover:none)]:opacity-100"
-                    />
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
       </div>
       <div className="border-t px-4 py-3">
         <button

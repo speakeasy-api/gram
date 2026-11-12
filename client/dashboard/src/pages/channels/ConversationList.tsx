@@ -25,13 +25,14 @@ function fitBytes(value: string, maxBytes: number): string {
 }
 
 /**
- * The conversation rail: everything the project is talking about, newest
- * first, so the page opens on activity rather than on a setup form.
+ * The conversation rail: Home, then everything the project is talking about,
+ * newest first.
  */
 export function ConversationList({
   conversations,
   selectedId,
   onSelect,
+  homeUnread,
   onCreate,
   canParticipate,
   maxTitleBytes,
@@ -44,7 +45,10 @@ export function ConversationList({
 }: {
   conversations: Conversation[];
   selectedId: string;
+  /** Choosing nothing is choosing Home. */
   onSelect: (id: string) => void;
+  /** Unread across conversations the person has not muted, shown on Home. */
+  homeUnread: number;
   /** Resolves true once the thread exists. */
   onCreate: (title: string) => Promise<boolean>;
   canParticipate: boolean;
@@ -157,6 +161,31 @@ export function ConversationList({
         aria-label="Conversations"
         className="min-h-0 min-w-0 flex-1 overflow-y-auto pb-4"
       >
+        <button
+          type="button"
+          aria-current={selectedId ? undefined : "page"}
+          onClick={() => onSelect("")}
+          className={cn(
+            "hover:bg-muted/60 mb-2 flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm transition-colors",
+            !selectedId && "bg-muted",
+          )}
+        >
+          <span className="flex w-5 shrink-0 justify-end">
+            <Icon
+              name="house"
+              className="text-muted-foreground size-3.5"
+              aria-hidden
+            />
+          </span>
+          <span className={cn("flex-1", homeUnread > 0 && "font-medium")}>
+            Home
+          </span>
+          {homeUnread > 0 ? (
+            <span className="text-muted-foreground text-xs">
+              {homeUnread} unread
+            </span>
+          ) : null}
+        </button>
         <Group
           title="Threads"
           conversations={threads}

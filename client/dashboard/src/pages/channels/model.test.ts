@@ -6,7 +6,8 @@ import {
   conversationsFrom,
   dashboardSessionIn,
   directThreadBetween,
-  presenceGroups,
+  presenceOf,
+  setupProgressOf,
 } from "./model";
 
 const online = "2099-01-01T00:00:00Z";
@@ -131,14 +132,32 @@ describe("conversation list", () => {
     expect(asParticipant?.involvesViewer).toBe(true);
   });
 
-  it("counts only what arrived after the viewer last looked, from someone else", () => {
+  it("counts what arrived since the viewer last looked, including their own agents", () => {
     const [, deploy] = listFrom(snapshot, {
       viewerId: "identity-1",
       resolve,
       readMarks: {},
     });
-    // The viewer's own agent posted it, so it is not unread for them.
-    expect(deploy?.unread).toBe(0);
+    // An agent the viewer connected said it; the viewer has not read it.
+    expect(deploy?.unread).toBe(1);
+    const typed = snapshotWith({
+      threads: { busy: { id: "busy", title: "Deploy" } },
+      messages: [
+        {
+          id: 1,
+          threadId: "busy",
+          instanceId: "session-1",
+          subjectId: "identity-1",
+          text: "On my way",
+          createdAt: "2026-01-01T10:00:00Z",
+        },
+      ],
+    });
+    // What the viewer typed themselves is never news to them.
+    expect(
+      listFrom(typed, { viewerId: "identity-1", resolve, readMarks: {} })[0]
+        ?.unread,
+    ).toBe(0);
     const [, afterReading] = listFrom(snapshot, {
       viewerId: "identity-2",
       resolve,
@@ -220,25 +239,71 @@ describe("conversation list", () => {
 });
 
 describe("presence", () => {
-  it("groups live participants by person and puts the viewer first", () => {
+  it("lists live agents by the name they chose and keeps people as readers", () => {
     const snapshot = snapshotWith({});
-    const groups = presenceGroups(snapshot, {
+    const presence = presenceOf(snapshot, {
       viewerId: "identity-1",
       resolve,
     });
-    expect(groups).toHaveLength(1);
-    expect(groups[0]).toMatchObject({ owner: "You", isYou: true });
-    expect(groups[0]!.entries.map((entry) => entry.name)).toEqual([
-      "avery on dashboard",
+    expect(presence.agents.map((entry) => entry.name)).toEqual([
       "claude in CI",
       "claude on laptop",
     ]);
-    // An agent is not the person; a browser session is the person reading.
-    expect(groups[0]!.entries.map((entry) => entry.isAgent)).toEqual([
-      false,
-      true,
-      true,
-    ]);
+    expect(presence.agents[1]).toMatchObject({
+      owner: "You",
+      isYours: true,
+    });
+    // A browser session is a person reading along, not a participant.
+    expect(presence.readers).toEqual(["You"]);
+  });
+
+  it("counts agents that ever connected and notices when one posts in a thread", () => {
+    const quiet = snapshotWith({
+      participants: {
+        gone: { id: "gone", subjectId: "identity-2", label: "old agent" },
+      },
+    });
+    // Two live agents and one that has since left; the browser session is a person.
+    expect(setupProgressOf(quiet)).toEqual({
+      agentsSeen: 4,
+      agentsTalking: false,
+    });
+
+    const direct = snapshotWith({
+      threads: {
+        dm: { id: "dm", title: "", participants: ["identity-1"] },
+      },
+      messages: [
+        {
+          id: 1,
+          threadId: "dm",
+          instanceId: "agent-1",
+          subjectId: "identity-1",
+          text: "Hi",
+          createdAt: "2026-01-01T00:00:00Z",
+        },
+      ],
+    });
+    // A private message is not agents talking in a thread.
+    expect(setupProgressOf(direct).agentsTalking).toBe(false);
+
+    const talking = snapshotWith({
+      threads: {
+        planning: {
+          id: "planning",
+          title: "Planning",
+          lastMessage: {
+            id: 2,
+            threadId: "planning",
+            instanceId: "agent-2",
+            subjectId: "identity-1",
+            text: "Done",
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        },
+      },
+    });
+    expect(setupProgressOf(talking).agentsTalking).toBe(true);
   });
 
   it("finds the viewer's own browser session and ignores agents", () => {

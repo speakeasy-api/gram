@@ -42,18 +42,20 @@ export interface Speaker {
   isYou: boolean;
 }
 
-interface PresenceEntry {
+export interface PresenceEntry {
   instance: ChannelInstance;
+  /** The name the agent chose for itself when it connected. */
   name: string;
-  isAgent: boolean;
-  online: boolean;
+  /** Who connected it, in the viewer's words. Secondary to the name. */
+  owner: string;
+  isYours: boolean;
 }
 
-export interface PresenceGroup {
-  subjectId: string;
-  owner: string;
-  isYou: boolean;
-  entries: PresenceEntry[];
+/** Who is here right now: the agents first, then the people reading along. */
+export interface Presence {
+  agents: PresenceEntry[];
+  /** People with the page open, by name, the viewer first. */
+  readers: string[];
 }
 
 /** Resolves an account to the name a person recognizes. */
@@ -202,7 +204,9 @@ export function conversationsFrom(
         messages,
         lastMessage,
         lastActivity: lastMessage ? Date.parse(lastMessage.createdAt) : 0,
-        unread: unreadCount(messages, lastMessage, mark, options.viewerId),
+        unread: unreadCount(messages, lastMessage, mark, (message) =>
+          typedByViewer(message, snapshot, options.viewerId),
+        ),
       };
     },
   );
@@ -225,6 +229,21 @@ function newestOf(
 }
 
 /**
+ * Whether the viewer wrote this themselves. Their agents post under the same
+ * account, but what an agent says is news to the person who connected it.
+ */
+function typedByViewer(
+  message: ChannelMessage,
+  snapshot: ChannelsSnapshot,
+  viewerId: string,
+): boolean {
+  return (
+    message.subjectId === viewerId &&
+    !isAgent(participantOf(snapshot, message.instanceId))
+  );
+}
+
+/**
  * How much arrived since the viewer last looked. Only loaded messages can be
  * counted exactly; a summary newer than the loaded pages still has to show
  * that something is waiting, so it counts for one.
@@ -233,52 +252,89 @@ function unreadCount(
   messages: ChannelMessage[],
   newest: ChannelMessage | undefined,
   mark: number,
-  viewerId: string,
+  isOwn: (message: ChannelMessage) => boolean,
 ): number {
   let unread = 0;
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index]!;
     if (message.id <= mark) break;
-    if (message.subjectId !== viewerId) unread++;
+    if (!isOwn(message)) unread++;
   }
   const unloaded =
     newest &&
     newest.id > mark &&
-    newest.subjectId !== viewerId &&
+    !isOwn(newest) &&
     newest.id > (messages[messages.length - 1]?.id ?? 0);
   return unread + (unloaded ? 1 : 0);
 }
 
-/** Groups live participants by the person who owns them, viewer first. */
-export function presenceGroups(
+/**
+ * Lists the live agents by the name each chose, with the person who connected
+ * it as secondary detail. Browser sessions are people reading along, so they
+ * are named separately rather than listed as participants.
+ */
+export function presenceOf(
   snapshot: ChannelsSnapshot,
   options: { viewerId: string; resolve: ResolveOwner; now?: number },
-): PresenceGroup[] {
+): Presence {
   const now = options.now ?? Date.now();
-  const groups = new Map<string, PresenceGroup>();
+  const agents: PresenceEntry[] = [];
+  const readers = new Map<string, string>();
   for (const instance of Object.values(snapshot.instances)) {
     if (!isOnline(instance, now)) continue;
-    const group = groups.get(instance.subjectId) ?? {
-      subjectId: instance.subjectId,
-      owner: ownerName(instance.subjectId, options.viewerId, options.resolve),
-      isYou: instance.subjectId === options.viewerId,
-      entries: [],
-    };
-    group.entries.push({
+    const owner = ownerName(
+      instance.subjectId,
+      options.viewerId,
+      options.resolve,
+    );
+    if (!isAgent(instance)) {
+      readers.set(instance.subjectId, owner);
+      continue;
+    }
+    agents.push({
       instance,
       name: nameOf(instance),
-      isAgent: isAgent(instance),
-      online: true,
+      owner,
+      isYours: instance.subjectId === options.viewerId,
     });
-    groups.set(instance.subjectId, group);
   }
-  for (const group of groups.values()) {
-    group.entries.sort((a, b) => a.name.localeCompare(b.name));
+  agents.sort((a, b) => a.name.localeCompare(b.name));
+  const people = [...readers.entries()]
+    .sort(([a, aName], [b, bName]) => {
+      if ((a === options.viewerId) !== (b === options.viewerId))
+        return a === options.viewerId ? -1 : 1;
+      return aName.localeCompare(bName);
+    })
+    .map(([, name]) => name);
+  return { agents, readers: people };
+}
+
+/** How far the project is from agents talking to each other. */
+export interface SetupProgress {
+  /** Distinct agents that have connected, whether or not they still are. */
+  agentsSeen: number;
+  /** True once any agent has posted in a thread everyone can read. */
+  agentsTalking: boolean;
+}
+
+export function setupProgressOf(snapshot: ChannelsSnapshot): SetupProgress {
+  const seen = new Set<string>();
+  for (const participant of [
+    ...Object.values(snapshot.instances),
+    ...Object.values(snapshot.participants ?? {}),
+  ]) {
+    if (isAgent(participant)) seen.add(participant.id);
   }
-  return [...groups.values()].sort((a, b) => {
-    if (a.isYou !== b.isYou) return a.isYou ? -1 : 1;
-    return a.owner.localeCompare(b.owner);
-  });
+  const fromAgent = (message: ChannelMessage | undefined) =>
+    message !== undefined &&
+    isAgent(participantOf(snapshot, message.instanceId)) &&
+    (snapshot.threads[message.threadId]?.participants?.length ?? 0) === 0;
+  const agentsTalking =
+    snapshot.messages.some(fromAgent) ||
+    Object.values(snapshot.threads).some((thread) =>
+      fromAgent(thread.lastMessage),
+    );
+  return { agentsSeen: seen.size, agentsTalking };
 }
 
 /** The viewer's live browser session, if the project can still see it. */
