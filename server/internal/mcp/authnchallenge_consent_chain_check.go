@@ -135,6 +135,11 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 		attr.SlogIdentityChainingProvider(string(outcome.Provider)),
 	)
 
+	if result.Status == chainCheckRejected && outcome.Reason == identitychaining.ReasonIneligibleIdentity {
+		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeIneligibleIdentity,
+			mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject))
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := json.NewEncoder(w).Encode(result); err != nil {

@@ -747,6 +747,32 @@ func TestConnectionOutcome_ChainedFirstPartyEnds(t *testing.T) {
 	require.Equal(t, state.FlowID, row.AttemptID.String())
 }
 
+// An account Speakeasy won't vouch for is recorded on the consent page, naming the admin.
+func TestConnectionOutcome_ChainCheckRecordsIneligibleIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, issuer := seedChainedConsentEndpoint(t, "attempt-inelig-"+uuid.NewString()[:6])
+	g := setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	g.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome {
+		return identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonIneligibleIdentity, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
+	}
+	rec := recordConnections(t, fx.ti)
+	state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	state.FlowID = uuid.NewString()
+	state.CreatedAt = time.Now()
+	require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+
+	w, err := postChainCheck(t, fx, nil)
+	require.NoError(t, err)
+	require.Equal(t, "rejected", chainCheckResult(t, w)["status"])
+
+	require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
+	row := rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeIneligibleIdentity)
+	require.Equal(t, state.FlowID, row.AttemptID.String())
+	rec.RequireNotEnded()
+}
+
 // A provider callback whose sign-in has gone ends that attempt once, however many callbacks follow.
 func TestConnectionOutcome_ParentGoneDuringProviderSignIn(t *testing.T) {
 	t.Parallel()

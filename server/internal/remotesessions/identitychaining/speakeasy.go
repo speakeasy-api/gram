@@ -108,6 +108,11 @@ func (s speakeasySource) checkConsent(ctx context.Context, logger *slog.Logger, 
 
 func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Logger, req Request, sel *selection, result signins.Result) Outcome {
 	if !result.Eligible() {
+		// Only the consent page ends the loop: a reconnect reuses the same sign-in, so runtime keeps sending people there.
+		if !req.consent() {
+			return newOutcome(StageAuthorization, ReasonReauthenticationRequired, ConfidenceVerified, false)
+		}
+		logger.InfoContext(ctx, "Speakeasy will not vouch for the consent sign-in", attr.SlogReason(string(result.Reason)))
 		return newOutcome(StageAuthorization, signInRefusalReason(result.Reason), ConfidenceVerified, false)
 	}
 	if result.Identity.UserID != req.UserID {
@@ -126,7 +131,7 @@ func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Log
 	return success
 }
 
-// signInRefusalReason separates a sign-in a new one replaces from an account or
+// signInRefusalReason separates a consent sign-in a new one replaces from an account or
 // method Speakeasy will not vouch for, which signing in again the same way repeats.
 func signInRefusalReason(reason signins.Reason) Reason {
 	switch reason {
