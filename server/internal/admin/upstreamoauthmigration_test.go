@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -138,6 +139,75 @@ func TestUpstreamOAuthMigration_MigratesAnOrganizationIdempotently(t *testing.T)
 	require.Zero(t, again.AssociationsWritten)
 	require.Zero(t, again.SelectionsWritten)
 	require.True(t, again.Status.Migrated)
+}
+
+// A credential issued through a gateway consent has choices for the servers
+// that consent approved and is refused anywhere else. A server it holds no
+// choice for must not report the organization as unmigrated, while the same
+// server still does for a credential with no consent catalog.
+func TestUpstreamOAuthMigration_ConsentScopedCredentialsUnrecordedChoiceIsNotPending(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+
+	org := newMigrationOrg(t, ctx, db, "migrate-consent-scoped")
+	issuer := org.issuer()
+	org.client(issuer)
+	org.server(issuer)
+	org.session(issuer)
+	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.True(t, run.Status.Migrated)
+
+	scoped := org.session(issuer)
+	require.NoError(t, org.q.ApproveConsentCatalogFixture(ctx, selectionbackfill.ApproveConsentCatalogFixtureParams{CatalogID: uuid.New(), ID: scoped}))
+	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.True(t, status.Migrated)
+	require.Zero(t, status.PendingSelections)
+	require.Equal(t, new(int64(1)), status.ConsentScopedSelections)
+
+	org.session(issuer)
+	status, err = svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.False(t, status.Migrated, "a credential with no consent catalog is missing its choice")
+	require.Equal(t, int64(1), status.PendingSelections)
+	require.Equal(t, new(int64(1)), status.ConsentScopedSelections)
+}
+
+// A profile no turn has run under has no version. A run records it before
+// enforcement, so it is pending then. Under enforcement a turn records its own
+// profile, so it is reported apart and no longer blocks.
+func TestUpstreamOAuthMigration_EnforcedOrganizationReportsUnusedProfilesApart(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+
+	org := newMigrationOrg(t, ctx, db, "migrate-unused-profiles")
+	profiles := executionprofiles.New(db)
+	assistant, err := profiles.SeedAssistantFixture(ctx, executionprofiles.SeedAssistantFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, Name: "assistant"})
+	require.NoError(t, err)
+	trigger, err := profiles.SeedTriggerFixture(ctx, executionprofiles.SeedTriggerFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, Name: "trigger"})
+	require.NoError(t, err)
+	require.NoError(t, profiles.SeedWorkloadBindingFixture(ctx, executionprofiles.SeedWorkloadBindingFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, AssistantID: assistant, TriggerID: trigger}))
+	contexts := int64(len(executionprofiles.Contexts))
+
+	before, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.Equal(t, contexts, before.ExecutionProfiles.PendingVersions)
+	require.Equal(t, new(int64(0)), before.ExecutionProfiles.UnexercisedVersions)
+	require.False(t, before.ExecutionProfiles.Complete)
+	require.Contains(t, before.Enforcement.Blockers, "Assistant profiles are not all recorded.")
+
+	_, err = productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: org.id, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+
+	enforced, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.Zero(t, enforced.ExecutionProfiles.PendingVersions)
+	require.Equal(t, new(contexts), enforced.ExecutionProfiles.UnexercisedVersions)
+	require.True(t, enforced.ExecutionProfiles.Complete)
+	require.NotContains(t, enforced.Enforcement.Blockers, "Assistant profiles are not all recorded.")
 }
 
 // Under enforcement a client an issuer binds is not inferred onto the issuer's

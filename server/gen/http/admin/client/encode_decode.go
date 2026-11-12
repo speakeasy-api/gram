@@ -30489,9 +30489,10 @@ func unmarshalAdminUpstreamOAuthMigrationExecutionProfilesResponseBodyToAdminAdm
 		return nil
 	}
 	res := &admin.AdminUpstreamOAuthMigrationExecutionProfiles{
-		Complete:        *v.Complete,
-		Targets:         *v.Targets,
-		PendingVersions: *v.PendingVersions,
+		Complete:            *v.Complete,
+		Targets:             *v.Targets,
+		PendingVersions:     *v.PendingVersions,
+		UnexercisedVersions: v.UnexercisedVersions,
 	}
 	res.Gaps = make([]*admin.AdminUpstreamOAuthMigrationExecutionProfileGap, len(v.Gaps))
 	for i, val := range v.Gaps {
@@ -30543,13 +30544,14 @@ func unmarshalAdminUpstreamAuthEnforcementResponseBodyToAdminAdminUpstreamAuthEn
 // of type *AdminUpstreamOAuthMigrationStatusResponseBody.
 func unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamOAuthMigrationStatus(v *AdminUpstreamOAuthMigrationStatusResponseBody) *admin.AdminUpstreamOAuthMigrationStatus {
 	res := &admin.AdminUpstreamOAuthMigrationStatus{
-		OrganizationID:       *v.OrganizationID,
-		Migrated:             *v.Migrated,
-		Servers:              *v.Servers,
-		PendingAssociations:  *v.PendingAssociations,
-		Credentials:          *v.Credentials,
-		PendingSelections:    *v.PendingSelections,
-		ReconnectCredentials: *v.ReconnectCredentials,
+		OrganizationID:          *v.OrganizationID,
+		Migrated:                *v.Migrated,
+		Servers:                 *v.Servers,
+		PendingAssociations:     *v.PendingAssociations,
+		Credentials:             *v.Credentials,
+		PendingSelections:       *v.PendingSelections,
+		ConsentScopedSelections: v.ConsentScopedSelections,
+		ReconnectCredentials:    *v.ReconnectCredentials,
 	}
 	res.UnresolvedServers = make([]*admin.AdminUpstreamOAuthMigrationServer, len(v.UnresolvedServers))
 	for i, val := range v.UnresolvedServers {
