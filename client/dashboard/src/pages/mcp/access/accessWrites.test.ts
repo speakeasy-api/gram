@@ -84,6 +84,23 @@ describe("allowWrite", () => {
 
     expect(allowWrite(direct, rows[0]!, "use").entries).toEqual([]);
   });
+
+  it("lifts the row's own view block when opening manage", () => {
+    // A view block also takes manage, so allowing manage has to lift it or
+    // the new grant stays blocked.
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "blocked_view" }),
+    ]);
+
+    expect(allowWrite(direct, rows[0]!, "manage").entries).toEqual([
+      {
+        principalUrn: "user:1",
+        level: "manage",
+        tools: [],
+        dispositions: [],
+      },
+    ]);
+  });
 });
 
 describe("revokeScopeWrite", () => {
@@ -213,15 +230,14 @@ describe("lifting a block", () => {
     expect(allowWrite(direct, rows[0]!, "manage").entries).toEqual([]);
   });
 
-  it("keeps another line's block, which takes nothing from this scope", () => {
+  it("lifts a view block, which takes manage too", () => {
+    // Manage includes view, so the view block is what closes the manage line.
     const { direct, rows } = state([
       role({ level: "manage" }),
       role({ appliesTo: "resource", level: "blocked_view" }),
     ]);
 
-    expect(allowWrite(direct, rows[0]!, "manage").entries).toEqual([
-      { principalUrn: "role:global:1", level: "blocked_view" },
-    ]);
+    expect(allowWrite(direct, rows[0]!, "manage").entries).toEqual([]);
   });
 
   it("keeps a stronger block, which takes nothing from this scope", () => {

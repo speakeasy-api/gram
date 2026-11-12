@@ -77,10 +77,14 @@ function withoutOwnBlock(
   row: AccessRow,
   scope: ScopeKey,
 ): AudienceRule[] {
-  if (!row.cells[scope].ownBlock) return direct;
-  return withoutRules(direct, [
-    ruleId({ principalUrn: row.principalUrn, level: BLOCK_LEVEL[scope] }),
-  ]);
+  const blocks = row.cells[scope].ownBlocks;
+  if (blocks.length === 0) return direct;
+  return withoutRules(
+    direct,
+    blocks.map((block) =>
+      ruleId({ principalUrn: row.principalUrn, level: block.level }),
+    ),
+  );
 }
 
 /**
