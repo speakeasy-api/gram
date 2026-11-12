@@ -132,24 +132,24 @@ func TestRecordedDecisions_RequireUserOrganizationScope(t *testing.T) {
 	sessionless := *authCtx
 	sessionless.SessionID = nil
 
-	for name, tc := range map[string]struct {
-		ctx  context.Context
-		mode DecisionMode
-	}{
-		"principal api key":    {contextvalues.WithPrincipalAPIKeyAuthorization(base, authCtx, actor, contextvalues.PrincipalCredential{}), DecisionModeEnforced},
-		"principal credential": {contextvalues.WithPrincipalCredentialAuthorization(base, authCtx, actor, contextvalues.PrincipalCredential{}), DecisionModeEnforced},
-		"sessionless":          {contextvalues.SetAuthContext(base, &sessionless), DecisionModeSkipped},
-	} {
-		ctx := WithDecisionRecorder(tc.ctx)
+	contexts := map[string]context.Context{
+		"principal api key":    contextvalues.WithPrincipalAPIKeyAuthorization(base, authCtx, actor, contextvalues.PrincipalCredential{}),
+		"principal credential": contextvalues.WithPrincipalCredentialAuthorization(base, authCtx, actor, contextvalues.PrincipalCredential{}),
+		"sessionless":          contextvalues.SetAuthContext(base, &sessionless),
+	}
+	for name, callerCtx := range contexts {
+		ctx := WithDecisionRecorder(callerCtx)
 		_ = engine.RequireUserOrganizationScope(ctx, "org_other", authCtx.UserID, ScopeOrgRead)
 
 		summary, ok := RecordedDecisions(ctx)
 		require.True(t, ok, name)
-		require.Equal(t, map[DecisionOperation]int{DecisionOperationRequireUserOrganization: 1}, summary.Operations, name)
-		if tc.mode == DecisionModeEnforced {
-			require.Equal(t, 1, summary.Enforced, name)
-		} else {
-			require.Equal(t, 1, summary.Skipped, name)
+		require.Len(t, summary.Operations, 1, name)
+		require.Equal(t, 1, summary.Operations[DecisionOperationRequireUserOrganization], name)
+		wantSkipped := 0
+		if name == "sessionless" {
+			wantSkipped = 1
 		}
+		require.Equal(t, 1-wantSkipped, summary.Enforced, name)
+		require.Equal(t, wantSkipped, summary.Skipped, name)
 	}
 }
