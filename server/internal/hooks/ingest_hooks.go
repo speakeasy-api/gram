@@ -1295,6 +1295,13 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		GramOrgID:           authCtx.ActiveOrganizationID,
 		ProjectID:           authCtx.ProjectID.String(),
 	}
+	// A Cowork event names its surface itself. The relay skips SessionStart
+	// inside the Cowork VM and sends the generic "claude" adapter slug, so
+	// without this the session reads as Claude Code until Claude's OTEL
+	// stream reaches the server, while its transcript rows say cowork.
+	if fromCowork(payload) {
+		metadata.ServiceName = agentVariantCowork
+	}
 	if metadata.SessionID == "" {
 		return metadata
 	}
