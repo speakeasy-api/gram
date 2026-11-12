@@ -120,25 +120,6 @@ func (q *Queries) BackdateDelegationRefreshAttemptFixture(ctx context.Context, i
 	return err
 }
 
-const backdateRiskPolicyChallenges = `-- name: BackdateRiskPolicyChallenges :exec
-UPDATE risk_policy_challenges
-SET challenged_at = challenged_at - make_interval(secs => $1::float8)
-WHERE project_id = $2
-  AND status = 'challenged'
-`
-
-type BackdateRiskPolicyChallengesParams struct {
-	Seconds   float64
-	ProjectID uuid.UUID
-}
-
-// Moves a project's pending warn challenges into the past, so a test can
-// check what happens once a confirmation window has passed.
-func (q *Queries) BackdateRiskPolicyChallenges(ctx context.Context, arg BackdateRiskPolicyChallengesParams) error {
-	_, err := q.db.Exec(ctx, backdateRiskPolicyChallenges, arg.Seconds, arg.ProjectID)
-	return err
-}
-
 const backendPIDFixture = `-- name: BackendPIDFixture :one
 SELECT pg_backend_pid()
 `

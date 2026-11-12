@@ -736,22 +736,19 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 					return "", ""
 				}
 				// Cowork cuts the acknowledgement link off and shows it as plain
-				// text, so there the warning leads with a short link and the
-				// person can also confirm by sending the same prompt again.
+				// text, so there the warning leads with a short link.
 				if fromCowork(payload) {
-					// A transport retry of the challenged send reuses its
-					// idempotency key. It must get the same challenge, never
-					// count as the person sending the prompt again.
-					if !s.isHookDuplicate(ctx) && s.confirmWarnByResend(ctx, ev.Event, scanResult) {
-						return "", ""
+					if ackURL := s.coworkWarnAckURL(ctx, ev.Event, scanResult); ackURL != "" {
+						s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, "", scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
+						auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						return auditReason, coworkWarnUserReason(scanResult, ackURL)
 					}
-					s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, "", scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
-					auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-					return auditReason, coworkWarnUserReason(scanResult, s.coworkWarnAckURL(ctx, ev.Event, scanResult))
 				}
-				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
-					auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-					return auditReason, userReason
+				if !fromCowork(payload) {
+					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
+						auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						return auditReason, userReason
+					}
 				}
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)

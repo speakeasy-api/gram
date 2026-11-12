@@ -2675,14 +2675,6 @@ UPDATE custom_domains
 SET health_status = 'unhealthy', health_issue = 'check_failed', health_checked_at = @checked_at
 WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;
 
--- name: BackdateRiskPolicyChallenges :exec
--- Moves a project's pending warn challenges into the past, so a test can
--- check what happens once a confirmation window has passed.
-UPDATE risk_policy_challenges
-SET challenged_at = challenged_at - make_interval(secs => @seconds::float8)
-WHERE project_id = @project_id
-  AND status = 'challenged';
-
 -- name: SetChatMemorySweepFixture :exec
 -- Test-only fixture: backdates a chat and, when given, its summary and
 -- memory-exclusion timestamps so the team memory sweep sees it as idle,

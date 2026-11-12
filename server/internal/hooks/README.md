@@ -129,14 +129,11 @@ Code the block text carries an acknowledgement link the person opens before
 retrying. Cowork shows a hook's block text cut off after two lines with no way
 to expand it, and shows it as plain text, so a long link is cut off and none
 is clickable. For events with `session.surface: "cowork"` the challenge leads
-with a short link, `<site>/ack#<token>`, that the person can copy into a
-browser, and also tells them to send the same message again. Either confirms.
-The challenge key masks the "Message sent at …" sentence Claude's apps add to
-the prompt's reminder, because it names the minute the message was sent. An
-identical resend within 10 minutes is the confirmation: the
-pending challenge for that prompt's call fingerprint becomes a two-minute
-acknowledgement, recorded in the audit log. Only a person submits prompts, so
-the agent cannot confirm on their behalf.
+with a short link, `<site>/ack#<token>`, that the person copies into a
+browser. The dashboard's `/ack` route redeems it like the long link, and the
+person then tries again. The challenge key masks the "Message sent at …"
+sentence Claude's apps add to the prompt's reminder, because it names the
+minute the message was sent, so a retry a minute later still matches.
 
 The first message is typed in chat before the session moves to Cowork, so no
 prompt hook sees it. The Stop that ships it closes that gap. When an upload

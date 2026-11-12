@@ -3,12 +3,10 @@ package hooks
 // Warn & confirm for typed prompts in Claude Cowork.
 //
 // In Claude Code a warn on a prompt blocks it with an acknowledgement link the
-// person opens, then they retry. Cowork shows a hook's block reason truncated
-// to a couple of lines with no way to expand it, so the link is never visible
-// and a retry is challenged again forever. There, sending the same prompt again
-// is the confirmation: only a person can submit a prompt (the agent cannot
-// resend one), the warning was on screen when they did, and the challenge is
-// scoped to that exact prompt (call fingerprint) for a short window.
+// person opens, then they retry. Cowork shows a hook's block reason cut off
+// after a couple of lines, as plain text, so the long link never fits and none
+// is clickable. There the warning leads with a short link (<site>/ack#<token>)
+// that the person copies into a browser to approve, then retries.
 
 import (
 	"context"
@@ -30,35 +28,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const (
-	// coworkResendWindow bounds how long after a challenge an identical
-	// resend still counts as the confirmation.
-	coworkResendWindow = 10 * time.Minute
-	// coworkResendGrace keeps the acknowledgement alive long enough for the
-	// confirmed prompt itself to pass (and an immediate retry of it).
-	coworkResendGrace = 2 * time.Minute
-)
-
-// confirmWarnByResend turns a recent pending challenge for this exact prompt
-// into an acknowledgement and records it in the audit log. false means this is
-// the first sighting (or the window passed), so the caller challenges it.
-func (s *Service) confirmWarnByResend(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult) bool {
-	ctx, span := s.tracer.Start(ctx, "hooks.confirmWarnByResend")
-	defer span.End()
-
-	if scanResult == nil {
-		return false
-	}
-	policyID, err := uuid.Parse(scanResult.PolicyID)
-	if err != nil {
-		return false
-	}
-	return s.acknowledgePendingChallenge(ctx, ev, pendingChallenge{
-		PolicyID:        policyID,
-		ToolName:        "",
-		CallFingerprint: scanResult.CallFingerprint,
-	}, coworkResendWindow, "hooks_cowork_warn_resend_confirmed")
-}
+// coworkConfirmGrace keeps a Cowork confirmation alive long enough for the
+// confirmed call itself to pass (and an immediate retry of it).
+const coworkConfirmGrace = 2 * time.Minute
 
 // pendingChallenge names one challenged call: a prompt (no tool name) or a
 // tool call, under one policy.
@@ -84,7 +56,7 @@ func (s *Service) acknowledgePendingChallenge(ctx context.Context, ev hookevents
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := riskrepo.New(dbtx).ConfirmPendingRiskPolicyChallenge(ctx, riskrepo.ConfirmPendingRiskPolicyChallengeParams{
-		GraceSeconds:    coworkResendGrace.Seconds(),
+		GraceSeconds:    coworkConfirmGrace.Seconds(),
 		ProjectID:       ev.Context.ProjectID,
 		UserID:          ev.Context.User.ID,
 		RiskPolicyID:    pending.PolicyID,
@@ -129,19 +101,15 @@ func (s *Service) acknowledgePendingChallenge(ctx context.Context, ev hookevents
 }
 
 // coworkWarnUserReason is the block text shown in Cowork. The short
-// acknowledgement link and the confirmation instruction lead, because Cowork
-// cuts the reason off after a couple of lines and shows it as plain text: the
-// person copies the link, or sends the same message again.
+// acknowledgement link leads, because Cowork cuts the reason off after a
+// couple of lines and shows it as plain text: the person copies the link.
 func coworkWarnUserReason(scanResult *risk.ScanResult, ackURL string) string {
-	if ackURL == "" {
-		return fmt.Sprintf("Speakeasy warning. To send it anyway, send the same message again. %s", renderWarnBody(scanResult))
-	}
-	return fmt.Sprintf("%s Speakeasy warning: to send it anyway, approve at this link or send the same message again. %s", ackURL, renderWarnBody(scanResult))
+	return fmt.Sprintf("%s Speakeasy warning: to send it anyway, approve at this link, then try again. %s", ackURL, renderWarnBody(scanResult))
 }
 
 // coworkWarnAckURL mints the short acknowledgement link for a Cowork prompt
-// warning. It returns "" when no link can be made, and the person then
-// confirms by sending the message again.
+// warning. It returns "" when no link can be made, and the prompt is then
+// blocked, as a warn is everywhere without a link.
 func (s *Service) coworkWarnAckURL(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult) string {
 	if s.cache == nil || ev.Context.User.ID == "" {
 		return ""
