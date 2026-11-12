@@ -721,17 +721,17 @@ const ROUTE_STRUCTURE = {
     url: "risk-events",
     icon: "flag",
   },
-  // Shadow AI lives in Guardrails (the Shadow AI policy and its targets tab)
-  // and is not in the nav. Its section URLs stay because tickets, bookmarks
-  // and block messages link to them: every index page redirects to
-  // Guardrails, and the tool and server detail pages beneath keep rendering.
+  // Shadow AI: the MCP servers and AI tools in use, as two tabs of one page.
+  // The category indexes below have no page of their own and redirect to the
+  // matching tab; the tool and server detail pages beneath them render, and
+  // tickets, bookmarks and block messages link to all of these URLs.
   //
   // Project-level placement with organization-scoped reads behind it, the
   // same shape as identities above and for the same reason.
   shadowAI: {
     title: "Shadow AI",
     url: "shadow-ai",
-    icon: "shield",
+    icon: "eye-off",
     subPages: {
       // A tool's detail is nested under its category, as the server detail
       // is under MCPs, so the breadcrumb says which kind a pasted link is.
@@ -769,7 +769,7 @@ const ROUTE_STRUCTURE = {
         title: "MCPs",
         url: "mcps",
         // The MCPs index was the approvals queue; it lands on the MCP
-        // approvals tab of Guardrails rather than the policies list.
+        // servers tab of the Shadow AI page.
         subPages: {
           detail: {
             title: "Shadow MCP Server",

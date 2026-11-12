@@ -38,7 +38,7 @@ import {
 export function AiScanTargetsSection({
   title = "AI scan targets",
 }: {
-  /** The section heading; Guardrails retitles it to match its tab. */
+  /** The section heading; the Shadow AI page retitles it for its tab. */
   title?: string;
 } = {}): JSX.Element {
   return (

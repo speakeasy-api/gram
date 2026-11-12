@@ -52,7 +52,7 @@ describe("ShadowAITargetsTab", () => {
     render(<ShadowAITargetsTab />);
 
     expect(screen.getByTestId("scan-targets").textContent).toBe(
-      "Shadow AI targets",
+      "What device agents look for",
     );
   });
 

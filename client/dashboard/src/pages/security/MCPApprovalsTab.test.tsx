@@ -132,14 +132,15 @@ describe("MCPApprovalsTab", () => {
     });
   });
 
-  it("renders the inventory with the policy status beside the heading", () => {
+  it("renders the inventory with the policy status beside its description", () => {
     render(
       <MemoryRouter>
         <MCPApprovalsTab />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("heading", { name: "MCP approvals" })).toBeTruthy();
+    // The page title and tab name it; the tab adds no heading of its own.
+    expect(screen.queryByRole("heading")).toBeNull();
     expect(
       screen.getByText(/Every MCP server this project knows about/),
     ).toBeTruthy();
@@ -170,7 +171,7 @@ describe("MCPApprovalsTab", () => {
       expect.objectContaining({
         title: "MCP approval insights",
         contextInfo: expect.stringContaining(
-          "Page: Guardrails, MCP approvals tab. Shadow MCP policy posture: none.",
+          "Page: Shadow AI, MCP servers tab. Shadow MCP policy posture: none.",
         ),
       }),
     );

@@ -7,7 +7,7 @@ import {
 } from "../shadow-ai/use-undecided-tool-count";
 
 const UNDECIDED_TOOLS_TOOLTIP =
-  "Harnesses and assistants the device agent found, and MCP servers seen in agent traffic, that nobody has approved or denied yet. Decide tools in the Shadow AI policy and MCP servers on the MCP approvals tab, both under Guardrails.";
+  "Harnesses and assistants the device agent found, and MCP servers seen in agent traffic, that nobody has approved or denied yet. Decide them on the Shadow AI page: tools in its policy, MCP servers on its MCP servers tab.";
 
 /** What the tile shows for a count: a dash when a read failed (unknown is
  *  not zero), a floor when the inventory has more pages, the number
@@ -43,7 +43,7 @@ export function UndecidedToolsTile(): JSX.Element {
       format="number"
       icon="laptop"
       isRefreshing={!undecided.isError && undecided.isPending}
-      link={routes.policyCenter.href()}
+      link={routes.shadowAI.href()}
       linkText="Review"
       {...tileFacts(undecided)}
     />

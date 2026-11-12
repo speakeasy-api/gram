@@ -8,9 +8,9 @@ import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
 import {
-  policyCenterTabLabel,
-  policyCenterTabSearch,
-} from "@/pages/security/policy-center-tabs";
+  shadowAIBreadcrumbSubstitutions,
+  shadowAIBreadcrumbUrlSubstitutions,
+} from "@/pages/shadow-ai/tabs";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -691,19 +691,14 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   return (
     <Page>
       <Page.Header>
-        {/* The page is opened from the MCP approvals tab of Guardrails, where
-            the sidebar puts it too, so the trail names that tab rather than
-            the retired Shadow AI section its URL still carries. */}
+        {/* The page is opened from the MCP servers tab of Shadow AI, so the
+            trail walks back to that tab. */}
         <Page.Header.Breadcrumbs
           substitutions={{
-            "shadow-ai": routes.policyCenter.title,
-            mcps: policyCenterTabLabel("mcp-approvals"),
+            ...shadowAIBreadcrumbSubstitutions,
             [serverSlug]: server?.serverName || server?.urlHost,
           }}
-          urlSubstitutions={{
-            "/shadow-ai": `/${routes.policyCenter.url}`,
-            "/shadow-ai/mcps": `/${routes.policyCenter.url}${policyCenterTabSearch("mcp-approvals")}`,
-          }}
+          urlSubstitutions={shadowAIBreadcrumbUrlSubstitutions}
         />
       </Page.Header>
       <Page.Body fullHeight className="pb-8">

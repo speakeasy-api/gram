@@ -1,33 +1,107 @@
-import { policyCenterTabSearch } from "@/pages/security/policy-center-tabs";
+import { TabbedPage } from "@/components/page-templates";
+import { RequireScope } from "@/components/require-scope";
+import { Button } from "@/components/ui/Button";
+import { MCPApprovalsTab } from "@/pages/security/MCPApprovalsTab";
+import { ShadowAITargetsTab } from "@/pages/security/ShadowAITargetsTab";
+import { useShadowAIPolicySlot } from "@/pages/security/use-shadow-ai-policy-slot";
 import { useRoutes } from "@/routes";
-import { Navigate, Outlet, useLocation, useParams } from "react-router";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
+import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
+import {
+  SHADOW_AI_TABS,
+  type ShadowAITab,
+  shadowAITabs,
+  shadowAITabSearch,
+} from "./tabs";
 
 export function ShadowAIRoot(): JSX.Element {
   return <Outlet />;
 }
 
-// Shadow AI lives in Guardrails: the inventory and its decisions are the
-// Shadow AI policy and the Shadow AI targets tab. The section's own URLs stay
-// as redirects, since they sit in tickets, bookmarks and block messages, and
-// the tool and server detail pages under them still render.
-export function ShadowAISectionRedirect(): JSX.Element {
+/**
+ * Shadow AI: the MCP servers and AI tools people use that nobody has
+ * approved yet, and the one policy that decides which of them may connect.
+ * It sits beside Guardrails rather than inside it: Guardrails holds the
+ * policies that scan agent sessions for risk, while this page is an inventory
+ * the admin decides on row by row.
+ *
+ * The inventory reads and every decision require org:admin, so the page is
+ * gated there, the same as Guardrails.
+ */
+export default function ShadowAI(): JSX.Element {
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <ShadowAIContent />
+    </RequireScope>
+  );
+}
+
+function ShadowAIContent(): JSX.Element {
+  const [activeTab] = useQueryState(
+    "tab",
+    parseAsStringLiteral(SHADOW_AI_TABS).withDefault("mcp-servers"),
+  );
+  return (
+    <TabbedPage
+      title="Shadow AI"
+      description="See the MCP servers and AI tools your team uses, and decide which may connect."
+      primaryAction={<ShadowAIPolicyAction />}
+      activeTab={activeTab}
+      tabs={shadowAITabs()}
+    >
+      {activeTab === "mcp-servers" && <MCPApprovalsTab />}
+      {activeTab === "ai-tools" && <ShadowAITargetsTab />}
+    </TabbedPage>
+  );
+}
+
+/** The project has one Shadow AI policy. The header opens it, or the editor
+ *  that creates it, so setting it up no longer starts from Guardrails. */
+function ShadowAIPolicyAction(): JSX.Element | null {
   const routes = useRoutes();
-  return <Navigate to={routes.policyCenter.href()} replace />;
+  const slot = useShadowAIPolicySlot();
+  if (slot.pending || slot.failed) return null;
+  if (slot.href) {
+    return (
+      <Button variant="secondary" asChild>
+        <Link to={slot.href}>
+          <Button.Text>Edit policy</Button.Text>
+        </Link>
+      </Button>
+    );
+  }
+  return (
+    <Button asChild>
+      <Link to={`${routes.policyCenter.new.href()}?kind=shadow-ai`}>
+        <Button.Text>Set up policy</Button.Text>
+      </Link>
+    </Button>
+  );
+}
+
+function ShadowAITabRedirect({ tab }: { tab: ShadowAITab }): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <Navigate
+      to={`${routes.shadowAI.href()}${shadowAITabSearch(tab)}`}
+      replace
+    />
+  );
+}
+
+// The category indexes (harnesses, assistants, models) never had a page of
+// their own after the tools moved into one list; links to them land on the
+// AI tools tab. Their tool detail pages beneath still render.
+export function ShadowAIToolsIndexRedirect(): JSX.Element {
+  return <ShadowAITabRedirect tab="ai-tools" />;
 }
 
 // The MCPs index of the section and the older Shadow MCP index were the
 // approvals queue. Block messages, emails and bookmarks carry both paths, so
-// they land on the MCP approvals tab of Guardrails, where the queue lives
-// now, rather than on the policies list. Their query and fragment named
-// filters of the old page, so they are dropped rather than carried over.
+// they land on the MCP servers tab. Their query and fragment named filters of
+// the old page, so they are dropped rather than carried over.
 export function ShadowMCPIndexRedirect(): JSX.Element {
-  const routes = useRoutes();
-  return (
-    <Navigate
-      to={`${routes.policyCenter.href()}${policyCenterTabSearch("mcp-approvals")}`}
-      replace
-    />
-  );
+  return <ShadowAITabRedirect tab="mcp-servers" />;
 }
 
 export function ShadowMCPServerLegacyRedirect(): JSX.Element {

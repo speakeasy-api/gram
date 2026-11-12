@@ -1,41 +1,28 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
+  movedToShadowAITab,
   policyCenterTabs,
   policyCenterTabSearch,
   resolvePolicyCenterTab,
 } from "./policy-center-tabs";
 
 describe("policyCenterTabs", () => {
-  it("shows the Shadow AI targets and MCP approvals tabs after Detection Rules", () => {
+  it("keeps Shadow AI tabs out of Guardrails", () => {
     const tabs = policyCenterTabs();
     expect(tabs.map((tab) => tab.value)).toEqual([
       "policies",
       "detection-rules",
-      "shadow-ai-targets",
-      "mcp-approvals",
       "exclusions",
       "quarantines",
     ]);
-    expect(tabs.find((tab) => tab.value === "shadow-ai-targets")).toMatchObject(
-      {
-        label: "Shadow AI targets",
-        href: "?tab=shadow-ai-targets",
-      },
-    );
-    expect(tabs.find((tab) => tab.value === "mcp-approvals")).toMatchObject({
-      label: "MCP approvals",
-      href: "?tab=mcp-approvals",
-    });
   });
 
-  it("shows Tool approvals after MCP approvals when its flag is on", () => {
+  it("shows Tool approvals after Detection Rules when its flag is on", () => {
     const tabs = policyCenterTabs({ toolApprovals: true });
     expect(tabs.map((tab) => tab.value)).toEqual([
       "policies",
       "detection-rules",
-      "shadow-ai-targets",
-      "mcp-approvals",
       "tool-approvals",
       "exclusions",
       "quarantines",
@@ -51,10 +38,23 @@ describe("policyCenterTabs", () => {
     expect(
       resolvePolicyCenterTab("tool-approvals", { toolApprovals: true }),
     ).toBe("tool-approvals");
-    expect(resolvePolicyCenterTab("mcp-approvals")).toBe("mcp-approvals");
   });
 
   it("builds the search string a link lands on a tab with", () => {
-    expect(policyCenterTabSearch("mcp-approvals")).toBe("?tab=mcp-approvals");
+    expect(policyCenterTabSearch("exclusions")).toBe("?tab=exclusions");
+  });
+});
+
+describe("movedToShadowAITab", () => {
+  // Slack, block messages and bookmarks still carry the old tab links.
+  it("sends the old Shadow tabs to their Shadow AI tab", () => {
+    expect(movedToShadowAITab("mcp-approvals")).toBe("mcp-servers");
+    expect(movedToShadowAITab("shadow-ai-targets")).toBe("ai-tools");
+  });
+
+  it("leaves every other tab on Guardrails", () => {
+    expect(movedToShadowAITab(null)).toBeUndefined();
+    expect(movedToShadowAITab("policies")).toBeUndefined();
+    expect(movedToShadowAITab("toString")).toBeUndefined();
   });
 });

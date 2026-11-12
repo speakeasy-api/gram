@@ -48,7 +48,7 @@ describe("shadowAITargetsInsightsContext", () => {
       ],
     });
 
-    expect(context).toContain("Shadow AI targets tab");
+    expect(context).toContain("Page: Shadow AI, AI tools tab");
     expect(context).toContain("Library version 7.");
     expect(context).toContain(
       "Built-in targets: 2 (harnesses 1, assistants 0, open models 1).",

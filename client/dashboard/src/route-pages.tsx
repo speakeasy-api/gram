@@ -154,9 +154,9 @@ import RiskOverviewRedirect from "./pages/security/RiskOverviewRedirect";
 import Watchdog, { WatchdogRoot } from "./pages/security/watchdog/Watchdog";
 import SignalDetail from "./pages/security/watchdog/SignalDetail";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
-import {
+import ShadowAI, {
   ShadowAIRoot,
-  ShadowAISectionRedirect,
+  ShadowAIToolsIndexRedirect,
   ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
@@ -590,11 +590,11 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
   },
   shadowAI: {
     component: ShadowAIRoot,
-    indexComponent: ShadowAISectionRedirect,
+    indexComponent: ShadowAI,
     subPages: {
       harnesses: {
         component: ShadowAIRoot,
-        indexComponent: ShadowAISectionRedirect,
+        indexComponent: ShadowAIToolsIndexRedirect,
         subPages: {
           detail: {
             component: ShadowAIToolDetail,
@@ -603,7 +603,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       },
       assistants: {
         component: ShadowAIRoot,
-        indexComponent: ShadowAISectionRedirect,
+        indexComponent: ShadowAIToolsIndexRedirect,
         subPages: {
           detail: {
             component: ShadowAIToolDetail,
@@ -612,7 +612,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       },
       models: {
         component: ShadowAIRoot,
-        indexComponent: ShadowAISectionRedirect,
+        indexComponent: ShadowAIToolsIndexRedirect,
         subPages: {
           detail: {
             component: ShadowAIToolDetail,

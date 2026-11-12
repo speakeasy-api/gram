@@ -10,7 +10,7 @@ vi.mock("@/contexts/Sdk", () => ({ useSlugs: () => routeSlugs }));
 
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import {
-  ShadowAISectionRedirect,
+  ShadowAIToolsIndexRedirect,
   ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
@@ -141,38 +141,36 @@ describe("project routes", () => {
     ).toBeTruthy();
   });
 
-  // Shadow AI lives in Guardrails: every tool index page of the old section
-  // sends a pasted link there.
-  it.each([
-    "shadow-ai",
-    "shadow-ai/harnesses",
-    "shadow-ai/assistants",
-    "shadow-ai/models",
-  ])("redirects /%s to Guardrails", async (path) => {
-    const view = render(
-      <MemoryRouter initialEntries={[`/org/projects/project/${path}`]}>
-        <Routes>
-          <Route
-            path={`/org/projects/project/${path}`}
-            element={<ShadowAISectionRedirect />}
-          />
-          <Route path="*" element={<LocationPath />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+  // The tool category indexes have no page of their own: a pasted link lands
+  // on the AI tools tab of the Shadow AI page.
+  it.each(["shadow-ai/harnesses", "shadow-ai/assistants", "shadow-ai/models"])(
+    "redirects /%s to the AI tools tab of Shadow AI",
+    async (path) => {
+      const view = render(
+        <MemoryRouter initialEntries={[`/org/projects/project/${path}`]}>
+          <Routes>
+            <Route
+              path={`/org/projects/project/${path}`}
+              element={<ShadowAIToolsIndexRedirect />}
+            />
+            <Route path="*" element={<LocationPath />} />
+          </Routes>
+        </MemoryRouter>,
+      );
 
-    expect(
-      await within(view.container).findByText(
-        "/org/projects/project/risk-policies",
-      ),
-    ).toBeTruthy();
-  });
+      expect(
+        await within(view.container).findByText(
+          "/org/projects/project/shadow-ai?tab=ai-tools",
+        ),
+      ).toBeTruthy();
+    },
+  );
 
   // The MCPs index and the older Shadow MCP index were the approvals queue,
-  // so a pasted link lands on the MCP approvals tab. Their query and fragment
+  // so a pasted link lands on the MCP servers tab. Their query and fragment
   // named filters of the old page and are dropped rather than carried over.
   it.each(["shadow-ai/mcps", "shadow-mcp"])(
-    "redirects /%s to the MCP approvals tab of Guardrails",
+    "redirects /%s to the MCP servers tab of Shadow AI",
     async (path) => {
       const view = render(
         <MemoryRouter
@@ -192,7 +190,7 @@ describe("project routes", () => {
 
       expect(
         await within(view.container).findByText(
-          "/org/projects/project/risk-policies?tab=mcp-approvals",
+          "/org/projects/project/shadow-ai?tab=mcp-servers",
         ),
       ).toBeTruthy();
     },
