@@ -107,7 +107,21 @@ export function GatewayCodeExecution({
     [tool?.inputSchema],
   );
   const visibleFields = fields.filter((field) => field.kind !== "const");
-  const values = (tool && valuesByTool[tool.name]) ?? NO_VALUES;
+  // Null-prototype copy: schema field names such as `constructor` must read
+  // as unset, never as an inherited Object member.
+  const values: Record<string, string> = Object.assign(
+    Object.create(null) as Record<string, string>,
+    tool && Object.hasOwn(valuesByTool, tool.name)
+      ? valuesByTool[tool.name]
+      : undefined,
+  );
+  // Errors are per tool and field, so another tool's field never shows them.
+  const errorKey = (fieldName: string) =>
+    `${tool?.name ?? ""}\u0000${fieldName}`;
+  const errorFor = (fieldName: string) =>
+    Object.hasOwn(fieldErrors, errorKey(fieldName))
+      ? fieldErrors[errorKey(fieldName)]
+      : undefined;
   const snippet = tool
     ? codeModeCallSnippet(tool.name, fields, values)
     : undefined;
@@ -232,7 +246,9 @@ export function GatewayCodeExecution({
   const tooLarge = sourceBytes > MAX_SOURCE_BYTES;
   // A run belongs to the tool picked when it started, like the Run tab's
   // per-tool results: picking another tool hides it until that one runs.
-  const showRun = tool === undefined || ranFor === tool.name;
+  // No member tool picked is its own owner (""), so a member tool's run never
+  // shows under a gateway-owned tool or under nothing.
+  const showRun = ranFor !== undefined && ranFor === (tool?.name ?? "");
   const result = showRun ? execution.data?.result : undefined;
   const submitted = execution.variables;
   const canRun =
@@ -244,7 +260,7 @@ export function GatewayCodeExecution({
   const run = () => {
     if (canRun) {
       startedAt.current = performance.now();
-      setRanFor(tool?.name);
+      setRanFor(tool?.name ?? "");
       execution.mutate(code);
     }
   };
@@ -285,23 +301,29 @@ export function GatewayCodeExecution({
                     key={`${tool.name}:${field.name}`}
                     field={field}
                     value={values[field.name] ?? ""}
-                    error={fieldErrors[field.name]}
+                    error={errorFor(field.name)}
                     disabled={execution.isPending}
                     onChange={(value) => {
                       setValuesByTool((current) => ({
                         ...current,
                         [tool.name]: {
-                          ...current[tool.name],
+                          ...(Object.hasOwn(current, tool.name)
+                            ? current[tool.name]
+                            : undefined),
                           [field.name]: value,
                         },
                       }));
-                      if (fieldErrors[field.name])
-                        setFieldErrors(({ [field.name]: _, ...rest }) => rest);
+                      if (errorFor(field.name))
+                        setFieldErrors(
+                          ({ [errorKey(field.name)]: _, ...rest }) => rest,
+                        );
                     }}
                     onBlur={(value) => {
                       const error = jsonFieldError(field, value);
-                      setFieldErrors(({ [field.name]: _, ...rest }) =>
-                        error ? { ...rest, [field.name]: error } : rest,
+                      setFieldErrors(({ [errorKey(field.name)]: _, ...rest }) =>
+                        error
+                          ? { ...rest, [errorKey(field.name)]: error }
+                          : rest,
                       );
                     }}
                   />
@@ -404,8 +426,6 @@ export function GatewayCodeExecution({
     </section>
   );
 }
-
-const NO_VALUES: Record<string, string> = {};
 
 const MAX_SOURCE_BYTES = 64 * 1024;
 

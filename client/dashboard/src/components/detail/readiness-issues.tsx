@@ -13,13 +13,22 @@ const ReadinessIssuesContext = createContext<ReadinessCheck[]>([]);
 
 export function ReadinessIssuesProvider({
   checks,
+  pathname,
   children,
 }: {
   checks: ReadinessCheck[];
+  /**
+   * The page being shown. Only checks that link to it count: a gateway's
+   * check can link to a member server's page with an anchor this page has.
+   */
+  pathname: string;
   children: ReactNode;
 }): JSX.Element {
+  const here = checks.filter(
+    (check) => (check.href ?? "").split("#")[0] === pathname,
+  );
   return (
-    <ReadinessIssuesContext value={checks}>{children}</ReadinessIssuesContext>
+    <ReadinessIssuesContext value={here}>{children}</ReadinessIssuesContext>
   );
 }
 

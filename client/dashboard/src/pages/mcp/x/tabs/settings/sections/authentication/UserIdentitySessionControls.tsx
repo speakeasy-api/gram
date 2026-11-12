@@ -130,7 +130,11 @@ export function UserIdentitySessionControls({
             {/* Render-function form: RequireScope's loading branch applies
                 only pointer-events-none, so a keyboard user could still save
                 while grants are in flight. */}
-            <RequireScope scope="project:write" level="component">
+            <RequireScope
+              scope="project:write"
+              resourceId={userSessionIssuer.projectId}
+              level="component"
+            >
               {({ disabled }) => (
                 <FooterSaveButton
                   pending={update.isPending}

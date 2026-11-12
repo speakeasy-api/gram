@@ -641,8 +641,12 @@ export function RemoteMcpIdentitySectionBody({
     (identityCanSave || headerDrafts.isDirty);
   // Leaving the tab with a different identity picked, or edits staged under
   // it, asks first.
+  // Until the current identity has loaded there is nothing to differ from:
+  // a failed or pending lookup is read-only, not an unsaved change.
   useReportUnsavedChanges(
-    selectedMode !== actualMode || identityCanSave || headerDrafts.isDirty,
+    (actualMode !== null && selectedMode !== actualMode) ||
+      identityCanSave ||
+      headerDrafts.isDirty,
   );
   const savePending =
     detachIssuer.isPending ||

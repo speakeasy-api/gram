@@ -38,6 +38,7 @@ import { GatewayCodeExecution } from "./GatewayCodeExecution";
 import { GatewayConnectStep } from "./GatewayConnectStep";
 import {
   GATEWAY_SIGN_IN_WHY,
+  NEEDS_CREDENTIAL,
   NEEDS_GATEWAY_SIGN_IN,
   useGatewayMemberStates,
 } from "./useGatewayMemberStates";
@@ -217,7 +218,9 @@ function GatewayInspectConnection({
     },
   );
 
-  const { rows } = useGatewayMemberRows(metaMcpServer.id);
+  const { rows, isLoading: isLoadingRows } = useGatewayMemberRows(
+    metaMcpServer.id,
+  );
   const { healthFor, isLoading: isHealthLoading } = useToolHealth({
     metaMcpServerId: metaMcpServer.id,
   });
@@ -666,7 +669,13 @@ function GatewayInspectConnection({
         unavailableStat={{
           label: "Servers need attention",
           value: attentionSlugs.size,
-          isLoading: members.some((m) => m.isLoading),
+          // Counted from member rows and the viewer's status too, so it stays
+          // in its checking state until both have settled.
+          isLoading:
+            isLoadingRows ||
+            signIn.isLoading ||
+            members.some((m) => m.isLoading) ||
+            rows.some((row) => stateFor(row)?.kind === "checking"),
         }}
         accessHref={gatewayTabHref(routes, metaMcpServer.id, "team-access")}
         runTool={
@@ -787,7 +796,7 @@ function memberFailureReason(error: string | undefined): {
       needsCredential: false,
       needsGatewaySignIn: true,
     };
-  if (/requires authentication|no credential/i.test(error))
+  if (NEEDS_CREDENTIAL.test(error))
     return {
       text: "Needs a shared credential before the gateway can call it. An admin sets it in the server's sign-in settings.",
       needsCredential: true,

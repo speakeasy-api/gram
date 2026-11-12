@@ -2,8 +2,10 @@ import { useEffect } from "react";
 import { useLocation } from "react-router";
 import { scrollWithinPage } from "@/lib/scroll-within-page";
 
-/** How long a deep link keeps its target in place while sections load. */
+/** How long the page must stop resizing before a deep link lets go. */
 const SETTLE_MS = 2000;
+/** The longest a deep link waits for its target or holds it in place. */
+const MAX_HOLD_MS = 10_000;
 
 /**
  * Scrolls a settings page to the section its URL hash names, when the hash is
@@ -28,16 +30,35 @@ export function useScrollToSettingsHash(
     }
 
     let release = () => {};
-    const animationFrame = window.requestAnimationFrame(() => {
-      const target = document.getElementById(targetId);
-      if (!target) return;
+    let waiting: MutationObserver | undefined;
+    let giveUp: ReturnType<typeof setTimeout> | undefined;
+    const go = (target: HTMLElement) => {
       // Only the page's scroll container moves, so a pinned header stays put.
       scrollWithinPage(target);
       release = holdInPlace(target);
+    };
+    const animationFrame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(targetId);
+      if (target) {
+        go(target);
+        return;
+      }
+      // A section that mounts once its own data loads: wait for it.
+      waiting = new MutationObserver(() => {
+        const found = document.getElementById(targetId);
+        if (!found) return;
+        waiting?.disconnect();
+        clearTimeout(giveUp);
+        go(found);
+      });
+      waiting.observe(document.body, { childList: true, subtree: true });
+      giveUp = setTimeout(() => waiting?.disconnect(), MAX_HOLD_MS);
     });
 
     return () => {
       window.cancelAnimationFrame(animationFrame);
+      waiting?.disconnect();
+      clearTimeout(giveUp);
       release();
     };
   }, [ids, location.hash, ready]);
@@ -51,18 +72,31 @@ function holdInPlace(target: HTMLElement): () => void {
   if (!scroller || !content || typeof ResizeObserver === "undefined") {
     return () => {};
   }
-  const resize = new ResizeObserver(() =>
-    scrollWithinPage(target, { behavior: "auto" }),
-  );
+  // The observer reports once on observe with nothing changed; acting on it
+  // would cut the smooth scroll short.
+  let first = true;
+  let quiet: ReturnType<typeof setTimeout> | undefined;
+  const resize = new ResizeObserver(() => {
+    if (first) {
+      first = false;
+      return;
+    }
+    scrollWithinPage(target, { behavior: "auto" });
+    // Hold until the page stops changing, not for a fixed time.
+    clearTimeout(quiet);
+    quiet = setTimeout(stop, SETTLE_MS);
+  });
   resize.observe(content);
   const stop = () => {
     resize.disconnect();
-    clearTimeout(timer);
+    clearTimeout(quiet);
+    clearTimeout(cap);
     for (const event of ["wheel", "touchstart", "keydown", "pointerdown"]) {
       scroller.removeEventListener(event, stop);
     }
   };
-  const timer = setTimeout(stop, SETTLE_MS);
+  quiet = setTimeout(stop, SETTLE_MS);
+  const cap = setTimeout(stop, MAX_HOLD_MS);
   for (const event of ["wheel", "touchstart", "keydown", "pointerdown"]) {
     scroller.addEventListener(event, stop, { passive: true });
   }

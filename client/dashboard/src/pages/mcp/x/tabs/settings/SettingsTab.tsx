@@ -227,46 +227,65 @@ export function SettingsTab({
             content: <VisibilitySection mcpServer={mcpServer} />,
           },
           publishing,
-          canonical
-            ? toolsetSections && {
+          canonical && !toolsetSections
+            ? {
+                // The header's readiness links land here too, so the anchors
+                // stay for people who can't edit them.
                 ...G.identity,
                 content: (
-                  <>
+                  <div
+                    id={SETTINGS_ENVIRONMENT_VARIABLES_ID}
+                    className="scroll-mt-8"
+                  >
                     <div id={MCP_AUTHENTICATION_SECTION_ID}>
-                      <ReadinessIssueFrame
-                        anchorId={MCP_AUTHENTICATION_SECTION_ID}
-                      >
-                        <ToolsetOAuthSection toolset={hostedToolset} />
-                      </ReadinessIssueFrame>
+                      <Text muted small className="block max-w-2xl">
+                        Only people who can edit this server&apos;s tools can
+                        see or change its sign-in and environment variables.
+                      </Text>
                     </div>
-                    <div id={MCP_ENVIRONMENT_SECTION_ID}>
-                      {/* A stable anchor for the readiness checklist. */}
-                      <div
-                        id={SETTINGS_ENVIRONMENT_VARIABLES_ID}
-                        className="scroll-mt-8"
-                      >
-                        <ReadinessIssueFrame
-                          anchorId={SETTINGS_ENVIRONMENT_VARIABLES_ID}
-                        >
-                          <MCPAuthenticationTab
-                            toolset={hostedToolset}
-                            showOAuth={false}
-                          />
-                        </ReadinessIssueFrame>
-                      </div>
-                    </div>
-                  </>
+                  </div>
                 ),
               }
-            : {
-                ...G.identity,
-                content: (
-                  <AuthenticationSection
-                    mcpServer={mcpServer}
-                    mcpUrl={mcpUrl}
-                  />
-                ),
-              },
+            : canonical
+              ? toolsetSections && {
+                  ...G.identity,
+                  content: (
+                    <>
+                      <div id={MCP_AUTHENTICATION_SECTION_ID}>
+                        <ReadinessIssueFrame
+                          anchorId={MCP_AUTHENTICATION_SECTION_ID}
+                        >
+                          <ToolsetOAuthSection toolset={hostedToolset} />
+                        </ReadinessIssueFrame>
+                      </div>
+                      <div id={MCP_ENVIRONMENT_SECTION_ID}>
+                        {/* A stable anchor for the readiness checklist. */}
+                        <div
+                          id={SETTINGS_ENVIRONMENT_VARIABLES_ID}
+                          className="scroll-mt-8"
+                        >
+                          <ReadinessIssueFrame
+                            anchorId={SETTINGS_ENVIRONMENT_VARIABLES_ID}
+                          >
+                            <MCPAuthenticationTab
+                              toolset={hostedToolset}
+                              showOAuth={false}
+                            />
+                          </ReadinessIssueFrame>
+                        </div>
+                      </div>
+                    </>
+                  ),
+                }
+              : {
+                  ...G.identity,
+                  content: (
+                    <AuthenticationSection
+                      mcpServer={mcpServer}
+                      mcpUrl={mcpUrl}
+                    />
+                  ),
+                },
           (!canonical || toolsetSections) && {
             ...G.connection,
             content: (

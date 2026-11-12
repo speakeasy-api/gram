@@ -169,7 +169,10 @@ function GatewayNameSection({
 
   const trimmedDraft = nameDraft.trim();
   const dirty = trimmedDraft !== metaMcpServer.name.trim();
-  useReportUnsavedChanges(dirty);
+  // Same check as the Save gate below: an edit nobody can save is no change
+  // worth guarding.
+  const { hasScope } = useRBAC();
+  useReportUnsavedChanges(hasScope("mcp:write") && dirty);
   const saveDisabled =
     !dirty ||
     trimmedDraft === "" ||

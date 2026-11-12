@@ -3,6 +3,7 @@ import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { useMcpMetadataMetadataForm } from "@/components/mcp_install_page/useMcpMetadataForm";
 import { RequireScope } from "@/components/require-scope";
+import { useRBAC } from "@/hooks/useRBAC";
 import { FieldDescription } from "@/components/ui/Field";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
@@ -129,7 +130,10 @@ function GeneralSectionContent({
   const nameDirty = trimmedDraft !== (mcpServer.name ?? "").trim();
   const upstreamDirty = !!upstream?.dirty;
   const dirty = nameDirty || metadataForm.brandingDirty || upstreamDirty;
-  useReportUnsavedChanges(dirty);
+  // Same check as the Save gate: an edit nobody can save is no change worth
+  // guarding.
+  const { hasScope } = useRBAC();
+  useReportUnsavedChanges(hasScope("mcp:write") && dirty);
   const saving =
     update.isPending || metadataForm.isLoading || !!upstream?.pending;
   const supportsEditing = isKnownEnumValue(

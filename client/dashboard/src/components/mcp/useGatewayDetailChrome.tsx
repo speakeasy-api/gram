@@ -144,7 +144,10 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
           ? [
               memberSetupCheck(memberSetup, isLoadingMembers, (gap) =>
                 memberSettingsHref(
-                  gap.serverId,
+                  // Environment variables render only on a toolset's
+                  // canonical server, which shares the toolset's id.
+                  rows.find((row) => row.server?.id === gap.serverId)?.server
+                    ?.toolsetId ?? gap.serverId,
                   MCP_ENVIRONMENT_VARIABLES_SECTION_ID,
                 ),
               ),
@@ -156,7 +159,13 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
           gatewayTabHref(routes, id, "inspect"),
           (serverId) =>
             memberSettingsHref(serverId, SETTINGS_GROUPS.identity.id),
-          `${gatewayTabHref(routes, id, "settings")}#${AUTHORIZATION_SERVERS_FIELD_ID}`,
+          // The Authorization servers row exists only once the gateway has an
+          // identity provider; before that, Authentication holds its setup.
+          `${gatewayTabHref(routes, id, "settings")}#${
+            metaMcpServer.userSessionIssuerId
+              ? AUTHORIZATION_SERVERS_FIELD_ID
+              : GATEWAY_AUTHENTICATION_SECTION_ID
+          }`,
         ),
         // Only a gateway set to Code Mode can be let down by it.
         ...(metaMcpServer.discoveryMode === "code_mode"

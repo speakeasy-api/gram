@@ -44,6 +44,7 @@ export function McpDetailFrame({
   contentRef?: React.Ref<HTMLDivElement>;
 }): JSX.Element {
   const activeTab = chrome?.items.find((item) => item.active)?.key;
+  const { pathname } = useLocation();
   useHighlightLinkedSection();
 
   return (
@@ -112,6 +113,7 @@ export function McpDetailFrame({
               checks={(chrome?.readinessChecks ?? []).filter(
                 (check) => !check.pending,
               )}
+              pathname={pathname}
             >
               {children}
             </ReadinessIssuesProvider>
@@ -391,7 +393,9 @@ function ReadinessRow({
       ) : null}
     </span>
   );
-  return check.href && check.ready === false ? (
+  // Every settled open check links, including one that couldn't be
+  // determined: its target is where to try again.
+  return check.href && check.ready !== true && !check.pending ? (
     <Link
       to={check.href}
       state={HIGHLIGHT_STATE}

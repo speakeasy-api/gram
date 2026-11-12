@@ -162,8 +162,8 @@ describe("AvailabilitySection and VisibilitySection", () => {
 
     expect(screen.getByRole("heading", { name: "Availability" })).toBeTruthy();
     expect(screen.getAllByRole("radio").map((r) => r.id)).toEqual([
-      "mcp-visibility-private",
-      "mcp-visibility-disabled",
+      "mcp-availability-private",
+      "mcp-availability-disabled",
     ]);
     const save = screen.getByRole("button", { name: /Save/ });
     expect(save).toHaveProperty("disabled", true);
@@ -209,8 +209,8 @@ describe("AvailabilitySection and VisibilitySection", () => {
         screen.getByRole("heading", { name: "Availability" }),
       ).toBeTruthy();
       expect(screen.getAllByRole("radio").map((r) => r.id)).toEqual([
-        "mcp-visibility-private",
-        "mcp-visibility-disabled",
+        "mcp-availability-private",
+        "mcp-availability-disabled",
       ]);
       cleanup();
     }
@@ -253,7 +253,7 @@ describe("AvailabilitySection and VisibilitySection", () => {
     ).toBe("/mcp/example/settings#settings-general");
   });
 
-  it("makes a tunneled server public in one Save, warning inline first", async () => {
+  it("makes a tunneled server public only after a typed confirmation", async () => {
     renderSection(
       { ...base, tunneledMcpServerId: "tunnel-1" } as McpServer,
       VisibilitySection,
@@ -261,9 +261,18 @@ describe("AvailabilitySection and VisibilitySection", () => {
 
     expect(screen.queryByText(/Anyone on the internet/)).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: /Public/ }));
-    expect(screen.getByText(/Anyone on the internet/)).toBeTruthy();
+    expect(screen.getAllByText(/Anyone on the internet/).length).toBe(1);
 
     fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    // Nothing is written until the phrase is typed.
+    const confirm = screen.getByRole("button", { name: "Make public" });
+    expect(confirm).toHaveProperty("disabled", true);
+    expect(updateTunnel).not.toHaveBeenCalled();
+    fireEvent.change(
+      screen.getByLabelText("Type ALLOW PUBLIC ACCESS to confirm"),
+      { target: { value: "ALLOW PUBLIC ACCESS" } },
+    );
+    fireEvent.click(confirm);
     await waitFor(() =>
       expect(updateServer).toHaveBeenCalledWith({
         request: {

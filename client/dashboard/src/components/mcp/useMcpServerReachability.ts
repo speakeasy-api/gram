@@ -28,11 +28,14 @@ export type McpServerReachability =
 export function useMcpServerReachability({
   mcpUrl,
   mcpServerId,
+  projectId,
   userSessionIssuerId,
   enabled,
 }: {
   mcpUrl: string | undefined;
   mcpServerId: string | undefined;
+  /** The server's project, which a project-scoped mcp:write grant names. */
+  projectId: string | undefined;
   userSessionIssuerId: string | undefined;
   /** False for servers that are off, still loading, or not remote-backed. */
   enabled: boolean;
@@ -64,7 +67,7 @@ export function useMcpServerReachability({
   // The drift Inspect offers to sync: only for viewers who can sync, and
   // only once a saved list exists.
   const { hasAnyScope } = useRBAC();
-  const canWrite = hasAnyScope(["mcp:write"], mcpServerId);
+  const canWrite = hasAnyScope(["mcp:write"], mcpServerId, projectId);
   const { metadataByTool } = useToolMetadata(mcpServerId, { enabled });
   const driftCount = useMemo(
     () =>

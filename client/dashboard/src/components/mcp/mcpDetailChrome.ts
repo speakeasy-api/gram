@@ -2,9 +2,11 @@ import type { ReactNode } from "react";
 import type { DetailSidebarNavItem } from "@/components/detail/detail-sidebar-nav";
 import type { ReadinessCheck } from "@/components/mcp-server-readiness-bar";
 
+import { SETTINGS_ENVIRONMENT_VARIABLES_ID } from "@/components/detail/settings-groups";
+
 /** Anchors the Environment variables block on a server's Settings tab. */
 export const MCP_ENVIRONMENT_VARIABLES_SECTION_ID =
-  "settings-environment-variables";
+  SETTINGS_ENVIRONMENT_VARIABLES_ID;
 
 /** Everything an MCP detail page's header shows: servers and gateways alike. */
 export interface McpDetailChrome {

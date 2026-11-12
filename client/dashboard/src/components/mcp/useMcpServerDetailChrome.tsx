@@ -28,7 +28,10 @@ import {
   mcpServerInstallPageLinks,
   usePrivateMcpServerUrls,
 } from "@/hooks/usePrivateMcpServerUrls";
-import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import {
+  useCustomDomains,
+  useResolvedMcpServerUrl,
+} from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
@@ -132,6 +135,16 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     installPageUrl,
     loading: isResolvingUrl,
   } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
+  // A custom-domain endpoint has no URL until its domain resolves; until
+  // then the server isn't missing one, it is still being checked.
+  const hasCustomDomainEndpoint = endpoints.some(
+    (endpoint) => endpoint.customDomainId,
+  );
+  const { isLoading: isLoadingCustomDomains } = useCustomDomains(
+    hasCustomDomainEndpoint,
+  );
+  const resolvingCustomDomain =
+    hasCustomDomainEndpoint && !mcpUrl && isLoadingCustomDomains;
   const {
     privateMcpUrls,
     privateInstallPageUrls,
@@ -178,10 +191,14 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   const reachability = useMcpServerReachability({
     mcpUrl,
     mcpServerId: mcpServer?.id,
+    projectId: mcpServer?.projectId,
     userSessionIssuerId: mcpServer?.userSessionIssuerId,
+    // Private-only servers aren't reached on the hosted URL, which may be
+    // turned off on purpose, so probing it would report a working server down.
     enabled:
       !!mcpServer?.remoteMcpServerId &&
       mcpServer.visibility !== "disabled" &&
+      mcpServer.networkAccessMode !== McpServerNetworkAccessMode.PrivateOnly &&
       !!mcpUrl,
   });
 
@@ -325,6 +342,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
           loadingUrl:
             isLoadingEndpoints ||
             isResolvingUrl ||
+            resolvingCustomDomain ||
             (canReadPrivateUrls && isLoadingPrivateUrls),
           serverUrlReady,
           reachability,

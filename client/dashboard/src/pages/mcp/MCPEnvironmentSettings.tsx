@@ -520,6 +520,8 @@ export function MCPAuthenticationTab({
   // required variable alone is not an edit, but Save still writes its entry.
   const hasAnyUnsavedChanges = envVars.some(hasUserEdits);
   useReportUnsavedChanges(hasAnyUnsavedChanges);
+  // Save still turns on for an unmapped required variable, as before.
+  const hasAnythingToSave = envVars.some(hasUnsavedChanges);
 
   // Save all variables with unsaved changes
   const handleSaveAll = async () => {
@@ -740,7 +742,7 @@ export function MCPAuthenticationTab({
                   toolset.defaultEnvironmentSlug || "default"
                 }
                 requiredVars={requiredVars}
-                hasAnyUserEdits={hasAnyUnsavedChanges}
+                hasAnyUserEdits={hasAnythingToSave}
                 hasExistingConfigs={environmentConfigs.length > 0}
                 onEnvironmentSelect={setSelectedEnvironmentView}
                 onSaveAll={() => void handleSaveAll()}

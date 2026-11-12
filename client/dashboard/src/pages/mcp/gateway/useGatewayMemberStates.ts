@@ -155,10 +155,17 @@ function refreshGatewayMemberStates(
 }
 
 /**
- * Any change saved anywhere in the app can fix or break a member: a linked
- * sign-in, a shared credential, a member added. So every successful write
+ * The SDK resources whose writes change what a member gives the viewer:
+ * sign-in setup, credentials, members and their servers. Running a tool or
+ * sending a chat writes nothing here, and must not reconnect Inspect.
+ */
+const CONFIG_RESOURCES =
+  /^(remoteSessionClients|remoteSessionIssuers|userSessionIssuers|metaMcp|mcpServers|remoteMcp|toolsets|environments|mcpMetadata)/i;
+
+/**
+ * A configuration change saved anywhere in the app can fix or break a member: a linked
+ * sign-in, a shared credential, a member added. So every successful configuration write
  * reads the states again, and the header and rows never show a fixed issue.
- * Minting a session is itself a write and is left out, or it would loop.
  */
 function useRefreshOnSavedChanges(enabled: boolean): void {
   const queryClient = useQueryClient();
@@ -166,8 +173,10 @@ function useRefreshOnSavedChanges(enabled: boolean): void {
     if (!enabled) return;
     return queryClient.getMutationCache().subscribe((event) => {
       if (event.type !== "updated" || event.action.type !== "success") return;
-      const key = JSON.stringify(event.mutation.options.mutationKey ?? []);
-      if (/mint/i.test(key)) return;
+      const [source, resource] = (event.mutation.options.mutationKey ??
+        []) as unknown[];
+      if (source !== "@gram/client" || typeof resource !== "string") return;
+      if (!CONFIG_RESOURCES.test(resource)) return;
       void refreshGatewayMemberStates(queryClient);
     });
   }, [enabled, queryClient]);
@@ -219,8 +228,8 @@ export const MEMBER_STATE_LABEL: Record<MemberViewerState["kind"], string> = {
  * caller, which an admin fixes on the member's own sign-in settings. Matched
  * on text because the error carries no code.
  */
-const NEEDS_CREDENTIAL =
-  /requires authentication and has no credential|rejected the stored credential|rejected the credential configured/i;
+export const NEEDS_CREDENTIAL =
+  /requires authentication and has no credential|rejected the stored credential|rejected the credential configured|upstream credential that is misconfigured or was rejected/i;
 
 /**
  * The gateway's wording when a member's sign-in runs through an

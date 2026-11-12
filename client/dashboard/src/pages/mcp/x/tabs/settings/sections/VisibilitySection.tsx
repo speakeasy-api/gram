@@ -8,7 +8,9 @@ import { ServerUsageConfirmation } from "@/components/mcp-server-usage/ServerUsa
 import { useServerUsageConfirmation } from "@/components/mcp-server-usage/useServerUsageConfirmation";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
@@ -241,6 +243,10 @@ export function VisibilitySection({
   );
   const allowPublicUpdate = useUpdateTunneledMcpServerMutation();
   const [allowingPublic, setAllowingPublic] = useState(false);
+  // Allowing the tunnel to serve anonymous callers is a typed confirmation,
+  // as it was on the tunnel source's own page.
+  const [confirmingPublic, setConfirmingPublic] = useState(false);
+  const [confirmPhrase, setConfirmPhrase] = useState("");
   const pending = updating || allowingPublic;
 
   const off = mcpServer.visibility === "disabled";
@@ -265,31 +271,40 @@ export function VisibilitySection({
       guard.request(draft);
       return;
     }
-    // Public needs the tunnel source's consent; it is given with this Save.
+    // Public needs the tunnel source's consent, confirmed by typing it.
     if (draft === "public" && isTunneled && !tunneledSource?.allowPublic) {
       if (!tunneledSource) return;
-      setAllowingPublic(true);
-      try {
-        await allowPublicUpdate.mutateAsync({
-          request: {
-            updateTunneledMcpServerForm: {
-              id: tunneledSource.id,
-              allowPublic: true,
-            },
-          },
-        });
-        await invalidateTunneledMcpSourceViews(queryClient);
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Couldn't allow public access on the tunnel",
-        );
-        return;
-      } finally {
-        setAllowingPublic(false);
-      }
+      setConfirmPhrase("");
+      setConfirmingPublic(true);
+      return;
     }
+    updateVisibility(draft);
+  };
+
+  const allowPublicThenSave = async () => {
+    if (!tunneledSource) return;
+    setAllowingPublic(true);
+    try {
+      await allowPublicUpdate.mutateAsync({
+        request: {
+          updateTunneledMcpServerForm: {
+            id: tunneledSource.id,
+            allowPublic: true,
+          },
+        },
+      });
+      await invalidateTunneledMcpSourceViews(queryClient);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Couldn't allow public access on the tunnel",
+      );
+      return;
+    } finally {
+      setAllowingPublic(false);
+    }
+    setConfirmingPublic(false);
     updateVisibility(draft);
   };
 
@@ -388,9 +403,39 @@ export function VisibilitySection({
         </SettingsSection.Footer>
       </SettingsSection.Panel>
       {guard.dialogs}
+      <ConfirmDialog
+        open={confirmingPublic}
+        onOpenChange={(open) => {
+          if (!allowingPublic) setConfirmingPublic(open);
+        }}
+        title="Allow anonymous access to this tunnel?"
+        description="Anyone on the internet will be able to call every tool this tunnel exposes, with no sign-in."
+        confirmLabel="Make public"
+        pendingLabel="Making public…"
+        isPending={allowingPublic}
+        confirmDisabled={confirmPhrase.trim() !== PUBLIC_ACCESS_CONFIRM_PHRASE}
+        onConfirm={() => void allowPublicThenSave()}
+      >
+        <Text small muted className="block">
+          Type{" "}
+          <span className="font-mono font-medium">
+            {PUBLIC_ACCESS_CONFIRM_PHRASE}
+          </span>{" "}
+          to confirm.
+        </Text>
+        <Input
+          value={confirmPhrase}
+          onChange={(value) => setConfirmPhrase(value)}
+          placeholder={PUBLIC_ACCESS_CONFIRM_PHRASE}
+          disabled={allowingPublic}
+          aria-label={`Type ${PUBLIC_ACCESS_CONFIRM_PHRASE} to confirm`}
+        />
+      </ConfirmDialog>
     </SettingsSection>
   );
 }
+
+const PUBLIC_ACCESS_CONFIRM_PHRASE = "ALLOW PUBLIC ACCESS";
 
 function OptionRadios({
   label,
@@ -424,7 +469,9 @@ function OptionRadios({
     >
       {options.map((option) => {
         const isBlocked = blocked(option);
-        const id = `mcp-visibility-${option.value}`;
+        // Availability and Visibility share option values on one page, so
+        // the group's label keeps each radio's id unique.
+        const id = `mcp-${label.toLowerCase()}-${option.value}`;
         return (
           <div
             key={option.value}

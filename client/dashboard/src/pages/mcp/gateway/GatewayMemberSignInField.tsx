@@ -44,14 +44,15 @@ export function GatewayAuthorizationServersField({
   userSessionIssuerId: string;
   linkedClientIds: ReadonlySet<string>;
 }): JSX.Element {
-  const memberIssuerIds = useGatewayMemberIssuerIds(metaMcpServerId);
+  const signing = useSigningMembers(metaMcpServerId);
   return (
     <RemoteIdentityProvidersField
       {...field}
-      hiddenIssuerIds={memberIssuerIds}
+      hiddenIssuerIds={signing.issuerIds}
       members={
         <GatewayMemberSignInList
-          metaMcpServerId={metaMcpServerId}
+          servers={signing.servers}
+          isLoading={signing.isLoading}
           userSessionIssuerId={userSessionIssuerId}
           linkedClientIds={linkedClientIds}
           isLoadingLinked={field.isLoading}
@@ -78,14 +79,17 @@ function useProxiedMembers(metaMcpServerId: string): {
 }
 
 /**
- * The authorization servers the gateway's members sign in through, so the
- * Authorization servers row lists each of them once, as its member.
+ * The gateway's members that sign people in through their own service (those
+ * with an upstream client), and the authorization servers they use, so the
+ * row lists each member once and each server once.
  */
-function useGatewayMemberIssuerIds(
-  metaMcpServerId: string,
-): ReadonlySet<string> {
+function useSigningMembers(metaMcpServerId: string): {
+  servers: McpServer[];
+  issuerIds: ReadonlySet<string>;
+  isLoading: boolean;
+} {
   const client = useGramContext();
-  const { servers } = useProxiedMembers(metaMcpServerId);
+  const { servers, isLoading } = useProxiedMembers(metaMcpServerId);
   const results = useQueries({
     queries: servers.map((server) => ({
       ...buildServerClientAssociationsQuery(client, {
@@ -94,40 +98,59 @@ function useGatewayMemberIssuerIds(
       throwOnError: false,
     })),
   });
+  const signing = servers.filter(
+    // A failed read keeps its row, which offers Try again.
+    (_, index) =>
+      results[index]?.isError ||
+      (results[index]?.data?.associations.length ?? 0) > 0,
+  );
   const ids = results.flatMap(
     (result) =>
       result.data?.associations.map((a) => a.remoteSessionIssuerId) ?? [],
   );
   const key = ids.join(",");
   // oxlint-disable-next-line react-hooks/exhaustive-deps -- keyed by content, not by the per-render array
-  return useMemo(() => new Set(ids), [key]);
+  const issuerIds = useMemo(() => new Set(ids), [key]);
+  return {
+    servers: signing,
+    issuerIds,
+    isLoading: isLoading || results.some((result) => result.isLoading),
+  };
 }
 
 /**
  * One row per member that signs people in through its own service, with the
  * one action that makes it work through this gateway: link its sign-in, or
- * unlink it. Members that need no sign-in are left out.
+ * unlink it. Members that need no sign-in are left out; with none, one plain
+ * line says so.
  */
 function GatewayMemberSignInList({
-  metaMcpServerId,
+  servers,
+  isLoading,
   userSessionIssuerId,
   linkedClientIds,
   isLoadingLinked,
   projectId,
   readOnly,
 }: {
-  metaMcpServerId: string;
+  servers: McpServer[];
+  isLoading: boolean;
   userSessionIssuerId: string;
   /** Upstream clients already linked to the gateway's sign-in. */
   linkedClientIds: ReadonlySet<string>;
   isLoadingLinked: boolean;
   projectId: string;
   readOnly: boolean;
-}): JSX.Element | null {
-  const { servers, isLoading } = useProxiedMembers(metaMcpServerId);
+}): JSX.Element {
   if (isLoading)
     return <Skeleton label="Loading members" className="h-9 w-64" />;
-  if (servers.length === 0) return null;
+  if (servers.length === 0)
+    return (
+      <Text muted small className="block">
+        No member signs people in through its own service, so there is nothing
+        to link.
+      </Text>
+    );
   return (
     <ul className="divide-y border">
       {servers.map((server) => (

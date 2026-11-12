@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/Button";
+import { toast } from "sonner";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
@@ -603,13 +604,18 @@ function CopyTrace({ traceId }: { traceId: string }): JSX.Element {
             type="button"
             aria-label="Copy trace ID"
             onClick={() => {
-              void navigator.clipboard?.writeText(traceId);
-              setCopied(true);
-              window.clearTimeout(timer.current);
-              timer.current = window.setTimeout(
-                () => setCopied(false),
-                COPIED_MS,
-              );
+              // "Copied" only once the clipboard took it.
+              void navigator.clipboard
+                ?.writeText(traceId)
+                .then(() => {
+                  setCopied(true);
+                  window.clearTimeout(timer.current);
+                  timer.current = window.setTimeout(
+                    () => setCopied(false),
+                    COPIED_MS,
+                  );
+                })
+                .catch(() => toast.error("Couldn't copy the trace ID."));
             }}
             className="hover:text-foreground flex size-6 items-center justify-center"
           >

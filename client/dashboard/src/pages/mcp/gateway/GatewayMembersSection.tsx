@@ -1,4 +1,6 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
+import { mcpServerTabHref } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
 import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
 import { Spinner } from "@/components/ui/Spinner";
 import { Page } from "@/components/page-layout";
@@ -508,7 +510,8 @@ export function GatewayMembersSection({
           gatewaySignInHref={`${gatewayTabHref(routes, metaMcpServer.id, "settings")}#${AUTHORIZATION_SERVERS_FIELD_ID}`}
           credentialHref={
             row.server
-              ? `${routes.mcp.details.settings.href(mcpServerRouteParam(row.server))}#settings-sign-in`
+              ? // By id, like the header: two members can share a slug.
+                `${mcpServerTabHref(routes, row.server.id, "settings")}#${SETTINGS_GROUPS.identity.id}`
               : undefined
           }
         />
