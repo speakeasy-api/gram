@@ -101,7 +101,7 @@ func TestCreateRiskPolicySchemaAcceptsPresetBranch(t *testing.T) {
 	require.ErrorAs(t, err, &refusal, "a preset request passes schema validation and reaches the handler")
 	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
 
-	_, err = create.Invoke(ctx, json.RawMessage(`{"project_slug":"project","preset":"secrets_and_credentials","name":"Team secrets","action":"warn","score":3,"enabled":false,"approved_email_domains":["example.com"],"idempotency_key":"key"}`))
+	_, err = create.Invoke(ctx, json.RawMessage(`{"project_slug":"project","preset":"secrets_and_credentials","name":"Team secrets","action":"confirm","score":3,"enabled":false,"approved_email_domains":["example.com"],"idempotency_key":"key"}`))
 	require.ErrorAs(t, err, &refusal)
 	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
 

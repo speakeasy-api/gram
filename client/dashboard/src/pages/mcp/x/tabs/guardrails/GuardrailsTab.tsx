@@ -27,8 +27,9 @@ const VIEW_PARAM = "view";
 
 const ACTION_LABELS: Record<RiskPolicy["action"], string> = {
   flag: "Log",
-  warn: "Warn & confirm",
-  block: "Deny",
+  confirm: "Block until confirmed",
+  warn: "Block until confirmed",
+  block: "Block",
   quarantine: "Quarantine",
   require_approval: "Require approval",
 };

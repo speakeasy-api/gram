@@ -364,7 +364,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		autoName = *payload.AutoName
 	}
 
-	action := payload.Action
+	action := policycore.CanonicalAction(payload.Action)
 	if action == "" {
 		action = "flag"
 	}
@@ -977,12 +977,12 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		enabled = *payload.Enabled
 	}
 
-	action := current.Action
+	action := policycore.CanonicalAction(current.Action)
 	if payload.Action != nil {
 		if err := validateAction(*payload.Action); err != nil {
 			return nil, err
 		}
-		action = *payload.Action
+		action = policycore.CanonicalAction(*payload.Action)
 	}
 	if err := policycore.ValidateMCPScope(mcpScope, sources, action); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
@@ -3713,8 +3713,8 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 	switch action {
 	case "block":
 		actionLabel = "Blocker"
-	case "warn":
-		actionLabel = "Warner"
+	case policycore.ActionConfirm:
+		actionLabel = "Confirmer"
 	case "quarantine":
 		actionLabel = "Quarantiner"
 	case policycore.ActionRequireApproval:

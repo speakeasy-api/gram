@@ -41,11 +41,11 @@ const POLICY_ACTION_MESSAGE: Record<
   Exclude<PolicyAction, "flag" | "require_approval">,
   { label: string; description: string; placeholder: string }
 > = {
-  warn: {
-    label: "Warning message",
+  confirm: {
+    label: "Confirmation message",
     description:
-      "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message.",
-    placeholder: "e.g. %{match} looks sensitive. Acknowledge to proceed.",
+      "Shown to the user when this policy blocks a tool call or prompt and asks them to confirm. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders. Leave blank to use the default message.",
+    placeholder: "e.g. %{match} looks sensitive. Confirm to send it anyway.",
   },
   block: {
     label: "Block message",

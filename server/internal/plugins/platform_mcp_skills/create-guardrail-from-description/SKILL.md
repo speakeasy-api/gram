@@ -38,4 +38,4 @@ Turn "stop agents deleting anything in production" into a reviewed policy: map t
 - A preset is a starting point, not a verdict. Prefer the preset over a bespoke prompt when both fit: it is deterministic and cheaper to evaluate.
 - Keep the administrator's words in the bespoke prompt. Add scope ("production", "customer records") only when they said it.
 - Do not create more than one policy per confirmation. If the description covers two risks, propose two drafts and confirm each.
-- Findings from a `flag` policy are visible in Watchdog; `warn` and `block` interrupt the session. Say which one the policy will do before creating it.
+- Findings from a `flag` policy are visible in Watchdog; `confirm` and `block` interrupt the session. `confirm` blocks until the user confirms they want to go ahead (they can bypass it themselves); `block` cannot be bypassed. Say which one the policy will do before creating it.

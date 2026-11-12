@@ -205,12 +205,12 @@ function ChallengeReview({
     <Stack gap={5} align="center" className="w-full">
       <Stack gap={2} align="center">
         <Text variant="subheading" className="text-center">
-          Approval required
+          Confirm to continue
         </Text>
         <Text muted small className="text-center">
           {policyName
-            ? `This action was held for review by risk policy "${policyName}".`
-            : "This action was held for review by a risk policy."}
+            ? `Risk policy "${policyName}" blocked this action until you confirm it.`
+            : "A risk policy blocked this action until you confirm it."}
           {toolName ? ` Tool: ${toolName}.` : ""}
         </Text>
       </Stack>
@@ -226,15 +226,15 @@ function ChallengeReview({
 
       <Stack direction="horizontal" gap={2} className="w-full justify-center">
         <Button variant="secondary" onClick={onDecline} disabled={busy}>
-          <Button.Text>{declining ? "Denying..." : "Deny"}</Button.Text>
+          <Button.Text>{declining ? "Saving..." : "Keep blocked"}</Button.Text>
         </Button>
         <Button variant="primary" onClick={onApprove} disabled={busy}>
-          <Button.Text>{approving ? "Approving..." : "Approve"}</Button.Text>
+          <Button.Text>{approving ? "Confirming..." : "Confirm"}</Button.Text>
         </Button>
       </Stack>
       <Text muted small className="text-center">
-        Approving lets the agent retry this exact action. Denying keeps it
-        blocked.
+        Confirming lets the agent retry this exact action and is recorded in the
+        audit log. Keep blocked leaves it blocked.
       </Text>
     </Stack>
   );
@@ -243,7 +243,7 @@ function ChallengeReview({
 function ApprovedView() {
   return (
     <StatusView
-      title="Approved"
+      title="Confirmed"
       body="Return to your agent and retry the request. You can close this page."
     />
   );
@@ -252,7 +252,7 @@ function ApprovedView() {
 function DeclinedView() {
   return (
     <StatusView
-      title="Denied"
+      title="Kept blocked"
       body="The request remains blocked. You can close this page."
     />
   );
@@ -261,8 +261,8 @@ function DeclinedView() {
 function AlreadyApprovedView() {
   return (
     <StatusView
-      title="Already approved"
-      body="This challenge was already approved. Return to your agent and retry the request."
+      title="Already confirmed"
+      body="This action was already confirmed. Return to your agent and retry the request."
     />
   );
 }
@@ -271,7 +271,7 @@ function ExpiredView() {
   return (
     <StatusView
       title="Link expired"
-      body="This approval link is no longer valid. Try the action again in your agent to generate a new one."
+      body="This confirmation link is no longer valid. Try the action again in your agent to generate a new one."
     />
   );
 }

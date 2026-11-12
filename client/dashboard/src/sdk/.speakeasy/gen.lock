@@ -13723,7 +13723,7 @@ examples:
         application/json: {"prompt": "<value>"}
       responses:
         "200":
-          application/json: {"action": "warn", "alternatives": [], "confidence": 2490.3, "name": "<value>", "policy_type": "standard", "preset_id": "<id>", "presidio_entities": ["<value 1>", "<value 2>"], "prompt": "<value>", "rationale": "<value>", "score": 9398.92, "sources": ["<value 1>", "<value 2>", "<value 3>"], "user_message": "<value>"}
+          application/json: {"action": "confirm", "alternatives": [], "confidence": 2490.3, "name": "<value>", "policy_type": "standard", "preset_id": "<id>", "presidio_entities": ["<value 1>", "<value 2>"], "prompt": "<value>", "rationale": "<value>", "score": 9398.92, "sources": ["<value 1>", "<value 2>", "<value 3>"], "user_message": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

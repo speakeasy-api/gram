@@ -46,10 +46,11 @@ type RiskPolicy struct {
 	CustomRuleIds []string
 	// Whether the policy is active.
 	Enabled bool
-	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
-	// freeze the hook session), or require_approval (hold the call until a listed
-	// approver approves it). MCP-scoped policies support flag, block and
+	// Policy action: flag (log only), confirm (block until the user confirms they
+	// want to go ahead; they bypass it themselves and the confirmation is audited;
+	// warn is its deprecated former name), block (deny in real-time), quarantine
+	// (deny and freeze the hook session), or require_approval (hold the call until
+	// a listed approver approves it). MCP-scoped policies support flag, block and
 	// require_approval.
 	Action string
 	// Policy audience type: everyone or targeted.

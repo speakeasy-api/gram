@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -57,9 +58,9 @@ type inputScan struct {
 	result    *risk.ScanResult
 }
 
-// The protocol has no acknowledgement flow; warn policies deny the call.
+// The protocol cannot ask the user to confirm; confirm policies deny the call.
 func denies(result *risk.ScanResult) bool {
-	return result != nil && (result.Action == "block" || result.Action == "warn" || result.Action == "quarantine")
+	return result != nil && (result.Action == "block" || result.Action == policycore.ActionConfirm || result.Action == "quarantine")
 }
 
 func allowVerdict() Verdict {

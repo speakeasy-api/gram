@@ -22,7 +22,7 @@ export type GetRiskPolicyChallengeResponseBody = {
    */
   message: string;
   /**
-   * The policy that issued the warning.
+   * The policy that asked for confirmation.
    */
   policyName?: string | undefined;
   /**

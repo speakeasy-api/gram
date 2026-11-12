@@ -534,7 +534,7 @@ describe("StandardPolicyEditor scope rows", () => {
       ).toBe("true");
     });
   });
-  it("coerces warn to block when switching to MCP scope", () => {
+  it("coerces a legacy warn policy to block when switching to MCP scope", () => {
     renderEditor(
       policy({
         action: "warn",

@@ -107,7 +107,7 @@ func nonNilStrings(values []string) []string {
 	return values
 }
 
-var suggestPolicyActions = []string{"flag", "warn", "block", "quarantine"}
+var suggestPolicyActions = []string{"flag", policycore.ActionConfirm, "block", "quarantine"}
 
 // suggestPolicyMaxTokens caps the suggestion completion. The schema bounds the
 // answer to a 4,000-character prompt plus short fields, about 1,200 tokens;
@@ -132,7 +132,7 @@ Rules:
 - Choose the preset whose coverage best matches the description. Set "preset_id" to its id.
 - If no preset fits, set "preset_id" to "" and write "prompt": a precise instruction for a policy model that flags a message when the described behaviour occurs. Name what is in scope and what is not.
 - "name": 2-6 words, title case, specific to the request.
-- "action": "flag" (log only), "warn" (user must acknowledge), "block" (deny the request) or "quarantine" (deny and freeze the session until an administrator releases it). Only escalate above the preset default when the description asks to stop, block, deny, prevent or quarantine something.
+- "action": "flag" (log only), "confirm" (block until the user confirms they want to go ahead), "block" (deny the request) or "quarantine" (deny and freeze the session until an administrator releases it). Only escalate above the preset default when the description asks to stop, block, deny, prevent or quarantine something.
 - "score": severity 0.1-10 by impact; keep the preset default unless the description signals higher or lower impact.
 - "confidence": 0-1, how well the chosen preset (or bespoke prompt) covers the description.
 - "rationale": one sentence for the administrator.

@@ -331,7 +331,7 @@ func TestUpdateRiskPolicy_ShadowMCPStoredBlockAllRetiresOnActionChange(t *testin
 		Action: new("warn"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "warn", updated.Action)
+	require.Equal(t, "confirm", updated.Action)
 	require.Nil(t, updated.ShadowMcpDisposition)
 	// The caller sent no URL list: the server retires the bypass grants itself
 	// rather than leave them to reappear the next time the policy denies.

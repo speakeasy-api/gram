@@ -235,7 +235,7 @@ func TestUnknownContentBlocksDoNotBreakParsing(t *testing.T) {
 
 func TestServiceDeniesWarnAndQuarantineMatches(t *testing.T) {
 	t.Parallel()
-	for _, action := range []string{"warn", "quarantine"} {
+	for _, action := range []string{"confirm", "quarantine"} {
 		t.Run(action, func(t *testing.T) {
 			t.Parallel()
 			store := &memoryStore{saved: nil, userID: "", err: nil}

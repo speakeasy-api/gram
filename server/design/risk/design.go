@@ -39,7 +39,7 @@ var _ = Service("risk", func() {
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
+			Attribute("action", String, "Policy action: flag, confirm (block until the user confirms; warn is its deprecated former name), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
 				shared.RiskPolicyActionEnum()
 				Default("flag")
 			})
@@ -247,7 +247,7 @@ var _ = Service("risk", func() {
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
+			Attribute("action", String, "Policy action: flag, confirm (block until the user confirms; warn is its deprecated former name), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
 				shared.RiskPolicyActionEnum()
 			})
 			Attribute("audience_type", String, "Policy audience type: everyone or targeted. Omit to preserve the current audience type.", func() {
@@ -1053,18 +1053,18 @@ var _ = Service("risk", func() {
 	})
 
 	Method("acknowledgeRiskPolicyChallenge", func() {
-		Description("Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).")
+		Description("Confirm a blocked action for a confirm (formerly warn) risk policy from a confirmation-link token. Records the confirmation so the user's retried action proceeds; self-service (no admin approval).")
 		Security(security.Session)
 
 		Payload(func() {
 			security.SessionPayload()
-			Attribute("ack_token", String, "Acknowledgement token generated when a warn policy challenged the action.")
+			Attribute("ack_token", String, "Confirmation token generated when a confirm policy blocked the action.")
 			Required("ack_token")
 		})
 
 		Result(func() {
 			Attribute("acknowledged", Boolean, "Whether the challenge is now acknowledged.")
-			Attribute("policy_name", String, "The policy that issued the warning.")
+			Attribute("policy_name", String, "The policy that asked for confirmation.")
 			Attribute("expires_at", String, "RFC3339 time until which the acknowledgement suppresses re-challenge.", func() {
 				Format(FormatDateTime)
 			})
@@ -1084,17 +1084,17 @@ var _ = Service("risk", func() {
 	})
 
 	Method("getRiskPolicyChallenge", func() {
-		Description("Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).")
+		Description("Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the approval page (shows what was flagged and Approve/Deny actions).")
 		Security(security.Session)
 
 		Payload(func() {
 			security.SessionPayload()
-			Attribute("ack_token", String, "Acknowledgement token generated when a warn policy challenged the action.")
+			Attribute("ack_token", String, "Confirmation token generated when a confirm policy blocked the action.")
 			Required("ack_token")
 		})
 
 		Result(func() {
-			Attribute("policy_name", String, "The policy that issued the warning.")
+			Attribute("policy_name", String, "The policy that asked for confirmation.")
 			Attribute("tool_name", String, "The tool the challenge applies to, if any.")
 			Attribute("message", String, "Human-facing challenge message describing what was flagged.")
 			Attribute("expires_at", String, "RFC3339 time the acknowledgement link expires.", func() {
@@ -1121,12 +1121,12 @@ var _ = Service("risk", func() {
 	})
 
 	Method("declineRiskPolicyChallenge", func() {
-		Description("Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.")
+		Description("Decline a confirm policy challenge from a confirmation-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.")
 		Security(security.Session)
 
 		Payload(func() {
 			security.SessionPayload()
-			Attribute("ack_token", String, "Acknowledgement token generated when a warn policy challenged the action.")
+			Attribute("ack_token", String, "Confirmation token generated when a confirm policy blocked the action.")
 			Required("ack_token")
 		})
 
@@ -2247,11 +2247,11 @@ var RiskPreset = Type("RiskPreset", func() {
 	Attribute("sources", ArrayOf(String), "Detector sources enabled by a standard preset; empty for prompt-based presets.")
 	Attribute("presidio_entities", ArrayOf(String), "Presidio entities enabled when sources include presidio.")
 	Attribute("action", String, "Default enforcement action.", func() {
-		Enum("flag", "warn", "block", "quarantine")
+		Enum("flag", "confirm", "block", "quarantine")
 	})
 	Attribute("score", Float64, "Default CVSS-style severity (0.1-10).")
 	Attribute("prompt", String, "Judge instruction for a prompt-based preset; empty otherwise.")
-	Attribute("user_message", String, "Default message shown to the user when the policy warns or blocks; empty when none.")
+	Attribute("user_message", String, "Default message shown to the user when the policy asks them to confirm or blocks; empty when none.")
 	Attribute("requires_approved_email_domains", Boolean, "True when the preset is inert until approved_email_domains is supplied.")
 
 	Required("id", "label", "description", "policy_type", "sources", "presidio_entities", "action", "score", "prompt", "user_message", "requires_approved_email_domains")
@@ -2278,13 +2278,13 @@ var SuggestRiskPolicyResult = Type("SuggestRiskPolicyResult", func() {
 	})
 	Attribute("name", String, "Suggested policy name.")
 	Attribute("action", String, "Suggested enforcement action.", func() {
-		Enum("flag", "warn", "block", "quarantine")
+		Enum("flag", "confirm", "block", "quarantine")
 	})
 	Attribute("score", Float64, "Suggested CVSS-style severity (0.1-10).")
 	Attribute("sources", ArrayOf(String), "Detector sources for a standard draft; empty for prompt-based drafts.")
 	Attribute("presidio_entities", ArrayOf(String), "Presidio entities for a standard draft that includes presidio.")
 	Attribute("prompt", String, "Judge instruction for a prompt-based draft; empty otherwise.")
-	Attribute("user_message", String, "Suggested user-facing message when the policy warns or blocks; empty when none.")
+	Attribute("user_message", String, "Suggested user-facing message when the policy asks the user to confirm or blocks; empty when none.")
 	Attribute("rationale", String, "Why this draft was chosen.")
 	Attribute("confidence", Float64, "Fit between 0 and 1; 0 for a bespoke draft.")
 	Attribute("alternatives", ArrayOf(RiskPresetMatch), "Other presets that partially matched, best first.")

@@ -97,7 +97,8 @@ export function getPolicyRuleGroupNamesForDeleteDialog(
 export function getPolicyDeleteRuleActionLabel(policy: RiskPolicy): string {
   const labels: Record<RiskPolicy["action"], string> = {
     flag: "flag",
-    warn: "warn",
+    confirm: "confirm",
+    warn: "confirm",
     block: "block",
     quarantine: "quarantine",
     require_approval: "require approval",

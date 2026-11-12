@@ -60416,7 +60416,7 @@ paths:
         name: ListResources
   /rpc/risk.acknowledgePolicyChallenge:
     post:
-      description: Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).
+      description: Confirm a blocked action for a confirm (formerly warn) risk policy from a confirmation-link token. Records the confirmation so the user's retried action proceeds; self-service (no admin approval).
       operationId: acknowledgeRiskPolicyChallenge
       parameters:
         - allowEmptyValue: true
@@ -61247,7 +61247,7 @@ paths:
         type: mutation
   /rpc/risk.declinePolicyChallenge:
     post:
-      description: 'Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.'
+      description: 'Decline a confirm policy challenge from a confirmation-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.'
       operationId: declineRiskPolicyChallenge
       parameters:
         - allowEmptyValue: true
@@ -62597,7 +62597,7 @@ paths:
         type: mutation
   /rpc/risk.getPolicyChallenge:
     post:
-      description: Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
+      description: Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the approval page (shows what was flagged and Approve/Deny actions).
       operationId: getRiskPolicyChallenge
       parameters:
         - allowEmptyValue: true
@@ -89179,7 +89179,7 @@ components:
       properties:
         ack_token:
           type: string
-          description: Acknowledgement token generated when a warn policy challenged the action.
+          description: Confirmation token generated when a confirm policy blocked the action.
       required:
         - ack_token
     AcknowledgeRiskPolicyChallengeResponseBody:
@@ -89194,7 +89194,7 @@ components:
           format: date-time
         policy_name:
           type: string
-          description: The policy that issued the warning.
+          description: The policy that asked for confirmation.
       required:
         - acknowledged
     ActivatePrescriptionRequestBody:
@@ -95417,10 +95417,11 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
+          description: 'Policy action: flag, confirm (block until the user confirms; warn is its deprecated former name), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
           default: flag
           enum:
             - flag
+            - confirm
             - warn
             - block
             - quarantine
@@ -100654,7 +100655,7 @@ components:
           description: Human-facing challenge message describing what was flagged.
         policy_name:
           type: string
-          description: The policy that issued the warning.
+          description: The policy that asked for confirmation.
         tool_name:
           type: string
           description: The tool the challenge applies to, if any.
@@ -113567,10 +113568,11 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
+          description: 'Policy action: flag (log only), confirm (block until the user confirms they want to go ahead; they bypass it themselves and the confirmation is audited; warn is its deprecated former name), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
           default: flag
           enum:
             - flag
+            - confirm
             - warn
             - block
             - quarantine
@@ -113997,7 +113999,7 @@ components:
           description: Default enforcement action.
           enum:
             - flag
-            - warn
+            - confirm
             - block
             - quarantine
         description:
@@ -114037,7 +114039,7 @@ components:
           description: Detector sources enabled by a standard preset; empty for prompt-based presets.
         user_message:
           type: string
-          description: Default message shown to the user when the policy warns or blocks; empty when none.
+          description: Default message shown to the user when the policy asks them to confirm or blocks; empty when none.
       description: One use-case preset a risk policy can start from.
       required:
         - id
@@ -114117,7 +114119,7 @@ components:
           format: int64
         enforcement_outcome:
           type: string
-          description: Recorded enforcement outcome, independent of policy configuration.
+          description: 'Recorded enforcement outcome, independent of policy configuration. The warned_* values are confirm policy outcomes (they keep the action''s former name): warned_pending (blocked, waiting for the user to confirm), warned_acknowledged (the user confirmed) and warned_abandoned (the user never confirmed).'
           enum:
             - logged
             - denied
@@ -114256,7 +114258,7 @@ components:
           description: Human-readable description of the finding.
         enforcement_outcome:
           type: string
-          description: Recorded enforcement outcome, independent of policy configuration.
+          description: 'Recorded enforcement outcome, independent of policy configuration. The warned_* values are confirm policy outcomes (they keep the action''s former name): warned_pending (blocked, waiting for the user to confirm), warned_acknowledged (the user confirmed) and warned_abandoned (the user never confirmed).'
           enum:
             - logged
             - denied
@@ -119621,7 +119623,7 @@ components:
           description: Suggested enforcement action.
           enum:
             - flag
-            - warn
+            - confirm
             - block
             - quarantine
         alternatives:
@@ -119667,7 +119669,7 @@ components:
           description: Detector sources for a standard draft; empty for prompt-based drafts.
         user_message:
           type: string
-          description: Suggested user-facing message when the policy warns or blocks; empty when none.
+          description: Suggested user-facing message when the policy asks the user to confirm or blocks; empty when none.
       description: A policy draft derived from a plain-language description. The fields mirror createRiskPolicy so the dashboard can prefill the create form.
       required:
         - preset_id
@@ -123806,9 +123808,10 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
+          description: 'Policy action: flag, confirm (block until the user confirms; warn is its deprecated former name), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.'
           enum:
             - flag
+            - confirm
             - warn
             - block
             - quarantine

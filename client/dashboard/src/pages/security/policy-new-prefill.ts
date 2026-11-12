@@ -1,4 +1,8 @@
-import type { PolicyAction, RuleCategory } from "./policy-data";
+import {
+  canonicalPolicyAction,
+  type PolicyAction,
+  type RuleCategory,
+} from "./policy-data";
 import { AVAILABLE_CATEGORIES } from "./policy-form";
 
 /** A new standard policy's starting values, carried in the URL so another page
@@ -13,7 +17,7 @@ export interface PolicyNewPrefill {
 
 const ACTIONS: ReadonlySet<PolicyAction> = new Set([
   "flag",
-  "warn",
+  "confirm",
   "block",
   "quarantine",
 ]);
@@ -36,7 +40,8 @@ export function parsePolicyNewPrefill(
   ].filter((category): category is RuleCategory =>
     AVAILABLE_CATEGORIES.has(category as RuleCategory),
   );
-  const action = params.get("action");
+  const rawAction = params.get("action");
+  const action = rawAction ? canonicalPolicyAction(rawAction) : null;
   const score = Number(params.get("score"));
   const name = params.get("name")?.trim();
   return {

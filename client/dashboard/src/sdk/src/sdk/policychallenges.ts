@@ -28,7 +28,7 @@ export class PolicyChallenges extends ClientSDK {
    * acknowledgeRiskPolicyChallenge risk
    *
    * @remarks
-   * Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).
+   * Confirm a blocked action for a confirm (formerly warn) risk policy from a confirmation-link token. Records the confirmation so the user's retried action proceeds; self-service (no admin approval).
    */
   async acknowledge(
     request: AcknowledgeRiskPolicyChallengeRequest,
@@ -47,7 +47,7 @@ export class PolicyChallenges extends ClientSDK {
    * declineRiskPolicyChallenge risk
    *
    * @remarks
-   * Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.
+   * Decline a confirm policy challenge from a confirmation-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.
    */
   async decline(
     request: DeclineRiskPolicyChallengeRequest,
@@ -66,7 +66,7 @@ export class PolicyChallenges extends ClientSDK {
    * getRiskPolicyChallenge risk
    *
    * @remarks
-   * Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
+   * Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the approval page (shows what was flagged and Approve/Deny actions).
    */
   async get(
     request: GetRiskPolicyChallengeRequest,

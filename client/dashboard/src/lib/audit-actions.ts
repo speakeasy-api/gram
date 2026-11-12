@@ -988,7 +988,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "risk_policy:bypass_request_revoke":
       return "revoked a bypass for";
     case "risk_policy:challenge_acknowledge":
-      return "acknowledged a challenge for";
+      return "confirmed a blocked action for";
     case "risk_policy:eval_review_save":
       return "saved an evaluation review for";
     case "risk_policy:eval_review_delete":

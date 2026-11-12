@@ -120,16 +120,17 @@ type Service interface {
 	// Fetch what a request access link asks for (the blocked server and tool)
 	// WITHOUT filing the request. Powers the request access page.
 	GetRiskPolicyBypassRequestTarget(context.Context, *GetRiskPolicyBypassRequestTargetPayload) (res *GetRiskPolicyBypassRequestTargetResult, err error)
-	// Acknowledge a risk policy warn/challenge from a warning-link token. Records
-	// the acknowledgement so the user's retried action proceeds; self-service (no
-	// admin approval).
+	// Confirm a blocked action for a confirm (formerly warn) risk policy from a
+	// confirmation-link token. Records the confirmation so the user's retried
+	// action proceeds; self-service (no admin approval).
 	AcknowledgeRiskPolicyChallenge(context.Context, *AcknowledgeRiskPolicyChallengePayload) (res *AcknowledgeRiskPolicyChallengeResult, err error)
-	// Fetch the details of a risk policy warn/challenge from a warning-link token,
-	// WITHOUT acknowledging it. Powers the approval page (shows what was flagged
-	// and Approve/Deny actions).
+	// Fetch the details of a confirm policy challenge from a confirmation-link
+	// token, WITHOUT confirming it. Powers the approval page (shows what was
+	// flagged and Approve/Deny actions).
 	GetRiskPolicyChallenge(context.Context, *GetRiskPolicyChallengePayload) (res *GetRiskPolicyChallengeResult, err error)
-	// Decline a risk policy warn/challenge from a warning-link token: invalidate
-	// the link and mark the challenge declined. The blocked action stays blocked.
+	// Decline a confirm policy challenge from a confirmation-link token:
+	// invalidate the link and mark the challenge declined. The blocked action
+	// stays blocked.
 	DeclineRiskPolicyChallenge(context.Context, *DeclineRiskPolicyChallengePayload) (res *DeclineRiskPolicyChallengeResult, err error)
 	// Get a tool call block by its risk result ID for the durable block page.
 	GetRiskBlock(context.Context, *GetRiskBlockPayload) (res *RiskBlock, err error)
@@ -243,7 +244,7 @@ var MethodNames = [58]string{"createRiskPolicy", "listRiskPolicies", "listMCPPla
 // service acknowledgeRiskPolicyChallenge method.
 type AcknowledgeRiskPolicyChallengePayload struct {
 	SessionToken *string
-	// Acknowledgement token generated when a warn policy challenged the action.
+	// Confirmation token generated when a confirm policy blocked the action.
 	AckToken string
 }
 
@@ -252,7 +253,7 @@ type AcknowledgeRiskPolicyChallengePayload struct {
 type AcknowledgeRiskPolicyChallengeResult struct {
 	// Whether the challenge is now acknowledged.
 	Acknowledged bool
-	// The policy that issued the warning.
+	// The policy that asked for confirmation.
 	PolicyName *string
 	// RFC3339 time until which the acknowledgement suppresses re-challenge.
 	ExpiresAt *string
@@ -395,10 +396,10 @@ type CreateRiskPolicyPayload struct {
 	CustomRuleIds []string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag, warn (challenge), block, quarantine (deny and freeze
-	// the hook session), or require_approval (hold the call until a listed
-	// approver approves it). MCP-scoped policies support flag, block and
-	// require_approval.
+	// Policy action: flag, confirm (block until the user confirms; warn is its
+	// deprecated former name), block, quarantine (deny and freeze the hook
+	// session), or require_approval (hold the call until a listed approver
+	// approves it). MCP-scoped policies support flag, block and require_approval.
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string
@@ -457,7 +458,7 @@ type DecideRiskPolicyApprovalPayload struct {
 // declineRiskPolicyChallenge method.
 type DeclineRiskPolicyChallengePayload struct {
 	SessionToken *string
-	// Acknowledgement token generated when a warn policy challenged the action.
+	// Confirmation token generated when a confirm policy blocked the action.
 	AckToken string
 }
 
@@ -644,14 +645,14 @@ type GetRiskPolicyBypassRequestTargetResult struct {
 // getRiskPolicyChallenge method.
 type GetRiskPolicyChallengePayload struct {
 	SessionToken *string
-	// Acknowledgement token generated when a warn policy challenged the action.
+	// Confirmation token generated when a confirm policy blocked the action.
 	AckToken string
 }
 
 // GetRiskPolicyChallengeResult is the result type of the risk service
 // getRiskPolicyChallenge method.
 type GetRiskPolicyChallengeResult struct {
-	// The policy that issued the warning.
+	// The policy that asked for confirmation.
 	PolicyName *string
 	// The tool the challenge applies to, if any.
 	ToolName *string
@@ -1433,8 +1434,8 @@ type RiskPreset struct {
 	Score float64
 	// Judge instruction for a prompt-based preset; empty otherwise.
 	Prompt string
-	// Default message shown to the user when the policy warns or blocks; empty
-	// when none.
+	// Default message shown to the user when the policy asks them to confirm or
+	// blocks; empty when none.
 	UserMessage string
 	// True when the preset is inert until approved_email_domains is supplied.
 	RequiresApprovedEmailDomains bool
@@ -1756,8 +1757,8 @@ type SuggestRiskPolicyResult struct {
 	PresidioEntities []string
 	// Judge instruction for a prompt-based draft; empty otherwise.
 	Prompt string
-	// Suggested user-facing message when the policy warns or blocks; empty when
-	// none.
+	// Suggested user-facing message when the policy asks the user to confirm or
+	// blocks; empty when none.
 	UserMessage string
 	// Why this draft was chosen.
 	Rationale string
@@ -1929,10 +1930,10 @@ type UpdateRiskPolicyPayload struct {
 	CustomRuleIds []string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag, warn (challenge), block, quarantine (deny and freeze
-	// the hook session), or require_approval (hold the call until a listed
-	// approver approves it). MCP-scoped policies support flag, block and
-	// require_approval.
+	// Policy action: flag, confirm (block until the user confirms; warn is its
+	// deprecated former name), block, quarantine (deny and freeze the hook
+	// session), or require_approval (hold the call until a listed approver
+	// approves it). MCP-scoped policies support flag, block and require_approval.
 	Action *string
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.

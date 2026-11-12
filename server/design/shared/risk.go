@@ -12,12 +12,16 @@ import (
 // semantics; on update payloads (where the field is optional) they leave the
 // default off so the generated Go type stays *string.
 //
-// "warn" (a.k.a. "challenge") is the middle ground between flag and block: on
-// match, enforcement denies the current call and returns a warning plus a
-// short-lived out-of-band acknowledgement link. The user opens it, the ack is
-// recorded (per org+project+user+policy, TTL), and the agent retries the same
-// call — which now passes. Transports that cannot complete that round-trip fall
-// back to block (fail-safe).
+// "confirm" sits between flag and block: on match, enforcement blocks the
+// current prompt or tool call and asks the user to confirm. The user can
+// bypass the block themselves; the confirmation is recorded (per
+// org+project+user+policy+exact call, short TTL) and audited, and the same
+// call then passes. Claude Code, Cursor and Codex confirm through an
+// out-of-band link; Claude Cowork confirms by sending the same message again.
+// Clients that can do neither fall back to block (fail-safe).
+//
+// "warn" is the deprecated former name of "confirm". It is still accepted on
+// input and means the same thing; responses always say "confirm".
 //
 // "require_approval" holds an MCP tool call until a listed approver approves
 // it. The call is denied with a request token; the agent files the request
@@ -42,7 +46,7 @@ import (
 //   - https://docs.claude.com/en/docs/claude-code/hooks
 //   - https://cursor.com/docs/agent/hooks
 func RiskPolicyActionEnum() {
-	Enum("flag", "warn", "block", "quarantine", "require_approval")
+	Enum("flag", "confirm", "warn", "block", "quarantine", "require_approval")
 }
 
 // RiskPolicyTypeEnum applies the allowed-values constraint to a policy_type
@@ -199,7 +203,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
-	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
+	Attribute("action", String, "Policy action: flag (log only), confirm (block until the user confirms they want to go ahead; they bypass it themselves and the confirmation is audited; warn is its deprecated former name), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
 		RiskPolicyActionEnum()
 		Default("flag")
 	})
@@ -306,7 +310,7 @@ func riskExecutionAttributes() {
 	Attribute("mcp_method", String, "MCP method or equivalent mediated operation.")
 	Attribute("principal_kind", String, "Credential provenance class resolved by MCP identity.")
 	Attribute("identity_stamped", Boolean, "Whether MCP identity stamped validated principal provenance.")
-	Attribute("enforcement_outcome", String, "Recorded enforcement outcome, independent of policy configuration.", func() {
+	Attribute("enforcement_outcome", String, "Recorded enforcement outcome, independent of policy configuration. The warned_* values are confirm policy outcomes (they keep the action's former name): warned_pending (blocked, waiting for the user to confirm), warned_acknowledged (the user confirmed) and warned_abandoned (the user never confirmed).", func() {
 		Enum("logged", "denied", "withheld", "warned_pending", "warned_acknowledged", "warned_abandoned", "quarantined")
 	})
 }

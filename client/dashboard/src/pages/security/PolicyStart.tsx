@@ -56,7 +56,7 @@ import { useDetectorMode } from "./use-detector-mode";
 
 const ACTION_LABEL: Record<string, string> = {
   flag: "Flag",
-  warn: "Warn",
+  confirm: "Confirm",
   block: "Block",
   quarantine: "Quarantine",
   require_approval: "Approval",

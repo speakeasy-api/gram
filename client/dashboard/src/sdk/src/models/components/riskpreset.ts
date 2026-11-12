@@ -15,7 +15,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export const RiskPresetAction = {
   Flag: "flag",
-  Warn: "warn",
+  Confirm: "confirm",
   Block: "block",
   Quarantine: "quarantine",
 } as const;
@@ -81,7 +81,7 @@ export type RiskPreset = {
    */
   sources: Array<string>;
   /**
-   * Default message shown to the user when the policy warns or blocks; empty when none.
+   * Default message shown to the user when the policy asks them to confirm or blocks; empty when none.
    */
   userMessage: string;
 };

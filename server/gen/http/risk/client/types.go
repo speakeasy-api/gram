@@ -46,10 +46,10 @@ type CreateRiskPolicyRequestBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag, warn (challenge), block, quarantine (deny and freeze
-	// the hook session), or require_approval (hold the call until a listed
-	// approver approves it). MCP-scoped policies support flag, block and
-	// require_approval.
+	// Policy action: flag, confirm (block until the user confirms; warn is its
+	// deprecated former name), block, quarantine (deny and freeze the hook
+	// session), or require_approval (hold the call until a listed approver
+	// approves it). MCP-scoped policies support flag, block and require_approval.
 	Action string `form:"action" json:"action" xml:"action"`
 	// Policy audience type: everyone or targeted.
 	AudienceType string `form:"audience_type" json:"audience_type" xml:"audience_type"`
@@ -122,10 +122,10 @@ type UpdateRiskPolicyRequestBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag, warn (challenge), block, quarantine (deny and freeze
-	// the hook session), or require_approval (hold the call until a listed
-	// approver approves it). MCP-scoped policies support flag, block and
-	// require_approval.
+	// Policy action: flag, confirm (block until the user confirms; warn is its
+	// deprecated former name), block, quarantine (deny and freeze the hook
+	// session), or require_approval (hold the call until a listed approver
+	// approves it). MCP-scoped policies support flag, block and require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
@@ -237,21 +237,21 @@ type GetRiskPolicyBypassRequestTargetRequestBody struct {
 // AcknowledgeRiskPolicyChallengeRequestBody is the type of the "risk" service
 // "acknowledgeRiskPolicyChallenge" endpoint HTTP request body.
 type AcknowledgeRiskPolicyChallengeRequestBody struct {
-	// Acknowledgement token generated when a warn policy challenged the action.
+	// Confirmation token generated when a confirm policy blocked the action.
 	AckToken string `form:"ack_token" json:"ack_token" xml:"ack_token"`
 }
 
 // GetRiskPolicyChallengeRequestBody is the type of the "risk" service
 // "getRiskPolicyChallenge" endpoint HTTP request body.
 type GetRiskPolicyChallengeRequestBody struct {
-	// Acknowledgement token generated when a warn policy challenged the action.
+	// Confirmation token generated when a confirm policy blocked the action.
 	AckToken string `form:"ack_token" json:"ack_token" xml:"ack_token"`
 }
 
 // DeclineRiskPolicyChallengeRequestBody is the type of the "risk" service
 // "declineRiskPolicyChallenge" endpoint HTTP request body.
 type DeclineRiskPolicyChallengeRequestBody struct {
-	// Acknowledgement token generated when a warn policy challenged the action.
+	// Confirmation token generated when a confirm policy blocked the action.
 	AckToken string `form:"ack_token" json:"ack_token" xml:"ack_token"`
 }
 
@@ -507,10 +507,11 @@ type CreateRiskPolicyResponseBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
-	// freeze the hook session), or require_approval (hold the call until a listed
-	// approver approves it). MCP-scoped policies support flag, block and
+	// Policy action: flag (log only), confirm (block until the user confirms they
+	// want to go ahead; they bypass it themselves and the confirmation is audited;
+	// warn is its deprecated former name), block (deny in real-time), quarantine
+	// (deny and freeze the hook session), or require_approval (hold the call until
+	// a listed approver approves it). MCP-scoped policies support flag, block and
 	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
@@ -625,10 +626,11 @@ type GetRiskPolicyResponseBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
-	// freeze the hook session), or require_approval (hold the call until a listed
-	// approver approves it). MCP-scoped policies support flag, block and
+	// Policy action: flag (log only), confirm (block until the user confirms they
+	// want to go ahead; they bypass it themselves and the confirmation is audited;
+	// warn is its deprecated former name), block (deny in real-time), quarantine
+	// (deny and freeze the hook session), or require_approval (hold the call until
+	// a listed approver approves it). MCP-scoped policies support flag, block and
 	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
@@ -713,10 +715,11 @@ type UpdateRiskPolicyResponseBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
-	// freeze the hook session), or require_approval (hold the call until a listed
-	// approver approves it). MCP-scoped policies support flag, block and
+	// Policy action: flag (log only), confirm (block until the user confirms they
+	// want to go ahead; they bypass it themselves and the confirmation is audited;
+	// warn is its deprecated former name), block (deny in real-time), quarantine
+	// (deny and freeze the hook session), or require_approval (hold the call until
+	// a listed approver approves it). MCP-scoped policies support flag, block and
 	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
@@ -932,8 +935,8 @@ type SuggestRiskPolicyResponseBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Judge instruction for a prompt-based draft; empty otherwise.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// Suggested user-facing message when the policy warns or blocks; empty when
-	// none.
+	// Suggested user-facing message when the policy asks the user to confirm or
+	// blocks; empty when none.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 	// Why this draft was chosen.
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
@@ -1066,7 +1069,7 @@ type GetRiskPolicyBypassRequestTargetResponseBody struct {
 type AcknowledgeRiskPolicyChallengeResponseBody struct {
 	// Whether the challenge is now acknowledged.
 	Acknowledged *bool `form:"acknowledged,omitempty" json:"acknowledged,omitempty" xml:"acknowledged,omitempty"`
-	// The policy that issued the warning.
+	// The policy that asked for confirmation.
 	PolicyName *string `form:"policy_name,omitempty" json:"policy_name,omitempty" xml:"policy_name,omitempty"`
 	// RFC3339 time until which the acknowledgement suppresses re-challenge.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
@@ -1075,7 +1078,7 @@ type AcknowledgeRiskPolicyChallengeResponseBody struct {
 // GetRiskPolicyChallengeResponseBody is the type of the "risk" service
 // "getRiskPolicyChallenge" endpoint HTTP response body.
 type GetRiskPolicyChallengeResponseBody struct {
-	// The policy that issued the warning.
+	// The policy that asked for confirmation.
 	PolicyName *string `form:"policy_name,omitempty" json:"policy_name,omitempty" xml:"policy_name,omitempty"`
 	// The tool the challenge applies to, if any.
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
@@ -12597,10 +12600,11 @@ type RiskPolicyResponseBody struct {
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), block (deny in real-time), quarantine (deny and
-	// freeze the hook session), or require_approval (hold the call until a listed
-	// approver approves it). MCP-scoped policies support flag, block and
+	// Policy action: flag (log only), confirm (block until the user confirms they
+	// want to go ahead; they bypass it themselves and the confirmation is audited;
+	// warn is its deprecated former name), block (deny in real-time), quarantine
+	// (deny and freeze the hook session), or require_approval (hold the call until
+	// a listed approver approves it). MCP-scoped policies support flag, block and
 	// require_approval.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
@@ -12764,7 +12768,11 @@ type RiskResultResponseBody struct {
 	PrincipalKind *string `form:"principal_kind,omitempty" json:"principal_kind,omitempty" xml:"principal_kind,omitempty"`
 	// Whether MCP identity stamped validated principal provenance.
 	IdentityStamped *bool `form:"identity_stamped,omitempty" json:"identity_stamped,omitempty" xml:"identity_stamped,omitempty"`
-	// Recorded enforcement outcome, independent of policy configuration.
+	// Recorded enforcement outcome, independent of policy configuration. The
+	// warned_* values are confirm policy outcomes (they keep the action's former
+	// name): warned_pending (blocked, waiting for the user to confirm),
+	// warned_acknowledged (the user confirmed) and warned_abandoned (the user
+	// never confirmed).
 	EnforcementOutcome *string `form:"enforcement_outcome,omitempty" json:"enforcement_outcome,omitempty" xml:"enforcement_outcome,omitempty"`
 	// ID of the durable tool call block recorded for this finding's message, when
 	// one exists. Links to the block page at /blocks/:id.
@@ -12877,7 +12885,11 @@ type RiskResultRedactedResponseBody struct {
 	PrincipalKind *string `form:"principal_kind,omitempty" json:"principal_kind,omitempty" xml:"principal_kind,omitempty"`
 	// Whether MCP identity stamped validated principal provenance.
 	IdentityStamped *bool `form:"identity_stamped,omitempty" json:"identity_stamped,omitempty" xml:"identity_stamped,omitempty"`
-	// Recorded enforcement outcome, independent of policy configuration.
+	// Recorded enforcement outcome, independent of policy configuration. The
+	// warned_* values are confirm policy outcomes (they keep the action's former
+	// name): warned_pending (blocked, waiting for the user to confirm),
+	// warned_acknowledged (the user confirmed) and warned_abandoned (the user
+	// never confirmed).
 	EnforcementOutcome *string `form:"enforcement_outcome,omitempty" json:"enforcement_outcome,omitempty" xml:"enforcement_outcome,omitempty"`
 	// The chat message that was scanned, when the finding is anchored to a message.
 	ChatMessageID *string `form:"chat_message_id,omitempty" json:"chat_message_id,omitempty" xml:"chat_message_id,omitempty"`
@@ -13043,8 +13055,8 @@ type RiskPresetResponseBody struct {
 	Score *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
 	// Judge instruction for a prompt-based preset; empty otherwise.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// Default message shown to the user when the policy warns or blocks; empty
-	// when none.
+	// Default message shown to the user when the policy asks them to confirm or
+	// blocks; empty when none.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 	// True when the preset is inert until approved_email_domains is supplied.
 	RequiresApprovedEmailDomains *bool `form:"requires_approved_email_domains,omitempty" json:"requires_approved_email_domains,omitempty" xml:"requires_approved_email_domains,omitempty"`
@@ -23927,8 +23939,8 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine", "require_approval"}))
+		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "warn", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -24111,8 +24123,8 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine", "require_approval"}))
+		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "warn", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -24228,8 +24240,8 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine", "require_approval"}))
+		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "warn", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -24598,8 +24610,8 @@ func ValidateSuggestRiskPolicyResponseBody(body *SuggestRiskPolicyResponseBody) 
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
+		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "block" || *body.Action == "quarantine") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "block", "quarantine"}))
 		}
 	}
 	for _, e := range body.Alternatives {
@@ -39864,8 +39876,8 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine", "require_approval"}))
+		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine" || *body.Action == "require_approval") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "warn", "block", "quarantine", "require_approval"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -40331,8 +40343,8 @@ func ValidateRiskPresetResponseBody(body *RiskPresetResponseBody) (err error) {
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
+		if !(*body.Action == "flag" || *body.Action == "confirm" || *body.Action == "block" || *body.Action == "quarantine") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "confirm", "block", "quarantine"}))
 		}
 	}
 	return
