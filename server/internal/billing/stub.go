@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -352,7 +353,23 @@ func (s *StubClient) TrackToolCallUsage(ctx context.Context, event ToolCallUsage
 	}
 }
 
+// testDataDir is the directory usage files go to under "go test": one
+// temporary directory per test binary. Writing them to the package directory,
+// as a local server does, makes "go test" treat the files as test inputs that
+// changed during the run, so it never caches the package's result.
+var testDataDir = sync.OnceValues(func() (string, error) {
+	return os.MkdirTemp("", "gram-billing-stub-")
+})
+
 func (s *StubClient) ensureDataDir() (string, error) {
+	if testing.Testing() {
+		dir, err := testDataDir()
+		if err != nil {
+			return "", fmt.Errorf("create billing test directory: %w", err)
+		}
+		return dir, nil
+	}
+
 	wd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("get working directory: %w", err)

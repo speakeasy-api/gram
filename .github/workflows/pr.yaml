@@ -1891,8 +1891,13 @@ jobs:
       # files a test reads, and a fresh checkout stamps every file with the
       # current time. Without this step the packages that read schema.sql,
       # the OpenAPI document or testdata re-run on every commit.
+      # gotestsum writes its reports into server/. Creating them first keeps
+      # that from changing the directory's time during the run, which the
+      # packages that list server/ would see as a changed input.
       - name: Give tracked files content-derived modification times
-        run: node .github/scripts/content-mtime.mjs
+        run: |
+          touch server/junit-report.xml server/test-timings.json
+          node .github/scripts/content-mtime.mjs
 
       - name: Test
         id: test
@@ -1934,6 +1939,16 @@ jobs:
           if-no-files-found: ignore
           overwrite: true
           retention-days: 30
+
+      # TEMPORARY (experiment): tracked directories whose time changed after
+      # the stamping step; a test that lists one cannot be cached.
+      - name: List directories modified during the run
+        if: always()
+        run: |
+          git ls-tree -r -t -d --name-only HEAD | while IFS= read -r dir; do
+            [ -d "$dir" ] && [ "$(stat -c %Y "$dir")" -gt 1700000000 ] && echo "$dir"
+          done | head -100 || true
+          [ "$(stat -c %Y .)" -gt 1700000000 ] && echo "(repository root)" || true
 
       - name: Let tracked flaky tests through
         # Passes only when every failure is an open flaky-test ticket (see
