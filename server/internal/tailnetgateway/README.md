@@ -146,9 +146,17 @@ The listener accepts local tokens only in the `local` environment.
 
 The local stack may join a tailnet that production gateways also serve, so
 everything it creates there is named after `GRAM_NETWORK_INGRESS_DEV_ID`, a
-four-character id in `mise.local.toml` derived from the machine and worktree
-path. `mise run zero:network-ingress` writes it; `./zero`, new worktrees and
-the first start of the API server, reconciler or gateway run that task.
+four-character id in `mise.local.toml` derived from your git email, the
+machine's hostname and the main checkout's path. `mise run zero:network-ingress`
+writes it; `./zero`, new worktrees and the first start of the API server,
+reconciler or gateway run that task.
+
+The id is the same in every worktree of a checkout, so reuse one connection
+hostname rather than choosing a new one per worktree. Every new hostname
+needs a new certificate from the tailnet's Let's Encrypt allowance (50 a week,
+shared with everyone on the tailnet), while re-issuing an existing name counts
+as a renewal. Because worktrees share the names, run the private network
+group in one worktree at a time.
 
 Naming lives behind `networkingress.Namer`, one method per artifact.
 `LocalNamer` gives:
