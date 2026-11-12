@@ -2,6 +2,7 @@ package gram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -33,6 +34,7 @@ import (
 	metadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
+	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -58,12 +60,15 @@ import (
 const connectionRecorderDrainTimeout = 30 * time.Second
 
 type privateIngressRuntime struct {
-	DB         *pgxpool.Pool
-	Redis      *redis.Client
-	Temporal   *tenv.Environment
-	Kubernetes *k8s.KubernetesClients
-	Runtime    *mcpServerRuntime
-	cleanup    []func(context.Context) error
+	DB       *pgxpool.Pool
+	Redis    *redis.Client
+	Temporal *tenv.Environment
+	Runtime  *mcpServerRuntime
+	cleanup  []func(context.Context) error
+
+	// TokenReviewer verifies attestation tokens: Kubernetes TokenReview in a
+	// cluster, or the HMAC-signed local tokens in local development.
+	TokenReviewer netingress.TokenReviewer
 }
 
 func (r *privateIngressRuntime) Close(ctx context.Context) {
@@ -85,7 +90,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err := validatePrivateIngressTemporalConfig(c); err != nil {
 		return nil, err
 	}
-	r := &privateIngressRuntime{DB: nil, Redis: nil, Temporal: nil, Kubernetes: nil, Runtime: nil, cleanup: nil}
+	r := &privateIngressRuntime{DB: nil, Redis: nil, Temporal: nil, Runtime: nil, cleanup: nil, TokenReviewer: nil}
 	defer func() {
 		if err != nil {
 			r.Close(ctx)
@@ -148,12 +153,9 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, fmt.Errorf("create private ingress encryption client: %w", err)
 	}
 	env := environments.NewEnvironmentEntries(logger, db, enc, metadatarepo.New(db))
-	r.Kubernetes, err = k8s.InitializeK8sClient(ctx, logger, c.String("environment"), "", "", "")
+	r.TokenReviewer, err = newPrivateIngressTokenReviewer(ctx, logger, c.String("environment"), c.String("netingress-local-token-key-file"))
 	if err != nil {
-		return nil, fmt.Errorf("create private ingress Kubernetes client: %w", err)
-	}
-	if r.Kubernetes.Clientset == nil {
-		return nil, fmt.Errorf("private network ingress listener requires an in-cluster Kubernetes client")
+		return nil, err
 	}
 	r.Temporal, stop, err = newTemporalClient(logger, meterProvider, temporalClientOptions{
 		address: c.String("temporal-address"), namespace: c.String("temporal-namespace"), taskQueue: c.String("temporal-task-queue"),
@@ -352,4 +354,33 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, err
 	}
 	return r, nil
+}
+
+// newPrivateIngressTokenReviewer returns the attestation token reviewer. A
+// local token key selects the HMAC reviewer, which is accepted only in the
+// local environment; otherwise tokens are reviewed by the cluster.
+func newPrivateIngressTokenReviewer(ctx context.Context, logger *slog.Logger, environment, localKeyFile string) (netingress.TokenReviewer, error) {
+	if localKeyFile != "" {
+		if environment != "local" {
+			return nil, errors.New("local attestation tokens are only accepted in the local environment")
+		}
+		key, err := netingress.ReadLocalTokenKey(localKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("load local attestation key: %w", err)
+		}
+		reviewer, err := netingress.NewLocalTokenReviewer(key)
+		if err != nil {
+			return nil, fmt.Errorf("create local attestation reviewer: %w", err)
+		}
+		return reviewer, nil
+	}
+
+	clients, err := k8s.InitializeK8sClient(ctx, logger, environment, "", "", "")
+	if err != nil {
+		return nil, fmt.Errorf("create private ingress Kubernetes client: %w", err)
+	}
+	if clients.Clientset == nil {
+		return nil, errors.New("private network ingress listener requires an in-cluster Kubernetes client, or a local token key in local development")
+	}
+	return clients.Clientset.AuthenticationV1().TokenReviews(), nil
 }
