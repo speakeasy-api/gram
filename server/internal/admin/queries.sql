@@ -1409,7 +1409,7 @@ SELECT
     ))::boolean AS creator_active,
     a.created_at
 FROM assistants a
-JOIN projects p ON p.id = a.project_id AND p.deleted IS FALSE
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
 LEFT JOIN users u ON u.id = a.created_by_user_id
 WHERE a.organization_id = @organization_id
   AND a.deleted IS FALSE

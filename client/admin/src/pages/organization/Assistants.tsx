@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX } from "react";
+import { useMemo, useRef, useState, type JSX } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
@@ -158,6 +158,7 @@ export function Assistants({ org }: { org: AdminOrganization }): JSX.Element {
     enabled: !!org.id,
   });
   const [confirm, confirmDialog] = useConfirmDialog();
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const [lastRun, setLastRun] =
     useState<AdminAssistantIdentityMigrationRun | null>(null);
   const migrate = useMutation({
@@ -204,6 +205,8 @@ export function Assistants({ org }: { org: AdminOrganization }): JSX.Element {
       ),
       confirmLabel: "Migrate",
     });
+    // The dialog has no opener to give the keyboard back to on its own.
+    buttonRef.current?.focus();
     if (!confirmed) return;
     try {
       const result = await migrate.mutateAsync();
@@ -225,6 +228,7 @@ export function Assistants({ org }: { org: AdminOrganization }): JSX.Element {
           </p>
         )}
         <Button
+          ref={buttonRef}
           size="sm"
           className="ml-auto"
           disabled={migrate.isPending || migratable.length === 0}
@@ -235,7 +239,9 @@ export function Assistants({ org }: { org: AdminOrganization }): JSX.Element {
           {migrate.isPending ? "Migrating..." : "Migrate to agent identity"}
         </Button>
       </div>
-      {lastRun && <MigrationSummary run={lastRun} />}
+      {lastRun?.organization_id === org.id && (
+        <MigrationSummary run={lastRun} />
+      )}
       <div className="overflow-clip rounded-lg border">
         <Table cellPadding="condensed">
           <Table.Header table={table} />

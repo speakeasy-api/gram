@@ -553,6 +553,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.UpdateGcpIamPlatformCredential = service.strictAdminJSON(server.UpdateGcpIamPlatformCredential, func() any { return new(adminserver.UpdateGcpIamPlatformCredentialRequestBody) })
 	server.VerifyGcpIamPlatformCredential = service.strictAdminJSON(server.VerifyGcpIamPlatformCredential, func() any { return new(adminserver.VerifyGcpIamPlatformCredentialRequestBody) })
 	server.DeleteGcpIamPlatformCredential = service.strictAdminJSON(server.DeleteGcpIamPlatformCredential, func() any { return new(adminserver.DeleteGcpIamPlatformCredentialRequestBody) })
+	server.ListOrganizationAssistants = service.preauthorizeAdmin(server.ListOrganizationAssistants)
+	server.MigrateOrganizationAssistantIdentities = service.strictAdminJSON(server.MigrateOrganizationAssistantIdentities, func() any { return new(adminserver.MigrateOrganizationAssistantIdentitiesRequestBody) })
 	adminserver.Mount(mux, server)
 
 }

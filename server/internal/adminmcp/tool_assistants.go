@@ -8,6 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const maxOrganizationAssistants = 500
@@ -33,6 +34,8 @@ type AssistantListing struct {
 	Status         string `json:"status"`
 	IdentityState  string `json:"identity_state"`
 	RuntimeVersion int    `json:"runtime_version"`
+	CreatorUserID  string `json:"creator_user_id,omitempty"`
+	CreatorEmail   string `json:"creator_email,omitempty"`
 	CreatorActive  bool   `json:"creator_active"`
 	CreatedAt      string `json:"created_at"`
 }
@@ -68,6 +71,7 @@ func registerAssistantTools(server *mcp.Server, organizations OrganizationReader
 			output.Assistants = append(output.Assistants, AssistantListing{
 				ID: assistant.ID, Name: assistant.Name, ProjectID: assistant.ProjectID, ProjectSlug: assistant.ProjectSlug,
 				Status: assistant.Status, IdentityState: assistant.IdentityState, RuntimeVersion: assistant.RuntimeVersion,
+				CreatorUserID: conv.PtrValOr(assistant.CreatedByUserID, ""), CreatorEmail: conv.PtrValOr(assistant.CreatedByUserEmail, ""),
 				CreatorActive: assistant.CreatorActive, CreatedAt: assistant.CreatedAt,
 			})
 		}
