@@ -194,11 +194,11 @@ func Budget(entries []Entry, budgetTokens int) (kept []Entry, dropped int) {
 	cost := func(e Entry) int { return EstimateTokens(renderEntry(e)) + EstimateTokens(entrySeparator) }
 	used := 0
 	start := len(entries)
-	for i := len(entries) - 1; i >= 0; i-- {
-		if used+cost(entries[i]) > budgetTokens {
+	for i, entrie := range slices.Backward(entries) {
+		if used+cost(entrie) > budgetTokens {
 			break
 		}
-		used += cost(entries[i])
+		used += cost(entrie)
 		start = i
 	}
 	// Render adds an omission notice only when something was dropped; make

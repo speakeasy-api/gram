@@ -15,6 +15,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -187,6 +188,12 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	// Read on the mint's transaction, so the choices it records follow the
+	// enforcement state they commit beside.
+	enforced, err := authenforcement.ReadEnforced(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, s.logger)
+	}
 	txRepo := repo.New(dbtx)
 	session, err := txRepo.CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: target.issuerID,
@@ -235,6 +242,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		PickedClientIds:     []uuid.UUID{},
 		PickedAuthClientIds: nil,
 		ScopeMcpServerIds:   nil,
+		TypedOnly:           enforced,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)
 	}

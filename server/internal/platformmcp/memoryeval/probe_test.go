@@ -147,7 +147,7 @@ func (hashEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, erro
 	vectors := make([][]float32, len(inputs))
 	for i, input := range inputs {
 		vector := make([]float32, 256)
-		for _, word := range strings.Fields(strings.ToLower(input)) {
+		for word := range strings.FieldsSeq(strings.ToLower(input)) {
 			h := fnv.New32a()
 			_, _ = h.Write([]byte(word))
 			vector[h.Sum32()%256]++

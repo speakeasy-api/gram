@@ -18,7 +18,8 @@ import type {
   Selector,
 } from "@gram/client/models/components/selector.js";
 
-import type { ToolLimit } from "./mcpAccessModel";
+import { serverHandle, type ToolLimit } from "./mcpAccessModel";
+import type { Server, ServerGroup } from "./serverMerge";
 import { scopeCatalogue, scopeClosure } from "./scopeCatalogue";
 import type { ResourceType, RoleGrant, ScopeRule } from "./types";
 
@@ -134,6 +135,69 @@ export function parentRow(row: McpRow): McpRow | null {
     case "server":
       return { kind: "project", projectId: row.projectId };
   }
+}
+
+/** A matrix row with the names it is shown under. */
+export interface McpRowView {
+  row: McpRow;
+  name: string;
+  detail?: string;
+  depth: 0 | 1 | 2;
+  server?: Server;
+}
+
+/**
+ * The matrix's rows, top to bottom: All servers, then each project with its
+ * servers. A project without servers still takes grants for the ones added
+ * later.
+ */
+export function mcpRowViews(
+  groups: ServerGroup[],
+  projects: { id: string; name: string }[],
+): McpRowView[] {
+  const rows: McpRowView[] = [
+    {
+      row: { kind: "all" },
+      name: "All servers",
+      detail: "Including servers added later",
+      depth: 0,
+    },
+  ];
+  for (const group of groups) {
+    rows.push({
+      row: { kind: "project", projectId: group.projectId },
+      name: group.projectName,
+      detail:
+        group.servers.length === 1
+          ? "1 server"
+          : `${group.servers.length} servers`,
+      depth: 1,
+    });
+    for (const server of group.servers) {
+      rows.push({
+        row: {
+          kind: "server",
+          serverId: server.id,
+          projectId: group.projectId,
+        },
+        name: server.name,
+        detail: serverHandle(server),
+        depth: 2,
+        server,
+      });
+    }
+  }
+  const listed = new Set(groups.map((group) => group.projectId));
+  for (const project of projects) {
+    if (listed.has(project.id)) continue;
+    rows.push({
+      row: { kind: "project", projectId: project.id },
+      name: project.name,
+      detail: "No servers yet",
+      depth: 1,
+    });
+  }
+  return rows;
 }
 
 function isRowSelector(s: Selector, row: McpRow): boolean {
@@ -267,6 +331,49 @@ export function setMcpRowBlocked(
     if (on) next = setMcpAllow(next, row, level, false);
   }
   return next;
+}
+
+/** Whether the role denies every level on this row. */
+export function mcpRowDenied(
+  grants: Record<string, RoleGrant>,
+  row: McpRow,
+): boolean {
+  return LEVELS.every((level) => mcpBlocks(grants, row, level));
+}
+
+/** A block on one named tool of a row, stored on Connect. */
+function isToolBlockSelector(s: Selector, row: McpRow): boolean {
+  return (
+    row.kind === "server" && isRowSelector(s, row) && !!s.tool && !s.disposition
+  );
+}
+
+/** The tools of a server the role denies by name. */
+export function mcpBlockedTools(
+  grants: Record<string, RoleGrant>,
+  row: McpRow,
+): string[] {
+  return flatten(grants[MCP_LEVEL_SCOPE.use])
+    .deny.filter((s) => isToolBlockSelector(s, row))
+    .flatMap((s) => (s.tool ? [s.tool] : []));
+}
+
+/** Deny one tool of a server, or take that deny back. */
+export function setMcpToolBlocked(
+  grants: Record<string, RoleGrant>,
+  row: McpRow & { kind: "server" },
+  tool: string,
+  on: boolean,
+): Record<string, RoleGrant> {
+  return editFlat(grants, MCP_LEVEL_SCOPE.use, (flat) => {
+    const deny = flat.deny.filter(
+      (s) => !(isToolBlockSelector(s, row) && s.tool === tool),
+    );
+    return {
+      ...flat,
+      deny: on ? [...deny, { ...rowSelector(row), tool }] : deny,
+    };
+  });
 }
 
 /** Which tools Use on this row reaches; null when the row has no Use. */
@@ -452,7 +559,9 @@ export function otherMcpRules(
     const shown = (s: Selector, blocked: boolean) =>
       rows.some((row) =>
         blocked
-          ? isPlainRowSelector(s, row)
+          ? isPlainRowSelector(s, row) ||
+            // A denied tool has its own row under its server.
+            (level === "use" && isToolBlockSelector(s, row))
           : cellSelectors(row, level)(s) &&
             !isHiddenAnnotationLimit(flat.allow, s, row),
       );
@@ -769,4 +878,315 @@ export function clearPlatform(
     }
   }
   return next;
+}
+
+// ─── Platform levels ────────────────────────────────────────────────────────
+
+/** The one level a platform area's card shows: Manage includes View. */
+export type PlatformLevel = "none" | "view" | "manage";
+
+export function platformLevel(
+  grants: Record<string, RoleGrant>,
+  area: PlatformArea,
+): PlatformLevel {
+  if (area.manage && platformAllows(grants, area.manage.slug)) return "manage";
+  if (area.view && platformAllows(grants, area.view.slug)) return "view";
+  return "none";
+}
+
+/**
+ * Move an area to one level. Where the level applies moves with it, so a
+ * role narrowed to two projects stays narrowed when View becomes Manage.
+ * Blocks stay where they are stored.
+ */
+export function setPlatformLevel(
+  grants: Record<string, RoleGrant>,
+  area: PlatformArea,
+  level: PlatformLevel,
+): Record<string, RoleGrant> {
+  const current = platformLevel(grants, area);
+  if (current === level) return grants;
+  const currentDef = current === "none" ? undefined : area[current];
+  const carried = (
+    currentDef ? (grants[currentDef.slug]?.rules ?? []) : []
+  ).filter((r) => r.effect === "allow");
+  let next = grants;
+  for (const key of ["view", "manage"] as const) {
+    const def = area[key];
+    if (!def) continue;
+    const scope = def.slug as Scope;
+    const denies = (next[scope]?.rules ?? []).filter(
+      (r) => r.effect === "deny",
+    );
+    const allows: ScopeRule[] =
+      key !== level
+        ? []
+        : carried.length > 0
+          ? carried.map((rule) => ({ ...rule, id: crypto.randomUUID() }))
+          : [{ id: crypto.randomUUID(), effect: "allow", selectors: null }];
+    const rules = [...allows, ...denies];
+    next = withGrant(
+      next,
+      scope,
+      rules.length > 0 ? { scope, rules } : undefined,
+    );
+  }
+  return next;
+}
+
+/** The permissions of an area that a deny can be stored for. */
+function blockableExtras(area: PlatformArea): ScopeDefinition[] {
+  return area.extras.filter((scope) => !!scope.exclusionScope);
+}
+
+/** Whether the area can be denied as a whole. */
+export function platformAreaBlockable(area: PlatformArea): boolean {
+  if (area.view || area.manage) {
+    return !!(area.view?.exclusionScope ?? area.manage?.exclusionScope);
+  }
+  return blockableExtras(area).length > 0;
+}
+
+/** Whether the role denies the area as a whole. */
+export function platformAreaDenied(
+  grants: Record<string, RoleGrant>,
+  area: PlatformArea,
+): boolean {
+  const level = area.view ?? area.manage;
+  if (level) return platformBlock(grants, level.slug) === "all";
+  const extras = blockableExtras(area);
+  return (
+    extras.length > 0 &&
+    extras.every((scope) => platformBlock(grants, scope.slug) === "all")
+  );
+}
+
+/**
+ * Deny an area as a whole, or take that deny back. An area with levels stores
+ * it on View, which also blocks Manage; its single permissions that can be
+ * blocked are blocked with it. Ones that cannot be blocked stay as they are.
+ */
+export function setPlatformAreaDenied(
+  grants: Record<string, RoleGrant>,
+  area: PlatformArea,
+  on: boolean,
+): Record<string, RoleGrant> {
+  // The area's single permissions go with it: a card that says Denied must
+  // not leave one of them granted underneath.
+  let next =
+    area.view || area.manage ? setPlatformBlocked(grants, area, on) : grants;
+  for (const scope of blockableExtras(area)) {
+    next = setPlatformScopeBlocked(next, scope.slug as Scope, on);
+  }
+  return next;
+}
+
+// ─── Explicit denies ────────────────────────────────────────────────────────
+
+/** One standing refusal the role stores, as the editor lists it. */
+export type RoleDeny =
+  /** Levels denied on a matrix row; every level is a deny of the row. */
+  | { kind: "mcp-row"; key: string; row: McpRow; levels: Level[] }
+  | {
+      kind: "mcp-tool";
+      key: string;
+      row: McpRow & { kind: "server" };
+      tool: string;
+    }
+  /** A stored MCP block the matrix has no row for. */
+  | { kind: "mcp-other"; key: string; rule: OtherMcpRule }
+  | { kind: "area"; key: string; area: PlatformArea }
+  /** One permission blocked everywhere, where its area is not denied. */
+  | { kind: "scope"; key: string; area: PlatformArea; scope: ScopeDefinition }
+  /** A block narrowed to some projects. */
+  | {
+      kind: "rule";
+      key: string;
+      area: PlatformArea;
+      scope: ScopeDefinition;
+      ruleIndex: number;
+      rule: ScopeRule;
+    };
+
+/**
+ * Every deny the role stores. `rows` is the matrix's rows, or null while the
+ * server inventory is still loading: MCP denies wait for it, since a block is
+ * only "other" once its server is known to be missing.
+ */
+export function roleDenies(
+  grants: Record<string, RoleGrant>,
+  rows: McpRow[] | null,
+  areas: PlatformArea[],
+): RoleDeny[] {
+  const result: RoleDeny[] = [];
+  for (const row of rows ?? []) {
+    const levels = LEVELS.filter((level) => mcpBlocks(grants, row, level));
+    if (levels.length > 0) {
+      result.push({
+        kind: "mcp-row",
+        key: `row:${mcpRowKey(row)}`,
+        row,
+        levels,
+      });
+    }
+    if (row.kind !== "server") continue;
+    for (const tool of mcpBlockedTools(grants, row)) {
+      result.push({
+        kind: "mcp-tool",
+        key: `tool:${row.serverId}:${tool}`,
+        row,
+        tool,
+      });
+    }
+  }
+  if (rows) {
+    for (const rule of otherMcpRules(grants, rows)) {
+      if (rule.blocked) {
+        result.push({ kind: "mcp-other", key: `other:${rule.key}`, rule });
+      }
+    }
+  }
+  for (const area of areas) {
+    const denied = platformAreaDenied(grants, area);
+    if (denied) {
+      result.push({ kind: "area", key: `area:${area.category}`, area });
+    }
+    // The area's deny is stored on its lowest level, or on every single
+    // permission of an area without levels: those are the deny above.
+    const whole = new Set<ScopeDefinition>(
+      !denied
+        ? []
+        : [area.view ?? area.manage, ...blockableExtras(area)].filter(
+            (scope) => scope !== undefined,
+          ),
+    );
+    for (const scope of [area.view, area.manage, ...area.extras]) {
+      if (!scope) continue;
+      (grants[scope.slug]?.rules ?? []).forEach((rule, ruleIndex) => {
+        if (rule.effect !== "deny") return;
+        if (rule.selectors === null) {
+          if (whole.has(scope)) return;
+          result.push({
+            kind: "scope",
+            key: `scope:${scope.slug}`,
+            area,
+            scope,
+          });
+          return;
+        }
+        result.push({
+          kind: "rule",
+          key: `rule:${scope.slug}:${rule.id}`,
+          area,
+          scope,
+          ruleIndex,
+          rule,
+        });
+      });
+    }
+  }
+  return result;
+}
+
+/** "1 explicit deny" / "3 explicit denies", for the list and the footer. */
+export function denyCountLabel(count: number): string {
+  return `${count} explicit ${count === 1 ? "deny" : "denies"}`;
+}
+
+/**
+ * Give a row Connect on the tools a limit names, on top of any Connect it
+ * already has: a server limited to two tools keeps them and gains the rest.
+ */
+function addUseLimit(
+  grants: Record<string, RoleGrant>,
+  row: McpRow,
+  limit: ToolLimit,
+): Record<string, RoleGrant> {
+  const own = mcpToolLimit(grants, row);
+  if (own?.kind === "all") return grants;
+  if (!own || limit.kind === "all") return setMcpToolLimit(grants, row, limit);
+  const base = rowSelector(row);
+  const extra: Selector[] =
+    limit.kind === "tools"
+      ? limit.tools.map((tool) => ({ ...base, tool }))
+      : limit.dispositions.map((disposition) => ({ ...base, disposition }));
+  return editFlat(grants, MCP_LEVEL_SCOPE.use, (flat) => ({
+    ...flat,
+    allow: [...flat.allow, ...extra],
+  }));
+}
+
+/**
+ * Take one level away from a row that gets it from a wider row. Grants add
+ * up, so nothing stored on the row itself could take it away: the wider
+ * grant is split instead. A grant on every server becomes one on each other
+ * project, and a grant on a project becomes one on each of its other
+ * servers. Servers and projects added later are no longer covered by a
+ * grant that was split.
+ */
+export function excludeMcpRow(
+  grants: Record<string, RoleGrant>,
+  row: McpRow,
+  level: Level,
+  rows: McpRow[],
+): Record<string, RoleGrant> {
+  if (row.kind === "all") return setMcpAllow(grants, row, level, false);
+  const servers = rows.filter((r) => r.kind === "server");
+  // Connect can be limited to some tools, which the split has to carry.
+  if (level === "use" && row.kind === "server") {
+    return splitMcpToolLimit(
+      grants,
+      row,
+      { kind: "tools", tools: [] },
+      servers,
+    );
+  }
+  const all: McpRow = { kind: "all" };
+  const project: McpRow = { kind: "project", projectId: row.projectId };
+  const fromAll = mcpAllows(grants, all, level);
+  const fromProject = mcpAllows(grants, project, level);
+  const allLimit: ToolLimit = (level === "use"
+    ? mcpToolLimit(grants, all)
+    : null) ?? { kind: "all" };
+
+  let next = grants;
+  if (fromAll) {
+    next = setMcpAllow(next, all, level, false);
+    for (const other of rows) {
+      if (other.kind !== "project" || other.projectId === row.projectId) {
+        continue;
+      }
+      if (mcpAllows(next, other, level)) continue;
+      // A project row holds a level on every tool; a narrower Connect goes
+      // on each of its servers instead.
+      if (allLimit.kind === "all") {
+        next = setMcpAllow(next, other, level, true);
+        continue;
+      }
+      for (const server of servers) {
+        if (server.projectId !== other.projectId) continue;
+        next = addUseLimit(next, server, allLimit);
+      }
+    }
+  }
+  if (row.kind === "project") {
+    return fromProject ? setMcpAllow(next, row, level, false) : next;
+  }
+  // A server: its project's grant, own or just handed down, moves to the
+  // project's other servers.
+  if (fromAll || fromProject) {
+    next = setMcpAllow(next, project, level, false);
+    for (const server of servers) {
+      if (
+        server.projectId !== row.projectId ||
+        server.serverId === row.serverId
+      ) {
+        continue;
+      }
+      if (!mcpAllows(next, server, level)) {
+        next = setMcpAllow(next, server, level, true);
+      }
+    }
+  }
+  return setMcpAllow(next, row, level, false);
 }

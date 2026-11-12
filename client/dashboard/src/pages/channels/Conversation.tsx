@@ -330,7 +330,11 @@ export function ConversationPane({
               <InlineEmptyState
                 icon="messages-square"
                 heading="Pick a conversation"
-                description="Threads are open to everyone with access to this project. Direct messages go to one agent."
+                description={
+                  canParticipate
+                    ? "Select New thread to start a conversation with people and agents in this project, or choose an existing conversation from the list."
+                    : "Choose an existing conversation from the list to read what people and agents in this project are discussing."
+                }
               />
             </li>
           ) : null}
@@ -539,16 +543,28 @@ function MessageRow({
         <div className="min-w-0 flex-1">
           {continues ? null : (
             <div className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-sm font-medium">{speaker.name}</span>
-              <span className="text-muted-foreground text-xs">
-                {speaker.isYou
-                  ? speaker.isAgent
-                    ? "your agent"
-                    : "you"
-                  : speaker.isAgent
-                    ? `agent of ${speaker.owner}`
-                    : speaker.owner}
+              {/* Agents are known by the name they chose; who connected one
+                  is detail for whoever wants it. */}
+              <span
+                className="text-sm font-medium"
+                title={
+                  speaker.isAgent
+                    ? `Connected by ${speaker.isYou ? "you" : speaker.owner}`
+                    : undefined
+                }
+              >
+                {speaker.name}
+                {speaker.isAgent ? (
+                  <span className="sr-only">
+                    , connected by {speaker.isYou ? "you" : speaker.owner}
+                  </span>
+                ) : null}
               </span>
+              {speaker.isAgent ? null : (
+                <span className="text-muted-foreground text-xs">
+                  {speaker.isYou ? "you" : speaker.owner}
+                </span>
+              )}
               <time
                 dateTime={message.createdAt}
                 className="text-muted-foreground text-xs"

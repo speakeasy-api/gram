@@ -85,11 +85,22 @@ without approval, discovery skips the **entire backend**, including inline-text 
 The standard Claude plugin switches modes by itself. Claude's admin plugin
 settings install it in Claude Code and in the Cowork VM alike. When Claude Code
 reports the Cowork entrypoint (`CLAUDE_CODE_ENTRYPOINT=remote_cowork`, which
-every hook process inherits), the binary relays no per-event hook, so no policy
-is enforced there, and ships the transcript from Stop instead. Everywhere else
-it relays per-event hooks as before. Every event of a session reads the same
-environment, so a session never mixes per-event rows with `claude-transcript:`
-rows.
+every hook process inherits), prompt, tool and permission events go to
+`/rpc/hooks.ingest` as they do in Claude Code, so policy is enforced in real
+time and the session is captured per event. The org instruction moves every
+unified session into Cowork, so the only message no hook sees is the first,
+typed in chat before the move. The binary therefore also ships the transcript
+from Stop, which backfills that prompt and the assistant text no hook reports.
+Session start, inventory, notification and config events stay local in the VM.
+
+Both paths can describe the same prompt or tool call. Envelopes from the VM
+carry `session.surface: "cowork"`, and both paths then key those rows by
+the ids Claude reports to both: `claude-prompt:<prompt_id>` (the transcript's
+`promptId`), `claude-tool-call:<tool_use_id>` and
+`claude-tool-result:<tool_use_id>`. The `(chat_id, external_message_id)` unique
+index keeps one row per message whichever path writes first and however often
+either is re-sent. Rows only the transcript describes keep the
+`claude-transcript:<uuid>` key.
 
 Capture needs both halves deployed: a pinned hooks binary that includes the
 Cowork mode, and an ingress rule forwarding `/transcript` to the server.
@@ -100,11 +111,43 @@ rule, uploads are answered by the dashboard and stay queued in the VM.
 `/ahp`. The body's `schema_version` selects the transcript format;
 `claude.transcript.v1` (raw Claude Code JSONL lines) is the only one accepted.
 This endpoint is the one exception to dispatching on canonical feature events:
-the backend parses the provider's own transcript format, because inside the
-Cowork VM the binary relays no per-event hooks to translate.
+the backend parses the provider's own transcript format, because the hooks
+never see the parts of a Cowork session the transcript fills in (the first
+prompt and the assistant's text).
 
-Each entry's uuid keys its rows (`external_message_id` prefixed
-`claude-transcript:`), so a re-sent line is never stored twice.
+Prompts and tool calls are keyed by the ids the hooks also use
+(`claude-prompt:<prompt id>`, `claude-tool-call:<tool_use id>`,
+`claude-tool-result:<tool_use id>`); other entries are keyed by the entry's
+uuid (`claude-transcript:<uuid>`), with `/block:<index>` appended when one
+entry yields more than one row. A line the hooks already stored, or a re-sent
+line, is never stored twice.
+
+### Warn policies in Cowork
+
+A warn on a typed prompt challenges it: the prompt is blocked, and in Claude
+Code the block text carries an acknowledgement link the person opens before
+retrying. Cowork shows a hook's block text cut off after two lines with no way
+to expand it, and shows it as plain text, so a long link is cut off and none
+is clickable. For events with `session.surface: "cowork"` the challenge leads
+with a short link, `<site>/ack#<token>`, that the person copies into a
+browser. The dashboard's `/ack` route redeems it like the long link: the link
+works for 10 minutes, approving it is recorded in the audit log, and the
+approval lets that exact prompt through for 5 minutes. The person then tries
+again; a retry after that is challenged again. The challenge key masks the "Message sent at …"
+sentence Claude's apps add to the prompt's reminder, because it names the
+minute the message was sent, so a retry a minute later still matches.
+
+The first message is typed in chat before the session moves to Cowork, so no
+prompt hook sees it. The Stop that ships it closes that gap. When an upload
+stores new rows, the server checks the upload's user prompts from the last 15
+minutes (at most five) against the project's enforcing policies and returns the
+warn matches as `warnings` beside `stored`. The binary then answers that Stop
+with `decision: block` and a reason, so Claude continues once and tells the
+user, plus a `systemMessage` carrying the same warning. The next Stop ships no
+new prompt and finishes. The prompt has already reached the model, so this
+warning is a notice. Block and quarantine matches are enforced by the
+per-event hooks, not here. A full re-send stores nothing new and warns nobody
+twice.
 
 The binary advances its read offset past a batch only once the batch is
 settled, and resends anything unsettled on the next Stop:
