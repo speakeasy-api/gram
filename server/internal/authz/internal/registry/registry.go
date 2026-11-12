@@ -140,8 +140,10 @@ type Permission struct {
 	// its resource type's.
 	Dimensions []Dimension
 	// DimensionSets are extra request methods on this permission's ref, each
-	// carrying a fixed set of the type's dimensions as arguments, beside the
-	// plain method named after the action.
+	// carrying a fixed set of dimensions declared on the type or on this
+	// permission as arguments, beside the plain method named after the action.
+	// Dimensions the ref fills in from its constructor, such as project_id,
+	// cannot be in a set.
 	DimensionSets []DimensionSet
 	// Source says where grants of this permission's scopes are set: through
 	// roles or through risk policies. Every permission sets it explicitly.

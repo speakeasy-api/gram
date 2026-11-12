@@ -89,6 +89,11 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 
 	for _, t := range r.Types {
 		if _, ok := handWrittenRefs[t.Kind]; ok {
+			for _, p := range t.Permissions {
+				if len(p.DimensionSets) > 0 {
+					return nil, fmt.Errorf("%s:%s declares dimension sets, but %s refs are hand-written, so no method would be generated", t.Kind, p.Action, t.Kind)
+				}
+			}
 			continue
 		}
 		name := RefName(t.Kind)
@@ -165,6 +170,11 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 		}
 		for _, p := range t.Permissions {
 			for _, set := range p.DimensionSets {
+				for _, key := range set.Keys {
+					if paramType(r, key) != "string" {
+						return nil, fmt.Errorf("%s:%s dimension set %s uses %q, which the ref already fills in from its constructor", t.Kind, p.Action, set.Method, key)
+					}
+				}
 				renderDimensionSet(&b, name, ScopeConstantName(t.ScopeFor(p)), match, set)
 			}
 		}
