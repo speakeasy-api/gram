@@ -41,6 +41,8 @@ export type AIIntegrationConfigForm = {
   setBillingMode: Dispatch<SetStateAction<string>>;
   isConfigured: boolean;
   hasSavedKey: boolean;
+  // The saved (not the edited) delegated admin; listing org units needs it.
+  hasSavedDelegatedUser: boolean;
   isMutating: boolean;
   canSave: boolean;
   save: () => void;
@@ -109,6 +111,7 @@ export function useAIIntegrationConfigForm(
 
   const isConfigured = Boolean(data?.id);
   const hasSavedKey = Boolean(data?.hasApiKey);
+  const hasSavedDelegatedUser = Boolean(data?.delegatedUser);
   const awaitingOrgUnit = Boolean(
     provider.selectsOrgUnit && isConfigured && !data?.orgUnitId,
   );
@@ -231,6 +234,7 @@ export function useAIIntegrationConfigForm(
     setBillingMode,
     isConfigured,
     hasSavedKey,
+    hasSavedDelegatedUser,
     isMutating,
     canSave,
     save,

@@ -9,6 +9,7 @@ import type { AIIntegrationConfigForm } from "./use-ai-integration-config-form";
 
 const query = vi.hoisted(() => ({
   enabled: undefined as boolean | undefined,
+  throwOnError: undefined as boolean | undefined,
   result: {
     data: undefined as
       | { orgUnits: Array<{ id: string; path: string; name: string }> }
@@ -23,9 +24,10 @@ vi.mock("@gram/client/react-query/aiIntegrationOrgUnits", () => ({
   useAiIntegrationOrgUnits: (
     _request: unknown,
     _security: unknown,
-    options: { enabled: boolean },
+    options: { enabled: boolean; throwOnError: boolean },
   ) => {
     query.enabled = options.enabled;
+    query.throwOnError = options.throwOnError;
     return query.result;
   },
 }));
@@ -56,6 +58,7 @@ function stubForm(
     setBillingMode: noop,
     isConfigured: false,
     hasSavedKey: false,
+    hasSavedDelegatedUser: false,
     isMutating: false,
     canSave: false,
     save: noop,
@@ -67,6 +70,7 @@ function stubForm(
 
 beforeEach(() => {
   query.enabled = undefined;
+  query.throwOnError = undefined;
   query.result = {
     data: undefined,
     isLoading: false,
@@ -113,6 +117,7 @@ it("lists units once credentials are saved and the panel is open", () => {
       provider={gemini}
       form={stubForm({
         hasSavedKey: true,
+        hasSavedDelegatedUser: true,
         isConfigured: true,
         awaitingOrgUnit: true,
       })}
@@ -120,6 +125,8 @@ it("lists units once credentials are saved and the panel is open", () => {
     />,
   );
   expect(query.enabled).toBe(true);
+  // Errors render inline; the default would throw to the page's error boundary.
+  expect(query.throwOnError).toBe(false);
   expect(screen.getByText("Organizational unit to export")).toBeTruthy();
   expect(screen.getByText(/Syncing starts once a unit is saved/)).toBeTruthy();
 });
@@ -136,7 +143,11 @@ it("shows Google's refusal instead of an empty list", () => {
   render(
     <AIIntegrationWorkspaceFields
       provider={gemini}
-      form={stubForm({ hasSavedKey: true, isConfigured: true })}
+      form={stubForm({
+        hasSavedKey: true,
+        hasSavedDelegatedUser: true,
+        isConfigured: true,
+      })}
       active
     />,
   );
@@ -145,11 +156,34 @@ it("shows Google's refusal instead of an empty list", () => {
   );
 });
 
+it("waits for a saved delegated admin before listing units", () => {
+  // A key saved before the admin had its own field, or an admin typed but
+  // not yet saved: the server would refuse the list.
+  render(
+    <AIIntegrationWorkspaceFields
+      provider={gemini}
+      form={stubForm({
+        hasSavedKey: true,
+        isConfigured: true,
+        delegatedUser: "vault-export@example.com",
+      })}
+      active
+    />,
+  );
+  expect(query.enabled).toBe(false);
+  expect(screen.queryByText("Organizational unit to export")).toBeNull();
+  expect(screen.getByLabelText("Delegated admin email")).toBeTruthy();
+});
+
 it("does not fetch units while the panel is closed", () => {
   render(
     <AIIntegrationWorkspaceFields
       provider={gemini}
-      form={stubForm({ hasSavedKey: true, isConfigured: true })}
+      form={stubForm({
+        hasSavedKey: true,
+        hasSavedDelegatedUser: true,
+        isConfigured: true,
+      })}
       active={false}
     />,
   );

@@ -17,7 +17,8 @@ import type { AIIntegrationConfigForm } from "./use-ai-integration-config-form";
 
 // Google Workspace fields for providers that act as a delegated admin and
 // export one organizational unit (gemini_compliance). The unit list needs the
-// saved key and admin, so it appears after the first save.
+// saved key and admin, so it appears after the first save. Configs saved before
+// the admin had its own field have neither until they are saved again.
 export function AIIntegrationWorkspaceFields({
   provider,
   form,
@@ -29,12 +30,15 @@ export function AIIntegrationWorkspaceFields({
   // fetched while it is.
   active: boolean;
 }): JSX.Element | null {
-  const showsOrgUnits = Boolean(provider.selectsOrgUnit && form.hasSavedKey);
+  const showsOrgUnits = Boolean(
+    provider.selectsOrgUnit && form.hasSavedKey && form.hasSavedDelegatedUser,
+  );
   const orgUnits = useAiIntegrationOrgUnits(
     { provider: provider.provider },
     undefined,
-    // A refusal names the delegation or privilege to fix; retrying won't.
-    { enabled: active && showsOrgUnits, retry: false },
+    // A refusal names the delegation or privilege to fix, so show it below
+    // rather than throwing to the page's error boundary; retrying won't help.
+    { enabled: active && showsOrgUnits, retry: false, throwOnError: false },
   );
   if (!provider.delegatedUser && !provider.selectsOrgUnit) return null;
 

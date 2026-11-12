@@ -46,6 +46,7 @@ function stubForm(
     setBillingMode: noop,
     isConfigured: false,
     hasSavedKey: false,
+    hasSavedDelegatedUser: false,
     isMutating: false,
     canSave: true,
     save: noop,
