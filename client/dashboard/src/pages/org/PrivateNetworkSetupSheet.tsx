@@ -16,7 +16,10 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { NetworkIngressCredentialsFields } from "./NetworkIngressCredentialsFields";
+import {
+  NetworkIngressCredentialsFields,
+  TailscaleTrustCredentialsLink,
+} from "./NetworkIngressCredentialsFields";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
@@ -212,6 +215,8 @@ export function PrivateNetworkSetupSheet({
           <div className="space-y-2">
             <Text variant="subheading">3. Create a Tailscale OAuth client</Text>
             <Text small muted>
+              In the Tailscale admin console, open{" "}
+              <TailscaleTrustCredentialsLink /> and create an OAuth client.
               Grant Auth Keys, Devices Core, and Services write scopes, then
               apply the <code>tag:speakeasy</code> tag. Speakeasy uses the OAuth
               client only to register its gateway nodes and define the service.
