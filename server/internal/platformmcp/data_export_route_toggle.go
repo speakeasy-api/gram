@@ -41,22 +41,22 @@ const (
 )
 
 var (
-	ErrDataExportToggleInvalid  = errors.New("invalid data export pause or resume request")
-	ErrDataExportToggleMissing  = errors.New("data export route not found")
+	ErrDataExportRequestInvalid = errors.New("invalid data export request")
+	ErrDataExportRouteNotFound  = errors.New("data export route not found")
 	ErrDataExportToggleRefused  = errors.New("data export route cannot be resumed")
 	ErrDataExportToggleConflict = errors.New("data export pause or resume idempotency conflict")
 )
 
-// DataExportToggleError is safe to map into a tool refusal: its message names
+// DataExportRefusalError is safe to map into a tool refusal: its message names
 // what the caller can do next and never carries database detail.
-type DataExportToggleError struct {
+type DataExportRefusalError struct {
 	Code    string
 	Message string
 	Cause   error
 }
 
-func (e *DataExportToggleError) Error() string { return e.Message }
-func (e *DataExportToggleError) Unwrap() error { return e.Cause }
+func (e *DataExportRefusalError) Error() string { return e.Message }
+func (e *DataExportRefusalError) Unwrap() error { return e.Cause }
 
 type ToggleDataExportRouteInput struct {
 	ProjectID      string `json:"project_id" jsonschema:"project ID that owns the route, from list_data_exports"`
@@ -137,7 +137,7 @@ type DataExportRouteToggleService struct {
 
 func NewDataExportRouteToggleService(logger *slog.Logger, db *pgxpool.Pool, core *dataexports.RouteEnabledCore, admin Authorizer, changes OperationBudget) (*DataExportRouteToggleService, error) {
 	if logger == nil || db == nil || core == nil || admin == nil || !changes.valid() {
-		return nil, ErrDataExportToggleInvalid
+		return nil, ErrDataExportRequestInvalid
 	}
 	return &DataExportRouteToggleService{logger: logger, db: db, queries: platformrepo.New(db), core: core, admin: admin, changes: changes, now: time.Now}, nil
 }
@@ -169,7 +169,7 @@ func (s *DataExportRouteToggleService) Resume(ctx context.Context, principal Pri
 func validateResumeExpectation(input ResumeDataExportRouteInput) (*dataexports.RouteExpectation, error) {
 	dataSource, err := dataexports.NormalizeDataSource(strings.TrimSpace(input.ExpectedDataSource))
 	if err != nil {
-		return nil, dataExportToggleInvalid("Provide expected_data_source exactly as the current data export list shows it for this route.")
+		return nil, dataExportInvalid("Provide expected_data_source exactly as the current data export list shows it for this route.")
 	}
 	// An empty value is what the list shows for a route with no destination.
 	// It is accepted so that route reaches the readable no_destination
@@ -178,7 +178,7 @@ func validateResumeExpectation(input ResumeDataExportRouteInput) (*dataexports.R
 	if trimmed := strings.TrimSpace(input.ExpectedDestinationID); trimmed != "" {
 		parsed, err := uuid.Parse(trimmed)
 		if err != nil {
-			return nil, dataExportToggleInvalid("Provide expected_destination_id exactly as the current data export list shows it for this route.")
+			return nil, dataExportInvalid("Provide expected_destination_id exactly as the current data export list shows it for this route.")
 		}
 		destination = uuid.NullUUID{UUID: parsed, Valid: true}
 	}
@@ -198,13 +198,13 @@ func (s *DataExportRouteToggleService) boundaryError(ctx context.Context, operat
 	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
 		return err
 	}
-	if refusal, ok := errors.AsType[*DataExportToggleError](err); ok && refusal.Code != unavailableCode {
+	if refusal, ok := errors.AsType[*DataExportRefusalError](err); ok && refusal.Code != unavailableCode {
 		return err
 	}
 	// The refusal's own message is the generic text written for the caller,
 	// so the log records the cause it wraps — the driver or SQL error an
 	// operator needs — and only the refusal goes back to the caller.
-	refusal, ok := errors.AsType[*DataExportToggleError](err)
+	refusal, ok := errors.AsType[*DataExportRefusalError](err)
 	if !ok {
 		refusal = newDataExportToggleUnavailable(err)
 	}
@@ -243,16 +243,16 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 		return ToggleDataExportRouteOutput{}, err
 	}
 	if principal.OrganizationID == "" || principal.UserID == "" {
-		return ToggleDataExportRouteOutput{}, dataExportToggleInvalid("The request is missing its caller identity.")
+		return ToggleDataExportRouteOutput{}, dataExportInvalid("The request is missing its caller identity.")
 	}
 	// Authorized before the project or route is looked up, so a caller without
 	// org:admin gets the same answer for a real route and an invented one.
 	if err := s.admin.RequireLiveOrgAdmin(ctx, principal); err != nil {
-		return ToggleDataExportRouteOutput{}, dataExportToggleAdminError(err)
+		return ToggleDataExportRouteOutput{}, dataExportAdminError(err, dataExportToggleUnavailable)
 	}
 	row, err := s.queries.ResolvePlatformMCPProjectByID(ctx, platformrepo.ResolvePlatformMCPProjectByIDParams{OrganizationID: principal.OrganizationID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ToggleDataExportRouteOutput{}, dataExportToggleMissing()
+		return ToggleDataExportRouteOutput{}, dataExportRouteMissing()
 	}
 	if err != nil {
 		return ToggleDataExportRouteOutput{}, dataExportToggleUnavailable(fmt.Errorf("resolve data export route project: %w", err))
@@ -266,7 +266,7 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 	}
 	payload, err := json.Marshal(request)
 	if err != nil {
-		return ToggleDataExportRouteOutput{}, dataExportToggleInvalid("The request could not be normalized.")
+		return ToggleDataExportRouteOutput{}, dataExportInvalid("The request could not be normalized.")
 	}
 	digest := sha256.Sum256(append([]byte("platform-mcp-data-export-toggle-v1\x00"), payload...))
 	inputHash := hex.EncodeToString(digest[:])
@@ -276,7 +276,7 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 	charge := func(ctx context.Context) error {
 		if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
 			if errors.Is(err, ErrOperationRateLimited) {
-				return &DataExportToggleError{Code: "rate_limited", Message: "Pausing or resuming data exports was asked for too often just now. Try again shortly.", Cause: err}
+				return &DataExportRefusalError{Code: "rate_limited", Message: "Pausing or resuming data exports was asked for too often just now. Try again shortly.", Cause: err}
 			}
 			return dataExportToggleUnavailable(err)
 		}
@@ -285,9 +285,9 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 	receipt, err := executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[dataExportToggleReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
 		IdempotencyKey: key, InputHash: inputHash, Label: "data export " + operation,
-		Invalid: func(error) error { return dataExportToggleInvalid("The request is invalid.") },
+		Invalid: func(error) error { return dataExportInvalid("The request is invalid.") },
 		Conflict: func(message string) error {
-			return &DataExportToggleError{Code: "conflict", Message: message, Cause: ErrDataExportToggleConflict}
+			return &DataExportRefusalError{Code: "conflict", Message: message, Cause: ErrDataExportToggleConflict}
 		},
 		Unavailable:    dataExportToggleUnavailable,
 		ValidateReplay: validDataExportToggleReceipt,
@@ -391,19 +391,19 @@ func (s *DataExportRouteToggleService) readRoute(ctx context.Context, principal 
 
 func validateDataExportToggle(input ToggleDataExportRouteInput) (uuid.UUID, uuid.UUID, string, error) {
 	if !input.Confirmed {
-		return uuid.Nil, uuid.Nil, "", dataExportToggleInvalid("Confirm the exact project and route with the user before pausing or resuming it.")
+		return uuid.Nil, uuid.Nil, "", dataExportInvalid("Confirm the exact project and route with the user before pausing or resuming it.")
 	}
 	key := strings.TrimSpace(input.IdempotencyKey)
 	if key == "" || len(key) > 128 {
-		return uuid.Nil, uuid.Nil, "", dataExportToggleInvalid("Provide a stable idempotency key of at most 128 characters so retrying this exact change is safe.")
+		return uuid.Nil, uuid.Nil, "", dataExportInvalid("Provide a stable idempotency key of at most 128 characters so retrying this exact change is safe.")
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
 	if err != nil {
-		return uuid.Nil, uuid.Nil, "", dataExportToggleInvalid("Provide the explicit project ID that owns the route.")
+		return uuid.Nil, uuid.Nil, "", dataExportInvalid("Provide the explicit project ID that owns the route.")
 	}
 	routeID, err := uuid.Parse(strings.TrimSpace(input.RouteID))
 	if err != nil {
-		return uuid.Nil, uuid.Nil, "", dataExportToggleInvalid("Provide the exact route ID from the current data export list.")
+		return uuid.Nil, uuid.Nil, "", dataExportInvalid("Provide the exact route ID from the current data export list.")
 	}
 	return projectID, routeID, key, nil
 }
@@ -413,15 +413,15 @@ func classifyDataExportToggleError(err error) error {
 	case errors.Is(err, dataexports.ErrRouteChanged):
 		return dataExportRouteChanged(err)
 	case errors.Is(err, dataexports.ErrRouteNotFound):
-		return dataExportToggleMissing()
+		return dataExportRouteMissing()
 	case errors.Is(err, dataexports.ErrRouteDestinationRequired):
-		return &DataExportToggleError{
+		return &DataExportRefusalError{
 			Code:    "no_destination",
 			Message: "This route has no destination, so it has nowhere to send data and cannot be resumed. Nothing was changed. Choose a destination for the route in the dashboard first.",
 			Cause:   errors.Join(ErrDataExportToggleRefused, err),
 		}
 	case errors.Is(err, dataexports.ErrRouteDestinationInactive):
-		return &DataExportToggleError{
+		return &DataExportRefusalError{
 			Code:    "destination_deleted",
 			Message: "This route's destination has been deleted, so it has nowhere to send data and cannot be resumed. Nothing was changed. Point the route at an active destination in the dashboard first.",
 			Cause:   errors.Join(ErrDataExportToggleRefused, err),
@@ -430,7 +430,7 @@ func classifyDataExportToggleError(err error) error {
 		// The cause names the failing field but is never put in the message:
 		// the stored endpoint and headers are the administrator's
 		// configuration, and headers are secrets.
-		return &DataExportToggleError{
+		return &DataExportRefusalError{
 			Code:    "destination_invalid",
 			Message: "This route's destination has a stored configuration that can no longer be used, so the route cannot be resumed. Nothing was changed. Open the destination in the dashboard and save its endpoint, sensitive-data setting, and headers again.",
 			Cause:   errors.Join(ErrDataExportToggleRefused, err),
@@ -440,25 +440,27 @@ func classifyDataExportToggleError(err error) error {
 	}
 }
 
-func dataExportToggleAdminError(err error) error {
+// dataExportAdminError maps a failed org admin check to a permission refusal,
+// or to the calling tool's own unavailable refusal.
+func dataExportAdminError(err error, unavailable func(error) error) error {
 	mapped := toolExposureAuthorizationError(err, authz.ScopeOrgAdmin)
 	if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); ok {
 		return mapped
 	}
-	return dataExportToggleUnavailable(err)
+	return unavailable(err)
 }
 
-func dataExportToggleInvalid(message string) error {
-	return &DataExportToggleError{Code: "invalid_request", Message: message, Cause: ErrDataExportToggleInvalid}
+func dataExportInvalid(message string) error {
+	return &DataExportRefusalError{Code: "invalid_request", Message: message, Cause: ErrDataExportRequestInvalid}
 }
 
-// dataExportToggleMissing is one message for a missing project and a missing
+// dataExportRouteMissing is one message for a missing project and a missing
 // route, so the refusal does not say which of the two ids was wrong.
-func dataExportToggleMissing() error {
-	return &DataExportToggleError{
+func dataExportRouteMissing() error {
+	return &DataExportRefusalError{
 		Code:    "not_found",
 		Message: "No data export route with that ID exists in that project. Read the current data exports and use a route ID and project ID from that list.",
-		Cause:   ErrDataExportToggleMissing,
+		Cause:   ErrDataExportRouteNotFound,
 	}
 }
 
@@ -468,8 +470,8 @@ func dataExportToggleUnavailable(cause error) error {
 	return newDataExportToggleUnavailable(cause)
 }
 
-func newDataExportToggleUnavailable(cause error) *DataExportToggleError {
-	return &DataExportToggleError{
+func newDataExportToggleUnavailable(cause error) *DataExportRefusalError {
+	return &DataExportRefusalError{
 		Code:    unavailableCode,
 		Message: "Pausing or resuming data exports is temporarily unavailable.",
 		Cause:   errors.Join(ErrUnavailable, cause),
@@ -498,7 +500,7 @@ func dataExportRouteChanged(err error) error {
 			what = "data source"
 		}
 	}
-	return &DataExportToggleError{
+	return &DataExportRefusalError{
 		Code:    "route_changed",
 		Message: "This route's " + what + " changed after it was read, so it was not resumed and nothing was changed. Read the current data exports again, show the user where the route now sends data, and resume only after they confirm that.",
 		Cause:   errors.Join(ErrDataExportToggleRefused, err),

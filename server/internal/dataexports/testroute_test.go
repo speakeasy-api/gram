@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
@@ -21,6 +22,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const testRouteSecret = "test-route-secret-value"
@@ -125,7 +129,7 @@ func TestTestRouteReportsUnreachableDestination(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "unreachable", result.Outcome)
 	require.Nil(t, result.StatusCode)
-	require.Equal(t, "Speakeasy could not reach the destination.", result.Message)
+	require.Equal(t, "Speakeasy could not reach the destination. Check the URL, and that the address accepts connections from the internet.", result.Message)
 
 	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
 	require.NoError(t, err)
@@ -232,4 +236,121 @@ func TestTestRouteIsRateLimitedPerRoute(t *testing.T) {
 	_, err := testRoute(ctx, ti, route.ID)
 	requireOopsCode(t, err, oops.CodeRateLimitExceeded)
 	require.EqualValues(t, dataexports.RouteTestsPerMinute, received.Load())
+}
+
+// fixedTestSender answers every test event with status, counting the calls.
+// Before answering it runs onSend, if set.
+type fixedTestSender struct {
+	status int
+	sent   atomic.Int64
+	onSend func()
+}
+
+func (s *fixedTestSender) SendConnectionLogTest(context.Context, dataexports.TestDestination) (int, error) {
+	s.sent.Add(1)
+	if s.onSend != nil {
+		s.onSend()
+	}
+	return s.status, nil
+}
+
+func routeTestParams(t *testing.T, ctx context.Context, routeID string) dataexports.SendRouteTestParams {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	return dataexports.SendRouteTestParams{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		RouteID:          uuid.MustParse(routeID),
+		Expect:           nil,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: nil,
+	}
+}
+
+func routeTestLimits(t *testing.T, perRoute, perOrganization int) dataexports.RouteTestLimits {
+	t.Helper()
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	store := ratelimit.NewRedisStore(redisClient)
+	return dataexports.RouteTestLimits{
+		Route:        ratelimit.New(store, dataexports.RouteTestLimitName, ratelimit.PerMinute(perRoute)),
+		Organization: ratelimit.New(store, dataexports.RouteTestOrganizationLimitName+":"+uuid.NewString(), ratelimit.PerMinute(perOrganization)),
+	}
+}
+
+func TestTestRouteIsRateLimitedPerOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	first := createTestableRoute(t, ctx, ti, "https://collector.example.com", dataexports.DataSourceMCPConnectionLogs)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	otherSlug := "data-exports-other-" + uuid.NewString()[:8]
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           otherSlug,
+		Slug:           otherSlug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	otherAuth := *authCtx
+	otherAuth.ProjectID = &otherProject.ID
+	otherAuth.ProjectSlug = &otherSlug
+	otherCtx := contextvalues.SetAuthContext(ctx, &otherAuth)
+	second := createTestableRoute(t, otherCtx, ti, "https://collector.example.com", dataexports.DataSourceMCPConnectionLogs)
+	sender := &fixedTestSender{status: http.StatusOK}
+	core := dataexports.NewRouteTestCore(testenv.NewLogger(t), ti.conn, audit.NewLogger(), ti.enc, sender, routeTestLimits(t, dataexports.RouteTestsPerMinute, 2))
+	require.NotNil(t, core)
+
+	_, err = core.SendTest(ctx, routeTestParams(t, ctx, first.ID))
+	require.NoError(t, err)
+	_, err = core.SendTest(otherCtx, routeTestParams(t, otherCtx, second.ID))
+	require.NoError(t, err)
+	// The second route, in another project, still has its own allowance, but the organization does not.
+	_, err = core.SendTest(otherCtx, routeTestParams(t, otherCtx, second.ID))
+	require.ErrorIs(t, err, dataexports.ErrRouteTestRateLimited)
+	require.EqualValues(t, 2, sender.sent.Load())
+}
+
+func TestTestRouteFailsClosedOnALimiterError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, received := testRouteDestination(t, http.StatusOK)
+	route := createTestableRoute(t, ctx, ti, server.URL, dataexports.DataSourceMCPConnectionLogs)
+	sender := &fixedTestSender{status: http.StatusOK}
+	limits := routeTestLimits(t, dataexports.RouteTestsPerMinute, dataexports.RouteTestsPerOrganizationPerMinute)
+	// An unusable rate makes Allow return an error, as a Redis outage does.
+	limits.Organization = ratelimit.New(ratelimit.NewRedisStore(nil), dataexports.RouteTestOrganizationLimitName, ratelimit.PerMinute(0))
+	core := dataexports.NewRouteTestCore(testenv.NewLogger(t), ti.conn, audit.NewLogger(), ti.enc, sender, limits)
+	require.NotNil(t, core)
+
+	_, err := core.SendTest(ctx, routeTestParams(t, ctx, route.ID))
+	require.ErrorIs(t, err, dataexports.ErrRouteTestUnavailable)
+	require.Zero(t, sender.sent.Load())
+	require.Zero(t, received.Load())
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func TestTestRouteReturnsTheOutcomeWhenTheAuditFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	route := createTestableRoute(t, ctx, ti, "https://collector.example.com", dataexports.DataSourceMCPConnectionLogs)
+	pool, err := pgxpool.New(ctx, ti.conn.Config().ConnString())
+	require.NoError(t, err)
+	// Closing the pool mid-send makes the audit insert after the send fail.
+	sender := &fixedTestSender{status: http.StatusAccepted, onSend: pool.Close}
+	core := dataexports.NewRouteTestCore(testenv.NewLogger(t), pool, audit.NewLogger(), ti.enc, sender, routeTestLimits(t, dataexports.RouteTestsPerMinute, dataexports.RouteTestsPerOrganizationPerMinute))
+	require.NotNil(t, core)
+
+	result, err := core.SendTest(ctx, routeTestParams(t, ctx, route.ID))
+	require.NoError(t, err)
+	require.Equal(t, dataexports.TestOutcomeAccepted, result.Outcome)
+	require.Equal(t, http.StatusAccepted, result.StatusCode)
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
+	require.NoError(t, err)
+	require.Zero(t, count)
 }

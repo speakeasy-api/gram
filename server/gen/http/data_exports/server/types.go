@@ -171,7 +171,8 @@ type UpdateRouteResponseBody struct {
 // endpoint HTTP response body.
 type TestRouteResponseBody struct {
 	// accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no
-	// answer, such as a timeout or refused connection. error: any other answer.
+	// answer, such as a timeout or refused connection, or an address Speakeasy may
+	// not send to. error: any other answer.
 	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
 	// HTTP status the destination answered with. Omitted when it did not answer.
 	StatusCode *int `form:"status_code,omitempty" json:"status_code,omitempty" xml:"status_code,omitempty"`

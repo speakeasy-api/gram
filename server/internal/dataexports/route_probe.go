@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -21,8 +23,16 @@ import (
 const (
 	// RouteTestLimitName namespaces the per-route test allowance.
 	RouteTestLimitName = "data-export-route-test"
+
 	// RouteTestsPerMinute is how many test events one route may send a minute.
 	RouteTestsPerMinute = 5
+
+	// RouteTestOrganizationLimitName namespaces the per-organization test allowance.
+	RouteTestOrganizationLimitName = "data-export-route-test-organization"
+
+	// RouteTestsPerOrganizationPerMinute bounds an organization's tests across
+	// all its routes and projects, so re-creating routes cannot multiply sends.
+	RouteTestsPerOrganizationPerMinute = 20
 
 	// routeTestTimeout bounds the whole send, on top of the HTTP client's own timeout.
 	routeTestTimeout = 10 * time.Second
@@ -47,9 +57,21 @@ var (
 	// ErrRouteTestUnsupported means the route's data source has no test event.
 	ErrRouteTestUnsupported = errors.New("test events are only available for MCP connection logs exports")
 
-	// ErrRouteTestRateLimited means the route sent its allowance of test events.
-	ErrRouteTestRateLimited = errors.New("too many test events for this data export route")
+	// ErrRouteTestRateLimited means the route or its organization sent its allowance of test events.
+	ErrRouteTestRateLimited = errors.New("too many test events were sent just now")
+
+	// ErrRouteTestUnavailable means the rate limiter could not be checked, so nothing was sent.
+	ErrRouteTestUnavailable = errors.New("test events cannot be sent right now")
 )
+
+// RouteTestLimits bounds test events. A test is sent only when both allow it.
+type RouteTestLimits struct {
+	// Route is keyed on the route ID.
+	Route *ratelimit.Limiter
+
+	// Organization is keyed on the organization ID.
+	Organization *ratelimit.Limiter
+}
 
 // TestDestination is where a test event goes: one route's destination with its headers decrypted.
 type TestDestination struct {
@@ -70,20 +92,21 @@ type TestEventSender interface {
 // RouteTestCore sends a test event for one route. The dashboard and the
 // Platform MCP share it, so they share its checks, rate limit and audit entry.
 type RouteTestCore struct {
+	logger     *slog.Logger
 	db         *pgxpool.Pool
 	audit      *audit.Logger
 	encryption *encryption.Client
 	sender     TestEventSender
-	limiter    *ratelimit.Limiter
+	limits     RouteTestLimits
 }
 
 // NewRouteTestCore returns nil when a dependency is missing, so callers can
 // report the feature as unavailable instead of failing later.
-func NewRouteTestCore(db *pgxpool.Pool, auditLogger *audit.Logger, encryptionClient *encryption.Client, sender TestEventSender, limiter *ratelimit.Limiter) *RouteTestCore {
-	if db == nil || auditLogger == nil || encryptionClient == nil || sender == nil || limiter == nil {
+func NewRouteTestCore(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, encryptionClient *encryption.Client, sender TestEventSender, limits RouteTestLimits) *RouteTestCore {
+	if logger == nil || db == nil || auditLogger == nil || encryptionClient == nil || sender == nil || limits.Route == nil || limits.Organization == nil {
 		return nil
 	}
-	return &RouteTestCore{db: db, audit: auditLogger, encryption: encryptionClient, sender: sender, limiter: limiter}
+	return &RouteTestCore{logger: logger.With(attr.SlogComponent("dataexports.route_test")), db: db, audit: auditLogger, encryption: encryptionClient, sender: sender, limits: limits}
 }
 
 // SendRouteTestParams names one route exactly. Expect, when set, must match
@@ -142,11 +165,9 @@ func (c *RouteTestCore) SendTest(ctx context.Context, params SendRouteTestParams
 		return RouteTestResult{}, err
 	}
 
-	switch allowed, err := c.limiter.Allow(ctx, route.ID.String()); {
-	case err != nil:
-		// A limiter outage is not a throttle; the client timeout still bounds each send.
-	case !allowed.Allowed:
-		return RouteTestResult{}, ErrRouteTestRateLimited
+	logger := c.logger.With(attr.SlogOrganizationID(params.OrganizationID), attr.SlogProjectID(params.ProjectID.String()))
+	if err := c.allow(ctx, logger, params.OrganizationID, route.ID); err != nil {
+		return RouteTestResult{}, err
 	}
 
 	sendCtx, cancel := context.WithTimeout(ctx, routeTestTimeout)
@@ -165,13 +186,13 @@ func (c *RouteTestCore) SendTest(ctx context.Context, params SendRouteTestParams
 	case err != nil:
 		return RouteTestResult{}, fmt.Errorf("send data export test event: %w", err)
 	default:
-		outcome = TestOutcomeForStatus(statusCode)
+		outcome = testOutcomeForStatus(statusCode)
 	}
 
 	result := RouteTestResult{
 		Outcome:       outcome,
 		StatusCode:    statusCode,
-		Message:       TestOutcomeMessage(outcome, statusCode),
+		Message:       testOutcomeMessage(outcome, statusCode),
 		DataSource:    route.DataSource,
 		DestinationID: destination.ID,
 	}
@@ -187,13 +208,36 @@ func (c *RouteTestCore) SendTest(ctx context.Context, params SendRouteTestParams
 		Outcome:          string(outcome),
 		StatusCode:       statusCode,
 	}); err != nil {
-		return RouteTestResult{}, fmt.Errorf("audit data export route test: %w", err)
+		// The event was already sent, so the caller still gets its outcome.
+		logger.ErrorContext(ctx, "audit data export route test", attr.SlogError(err))
 	}
 	return result, nil
 }
 
-// TestOutcomeForStatus maps the destination's HTTP status to an outcome.
-func TestOutcomeForStatus(statusCode int) TestOutcome {
+// allow spends one test from the route's and the organization's allowances.
+// It fails closed: when the limiter cannot be checked, nothing is sent.
+func (c *RouteTestCore) allow(ctx context.Context, logger *slog.Logger, organizationID string, routeID uuid.UUID) error {
+	for _, check := range []struct {
+		limiter *ratelimit.Limiter
+		key     string
+	}{
+		{limiter: c.limits.Route, key: routeID.String()},
+		{limiter: c.limits.Organization, key: organizationID},
+	} {
+		result, err := check.limiter.Allow(ctx, check.key)
+		if err != nil {
+			logger.ErrorContext(ctx, "check data export route test rate limit", attr.SlogError(err))
+			return ErrRouteTestUnavailable
+		}
+		if !result.Allowed {
+			return ErrRouteTestRateLimited
+		}
+	}
+	return nil
+}
+
+// testOutcomeForStatus maps the destination's HTTP status to an outcome.
+func testOutcomeForStatus(statusCode int) TestOutcome {
 	switch {
 	case statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices:
 		return TestOutcomeAccepted
@@ -206,8 +250,8 @@ func TestOutcomeForStatus(statusCode int) TestOutcome {
 	}
 }
 
-// TestOutcomeMessage is the plain-language result shown to the admin.
-func TestOutcomeMessage(outcome TestOutcome, statusCode int) string {
+// testOutcomeMessage is the plain-language result shown to the admin.
+func testOutcomeMessage(outcome TestOutcome, statusCode int) string {
 	switch outcome {
 	case TestOutcomeAccepted:
 		return "The destination accepted the test event."
@@ -216,9 +260,9 @@ func TestOutcomeMessage(outcome TestOutcome, statusCode int) string {
 	case TestOutcomeNotFound:
 		return "No logs endpoint at this address. Check the URL; Speakeasy adds /v1/logs."
 	case TestOutcomeUnreachable:
-		return "Speakeasy could not reach the destination."
+		return "Speakeasy could not reach the destination. Check the URL, and that the address accepts connections from the internet."
 	case TestOutcomeError:
-		return fmt.Sprintf("The destination returned an error (HTTP %d).", statusCode)
+		fallthrough
 	default:
 		return fmt.Sprintf("The destination returned an error (HTTP %d).", statusCode)
 	}

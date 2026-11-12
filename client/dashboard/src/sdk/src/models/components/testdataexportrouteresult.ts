@@ -11,7 +11,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection. error: any other answer.
+ * accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection, or an address Speakeasy may not send to. error: any other answer.
  */
 export const TestDataExportRouteResultOutcome = {
   Accepted: "accepted",
@@ -21,7 +21,7 @@ export const TestDataExportRouteResultOutcome = {
   Error: "error",
 } as const;
 /**
- * accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection. error: any other answer.
+ * accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection, or an address Speakeasy may not send to. error: any other answer.
  */
 export type TestDataExportRouteResultOutcome = OpenEnum<
   typeof TestDataExportRouteResultOutcome
@@ -36,7 +36,7 @@ export type TestDataExportRouteResult = {
    */
   message: string;
   /**
-   * accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection. error: any other answer.
+   * accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection, or an address Speakeasy may not send to. error: any other answer.
    */
   outcome: TestDataExportRouteResultOutcome;
   /**

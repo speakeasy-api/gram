@@ -68,11 +68,15 @@ func (s *DataExportTestEventService) Send(ctx context.Context, principal Princip
 	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
 		return SendDataExportTestEventOutput{}, err
 	}
-	if refusal, ok := errors.AsType[*DataExportToggleError](err); ok && refusal.Code != unavailableCode {
+	refusal, ok := errors.AsType[*DataExportRefusalError](err)
+	if ok && refusal.Code != unavailableCode {
 		return SendDataExportTestEventOutput{}, err
 	}
 	if s != nil && s.logger != nil {
 		s.logger.ErrorContext(ctx, "platform mcp data export test event failed", attr.SlogError(err))
+	}
+	if ok {
+		return SendDataExportTestEventOutput{}, err
 	}
 	return SendDataExportTestEventOutput{}, dataExportTestUnavailable(err)
 }
@@ -82,30 +86,30 @@ func (s *DataExportTestEventService) send(ctx context.Context, principal Princip
 		return SendDataExportTestEventOutput{}, errors.New("data export test event service is not composed")
 	}
 	if !input.Confirmed {
-		return SendDataExportTestEventOutput{}, dataExportTestInvalid("Confirm the exact project, route, and destination with the user before sending a test event to it.")
+		return SendDataExportTestEventOutput{}, dataExportInvalid("Confirm the exact project, route, and destination with the user before sending a test event to it.")
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
 	if err != nil {
-		return SendDataExportTestEventOutput{}, dataExportTestInvalid("Provide the explicit project ID that owns the route.")
+		return SendDataExportTestEventOutput{}, dataExportInvalid("Provide the explicit project ID that owns the route.")
 	}
 	routeID, err := uuid.Parse(strings.TrimSpace(input.RouteID))
 	if err != nil {
-		return SendDataExportTestEventOutput{}, dataExportTestInvalid("Provide the exact route ID from the current data export list.")
+		return SendDataExportTestEventOutput{}, dataExportInvalid("Provide the exact route ID from the current data export list.")
 	}
 	destinationID, err := uuid.Parse(strings.TrimSpace(input.ExpectedDestinationID))
 	if err != nil {
-		return SendDataExportTestEventOutput{}, dataExportTestInvalid("Provide expected_destination_id exactly as the current data export list shows it for this route.")
+		return SendDataExportTestEventOutput{}, dataExportInvalid("Provide expected_destination_id exactly as the current data export list shows it for this route.")
 	}
 	if principal.OrganizationID == "" || principal.UserID == "" {
-		return SendDataExportTestEventOutput{}, dataExportTestInvalid("The request is missing its caller identity.")
+		return SendDataExportTestEventOutput{}, dataExportInvalid("The request is missing its caller identity.")
 	}
 	// Authorized before the target is read, so a non-admin gets the same answer for any route.
 	if err := s.admin.RequireLiveOrgAdmin(ctx, principal); err != nil {
-		return SendDataExportTestEventOutput{}, dataExportToggleAdminError(err)
+		return SendDataExportTestEventOutput{}, dataExportAdminError(err, dataExportTestUnavailable)
 	}
 	project, err := s.queries.ResolvePlatformMCPProjectByID(ctx, platformrepo.ResolvePlatformMCPProjectByIDParams{OrganizationID: principal.OrganizationID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return SendDataExportTestEventOutput{}, dataExportTestMissing()
+		return SendDataExportTestEventOutput{}, dataExportRouteMissing()
 	}
 	if err != nil {
 		return SendDataExportTestEventOutput{}, fmt.Errorf("resolve data export test project: %w", err)
@@ -137,11 +141,11 @@ func (s *DataExportTestEventService) send(ctx context.Context, principal Princip
 
 func classifyDataExportTestError(err error) error {
 	refusal := func(code, message string) error {
-		return &DataExportToggleError{Code: code, Message: message, Cause: err}
+		return &DataExportRefusalError{Code: code, Message: message, Cause: err}
 	}
 	switch {
 	case errors.Is(err, dataexports.ErrRouteNotFound):
-		return dataExportTestMissing()
+		return dataExportRouteMissing()
 	case errors.Is(err, dataexports.ErrRouteTestUnsupported):
 		return refusal("unsupported_data_source", "Test events are only available for MCP connection logs exports. Nothing was sent.")
 	case errors.Is(err, dataexports.ErrRouteChanged):
@@ -153,27 +157,16 @@ func classifyDataExportTestError(err error) error {
 	case errors.Is(err, dataexports.ErrRouteDestinationInvalid):
 		return refusal("destination_invalid", "This route's destination has a stored configuration that can no longer be used, so nothing was sent. Open the destination in the dashboard and save it again.")
 	case errors.Is(err, dataexports.ErrRouteTestRateLimited):
-		return refusal("rate_limited", "This route sent too many test events just now. Try again in a minute.")
+		return refusal("rate_limited", "Too many test events were sent just now. Try again in a minute.")
+	case errors.Is(err, dataexports.ErrRouteTestUnavailable):
+		return &DataExportRefusalError{Code: unavailableCode, Message: "Speakeasy can't send test events right now. Try again shortly.", Cause: errors.Join(ErrUnavailable, err)}
 	default:
 		return err
 	}
 }
 
-func dataExportTestInvalid(message string) error {
-	return &DataExportToggleError{Code: "invalid_request", Message: message, Cause: ErrDataExportToggleInvalid}
-}
-
-// dataExportTestMissing is one message for a missing project and a missing route.
-func dataExportTestMissing() error {
-	return &DataExportToggleError{
-		Code:    "not_found",
-		Message: "No data export route with that ID exists in that project. Read the current data exports and use a route ID and project ID from that list.",
-		Cause:   ErrDataExportToggleMissing,
-	}
-}
-
 func dataExportTestUnavailable(cause error) error {
-	return &DataExportToggleError{
+	return &DataExportRefusalError{
 		Code:    unavailableCode,
 		Message: "Sending a data export test event is temporarily unavailable.",
 		Cause:   errors.Join(ErrUnavailable, cause),

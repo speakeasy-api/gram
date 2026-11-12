@@ -735,7 +735,9 @@ func (s *Service) TestRoute(ctx context.Context, payload *gen.TestRoutePayload) 
 	case errors.Is(err, ErrRouteDestinationInactive):
 		return nil, oops.E(oops.CodeInvalid, err, "the route's destination was deleted")
 	case errors.Is(err, ErrRouteTestRateLimited):
-		return nil, oops.E(oops.CodeRateLimitExceeded, err, "too many test events for this export, try again in a minute")
+		return nil, oops.E(oops.CodeRateLimitExceeded, err, "Too many test events were sent just now. Try again in a minute.")
+	case errors.Is(err, ErrRouteTestUnavailable):
+		return nil, oops.E(oops.CodeUnavailable, err, "Speakeasy can't send test events right now. Try again shortly.").LogError(ctx, logger)
 	default:
 		message := "send test event"
 		if invalid, ok := errors.AsType[*routeDestinationInvalidError](err); ok {

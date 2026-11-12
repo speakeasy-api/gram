@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
 	"github.com/stretchr/testify/require"
@@ -69,8 +70,12 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 	require.NoError(t, err)
 	sender := otelsink.NewTestSender(otelsvc.NewConnectionLogProbe(logger, testenv.NewMeterProvider(t), policy), "gram-server")
-	limiter := ratelimit.New(ratelimit.NewRedisStore(redisClient), dataexports.RouteTestLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerMinute))
-	routeTests := dataexports.NewRouteTestCore(conn, audit.NewLogger(), enc, sender, limiter)
+	store := ratelimit.NewRedisStore(redisClient)
+	// Every test shares one organization ID and one Redis, so each gets its own organization bucket.
+	routeTests := dataexports.NewRouteTestCore(logger, conn, audit.NewLogger(), enc, sender, dataexports.RouteTestLimits{
+		Route:        ratelimit.New(store, dataexports.RouteTestLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerMinute)),
+		Organization: ratelimit.New(store, dataexports.RouteTestOrganizationLimitName+":"+uuid.NewString(), ratelimit.PerMinute(dataexports.RouteTestsPerOrganizationPerMinute)),
+	})
 
 	service := dataexports.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc, routeTests)
 	return ctx, &testInstance{service: service, conn: conn, enc: enc}

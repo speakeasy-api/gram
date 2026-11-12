@@ -51,8 +51,11 @@ func newDataExportTestEventFixture(t *testing.T, ctx context.Context, database s
 	redisClient, err := platformMCPInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	sender := &recordingTestEventSender{status: status}
-	limiter := ratelimit.New(ratelimit.NewRedisStore(redisClient), dataexports.RouteTestLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerMinute))
-	core := dataexports.NewRouteTestCore(f.conn, audit.NewLogger(), testenv.NewEncryptionClient(t), sender, limiter)
+	store := ratelimit.NewRedisStore(redisClient)
+	core := dataexports.NewRouteTestCore(testenv.NewLogger(t), f.conn, audit.NewLogger(), testenv.NewEncryptionClient(t), sender, dataexports.RouteTestLimits{
+		Route:        ratelimit.New(store, dataexports.RouteTestLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerMinute)),
+		Organization: ratelimit.New(store, dataexports.RouteTestOrganizationLimitName+":"+uuid.NewString(), ratelimit.PerMinute(dataexports.RouteTestsPerOrganizationPerMinute)),
+	})
 	require.NotNil(t, core)
 	tests := NewDataExportTestEventService(testenv.NewLogger(t), f.conn, core, stubAuthorizer{err: nil})
 	require.NotNil(t, tests)
@@ -174,8 +177,28 @@ func TestSendDataExportTestEventIsRateLimitedPerRoute(t *testing.T) {
 		require.Equal(t, "accepted", output.Outcome)
 	}
 	_, err := f.tests.Send(ctx, f.principal, f.testInput(route.ID, f.destination))
-	requireDataExportTestCode(t, err, "rate_limited")
+	text := requireDataExportTestCode(t, err, "rate_limited")
+	require.Contains(t, text, "Too many test events were sent just now. Try again in a minute.")
 	require.Equal(t, dataexports.RouteTestsPerMinute, f.sender.count())
+}
+
+func TestSendDataExportTestEventRefusesWhenTheLimitCannotBeChecked(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	f := newDataExportTestEventFixture(t, ctx, "platform_mcp_data_export_test_event_limit_down", http.StatusAccepted)
+	route := f.createRoute(t, ctx, dataexports.DataSourceMCPConnectionLogs, true, uuid.NullUUID{UUID: f.destination, Valid: true})
+	// An unusable rate makes Allow return an error, as a Redis outage does.
+	broken := ratelimit.New(ratelimit.NewRedisStore(nil), dataexports.RouteTestLimitName, ratelimit.PerMinute(0))
+	core := dataexports.NewRouteTestCore(testenv.NewLogger(t), f.conn, audit.NewLogger(), testenv.NewEncryptionClient(t), f.sender, dataexports.RouteTestLimits{Route: broken, Organization: broken})
+	require.NotNil(t, core)
+	service := NewDataExportTestEventService(testenv.NewLogger(t), f.conn, core, stubAuthorizer{err: nil})
+
+	_, err := service.Send(ctx, f.principal, f.testInput(route.ID, f.destination))
+	text := requireDataExportTestCode(t, err, unavailableCode)
+	require.Contains(t, text, "Speakeasy can't send test events right now. Try again shortly.")
+	require.Zero(t, f.sender.count())
+	require.Zero(t, auditCount(t, ctx, f.conn, audit.ActionDataExportRouteTest))
 }
 
 func TestDataExportTestEventUnavailableManifestMatchesLive(t *testing.T) {

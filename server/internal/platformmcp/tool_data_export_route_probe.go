@@ -38,8 +38,8 @@ func registerDataExportTestEventTool(reg *Registrar, service *DataExportTestEven
 		Description: "Send one test event straight to the destination of an MCP connection logs export and report what it answered, to check the endpoint and API key. " +
 			"Supply the project ID, the exact route ID and its destination_id from list_data_exports, and confirmed: true only after the user confirms the exact project, route, and destination. " +
 			"The event is marked as a test (event name speakeasy.mcp_connection.test, attribute speakeasy.mcp_connection.test=true) and carries no real connection, person, or server. " +
-			"Outcomes: accepted (2xx), refused (401 or 403: check the API key, and for Datadog that the endpoint matches the site), not_found (404: check the URL; Speakeasy adds /v1/logs), unreachable (timeout or no connection), error (any other answer). " +
-			"Show the user the returned message. Each route can send a few test events a minute. Nothing about the route or destination changes.",
+			"Outcomes: accepted (2xx), refused (401 or 403: check the API key, and for Datadog that the endpoint matches the site), not_found (404: check the URL; Speakeasy adds /v1/logs), unreachable (timeout, no connection, or an address Speakeasy may not send to), error (any other answer). " +
+			"Show the user the returned message. Each route, and each organization across all its routes, can send only a few test events a minute; past that the call is refused as rate_limited, and when Speakeasy cannot check that limit it is refused as unavailable and nothing is sent. Nothing about the route or destination changes.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: false, DestructiveHint: new(false), OpenWorldHint: new(true)},
 	}, meta, handler)
 }
@@ -48,11 +48,11 @@ func dataExportTestEventToolResult(err error) (*mcp.CallToolResult, bool) {
 	if refusal, ok := externalAuthorizationToolResult(err); ok {
 		return refusal, true
 	}
-	toggle, ok := errors.AsType[*DataExportToggleError](err)
+	refusal, ok := errors.AsType[*DataExportRefusalError](err)
 	if !ok {
 		return nil, false
 	}
-	payload, marshalErr := json.Marshal(dataExportToggleRefusal{Code: toggle.Code, Feature: dataExportTestFeature, Message: toggle.Message})
+	payload, marshalErr := json.Marshal(dataExportRefusal{Code: refusal.Code, Feature: dataExportTestFeature, Message: refusal.Message})
 	if marshalErr != nil {
 		return nil, false
 	}

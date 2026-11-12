@@ -122,7 +122,7 @@ type platformMCPConfig struct {
 	AccessRoles            access.RoleProvider
 	PluginPublisher        *plugins.Service
 	PluginManagement       *plugins.Service
-	// DataExportRouteTests is shared with the dashboard, so both spend one per-route allowance.
+	// DataExportRouteTests is shared with the dashboard, so both spend the same allowances.
 	DataExportRouteTests *dataexports.RouteTestCore
 	// DirectoryReview backs the directory review tools with the dashboard's
 	// access service, so they share its authorization, checks and audit.

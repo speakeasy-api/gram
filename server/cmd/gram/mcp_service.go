@@ -81,11 +81,14 @@ func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord]) m
 	return mcpconnectionattempts.WithExport(otelsink.New(publisher, gatewayRecordsServiceName))
 }
 
-// newDataExportRouteTests sends export test events with the server's outbound policy, one limit per route.
+// newDataExportRouteTests sends export test events with the server's outbound policy, limited per route and per organization.
 func newDataExportRouteTests(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, auditLogger *audit.Logger, encryptionClient *encryption.Client, policy *guardian.Policy, redisClient *redis.Client) *dataexports.RouteTestCore {
 	sender := otelsink.NewTestSender(otelsvc.NewConnectionLogProbe(logger, meterProvider, policy), gatewayRecordsServiceName)
-	limiter := ratelimit.New(ratelimit.NewRedisStore(redisClient), dataexports.RouteTestLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerMinute), ratelimit.WithMetrics(meterProvider))
-	return dataexports.NewRouteTestCore(db, auditLogger, encryptionClient, sender, limiter)
+	store := ratelimit.NewRedisStore(redisClient)
+	return dataexports.NewRouteTestCore(logger, db, auditLogger, encryptionClient, sender, dataexports.RouteTestLimits{
+		Route:        ratelimit.New(store, dataexports.RouteTestLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerMinute), ratelimit.WithMetrics(meterProvider)),
+		Organization: ratelimit.New(store, dataexports.RouteTestOrganizationLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerOrganizationPerMinute), ratelimit.WithMetrics(meterProvider)),
+	})
 }
 
 type mcpServiceDependencies struct {

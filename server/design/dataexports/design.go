@@ -358,7 +358,7 @@ var ListDataExportRoutesResult = Type("ListDataExportRoutesResult", func() {
 
 var TestDataExportRouteResult = Type("TestDataExportRouteResult", func() {
 	Description("What the destination answered to one test event. Header values and the response body are never returned.")
-	Attribute("outcome", String, "accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection. error: any other answer.", func() {
+	Attribute("outcome", String, "accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection, or an address Speakeasy may not send to. error: any other answer.", func() {
 		Enum("accepted", "refused", "not_found", "unreachable", "error")
 	})
 	Attribute("status_code", Int, "HTTP status the destination answered with. Omitted when it did not answer.")
