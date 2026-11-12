@@ -26,7 +26,7 @@ type SendDataExportTestEventInput struct {
 	ProjectID             string `json:"project_id" jsonschema:"project ID that owns the route, from list_data_exports"`
 	RouteID               string `json:"route_id" jsonschema:"exact route ID from list_data_exports"`
 	ExpectedDataSource    string `json:"expected_data_source" jsonschema:"the route's data_source exactly as list_data_exports returned it and the user confirmed"`
-	ExpectedDestinationID string `json:"expected_destination_id" jsonschema:"the route's destination_id exactly as list_data_exports returned it and the user confirmed"`
+	ExpectedDestinationID string `json:"expected_destination_id" jsonschema:"the route's destination_id exactly as list_data_exports returned it and the user confirmed; empty only when the list showed no destination"`
 	Confirmed             bool   `json:"confirmed" jsonschema:"true only after the user confirmed this exact project, route, data source, and destination"`
 }
 
@@ -45,7 +45,7 @@ type SendDataExportTestEventOutput struct {
 	StatusCode    int                             `json:"status_code,omitempty" jsonschema:"HTTP status of the signal that set the outcome; omitted when it did not answer"`
 	Message       string                          `json:"message" jsonschema:"what happened, in plain language, to show the user"`
 	Signals       []SendDataExportTestEventSignal `json:"signals" jsonschema:"one result for each signal the route's data source exports"`
-	TestEventID   string                          `json:"test_event_id" jsonschema:"the speakeasy.test_event.id every record of this test carries; the user can search the destination for it"`
+	TestEventID   string                          `json:"test_event_id" jsonschema:"the speakeasy.test_event.id this test's logs and traces carry; the user can search the destination for it. Metrics carry only speakeasy.test_event=true"`
 	ProjectID     string                          `json:"project_id"`
 	RouteID       string                          `json:"route_id"`
 	DataSource    string                          `json:"data_source"`
@@ -108,13 +108,9 @@ func (s *DataExportTestEventService) send(ctx context.Context, principal Princip
 	if err != nil {
 		return SendDataExportTestEventOutput{}, dataExportInvalid("Provide the exact route ID from the current data export list.")
 	}
-	dataSource, err := dataexports.NormalizeDataSource(strings.TrimSpace(input.ExpectedDataSource))
+	expect, err := validateRouteExpectation(input.ExpectedDataSource, input.ExpectedDestinationID)
 	if err != nil {
-		return SendDataExportTestEventOutput{}, dataExportInvalid("Provide expected_data_source exactly as the current data export list shows it for this route.")
-	}
-	destinationID, err := uuid.Parse(strings.TrimSpace(input.ExpectedDestinationID))
-	if err != nil {
-		return SendDataExportTestEventOutput{}, dataExportInvalid("Provide expected_destination_id exactly as the current data export list shows it for this route.")
+		return SendDataExportTestEventOutput{}, err
 	}
 	if principal.OrganizationID == "" || principal.UserID == "" {
 		return SendDataExportTestEventOutput{}, dataExportInvalid("The request is missing its caller identity.")
@@ -135,10 +131,7 @@ func (s *DataExportTestEventService) send(ctx context.Context, principal Princip
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      project.ID,
 		RouteID:        routeID,
-		Expect: &dataexports.RouteExpectation{
-			DataSource:        dataSource,
-			OtelDestinationID: uuid.NullUUID{UUID: destinationID, Valid: true},
-		},
+		Expect:           expect,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 		ActorDisplayName: nil,
 	})

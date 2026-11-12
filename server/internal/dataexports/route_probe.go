@@ -79,7 +79,7 @@ type TestDestination struct {
 	EndpointURL          string
 	Headers              map[string]string
 	IncludeSensitiveData bool
-	// TestEventID is shared by every record one test sends, across all its signals.
+	// TestEventID is carried by every log and span one test sends, across all its signals.
 	TestEventID string
 }
 

@@ -257,11 +257,12 @@ func TestRouteTester_ReportsUnreachableDestinations(t *testing.T) {
 		t.Cleanup(server.Close)
 		t.Cleanup(func() { close(release) })
 
-		ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
-		defer cancel()
-		results, err := newTestRouteTester(t, unsafeRouteTestPolicy(t)).SendTest(ctx, dataexports.DataSourceToolCallLogs, routeTestDestination(server.URL, false))
+		// The caller sets no deadline, so only the signal's own timeout ends the send.
+		started := time.Now()
+		results, err := newTestRouteTester(t, unsafeRouteTestPolicy(t)).SendTest(t.Context(), dataexports.DataSourceToolCallLogs, routeTestDestination(server.URL, false))
 		require.NoError(t, err)
 		require.Equal(t, unreachable, results)
+		require.GreaterOrEqual(t, time.Since(started), routeTestSignalTimeout)
 	})
 
 	t.Run("blocked by the outbound policy", func(t *testing.T) {

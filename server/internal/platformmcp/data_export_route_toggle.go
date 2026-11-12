@@ -155,7 +155,7 @@ func (s *DataExportRouteToggleService) Pause(ctx context.Context, principal Prin
 
 func (s *DataExportRouteToggleService) Resume(ctx context.Context, principal Principal, input ResumeDataExportRouteInput) (ToggleDataExportRouteOutput, error) {
 	common := ToggleDataExportRouteInput{ProjectID: input.ProjectID, RouteID: input.RouteID, IdempotencyKey: input.IdempotencyKey, Confirmed: input.Confirmed}
-	expect, err := validateResumeExpectation(input)
+	expect, err := validateRouteExpectation(input.ExpectedDataSource, input.ExpectedDestinationID)
 	if err != nil {
 		return ToggleDataExportRouteOutput{}, s.boundaryError(ctx, operationResumeDataExport, err)
 	}
@@ -163,11 +163,11 @@ func (s *DataExportRouteToggleService) Resume(ctx context.Context, principal Pri
 	return output, s.boundaryError(ctx, operationResumeDataExport, err)
 }
 
-// validateResumeExpectation requires the data source and destination the user
-// was shown. Both are required: a resume without them could not tell a route
-// that was repointed after it was read from the one that was confirmed.
-func validateResumeExpectation(input ResumeDataExportRouteInput) (*dataexports.RouteExpectation, error) {
-	dataSource, err := dataexports.NormalizeDataSource(strings.TrimSpace(input.ExpectedDataSource))
+// validateRouteExpectation requires the data source and destination the user
+// was shown. Both are required: without them a route that was repointed after
+// it was read could not be told from the one that was confirmed.
+func validateRouteExpectation(expectedDataSource, expectedDestinationID string) (*dataexports.RouteExpectation, error) {
+	dataSource, err := dataexports.NormalizeDataSource(strings.TrimSpace(expectedDataSource))
 	if err != nil {
 		return nil, dataExportInvalid("Provide expected_data_source exactly as the current data export list shows it for this route.")
 	}
@@ -175,7 +175,7 @@ func validateResumeExpectation(input ResumeDataExportRouteInput) (*dataexports.R
 	// It is accepted so that route reaches the readable no_destination
 	// refusal rather than a generic input error.
 	destination := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if trimmed := strings.TrimSpace(input.ExpectedDestinationID); trimmed != "" {
+	if trimmed := strings.TrimSpace(expectedDestinationID); trimmed != "" {
 		parsed, err := uuid.Parse(trimmed)
 		if err != nil {
 			return nil, dataExportInvalid("Provide expected_destination_id exactly as the current data export list shows it for this route.")

@@ -31490,6 +31490,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -133783,7 +133789,7 @@ components:
                     format: int64
                 test_event_id:
                     type: string
-                    description: The speakeasy.test_event.id every record of this test carries, to find them in the destination.
+                    description: The speakeasy.test_event.id this test's logs and traces carry, to find them in the destination. Metrics carry only speakeasy.test_event=true.
             description: What the destination answered to a route's test events. Header values and the response body are never returned.
             required:
                 - outcome

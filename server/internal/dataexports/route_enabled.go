@@ -178,10 +178,12 @@ func (c *RouteEnabledCore) SetEnabled(ctx context.Context, tx pgx.Tx, params Set
 
 // checkRouteDestination is the one place that decides whether a route may
 // point at a destination, shared by the dashboard's route create and update
-// and by RouteEnabledCore. An enabled route needs a destination; any named
-// destination must be live in the same project and hold a usable stored
-// configuration. The destination row is held FOR SHARE until tx ends, so a
-// concurrent destination delete cannot land between this check and the write.
+// and by RouteEnabledCore and RouteTestCore. An enabled route needs a
+// destination; any named destination must be live in the same project and hold
+// a usable stored configuration. Inside a transaction the destination row is
+// held FOR SHARE until it ends, so a concurrent destination delete cannot land
+// between this check and the write. RouteTestCore calls it without one and
+// writes nothing, so there the lock ends with the read.
 // It returns the decoded destination, zero when the route names none.
 func checkRouteDestination(
 	ctx context.Context,

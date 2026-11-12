@@ -180,8 +180,8 @@ type TestRouteResponseBody struct {
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
 	// One result for each signal the route's data source exports.
 	Signals []*TestDataExportRouteSignalResultResponseBody `form:"signals,omitempty" json:"signals,omitempty" xml:"signals,omitempty"`
-	// The speakeasy.test_event.id every record of this test carries, to find them
-	// in the destination.
+	// The speakeasy.test_event.id this test's logs and traces carry, to find them
+	// in the destination. Metrics carry only speakeasy.test_event=true.
 	TestEventID *string `form:"test_event_id,omitempty" json:"test_event_id,omitempty" xml:"test_event_id,omitempty"`
 }
 
@@ -1858,6 +1858,24 @@ type DeleteRouteGatewayErrorResponseBody struct {
 // service "testRoute" endpoint HTTP response body for the
 // "rate_limit_exceeded" error.
 type TestRouteRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// TestRouteUnavailableResponseBody is the type of the "dataExports" service
+// "testRoute" endpoint HTTP response body for the "unavailable" error.
+type TestRouteUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3726,6 +3744,21 @@ func NewTestRouteTestDataExportRouteResultOK(body *TestRouteResponseBody) *datae
 // NewTestRouteRateLimitExceeded builds a dataExports service testRoute
 // endpoint rate_limit_exceeded error.
 func NewTestRouteRateLimitExceeded(body *TestRouteRateLimitExceededResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewTestRouteUnavailable builds a dataExports service testRoute endpoint
+// unavailable error.
+func NewTestRouteUnavailable(body *TestRouteUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6335,6 +6368,30 @@ func ValidateDeleteRouteGatewayErrorResponseBody(body *DeleteRouteGatewayErrorRe
 // ValidateTestRouteRateLimitExceededResponseBody runs the validations defined
 // on testRoute_rate_limit_exceeded_response_body
 func ValidateTestRouteRateLimitExceededResponseBody(body *TestRouteRateLimitExceededResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTestRouteUnavailableResponseBody runs the validations defined on
+// testRoute_unavailable_response_body
+func ValidateTestRouteUnavailableResponseBody(body *TestRouteUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

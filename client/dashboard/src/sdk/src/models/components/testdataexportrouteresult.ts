@@ -52,7 +52,7 @@ export type TestDataExportRouteResult = {
    */
   statusCode?: number | undefined;
   /**
-   * The speakeasy.test_event.id every record of this test carries, to find them in the destination.
+   * The speakeasy.test_event.id this test's logs and traces carry, to find them in the destination. Metrics carry only speakeasy.test_event=true.
    */
   testEventId: string;
 };

@@ -727,13 +727,13 @@ func (s *Service) TestRoute(ctx context.Context, payload *gen.TestRoutePayload) 
 	switch {
 	case err == nil:
 	case errors.Is(err, ErrRouteNotFound):
-		return nil, oops.E(oops.CodeNotFound, err, "data export route not found")
+		return nil, oops.E(oops.CodeNotFound, err, "This export no longer exists. Reload the page.")
 	case errors.Is(err, ErrRouteTestUnsupported):
-		return nil, oops.E(oops.CodeInvalid, err, "this route's data source has no test event")
+		return nil, oops.E(oops.CodeInvalid, err, "This data source has no test event.")
 	case errors.Is(err, ErrRouteDestinationRequired):
-		return nil, oops.E(oops.CodeInvalid, err, "the route has no destination to test")
+		return nil, oops.E(oops.CodeInvalid, err, "This export has no destination. Choose one and save first.")
 	case errors.Is(err, ErrRouteDestinationInactive):
-		return nil, oops.E(oops.CodeInvalid, err, "the route's destination was deleted")
+		return nil, oops.E(oops.CodeInvalid, err, "This export's destination was deleted. Choose another and save first.")
 	case errors.Is(err, ErrRouteTestRateLimited):
 		return nil, oops.E(oops.CodeRateLimitExceeded, err, "Too many test events were sent just now. Try again in a minute.")
 	case errors.Is(err, ErrRouteTestUnavailable):

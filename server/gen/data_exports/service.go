@@ -246,8 +246,8 @@ type TestDataExportRouteResult struct {
 	Message string
 	// One result for each signal the route's data source exports.
 	Signals []*TestDataExportRouteSignalResult
-	// The speakeasy.test_event.id every record of this test carries, to find them
-	// in the destination.
+	// The speakeasy.test_event.id this test's logs and traces carry, to find them
+	// in the destination. Metrics carry only speakeasy.test_event=true.
 	TestEventID string
 }
 
@@ -382,4 +382,9 @@ func MakeGatewayError(err error) *goa.ServiceError {
 // MakeRateLimitExceeded builds a goa.ServiceError from an error.
 func MakeRateLimitExceeded(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "rate_limit_exceeded", false, false, false)
+}
+
+// MakeUnavailable builds a goa.ServiceError from an error.
+func MakeUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unavailable", false, false, true)
 }

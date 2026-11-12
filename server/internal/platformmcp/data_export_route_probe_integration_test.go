@@ -3,12 +3,15 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -143,6 +146,20 @@ func TestSendDataExportTestEventRefusesWithoutConfirmationOrAMatchingDestination
 	require.Zero(t, auditCount(t, ctx, f.conn, audit.ActionDataExportRouteTest))
 }
 
+func TestSendDataExportTestEventRefusesARouteWithNoDestination(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	f := newDataExportTestEventFixture(t, ctx, "platform_mcp_data_export_test_event_no_destination", http.StatusOK)
+	route := f.createRoute(t, ctx, dataexports.DataSourceMCPConnectionLogs, false, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+
+	input := f.testInput(route.ID, dataexports.DataSourceMCPConnectionLogs, uuid.Nil)
+	input.ExpectedDestinationID = ""
+	_, err := f.tests.Send(ctx, f.principal, input)
+	requireDataExportTestCode(t, err, "no_destination")
+	require.Zero(t, f.sender.count())
+}
+
 func TestSendDataExportTestEventReportsEverySignalForProductTelemetry(t *testing.T) {
 	t.Parallel()
 
@@ -227,8 +244,7 @@ func TestSendDataExportTestEventRefusesWhenTheLimitCannotBeChecked(t *testing.T)
 	ctx := t.Context()
 	f := newDataExportTestEventFixture(t, ctx, "platform_mcp_data_export_test_event_limit_down", http.StatusAccepted)
 	route := f.createRoute(t, ctx, dataexports.DataSourceMCPConnectionLogs, true, uuid.NullUUID{UUID: f.destination, Valid: true})
-	// An unusable rate makes Allow return an error, as a Redis outage does.
-	broken := ratelimit.New(ratelimit.NewRedisStore(nil), dataexports.RouteTestLimitName, ratelimit.PerMinute(0))
+	broken := ratelimit.New(ratelimit.NewRedisStore(unreachableRedis(t)), dataexports.RouteTestLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerMinute))
 	core := dataexports.NewRouteTestCore(testenv.NewLogger(t), f.conn, audit.NewLogger(), testenv.NewEncryptionClient(t), f.sender, dataexports.RouteTestLimits{Route: broken, Organization: broken})
 	require.NotNil(t, core)
 	service := NewDataExportTestEventService(testenv.NewLogger(t), f.conn, core, stubAuthorizer{err: nil})
@@ -273,4 +289,16 @@ func TestDataExportTestEventUnavailableManifestMatchesLive(t *testing.T) {
 
 	refusal := invokeUnavailable(t, unavailable, map[string]any{"project_id": f.project.ID.String(), "route_id": uuid.NewString(), "expected_data_source": dataexports.DataSourceMCPConnectionLogs, "expected_destination_id": uuid.NewString(), "confirmed": true})
 	require.Contains(t, refusal, `"feature":"data_export_test_event"`)
+}
+
+// unreachableRedis is a Redis client whose every command fails, as in an outage.
+func unreachableRedis(t *testing.T) *redis.Client {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := listener.Addr().String()
+	require.NoError(t, listener.Close())
+	client := redis.NewClient(&redis.Options{Addr: addr, MaxRetries: -1, DialTimeout: time.Second})
+	t.Cleanup(func() { _ = client.Close() })
+	return client
 }

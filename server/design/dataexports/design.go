@@ -210,8 +210,12 @@ var _ = Service("dataExports", func() {
 	Method("testRoute", func() {
 		Description("Send a test event straight to a route's destination, one for each signal its data source exports, and report what the destination answered to each. Rate limited per route and per organization.")
 
-		// Declared here, not in the shared set, so only this method gets a typed 429.
+		// Declared here, not in the shared set, so only this method gets a typed 429 and 503.
 		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
+		Error(string(oops.CodeUnavailable), func() {
+			Description(oops.CodeUnavailable.UserMessage())
+			Fault()
+		})
 
 		Payload(func() {
 			Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
@@ -229,6 +233,9 @@ var _ = Service("dataExports", func() {
 			security.ProjectHeader()
 			Response(StatusOK)
 			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
+			Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
 				ContentType("application/json")
 			})
 		})
@@ -372,7 +379,7 @@ var TestDataExportRouteResult = Type("TestDataExportRouteResult", func() {
 	Attribute("status_code", Int, "HTTP status of the signal that set the outcome. Omitted when it did not answer.")
 	Attribute("message", String, "What happened, in plain language.")
 	Attribute("signals", ArrayOf(TestDataExportRouteSignalResult), "One result for each signal the route's data source exports.")
-	Attribute("test_event_id", String, "The speakeasy.test_event.id every record of this test carries, to find them in the destination.")
+	Attribute("test_event_id", String, "The speakeasy.test_event.id this test's logs and traces carry, to find them in the destination. Metrics carry only speakeasy.test_event=true.")
 	Required("outcome", "message", "signals", "test_event_id")
 })
 

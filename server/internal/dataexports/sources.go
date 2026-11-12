@@ -32,8 +32,9 @@ type Source struct {
 	Signals []Signal
 }
 
-// sources is the registry of data export sources. A new source needs a test
-// event for every signal it lists, or the route tester refuses to start.
+// sources is the registry of data export sources. The route tester refuses to
+// start without a test source for each; a test that misses a listed signal
+// fails the registry test in CI and is refused when sent.
 var sources = []Source{
 	{Name: DataSourceProductTelemetry, Signals: []Signal{SignalLogs, SignalTraces, SignalMetrics}},
 	{Name: DataSourceRiskFindings, Signals: []Signal{SignalLogs}},

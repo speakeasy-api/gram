@@ -180,8 +180,8 @@ type TestRouteResponseBody struct {
 	Message string `form:"message" json:"message" xml:"message"`
 	// One result for each signal the route's data source exports.
 	Signals []*TestDataExportRouteSignalResultResponseBody `form:"signals" json:"signals" xml:"signals"`
-	// The speakeasy.test_event.id every record of this test carries, to find them
-	// in the destination.
+	// The speakeasy.test_event.id this test's logs and traces carry, to find them
+	// in the destination. Metrics carry only speakeasy.test_event=true.
 	TestEventID string `form:"test_event_id" json:"test_event_id" xml:"test_event_id"`
 }
 
@@ -1858,6 +1858,24 @@ type DeleteRouteGatewayErrorResponseBody struct {
 // service "testRoute" endpoint HTTP response body for the
 // "rate_limit_exceeded" error.
 type TestRouteRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestRouteUnavailableResponseBody is the type of the "dataExports" service
+// "testRoute" endpoint HTTP response body for the "unavailable" error.
+type TestRouteUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3609,6 +3627,20 @@ func NewDeleteRouteGatewayErrorResponseBody(res *goa.ServiceError) *DeleteRouteG
 // the result of the "testRoute" endpoint of the "dataExports" service.
 func NewTestRouteRateLimitExceededResponseBody(res *goa.ServiceError) *TestRouteRateLimitExceededResponseBody {
 	body := &TestRouteRateLimitExceededResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteUnavailableResponseBody builds the HTTP response body from the
+// result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteUnavailableResponseBody(res *goa.ServiceError) *TestRouteUnavailableResponseBody {
+	body := &TestRouteUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

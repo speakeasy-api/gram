@@ -6,7 +6,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 )
 
@@ -86,13 +85,5 @@ func redactUnkeyedLogBody(value *commonv1.AnyValue) {
 // nothing sensitive. Producers cannot send the marker, so a real record cannot
 // keep its body this way.
 func isTestEventLogBody(record *logsv1.LogRecord) bool {
-	if record.GetBody().GetStringValue() != TestEventMessage {
-		return false
-	}
-	for _, kv := range record.GetAttributes() {
-		if kv.GetKey() == string(attr.TestEventKey) {
-			return kv.GetValue().GetBoolValue()
-		}
-	}
-	return false
+	return record.GetBody().GetStringValue() == TestEventMessage && hasTestMarker(record.GetAttributes())
 }

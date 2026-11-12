@@ -8,9 +8,11 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
@@ -416,8 +418,7 @@ func TestTestRouteFailsClosedOnALimiterError(t *testing.T) {
 	route := createTestableRoute(t, ctx, ti, server.URL, dataexports.DataSourceMCPConnectionLogs)
 	sender := &fixedTestSender{status: http.StatusOK}
 	limits := routeTestLimits(t, dataexports.RouteTestsPerMinute, dataexports.RouteTestsPerOrganizationPerMinute)
-	// An unusable rate makes Allow return an error, as a Redis outage does.
-	limits.Organization = ratelimit.New(ratelimit.NewRedisStore(nil), dataexports.RouteTestOrganizationLimitName, ratelimit.PerMinute(0))
+	limits.Organization = ratelimit.New(ratelimit.NewRedisStore(unreachableRedis(t)), dataexports.RouteTestOrganizationLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerOrganizationPerMinute))
 	core := dataexports.NewRouteTestCore(testenv.NewLogger(t), ti.conn, audit.NewLogger(), ti.enc, sender, limits)
 	require.NotNil(t, core)
 
@@ -540,4 +541,16 @@ func TestTestRouteGivesANeutralMessageWhenEverySignalFailsAlike(t *testing.T) {
 			require.Equal(t, tc.message, result.Message)
 		})
 	}
+}
+
+// unreachableRedis is a Redis client whose every command fails, as in an outage.
+func unreachableRedis(t *testing.T) *redis.Client {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := listener.Addr().String()
+	require.NoError(t, listener.Close())
+	client := redis.NewClient(&redis.Options{Addr: addr, MaxRetries: -1, DialTimeout: time.Second})
+	t.Cleanup(func() { _ = client.Close() })
+	return client
 }
