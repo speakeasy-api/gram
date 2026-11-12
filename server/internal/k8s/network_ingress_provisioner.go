@@ -39,6 +39,10 @@ const (
 	// The hosts are connected but the customer's tailnet has not approved
 	// them to host the service, so clients cannot reach it.
 	NetworkIngressErrorProviderServiceNotApproved = "provider_service_not_approved"
+	// The hosts are approved but Tailscale has not obtained the service's TLS
+	// certificate from Let's Encrypt yet, usually because the tailnet used its
+	// weekly allowance of new certificates. The gateway retries on its own.
+	NetworkIngressErrorProviderCertificateUnavailable = "provider_certificate_unavailable"
 	// The organization's encryption key is suspended or unreachable, so the
 	// gateway cannot seal or read its secrets. For a customer-managed key the
 	// customer restores access to it.

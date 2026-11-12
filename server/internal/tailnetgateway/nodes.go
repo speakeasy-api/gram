@@ -44,12 +44,18 @@ const (
 	// The customer fixes it in their policy or admin console; the pod keeps
 	// the node up and picks up approval on its next heartbeat.
 	NodeStatusAwaitingApproval NodeStatus = "awaiting_approval"
+
+	// NodeStatusAwaitingCertificate means the node is approved but Let's
+	// Encrypt has not issued the service's TLS certificate yet, so every
+	// client handshake fails. Usually the tailnet has used its weekly
+	// allowance of new certificates; the pod retries on its own.
+	NodeStatusAwaitingCertificate NodeStatus = "awaiting_certificate"
 )
 
 // ParseNodeStatus validates a stored status value.
 func ParseNodeStatus(value string) (NodeStatus, error) {
 	switch NodeStatus(value) {
-	case NodeStatusPending, NodeStatusStarting, NodeStatusOnline, NodeStatusDraining, NodeStatusError, NodeStatusStopped, NodeStatusNeedsLogin, NodeStatusAwaitingApproval:
+	case NodeStatusPending, NodeStatusStarting, NodeStatusOnline, NodeStatusDraining, NodeStatusError, NodeStatusStopped, NodeStatusNeedsLogin, NodeStatusAwaitingApproval, NodeStatusAwaitingCertificate:
 		return NodeStatus(value), nil
 	default:
 		return "", fmt.Errorf("invalid network ingress node status %q", value)
