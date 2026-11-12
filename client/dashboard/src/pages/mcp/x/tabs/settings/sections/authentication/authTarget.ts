@@ -157,7 +157,7 @@ export function useMetaMcpAuthTarget(
       projectId: metaMcpServer.projectId,
       kind: "standard",
       permissionResourceId: metaMcpServer.projectId,
-      supportsOrganizationIssuers: false,
+      supportsOrganizationIssuers: true,
       userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,
       attachImpactTarget: { metaMcpServerId: metaMcpServer.id },
       mcpUrl,

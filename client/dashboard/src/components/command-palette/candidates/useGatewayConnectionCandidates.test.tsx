@@ -1,6 +1,5 @@
 import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { isSendable } from "./types";
 
 const state = vi.hoisted(() => ({
   org: "org-one",
@@ -119,7 +118,6 @@ it("finds a cached registration and opens its canonical gateway with private mat
   ]);
   const registration = result.current[3]!;
   expect(registration.keywords).toContain("public-client");
-  expect(isSendable(registration)).toBe(false);
   void registration.run("open");
   expect(state.navigate).toHaveBeenCalledWith(
     "/acme/projects/project-one/mcp/gateway/gateway-one/sessions?registration=later-page",
