@@ -426,6 +426,31 @@ func TestProvisionerReportsSlotWaitingForLoginAsError(t *testing.T) {
 	require.Equal(t, k8s.NetworkIngressStatusError, observation.Status, "a slot waiting for login is not healthy")
 }
 
+func TestProvisionerReportsHostsAwaitingACertificate(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovcert")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+
+	f.heartbeat(t, 0, tailnetgateway.NodeStatusAwaitingCertificate, "nONE")
+	f.heartbeat(t, 1, tailnetgateway.NodeStatusError, "")
+	observation, err := f.provisioner.Observe(ctx, f.resources)
+	require.NoError(t, err)
+	require.Equal(t, k8s.NetworkIngressStatusError, observation.Status, "a host without a certificate cannot serve")
+	require.Equal(t, k8s.NetworkIngressErrorProviderCertificateUnavailable, observation.ErrorCode, "the specific cause wins over a generic failure")
+
+	f.heartbeat(t, 1, tailnetgateway.NodeStatusAwaitingApproval, "nTWO")
+	observation, err = f.provisioner.Observe(ctx, f.resources)
+	require.NoError(t, err)
+	require.Equal(t, k8s.NetworkIngressErrorProviderServiceNotApproved, observation.ErrorCode, "approval comes first: an unapproved host cannot get a certificate")
+
+	f.heartbeat(t, 1, tailnetgateway.NodeStatusOnline, "nTWO")
+	observation, err = f.provisioner.Observe(ctx, f.resources)
+	require.NoError(t, err)
+	require.Equal(t, k8s.NetworkIngressStatusOnline, observation.Status, "one serving host is enough")
+}
+
 func TestProvisionerReportsHostsAwaitingApproval(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()

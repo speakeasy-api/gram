@@ -44,6 +44,15 @@ per-ingress attestor pods.
   shows `provider_service_not_approved` until the customer approves the host
   or fixes `autoApprovers`. Approval is re-checked on every heartbeat, so
   approving or revoking a host takes effect without a restart.
+- An approved slot is `online` only once it also holds the TLS certificate
+  for `svc:<label>`: without it every client handshake fails. Tailscale gets
+  the certificate from Let's Encrypt, which allows a tailnet 50 new
+  certificates a week, shared with everything else on that tailnet. tsnet
+  only asks for one when a client connects or in an hourly refresh, so the
+  gateway requests it as soon as the node is approved, waits briefly for it
+  at start, and retries at Let's Encrypt's stated retry time when refused.
+  Until it is issued the slot reports `awaiting_certificate` with the reason
+  and retry time, and the ingress shows `provider_certificate_unavailable`.
 
 ## Encryption
 

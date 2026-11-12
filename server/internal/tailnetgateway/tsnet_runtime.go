@@ -178,14 +178,26 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 		return nil, fmt.Errorf("tsnet local client: %w", err)
 	}
 
-	waitForApproval(ctx, lc, tailcfg.ServiceName(spec.ServiceName))
+	approved := waitForApproval(ctx, lc, tailcfg.ServiceName(spec.ServiceName))
+
+	fqdn := ln.FQDN
+	cert := newCertificateTracker(fqdn, func(ctx context.Context) error {
+		if _, _, err := lc.CertPair(ctx, fqdn); err != nil {
+			return fmt.Errorf("obtain tailnet service certificate: %w", err)
+		}
+		return nil
+	}, hostLogger, time.Now)
+	if approved {
+		cert.Await(ctx, certificateStartWait)
+	}
 
 	return &tsnetNode{
 		srv:                srv,
 		ln:                 ln,
 		lc:                 lc,
 		service:            tailcfg.ServiceName(spec.ServiceName),
-		fqdn:               ln.FQDN,
+		fqdn:               fqdn,
+		cert:               cert,
 		logger:             hostLogger,
 		shutdownTimeout:    r.shutdownTimeout,
 		requestReadTimeout: r.requestReadTimeout,
@@ -197,10 +209,10 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 }
 
 // waitForApproval gives the tailnet a moment to approve the node as a host
-// of service, returning as soon as it does, when approvalWait elapses, or
-// when ctx is done. It never fails: Status reports a host that is still
-// unapproved.
-func waitForApproval(ctx context.Context, lc *local.Client, service tailcfg.ServiceName) {
+// of service, returning true as soon as it does, or false when approvalWait
+// elapses or ctx is done. It never fails: Status reports a host that is
+// still unapproved.
+func waitForApproval(ctx context.Context, lc *local.Client, service tailcfg.ServiceName) bool {
 	waitCtx, cancel := context.WithTimeout(ctx, approvalWait)
 	defer cancel()
 
@@ -209,13 +221,13 @@ func waitForApproval(ctx context.Context, lc *local.Client, service tailcfg.Serv
 	for {
 		if st, err := lc.StatusWithoutPeers(waitCtx); err == nil {
 			if approved, err := hostsService(st.Self, service); err == nil && approved {
-				return
+				return true
 			}
 		}
 
 		select {
 		case <-waitCtx.Done():
-			return
+			return false
 		case <-ticker.C:
 		}
 	}
@@ -271,6 +283,7 @@ type tsnetNode struct {
 	lc                 *local.Client
 	service            tailcfg.ServiceName
 	fqdn               string
+	cert               *certificateTracker
 	logger             *slog.Logger
 	shutdownTimeout    time.Duration
 	requestReadTimeout time.Duration
@@ -321,25 +334,31 @@ func (n *tsnetNode) Status(ctx context.Context) (NodeState, error) {
 	n.mu.Unlock()
 
 	if serveErr != nil {
-		return NodeState{Online: false, BackendState: "", NeedsLogin: false, AwaitingApproval: false, NodeID: "", FQDN: n.fqdn}, fmt.Errorf("service listener stopped: %w", serveErr)
+		return NodeState{Online: false, BackendState: "", NeedsLogin: false, AwaitingApproval: false, AwaitingCertificate: false, CertificateStatus: "", NodeID: "", FQDN: n.fqdn}, fmt.Errorf("service listener stopped: %w", serveErr)
 	}
 
 	st, err := n.lc.Status(ctx)
 	if err != nil {
-		return NodeState{Online: false, BackendState: "", NeedsLogin: false, AwaitingApproval: false, NodeID: "", FQDN: n.fqdn}, fmt.Errorf("tsnet status: %w", err)
+		return NodeState{Online: false, BackendState: "", NeedsLogin: false, AwaitingApproval: false, AwaitingCertificate: false, CertificateStatus: "", NodeID: "", FQDN: n.fqdn}, fmt.Errorf("tsnet status: %w", err)
 	}
 
 	running := st.BackendState == ipn.Running.String()
 	approved, err := hostsService(st.Self, n.service)
 	if err != nil {
 		// Fail closed, but report why rather than as a plain approval wait.
-		return NodeState{Online: false, BackendState: st.BackendState, NeedsLogin: false, AwaitingApproval: false, NodeID: "", FQDN: n.fqdn}, err
+		return NodeState{Online: false, BackendState: st.BackendState, NeedsLogin: false, AwaitingApproval: false, AwaitingCertificate: false, CertificateStatus: "", NodeID: "", FQDN: n.fqdn}, err
+	}
+	certified, certificateStatus := false, ""
+	if running && approved {
+		certified, certificateStatus = n.cert.Poll()
 	}
 	state := NodeState{
-		Online: running && approved, BackendState: st.BackendState,
-		NeedsLogin:       st.BackendState == ipn.NeedsLogin.String(),
-		AwaitingApproval: running && !approved,
-		NodeID:           "", FQDN: n.fqdn,
+		Online: running && approved && certified, BackendState: st.BackendState,
+		NeedsLogin:          st.BackendState == ipn.NeedsLogin.String(),
+		AwaitingApproval:    running && !approved,
+		AwaitingCertificate: running && approved && !certified,
+		CertificateStatus:   certificateStatus,
+		NodeID:              "", FQDN: n.fqdn,
 	}
 	if st.Self != nil {
 		state.NodeID = string(st.Self.ID)
@@ -384,6 +403,8 @@ func (n *tsnetNode) WhoIs(ctx context.Context, peer netip.Addr) (*apitype.WhoIsR
 func (n *tsnetNode) Close(ctx context.Context) error {
 	var errs []error
 	n.closeOnce.Do(func() {
+		n.cert.Close()
+
 		if n.server != nil {
 			shutdownCtx := ctx
 			if _, ok := ctx.Deadline(); !ok {

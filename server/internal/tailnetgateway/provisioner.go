@@ -381,7 +381,7 @@ func (p *Provisioner) observe(ctx context.Context, id uuid.UUID, organizationID 
 	}
 	now := p.cfg.Now()
 	observation := k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusPending}
-	seen, failed, unapproved := false, false, false
+	seen, failed, unapproved, uncertified := false, false, false, false
 	for _, node := range nodes {
 		if node.RetiredAt.Valid || !node.LastSeenAt.Valid {
 			continue
@@ -400,6 +400,8 @@ func (p *Provisioner) observe(ctx context.Context, id uuid.UUID, organizationID 
 			failed = true
 		case fresh && node.Status == string(NodeStatusAwaitingApproval):
 			unapproved = true
+		case fresh && node.Status == string(NodeStatusAwaitingCertificate):
+			uncertified = true
 		}
 	}
 	if observation.Status == k8s.NetworkIngressStatusOnline {
@@ -409,6 +411,11 @@ func (p *Provisioner) observe(ctx context.Context, id uuid.UUID, organizationID 
 	// their tailnet, so that takes precedence over a generic failure.
 	if unapproved {
 		return errorObservation(k8s.NetworkIngressErrorProviderServiceNotApproved), nil
+	}
+	// Approved hosts without a TLS certificate fail every client handshake.
+	// The gateway retries on its own; the code names the cause.
+	if uncertified {
+		return errorObservation(k8s.NetworkIngressErrorProviderCertificateUnavailable), nil
 	}
 	if failed {
 		return errorObservation(""), nil

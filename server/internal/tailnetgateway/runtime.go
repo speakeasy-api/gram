@@ -54,8 +54,8 @@ type NodeSpec struct {
 
 // NodeState is a point-in-time view of a running node.
 type NodeState struct {
-	// Online is true once the node is connected and control has approved it
-	// to host its service.
+	// Online is true once the node is connected, control has approved it to
+	// host its service, and it holds the service's TLS certificate.
 	Online bool
 
 	// BackendState is tsnet's state machine name, for diagnostics.
@@ -67,6 +67,14 @@ type NodeState struct {
 	// AwaitingApproval is true when the node is connected but control has not
 	// approved it to host its service, so the service has no addresses here.
 	AwaitingApproval bool
+
+	// AwaitingCertificate is true when the node is approved but has no TLS
+	// certificate for its service yet, so every client handshake fails.
+	AwaitingCertificate bool
+
+	// CertificateStatus says why the certificate is missing and when the
+	// node retries; empty otherwise.
+	CertificateStatus string
 
 	// NodeID is the stable Tailscale node id, used to delete the device.
 	NodeID string

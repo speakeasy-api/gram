@@ -38,14 +38,16 @@ type fakeNode struct {
 	spec       tailnetgateway.NodeSpec
 	online     bool
 	unapproved bool
-	needsLogin bool
-	statusErr  error
-	closeDelay time.Duration
-	fqdn       string
-	nodeID     string
-	handler    http.Handler
-	closed     bool
-	who        *apitype.WhoIsResponse
+	// uncertified, when set, is why the approved node has no TLS certificate.
+	uncertified string
+	needsLogin  bool
+	statusErr   error
+	closeDelay  time.Duration
+	fqdn        string
+	nodeID      string
+	handler     http.Handler
+	closed      bool
+	who         *apitype.WhoIsResponse
 }
 
 func (n *fakeNode) Serve(handler http.Handler) error {
@@ -69,9 +71,12 @@ func (n *fakeNode) Status(context.Context) (tailnetgateway.NodeState, error) {
 		state = "Running"
 	}
 	running := n.online && !n.needsLogin
+	certified := n.uncertified == ""
 	return tailnetgateway.NodeState{
-		Online: running && !n.unapproved, BackendState: state, NeedsLogin: n.needsLogin,
-		AwaitingApproval: running && n.unapproved, NodeID: n.nodeID, FQDN: n.fqdn,
+		Online: running && !n.unapproved && certified, BackendState: state, NeedsLogin: n.needsLogin,
+		AwaitingApproval:    running && n.unapproved,
+		AwaitingCertificate: running && !n.unapproved && !certified, CertificateStatus: n.uncertified,
+		NodeID: n.nodeID, FQDN: n.fqdn,
 	}, nil
 }
 
@@ -107,6 +112,14 @@ func (n *fakeNode) setApproved(approved bool) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.unapproved = !approved
+}
+
+// setUncertified simulates the node having no TLS certificate for its
+// service, for reason; an empty reason means it holds one.
+func (n *fakeNode) setUncertified(reason string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.uncertified = reason
 }
 
 // failStatus simulates a node that can no longer report, as when its service
@@ -176,7 +189,7 @@ func (r *fakeRuntime) Start(_ context.Context, spec tailnetgateway.NodeSpec) (ta
 	if err := spec.Store.WriteState(ipn.KnownProfilesStateKey, []byte(`{"profile-1":{"ID":"profile-1","Name":"speakeasy-gw-0"}}`)); err != nil {
 		return nil, fmt.Errorf("persist fake node profile: %w", err)
 	}
-	node := &fakeNode{mu: sync.Mutex{}, spec: spec, online: false, unapproved: false, needsLogin: false, statusErr: nil, closeDelay: r.closeDelay, fqdn: "speakeasy.example.ts.net", nodeID: "", handler: nil, closed: false, who: nil}
+	node := &fakeNode{mu: sync.Mutex{}, spec: spec, online: false, unapproved: false, uncertified: "", needsLogin: false, statusErr: nil, closeDelay: r.closeDelay, fqdn: "speakeasy.example.ts.net", nodeID: "", handler: nil, closed: false, who: nil}
 	r.nodes = append(r.nodes, node)
 	return node, nil
 }
@@ -572,6 +585,45 @@ func TestGatewayStopsHostsConcurrently(t *testing.T) {
 	elapsed := time.Since(started)
 	require.Empty(t, f.gateway.Hosts())
 	require.Less(t, elapsed, 2*closeDelay, "three stops cost about one close, not three")
+}
+
+func TestGatewayReportsHostsAwaitingACertificate(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewaycert", 0)
+	ingressID, orgID := seedIngress(t, f.db, "gateway-cert")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+	wakes := func() int {
+		messages, err := nirepo.New(f.db).ListNetworkIngressReconcileRequests(ctx, orgID)
+		require.NoError(t, err)
+		return len(messages)
+	}
+
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	node := f.runtime.started()[0]
+
+	// Approved, but Let's Encrypt has not issued the service's certificate:
+	// every client handshake would fail, so the host is not online.
+	const reason = "Let's Encrypt is rate limiting new certificates for this tailnet; retrying after 2026-11-12 22:53 UTC"
+	node.setOnline("nCERT")
+	node.setUncertified(reason)
+	f.gateway.Poll(ctx)
+	row := f.slotRow(t, ingressID, orgID, 0)
+	require.Equal(t, string(tailnetgateway.NodeStatusAwaitingCertificate), row.Status)
+	require.Equal(t, reason, row.LastError.String, "the slot records why and when the node retries")
+	require.False(t, row.ConnectedSince.Valid, "a host without a certificate is not serving")
+	require.Equal(t, 1, wakes(), "the reconciler learns about the missing certificate right away")
+
+	f.gateway.Poll(ctx)
+	require.Equal(t, 1, wakes(), "still waiting does not wake the reconciler again")
+
+	// The certificate is issued: the host comes online without a restart.
+	node.setUncertified("")
+	f.gateway.Poll(ctx)
+	row = f.slotRow(t, ingressID, orgID, 0)
+	require.Equal(t, string(tailnetgateway.NodeStatusOnline), row.Status)
+	require.Equal(t, 2, wakes(), "coming online wakes the reconciler")
 }
 
 func TestGatewayReportsHostsAwaitingApproval(t *testing.T) {

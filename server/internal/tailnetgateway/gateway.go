@@ -161,6 +161,9 @@ type desiredIngress struct {
 //     the service.
 //   - starting | online -> awaiting_approval: the node is up but the tailnet
 //     has not approved it, or revoked its approval; -> online once approved.
+//   - starting | awaiting_approval -> awaiting_certificate: the node is
+//     approved but holds no TLS certificate for the service yet; -> online
+//     once the certificate is issued.
 //   - starting -> error: the start failed; retried next poll, backing off
 //     after maxStartFailures attempts in a row that did not reach online.
 //   - any running state -> draining -> error: the node failed while running;
@@ -176,8 +179,9 @@ type desiredIngress struct {
 //
 // Holds (pending without a key, needs_login awaiting re-registration) record
 // a state without waking the reconciler: it already knows and is the one that
-// clears them. Crossing the online boundary, and entering awaiting_approval
-// or needs_login, wake it so the dashboard shows the reason promptly.
+// clears them. Crossing the online boundary, and entering awaiting_approval,
+// awaiting_certificate or needs_login, wake it so the dashboard shows the
+// reason promptly.
 type slot struct {
 	// mu guards every field. Poll, start, probe and stop run from different
 	// goroutines; the gateway lock is always taken before this one.
@@ -242,7 +246,7 @@ func wakes(from, to NodeStatus) bool {
 		return false
 	case from == NodeStatusOnline, to == NodeStatusOnline:
 		return true
-	case to == NodeStatusAwaitingApproval, to == NodeStatusNeedsLogin:
+	case to == NodeStatusAwaitingApproval, to == NodeStatusAwaitingCertificate, to == NodeStatusNeedsLogin:
 		return true
 	default:
 		return false
@@ -263,6 +267,9 @@ func probeTransition(from NodeStatus, label string, state NodeState, err error) 
 	case state.AwaitingApproval:
 		t.to = NodeStatusAwaitingApproval
 		t.message = "the tailnet has not approved this node to host " + ServiceName(label)
+	case state.AwaitingCertificate:
+		t.to = NodeStatusAwaitingCertificate
+		t.message = state.CertificateStatus
 	}
 	t.wake = wakes(from, t.to)
 
