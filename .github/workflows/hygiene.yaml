@@ -260,3 +260,31 @@ jobs:
       - name: Prune aube store
         if: ${{ steps.check.outputs.lint == 'true' }}
         run: aube store prune
+
+      # An unticked task list item in the PR description is work still owed
+      # before merge, such as cleanup or a manual check. Ticking a box edits
+      # the description, which re-runs this job. Items inside fenced code
+      # blocks are ignored. It runs last so the other checks report first.
+      - name: Require ticked PR description checklist
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          unticked=$(printf '%s\n' "${PR_BODY:-}" | tr -d '\r' | awk '
+            /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
+            !fenced && /^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]+\[ \]([[:space:]]|$)/ { print }
+          ')
+
+          if [[ -z "$unticked" ]]; then
+            echo "✅ The PR description has no unticked checklist items."
+            exit 0
+          fi
+
+          echo "❌ The PR description has unticked checklist items:"
+          printf '%s\n' "$unticked" | sed 's/^[[:space:]]*/  /'
+          echo ""
+          echo "Finish each item and tick its box, or remove items that no longer apply."
+          echo "Ticking a box re-runs this check."
+          exit 1
