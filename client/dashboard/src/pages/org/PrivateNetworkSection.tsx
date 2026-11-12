@@ -64,6 +64,10 @@ function statusVariant(
 // The tailnet has not approved Speakeasy's gateway to host the service.
 const SERVICE_NOT_APPROVED = "provider_service_not_approved";
 
+// The gateway is approved but Tailscale has not obtained the service's TLS
+// certificate from Let's Encrypt yet; the gateway retries on its own.
+const CERTIFICATE_UNAVAILABLE = "provider_certificate_unavailable";
+
 function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
 }
@@ -170,6 +174,7 @@ function ConfiguredPrivateNetwork({
   const [rotateOpen, setRotateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const serviceNotApproved = ingress.lastError === SERVICE_NOT_APPROVED;
+  const certificateUnavailable = ingress.lastError === CERTIFICATE_UNAVAILABLE;
   const update = useUpdateNetworkIngressMutation({
     onSuccess: async () => {
       await invalidateAllNetworkIngress(queryClient);
@@ -289,6 +294,18 @@ function ConfiguredPrivateNetwork({
               </Button>
             </div>
           </Alert>
+        ) : certificateUnavailable ? (
+          <Alert variant="error" dismissible={false}>
+            <Text small>
+              Speakeasy&apos;s gateway is approved, but Tailscale hasn&apos;t
+              obtained an HTTPS certificate for <code>{ingress.hostname}</code>{" "}
+              yet, so devices can&apos;t connect. This usually means your
+              tailnet has used its weekly allowance of new certificates from
+              Let&apos;s Encrypt, which every machine and service on the tailnet
+              shares. Speakeasy retries on its own and this page updates once
+              the certificate is issued; there&apos;s nothing to change.
+            </Text>
+          </Alert>
         ) : (
           ingress.lastError && (
             <Alert variant="error" dismissible={false}>
@@ -296,36 +313,38 @@ function ConfiguredPrivateNetwork({
             </Alert>
           )
         )}
-        {ingress.status === "error" && !serviceNotApproved && (
-          <Alert variant="warning" dismissible={false}>
-            <div className="space-y-3">
-              <Text small>
-                Tailscale could not be connected. Check your OAuth client and
-                tailnet policy, then retry provisioning. If it still fails, our
-                team can help.
-              </Text>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={!entitled || health.isPending}
-                  onClick={() =>
-                    health.mutate({
-                      security: { sessionHeaderGramSession: "" },
-                    })
-                  }
-                >
-                  {health.isPending ? "Retrying..." : "Retry provisioning"}
-                </Button>
-                <Button asChild variant="tertiary" size="sm">
-                  <a href="mailto:support@speakeasy.com?subject=Tailscale%20setup%20help">
-                    Contact support
-                  </a>
-                </Button>
+        {ingress.status === "error" &&
+          !serviceNotApproved &&
+          !certificateUnavailable && (
+            <Alert variant="warning" dismissible={false}>
+              <div className="space-y-3">
+                <Text small>
+                  Tailscale could not be connected. Check your OAuth client and
+                  tailnet policy, then retry provisioning. If it still fails,
+                  our team can help.
+                </Text>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={!entitled || health.isPending}
+                    onClick={() =>
+                      health.mutate({
+                        security: { sessionHeaderGramSession: "" },
+                      })
+                    }
+                  >
+                    {health.isPending ? "Retrying..." : "Retry provisioning"}
+                  </Button>
+                  <Button asChild variant="tertiary" size="sm">
+                    <a href="mailto:support@speakeasy.com?subject=Tailscale%20setup%20help">
+                      Contact support
+                    </a>
+                  </Button>
+                </div>
               </div>
-            </div>
-          </Alert>
-        )}
+            </Alert>
+          )}
         <div className="flex items-start justify-between gap-6 border-t pt-4">
           <div className="space-y-1">
             <Text variant="subheading">Require user identity</Text>
@@ -435,6 +454,8 @@ export function PrivateNetworkSection(): JSX.Element | null {
       // Admins approve the host in Tailscale's console, so pick that up
       // without a reload.
       if (current?.lastError === SERVICE_NOT_APPROVED) return 10_000;
+      // The gateway retries the certificate on its own; show it once issued.
+      if (current?.lastError === CERTIFICATE_UNAVAILABLE) return 30_000;
       return false;
     },
   });
