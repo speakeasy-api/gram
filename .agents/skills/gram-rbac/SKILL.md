@@ -16,7 +16,7 @@ metadata:
 
 # Speakeasy RBAC
 
-The whole permission model is one Go value, `authz.Model` in `server/internal/authz/registry_resources.go`. The scope constants (`scopes_gen.go`), the typed request refs (`refs_gen.go`; the project collections and `ToolCall` are hand-written in `refs.go`), the expansion and block tables, the selector key allowlists, the scope catalogue, the scope enum in the Goa design and the `docs/rbac.md` scope table are all derived from it. One server-side evaluator, `authz.Engine`, decides every request. **Change the model, regenerate, and let the tests tell you what else moved.** Never hand-edit a derived table.
+The whole permission model is one Go value, `authz.Model` in `server/internal/authz/registry_resources.go`. The scope constants (`scopes_gen.go`), the typed request refs (`refs_gen.go`; the project collections and `ToolCall` are hand-written in `refs.go`), the expansion and block tables, the selector key allowlists, the scope catalogue, the scope enum in the Goa design and the `docs/rbac.md` scope table are all derived from it. One server-side evaluator, `authz.Engine`, is canonical. Two list queries still mirror its matching and precedence in SQL (`ListAccessibleMCPServersForUser`, `ListAccessibleSkillsForUser`); a change to matching or blocks must update them too, until the SQL prefilter replaces them. **Change the model, regenerate, and let the tests tell you what else moved.** Never hand-edit a derived table.
 
 ## Mental model
 
@@ -38,14 +38,20 @@ if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerID(id), authz.Proj
 	return err
 }
 // no resource yet (create), or a lookup that missed (do not leak existence)
-s.authz.Require(ctx, authz.Project(authz.ProjectID(p)).Environments().Create())
-s.authz.Require(ctx, authz.Project(authz.ProjectID(p)).Environments().Read())
+if err := s.authz.Require(ctx, authz.Project(authz.ProjectID(p)).Environments().Create()); err != nil {
+	return err
+}
+if err := s.authz.Require(ctx, authz.Project(authz.ProjectID(p)).Environments().Read()); err != nil {
+	return err
+}
 // a project-wide grant OR a grant on the resource, and a block on either refuses
-s.authz.Require(ctx, authz.AnyOf(authz.Project(p).Write(), authz.Skill(id).Write()))
+if err := s.authz.Require(ctx, authz.AnyOf(authz.Project(authz.ProjectID(p)).Write(), authz.Skill(authz.SkillID(id)).Write())); err != nil {
+	return err
+}
 // a branch, not a denial (no challenge logged)
-ok, err := s.authz.Can(ctx, authz.Chat(id).Read())
+ok, err := s.authz.Can(ctx, authz.Chat(authz.ChatID(id)).Read())
 // discovery: "could they act on any matching resource?"
-ok, err := s.authz.Can(ctx, authz.MCPServer(id, p).Connect().Probe())
+ok, err := s.authz.Can(ctx, authz.MCPServer(authz.MCPServerID(id), authz.ProjectID(p)).Connect().Probe())
 ```
 
 | Need                                             | Use                                                                                                                                                                    |
@@ -93,7 +99,7 @@ The invariant suite (`registry_invariants_test.go`) checks every permission auto
 
 ## Agents
 
-`Agent: AgentUnsafe()` means no agent policy may ever hold the permission. Use it by default. `SafeSince(N)` makes the permission agent-safe from delegated policy version `N`, and policies stored at an older version keep reading it as unsafe. Making a permission agent-safe therefore means adding a delegated policy version in `server/internal/agents/runtimepolicy/delegated_policy.go`: N is `CurrentDelegatedPolicyVersion` + 1, and `CurrentDelegatedPolicyVersion` moves to N. The issuer constants (`IssuedDelegatedPolicyVersion`, `AssistantIssuedPolicyVersion`, `InferenceIssuedPolicyVersion`) are separate contracts; raise one only when that issuer should start carrying the permission. Then commit the new version's stored-policy fixture:
+`Agent: AgentUnsafe()` means no agent policy may ever hold the permission. Use it by default. `SafeSince(N)` makes the permission agent-safe from delegated policy version `N`, and policies stored at an older version keep reading it as unsafe. Making a permission agent-safe therefore means adding a delegated policy version in `server/internal/agents/runtimepolicy/delegated_policy.go`: N is `CurrentDelegatedPolicyVersion` + 1. Add the version constants in both `delegated_policy.go` and `runtimepolicy/scopes.go`, and move both `CurrentDelegatedPolicyVersion` and `CurrentRuntimeScopeRegistryVersion` to N; `SafeSince` panics past the runtime registry's current version. The issuer constants (`IssuedDelegatedPolicyVersion`, `AssistantIssuedPolicyVersion`, `InferenceIssuedPolicyVersion`) are separate contracts; raise one only when that issuer should start carrying the permission. Then commit the new version's stored-policy fixture:
 
 ```
 go test ./internal/agents/runtimepolicy -run TestStoredPolicyFixtures -args -write-stored-policy-fixture=N
