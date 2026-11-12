@@ -69,7 +69,9 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	// Unsafe so tests can reach httptest servers on loopback.
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 	require.NoError(t, err)
-	sender := otelsink.NewTestSender(otelsvc.NewConnectionLogProbe(logger, testenv.NewMeterProvider(t), policy), "gram-server")
+	meterProvider := testenv.NewMeterProvider(t)
+	sender, err := otelsvc.NewRouteTester(policy, append(otelsvc.NewRouteTestSources(logger, meterProvider), otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequests(logger, meterProvider), "gram-server"))...)
+	require.NoError(t, err)
 	store := ratelimit.NewRedisStore(redisClient)
 	// Every test shares one organization ID and one Redis, so each gets its own organization bucket.
 	routeTests := dataexports.NewRouteTestCore(logger, conn, audit.NewLogger(), enc, sender, dataexports.RouteTestLimits{

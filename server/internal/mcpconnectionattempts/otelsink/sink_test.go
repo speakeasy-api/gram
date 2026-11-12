@@ -1,12 +1,9 @@
 package otelsink_test
 
 import (
-	"context"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -70,21 +67,18 @@ func TestConnectionLogExport_PublishesUnderTheRowTenant(t *testing.T) {
 	require.Equal(t, dialect.ConnectionLogSource, record.GetProvenance().GetSource())
 }
 
-func newTestEventSender(t *testing.T) *otelsink.TestSender {
+func newTestSource(t *testing.T) *otelsink.TestSource {
 	t.Helper()
-	// Unsafe so the test can reach an httptest server on loopback.
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
-	require.NoError(t, err)
-	return otelsink.NewTestSender(otelsvc.NewConnectionLogProbe(testenv.NewLogger(t), testenv.NewMeterProvider(t), policy), "gram-server")
+	return otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequests(testenv.NewLogger(t), testenv.NewMeterProvider(t)), "gram-server")
 }
 
-func testEventDestination(endpointURL string) dataexports.TestDestination {
+func testEventDestination(includeSensitiveData bool) dataexports.TestDestination {
 	return dataexports.TestDestination{
 		OrganizationID:       "org-test",
 		ProjectID:            uuid.MustParse("01900000-0000-7000-8000-000000000101"),
-		EndpointURL:          endpointURL,
+		EndpointURL:          "https://collector.example.com",
 		Headers:              map[string]string{"DD-API-KEY": "secret"},
-		IncludeSensitiveData: false,
+		IncludeSensitiveData: includeSensitiveData,
 	}
 }
 
@@ -96,138 +90,81 @@ func otlpAttributes(kvs []*commonv1.KeyValue) map[string]*commonv1.AnyValue {
 	return out
 }
 
-func TestTestSender_SendsOneMarkedRecordAndNothingReal(t *testing.T) {
+func buildTestRecord(t *testing.T, includeSensitiveData bool) (*logsv1.ResourceLogs, *logsv1.LogRecord) {
+	t.Helper()
+	requests, err := newTestSource(t).BuildTestRequests(t.Context(), testEventDestination(includeSensitiveData))
+	require.NoError(t, err)
+	require.Len(t, requests, 1)
+	require.Equal(t, dataexports.SignalLogs, requests[0].Signal)
+	request, ok := requests[0].Message.(*collectorlogsv1.ExportLogsServiceRequest)
+	require.True(t, ok)
+	require.Len(t, request.GetResourceLogs(), 1)
+	resourceLogs := request.GetResourceLogs()[0]
+	require.Len(t, resourceLogs.GetScopeLogs(), 1)
+	require.Len(t, resourceLogs.GetScopeLogs()[0].GetLogRecords(), 1)
+	return resourceLogs, resourceLogs.GetScopeLogs()[0].GetLogRecords()[0]
+}
+
+func TestTestSource_BuildsOneMarkedRecordAndNothingReal(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, dataexports.DataSourceMCPConnectionLogs, newTestSource(t).DataSource())
+	for _, includeSensitiveData := range []bool{false, true} {
+		resourceLogs, record := buildTestRecord(t, includeSensitiveData)
+		require.Equal(t, "gram-server", otlpAttributes(resourceLogs.GetResource().GetAttributes())["service.name"].GetStringValue())
+
+		require.Equal(t, "speakeasy.mcp_connection.test", record.GetEventName())
+		require.Equal(t, logsv1.SeverityNumber_SEVERITY_NUMBER_INFO, record.GetSeverityNumber())
+		require.Nil(t, record.GetBody())
+		attrs := otlpAttributes(record.GetAttributes())
+		require.True(t, attrs["speakeasy.test_event"].GetBoolValue())
+		require.NotEmpty(t, attrs["log.record.uid"].GetStringValue())
+		require.Equal(t, "This is a test event from Speakeasy. It is not real data.", attrs["speakeasy.mcp_connection.user_message"].GetStringValue())
+		require.Equal(t, dialect.ConnectionLogScope, attrs["speakeasy.original_instrumentation_scope.name"].GetStringValue())
+		for key := range attrs {
+			switch key {
+			case "speakeasy.test_event", "speakeasy.mcp_connection.user_message", "log.record.uid",
+				"speakeasy.original_instrumentation_scope.name", "speakeasy.organization.id", "speakeasy.project.id":
+			default:
+				t.Errorf("unexpected attribute %q on the test record", key)
+			}
+		}
+		require.Empty(t, record.GetTraceId())
+	}
+
+	// Each test gets its own uid.
+	_, first := buildTestRecord(t, false)
+	_, second := buildTestRecord(t, false)
+	require.NotEqual(t, otlpAttributes(first.GetAttributes())["log.record.uid"].GetStringValue(), otlpAttributes(second.GetAttributes())["log.record.uid"].GetStringValue())
+}
+
+func TestTestSource_SendsThroughTheRouteTester(t *testing.T) {
 	t.Parallel()
 
 	var bodies [][]byte
-	var headers []http.Header
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
 		assert.Equal(t, "/v1/logs", r.URL.Path)
+		assert.Equal(t, "secret", r.Header.Get("DD-API-KEY"))
 		bodies = append(bodies, body)
-		headers = append(headers, r.Header.Clone())
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(server.Close)
 
-	status, err := newTestEventSender(t).SendConnectionLogTest(t.Context(), testEventDestination(server.URL))
+	// Unsafe so the test can reach an httptest server on loopback.
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, status)
-	require.Len(t, bodies, 1)
-	require.Equal(t, "secret", headers[0].Get("DD-API-KEY"))
-	require.Equal(t, "application/x-protobuf", headers[0].Get("Content-Type"))
+	tester, err := otelsvc.NewRouteTester(policy, append(otelsvc.NewRouteTestSources(testenv.NewLogger(t), testenv.NewMeterProvider(t)), newTestSource(t))...)
+	require.NoError(t, err)
+	destination := testEventDestination(false)
+	destination.EndpointURL = server.URL
 
+	results, err := tester.SendTest(t.Context(), dataexports.DataSourceMCPConnectionLogs, destination)
+	require.NoError(t, err)
+	require.Equal(t, []dataexports.SignalTestResult{{Signal: dataexports.SignalLogs, StatusCode: http.StatusOK, Unreachable: false}}, results)
+	require.Len(t, bodies, 1)
 	var request collectorlogsv1.ExportLogsServiceRequest
 	require.NoError(t, proto.Unmarshal(bodies[0], &request))
-	require.Len(t, request.GetResourceLogs(), 1)
-	resourceLogs := request.GetResourceLogs()[0]
-	require.Equal(t, "gram-server", otlpAttributes(resourceLogs.GetResource().GetAttributes())["service.name"].GetStringValue())
-	require.Len(t, resourceLogs.GetScopeLogs(), 1)
-	require.Len(t, resourceLogs.GetScopeLogs()[0].GetLogRecords(), 1)
-	record := resourceLogs.GetScopeLogs()[0].GetLogRecords()[0]
-
-	require.Equal(t, "speakeasy.mcp_connection.test", record.GetEventName())
-	require.Equal(t, logsv1.SeverityNumber_SEVERITY_NUMBER_INFO, record.GetSeverityNumber())
-	require.Nil(t, record.GetBody())
-	attrs := otlpAttributes(record.GetAttributes())
-	require.True(t, attrs["speakeasy.mcp_connection.test"].GetBoolValue())
-	require.NotEmpty(t, attrs["log.record.uid"].GetStringValue())
-	require.Contains(t, attrs["speakeasy.mcp_connection.user_message"].GetStringValue(), "test event from Speakeasy")
-	require.Equal(t, dialect.ConnectionLogScope, attrs["speakeasy.original_instrumentation_scope.name"].GetStringValue())
-	for key := range attrs {
-		switch key {
-		case "speakeasy.mcp_connection.test", "speakeasy.mcp_connection.user_message", "log.record.uid",
-			"speakeasy.original_instrumentation_scope.name", "speakeasy.organization.id", "speakeasy.project.id":
-		default:
-			t.Errorf("unexpected attribute %q on the test record", key)
-		}
-	}
-	require.Empty(t, record.GetTraceId())
-
-	// Each test gets its own uid.
-	server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		assert.NoError(t, err)
-		bodies = append(bodies, body)
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	t.Cleanup(server2.Close)
-	_, err = newTestEventSender(t).SendConnectionLogTest(t.Context(), testEventDestination(server2.URL))
-	require.NoError(t, err)
-	var second collectorlogsv1.ExportLogsServiceRequest
-	require.NoError(t, proto.Unmarshal(bodies[1], &second))
-	secondAttrs := otlpAttributes(second.GetResourceLogs()[0].GetScopeLogs()[0].GetLogRecords()[0].GetAttributes())
-	require.NotEqual(t, attrs["log.record.uid"].GetStringValue(), secondAttrs["log.record.uid"].GetStringValue())
-}
-
-func TestTestSender_ReportsStatusesWithoutRetrying(t *testing.T) {
-	t.Parallel()
-
-	for _, status := range []int{http.StatusAccepted, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusRequestTimeout, http.StatusServiceUnavailable} {
-		t.Run(http.StatusText(status), func(t *testing.T) {
-			t.Parallel()
-			var calls atomic.Int64
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				calls.Add(1)
-				w.WriteHeader(status)
-			}))
-			t.Cleanup(server.Close)
-
-			got, err := newTestEventSender(t).SendConnectionLogTest(t.Context(), testEventDestination(server.URL))
-			require.NoError(t, err)
-			require.Equal(t, status, got)
-			require.EqualValues(t, 1, calls.Load())
-		})
-	}
-}
-
-func TestTestSender_ReportsUnreachableDestinations(t *testing.T) {
-	t.Parallel()
-
-	t.Run("connection refused", func(t *testing.T) {
-		t.Parallel()
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
-		require.NoError(t, err)
-		endpoint := "http://" + listener.Addr().String()
-		require.NoError(t, listener.Close())
-
-		status, err := newTestEventSender(t).SendConnectionLogTest(t.Context(), testEventDestination(endpoint))
-		require.ErrorIs(t, err, dataexports.ErrTestUnreachable)
-		require.Zero(t, status)
-	})
-
-	t.Run("timeout", func(t *testing.T) {
-		t.Parallel()
-		release := make(chan struct{})
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			select {
-			case <-release:
-			case <-r.Context().Done():
-			}
-			w.WriteHeader(http.StatusOK)
-		}))
-		t.Cleanup(server.Close)
-		t.Cleanup(func() { close(release) })
-
-		ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
-		defer cancel()
-		status, err := newTestEventSender(t).SendConnectionLogTest(ctx, testEventDestination(server.URL))
-		require.ErrorIs(t, err, dataexports.ErrTestUnreachable)
-		require.Zero(t, status)
-	})
-
-	t.Run("blocked by the outbound policy", func(t *testing.T) {
-		t.Parallel()
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			t.Error("the default policy must not reach loopback")
-			w.WriteHeader(http.StatusOK)
-		}))
-		t.Cleanup(server.Close)
-		sender := otelsink.NewTestSender(otelsvc.NewConnectionLogProbe(testenv.NewLogger(t), testenv.NewMeterProvider(t), guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))), "gram-server")
-
-		status, err := sender.SendConnectionLogTest(t.Context(), testEventDestination(server.URL))
-		require.ErrorIs(t, err, dataexports.ErrTestUnreachable)
-		require.Zero(t, status)
-	})
+	require.Equal(t, "speakeasy.mcp_connection.test", request.GetResourceLogs()[0].GetScopeLogs()[0].GetLogRecords()[0].GetEventName())
 }

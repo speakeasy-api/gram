@@ -17627,7 +17627,7 @@ func dataExportsUsage() {
 	fmt.Fprintln(os.Stderr, `    create-route: Create the selected data source's export route configuration.`)
 	fmt.Fprintln(os.Stderr, `    update-route: Replace the selected data source's export route configuration.`)
 	fmt.Fprintln(os.Stderr, `    delete-route: Delete a data source's export route configuration.`)
-	fmt.Fprintln(os.Stderr, `    test-route: Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today. Rate limited per route and per organization.`)
+	fmt.Fprintln(os.Stderr, `    test-route: Send a test event straight to a route's destination, one for each signal its data source exports, and report what the destination answered to each. Rate limited per route and per organization.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s data-exports COMMAND --help\n", os.Args[0])
@@ -17855,7 +17855,7 @@ func dataExportsTestRouteUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today. Rate limited per route and per organization.`)
+	fmt.Fprintln(os.Stderr, `Send a test event straight to a route's destination, one for each signal its data source exports, and report what the destination answered to each. Rate limited per route and per organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)

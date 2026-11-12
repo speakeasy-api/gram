@@ -41,28 +41,30 @@ func (s *Sink) Publish(ctx context.Context, organizationID, projectID, recordID 
 
 func (s *Sink) Close() { s.logs.Close() }
 
-// TestSender sends a test connection event, built exactly as the sink builds
-// real ones, straight to one destination. It never publishes.
-type TestSender struct {
-	records *otelpub.RecordBuilder
-	probe   *otelsvc.ConnectionLogProbe
+// TestSource builds the MCP connection logs test event exactly as the sink
+// builds real records. It never publishes.
+type TestSource struct {
+	records  *otelpub.RecordBuilder
+	requests *otelsvc.ConnectionLogTestRequests
 }
 
-var _ dataexports.TestEventSender = (*TestSender)(nil)
+var _ otelsvc.RouteTestSource = (*TestSource)(nil)
 
-func NewTestSender(probe *otelsvc.ConnectionLogProbe, serviceName string) *TestSender {
-	return &TestSender{records: otelpub.NewRecordBuilder(connectionLogResource(serviceName), dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource)), probe: probe}
+func NewTestSource(requests *otelsvc.ConnectionLogTestRequests, serviceName string) *TestSource {
+	return &TestSource{records: otelpub.NewRecordBuilder(connectionLogResource(serviceName), dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource)), requests: requests}
 }
 
-func (s *TestSender) SendConnectionLogTest(ctx context.Context, destination dataexports.TestDestination) (int, error) {
+func (s *TestSource) DataSource() string { return dataexports.DataSourceMCPConnectionLogs }
+
+func (s *TestSource) BuildTestRequests(ctx context.Context, destination dataexports.TestDestination) ([]otelsvc.RouteTestRequest, error) {
 	record := mcpconnectionattempts.TestExportRecord(time.Now())
 	inbound, err := s.records.Prepare(otelpub.WithTenant(ctx, destination.OrganizationID, destination.ProjectID.String()), &record)
 	if err != nil {
-		return 0, fmt.Errorf("prepare connection log test record: %w", err)
+		return nil, fmt.Errorf("prepare connection log test record: %w", err)
 	}
-	status, err := s.probe.Send(ctx, destination, inbound)
+	request, err := s.requests.Build(ctx, inbound, destination)
 	if err != nil {
-		return 0, fmt.Errorf("send connection log test record: %w", err)
+		return nil, fmt.Errorf("build connection log test request: %w", err)
 	}
-	return status, nil
+	return []otelsvc.RouteTestRequest{request}, nil
 }

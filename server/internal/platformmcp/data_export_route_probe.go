@@ -24,24 +24,35 @@ const (
 
 type SendDataExportTestEventInput struct {
 	ProjectID             string `json:"project_id" jsonschema:"project ID that owns the route, from list_data_exports"`
-	RouteID               string `json:"route_id" jsonschema:"exact route ID of an mcp_connection_logs route, from list_data_exports"`
+	RouteID               string `json:"route_id" jsonschema:"exact route ID from list_data_exports"`
+	ExpectedDataSource    string `json:"expected_data_source" jsonschema:"the route's data_source exactly as list_data_exports returned it and the user confirmed"`
 	ExpectedDestinationID string `json:"expected_destination_id" jsonschema:"the route's destination_id exactly as list_data_exports returned it and the user confirmed"`
-	Confirmed             bool   `json:"confirmed" jsonschema:"true only after the user confirmed this exact project, route, and destination"`
+	Confirmed             bool   `json:"confirmed" jsonschema:"true only after the user confirmed this exact project, route, data source, and destination"`
+}
+
+// SendDataExportTestEventSignal is what the destination answered to one signal's test event.
+type SendDataExportTestEventSignal struct {
+	Signal     string `json:"signal" jsonschema:"logs, traces, or metrics"`
+	Outcome    string `json:"outcome" jsonschema:"accepted, refused, not_found, unreachable, or error"`
+	StatusCode int    `json:"status_code,omitempty" jsonschema:"HTTP status the destination answered with; omitted when it did not answer"`
+	Message    string `json:"message" jsonschema:"what happened to this signal, in plain language"`
 }
 
 // SendDataExportTestEventOutput is what the destination answered. It never
 // carries header values or the destination's response body.
 type SendDataExportTestEventOutput struct {
-	Outcome       string `json:"outcome" jsonschema:"accepted, refused, not_found, unreachable, or error"`
-	StatusCode    int    `json:"status_code,omitempty" jsonschema:"HTTP status the destination answered with; omitted when it did not answer"`
-	Message       string `json:"message" jsonschema:"what happened, in plain language, to show the user"`
-	ProjectID     string `json:"project_id"`
-	RouteID       string `json:"route_id"`
-	DestinationID string `json:"destination_id"`
+	Outcome       string                          `json:"outcome" jsonschema:"accepted when every signal was accepted; otherwise the worst signal's outcome: unreachable, refused, not_found, or error"`
+	StatusCode    int                             `json:"status_code,omitempty" jsonschema:"HTTP status of the signal that set the outcome; omitted when it did not answer"`
+	Message       string                          `json:"message" jsonschema:"what happened, in plain language, to show the user"`
+	Signals       []SendDataExportTestEventSignal `json:"signals" jsonschema:"one result for each signal the route's data source exports"`
+	ProjectID     string                          `json:"project_id"`
+	RouteID       string                          `json:"route_id"`
+	DataSource    string                          `json:"data_source"`
+	DestinationID string                          `json:"destination_id"`
 }
 
-// DataExportTestEventService sends one test event for an MCP connection logs
-// export through dataexports.RouteTestCore, the dashboard's own path.
+// DataExportTestEventService sends a data export route's test events through
+// dataexports.RouteTestCore, the dashboard's own path.
 type DataExportTestEventService struct {
 	logger  *slog.Logger
 	queries *platformrepo.Queries
@@ -86,7 +97,7 @@ func (s *DataExportTestEventService) send(ctx context.Context, principal Princip
 		return SendDataExportTestEventOutput{}, errors.New("data export test event service is not composed")
 	}
 	if !input.Confirmed {
-		return SendDataExportTestEventOutput{}, dataExportInvalid("Confirm the exact project, route, and destination with the user before sending a test event to it.")
+		return SendDataExportTestEventOutput{}, dataExportInvalid("Confirm the exact project, route, data source, and destination with the user before sending a test event to it.")
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
 	if err != nil {
@@ -95,6 +106,10 @@ func (s *DataExportTestEventService) send(ctx context.Context, principal Princip
 	routeID, err := uuid.Parse(strings.TrimSpace(input.RouteID))
 	if err != nil {
 		return SendDataExportTestEventOutput{}, dataExportInvalid("Provide the exact route ID from the current data export list.")
+	}
+	dataSource, err := dataexports.NormalizeDataSource(strings.TrimSpace(input.ExpectedDataSource))
+	if err != nil {
+		return SendDataExportTestEventOutput{}, dataExportInvalid("Provide expected_data_source exactly as the current data export list shows it for this route.")
 	}
 	destinationID, err := uuid.Parse(strings.TrimSpace(input.ExpectedDestinationID))
 	if err != nil {
@@ -120,7 +135,7 @@ func (s *DataExportTestEventService) send(ctx context.Context, principal Princip
 		ProjectID:      project.ID,
 		RouteID:        routeID,
 		Expect: &dataexports.RouteExpectation{
-			DataSource:        dataexports.DataSourceMCPConnectionLogs,
+			DataSource:        dataSource,
 			OtelDestinationID: uuid.NullUUID{UUID: destinationID, Valid: true},
 		},
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
@@ -129,12 +144,18 @@ func (s *DataExportTestEventService) send(ctx context.Context, principal Princip
 	if err != nil {
 		return SendDataExportTestEventOutput{}, classifyDataExportTestError(err)
 	}
+	signals := make([]SendDataExportTestEventSignal, len(result.Signals))
+	for i, signal := range result.Signals {
+		signals[i] = SendDataExportTestEventSignal{Signal: string(signal.Signal), Outcome: string(signal.Outcome), StatusCode: signal.StatusCode, Message: signal.Message}
+	}
 	return SendDataExportTestEventOutput{
 		Outcome:       string(result.Outcome),
 		StatusCode:    result.StatusCode,
 		Message:       result.Message,
+		Signals:       signals,
 		ProjectID:     project.ID.String(),
 		RouteID:       routeID.String(),
+		DataSource:    result.DataSource,
 		DestinationID: result.DestinationID.String(),
 	}, nil
 }
@@ -147,9 +168,9 @@ func classifyDataExportTestError(err error) error {
 	case errors.Is(err, dataexports.ErrRouteNotFound):
 		return dataExportRouteMissing()
 	case errors.Is(err, dataexports.ErrRouteTestUnsupported):
-		return refusal("unsupported_data_source", "Test events are only available for MCP connection logs exports. Nothing was sent.")
+		return refusal("unsupported_data_source", "This route's data source has no test event. Nothing was sent.")
 	case errors.Is(err, dataexports.ErrRouteChanged):
-		return refusal("route_changed", "This route's destination changed after it was read, so nothing was sent. Read the current data exports again and confirm the destination with the user.")
+		return refusal("route_changed", "This route's data source or destination changed after it was read, so nothing was sent. Read the current data exports again and confirm them with the user.")
 	case errors.Is(err, dataexports.ErrRouteDestinationRequired):
 		return refusal("no_destination", "This route has no destination, so there is nowhere to send a test event. Choose a destination for the route in the dashboard first.")
 	case errors.Is(err, dataexports.ErrRouteDestinationInactive):

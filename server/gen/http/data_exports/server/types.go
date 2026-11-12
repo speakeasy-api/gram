@@ -170,14 +170,16 @@ type UpdateRouteResponseBody struct {
 // TestRouteResponseBody is the type of the "dataExports" service "testRoute"
 // endpoint HTTP response body.
 type TestRouteResponseBody struct {
-	// accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no
-	// answer, such as a timeout or refused connection, or an address Speakeasy may
-	// not send to. error: any other answer.
+	// accepted when every signal was accepted. Otherwise the worst signal's
+	// outcome, in this order: unreachable, refused, not_found, error.
 	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
-	// HTTP status the destination answered with. Omitted when it did not answer.
+	// HTTP status of the signal that set the outcome. Omitted when it did not
+	// answer.
 	StatusCode *int `form:"status_code,omitempty" json:"status_code,omitempty" xml:"status_code,omitempty"`
 	// What happened, in plain language.
 	Message string `form:"message" json:"message" xml:"message"`
+	// One result for each signal the route's data source exports.
+	Signals []*TestDataExportRouteSignalResultResponseBody `form:"signals" json:"signals" xml:"signals"`
 }
 
 // ListDestinationsUnauthorizedResponseBody is the type of the "dataExports"
@@ -2107,6 +2109,21 @@ type DataExportRouteResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// TestDataExportRouteSignalResultResponseBody is used to define fields on
+// response body types.
+type TestDataExportRouteSignalResultResponseBody struct {
+	// The OTLP signal.
+	Signal string `form:"signal" json:"signal" xml:"signal"`
+	// accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no
+	// answer, such as a timeout or refused connection, or an address Speakeasy may
+	// not send to. error: any other answer.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+	// HTTP status the destination answered with. Omitted when it did not answer.
+	StatusCode *int `form:"status_code,omitempty" json:"status_code,omitempty" xml:"status_code,omitempty"`
+	// What happened, in plain language.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
 // CreateOtelDestinationInputRequestBody is used to define fields on request
 // body types.
 type CreateOtelDestinationInputRequestBody struct {
@@ -2286,6 +2303,18 @@ func NewTestRouteResponseBody(res *dataexports.TestDataExportRouteResult) *TestR
 		Outcome:    res.Outcome,
 		StatusCode: res.StatusCode,
 		Message:    res.Message,
+	}
+	if res.Signals != nil {
+		body.Signals = make([]*TestDataExportRouteSignalResultResponseBody, len(res.Signals))
+		for i, val := range res.Signals {
+			if val == nil {
+				body.Signals[i] = nil
+				continue
+			}
+			body.Signals[i] = marshalDataexportsTestDataExportRouteSignalResultToTestDataExportRouteSignalResultResponseBody(val)
+		}
+	} else {
+		body.Signals = []*TestDataExportRouteSignalResultResponseBody{}
 	}
 	return body
 }

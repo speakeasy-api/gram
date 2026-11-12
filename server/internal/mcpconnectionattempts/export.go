@@ -40,7 +40,7 @@ const (
 	exportEventName = "speakeasy.mcp_connection"
 
 	testExportEventName = "speakeasy.mcp_connection.test"
-	testExportMessage   = "This is a test event from Speakeasy. It is not a real connection attempt."
+	testExportMessage   = "This is a test event from Speakeasy. It is not real data."
 
 	// minAttemptDuration separates a real span from a one-row attempt, whose start and end are the same moment.
 	minAttemptDuration = time.Millisecond
@@ -311,12 +311,12 @@ func exportRecord(row Row) (log.Record, bool) {
 	return newExportRecord(exportEventName, row.EventTime, severity, severityText, attrs), true
 }
 
-// TestExportRecord is the event a destination test sends: the export schema, marked as a
-// test, with no attempt, person or server in it.
+// TestExportRecord is the event a destination test sends: the export schema with no
+// attempt, person or server in it. The pipeline adds the speakeasy.test_event marker,
+// a key this producer may not write.
 func TestExportRecord(at time.Time) log.Record {
 	return newExportRecord(testExportEventName, at, log.SeverityInfo, "INFO", []attribute.KeyValue{
 		attr.LogRecordUID(uuid.NewString()),
-		attr.ExtMcpConnectionTest(true),
 		attr.ExtMcpConnectionUserMessage(testExportMessage),
 	})
 }

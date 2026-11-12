@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,7 +36,8 @@ const (
 	// all its routes and projects, so re-creating routes cannot multiply sends.
 	RouteTestsPerOrganizationPerMinute = 20
 
-	// routeTestTimeout bounds the whole send, on top of the HTTP client's own timeout.
+	// routeTestTimeout bounds the whole test. A source's signals go out in
+	// parallel, each with its own shorter timeout.
 	routeTestTimeout = 10 * time.Second
 )
 
@@ -50,12 +53,8 @@ const (
 )
 
 var (
-	// ErrTestUnreachable means no HTTP response came back: a timeout, a refused
-	// connection, or an address the outbound network policy blocks.
-	ErrTestUnreachable = errors.New("the data export destination could not be reached")
-
 	// ErrRouteTestUnsupported means the route's data source has no test event.
-	ErrRouteTestUnsupported = errors.New("test events are only available for MCP connection logs exports")
+	ErrRouteTestUnsupported = errors.New("this data source has no test event")
 
 	// ErrRouteTestRateLimited means the route or its organization sent its allowance of test events.
 	ErrRouteTestRateLimited = errors.New("too many test events were sent just now")
@@ -82,11 +81,21 @@ type TestDestination struct {
 	IncludeSensitiveData bool
 }
 
-// TestEventSender sends one test event straight to a destination, through the
-// relay's delivery path. It returns the HTTP status, or an error wrapping
-// ErrTestUnreachable when no response came back.
+// SignalTestResult is what one signal's test request got back.
+type SignalTestResult struct {
+	Signal Signal
+	// StatusCode is zero when no response came back.
+	StatusCode int
+	// Unreachable means no response came back: a timeout, a refused
+	// connection, or an address the outbound network policy blocks.
+	Unreachable bool
+}
+
+// TestEventSender sends a source's test events straight to a destination,
+// through the relays' delivery path. It returns one result per signal the
+// source exports; an error means the test could not be built or sent.
 type TestEventSender interface {
-	SendConnectionLogTest(ctx context.Context, destination TestDestination) (int, error)
+	SendTest(ctx context.Context, source string, destination TestDestination) ([]SignalTestResult, error)
 }
 
 // RouteTestCore sends a test event for one route. The dashboard and the
@@ -126,8 +135,17 @@ type RouteTestResult struct {
 	Outcome       TestOutcome
 	StatusCode    int
 	Message       string
+	Signals       []SignalTestOutcome
 	DataSource    string
 	DestinationID uuid.UUID
+}
+
+// SignalTestOutcome is one signal's outcome, as shown to the admin.
+type SignalTestOutcome struct {
+	Signal     Signal
+	Outcome    TestOutcome
+	StatusCode int
+	Message    string
 }
 
 // SendTest checks the route, spends one test from its allowance, sends the
@@ -148,7 +166,7 @@ func (c *RouteTestCore) SendTest(ctx context.Context, params SendRouteTestParams
 	if err != nil {
 		return RouteTestResult{}, fmt.Errorf("load data export route: %w", err)
 	}
-	if route.DataSource != DataSourceMCPConnectionLogs {
+	if _, ok := LookupSource(route.DataSource); !ok {
 		return RouteTestResult{}, ErrRouteTestUnsupported
 	}
 	if params.Expect != nil {
@@ -170,31 +188,29 @@ func (c *RouteTestCore) SendTest(ctx context.Context, params SendRouteTestParams
 		return RouteTestResult{}, err
 	}
 
+	// One allowance covers every signal: a product telemetry test sends three requests.
 	sendCtx, cancel := context.WithTimeout(ctx, routeTestTimeout)
 	defer cancel()
-	statusCode, err := c.sender.SendConnectionLogTest(sendCtx, TestDestination{
+	sent, err := c.sender.SendTest(sendCtx, route.DataSource, TestDestination{
 		OrganizationID:       params.OrganizationID,
 		ProjectID:            params.ProjectID,
 		EndpointURL:          destination.EndpointURL,
 		Headers:              destination.Headers,
 		IncludeSensitiveData: destination.IncludeSensitiveData,
 	})
-	var outcome TestOutcome
-	switch {
-	case errors.Is(err, ErrTestUnreachable):
-		outcome, statusCode = TestOutcomeUnreachable, 0
-	case err != nil:
+	if err != nil {
 		return RouteTestResult{}, fmt.Errorf("send data export test event: %w", err)
-	default:
-		outcome = testOutcomeForStatus(statusCode)
+	}
+	if len(sent) == 0 {
+		return RouteTestResult{}, errors.New("send data export test event: no signal was sent")
 	}
 
-	result := RouteTestResult{
-		Outcome:       outcome,
-		StatusCode:    statusCode,
-		Message:       testOutcomeMessage(outcome, statusCode),
-		DataSource:    route.DataSource,
-		DestinationID: destination.ID,
+	result := summarizeRouteTest(sent)
+	result.DataSource = route.DataSource
+	result.DestinationID = destination.ID
+	auditSignals := make([]audit.DataExportRouteTestSignal, len(result.Signals))
+	for i, signal := range result.Signals {
+		auditSignals[i] = audit.DataExportRouteTestSignal{Signal: string(signal.Signal), Outcome: string(signal.Outcome), StatusCode: signal.StatusCode}
 	}
 	if err := c.audit.LogDataExportRouteTest(context.WithoutCancel(ctx), c.db, audit.LogDataExportRouteTestEvent{
 		OrganizationID:   params.OrganizationID,
@@ -205,8 +221,9 @@ func (c *RouteTestCore) SendTest(ctx context.Context, params SendRouteTestParams
 		RouteURN:         urn.NewDataExportRoute(route.ID),
 		DataSource:       route.DataSource,
 		DestinationURN:   urn.NewOtelDestination(destination.ID),
-		Outcome:          string(outcome),
-		StatusCode:       statusCode,
+		Outcome:          string(result.Outcome),
+		StatusCode:       result.StatusCode,
+		Signals:          auditSignals,
 	}); err != nil {
 		// The event was already sent, so the caller still gets its outcome.
 		logger.ErrorContext(ctx, "audit data export route test", attr.SlogError(err))
@@ -236,6 +253,54 @@ func (c *RouteTestCore) allow(ctx context.Context, logger *slog.Logger, organiza
 	return nil
 }
 
+// testOutcomeSeverity orders outcomes from worst to best; the worst signal sets the test's outcome.
+var testOutcomeSeverity = []TestOutcome{TestOutcomeUnreachable, TestOutcomeRefused, TestOutcomeNotFound, TestOutcomeError, TestOutcomeAccepted}
+
+// summarizeRouteTest gives each signal its outcome and the test the worst of them.
+func summarizeRouteTest(sent []SignalTestResult) RouteTestResult {
+	signals := make([]SignalTestOutcome, len(sent))
+	worst := -1
+	for i, item := range sent {
+		outcome, statusCode := TestOutcomeUnreachable, 0
+		if !item.Unreachable {
+			outcome, statusCode = testOutcomeForStatus(item.StatusCode), item.StatusCode
+		}
+		signals[i] = SignalTestOutcome{Signal: item.Signal, Outcome: outcome, StatusCode: statusCode, Message: testOutcomeMessage(item.Signal, outcome, statusCode)}
+		if worst < 0 || slices.Index(testOutcomeSeverity, outcome) < slices.Index(testOutcomeSeverity, signals[worst].Outcome) {
+			worst = i
+		}
+	}
+
+	result := RouteTestResult{
+		Outcome:       signals[worst].Outcome,
+		StatusCode:    signals[worst].StatusCode,
+		Message:       signals[worst].Message,
+		Signals:       signals,
+		DataSource:    "",
+		DestinationID: uuid.Nil,
+	}
+	if len(signals) > 1 {
+		if result.Outcome == TestOutcomeAccepted {
+			names := make([]string, len(signals))
+			for i, signal := range signals {
+				names[i] = string(signal.Signal)
+			}
+			result.Message = fmt.Sprintf("The destination accepted the test events for %s.", joinWithAnd(names))
+		} else {
+			result.Message = "The destination did not accept every test event. See each signal for details."
+		}
+	}
+	return result
+}
+
+// joinWithAnd joins names as "a, b and c".
+func joinWithAnd(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
 // testOutcomeForStatus maps the destination's HTTP status to an outcome.
 func testOutcomeForStatus(statusCode int) TestOutcome {
 	switch {
@@ -251,14 +316,14 @@ func testOutcomeForStatus(statusCode int) TestOutcome {
 }
 
 // testOutcomeMessage is the plain-language result shown to the admin.
-func testOutcomeMessage(outcome TestOutcome, statusCode int) string {
+func testOutcomeMessage(signal Signal, outcome TestOutcome, statusCode int) string {
 	switch outcome {
 	case TestOutcomeAccepted:
 		return "The destination accepted the test event."
 	case TestOutcomeRefused:
 		return "The destination refused the test event. Check the API key, and for Datadog, that the endpoint matches your site."
 	case TestOutcomeNotFound:
-		return "No logs endpoint at this address. Check the URL; Speakeasy adds /v1/logs."
+		return fmt.Sprintf("No %s endpoint at this address. Check the URL; Speakeasy adds /v1/%s.", signal, signal)
 	case TestOutcomeUnreachable:
 		return "Speakeasy could not reach the destination. Check the URL, and that the address accepts connections from the internet."
 	case TestOutcomeError:

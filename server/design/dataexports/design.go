@@ -208,7 +208,7 @@ var _ = Service("dataExports", func() {
 	})
 
 	Method("testRoute", func() {
-		Description("Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today. Rate limited per route and per organization.")
+		Description("Send a test event straight to a route's destination, one for each signal its data source exports, and report what the destination answered to each. Rate limited per route and per organization.")
 
 		// Declared here, not in the shared set, so only this method gets a typed 429.
 		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
@@ -365,11 +365,25 @@ var ListDataExportRoutesResult = Type("ListDataExportRoutesResult", func() {
 })
 
 var TestDataExportRouteResult = Type("TestDataExportRouteResult", func() {
-	Description("What the destination answered to one test event. Header values and the response body are never returned.")
+	Description("What the destination answered to a route's test events. Header values and the response body are never returned.")
+	Attribute("outcome", String, "accepted when every signal was accepted. Otherwise the worst signal's outcome, in this order: unreachable, refused, not_found, error.", func() {
+		Enum("accepted", "refused", "not_found", "unreachable", "error")
+	})
+	Attribute("status_code", Int, "HTTP status of the signal that set the outcome. Omitted when it did not answer.")
+	Attribute("message", String, "What happened, in plain language.")
+	Attribute("signals", ArrayOf(TestDataExportRouteSignalResult), "One result for each signal the route's data source exports.")
+	Required("outcome", "message", "signals")
+})
+
+var TestDataExportRouteSignalResult = Type("TestDataExportRouteSignalResult", func() {
+	Description("What the destination answered to one signal's test event.")
+	Attribute("signal", String, "The OTLP signal.", func() {
+		Enum("logs", "traces", "metrics")
+	})
 	Attribute("outcome", String, "accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection, or an address Speakeasy may not send to. error: any other answer.", func() {
 		Enum("accepted", "refused", "not_found", "unreachable", "error")
 	})
 	Attribute("status_code", Int, "HTTP status the destination answered with. Omitted when it did not answer.")
 	Attribute("message", String, "What happened, in plain language.")
-	Required("outcome", "message")
+	Required("signal", "outcome")
 })

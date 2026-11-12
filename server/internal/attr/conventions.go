@@ -831,7 +831,9 @@ const (
 	ExtMcpConnectionSubjectKindKey      = attribute.Key("speakeasy.mcp_connection.subject_kind")
 	ExtMcpConnectionClientNameKey       = attribute.Key("speakeasy.mcp_connection.client_name")
 	ExtMcpConnectionClientVersionKey    = attribute.Key("speakeasy.mcp_connection.client_version")
-	ExtMcpConnectionTestKey             = attribute.Key("speakeasy.mcp_connection.test")
+
+	// TestEventKey marks every record a data export test sends, so a destination can filter it out.
+	TestEventKey = attribute.Key("speakeasy.test_event")
 
 	ConnectionDropCountsKey           = attribute.Key("gram.connection.drop_counts")
 	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")
@@ -3258,9 +3260,9 @@ func SlogExtMcpConnectionFinal(v bool) slog.Attr {
 	return slog.Bool(string(ExtMcpConnectionFinalKey), v)
 }
 
-func ExtMcpConnectionTest(v bool) attribute.KeyValue { return ExtMcpConnectionTestKey.Bool(v) }
-func SlogExtMcpConnectionTest(v bool) slog.Attr {
-	return slog.Bool(string(ExtMcpConnectionTestKey), v)
+func TestEvent(v bool) attribute.KeyValue { return TestEventKey.Bool(v) }
+func SlogTestEvent(v bool) slog.Attr {
+	return slog.Bool(string(TestEventKey), v)
 }
 
 func ExtMcpConnectionUserMessage(v string) attribute.KeyValue {

@@ -32,9 +32,19 @@ const testRouteSecret = "test-route-secret-value"
 // testRouteDestination is a collector answering status, counting requests that carry the secret header.
 func testRouteDestination(t *testing.T, status int) (*httptest.Server, *atomic.Int64) {
 	t.Helper()
+	return testRouteDestinationByPath(t, map[string]int{"/v1/logs": status, "/v1/traces": status, "/v1/metrics": status})
+}
+
+// testRouteDestinationByPath answers each OTLP path with its own status.
+func testRouteDestinationByPath(t *testing.T, statuses map[string]int) (*httptest.Server, *atomic.Int64) {
+	t.Helper()
 	var received atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/logs" && r.Header.Get("Dd-Api-Key") == testRouteSecret {
+		status, ok := statuses[r.URL.Path]
+		if !ok {
+			status = http.StatusNotFound
+		}
+		if ok && r.Header.Get("Dd-Api-Key") == testRouteSecret {
 			received.Add(1)
 		}
 		w.WriteHeader(status)
@@ -96,6 +106,10 @@ func TestTestRouteMapsDestinationAnswers(t *testing.T) {
 			require.Equal(t, tc.status, *result.StatusCode)
 			require.Equal(t, tc.message, result.Message)
 			require.NotContains(t, result.Message, testRouteSecret)
+			require.Len(t, result.Signals, 1)
+			require.Equal(t, "logs", result.Signals[0].Signal)
+			require.Equal(t, tc.outcome, result.Signals[0].Outcome)
+			require.Equal(t, tc.message, *result.Signals[0].Message)
 			// One request, no retries, even for a retryable 500.
 			require.EqualValues(t, 1, received.Load())
 
@@ -139,19 +153,84 @@ func TestTestRouteReportsUnreachableDestination(t *testing.T) {
 	require.NotContains(t, metadata, "status_code")
 }
 
-func TestTestRouteRejectsOtherDataSources(t *testing.T) {
+func TestTestRouteSendsALogForEveryLogsOnlySource(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	server, received := testRouteDestination(t, http.StatusOK)
-	route := createTestableRoute(t, ctx, ti, server.URL, dataexports.DataSourceProductTelemetry)
+	for _, source := range []string{dataexports.DataSourceToolCallLogs, dataexports.DataSourceRiskFindings, dataexports.DataSourceMCPConnectionLogs} {
+		t.Run(source, func(t *testing.T) {
+			t.Parallel()
 
-	_, err := testRoute(ctx, ti, route.ID)
-	requireOopsCode(t, err, oops.CodeInvalid)
-	require.Zero(t, received.Load())
-	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
-	require.NoError(t, err)
-	require.Zero(t, count)
+			ctx, ti := newTestService(t)
+			server, received := testRouteDestinationByPath(t, map[string]int{"/v1/logs": http.StatusOK})
+			route := createTestableRoute(t, ctx, ti, server.URL, source)
+
+			result, err := testRoute(ctx, ti, route.ID)
+			require.NoError(t, err)
+			require.Equal(t, "accepted", result.Outcome)
+			require.Equal(t, "The destination accepted the test event.", result.Message)
+			require.Len(t, result.Signals, 1)
+			require.Equal(t, "logs", result.Signals[0].Signal)
+			require.EqualValues(t, 1, received.Load())
+		})
+	}
+}
+
+func TestTestRouteSendsEverySignalForProductTelemetry(t *testing.T) {
+	t.Parallel()
+
+	t.Run("all accepted", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestService(t)
+		server, received := testRouteDestination(t, http.StatusOK)
+		route := createTestableRoute(t, ctx, ti, server.URL, dataexports.DataSourceProductTelemetry)
+
+		result, err := testRoute(ctx, ti, route.ID)
+		require.NoError(t, err)
+		require.Equal(t, "accepted", result.Outcome)
+		require.Equal(t, http.StatusOK, *result.StatusCode)
+		require.Equal(t, "The destination accepted the test events for logs, traces and metrics.", result.Message)
+		require.Len(t, result.Signals, 3)
+		for i, signal := range []string{"logs", "traces", "metrics"} {
+			require.Equal(t, signal, result.Signals[i].Signal)
+			require.Equal(t, "accepted", result.Signals[i].Outcome)
+		}
+		require.EqualValues(t, 3, received.Load())
+	})
+
+	t.Run("traces not found", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestService(t)
+		server, received := testRouteDestinationByPath(t, map[string]int{"/v1/logs": http.StatusOK, "/v1/traces": http.StatusNotFound, "/v1/metrics": http.StatusAccepted})
+		route := createTestableRoute(t, ctx, ti, server.URL, dataexports.DataSourceProductTelemetry)
+
+		result, err := testRoute(ctx, ti, route.ID)
+		require.NoError(t, err)
+		require.Equal(t, "not_found", result.Outcome)
+		require.Equal(t, http.StatusNotFound, *result.StatusCode)
+		require.Equal(t, "The destination did not accept every test event. See each signal for details.", result.Message)
+		require.Equal(t, "accepted", result.Signals[0].Outcome)
+		require.Equal(t, "not_found", result.Signals[1].Outcome)
+		require.Equal(t, "No traces endpoint at this address. Check the URL; Speakeasy adds /v1/traces.", *result.Signals[1].Message)
+		require.Equal(t, "accepted", result.Signals[2].Outcome)
+		require.Equal(t, http.StatusAccepted, *result.Signals[2].StatusCode)
+		require.EqualValues(t, 3, received.Load())
+
+		entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
+		require.NoError(t, err)
+		metadata, err := audittest.DecodeAuditData(entry.Metadata)
+		require.NoError(t, err)
+		require.Equal(t, "not_found", metadata["outcome"])
+		require.InDelta(t, float64(http.StatusNotFound), metadata["status_code"], 0)
+		signals, ok := metadata["signals"].([]any)
+		require.True(t, ok)
+		require.Len(t, signals, 3)
+		traces, ok := signals[1].(map[string]any)
+		require.True(t, ok)
+		require.Equal(t, "traces", traces["signal"])
+		require.Equal(t, "not_found", traces["outcome"])
+	})
 }
 
 func TestTestRouteRequiresADestination(t *testing.T) {
@@ -238,20 +317,33 @@ func TestTestRouteIsRateLimitedPerRoute(t *testing.T) {
 	require.EqualValues(t, dataexports.RouteTestsPerMinute, received.Load())
 }
 
-// fixedTestSender answers every test event with status, counting the calls.
-// Before answering it runs onSend, if set.
+// fixedTestSender answers every signal with status, or with its entry in
+// results, counting the calls. Before answering it runs onSend, if set.
 type fixedTestSender struct {
-	status int
-	sent   atomic.Int64
-	onSend func()
+	status  int
+	results map[dataexports.Signal]dataexports.SignalTestResult
+	sent    atomic.Int64
+	onSend  func()
 }
 
-func (s *fixedTestSender) SendConnectionLogTest(context.Context, dataexports.TestDestination) (int, error) {
+func (s *fixedTestSender) SendTest(_ context.Context, sourceName string, _ dataexports.TestDestination) ([]dataexports.SignalTestResult, error) {
 	s.sent.Add(1)
 	if s.onSend != nil {
 		s.onSend()
 	}
-	return s.status, nil
+	source, ok := dataexports.LookupSource(sourceName)
+	if !ok {
+		return nil, dataexports.ErrRouteTestUnsupported
+	}
+	results := make([]dataexports.SignalTestResult, len(source.Signals))
+	for i, signal := range source.Signals {
+		result, ok := s.results[signal]
+		if !ok {
+			result = dataexports.SignalTestResult{Signal: signal, StatusCode: s.status, Unreachable: false}
+		}
+		results[i] = result
+	}
+	return results, nil
 }
 
 func routeTestParams(t *testing.T, ctx context.Context, routeID string) dataexports.SendRouteTestParams {
@@ -353,4 +445,50 @@ func TestTestRouteReturnsTheOutcomeWhenTheAuditFails(t *testing.T) {
 	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDataExportRouteTest)
 	require.NoError(t, err)
 	require.Zero(t, count)
+}
+
+func TestTestRouteTakesTheWorstSignal(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		results    map[dataexports.Signal]dataexports.SignalTestResult
+		outcome    dataexports.TestOutcome
+		statusCode int
+	}{
+		{name: "unreachable beats refused", results: map[dataexports.Signal]dataexports.SignalTestResult{
+			dataexports.SignalLogs:    {Signal: dataexports.SignalLogs, StatusCode: http.StatusOK, Unreachable: false},
+			dataexports.SignalTraces:  {Signal: dataexports.SignalTraces, StatusCode: http.StatusForbidden, Unreachable: false},
+			dataexports.SignalMetrics: {Signal: dataexports.SignalMetrics, StatusCode: 0, Unreachable: true},
+		}, outcome: dataexports.TestOutcomeUnreachable, statusCode: 0},
+		{name: "refused beats not found", results: map[dataexports.Signal]dataexports.SignalTestResult{
+			dataexports.SignalLogs:    {Signal: dataexports.SignalLogs, StatusCode: http.StatusNotFound, Unreachable: false},
+			dataexports.SignalTraces:  {Signal: dataexports.SignalTraces, StatusCode: http.StatusOK, Unreachable: false},
+			dataexports.SignalMetrics: {Signal: dataexports.SignalMetrics, StatusCode: http.StatusUnauthorized, Unreachable: false},
+		}, outcome: dataexports.TestOutcomeRefused, statusCode: http.StatusUnauthorized},
+		{name: "not found beats error", results: map[dataexports.Signal]dataexports.SignalTestResult{
+			dataexports.SignalLogs:    {Signal: dataexports.SignalLogs, StatusCode: http.StatusBadGateway, Unreachable: false},
+			dataexports.SignalTraces:  {Signal: dataexports.SignalTraces, StatusCode: http.StatusNotFound, Unreachable: false},
+			dataexports.SignalMetrics: {Signal: dataexports.SignalMetrics, StatusCode: http.StatusOK, Unreachable: false},
+		}, outcome: dataexports.TestOutcomeNotFound, statusCode: http.StatusNotFound},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestService(t)
+			route := createTestableRoute(t, ctx, ti, "https://collector.example.com", dataexports.DataSourceProductTelemetry)
+			sender := &fixedTestSender{status: http.StatusOK, results: tc.results}
+			core := dataexports.NewRouteTestCore(testenv.NewLogger(t), ti.conn, audit.NewLogger(), ti.enc, sender, routeTestLimits(t, dataexports.RouteTestsPerMinute, dataexports.RouteTestsPerOrganizationPerMinute))
+			require.NotNil(t, core)
+
+			result, err := core.SendTest(ctx, routeTestParams(t, ctx, route.ID))
+			require.NoError(t, err)
+			require.Equal(t, tc.outcome, result.Outcome)
+			require.Equal(t, tc.statusCode, result.StatusCode)
+			require.Equal(t, "The destination did not accept every test event. See each signal for details.", result.Message)
+			require.Len(t, result.Signals, 3)
+			require.EqualValues(t, 1, sender.sent.Load())
+		})
+	}
 }

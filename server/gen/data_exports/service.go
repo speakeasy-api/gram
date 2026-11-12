@@ -34,9 +34,9 @@ type Service interface {
 	UpdateRoute(context.Context, *UpdateRoutePayload) (res *DataExportRoute, err error)
 	// Delete a data source's export route configuration.
 	DeleteRoute(context.Context, *DeleteRoutePayload) (err error)
-	// Send one test event straight to a route's destination and report what it
-	// answered. Only MCP connection logs routes support this today. Rate limited
-	// per route and per organization.
+	// Send a test event straight to a route's destination, one for each signal its
+	// data source exports, and report what the destination answered to each. Rate
+	// limited per route and per organization.
 	TestRoute(context.Context, *TestRoutePayload) (res *TestDataExportRouteResult, err error)
 }
 
@@ -236,6 +236,22 @@ type OtelDestinationHeader struct {
 // TestDataExportRouteResult is the result type of the dataExports service
 // testRoute method.
 type TestDataExportRouteResult struct {
+	// accepted when every signal was accepted. Otherwise the worst signal's
+	// outcome, in this order: unreachable, refused, not_found, error.
+	Outcome string
+	// HTTP status of the signal that set the outcome. Omitted when it did not
+	// answer.
+	StatusCode *int
+	// What happened, in plain language.
+	Message string
+	// One result for each signal the route's data source exports.
+	Signals []*TestDataExportRouteSignalResult
+}
+
+// What the destination answered to one signal's test event.
+type TestDataExportRouteSignalResult struct {
+	// The OTLP signal.
+	Signal string
 	// accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no
 	// answer, such as a timeout or refused connection, or an address Speakeasy may
 	// not send to. error: any other answer.
@@ -243,7 +259,7 @@ type TestDataExportRouteResult struct {
 	// HTTP status the destination answered with. Omitted when it did not answer.
 	StatusCode *int
 	// What happened, in plain language.
-	Message string
+	Message *string
 }
 
 // TestRoutePayload is the payload type of the dataExports service testRoute

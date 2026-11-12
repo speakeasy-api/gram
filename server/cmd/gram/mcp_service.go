@@ -81,14 +81,27 @@ func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord]) m
 	return mcpconnectionattempts.WithExport(otelsink.New(publisher, gatewayRecordsServiceName))
 }
 
+// newDataExportRouteTester composes a test source for every data export source.
+func newDataExportRouteTester(logger *slog.Logger, meterProvider metric.MeterProvider, policy *guardian.Policy) (*otelsvc.RouteTester, error) {
+	sources := append(otelsvc.NewRouteTestSources(logger, meterProvider), otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequests(logger, meterProvider), gatewayRecordsServiceName))
+	tester, err := otelsvc.NewRouteTester(policy, sources...)
+	if err != nil {
+		return nil, fmt.Errorf("compose data export route tester: %w", err)
+	}
+	return tester, nil
+}
+
 // newDataExportRouteTests sends export test events with the server's outbound policy, limited per route and per organization.
-func newDataExportRouteTests(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, auditLogger *audit.Logger, encryptionClient *encryption.Client, policy *guardian.Policy, redisClient *redis.Client) *dataexports.RouteTestCore {
-	sender := otelsink.NewTestSender(otelsvc.NewConnectionLogProbe(logger, meterProvider, policy), gatewayRecordsServiceName)
+func newDataExportRouteTests(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, auditLogger *audit.Logger, encryptionClient *encryption.Client, policy *guardian.Policy, redisClient *redis.Client) (*dataexports.RouteTestCore, error) {
+	tester, err := newDataExportRouteTester(logger, meterProvider, policy)
+	if err != nil {
+		return nil, err
+	}
 	store := ratelimit.NewRedisStore(redisClient)
-	return dataexports.NewRouteTestCore(logger, db, auditLogger, encryptionClient, sender, dataexports.RouteTestLimits{
+	return dataexports.NewRouteTestCore(logger, db, auditLogger, encryptionClient, tester, dataexports.RouteTestLimits{
 		Route:        ratelimit.New(store, dataexports.RouteTestLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerMinute), ratelimit.WithMetrics(meterProvider)),
 		Organization: ratelimit.New(store, dataexports.RouteTestOrganizationLimitName, ratelimit.PerMinute(dataexports.RouteTestsPerOrganizationPerMinute), ratelimit.WithMetrics(meterProvider)),
-	})
+	}), nil
 }
 
 type mcpServiceDependencies struct {

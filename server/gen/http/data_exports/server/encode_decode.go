@@ -2451,3 +2451,17 @@ func unmarshalUpdateOtelDestinationHeaderInputRequestBodyToDataexportsUpdateOtel
 
 	return res
 }
+
+// marshalDataexportsTestDataExportRouteSignalResultToTestDataExportRouteSignalResultResponseBody
+// builds a value of type *TestDataExportRouteSignalResultResponseBody from a
+// value of type *dataexports.TestDataExportRouteSignalResult.
+func marshalDataexportsTestDataExportRouteSignalResultToTestDataExportRouteSignalResultResponseBody(v *dataexports.TestDataExportRouteSignalResult) *TestDataExportRouteSignalResultResponseBody {
+	res := &TestDataExportRouteSignalResultResponseBody{
+		Signal:     v.Signal,
+		Outcome:    v.Outcome,
+		StatusCode: v.StatusCode,
+		Message:    v.Message,
+	}
+
+	return res
+}

@@ -25,11 +25,19 @@ type recordingTestEventSender struct {
 	sent   []dataexports.TestDestination
 }
 
-func (s *recordingTestEventSender) SendConnectionLogTest(_ context.Context, destination dataexports.TestDestination) (int, error) {
+func (s *recordingTestEventSender) SendTest(_ context.Context, sourceName string, destination dataexports.TestDestination) ([]dataexports.SignalTestResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sent = append(s.sent, destination)
-	return s.status, nil
+	source, ok := dataexports.LookupSource(sourceName)
+	if !ok {
+		return nil, dataexports.ErrRouteTestUnsupported
+	}
+	results := make([]dataexports.SignalTestResult, len(source.Signals))
+	for i, signal := range source.Signals {
+		results[i] = dataexports.SignalTestResult{Signal: signal, StatusCode: s.status, Unreachable: false}
+	}
+	return results, nil
 }
 
 func (s *recordingTestEventSender) count() int {
@@ -62,8 +70,8 @@ func newDataExportTestEventFixture(t *testing.T, ctx context.Context, database s
 	return dataExportTestEventFixture{dataExportToggleFixture: f, sender: sender, tests: tests, core: core}
 }
 
-func (f dataExportTestEventFixture) testInput(routeID, destinationID uuid.UUID) SendDataExportTestEventInput {
-	return SendDataExportTestEventInput{ProjectID: f.project.ID.String(), RouteID: routeID.String(), ExpectedDestinationID: destinationID.String(), Confirmed: true}
+func (f dataExportTestEventFixture) testInput(routeID uuid.UUID, dataSource string, destinationID uuid.UUID) SendDataExportTestEventInput {
+	return SendDataExportTestEventInput{ProjectID: f.project.ID.String(), RouteID: routeID.String(), ExpectedDataSource: dataSource, ExpectedDestinationID: destinationID.String(), Confirmed: true}
 }
 
 func requireDataExportTestCode(t *testing.T, err error, code string) string {
@@ -91,13 +99,17 @@ func TestSendDataExportTestEventReportsTheAnswerAndAudits(t *testing.T) {
 	f := newDataExportTestEventFixture(t, ctx, "platform_mcp_data_export_test_event", http.StatusForbidden)
 	route := f.createRoute(t, ctx, dataexports.DataSourceMCPConnectionLogs, false, uuid.NullUUID{UUID: f.destination, Valid: true})
 
-	output, err := f.tests.Send(ctx, f.principal, f.testInput(route.ID, f.destination))
+	output, err := f.tests.Send(ctx, f.principal, f.testInput(route.ID, dataexports.DataSourceMCPConnectionLogs, f.destination))
 	require.NoError(t, err)
 	require.Equal(t, "refused", output.Outcome)
 	require.Equal(t, http.StatusForbidden, output.StatusCode)
 	require.Contains(t, output.Message, "Check the API key")
 	require.Equal(t, route.ID.String(), output.RouteID)
+	require.Equal(t, dataexports.DataSourceMCPConnectionLogs, output.DataSource)
 	require.Equal(t, f.destination.String(), output.DestinationID)
+	require.Len(t, output.Signals, 1)
+	require.Equal(t, "logs", output.Signals[0].Signal)
+	require.Equal(t, "refused", output.Signals[0].Outcome)
 	require.Equal(t, 1, f.sender.count())
 	require.Equal(t, "https://otel.example.test/v1", f.sender.sent[0].EndpointURL)
 	require.Equal(t, f.project.ID, f.sender.sent[0].ProjectID)
@@ -113,20 +125,45 @@ func TestSendDataExportTestEventRefusesWithoutConfirmationOrAMatchingDestination
 	f := newDataExportTestEventFixture(t, ctx, "platform_mcp_data_export_test_event_confirm", http.StatusOK)
 	route := f.createRoute(t, ctx, dataexports.DataSourceMCPConnectionLogs, true, uuid.NullUUID{UUID: f.destination, Valid: true})
 
-	unconfirmed := f.testInput(route.ID, f.destination)
+	unconfirmed := f.testInput(route.ID, dataexports.DataSourceMCPConnectionLogs, f.destination)
 	unconfirmed.Confirmed = false
 	_, err := f.tests.Send(ctx, f.principal, unconfirmed)
 	requireDataExportTestCode(t, err, "invalid_request")
 
-	_, err = f.tests.Send(ctx, f.principal, f.testInput(route.ID, uuid.New()))
+	_, err = f.tests.Send(ctx, f.principal, f.testInput(route.ID, dataexports.DataSourceMCPConnectionLogs, uuid.New()))
 	requireDataExportTestCode(t, err, "route_changed")
 
-	telemetry := f.createRoute(t, ctx, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: f.destination, Valid: true})
-	_, err = f.tests.Send(ctx, f.principal, f.testInput(telemetry.ID, f.destination))
-	requireDataExportTestCode(t, err, "unsupported_data_source")
+	_, err = f.tests.Send(ctx, f.principal, f.testInput(route.ID, dataexports.DataSourceRiskFindings, f.destination))
+	requireDataExportTestCode(t, err, "route_changed")
+
+	_, err = f.tests.Send(ctx, f.principal, f.testInput(route.ID, "unknown_source", f.destination))
+	requireDataExportTestCode(t, err, "invalid_request")
 
 	require.Zero(t, f.sender.count())
 	require.Zero(t, auditCount(t, ctx, f.conn, audit.ActionDataExportRouteTest))
+}
+
+func TestSendDataExportTestEventReportsEverySignalForProductTelemetry(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	f := newDataExportTestEventFixture(t, ctx, "platform_mcp_data_export_test_event_signals", http.StatusOK)
+	route := f.createRoute(t, ctx, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: f.destination, Valid: true})
+
+	output, err := f.tests.Send(ctx, f.principal, f.testInput(route.ID, dataexports.DataSourceProductTelemetry, f.destination))
+	require.NoError(t, err)
+	require.Equal(t, "accepted", output.Outcome)
+	require.Equal(t, "The destination accepted the test events for logs, traces and metrics.", output.Message)
+	require.Equal(t, dataexports.DataSourceProductTelemetry, output.DataSource)
+	require.Len(t, output.Signals, 3)
+	for i, signal := range []string{"logs", "traces", "metrics"} {
+		require.Equal(t, signal, output.Signals[i].Signal)
+		require.Equal(t, "accepted", output.Signals[i].Outcome)
+		require.Equal(t, http.StatusOK, output.Signals[i].StatusCode)
+	}
+	// One click spends one allowance, whatever the signal count.
+	require.Equal(t, 1, f.sender.count())
+	require.EqualValues(t, 1, auditCount(t, ctx, f.conn, audit.ActionDataExportRouteTest))
 }
 
 func TestSendDataExportTestEventRefusesANonAdminIdenticallyForRealAndInventedRoutes(t *testing.T) {
@@ -142,8 +179,8 @@ func TestSendDataExportTestEventRefusesANonAdminIdenticallyForRealAndInventedRou
 	service := NewDataExportTestEventService(testenv.NewLogger(t), f.conn, f.core, NewLiveOrgAdminAuthorizer(f.conn, engine))
 	member := Principal{UserID: memberID, OrganizationID: f.principal.OrganizationID, ConnectionID: uuid.NewString(), Generation: uuid.NewString(), ClientID: "client-test", Surface: SurfacePlatformMCP}
 
-	_, realErr := service.Send(ctx, member, f.testInput(route.ID, f.destination))
-	_, inventedErr := service.Send(ctx, member, f.testInput(uuid.New(), f.destination))
+	_, realErr := service.Send(ctx, member, f.testInput(route.ID, dataexports.DataSourceMCPConnectionLogs, f.destination))
+	_, inventedErr := service.Send(ctx, member, f.testInput(uuid.New(), dataexports.DataSourceMCPConnectionLogs, f.destination))
 	require.Equal(t, requireDataExportToggleCode(t, realErr, "permission_denied"), requireDataExportToggleCode(t, inventedErr, "permission_denied"))
 	require.Zero(t, f.sender.count())
 }
@@ -157,9 +194,9 @@ func TestSendDataExportTestEventCannotReachAnotherOrganizationsRoute(t *testing.
 	other := dataExportToggleFixture{conn: f.conn, service: f.service, principal: otherPrincipal, project: otherProject, destination: uuid.Nil}
 	foreign := other.createRoute(t, ctx, dataexports.DataSourceMCPConnectionLogs, false, uuid.NullUUID{})
 
-	_, err := f.tests.Send(ctx, f.principal, SendDataExportTestEventInput{ProjectID: otherProject.ID.String(), RouteID: foreign.ID.String(), ExpectedDestinationID: f.destination.String(), Confirmed: true})
+	_, err := f.tests.Send(ctx, f.principal, SendDataExportTestEventInput{ProjectID: otherProject.ID.String(), RouteID: foreign.ID.String(), ExpectedDataSource: dataexports.DataSourceMCPConnectionLogs, ExpectedDestinationID: f.destination.String(), Confirmed: true})
 	notFound := requireDataExportTestCode(t, err, "not_found")
-	_, err = f.tests.Send(ctx, f.principal, f.testInput(foreign.ID, f.destination))
+	_, err = f.tests.Send(ctx, f.principal, f.testInput(foreign.ID, dataexports.DataSourceMCPConnectionLogs, f.destination))
 	require.Equal(t, notFound, requireDataExportTestCode(t, err, "not_found"))
 	require.Zero(t, f.sender.count())
 }
@@ -172,11 +209,11 @@ func TestSendDataExportTestEventIsRateLimitedPerRoute(t *testing.T) {
 	route := f.createRoute(t, ctx, dataexports.DataSourceMCPConnectionLogs, true, uuid.NullUUID{UUID: f.destination, Valid: true})
 
 	for range dataexports.RouteTestsPerMinute {
-		output, err := f.tests.Send(ctx, f.principal, f.testInput(route.ID, f.destination))
+		output, err := f.tests.Send(ctx, f.principal, f.testInput(route.ID, dataexports.DataSourceMCPConnectionLogs, f.destination))
 		require.NoError(t, err)
 		require.Equal(t, "accepted", output.Outcome)
 	}
-	_, err := f.tests.Send(ctx, f.principal, f.testInput(route.ID, f.destination))
+	_, err := f.tests.Send(ctx, f.principal, f.testInput(route.ID, dataexports.DataSourceMCPConnectionLogs, f.destination))
 	text := requireDataExportTestCode(t, err, "rate_limited")
 	require.Contains(t, text, "Too many test events were sent just now. Try again in a minute.")
 	require.Equal(t, dataexports.RouteTestsPerMinute, f.sender.count())
@@ -194,7 +231,7 @@ func TestSendDataExportTestEventRefusesWhenTheLimitCannotBeChecked(t *testing.T)
 	require.NotNil(t, core)
 	service := NewDataExportTestEventService(testenv.NewLogger(t), f.conn, core, stubAuthorizer{err: nil})
 
-	_, err := service.Send(ctx, f.principal, f.testInput(route.ID, f.destination))
+	_, err := service.Send(ctx, f.principal, f.testInput(route.ID, dataexports.DataSourceMCPConnectionLogs, f.destination))
 	text := requireDataExportTestCode(t, err, unavailableCode)
 	require.Contains(t, text, "Speakeasy can't send test events right now. Try again shortly.")
 	require.Zero(t, f.sender.count())
@@ -230,8 +267,8 @@ func TestDataExportTestEventUnavailableManifestMatchesLive(t *testing.T) {
 		Required []string `json:"required"`
 	}
 	require.NoError(t, json.Unmarshal(unavailable.InputSchema, &schema))
-	require.Subset(t, schema.Required, []string{"project_id", "route_id", "expected_destination_id", "confirmed"})
+	require.Subset(t, schema.Required, []string{"project_id", "route_id", "expected_data_source", "expected_destination_id", "confirmed"})
 
-	refusal := invokeUnavailable(t, unavailable, map[string]any{"project_id": f.project.ID.String(), "route_id": uuid.NewString(), "expected_destination_id": uuid.NewString(), "confirmed": true})
+	refusal := invokeUnavailable(t, unavailable, map[string]any{"project_id": f.project.ID.String(), "route_id": uuid.NewString(), "expected_data_source": dataexports.DataSourceMCPConnectionLogs, "expected_destination_id": uuid.NewString(), "confirmed": true})
 	require.Contains(t, refusal, `"feature":"data_export_test_event"`)
 }

@@ -170,14 +170,16 @@ type UpdateRouteResponseBody struct {
 // TestRouteResponseBody is the type of the "dataExports" service "testRoute"
 // endpoint HTTP response body.
 type TestRouteResponseBody struct {
-	// accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no
-	// answer, such as a timeout or refused connection, or an address Speakeasy may
-	// not send to. error: any other answer.
+	// accepted when every signal was accepted. Otherwise the worst signal's
+	// outcome, in this order: unreachable, refused, not_found, error.
 	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
-	// HTTP status the destination answered with. Omitted when it did not answer.
+	// HTTP status of the signal that set the outcome. Omitted when it did not
+	// answer.
 	StatusCode *int `form:"status_code,omitempty" json:"status_code,omitempty" xml:"status_code,omitempty"`
 	// What happened, in plain language.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// One result for each signal the route's data source exports.
+	Signals []*TestDataExportRouteSignalResultResponseBody `form:"signals,omitempty" json:"signals,omitempty" xml:"signals,omitempty"`
 }
 
 // ListDestinationsUnauthorizedResponseBody is the type of the "dataExports"
@@ -2144,6 +2146,21 @@ type UpdateOtelDestinationHeaderInputRequestBody struct {
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 }
 
+// TestDataExportRouteSignalResultResponseBody is used to define fields on
+// response body types.
+type TestDataExportRouteSignalResultResponseBody struct {
+	// The OTLP signal.
+	Signal *string `form:"signal,omitempty" json:"signal,omitempty" xml:"signal,omitempty"`
+	// accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no
+	// answer, such as a timeout or refused connection, or an address Speakeasy may
+	// not send to. error: any other answer.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	// HTTP status the destination answered with. Omitted when it did not answer.
+	StatusCode *int `form:"status_code,omitempty" json:"status_code,omitempty" xml:"status_code,omitempty"`
+	// What happened, in plain language.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
 // NewCreateDestinationRequestBody builds the HTTP request body from the
 // payload of the "createDestination" endpoint of the "dataExports" service.
 func NewCreateDestinationRequestBody(p *dataexports.CreateDestinationPayload) *CreateDestinationRequestBody {
@@ -3690,6 +3707,14 @@ func NewTestRouteTestDataExportRouteResultOK(body *TestRouteResponseBody) *datae
 		StatusCode: body.StatusCode,
 		Message:    *body.Message,
 	}
+	v.Signals = make([]*dataexports.TestDataExportRouteSignalResult, len(body.Signals))
+	for i, val := range body.Signals {
+		if val == nil {
+			v.Signals[i] = nil
+			continue
+		}
+		v.Signals[i] = unmarshalTestDataExportRouteSignalResultResponseBodyToDataexportsTestDataExportRouteSignalResult(val)
+	}
 
 	return v
 }
@@ -4122,9 +4147,19 @@ func ValidateTestRouteResponseBody(body *TestRouteResponseBody) (err error) {
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
 	}
+	if body.Signals == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signals", "body"))
+	}
 	if body.Outcome != nil {
 		if !(*body.Outcome == "accepted" || *body.Outcome == "refused" || *body.Outcome == "not_found" || *body.Outcome == "unreachable" || *body.Outcome == "error") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"accepted", "refused", "not_found", "unreachable", "error"}))
+		}
+	}
+	for _, e := range body.Signals {
+		if e != nil {
+			if err2 := ValidateTestDataExportRouteSignalResultResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -6703,5 +6738,27 @@ func ValidateUpdateOtelDestinationInputRequestBody(body *UpdateOtelDestinationIn
 		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
 	}
 	err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", body.EndpointURL, goa.FormatURI))
+	return
+}
+
+// ValidateTestDataExportRouteSignalResultResponseBody runs the validations
+// defined on TestDataExportRouteSignalResultResponseBody
+func ValidateTestDataExportRouteSignalResultResponseBody(body *TestDataExportRouteSignalResultResponseBody) (err error) {
+	if body.Signal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signal", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.Signal != nil {
+		if !(*body.Signal == "logs" || *body.Signal == "traces" || *body.Signal == "metrics") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signal", *body.Signal, []any{"logs", "traces", "metrics"}))
+		}
+	}
+	if body.Outcome != nil {
+		if !(*body.Outcome == "accepted" || *body.Outcome == "refused" || *body.Outcome == "not_found" || *body.Outcome == "unreachable" || *body.Outcome == "error") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"accepted", "refused", "not_found", "unreachable", "error"}))
+		}
+	}
 	return
 }

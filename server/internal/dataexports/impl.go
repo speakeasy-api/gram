@@ -729,7 +729,7 @@ func (s *Service) TestRoute(ctx context.Context, payload *gen.TestRoutePayload) 
 	case errors.Is(err, ErrRouteNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "data export route not found")
 	case errors.Is(err, ErrRouteTestUnsupported):
-		return nil, oops.E(oops.CodeInvalid, err, "test events are only available for MCP connection logs exports")
+		return nil, oops.E(oops.CodeInvalid, err, "this route's data source has no test event")
 	case errors.Is(err, ErrRouteDestinationRequired):
 		return nil, oops.E(oops.CodeInvalid, err, "the route has no destination to test")
 	case errors.Is(err, ErrRouteDestinationInactive):
@@ -746,14 +746,20 @@ func (s *Service) TestRoute(ctx context.Context, payload *gen.TestRoutePayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, logger)
 	}
 
-	var statusCode *int
-	if result.StatusCode != 0 {
-		statusCode = &result.StatusCode
+	signals := make([]*gen.TestDataExportRouteSignalResult, len(result.Signals))
+	for i, signal := range result.Signals {
+		signals[i] = &gen.TestDataExportRouteSignalResult{
+			Signal:     string(signal.Signal),
+			Outcome:    string(signal.Outcome),
+			StatusCode: conv.PtrEmpty(signal.StatusCode),
+			Message:    conv.PtrEmpty(signal.Message),
+		}
 	}
 	return &gen.TestDataExportRouteResult{
 		Outcome:    string(result.Outcome),
-		StatusCode: statusCode,
+		StatusCode: conv.PtrEmpty(result.StatusCode),
 		Message:    result.Message,
+		Signals:    signals,
 	}, nil
 }
 

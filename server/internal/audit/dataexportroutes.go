@@ -189,17 +189,27 @@ type LogDataExportRouteTestEvent struct {
 	Outcome        string
 	// StatusCode is zero when no response came back.
 	StatusCode int
+	// Signals is each signal's own outcome, one per OTLP request the test sent.
+	Signals []DataExportRouteTestSignal
+}
+
+// DataExportRouteTestSignal is what one signal's test request got back.
+type DataExportRouteTestSignal struct {
+	Signal     string `json:"signal"`
+	Outcome    string `json:"outcome"`
+	StatusCode int    `json:"status_code,omitempty"`
 }
 
 type dataExportRouteTestMetadata struct {
-	DestinationID string `json:"otel_destination_id"`
-	Outcome       string `json:"outcome"`
-	StatusCode    int    `json:"status_code,omitempty"`
+	DestinationID string                      `json:"otel_destination_id"`
+	Outcome       string                      `json:"outcome"`
+	StatusCode    int                         `json:"status_code,omitempty"`
+	Signals       []DataExportRouteTestSignal `json:"signals,omitempty"`
 }
 
 func (l *Logger) LogDataExportRouteTest(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteTestEvent) error {
 	action := ActionDataExportRouteTest
-	metadata, err := marshalAuditPayload(dataExportRouteTestMetadata{DestinationID: event.DestinationURN.ID.String(), Outcome: event.Outcome, StatusCode: event.StatusCode})
+	metadata, err := marshalAuditPayload(dataExportRouteTestMetadata{DestinationID: event.DestinationURN.ID.String(), Outcome: event.Outcome, StatusCode: event.StatusCode, Signals: event.Signals})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}

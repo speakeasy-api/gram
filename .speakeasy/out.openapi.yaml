@@ -21942,7 +21942,7 @@ paths:
         name: DataExportRoutes
   /rpc/dataExports.testRoute:
     post:
-      description: Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today. Rate limited per route and per organization.
+      description: Send a test event straight to a route's destination, one for each signal its data source exports, and report what the destination answered to each. Rate limited per route and per organization.
       operationId: testDataExportRoute
       parameters:
         - allowEmptyValue: true
@@ -119677,6 +119677,35 @@ components:
           description: What happened, in plain language.
         outcome:
           type: string
+          description: 'accepted when every signal was accepted. Otherwise the worst signal''s outcome, in this order: unreachable, refused, not_found, error.'
+          enum:
+            - accepted
+            - refused
+            - not_found
+            - unreachable
+            - error
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/TestDataExportRouteSignalResult'
+          description: One result for each signal the route's data source exports.
+        status_code:
+          type: integer
+          description: HTTP status of the signal that set the outcome. Omitted when it did not answer.
+          format: int64
+      description: What the destination answered to a route's test events. Header values and the response body are never returned.
+      required:
+        - outcome
+        - message
+        - signals
+    TestDataExportRouteSignalResult:
+      type: object
+      properties:
+        message:
+          type: string
+          description: What happened, in plain language.
+        outcome:
+          type: string
           description: 'accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection, or an address Speakeasy may not send to. error: any other answer.'
           enum:
             - accepted
@@ -119684,14 +119713,21 @@ components:
             - not_found
             - unreachable
             - error
+        signal:
+          type: string
+          description: The OTLP signal.
+          enum:
+            - logs
+            - traces
+            - metrics
         status_code:
           type: integer
           description: HTTP status the destination answered with. Omitted when it did not answer.
           format: int64
-      description: What the destination answered to one test event. Header values and the response body are never returned.
+      description: What the destination answered to one signal's test event.
       required:
+        - signal
         - outcome
-        - message
     TestDetectionRuleMatch:
       type: object
       properties:
