@@ -298,6 +298,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe("Channels", () => {
@@ -381,6 +382,12 @@ describe("Channels", () => {
 
   it("opens on Home with what arrived, not on a conversation nobody chose", async () => {
     vi.useFakeTimers();
+    // A wide window, where Home sits beside the list.
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({ matches: true, media: query }) as unknown as MediaQueryList,
+    );
     snapshot.threads["thread-2"] = { id: "thread-2", title: "Implementation" };
     snapshot.messages.push({
       id: 2,
