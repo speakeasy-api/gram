@@ -298,6 +298,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe("Channels", () => {
@@ -412,7 +413,6 @@ describe("Channels", () => {
     expect(
       screen.getByRole("heading", { name: /Implementation/ }),
     ).toBeDefined();
-    vi.unstubAllGlobals();
   });
 
   it("shows an administrator whose own access is withheld only what they can change", async () => {

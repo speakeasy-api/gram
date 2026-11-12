@@ -136,7 +136,7 @@ export function ChannelsHome({
           />
         )}
 
-        {partial ? (
+        {partial && !settingUp ? (
           <p className="text-muted-foreground -mt-4 text-xs">
             These counts cover the conversations loaded so far. Load more from
             the list to include the rest.
