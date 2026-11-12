@@ -94,6 +94,6 @@ When a tool is added or its name, description, schema or annotations change, or 
 - regenerate `tooleval/catalogue.json` with `mise run test:server -run TestToolEvalCatalogueSnapshotIsCurrent ./internal/platformmcp/ -args -update-tooleval-catalogue`;
 - keep input schemas free of top-level `oneOf`, `anyOf` and `allOf`, which Anthropic rejects (`TestPlatformToolSchemasFitModelProviders`); the tools already like this are listed with reasons in `toolEvalProviderSchemaExempt`, so the test blocks only new ones, and an entry comes out once its schema is fixed;
 - when a new dependency leaves a tool registered as a placeholder in the eval, supply it in `composeToolEvalRegistry`;
-- to measure the change, run `mise run eval:platform-tools --changed-since origin/main --max-cases 60`, which matches the `platform-tool-eval` pull request job; drop `--max-cases` to run every selected case.
+- to measure the change, run `mise run eval:platform-tools --changed-since origin/main --max-cases 60 --surfaces progressive --runs 3 --gate`, which matches the gated half of the `platform-tool-eval` pull request job; that job fails the PR when a case that passes in `tooleval/baseline.json` now fails, and when a change improves or adds cases, commit the `baseline.json` from its artifact.
 
 When shipped Platform MCP skills change, also follow `.agents/skills/authoring-platform-mcp-skills/SKILL.md`. Then run the normal formatting and server gates appropriate to the complete change.

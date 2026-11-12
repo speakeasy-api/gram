@@ -97,15 +97,38 @@ cache it; other models pay for it on every turn.
 
 ### In pull requests
 
-The `platform-tool-eval` job starts only when a pull request changes
-`catalogue.json` or a case file. Every tool or instruction change regenerates
-`catalogue.json`, so no tool change slips past it. It runs `--changed-since`
-against the base, capped at 60 cases. The first run, where the base has no
-`catalogue.json` yet, runs every case uncapped as the baseline. The report
-goes to the job summary: open the run from the PR's Checks tab and read its
-Summary page.
-It is report-only and does not block merging. It needs the
-`OPENROUTER_TOOL_EVAL_KEY` repository secret, and skips without it.
+The `platform-tool-eval` job blocks the merge through the CI Gate when a
+change makes the agent worse:
+
+- It starts when `catalogue.json`, a case, the baseline or the eval harness
+  changes. Every tool or instruction change regenerates `catalogue.json`, so
+  no tool change slips past it.
+- It runs `--changed-since` against the pull request's base, capped at 60
+  cases with the changed cases first.
+- The progressive surface is gated: three runs per case, and the job fails
+  when a case that passed in most runs of `baseline.json` now fails in most
+  runs. The direct surface lists the whole catalogue on every turn, about
+  $0.27 a case, so it runs once and only reports. A case that was already failing, a case with no baseline
+  entry, or a one-run flake does not fail it. Errored runs count as neither.
+- The report goes to the job summary. The report and `baseline.json` updated
+  with this run's results go to the `platform-tool-eval` artifact.
+- When the branch has no `baseline.json`, the gated run takes every case to
+  record one and gates nothing.
+
+It needs the `OPENROUTER_TOOL_EVAL_KEY` repository secret, and skips without
+it. A provider outage that errors every case fails the job; re-run it.
+
+### Updating the baseline
+
+`baseline.json` holds, for each case and surface, how many of its runs
+passed. Update it when a change improves cases or adds new ones, so the gate
+protects them from then on: download `baseline.json` from the pull request's
+`platform-tool-eval` artifact and commit it as `tooleval/baseline.json`.
+Locally, `--baseline-out` writes the same file:
+
+```bash
+mise run eval:platform-tools --changed-since origin/main --surfaces progressive --runs 3 --gate --baseline-out baseline.json
+```
 
 ## Adding or changing a tool
 
