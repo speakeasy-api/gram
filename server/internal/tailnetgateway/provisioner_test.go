@@ -277,6 +277,7 @@ func TestProvisionerDeleteWaitsForHostsThenRemovesDevices(t *testing.T) {
 	require.NoError(t, err)
 	store := newStateStore(t, f.db, f.ingressID, f.orgID, 0)
 	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("registered")))
+	require.NoError(t, store.WriteTLSCertAndKey("private.example.ts.net", []byte("cert"), []byte("key")))
 	f.heartbeat(t, 0, tailnetgateway.NodeStatusOnline, "nONE")
 	f.heartbeat(t, 1, tailnetgateway.NodeStatusOnline, "nTWO")
 
@@ -303,6 +304,8 @@ func TestProvisionerDeleteWaitsForHostsThenRemovesDevices(t *testing.T) {
 	require.Empty(t, nodes)
 	_, err = store.ReadState(ipn.MachineKeyStateKey)
 	require.ErrorIs(t, err, ipn.ErrStateNotExist, "node state is purged with the devices")
+	_, _, err = store.ReadTLSCertAndKey("private.example.ts.net")
+	require.ErrorIs(t, err, ipn.ErrStateNotExist, "the connection's certificate is purged with it")
 
 	// Teardown already removed the service with the slots, so a redelivered
 	// delete finishes without calling Tailscale.

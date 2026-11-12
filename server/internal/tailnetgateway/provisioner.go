@@ -510,6 +510,9 @@ func (p *Provisioner) deleteWithCredentials(ctx context.Context, resources k8s.N
 	if err := queries.DeleteNetworkIngressNodeStates(ctx, repo.DeleteNetworkIngressNodeStatesParams{NetworkIngressID: resources.OwnerID, OrganizationID: own.organizationID}); err != nil {
 		return fmt.Errorf("delete gateway node state: %w", err)
 	}
+	if err := queries.DeleteNetworkIngressCertificateStates(ctx, repo.DeleteNetworkIngressCertificateStatesParams{NetworkIngressID: resources.OwnerID, OrganizationID: own.organizationID}); err != nil {
+		return fmt.Errorf("delete gateway certificate state: %w", err)
+	}
 	if err := queries.DeleteNetworkIngressNodes(ctx, repo.DeleteNetworkIngressNodesParams{NetworkIngressID: resources.OwnerID, OrganizationID: own.organizationID}); err != nil {
 		return fmt.Errorf("delete gateway slots: %w", err)
 	}

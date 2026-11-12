@@ -27,6 +27,13 @@ per-ingress attestor pods.
   every `Tailscale-*` header with the resolved identity and forwards to the
   private listener with the pod's projected service-account token, exactly as
   the attestor did.
+- In Kubernetes, tsnet keeps each node's TLS certificate in the state store.
+  Every slot of a connection serves the same `svc:<label>` name, so the
+  certificate, its key and the ACME account that issues it are stored once
+  per connection, in `network_ingress_certificate_states`, and shared by all
+  slots. Let's Encrypt
+  allows 50 new certificates per tailnet per week, shared with the customer's
+  own use, and one certificate per connection keeps the gateway's share small.
 - Each pod heartbeats its slot rows; the reconciler reports the ingress online
   when any slot has a fresh `online` heartbeat.
 - A slot is `online` only when its node is connected **and** the tailnet has

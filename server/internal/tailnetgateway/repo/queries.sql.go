@@ -33,6 +33,41 @@ func (q *Queries) ClearNetworkIngressNodeAuthKey(ctx context.Context, arg ClearN
 	return err
 }
 
+const deleteNetworkIngressCertificateState = `-- name: DeleteNetworkIngressCertificateState :exec
+DELETE FROM network_ingress_certificate_states
+WHERE network_ingress_id = $1
+  AND organization_id = $2
+  AND state_key = $3
+`
+
+type DeleteNetworkIngressCertificateStateParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+	StateKey         string
+}
+
+func (q *Queries) DeleteNetworkIngressCertificateState(ctx context.Context, arg DeleteNetworkIngressCertificateStateParams) error {
+	_, err := q.db.Exec(ctx, deleteNetworkIngressCertificateState, arg.NetworkIngressID, arg.OrganizationID, arg.StateKey)
+	return err
+}
+
+const deleteNetworkIngressCertificateStates = `-- name: DeleteNetworkIngressCertificateStates :exec
+DELETE FROM network_ingress_certificate_states
+WHERE network_ingress_id = $1
+  AND organization_id = $2
+`
+
+type DeleteNetworkIngressCertificateStatesParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+}
+
+// Hard delete at teardown: the service the certificate names is gone.
+func (q *Queries) DeleteNetworkIngressCertificateStates(ctx context.Context, arg DeleteNetworkIngressCertificateStatesParams) error {
+	_, err := q.db.Exec(ctx, deleteNetworkIngressCertificateStates, arg.NetworkIngressID, arg.OrganizationID)
+	return err
+}
+
 const deleteNetworkIngressNodeSlot = `-- name: DeleteNetworkIngressNodeSlot :exec
 DELETE FROM network_ingress_nodes
 WHERE network_ingress_id = $1
@@ -147,6 +182,27 @@ type EnsureNetworkIngressNodeSlotParams struct {
 func (q *Queries) EnsureNetworkIngressNodeSlot(ctx context.Context, arg EnsureNetworkIngressNodeSlotParams) error {
 	_, err := q.db.Exec(ctx, ensureNetworkIngressNodeSlot, arg.NetworkIngressID, arg.OrganizationID, arg.Slot)
 	return err
+}
+
+const getNetworkIngressCertificateState = `-- name: GetNetworkIngressCertificateState :one
+SELECT value_encrypted
+FROM network_ingress_certificate_states
+WHERE network_ingress_id = $1
+  AND organization_id = $2
+  AND state_key = $3
+`
+
+type GetNetworkIngressCertificateStateParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+	StateKey         string
+}
+
+func (q *Queries) GetNetworkIngressCertificateState(ctx context.Context, arg GetNetworkIngressCertificateStateParams) (string, error) {
+	row := q.db.QueryRow(ctx, getNetworkIngressCertificateState, arg.NetworkIngressID, arg.OrganizationID, arg.StateKey)
+	var value_encrypted string
+	err := row.Scan(&value_encrypted)
+	return value_encrypted, err
 }
 
 const getNetworkIngressGatewayOwner = `-- name: GetNetworkIngressGatewayOwner :one
@@ -328,6 +384,30 @@ func (q *Queries) HeartbeatNetworkIngressNode(ctx context.Context, arg Heartbeat
 	return result.RowsAffected(), nil
 }
 
+const insertNetworkIngressCertificateStateIfAbsent = `-- name: InsertNetworkIngressCertificateStateIfAbsent :exec
+INSERT INTO network_ingress_certificate_states (network_ingress_id, organization_id, state_key, value_encrypted)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (network_ingress_id, state_key) DO NOTHING
+`
+
+type InsertNetworkIngressCertificateStateIfAbsentParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+	StateKey         string
+	ValueEncrypted   string
+}
+
+// Keeps the first value written: slots starting together settle on one.
+func (q *Queries) InsertNetworkIngressCertificateStateIfAbsent(ctx context.Context, arg InsertNetworkIngressCertificateStateIfAbsentParams) error {
+	_, err := q.db.Exec(ctx, insertNetworkIngressCertificateStateIfAbsent,
+		arg.NetworkIngressID,
+		arg.OrganizationID,
+		arg.StateKey,
+		arg.ValueEncrypted,
+	)
+	return err
+}
+
 const listDesiredGatewayIngressesForSlot = `-- name: ListDesiredGatewayIngressesForSlot :many
 SELECT
     i.id,
@@ -385,6 +465,47 @@ func (q *Queries) ListDesiredGatewayIngressesForSlot(ctx context.Context, arg Li
 			&i.IdentityRequired,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNetworkIngressCertificateStates = `-- name: ListNetworkIngressCertificateStates :many
+SELECT state_key, value_encrypted
+FROM network_ingress_certificate_states
+WHERE network_ingress_id = $1
+  AND organization_id = $2
+  AND state_key = ANY($3::text[])
+`
+
+type ListNetworkIngressCertificateStatesParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+	StateKeys        []string
+}
+
+type ListNetworkIngressCertificateStatesRow struct {
+	StateKey       string
+	ValueEncrypted string
+}
+
+// One statement, so a certificate and key written together in a transaction
+// are read as a consistent pair.
+func (q *Queries) ListNetworkIngressCertificateStates(ctx context.Context, arg ListNetworkIngressCertificateStatesParams) ([]ListNetworkIngressCertificateStatesRow, error) {
+	rows, err := q.db.Query(ctx, listNetworkIngressCertificateStates, arg.NetworkIngressID, arg.OrganizationID, arg.StateKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListNetworkIngressCertificateStatesRow
+	for rows.Next() {
+		var i ListNetworkIngressCertificateStatesRow
+		if err := rows.Scan(&i.StateKey, &i.ValueEncrypted); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -536,6 +657,31 @@ func (q *Queries) SetNetworkIngressNodeAuthKey(ctx context.Context, arg SetNetwo
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertNetworkIngressCertificateState = `-- name: UpsertNetworkIngressCertificateState :exec
+INSERT INTO network_ingress_certificate_states (network_ingress_id, organization_id, state_key, value_encrypted)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (network_ingress_id, state_key) DO UPDATE
+SET value_encrypted = EXCLUDED.value_encrypted,
+    updated_at = clock_timestamp()
+`
+
+type UpsertNetworkIngressCertificateStateParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+	StateKey         string
+	ValueEncrypted   string
+}
+
+func (q *Queries) UpsertNetworkIngressCertificateState(ctx context.Context, arg UpsertNetworkIngressCertificateStateParams) error {
+	_, err := q.db.Exec(ctx, upsertNetworkIngressCertificateState,
+		arg.NetworkIngressID,
+		arg.OrganizationID,
+		arg.StateKey,
+		arg.ValueEncrypted,
+	)
+	return err
 }
 
 const upsertNetworkIngressNodeState = `-- name: UpsertNetworkIngressNodeState :exec

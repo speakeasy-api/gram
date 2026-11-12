@@ -186,3 +186,44 @@ WHERE id = @id
 SELECT organization_id, hostname, runtime
 FROM network_ingresses
 WHERE id = @id;
+
+-- name: GetNetworkIngressCertificateState :one
+SELECT value_encrypted
+FROM network_ingress_certificate_states
+WHERE network_ingress_id = @network_ingress_id
+  AND organization_id = @organization_id
+  AND state_key = @state_key;
+
+-- name: ListNetworkIngressCertificateStates :many
+-- One statement, so a certificate and key written together in a transaction
+-- are read as a consistent pair.
+SELECT state_key, value_encrypted
+FROM network_ingress_certificate_states
+WHERE network_ingress_id = @network_ingress_id
+  AND organization_id = @organization_id
+  AND state_key = ANY(@state_keys::text[]);
+
+-- name: UpsertNetworkIngressCertificateState :exec
+INSERT INTO network_ingress_certificate_states (network_ingress_id, organization_id, state_key, value_encrypted)
+VALUES (@network_ingress_id, @organization_id, @state_key, @value_encrypted)
+ON CONFLICT (network_ingress_id, state_key) DO UPDATE
+SET value_encrypted = EXCLUDED.value_encrypted,
+    updated_at = clock_timestamp();
+
+-- name: InsertNetworkIngressCertificateStateIfAbsent :exec
+-- Keeps the first value written: slots starting together settle on one.
+INSERT INTO network_ingress_certificate_states (network_ingress_id, organization_id, state_key, value_encrypted)
+VALUES (@network_ingress_id, @organization_id, @state_key, @value_encrypted)
+ON CONFLICT (network_ingress_id, state_key) DO NOTHING;
+
+-- name: DeleteNetworkIngressCertificateState :exec
+DELETE FROM network_ingress_certificate_states
+WHERE network_ingress_id = @network_ingress_id
+  AND organization_id = @organization_id
+  AND state_key = @state_key;
+
+-- name: DeleteNetworkIngressCertificateStates :exec
+-- Hard delete at teardown: the service the certificate names is gone.
+DELETE FROM network_ingress_certificate_states
+WHERE network_ingress_id = @network_ingress_id
+  AND organization_id = @organization_id;

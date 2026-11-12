@@ -157,3 +157,67 @@ func TestNewPostgresStateStoreRejectsIncompleteIdentity(t *testing.T) {
 	_, err = tailnetgateway.NewPostgresStateStore(db, enc, uuid.New(), "org", -1)
 	require.Error(t, err)
 }
+
+func TestPostgresStateStoreSharesTheCertificateAcrossSlots(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "tailnetstatecert")
+	require.NoError(t, err)
+	ingressID, orgID := seedIngress(t, db, "state-cert")
+	slot0 := newStateStore(t, db, ingressID, orgID, 0)
+	slot1 := newStateStore(t, db, ingressID, orgID, 1)
+	const domain = "private.example.ts.net"
+
+	_, _, err = slot1.ReadTLSCertAndKey(domain)
+	require.ErrorIs(t, err, ipn.ErrStateNotExist, "no certificate until one slot obtains it")
+
+	require.NoError(t, slot0.WriteTLSCertAndKey(domain, []byte("cert-pem"), []byte("key-pem")))
+	cert, key, err := slot1.ReadTLSCertAndKey(domain)
+	require.NoError(t, err)
+	require.Equal(t, []byte("cert-pem"), cert, "every slot serves the certificate the first one obtained")
+	require.Equal(t, []byte("key-pem"), key)
+	viaState, err := slot1.ReadState(ipn.StateKey(domain + ".crt"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("cert-pem"), viaState, "tsnet's per-key reads see the shared certificate too")
+
+	// A slot's own identity stays its own.
+	require.NoError(t, slot0.WriteState(ipn.MachineKeyStateKey, []byte("machine-zero")))
+	_, err = slot1.ReadState(ipn.MachineKeyStateKey)
+	require.ErrorIs(t, err, ipn.ErrStateNotExist)
+
+	// Resetting a slot's identity keeps the connection's certificate.
+	require.NoError(t, slot0.Reset(t.Context()))
+	_, _, err = slot0.ReadTLSCertAndKey(domain)
+	require.NoError(t, err)
+}
+
+func TestPostgresStateStoreKeepsTheFirstACMEAccountKey(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "tailnetstateacme")
+	require.NoError(t, err)
+	ingressID, orgID := seedIngress(t, db, "state-acme")
+	slot0 := newStateStore(t, db, ingressID, orgID, 0)
+	slot1 := newStateStore(t, db, ingressID, orgID, 1)
+	const accountKey = ipn.StateKey("acme-account.key.pem")
+
+	require.NoError(t, slot0.WriteState(accountKey, []byte("account-zero")))
+	require.NoError(t, slot1.WriteState(accountKey, []byte("account-one")))
+
+	for _, store := range []*tailnetgateway.PostgresStateStore{slot0, slot1} {
+		key, err := store.ReadState(accountKey)
+		require.NoError(t, err)
+		require.Equal(t, []byte("account-zero"), key, "slots settle on one ACME account, so renewals come from the account that issued the certificate")
+	}
+}
+
+func TestPostgresStateStoreTreatsAnIncompleteCertificateAsMissing(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "tailnetstatecertpartial")
+	require.NoError(t, err)
+	ingressID, orgID := seedIngress(t, db, "state-cert-partial")
+	slot0 := newStateStore(t, db, ingressID, orgID, 0)
+	const domain = "private.example.ts.net"
+
+	require.NoError(t, slot0.WriteState(ipn.StateKey(domain+".crt"), []byte("cert-pem")))
+	_, _, err = slot0.ReadTLSCertAndKey(domain)
+	require.ErrorIs(t, err, ipn.ErrStateNotExist)
+}
