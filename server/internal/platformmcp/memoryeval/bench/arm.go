@@ -52,8 +52,12 @@ type Tool struct {
 }
 
 // Arm is one way of giving an agent memory. Search runs a keyword query over
-// the main project's full history; Sweep returns everything the arm can show
-// for the main project, for leak and isolation checks. Tools, Call and
+// the main project's full history; Sweep probes what the arm shows for the
+// main project, for leak and isolation checks. An arm with a browse mode
+// sweeps everything; an arm without one (search_team_memory is search only)
+// probes with every term the corpus plants: evidence, titles, canaries and
+// secrets. So a sweep is exhaustive for planted content, not for arbitrary
+// text a summary might invent. Tools, Call and
 // Instructions are what the judged eval gives the answering agent. Every
 // function carries its own principal and grants, so callers pass a plain
 // context.

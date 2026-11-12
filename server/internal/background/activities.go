@@ -197,6 +197,7 @@ type Activities struct {
 	demoteExpiredTrials              expiredTrialDemoter
 	trialEmails                      *trialemails.Service
 	mcpResearch                      *activities.McpResearch
+	memoryEvalRunner                 MemoryEvalRunner
 	mcpApprovalRecheck               *activities.McpApprovalRecheck
 	billingNotifications             *billingnotifications.Service
 }
@@ -503,6 +504,7 @@ func NewActivities(
 		trialEmails:             trialEmailsService,
 		trialFixtureHandler:     trialFixtureHandler,
 		mcpResearch:             mcpResearch,
+		memoryEvalRunner:        nil,
 		mcpApprovalRecheck:      mcpApprovalRecheck,
 		billingNotifications:    billingnotifications.NewService(logger, db, emailService, features, orgHosts),
 		// The judges draw on the same per-(org, model) bucket and the same
