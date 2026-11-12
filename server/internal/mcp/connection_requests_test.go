@@ -595,8 +595,9 @@ func TestGatewayLocalUsageRefusalRecordsOnce(t *testing.T) {
 	auth = &caller
 	ctx = contextvalues.SetAuthContext(ctx, auth)
 	require.NoError(t, orgrepo.New(ti.conn).SetAccountType(ctx, orgrepo.SetAccountTypeParams{ID: auth.ActiveOrganizationID, GramAccountType: string(billing.TierBase)}))
-	require.NoError(t, os.MkdirAll("scratch", 0750))
-	usageFile := filepath.Join("scratch", "billingusage-"+auth.ActiveOrganizationID+".local.json")
+	usageDir, err := billing.StubDataDir()
+	require.NoError(t, err)
+	usageFile := filepath.Join(usageDir, "billingusage-"+auth.ActiveOrganizationID+".local.json")
 	require.NoError(t, os.WriteFile(usageFile, []byte(`{"ToolCalls":2000,"IncludedToolCalls":1,"HasActiveSubscription":false}`), 0600))
 	t.Cleanup(func() { require.NoError(t, os.Remove(usageFile)) })
 	rec := mcpconnectionattemptstest.New(t)

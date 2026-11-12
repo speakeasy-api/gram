@@ -42,7 +42,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/externalcredentials"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -535,6 +534,7 @@ func newAdminCommand() *cli.Command {
 			if temporalEnv != nil {
 				projectRedeployer = deployments.NewStaffRedeployer(logger, tracerProvider, db, temporalEnv, audit.NewLogger())
 				adminService.SetProjectRedeployer(projectRedeployer)
+				adminService.SetMemoryEvalRunStarter(&background.TemporalMemoryEvalRunStarter{TemporalEnv: temporalEnv})
 			}
 			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy))
 			adminService.SetMCPServerURL(mcpServerURL)
@@ -575,7 +575,7 @@ func newAdminCommand() *cli.Command {
 				platformAssets = assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage)
 				adminService.SetAssetService(platformAssets)
 			}
-			adminService.SetExternalCredentialService(externalcredentials.NewPlatformService(logger, tracerProvider, db, newGCPIdentity(ctx, logger, c)))
+			adminService.SetGCPIdentity(newGCPIdentity(ctx, logger, c))
 			admin.Attach(mux, adminService)
 			if c.Bool("admin-mcp-enabled") {
 				key := c.String("admin-mcp-signing-key")

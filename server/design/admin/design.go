@@ -1501,4 +1501,5 @@ var _ = Service("admin", func() {
 	projectRedeployMethods()
 	customDomainMethods()
 	platformExternalCredentialMethods()
+	memoryEvalMethods()
 })

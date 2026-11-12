@@ -43,7 +43,7 @@ func resolveUserEmail(ctx context.Context, typed any) string {
 			return email
 		}
 	}
-	if coworkTranscriptMode(base) {
+	if inCoworkVM(base) {
 		if email := claudeAccountEmail(); email != "" {
 			return email
 		}
