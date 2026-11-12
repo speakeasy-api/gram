@@ -35,11 +35,12 @@ func (q *Queries) CompleteRun(ctx context.Context, arg CompleteRunParams) (int64
 
 const countActiveRuns = `-- name: CountActiveRuns :one
 SELECT count(*) FROM memory_eval_runs
-WHERE deleted IS FALSE AND status IN ('queued', 'running')
+WHERE status IN ('queued', 'running')
 `
 
 // Runs that may still write team memory. Two at once would overwrite each
-// other's summaries and digests in the shared eval projects.
+// other's summaries and digests in the shared eval projects. A soft-deleted
+// run counts while it is unresolved: deleting the row does not stop it.
 func (q *Queries) CountActiveRuns(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countActiveRuns)
 	var count int64
@@ -50,10 +51,12 @@ func (q *Queries) CountActiveRuns(ctx context.Context) (int64, error) {
 const countRunsSince = `-- name: CountRunsSince :one
 SELECT count(*) FROM memory_eval_runs
 WHERE created_at >= $1
+  AND NOT (status = 'failed' AND started_at IS NULL)
 `
 
-// Runs started since a time, for the daily cap. Failed and deleted runs count
-// too: they spent credits, and deleting a run must not refund the cap.
+// Runs created since a time, for the daily cap. Failed and deleted runs count
+// too: they spent credits, and deleting a run must not refund the cap. A run
+// that failed before any workflow claimed it spent nothing, so it is left out.
 func (q *Queries) CountRunsSince(ctx context.Context, since pgtype.Timestamptz) (int64, error) {
 	row := q.db.QueryRow(ctx, countRunsSince, since)
 	var count int64
@@ -147,6 +150,28 @@ type FailRunParams struct {
 // Fails a run that has not finished. A no-op for runs that already resolved.
 func (q *Queries) FailRun(ctx context.Context, arg FailRunParams) (int64, error) {
 	result, err := q.db.Exec(ctx, failRun, arg.Error, arg.CostUsd, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const failStaleActiveRuns = `-- name: FailStaleActiveRuns :execrows
+UPDATE memory_eval_runs
+SET status = 'failed', error = $1, finished_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE status IN ('queued', 'running') AND created_at < $2
+`
+
+type FailStaleActiveRunsParams struct {
+	Error         pgtype.Text
+	CreatedBefore pgtype.Timestamptz
+}
+
+// Fails queued or running runs created before a cutoff older than any live
+// workflow. Nothing else resolves a row whose workflow never started or was
+// terminated, and an unresolved row blocks every later start.
+func (q *Queries) FailStaleActiveRuns(ctx context.Context, arg FailStaleActiveRunsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, failStaleActiveRuns, arg.Error, arg.CreatedBefore)
 	if err != nil {
 		return 0, err
 	}

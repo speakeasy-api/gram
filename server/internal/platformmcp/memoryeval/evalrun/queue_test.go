@@ -2,6 +2,7 @@ package evalrun_test
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 )
 
 // seedCorpusProject creates the local seed tenant's organization and main
-// eval project, which is all CorpusOrganization looks for.
+// eval project, which is all corpusOrganization looks for.
 func seedCorpusProject(t *testing.T, db *pgxpool.Pool) string {
 	t.Helper()
 	spec := demoseed.LocalSpec()
@@ -40,7 +41,7 @@ func TestQueueNeedsTheSeededCorpus(t *testing.T) {
 }
 
 // Runs share the eval projects' memory, so only one may be active, and the
-// daily limit counts failed runs too.
+// daily limit counts failed runs a workflow claimed, since they spent.
 func TestQueueAllowsOneActiveRunAndADailyLimit(t *testing.T) {
 	t.Parallel()
 
@@ -58,7 +59,9 @@ func TestQueueAllowsOneActiveRunAndADailyLimit(t *testing.T) {
 	require.ErrorIs(t, err, evalrun.ErrRunActive)
 
 	fail := func(run repo.MemoryEvalRun) {
-		_, err := q.FailRun(t.Context(), repo.FailRunParams{Error: pgtype.Text{String: "test", Valid: true}, CostUsd: pgtype.Numeric{}, ID: run.ID})
+		_, err := q.MarkRunRunning(t.Context(), run.ID)
+		require.NoError(t, err)
+		_, err = q.FailRun(t.Context(), repo.FailRunParams{Error: pgtype.Text{String: "test", Valid: true}, CostUsd: pgtype.Numeric{}, ID: run.ID})
 		require.NoError(t, err)
 	}
 	fail(first)
@@ -70,6 +73,94 @@ func TestQueueAllowsOneActiveRunAndADailyLimit(t *testing.T) {
 	}
 	_, err = evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "another-staff@example.com")
 	require.ErrorIs(t, err, evalrun.ErrDailyLimit)
+}
+
+// A run that failed before any workflow claimed it spent nothing, so it does
+// not use up the daily limit.
+func TestQueueDoesNotCountRunsThatNeverStarted(t *testing.T) {
+	t.Parallel()
+
+	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
+	require.NoError(t, err)
+	seedCorpusProject(t, db)
+
+	for range evalrun.DailyRunLimit + 1 {
+		run, err := evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
+		require.NoError(t, err)
+		require.NoError(t, evalrun.FailToStart(t.Context(), db, run, "start failed"))
+	}
+	n, err := evalrun.RunsInWindow(t.Context(), db)
+	require.NoError(t, err)
+	require.Zero(t, n)
+}
+
+// A run left queued or running past any workflow's lifetime has nothing
+// behind it to resolve it, so the next start fails it instead of conflicting
+// forever. A soft-deleted run that is still unresolved blocks like any other.
+func TestQueueFailsRunsOlderThanAnyWorkflow(t *testing.T) {
+	t.Parallel()
+
+	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
+	require.NoError(t, err)
+	seedCorpusProject(t, db)
+	q := repo.New(db)
+
+	orphan, err := evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
+	require.NoError(t, err)
+	_, err = q.MarkRunRunning(t.Context(), orphan.ID)
+	require.NoError(t, err)
+	_, err = q.DeleteRun(t.Context(), orphan.ID)
+	require.NoError(t, err)
+
+	_, err = evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
+	require.ErrorIs(t, err, evalrun.ErrRunActive, "a deleted run that is still running keeps writing memory")
+
+	_, err = db.Exec(t.Context(), `UPDATE memory_eval_runs SET created_at = created_at - interval '1 day' WHERE id = $1`, orphan.ID)
+	require.NoError(t, err)
+
+	next, err := evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
+	require.NoError(t, err)
+	require.Equal(t, "queued", next.Status)
+
+	var status, reason string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT status, error FROM memory_eval_runs WHERE id = $1`, orphan.ID).Scan(&status, &reason))
+	require.Equal(t, "failed", status)
+	require.NotEmpty(t, reason)
+}
+
+// The start lock is what makes the one-active-run rule hold when starts race:
+// exactly one of several simultaneous starts may succeed.
+func TestQueueAcceptsOneOfConcurrentStarts(t *testing.T) {
+	t.Parallel()
+
+	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
+	require.NoError(t, err)
+	seedCorpusProject(t, db)
+
+	const starters = 6
+	ready := make(chan struct{})
+	errs := make(chan error, starters)
+	var wg sync.WaitGroup
+	for i := range starters {
+		wg.Go(func() {
+			<-ready
+			_, err := evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), fmt.Sprintf("staff-%d@example.com", i))
+			errs <- err
+		})
+	}
+	close(ready)
+	wg.Wait()
+	close(errs)
+
+	var accepted int
+	for err := range errs {
+		if err == nil {
+			accepted++
+			continue
+		}
+		require.ErrorIs(t, err, evalrun.ErrRunActive)
+	}
+	require.Equal(t, 1, accepted)
 }
 
 func TestQueueRejectsInvalidConfig(t *testing.T) {

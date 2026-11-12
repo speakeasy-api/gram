@@ -45,7 +45,6 @@ import { InternalSessionIssuers } from "./internalsessionissuers.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
 import { Killswitches } from "./killswitches.js";
-import { Launcher } from "./launcher.js";
 import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
@@ -320,11 +319,6 @@ export class Gram extends ClientSDK {
   private _killswitches?: Killswitches;
   get killswitches(): Killswitches {
     return (this._killswitches ??= new Killswitches(this._options));
-  }
-
-  private _launcher?: Launcher;
-  get launcher(): Launcher {
-    return (this._launcher ??= new Launcher(this._options));
   }
 
   private _litellm?: Litellm;
