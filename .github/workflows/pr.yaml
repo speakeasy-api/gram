@@ -1940,16 +1940,6 @@ jobs:
           overwrite: true
           retention-days: 30
 
-      # TEMPORARY (experiment): tracked directories whose time changed after
-      # the stamping step; a test that lists one cannot be cached.
-      - name: List directories modified during the run
-        if: always()
-        run: |
-          git ls-tree -r -t -d --name-only HEAD | while IFS= read -r dir; do
-            [ -d "$dir" ] && [ "$(stat -c %Y "$dir")" -gt 1700000000 ] && echo "$dir"
-          done | head -100 || true
-          [ "$(stat -c %Y .)" -gt 1700000000 ] && echo "(repository root)" || true
-
       - name: Let tracked flaky tests through
         # Passes only when every failure is an open flaky-test ticket (see
         # ci/cmd/flaky). A failing candidate is quarantined and handed to the
