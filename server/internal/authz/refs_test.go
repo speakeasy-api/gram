@@ -99,13 +99,14 @@ func TestRefs_CoverEveryPermission(t *testing.T) {
 	}
 }
 
-// An MCP ref built without its project is refused at evaluation instead of
-// matching project-bounded grants by omission. The other kinds follow when
-// their project becomes a required dimension.
+// A ref built without its project is refused at evaluation instead of
+// matching project-bounded grants by omission.
 func TestRefs_MissingProjectIsInvalid(t *testing.T) {
 	t.Parallel()
 
 	require.Error(t, validateInput(MCPServer("server-1", "").Write()))
+	require.Error(t, validateInput(Environment("env-1", "").Read()))
+	require.Error(t, validateInput(Assistant("assistant-1", "").Read()))
 }
 
 // A ref built from uuids builds the same check as one built from their
