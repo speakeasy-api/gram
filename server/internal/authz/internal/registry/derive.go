@@ -294,11 +294,6 @@ func (r Registry) DeriveDimensionValues(kind Kind, key string) map[string]bool {
 	return out
 }
 
-// DeriveSystemRoleScopes returns a copy of a system role's seeded scopes.
-func (r Registry) DeriveSystemRoleScopes(role string) []authz.Scope {
-	return slices.Clone(r.SystemRoles[role])
-}
-
 // DeriveCatalog lists every grantable scope with its presentation, ordered by
 // category and then by declaration, each block right after its permission.
 func (r Registry) DeriveCatalog() []authz.ScopeEntry {
