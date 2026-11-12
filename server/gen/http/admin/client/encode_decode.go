@@ -28592,12 +28592,13 @@ func unmarshalAdminProjectResponseBodyToAdminAdminProject(v *AdminProjectRespons
 // type *admin.AdminMcpServer from a value of type *AdminMcpServerResponseBody.
 func unmarshalAdminMcpServerResponseBodyToAdminAdminMcpServer(v *AdminMcpServerResponseBody) *admin.AdminMcpServer {
 	res := &admin.AdminMcpServer{
-		ID:         *v.ID,
-		Name:       *v.Name,
-		URL:        v.URL,
-		Visibility: *v.Visibility,
-		Source:     *v.Source,
-		CreatedAt:  *v.CreatedAt,
+		ID:          *v.ID,
+		Name:        *v.Name,
+		URL:         v.URL,
+		UpstreamURL: v.UpstreamURL,
+		Visibility:  *v.Visibility,
+		Source:      *v.Source,
+		CreatedAt:   *v.CreatedAt,
 	}
 
 	return res

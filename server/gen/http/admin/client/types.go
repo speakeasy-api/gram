@@ -26193,6 +26193,8 @@ type AdminMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The URL clients connect to. Omitted when the server has no routable address.
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// The upstream URL for a remote MCP server. Omitted for other server types.
+	UpstreamURL *string `form:"upstream_url,omitempty" json:"upstream_url,omitempty" xml:"upstream_url,omitempty"`
 	// The visibility of the server.
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// What backs the server. toolset_only is a toolset with no mcp_servers row.
