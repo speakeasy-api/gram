@@ -8,8 +8,9 @@ import { useMemo, useState } from "react";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
 import { MemberWorkflowCTA } from "@/components/platform-mcp/member-workflow-cta";
 import { RankedBarList } from "@/components/chart/RankedBarList";
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
-import { Text } from "@/components/ui/Text";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { TopUsersTable } from "./TopUsersTable";
@@ -59,31 +60,32 @@ export function MCPOverviewTab({
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
 
-  const { data, isLoading, isError, isLogsDisabled } = useLogsEnabledErrorCheck(
-    useQuery<GetObservabilityOverviewResult>({
-      queryKey: [
-        "mcp-detail-overview",
-        server.kind,
-        server.id,
-        server.slug,
-        from.toISOString(),
-        to.toISOString(),
-      ],
-      queryFn: () =>
-        unwrapAsync(
-          telemetryGetObservabilityOverview(client, {
-            getObservabilityOverviewPayload: {
-              from,
-              to,
-              ...overviewScope(server),
-              includeTimeSeries: true,
-            },
-          }),
-        ),
-      placeholderData: keepPreviousData,
-      throwOnError: false,
-    }),
-  );
+  const { data, isLoading, isError, isLogsDisabled, refetch } =
+    useLogsEnabledErrorCheck(
+      useQuery<GetObservabilityOverviewResult>({
+        queryKey: [
+          "mcp-detail-overview",
+          server.kind,
+          server.id,
+          server.slug,
+          from.toISOString(),
+          to.toISOString(),
+        ],
+        queryFn: () =>
+          unwrapAsync(
+            telemetryGetObservabilityOverview(client, {
+              getObservabilityOverviewPayload: {
+                from,
+                to,
+                ...overviewScope(server),
+                includeTimeSeries: true,
+              },
+            }),
+          ),
+        placeholderData: keepPreviousData,
+        throwOnError: false,
+      }),
+    );
 
   // With keepPreviousData a failed refetch still has stale data to show, so
   // only fall back to the error state when there is nothing to render at all.
@@ -155,14 +157,21 @@ export function MCPOverviewTab({
         <ObservabilityDisabledState subject="this MCP server" />
       )}
       {!isLogsDisabled && showQueryError && (
-        <div className="flex flex-col items-center justify-center border p-12 text-center">
-          <Text muted className="mb-1 block">
-            Could not load usage data
-          </Text>
-          <Text muted small>
-            Something went wrong loading metrics for this MCP server. Try
-            refreshing the page or changing the time range.
-          </Text>
+        <div role="alert">
+          <InlineEmptyState
+            icon="triangle-alert"
+            heading="Couldn't load usage"
+            description="Check your connection, then try again."
+            action={
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refetch()}
+              >
+                <Button.Text>Retry</Button.Text>
+              </Button>
+            }
+          />
         </div>
       )}
       {!isLogsDisabled && !showQueryError && (

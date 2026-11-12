@@ -4,10 +4,41 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useGatewayDetailChrome } from "./useGatewayDetailChrome";
 
 const state = vi.hoisted(() => ({
-  rows: [] as { classification: string }[],
+  rows: [] as {
+    classification: string;
+    server?: { slug?: string; name?: string };
+    member?: { id: string; mcpServerSlug?: string };
+  }[],
+  memberStates: {} as Record<
+    string,
+    { kind: string; why?: string } | undefined
+  >,
   isLoadingMembers: false,
   membersFailed: false,
   userSessionIssuerId: undefined as string | undefined,
+  discoveryMode: undefined as string | undefined,
+  codeModeEnabled: false,
+  setup: {
+    gaps: [] as {
+      serverId: string;
+      serverSlug: string | undefined;
+      name: string;
+      missingEnvVars: number;
+    }[],
+    loading: false,
+    failed: false,
+  },
+}));
+vi.mock("@/pages/mcp/gateway/useGatewayMemberStates", () => ({
+  useGatewayMemberStates: () => ({
+    stateFor: (row: { server?: { slug?: string } }) =>
+      state.memberStates[row.server?.slug ?? ""],
+    connect: () => undefined,
+    signIn: {},
+  }),
+}));
+vi.mock("./useGatewayMemberSetup", () => ({
+  useGatewayMemberSetup: () => state.setup,
 }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project" }) }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -42,6 +73,8 @@ vi.mock("@gram/client/react-query/getMetaMcpServer.js", () => ({
       id: "gw",
       name: "Gateway",
       userSessionIssuerId: state.userSessionIssuerId,
+      discoveryMode: state.discoveryMode,
+      codeModeEnabled: state.codeModeEnabled,
     },
   }),
 }));
@@ -58,6 +91,8 @@ function Readiness() {
           key={check.key}
           data-ready={String(check.ready)}
           data-optional={String(!!check.optional)}
+          data-broken={String(!!check.broken)}
+          data-href={check.href ?? ""}
         >
           {check.label}: {check.description}
         </li>
@@ -84,9 +119,13 @@ const row = (label: string) => screen.getByText(new RegExp(`^${label}:`));
 afterEach(cleanup);
 beforeEach(() => {
   state.rows = [];
+  state.memberStates = {};
   state.isLoadingMembers = false;
   state.membersFailed = false;
   state.userSessionIssuerId = undefined;
+  state.discoveryMode = undefined;
+  state.codeModeEnabled = false;
+  state.setup = { gaps: [], loading: false, failed: false };
 });
 
 it("counts only members the gateway can serve", () => {
@@ -120,4 +159,107 @@ it("stays neutral when members fail to load", () => {
 it("treats sign-in as optional, so an anonymous gateway can be ready", () => {
   renderReadiness();
   expect(row("Authentication").getAttribute("data-optional")).toBe("true");
+});
+
+it("flags a hosted member missing environment variables as broken", () => {
+  state.rows = [{ classification: "hosted" }];
+  state.setup = {
+    gaps: [
+      {
+        serverId: "srv-1",
+        serverSlug: "acme-support",
+        name: "Acme Support Tools",
+        missingEnvVars: 1,
+      },
+    ],
+    loading: false,
+    failed: false,
+  };
+  renderReadiness();
+  const check = row("Member setup");
+  expect(check.getAttribute("data-ready")).toBe("false");
+  expect(check.getAttribute("data-broken")).toBe("true");
+  expect(check.textContent).toContain(
+    "Acme Support Tools needs 1 environment variable set before its tools can run.",
+  );
+  expect(check.getAttribute("data-href")).toContain(
+    "/mcp/acme-support/settings#authentication",
+  );
+});
+
+it("holds member setup undetermined until its reads settle", () => {
+  state.rows = [{ classification: "hosted" }];
+  state.setup = { gaps: [], loading: true, failed: false };
+  renderReadiness();
+  expect(row("Member setup").getAttribute("data-ready")).toBe("null");
+});
+
+it("passes member setup once every hosted member is configured", () => {
+  state.rows = [{ classification: "hosted" }];
+  renderReadiness();
+  expect(row("Member setup").getAttribute("data-ready")).toBe("true");
+});
+
+it("leaves member setup out without hosted members", () => {
+  state.rows = [{ classification: "proxied" }];
+  renderReadiness();
+  expect(screen.queryByText(/^Member setup:/)).toBeNull();
+});
+
+it("flags Code Mode as broken when the gateway chose it but cannot run it", () => {
+  state.discoveryMode = "code_mode";
+  renderReadiness();
+  expect(row("Code Mode").getAttribute("data-ready")).toBe("false");
+  expect(row("Code Mode").getAttribute("data-broken")).toBe("true");
+
+  cleanup();
+  state.codeModeEnabled = true;
+  renderReadiness();
+  expect(row("Code Mode").getAttribute("data-ready")).toBe("true");
+
+  cleanup();
+  state.discoveryMode = "progressive";
+  renderReadiness();
+  expect(screen.queryByText(/^Code Mode:/)).toBeNull();
+});
+
+const remote = (slug: string, name: string) => ({
+  classification: "proxied",
+  server: { slug, name },
+  member: { id: `member-${slug}`, mcpServerSlug: slug },
+});
+
+it("asks the viewer to sign in to a member that needs their account", () => {
+  state.rows = [remote("linear", "Linear")];
+  state.memberStates = { linear: { kind: "sign_in" } };
+  renderReadiness();
+  const check = row("Sign in to Linear");
+  expect(check.getAttribute("data-ready")).toBe("false");
+  expect(check.getAttribute("data-broken")).toBe("false");
+  expect(check.getAttribute("data-href")).toContain("/gateway/gw/inspect");
+});
+
+it("flags a member whose tools couldn't be read as broken", () => {
+  state.rows = [remote("slack", "Slack")];
+  state.memberStates = {
+    slack: { kind: "unavailable", why: "Slack didn't answer." },
+  };
+  renderReadiness();
+  const check = row("Slack's tools couldn't be read");
+  expect(check.getAttribute("data-ready")).toBe("false");
+  expect(check.getAttribute("data-broken")).toBe("true");
+  expect(check.textContent).toContain("Slack didn't answer.");
+});
+
+it("holds the header back while member access is checked, and stays quiet when healthy", () => {
+  state.rows = [remote("linear", "Linear")];
+  state.memberStates = { linear: { kind: "checking" } };
+  renderReadiness();
+  expect(row("Member access").getAttribute("data-ready")).toBe("null");
+
+  cleanup();
+  state.memberStates = { linear: { kind: "available" } };
+  renderReadiness();
+  expect(screen.queryByText(/^Member access:/)).toBeNull();
+  expect(screen.queryByText(/^Sign in to/)).toBeNull();
 });

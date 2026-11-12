@@ -12,6 +12,19 @@ import {
   type TabValue,
 } from "@/pages/mcp/gateway/GatewayDetailsRouting";
 import { useGatewayMemberRows } from "@/pages/mcp/gateway/useGatewayMemberRows";
+import {
+  type GatewayMemberStates,
+  useGatewayMemberStates,
+} from "@/pages/mcp/gateway/useGatewayMemberStates";
+import type { MemberRow } from "@/pages/mcp/gateway/memberRows";
+import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
+import { mcpServerTabHref } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
+import { mcpServerRouteParam } from "@/lib/sources";
+import {
+  type GatewayMemberSetupGap,
+  useGatewayMemberSetup,
+} from "./useGatewayMemberSetup";
 import { GATEWAY_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/gateway/GatewaySettingsTab";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useRoutes } from "@/routes";
@@ -48,6 +61,15 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
     isLoading: isLoadingMembers,
     isError: membersFailed,
   } = useGatewayMemberRows(id);
+  const memberSetup = useGatewayMemberSetup(rows);
+  // One sign-in status call; tool checks only if Overview already ran them.
+  const memberStates = useGatewayMemberStates(
+    metaMcpServer,
+    endpoints,
+    isLoadingEndpoints,
+    rows,
+    { checkTools: "cache" },
+  );
   const { hasScope } = useRBAC();
   // Mirrors the mcp_servers sidebar: the tab reads org membership as well as
   // the resource, so hide it rather than render a permission wall.
@@ -94,6 +116,44 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
           ready: isLoadingMembers || membersFailed ? null : servable > 0,
           href: gatewayTabHref(routes, id, "overview"),
         },
+        // Only hosted members carry environment variables of their own.
+        ...(rows.some((row) => row.classification === "hosted")
+          ? [
+              memberSetupCheck(
+                memberSetup,
+                isLoadingMembers,
+                (gap) =>
+                  `${mcpServerTabHref(
+                    routes,
+                    mcpServerRouteParam({
+                      id: gap.serverId,
+                      slug: gap.serverSlug,
+                    }),
+                    "settings",
+                  )}#${MCP_AUTHENTICATION_SECTION_ID}`,
+              ),
+            ]
+          : []),
+        ...memberAccessChecks(
+          rows,
+          memberStates,
+          gatewayTabHref(routes, id, "inspect"),
+        ),
+        // Only a gateway set to Code Mode can be let down by it.
+        ...(metaMcpServer.discoveryMode === "code_mode"
+          ? [
+              {
+                key: "code-mode",
+                label: "Code Mode",
+                description: metaMcpServer.codeModeEnabled
+                  ? "Agents write code against this gateway's tools."
+                  : "Code Mode isn't available for this gateway, so agents get Progressive instead. Choose another mode in Settings.",
+                ready: !!metaMcpServer.codeModeEnabled,
+                broken: true,
+                href: `${gatewayTabHref(routes, id, "settings")}#${SETTINGS_GROUPS.tools.id}`,
+              },
+            ]
+          : []),
         {
           key: "authentication",
           label: "Authentication",
@@ -136,4 +196,99 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
       : [],
     items,
   };
+}
+
+/**
+ * Whether every hosted member can run its tools: a member missing required
+ * environment variables fails each call the gateway sends it.
+ */
+function memberSetupCheck(
+  setup: ReturnType<typeof useGatewayMemberSetup>,
+  loadingMembers: boolean,
+  settingsHref: (gap: GatewayMemberSetupGap) => string,
+): ReadinessCheck {
+  const item = { key: "member-setup", label: "Member setup", broken: true };
+  const [first] = setup.gaps;
+  if (first) {
+    const described = setup.gaps.map(
+      (gap) =>
+        `${gap.name} needs ${gap.missingEnvVars} environment ${gap.missingEnvVars === 1 ? "variable" : "variables"} set before its tools can run.`,
+    );
+    return {
+      ...item,
+      description: described.join(" "),
+      ready: false,
+      href: settingsHref(first),
+    };
+  }
+  if (loadingMembers || setup.loading) {
+    return {
+      ...item,
+      description: "Checking that each member is set up.",
+      ready: null,
+    };
+  }
+  if (setup.failed) {
+    return {
+      ...item,
+      description: "Could not check every member's setup.",
+      ready: null,
+    };
+  }
+  return {
+    ...item,
+    description: "Every hosted member has what it needs to run its tools.",
+    ready: true,
+  };
+}
+
+/**
+ * What the viewer still has to do, or can't use, among the servable members:
+ * a sign-in step per member that needs the viewer's account, and a broken
+ * check per member whose tools couldn't be read. Healthy members add nothing;
+ * while any member is still being checked, one pending check holds the
+ * header back from reading Ready.
+ */
+function memberAccessChecks(
+  rows: MemberRow[],
+  states: GatewayMemberStates,
+  inspectHref: string,
+): ReadinessCheck[] {
+  const checks: ReadinessCheck[] = [];
+  let checking = false;
+  for (const row of rows) {
+    const state = states.stateFor(row);
+    if (!state) continue;
+    const slug = row.server?.slug ?? row.member.mcpServerSlug ?? row.member.id;
+    const name = row.server?.name ?? row.member.mcpServerSlug ?? "A member";
+    if (state.kind === "checking") checking = true;
+    if (state.kind === "sign_in") {
+      checks.push({
+        key: `member-sign-in-${slug}`,
+        label: `Sign in to ${name}`,
+        description: `Connect your own account so its tools work for you. Inspect has the Connect step.`,
+        ready: false,
+        href: inspectHref,
+      });
+    }
+    if (state.kind === "unavailable") {
+      checks.push({
+        key: `member-unavailable-${slug}`,
+        label: `${name}'s tools couldn't be read`,
+        description: state.why,
+        ready: false,
+        broken: true,
+        href: inspectHref,
+      });
+    }
+  }
+  if (checking) {
+    checks.push({
+      key: "member-access",
+      label: "Member access",
+      description: "Checking what each member gives you.",
+      ready: null,
+    });
+  }
+  return checks;
 }

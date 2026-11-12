@@ -53,6 +53,8 @@ export interface GatewayMemberTools {
   /** What the gateway said when this member's catalog couldn't be read. */
   error?: string;
   isLoading: boolean;
+  /** Reads this member's catalog again. */
+  refetch: () => void;
 }
 
 /**
@@ -128,6 +130,7 @@ export function useGatewayMemberTools(
               inputSchema: detail?.inputSchema,
               annotations: detail?.annotations,
               group: server.name ?? server.slug,
+              source: server.name ?? server.slug,
             };
           }),
         };
@@ -145,6 +148,7 @@ export function useGatewayMemberTools(
         result?.data?.error ??
         (result?.error instanceof Error ? result.error.message : undefined),
       isLoading: !!result?.isLoading,
+      refetch: () => void result?.refetch(),
     };
   });
 }

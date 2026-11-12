@@ -281,7 +281,7 @@ it("finds plugin membership by the loaded toolset when the summary is missing", 
   ];
   state.publishStatus = { repoOwner: "acme", repoName: "plugins" };
   renderReadiness();
-  expect(readiness("Included in Plugin")).toBe("true");
+  expect(readiness("Included in a plugin")).toBe("true");
 });
 
 it("doesn't count a plugin as included while the marketplace has no collaborators", () => {
@@ -295,5 +295,18 @@ it("doesn't count a plugin as included while the marketplace has no collaborator
     hasCollaborators: false,
   };
   renderReadiness();
-  expect(readiness("Included in Plugin")).toBe("false");
+  expect(readiness("Included in a plugin")).toBe("false");
+});
+
+it("reports a turned-off server as broken, not as a setup step", () => {
+  state.server = { ...HOSTED_SERVER, visibility: "disabled" };
+  state.hostedToolset = HOSTED_TOOLSET;
+  renderReadiness();
+  expect(readiness("Availability")).toBe("false");
+  expect(screen.getByText(/This server is turned off/)).toBeTruthy();
+
+  cleanup();
+  state.server = { ...HOSTED_SERVER, visibility: "private" };
+  renderReadiness();
+  expect(readiness("Availability")).toBe("true");
 });

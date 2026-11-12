@@ -1,3 +1,4 @@
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Spinner } from "@/components/ui/Spinner";
 import { Page } from "@/components/page-layout";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
@@ -50,6 +51,11 @@ import {
 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
+import { GatewayMemberConnect } from "./GatewayMemberConnect";
+import {
+  MEMBER_STATE_LABEL,
+  type MemberViewerState,
+} from "./useGatewayMemberStates";
 import { toast } from "sonner";
 import {
   type MemberClassification,
@@ -125,7 +131,7 @@ const STATUS_BY_CLASSIFICATION: Record<
   proxied: {
     label: "Unknown",
     variant: "neutral",
-    why: "The gateway can't reach this member's upstream yet, so it reports no health. Drill-down and execution arrive with per-upstream credential routing.",
+    why: "Checked for you while the gateway is turned on.",
   },
   disabled: {
     label: "Excluded",
@@ -152,30 +158,79 @@ const STATUS_BY_CLASSIFICATION: Record<
 // A filled green dot for attested health, a hollow ring for "unobserved",
 // amber for excluded: quieter than boxed uppercase badges, and "Unknown"
 // stops reading as broken.
-const STATUS_DOT_CLASS: Record<"success" | "neutral" | "warning", string> = {
+const STATUS_DOT_CLASS: Record<
+  "success" | "neutral" | "warning" | "destructive",
+  string
+> = {
   success: "bg-emerald-500",
   neutral: "border-muted-foreground/60 border bg-transparent",
   warning: "bg-amber-500",
+  destructive: "bg-destructive",
 };
 
-function MemberStatusBadge({
+/** The viewer's own state for a servable member, as Inspect words it. */
+const VIEWER_STATUS: Record<
+  MemberViewerState["kind"],
+  { variant: keyof typeof STATUS_DOT_CLASS; why: string }
+> = {
+  checking: { variant: "neutral", why: "Checking this server for you." },
+  available: { variant: "success", why: "Its tools load for you." },
+  sign_in: {
+    variant: "warning",
+    why: "Connect your own account to use this server's tools.",
+  },
+  unavailable: { variant: "destructive", why: "" },
+};
+
+export function MemberStatusBadge({
   classification,
+  viewer,
+  name,
+  onConnect,
 }: {
   classification: MemberClassification;
+  /** What the viewer gets now; excluded members have none. */
+  viewer?: MemberViewerState;
+  name: string;
+  onConnect?: () => void;
 }): JSX.Element {
-  const status = STATUS_BY_CLASSIFICATION[classification];
+  const fixed = STATUS_BY_CLASSIFICATION[classification];
+  const status = viewer
+    ? {
+        label: MEMBER_STATE_LABEL[viewer.kind],
+        variant: VIEWER_STATUS[viewer.kind].variant,
+        why:
+          viewer.kind === "unavailable"
+            ? viewer.why
+            : VIEWER_STATUS[viewer.kind].why,
+      }
+    : fixed;
   return (
-    <SimpleTooltip tooltip={status.why}>
-      <span className="inline-flex cursor-default items-center gap-2">
-        <span
-          className={`size-2 shrink-0 rounded-full ${STATUS_DOT_CLASS[status.variant]}`}
-          aria-hidden
-        />
-        <Text as="span" muted small>
-          {status.label}
-        </Text>
-      </span>
-    </SimpleTooltip>
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
+      <SimpleTooltip tooltip={status.why}>
+        <span className="inline-flex cursor-default items-center gap-2">
+          <span
+            className={`size-2 shrink-0 rounded-full ${STATUS_DOT_CLASS[status.variant]}`}
+            aria-hidden
+          />
+          <Text as="span" muted small>
+            {status.label}
+          </Text>
+        </span>
+      </SimpleTooltip>
+      {viewer?.kind === "sign_in" && onConnect ? (
+        <GatewayMemberConnect name={name} onConnect={onConnect} />
+      ) : viewer?.kind === "unavailable" && viewer.retry ? (
+        <button
+          type="button"
+          onClick={viewer.retry}
+          aria-label={`Check ${name} again`}
+          className="text-foreground text-sm underline underline-offset-2"
+        >
+          Try again
+        </button>
+      ) : null}
+    </span>
   );
 }
 
@@ -215,8 +270,14 @@ function MemberNameCell({ row }: { row: MemberRow }): JSX.Element {
 /** Member management (list, reorder, add, remove) rendered on the Overview tab. */
 export function GatewayMembersSection({
   metaMcpServer,
+  memberStates,
 }: {
   metaMcpServer: MetaMcpServer;
+  /** What each member gives the viewer now, with Connect where it helps. */
+  memberStates?: {
+    stateFor: (row: MemberRow) => MemberViewerState | undefined;
+    connect: () => void;
+  };
 }): JSX.Element {
   const client = useSdkClient();
   const queryClient = useQueryClient();
@@ -477,9 +538,14 @@ export function GatewayMembersSection({
       key: "status",
       header: "Status",
       render: (row) => (
-        <MemberStatusBadge classification={row.classification} />
+        <MemberStatusBadge
+          classification={row.classification}
+          viewer={memberStates?.stateFor(row)}
+          name={row.server?.name ?? row.member.mcpServerSlug ?? "this server"}
+          onConnect={memberStates?.connect}
+        />
       ),
-      width: "140px",
+      width: memberStates ? "210px" : "140px",
     },
     {
       key: "actions",
@@ -516,9 +582,7 @@ export function GatewayMembersSection({
           Servers
         </Page.Section.Title>
         <Page.Section.Description>
-          The MCP servers this gateway fronts, in the order agents see them in
-          list_servers. Status reflects what the backend can attest; live
-          upstream health lands with the proxied runtime.
+          Agents see these servers in this order.
         </Page.Section.Description>
         <Page.Section.CTA>
           <RequireScope
@@ -538,11 +602,21 @@ export function GatewayMembersSection({
           {isLoading ? (
             <SkeletonTable />
           ) : isError ? (
-            <div role="alert" className="space-y-2">
-              <Text>Couldn't load gateway servers.</Text>
-              <Button variant="secondary" onClick={() => void refetch()}>
-                <Button.Text>Retry loading</Button.Text>
-              </Button>
+            <div role="alert">
+              <InlineEmptyState
+                icon="triangle-alert"
+                heading="Couldn't load servers"
+                description="Check your connection, then try again."
+                action={
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void refetch()}
+                  >
+                    <Button.Text>Retry</Button.Text>
+                  </Button>
+                }
+              />
             </div>
           ) : (
             <Table columns={columns}>
@@ -554,8 +628,8 @@ export function GatewayMembersSection({
                       state sit lower than every other one. */}
                   <div className="flex flex-col items-center gap-3">
                     <Text muted>
-                      No servers yet. A gateway with no servers exposes its four
-                      tools but has nothing to route to.
+                      Add servers so agents can use their tools through this
+                      gateway.
                     </Text>
                     <RequireScope
                       scope="mcp:write"

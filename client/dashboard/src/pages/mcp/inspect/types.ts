@@ -19,6 +19,8 @@ export interface InspectTool {
   unavailable?: { reason?: ProxiedMcpToolUnavailableReason };
   /** A heading to group the tool under, e.g. a gateway member's name. */
   group?: string;
+  /** The server a gateway member's tool comes from, e.g. "Linear". */
+  source?: string;
 }
 
 /**

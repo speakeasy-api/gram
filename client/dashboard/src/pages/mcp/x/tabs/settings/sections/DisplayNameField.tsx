@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 
-/** The Display Name input servers and gateways share on their settings tab. */
+/** The display name input servers and gateways share on their settings tab. */
 export function DisplayNameField({
   id,
   value,
@@ -30,7 +30,7 @@ export function DisplayNameField({
       data-invalid={error !== undefined ? true : undefined}
       className="max-w-md"
     >
-      <FieldLabel htmlFor={id}>Display Name</FieldLabel>
+      <FieldLabel htmlFor={id}>Display name</FieldLabel>
       <Input
         id={id}
         value={value}

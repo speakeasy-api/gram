@@ -38,6 +38,8 @@ type RemoteMcpToolsSectionProps = {
   remoteMcpServerId?: string;
   /** Disabled servers cannot serve MCP requests. */
   isDisabled: boolean;
+  /** Where a disabled server is turned back on. */
+  availabilityHref?: string;
   /**
    * Deep link to the server's Authentication settings section. Surfaced when a
    * server with no authentication configured fails to list its tools.
@@ -73,7 +75,18 @@ export function RemoteMcpToolsSection(
 ): JSX.Element {
   if (props.isDisabled) {
     return (
-      <StateNotice message="This server is disabled. Enable it to see and run its tools." />
+      <StateNotice
+        message="This server is turned off, so agents can't reach its tools."
+        action={
+          props.availabilityHref ? (
+            <Button asChild>
+              <Link to={props.availabilityHref}>
+                <Button.Text>Turn on in settings</Button.Text>
+              </Link>
+            </Button>
+          ) : undefined
+        }
+      />
     );
   }
 
@@ -304,10 +317,13 @@ function StateNotice({
   message,
   authSettingsHref,
   onRetry,
+  action,
 }: {
   message: string;
   authSettingsHref?: string;
   onRetry?: () => void;
+  /** Replaces the default authentication and retry actions. */
+  action?: ReactNode;
 }): JSX.Element {
   return (
     <InspectState
@@ -315,7 +331,8 @@ function StateNotice({
       tone="warning"
       heading={message}
       action={
-        authSettingsHref || onRetry ? (
+        action ??
+        (authSettingsHref || onRetry ? (
           <>
             {authSettingsHref ? (
               <Button asChild>
@@ -330,7 +347,7 @@ function StateNotice({
               </Button>
             ) : null}
           </>
-        ) : undefined
+        ) : undefined)
       }
     />
   );

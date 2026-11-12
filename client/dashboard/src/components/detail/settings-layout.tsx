@@ -75,7 +75,12 @@ export function SettingsLayout({
             // bring even a short final area to the top.
             className="border-border scroll-mt-8 border-t pt-8 pb-14 first:border-t-0 first:pt-0 last:min-h-[calc(100vh-24rem)] last:pb-0"
           >
-            <h2 id={`${group.id}-title`} className="text-eyebrow mb-6">
+            {/* The sticky index names each area on wide screens, so the
+                eyebrow only shows where the index is hidden. */}
+            <h2
+              id={`${group.id}-title`}
+              className="text-eyebrow mb-6 lg:sr-only"
+            >
               {group.title}
             </h2>
             <div className="space-y-10">{group.content}</div>

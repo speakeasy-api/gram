@@ -16,6 +16,7 @@ import { useHostedVisibilityGuard } from "@/pages/mcp/x/hosted/useHostedVisibili
 import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import {
   HOSTED_PUBLIC_DESCRIPTION,
+  isOnOffServer,
   useMcpServerVisibilityUpdate,
 } from "@/pages/mcp/x/mcpServerVisibility";
 import type {
@@ -95,7 +96,7 @@ export function VisibilitySection({
   // Public needs the tunnel source owner's consent first (double opt-in).
   const publicBlocked = isTunneled && !(tunneledSource?.allowPublic ?? false);
 
-  const onOff = !hosted && !isTunneled;
+  const onOff = isOnOffServer(mcpServer);
   const options = onOff
     ? AVAILABILITY_OPTIONS
     : [DISABLED_OPTION, PRIVATE_OPTION, PUBLIC_OPTION];

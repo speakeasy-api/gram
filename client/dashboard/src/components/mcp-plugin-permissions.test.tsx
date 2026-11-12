@@ -283,13 +283,14 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 const scope = { gramProject: "project-slug", gramSession: "session-a" };
-function banner() {
+function banner(variant?: "banner" | "header" | "settings") {
   const client = new QueryClient();
   const content = () => (
     <QueryClientProvider client={client}>
       <TooltipProvider>
         <ConfigProvider theme="light" setTheme={() => {}}>
           <PluginStatusBanner
+            variant={variant}
             server={{
               kind: "mcp-server",
               id: "server-a",
@@ -339,12 +340,56 @@ describe("MCP plugin permission boundaries", () => {
     expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
     expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
   });
+  it("offers the header's plugin picker as a Publishing settings section", () => {
+    state.grants = [{ scope: "plugin:write" }];
+    banner("settings");
+    expect(screen.getByRole("heading", { name: "Publishing" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Plugins" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
+  });
+
+  it("lists plugins alphabetically, with a description line when there is one", () => {
+    state.grants = [{ scope: "plugin:write" }];
+    const original = state.plugins.getMockImplementation();
+    state.plugins.mockReturnValue({
+      data: {
+        plugins: [
+          { id: "p-z", name: "zeta", slug: "zeta", servers: [] },
+          {
+            id: "p-a",
+            name: "Alpha",
+            slug: "alpha",
+            description: "For the support team",
+            servers: [],
+          },
+          { id: "p-m", name: "Mid", slug: "mid", servers: [] },
+        ],
+      },
+    } as unknown as ReturnType<typeof state.plugins>);
+    banner("settings");
+    fireEvent.click(screen.getByRole("button", { name: "Plugins" }));
+    const names = screen
+      .getAllByRole("checkbox")
+      .map((box) => box.closest("label")?.textContent);
+    expect(names).toEqual(["AlphaFor the support team", "Mid", "zeta"]);
+    if (original) state.plugins.mockImplementation(original);
+  });
+
+  it("labels the header card and keeps its Publish action secondary", () => {
+    state.grants = [{ scope: "plugin:write" }];
+    banner("header");
+    expect(screen.getByText("Publish status")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Update" }).getAttribute("class"),
+    ).not.toMatch(/(^|\s)bg-btn-primary(\s|$)/);
+  });
+
   it.each(["org:read", "plugin:write", "org:admin"])(
     "scopes detail chrome queries for %s",
     (grant) => {
       state.grants = [{ scope: grant }];
       render(<DetailChrome />, { wrapper: MemoryRouter });
-      expect(screen.getByText("Included in Plugin")).toBeTruthy();
+      expect(screen.getByText("Included in a plugin")).toBeTruthy();
       expect(state.plugins).toHaveBeenCalledWith(
         scope,
         undefined,
@@ -377,7 +422,7 @@ describe("MCP plugin permission boundaries", () => {
         undefined,
         expect.objectContaining({ enabled: false }),
       );
-      expect(screen.queryByText("Included in Plugin")).toBeNull();
+      expect(screen.queryByText("Included in a plugin")).toBeNull();
     },
   );
   it("honors org-ID read denial for team access", () => {
@@ -497,7 +542,7 @@ describe("MCP server readiness", () => {
       "Server URL",
       "Authentication",
       "Source",
-      "Included in Plugin",
+      "Included in a plugin",
     ]) {
       expect(screen.getByText(label)).toBeTruthy();
     }

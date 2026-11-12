@@ -1,5 +1,9 @@
 import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
-import { serverMatchesRef } from "@/pages/mcp/overview/serverMatchesRef";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import {
+  pluginServerRef,
+  serverMatchesRef,
+} from "@/pages/mcp/overview/serverMatchesRef";
 import type { HostedServerRef } from "@/pages/mcp/overview/MCPOverviewTab";
 import type { McpDetailChrome } from "./mcpDetailChrome";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
@@ -38,6 +42,7 @@ import {
   useTunneledMcpConnections,
 } from "@/pages/mcp/x/tabs/tunnelStatus";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
+import { MCP_VISIBILITY_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/VisibilitySection";
 import { useRoutes } from "@/routes";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { isNotNotFound } from "@/lib/query-errors";
@@ -198,25 +203,9 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       throwOnError: false,
     });
 
-  // Plugin entries name a hosted server by its toolset when it is the
-  // toolset's own wrapper, and by its own id otherwise. The read can omit the
-  // toolset summary, so fall back to the loaded toolset.
-  const canonicalToolsetRef = mcpServer?.toolset ?? canonicalToolset;
-  const pluginRef: HostedServerRef | undefined = !mcpServer
-    ? undefined
-    : isCanonical && canonicalToolsetRef
-      ? {
-          kind: "toolset",
-          id: canonicalToolsetRef.id,
-          slug: canonicalToolsetRef.slug,
-          name: canonicalToolsetRef.name,
-        }
-      : {
-          kind: "mcp-server",
-          id: mcpServer.id,
-          slug: mcpServer.slug ?? "",
-          name: mcpServer.name ?? "MCP Server",
-        };
+  const pluginRef: HostedServerRef | undefined = mcpServer
+    ? pluginServerRef(mcpServer, canonicalToolset)
+    : undefined;
   // Same membership rule as the header's plugin card.
   const memberPlugins = pluginRef
     ? (pluginsData?.plugins ?? []).filter((plugin) =>
@@ -284,6 +273,22 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
 
   const readinessChecks: ReadinessCheck[] = mcpServer
     ? [
+        // Unproxied servers have no switch: clients reach the vendor directly.
+        ...(isUnproxied
+          ? []
+          : [
+              {
+                key: "availability",
+                label: "Availability",
+                description:
+                  mcpServer.visibility === "disabled"
+                    ? "This server is turned off, so every connection to it fails. Turn it on in Settings."
+                    : "Turned on and accepting connections.",
+                ready: mcpServer.visibility !== "disabled",
+                broken: true,
+                href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_VISIBILITY_SECTION_ID}`,
+              },
+            ]),
         {
           key: "server-url",
           label: "Server URL",
@@ -348,7 +353,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
           ? [
               {
                 key: "plugin",
-                label: "Included in Plugin",
+                label: "Included in a plugin",
                 description: isTrulyIncluded
                   ? `Published to ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}.`
                   : isPluginMember
@@ -395,10 +400,14 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
         missingRequiredEnvVars > 0 ? (
           <span className="flex items-center gap-1.5">
             Settings
-            <AlertTriangle
-              className="text-warning h-3.5 w-3.5 shrink-0"
-              aria-label="Required environment variables not configured"
-            />
+            <SimpleTooltip
+              tooltip={`${missingRequiredEnvVars === 1 ? "1 required environment variable is" : `${missingRequiredEnvVars} required environment variables are`} not set, so tool calls that need ${missingRequiredEnvVars === 1 ? "it" : "them"} will fail. Set ${missingRequiredEnvVars === 1 ? "it" : "them"} under Sign-in and identity.`}
+            >
+              <AlertTriangle
+                className="text-warning h-3.5 w-3.5 shrink-0"
+                aria-label="Required environment variables not set"
+              />
+            </SimpleTooltip>
           </span>
         ) : undefined,
     },

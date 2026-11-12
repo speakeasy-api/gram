@@ -31,8 +31,8 @@ export function DriftNotice({
       >
         <StatusDot tone="warning" />
         <span>
-          {count} {count === 1 ? "tool differs" : "tools differ"} from the saved
-          list for this project
+          {count} {count === 1 ? "tool has" : "tools have"} changed on the
+          server since Speakeasy saved its tool list
         </span>
         <span className="text-foreground flex items-center gap-0.5 font-medium">
           Review

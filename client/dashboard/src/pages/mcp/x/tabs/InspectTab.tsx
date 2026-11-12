@@ -1,3 +1,4 @@
+import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { mcpServerRouteParam } from "@/lib/sources";
 import {
@@ -41,6 +42,10 @@ export function InspectTab({
   const authSettingsHref = `${routes.mcp.details.settings.href(
     param,
   )}#${MCP_AUTHENTICATION_SECTION_ID}`;
+  // Availability sits at the top of Settings' General area.
+  const availabilityHref = `${routes.mcp.details.settings.href(
+    param,
+  )}#${SETTINGS_GROUPS.general.id}`;
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -51,6 +56,7 @@ export function InspectTab({
         userSessionIssuerId={mcpServer.userSessionIssuerId}
         remoteMcpServerId={mcpServer.remoteMcpServerId ?? undefined}
         isDisabled={mcpServer.visibility === "disabled"}
+        availabilityHref={availabilityHref}
         authSettingsHref={authSettingsHref}
         accessHref={mcpServerTabHref(routes, param, "team-access")}
         platformSlug={platformEndpointSlug(endpoints)}

@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { ChevronRight, Info } from "lucide-react";
 import { useId, useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router";
 import type { McpToolRun } from "./runMcpTool";
 import {
   extractFields,
@@ -29,7 +30,11 @@ import {
   toArguments,
   type ToolField,
 } from "./toolSchemaFields";
-import { isDestructive, type InspectTool } from "./types";
+import {
+  isDestructive,
+  unavailableReasonLabel,
+  type InspectTool,
+} from "./types";
 import {
   HEALTH_WINDOW_LABEL,
   isFailing,
@@ -45,11 +50,14 @@ export function ToolRunPanel({
   toolbar,
   health,
   run,
+  accessHref,
 }: {
   tool: InspectTool;
   /** Sits left of "Run as you" on the panel's top row. */
   toolbar?: ReactNode;
   health: ToolHealth | undefined;
+  /** Where the rule that blocks this tool can be changed. */
+  accessHref?: string;
   /** Undefined when this panel can only describe the tool, not run it. */
   run: ((args: Record<string, unknown>) => Promise<McpToolRun>) | undefined;
 }): JSX.Element {
@@ -117,8 +125,23 @@ export function ToolRunPanel({
         ) : null}
         <HealthLine health={health} />
         {blocked ? (
-          <p className="text-destructive text-sm">
-            You can&apos;t run this tool. Its access rule is shown in the list.
+          <p className="text-sm">
+            <span className="text-destructive">
+              {unavailableReasonLabel(tool.unavailable?.reason)}, so you
+              can&apos;t run this tool.
+            </span>{" "}
+            {accessHref ? (
+              <Link
+                to={accessHref}
+                className="text-foreground font-medium underline underline-offset-2"
+              >
+                Review access
+              </Link>
+            ) : (
+              <span className="text-muted-foreground">
+                Ask an admin of this server for access.
+              </span>
+            )}
           </p>
         ) : null}
       </div>
@@ -369,6 +392,7 @@ function RunResult({ run }: { run: McpToolRun }): JSX.Element {
               code={value}
               fontSize="small"
               wordWrap
+              className="border-0"
             />
           </div>
         ) : null}
@@ -420,6 +444,7 @@ function RunResult({ run }: { run: McpToolRun }): JSX.Element {
               )}
               fontSize="small"
               wordWrap
+              className="border-0"
             />
           </div>
         ) : null}

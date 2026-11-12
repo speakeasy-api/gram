@@ -85,6 +85,12 @@ vi.mock("./sections/VisibilitySection", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
+vi.mock("@/hooks/usePluginWriteAccess", () => ({
+  usePluginWriteAccess: () => true,
+}));
+vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
+  PluginStatusBanner: () => <h2>Publishing</h2>,
+}));
 
 vi.mock("./sections/NetworkAccessSection", () => ({
   NetworkAccessSection: () => <h2>Network Access</h2>,
@@ -195,8 +201,10 @@ describe("SettingsTab", () => {
         }),
       ),
     ).toEqual({
-      General: ["General"],
-      Access: ["Visibility"],
+      // On or off is about the server itself, so it leads General and the
+      // server has no Access area.
+      General: ["Visibility", "General"],
+      Publishing: ["Publishing"],
       // Upstream headers are the Identity panel's Custom Headers disclosure,
       // not a section of their own.
       "Sign-in and identity": ["Identity", "Identity chaining"],
@@ -212,6 +220,7 @@ describe("SettingsTab", () => {
     ).toEqual({
       General: ["General"],
       Access: ["Visibility", "Public Access", "Public Rate Limits"],
+      Publishing: ["Publishing"],
       "Sign-in and identity": [
         "Authentication",
         "Resource Identifier",
@@ -232,11 +241,18 @@ describe("SettingsTab", () => {
     expect(
       renderAreas(server({ unproxiedMcpServerId: "unproxied-source-1" })),
     ).toEqual({
-      General: ["General"],
-      Access: ["Visibility"],
+      General: ["Visibility", "General"],
+      Publishing: ["Publishing"],
       "Sign-in and identity": ["Authentication"],
       "Danger zone": ["Danger Zone"],
     });
+  });
+
+  it("lands old Access links on Availability when the area is gone", () => {
+    renderTab(server({ remoteMcpServerId: "remote-source-1" }));
+    expect(document.getElementById("settings-access")?.textContent).toContain(
+      "Visibility",
+    );
   });
 
   it("indexes every area it shows", () => {
@@ -249,7 +265,7 @@ describe("SettingsTab", () => {
       ]),
     ).toEqual([
       ["General", "#settings-general"],
-      ["Access", "#settings-access"],
+      ["Publishing", "#publishing"],
       ["Sign-in and identity", "#settings-sign-in"],
       ["Danger zone", "#settings-danger-zone"],
     ]);
@@ -281,8 +297,9 @@ describe("SettingsTab upstream identity gate", () => {
   it("shows only the credentials as Identity on a remote server when enforced", () => {
     setEnforcement("enforced");
     expect(renderSettings(remoteServer())).toEqual([
-      "General",
       "Visibility",
+      "General",
+      "Publishing",
       "Identity",
       "Identity chaining",
       "Server URL",
@@ -330,11 +347,12 @@ describe("SettingsTab upstream identity gate", () => {
     const headings = renderSettings(
       server({ tunneledMcpServerId: "tunneled-source-1" }),
     );
-    expect(headings.slice(0, 6)).toEqual([
+    expect(headings.slice(0, 7)).toEqual([
       "General",
       "Visibility",
       "Public Access",
       "Public Rate Limits",
+      "Publishing",
       "Authentication",
       "Identity",
     ]);
@@ -357,7 +375,13 @@ describe("SettingsTab upstream identity gate", () => {
       setEnforcement(state);
       expect(
         renderSettings(server({ unproxiedMcpServerId: "unproxied-source-1" })),
-      ).toEqual(["General", "Visibility", "Authentication", "Danger Zone"]);
+      ).toEqual([
+        "Visibility",
+        "General",
+        "Publishing",
+        "Authentication",
+        "Danger Zone",
+      ]);
       cleanup();
       expect(
         renderSettings(

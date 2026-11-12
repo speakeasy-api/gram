@@ -250,13 +250,13 @@ export function GatewayActivitySection({
     !overview.isPlaceholderData &&
     discoveredWithoutExecuting(usage.data?.funnel);
   const noDispatchMessage = stoppedAtDiscovery
-    ? "Agents used the discovery tools in this range, but no execute_tool calls were observed. Gateway tool usage below shows the discovery steps."
+    ? "Agents looked up tools in this range but did not call any. Gateway tool usage below shows the lookups."
     : "No dispatched calls for the selected time range";
   const noMemberCallsMessage = stoppedAtDiscovery
-    ? "No execute_tool calls were observed in the selected range; agents only used the discovery tools."
+    ? "Agents looked up tools in the selected range but did not call any."
     : isOrganization
       ? "No server calls in the selected range."
-      : "No member calls in the selected range.";
+      : "No server calls in the selected range.";
 
   return (
     <Page.Section>
@@ -267,8 +267,8 @@ export function GatewayActivitySection({
       </Page.Section.Title>
       <Page.Section.Description>
         {isOrganization
-          ? "Calls dispatched to MCP servers through execute_tool, the discovery steps agents took to reach them, and how the load spread across servers."
-          : "Calls dispatched to members through execute_tool, the discovery steps agents took to reach them, and how the load spread across members."}
+          ? "Tool calls agents made through the gateway, how they found the tools, and which servers handled them."
+          : "Tool calls agents made through this gateway, how they found the tools, and which servers handled them."}
       </Page.Section.Description>
       <Page.Section.CTA>
         <TimeRangePicker

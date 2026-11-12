@@ -3,12 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/HoverCard";
-import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -34,7 +29,7 @@ import {
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, TriangleAlert } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
@@ -211,6 +206,7 @@ export function RemoteMcpIdentitySectionBody({
     associationsQuery.isLoading;
   const identityResolved = !loading && !identityQueryError;
   const [selectedMode, setSelectedMode] = useState<IdentityMode>("none");
+  const identityRadioId = useId();
   // Raised by Save when it would remove an existing identity, which is the
   // "after confirmation" AIM-230 asks for.
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -717,7 +713,7 @@ export function RemoteMcpIdentitySectionBody({
             {passThroughAuthorization ? (
               <Alert variant="warning" dismissible={false}>
                 A legacy pass-through Authorization header is still configured.
-                Remove it in Custom Headers before selecting a shared credential
+                Remove it in Custom headers before selecting a shared credential
                 or relying on Manual.
               </Alert>
             ) : null}
@@ -738,69 +734,80 @@ export function RemoteMcpIdentitySectionBody({
                 className="w-full"
               >
                 {({ disabled: scopeDisabled }) => (
-                  <RadioCardGroup
-                    orientation="horizontal"
-                    showIndicator={false}
+                  // Plain radio rows, like Availability: cards would nest a
+                  // box inside this panel.
+                  <RadioGroup
+                    aria-label="Identity"
                     value={selectedMode}
                     disabled={identityReadOnly || scopeDisabled || saving}
                     onValueChange={handleModeChange}
-                    className="grid-flow-row grid-cols-1 md:grid-flow-col md:grid-cols-none"
+                    className="gap-0 divide-y"
                   >
                     {cards.map((card) => {
-                      const warned = card.value === "none" && !!noneWarning;
+                      const warning =
+                        card.value === "none" ? noneWarning : null;
+                      // Only the pass-through conflict genuinely blocks a
+                      // choice: that legacy header already occupies the
+                      // Authorization name a static credential needs.
+                      // Agent to User is fine — a linked client wins over
+                      // a static credential, and AIM-230 expects the stale
+                      // one to be left visible for cleanup.
+                      const blocked =
+                        card.value === "agent" && !!passThroughAuthorization;
+                      const id = `${identityRadioId}-${card.value}`;
                       return (
-                        <RadioCard
+                        <label
                           key={card.value}
-                          value={card.value}
-                          // Only the pass-through conflict genuinely blocks a
-                          // choice: that legacy header already occupies the
-                          // Authorization name a static credential needs.
-                          // Agent to User is fine — a linked client wins over
-                          // a static credential, and AIM-230 expects the stale
-                          // one to be left visible for cleanup.
-                          disabled={
-                            card.value === "agent" && !!passThroughAuthorization
-                          }
-                          leading={card.icon}
-                          // Both states, so selecting the card does not swap
-                          // the warning border back to the selected one.
+                          htmlFor={id}
                           className={cn(
-                            warned &&
-                              "border-warning-default has-data-[state=checked]:border-warning-default",
+                            "flex items-start gap-3 py-3 first:pt-0 last:pb-0",
+                            blocked ? "cursor-not-allowed" : "cursor-pointer",
                           )}
-                          title={
-                            warned ? (
-                              <span className="flex items-center gap-2">
-                                {card.title}
-                                <HoverCard openDelay={150}>
-                                  <HoverCardTrigger asChild>
-                                    <span className="text-default-warning inline-flex cursor-help">
-                                      <TriangleAlert
-                                        aria-label="This server requires authentication"
-                                        className="size-3.5"
-                                      />
-                                    </span>
-                                  </HoverCardTrigger>
-                                  <HoverCardContent
-                                    align="start"
-                                    className="w-72"
-                                  >
-                                    <Text small className="block">
-                                      {noneWarning}
-                                    </Text>
-                                  </HoverCardContent>
-                                </HoverCard>
-                              </span>
-                            ) : (
-                              card.title
-                            )
-                          }
                         >
-                          {card.description}
-                        </RadioCard>
+                          {/* Named by the title alone, so the description
+                              and any warning read as its description. */}
+                          <RadioGroupItem
+                            id={id}
+                            value={card.value}
+                            disabled={blocked}
+                            aria-labelledby={`${id}-title`}
+                            aria-describedby={`${id}-description`}
+                            className="mt-0.5"
+                          />
+                          <span className="min-w-0 space-y-0.5">
+                            <span
+                              id={`${id}-title`}
+                              className={cn(
+                                "block text-sm font-medium",
+                                blocked && "opacity-60",
+                              )}
+                            >
+                              {card.title}
+                            </span>
+                            <span
+                              id={`${id}-description`}
+                              className="block max-w-2xl space-y-1"
+                            >
+                              <span className="text-muted-foreground block text-sm">
+                                {card.description}
+                              </span>
+                              {warning ? (
+                                // On the choice it is about, in words: what
+                                // goes wrong and which choice to make instead.
+                                <span className="text-warning-foreground flex items-start gap-1.5 text-sm">
+                                  <TriangleAlert
+                                    aria-hidden="true"
+                                    className="mt-0.5 size-3.5 shrink-0"
+                                  />
+                                  {warning}
+                                </span>
+                              ) : null}
+                            </span>
+                          </span>
+                        </label>
                       );
                     })}
-                  </RadioCardGroup>
+                  </RadioGroup>
                 )}
               </RequireScope>
             )}
@@ -861,7 +868,7 @@ export function RemoteMcpIdentitySectionBody({
                 className="size-4 transition-transform group-data-[state=open]:rotate-180"
               />
               <Text small className="font-medium">
-                Custom Headers
+                Custom headers
               </Text>
               <Text muted small>
                 Upstream headers sent with every request.

@@ -63,6 +63,8 @@ export function InspectWorkbench({
   const [query, setQuery] = useState("");
   const [selectedName, setSelectedName] = useState<string>();
   const [tab, setTab] = useState<PanelTab>("run");
+  const wide = useIsWide();
+  const panelRef = useRef<HTMLElement>(null);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -80,105 +82,134 @@ export function InspectWorkbench({
 
   const sections = useMemo(() => groupTools(filtered), [filtered]);
 
+  const list = (
+    <>
+      {notice ? <div className="px-6 pb-4">{notice}</div> : null}
+      {isLoading ? (
+        <ToolListSkeleton />
+      ) : state ? (
+        state
+      ) : (
+        <ToolList
+          sections={sections}
+          total={tools.length}
+          query={query}
+          onQueryChange={setQuery}
+          selectedName={selected?.name}
+          onSelect={(name) => {
+            setSelectedName(name);
+            setTab("run");
+            // Stacked, the panel sits below the list: bring it into view.
+            if (!wide) {
+              requestAnimationFrame(() =>
+                panelRef.current?.scrollIntoView({ block: "nearest" }),
+              );
+            }
+          }}
+          healthFor={healthFor}
+          accessHref={accessHref}
+        />
+      )}
+    </>
+  );
+
+  const panel = (
+    <aside
+      ref={panelRef}
+      aria-label="Selected tool"
+      className={cn(
+        "flex min-w-0 flex-col gap-5 px-6 py-5",
+        wide
+          ? "h-full min-h-0 overflow-y-auto"
+          : "border-border min-h-[420px] border-t",
+      )}
+    >
+      {(() => {
+        const tabs = chat ? (
+          <div role="tablist" className="flex gap-5 text-sm">
+            {(["run", "chat"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={tab === value}
+                onClick={() => setTab(value)}
+                className={cn(
+                  "pb-1 capitalize",
+                  tab === value
+                    ? "text-foreground shadow-[inset_0_-1.5px_0_currentColor]"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span />
+        );
+        // A state (error, sign-in) outranks a tool picked before it.
+        if (tab !== "chat" && !state && !runner && selected) {
+          // The run panel puts "Run as you" on the tab row.
+          return (
+            <ToolRunPanel
+              key={selected.name}
+              tool={selected}
+              toolbar={tabs}
+              health={healthFor(selected.name)}
+              accessHref={accessHref}
+              run={runTool ? (args) => runTool(selected, args) : undefined}
+            />
+          );
+        }
+        return (
+          <>
+            {chat ? tabs : null}
+            {panelBody()}
+          </>
+        );
+      })()}
+    </aside>
+  );
+
   return (
-    // Fills the tab's height: the list and the panel scroll inside it, so
-    // the page itself never moves under the inspector.
+    // Wide, it fills the tab's height: the list and the panel scroll inside
+    // it, so the page itself never moves under the inspector. Narrower, the
+    // panel stacks under the list and the page scrolls.
     <div className="border-border bg-card flex min-h-[480px] flex-1 flex-col border">
       <div className="border-border shrink-0 border-b px-6 py-4">{lens}</div>
-      {/* Drag the rule between the list and the panel to resize them. */}
-      <ResizablePanel useDefaultHandle={false} className="min-h-0 flex-1">
-        <ResizablePanel.Pane
-          minSize="35%"
-          defaultSize="68%"
-          className="min-w-0"
-        >
-          <div className="h-full min-h-0 min-w-0 overflow-y-auto py-4">
-            {notice ? <div className="px-6 pb-4">{notice}</div> : null}
-            {isLoading ? (
-              <ToolListSkeleton />
-            ) : state ? (
-              state
-            ) : (
-              <ToolList
-                sections={sections}
-                total={tools.length}
-                query={query}
-                onQueryChange={setQuery}
-                selectedName={selected?.name}
-                onSelect={(name) => {
-                  setSelectedName(name);
-                  setTab("run");
-                }}
-                healthFor={healthFor}
-                accessHref={accessHref}
-              />
-            )}
-          </div>
-        </ResizablePanel.Pane>
-
-        <ResizablePanel.ResizeHandle className="group bg-border hover:bg-foreground/40 data-[separator=active]:bg-foreground relative w-px transition-colors">
-          {/* A wider grab area than the 1px rule it draws. */}
-          <span className="absolute inset-y-0 -right-1.5 -left-1.5 cursor-col-resize" />
-        </ResizablePanel.ResizeHandle>
-
-        <ResizablePanel.Pane
-          minSize="24%"
-          defaultSize="32%"
-          className="min-w-0"
-        >
-          <aside
-            aria-label="Selected tool"
-            className="flex h-full min-h-0 min-w-0 flex-col gap-5 overflow-y-auto px-6 py-5"
+      {wide ? (
+        // Drag the rule between the list and the panel to resize them.
+        <ResizablePanel useDefaultHandle={false} className="min-h-0 flex-1">
+          <ResizablePanel.Pane
+            minSize="35%"
+            defaultSize="68%"
+            className="min-w-0"
           >
-            {(() => {
-              const tabs = chat ? (
-                <div role="tablist" className="flex gap-5 text-sm">
-                  {(["run", "chat"] as const).map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      role="tab"
-                      aria-selected={tab === value}
-                      onClick={() => setTab(value)}
-                      className={cn(
-                        "pb-1 capitalize",
-                        tab === value
-                          ? "text-foreground shadow-[inset_0_-1.5px_0_currentColor]"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {value}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <span />
-              );
-              // A state (error, sign-in) outranks a tool picked before it.
-              if (tab !== "chat" && !state && !runner && selected) {
-                // The run panel puts "Run as you" on the tab row.
-                return (
-                  <ToolRunPanel
-                    key={selected.name}
-                    tool={selected}
-                    toolbar={tabs}
-                    health={healthFor(selected.name)}
-                    run={
-                      runTool ? (args) => runTool(selected, args) : undefined
-                    }
-                  />
-                );
-              }
-              return (
-                <>
-                  {chat ? tabs : null}
-                  {panelBody()}
-                </>
-              );
-            })()}
-          </aside>
-        </ResizablePanel.Pane>
-      </ResizablePanel>
+            <div className="h-full min-h-0 min-w-0 overflow-y-auto py-4">
+              {list}
+            </div>
+          </ResizablePanel.Pane>
+
+          <ResizablePanel.ResizeHandle className="group bg-border hover:bg-foreground/40 data-[separator=active]:bg-foreground relative w-px transition-colors">
+            {/* A wider grab area than the 1px rule it draws. */}
+            <span className="absolute inset-y-0 -right-1.5 -left-1.5 cursor-col-resize" />
+          </ResizablePanel.ResizeHandle>
+
+          <ResizablePanel.Pane
+            minSize="24%"
+            defaultSize="32%"
+            className="min-w-0"
+          >
+            {panel}
+          </ResizablePanel.Pane>
+        </ResizablePanel>
+      ) : (
+        <>
+          <div className="min-w-0 py-4">{list}</div>
+          {panel}
+        </>
+      )}
     </div>
   );
 
@@ -217,12 +248,7 @@ function PanelSummary({
 }): JSX.Element {
   const usable = tools.filter((tool) => !tool.unavailable);
   const unavailable = tools.length - usable.length;
-  const failing = usable
-    .map((tool) => ({ tool, health: healthFor(tool.name) }))
-    .filter(({ health }) => isFailing(health))
-    .sort(
-      (a, b) => (b.health?.failureRate ?? 0) - (a.health?.failureRate ?? 0),
-    );
+  const failing = failingTools(usable, healthFor);
 
   return (
     <div className="flex flex-col gap-6 pt-1">
@@ -230,7 +256,7 @@ function PanelSummary({
         <span className="text-eyebrow">At a glance</span>
         <dl className="border-border grid grid-cols-3 border">
           {[
-            { label: "Agents get", value: usable.length, tone: "" },
+            { label: "You can use", value: usable.length, tone: "" },
             {
               label: "Not available",
               value: unavailable,
@@ -264,18 +290,25 @@ function PanelSummary({
         <div className="flex flex-col gap-2">
           <span className="text-eyebrow">Needs attention</span>
           <ul className="border-border border-t">
-            {failing.slice(0, 5).map(({ tool, health }) => (
+            {failing.slice(0, 5).map(({ tool, health, sources }) => (
               <li key={tool.name}>
                 <button
                   type="button"
                   onClick={() => onSelect(tool.name)}
                   className="border-border hover:bg-muted/60 flex w-full items-center justify-between gap-3 border-b py-2.5 text-left"
                 >
-                  <span className="truncate font-mono text-[13px]">
-                    {tool.label ?? tool.name}
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate font-mono text-[13px]">
+                      {tool.label ?? tool.name}
+                    </span>
+                    {sources.length > 0 ? (
+                      <span className="text-muted-foreground truncate text-xs">
+                        {sources.join(", ")}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="text-destructive shrink-0 text-[13px] tabular-nums">
-                    {((health?.failureRate ?? 0) * 100).toFixed(1)}% failed
+                    {(health.failureRate * 100).toFixed(1)}% failed
                   </span>
                 </button>
               </li>
@@ -295,6 +328,40 @@ function PanelSummary({
         </span>
       </p>
     </div>
+  );
+}
+
+/**
+ * Usable tools whose calls fail often, worst first. Usage is recorded by the
+ * name an agent called, so tools from different gateway servers can share one
+ * usage record (two servers' `get_metrics`): that record lists once, naming
+ * every server it may cover.
+ */
+function failingTools(
+  tools: InspectTool[],
+  healthFor: (toolName: string) => ToolHealth | undefined,
+): { tool: InspectTool; health: ToolHealth; sources: string[] }[] {
+  const byHealth = new Map<
+    ToolHealth,
+    { tool: InspectTool; health: ToolHealth; sources: string[] }
+  >();
+  for (const tool of tools) {
+    const health = healthFor(tool.name);
+    if (!health || !isFailing(health)) continue;
+    const entry = byHealth.get(health);
+    if (entry) {
+      if (tool.source && !entry.sources.includes(tool.source))
+        entry.sources.push(tool.source);
+      continue;
+    }
+    byHealth.set(health, {
+      tool,
+      health,
+      sources: tool.source ? [tool.source] : [],
+    });
+  }
+  return [...byHealth.values()].sort(
+    (a, b) => b.health.failureRate - a.health.failureRate,
   );
 }
 
@@ -369,12 +436,13 @@ function ToolList({
           ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
       )
         return;
+      if (total === 0) return;
       event.preventDefault();
       setSearching(true);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [total]);
   useEffect(() => {
     if (searching) inputRef.current?.focus();
   }, [searching]);
@@ -385,48 +453,75 @@ function ToolList({
   };
 
   const firstHeading = sections[0]?.heading;
+  // Searching an empty list is pointless.
+  const canSearch = total > 0;
   const shown = sections.reduce((n, s) => n + s.tools.length, 0);
 
   return (
     <div className="flex flex-col">
       <div className="flex min-h-8 items-center justify-between gap-3 px-6 pb-2">
-        {searching ? (
-          <div className="flex flex-1 items-center gap-2">
-            <Input
-              ref={inputRef}
-              value={query}
-              onChange={onQueryChange}
-              placeholder={`Search ${total} tools`}
-              aria-label="Search tools"
-              icon="search"
-              className="flex-1"
-              onKeyDown={(event) => {
-                if (event.key === "Escape") closeSearch();
-              }}
-            />
-            <button
-              type="button"
-              aria-label="Close search"
-              onClick={closeSearch}
-              className="text-muted-foreground hover:text-foreground"
+        <span className="text-eyebrow shrink-0">
+          {searching && query
+            ? `${shown} of ${total} tools`
+            : searching
+              ? "Tools"
+              : (firstHeading ?? "Tools")}
+        </span>
+        {canSearch ? (
+          // The field grows leftward out of the icon, on the same row.
+          <div className="relative flex min-w-0 flex-1 items-center justify-end">
+            <div
+              aria-hidden={!searching}
+              className={cn(
+                "flex min-w-0 items-center overflow-hidden transition-[width,opacity,visibility] duration-200 ease-out motion-reduce:transition-none",
+                searching
+                  ? "visible w-full max-w-72 opacity-100"
+                  : "invisible w-0 opacity-0",
+              )}
             >
-              <X className="size-4" />
-            </button>
+              <div className="relative w-full">
+                <Input
+                  ref={inputRef}
+                  value={query}
+                  onChange={onQueryChange}
+                  placeholder={`Search ${total} tools`}
+                  aria-label="Search tools"
+                  icon="search"
+                  tabIndex={searching ? undefined : -1}
+                  className="h-8 w-full py-1 pr-8"
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") closeSearch();
+                  }}
+                  onBlur={() => {
+                    if (!query) setSearching(false);
+                  }}
+                />
+                <button
+                  type="button"
+                  aria-label="Close search"
+                  tabIndex={searching ? undefined : -1}
+                  // Keeps focus in the field, so blur doesn't collapse first.
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={closeSearch}
+                  className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            </div>
+            {searching ? null : (
+              <button
+                type="button"
+                aria-label="Search tools"
+                title="Search tools (/)"
+                onClick={() => setSearching(true)}
+                className="text-muted-foreground hover:text-foreground absolute right-0"
+              >
+                <Search className="size-4" />
+              </button>
+            )}
           </div>
-        ) : (
-          <>
-            <span className="text-eyebrow">{firstHeading ?? "Tools"}</span>
-            <button
-              type="button"
-              aria-label="Search tools"
-              title="Search tools (/)"
-              onClick={() => setSearching(true)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <Search className="size-4" />
-            </button>
-          </>
-        )}
+        ) : null}
       </div>
 
       {shown === 0 ? (
@@ -616,4 +711,24 @@ export function LensChoice<T extends string>({
       </PopoverContent>
     </Popover>
   );
+}
+
+/** Tailwind's `xl` breakpoint: below it the split is too cramped to read. */
+const WIDE_QUERY = "(min-width: 80rem)";
+
+function useIsWide(): boolean {
+  const [wide, setWide] = useState(
+    () =>
+      typeof window.matchMedia !== "function" ||
+      window.matchMedia(WIDE_QUERY).matches,
+  );
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(WIDE_QUERY);
+    const onChange = () => setWide(query.matches);
+    onChange();
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+  return wide;
 }

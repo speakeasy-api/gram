@@ -120,6 +120,26 @@ afterEach(() => {
   mocks.chatRefetch.mockReset();
 });
 
+describe("RemoteMcpToolsSection turned off", () => {
+  it("links to the availability setting", () => {
+    renderSection({
+      isDisabled: true,
+      availabilityHref: "/settings#settings-general",
+    });
+
+    expect(
+      screen.getByText(
+        "This server is turned off, so agents can't reach its tools.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Turn on in settings" })
+        .getAttribute("href"),
+    ).toBe("/settings#settings-general");
+  });
+});
+
 describe("RemoteMcpToolsSection chat session", () => {
   it("shows a retryable error when the chat session can't be created", () => {
     mocks.needsAuth = false;
@@ -187,6 +207,59 @@ describe("RemoteMcpToolsSection tool list", () => {
     renderSection(remote);
 
     expect(screen.queryByRole("button", { name: /sync/i })).toBeNull();
+  });
+});
+
+describe("RemoteMcpToolsSection tool search", () => {
+  it("expands in place, filters, and collapses on Escape", () => {
+    mocks.needsAuth = false;
+    mocks.tools = {
+      search: { unavailable: false },
+      archive: { unavailable: false },
+    };
+    renderSection();
+
+    const field = screen.getByRole("textbox", {
+      name: "Search tools",
+      hidden: true,
+    });
+    expect(field.closest("[aria-hidden]")?.getAttribute("aria-hidden")).toBe(
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Search tools" }));
+    expect(field.closest("[aria-hidden]")?.getAttribute("aria-hidden")).toBe(
+      "false",
+    );
+    fireEvent.change(field, { target: { value: "archi" } });
+    expect(screen.getByText("1 of 2 tools")).toBeTruthy();
+    expect(screen.queryByText("search")).toBeNull();
+
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(screen.getByText("search")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Search tools" })).toBeTruthy();
+  });
+
+  it("collapses on blur only when the query is empty", () => {
+    mocks.needsAuth = false;
+    mocks.tools = { search: { unavailable: false } };
+    renderSection();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search tools" }));
+    const field = screen.getByRole("textbox", { name: "Search tools" });
+    fireEvent.change(field, { target: { value: "se" } });
+    fireEvent.blur(field);
+    expect(screen.queryByRole("button", { name: "Search tools" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close search" }));
+    expect(screen.getByRole("button", { name: "Search tools" })).toBeTruthy();
+  });
+
+  it("offers no search when the server lists no tools", () => {
+    mocks.needsAuth = false;
+    mocks.tools = {};
+    renderSection();
+
+    expect(screen.queryByRole("button", { name: "Search tools" })).toBeNull();
+    expect(screen.queryByPlaceholderText(/Search 0 tools/)).toBeNull();
   });
 });
 

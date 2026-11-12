@@ -32,6 +32,10 @@ import { MCPPerformanceTab } from "@/pages/mcp/MCPPerformanceTab";
 import { ExportJsonSection } from "@/pages/mcp/x/hosted/ExportJsonSection";
 import { ServerInstructionsSection } from "@/pages/mcp/x/hosted/ServerInstructionsSection";
 import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { isOnOffServer } from "@/pages/mcp/x/mcpServerVisibility";
+import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
+import { pluginServerRef } from "@/pages/mcp/overview/serverMatchesRef";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -113,6 +117,7 @@ export function SettingsTab({
   hostedToolset?: Toolset;
 }): JSX.Element {
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
+  const onOff = isOnOffServer(mcpServer);
   // Only remote and tunneled sources add sections to the page; the unproxied
   // row feeds the danger zone alone, so a deep link never waits on it.
   const hasSourceSections =
@@ -123,6 +128,7 @@ export function SettingsTab({
   // the others keep the legacy Identity panel. Only one renders.
   const upstreamAuth = useUpstreamAuthEnforcement();
   const { hasScope } = useRBAC();
+  const canWritePlugins = usePluginWriteAccess();
   const canWriteToolset =
     !!hostedToolset && hasScope("mcp:write", hostedToolset.id);
 
@@ -173,6 +179,17 @@ export function SettingsTab({
   }
 
   const G = SETTINGS_GROUPS;
+  // The same plugin picker as the header's plugin card, as a settings
+  // section; only people who can edit plugins get it.
+  const publishing = canWritePlugins && {
+    ...G.publishing,
+    content: (
+      <PluginStatusBanner
+        variant="settings"
+        server={pluginServerRef(mcpServer, hostedToolset)}
+      />
+    ),
+  };
   const danger = (
     <DangerZoneSection
       mcpServer={mcpServer}
@@ -203,6 +220,7 @@ export function SettingsTab({
             ...G.access,
             content: <VisibilitySection mcpServer={mcpServer} />,
           },
+          publishing,
           canonical
             ? toolsetSections && {
                 ...G.identity,
@@ -307,16 +325,20 @@ export function SettingsTab({
           (remoteMcpServer || remoteQuery.isError) && {
             ...G.general,
             content: (
-              <GeneralSection
-                mcpServer={mcpServer}
-                remoteMcpServer={remoteMcpServer}
-              />
+              <>
+                {/* On or off is about the server itself, not who may reach
+                    it, so it leads General and there is no Access area. */}
+                <AvailabilityAnchor>
+                  <VisibilitySection mcpServer={mcpServer} />
+                </AvailabilityAnchor>
+                <GeneralSection
+                  mcpServer={mcpServer}
+                  remoteMcpServer={remoteMcpServer}
+                />
+              </>
             ),
           },
-          {
-            ...G.access,
-            content: <VisibilitySection mcpServer={mcpServer} />,
-          },
+          publishing,
           {
             ...G.identity,
             // Upstream headers live inside the Identity panel's Custom
@@ -382,8 +404,22 @@ export function SettingsTab({
   return (
     <SettingsLayout
       groups={[
-        { ...G.general, content: <GeneralSection mcpServer={mcpServer} /> },
         {
+          ...G.general,
+          content: (
+            <>
+              {/* Tunneled servers pick who may connect, which is Access.
+                  The rest only switch on and off, which leads General. */}
+              {onOff ? (
+                <AvailabilityAnchor>
+                  <VisibilitySection mcpServer={mcpServer} />
+                </AvailabilityAnchor>
+              ) : null}
+              <GeneralSection mcpServer={mcpServer} />
+            </>
+          ),
+        },
+        !onOff && {
           ...G.access,
           content: (
             <>
@@ -400,6 +436,7 @@ export function SettingsTab({
             </>
           ),
         },
+        publishing,
         {
           ...G.identity,
           content: (
@@ -458,6 +495,22 @@ export function SettingsTab({
         { ...G.danger, content: danger },
       ]}
     />
+  );
+}
+
+/**
+ * Keeps old links to the Access area working on servers that no longer have
+ * one: they land on Availability, which used to be all that area held.
+ */
+function AvailabilityAnchor({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <div id={SETTINGS_GROUPS.access.id} className="scroll-mt-8">
+      {children}
+    </div>
   );
 }
 

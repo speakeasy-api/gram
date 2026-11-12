@@ -1,6 +1,6 @@
-import { CardContextMenu } from "@/components/card-context-menu";
 import { RequireScope } from "@/components/require-scope";
-import { Card, Cards } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Table, type Column } from "@/components/ui/Table";
 import {
   Command,
   CommandEmpty,
@@ -83,164 +83,150 @@ export function ResourcesTabContent({
     });
   };
 
-  // Show empty state if no resources exist at all in the system
-  if (allResources.length === 0) {
-    return (
-      <>
-        <ResourcesEmptyState onAddResources={() => setInstructionsOpen(true)} />
-        <Dialog open={instructionsOpen} onOpenChange={setInstructionsOpen}>
-          <Dialog.Content className="max-w-2xl!">
-            <Dialog.Header>
-              <Dialog.Title>Add Resources</Dialog.Title>
-              <Dialog.Description>
-                Add functions to create resources
-              </Dialog.Description>
-            </Dialog.Header>
-            <GettingStartedInstructions />
-          </Dialog.Content>
-        </Dialog>
-      </>
-    );
-  }
-
-  return (
-    <Cards>
-      {toolsetResources
-        .filter((resource) => resource.type === "function")
-        .map((resource) => {
-          const functionName = functionIdToName?.[resource.functionId];
-          return (
-            <ResourceCard
-              key={resource.resourceUrn}
-              resource={resource}
-              functionName={functionName}
-              onDelete={() => removeResourceFromToolset(resource.resourceUrn)}
-            />
-          );
-        })}
-      {allResources && allResources.length > 0 && (
-        <RequireScope scope="mcp:write" level="section">
-          <ResourceSelectPopover
-            allResources={allResources}
-            currentResourceUrns={currentResourceUrns}
-            onSelect={(resourceUrn) => addResourceToToolset(resourceUrn)}
-          />
-        </RequireScope>
-      )}
-    </Cards>
+  const functionResources = toolsetResources.filter(
+    (resource) => resource.type === "function",
   );
-}
+  const availableResources = allResources.filter(
+    (r) =>
+      r.type === "function" &&
+      r.resourceUrn &&
+      !currentResourceUrns.includes(r.resourceUrn),
+  );
 
-function ResourceCard({
-  resource,
-  functionName,
-  onDelete,
-}: {
-  resource: Resource;
-  functionName?: string;
-  onDelete: () => void;
-}) {
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write");
-  const actions: Action[] = [
+  // With nothing left to pick, adding a resource means writing a function.
+  const addAction =
+    availableResources.length > 0 ? (
+      <ResourceSelectPopover
+        availableResources={availableResources}
+        onSelect={(resourceUrn) => addResourceToToolset(resourceUrn)}
+      />
+    ) : (
+      <Button size="sm" onClick={() => setInstructionsOpen(true)}>
+        Add resource
+      </Button>
+    );
+
+  const columns: Column<Resource>[] = [
     {
-      label: "Remove from MCP server",
-      onClick: onDelete,
-      icon: "trash" as const,
-      destructive: true,
-      disabled: !canWrite,
+      key: "name",
+      header: "Resource",
+      width: "1fr",
+      render: (resource) => {
+        const functionName = functionIdToName?.[resource.functionId];
+        return (
+          <Stack gap={0.5} className="min-w-0">
+            <Text small className="truncate font-medium">
+              {resource.name}
+            </Text>
+            {functionName && (
+              <Text small muted className="truncate">
+                From {functionName}
+              </Text>
+            )}
+          </Stack>
+        );
+      },
+    },
+    {
+      key: "uri",
+      header: "Address",
+      width: "1fr",
+      render: (resource) => (
+        <Text small muted className="block truncate font-mono text-xs">
+          {resource.uri}
+        </Text>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "64px",
+      render: (resource) => (
+        <RemoveResourceAction
+          onRemove={() => removeResourceFromToolset(resource.resourceUrn)}
+        />
+      ),
     },
   ];
 
   return (
-    <CardContextMenu actions={actions}>
-      <Card>
-        <Card.Header>
-          <Stack direction="horizontal" gap={2} align="center">
-            <div className="bg-muted shrink-0 p-2">
-              <Newspaper
-                className="text-muted-foreground size-5"
-                strokeWidth={1.5}
-              />
-            </div>
-            <Card.Title className="normal-case">
-              {resource.name}
-              {functionName && (
-                <span className="text-muted-foreground ml-1 text-xs font-normal">
-                  ({functionName})
-                </span>
-              )}
-            </Card.Title>
+    <>
+      {functionResources.length === 0 ? (
+        <ResourcesEmptyState
+          action={
+            <RequireScope scope="mcp:write" level="component">
+              {addAction}
+            </RequireScope>
+          }
+        />
+      ) : (
+        <Stack gap={4}>
+          <Stack direction="horizontal" align="center" justify="space-between">
+            <Text small muted>
+              Agents connected to this server can read these resources.
+            </Text>
+            <RequireScope scope="mcp:write" level="component">
+              {addAction}
+            </RequireScope>
           </Stack>
-          <MoreActions actions={actions} />
-        </Card.Header>
-        <Card.Content>
-          <Card.Description className="font-mono">
-            {resource.uri}
-          </Card.Description>
-        </Card.Content>
-      </Card>
-    </CardContextMenu>
+          <Table
+            columns={columns}
+            data={functionResources}
+            rowKey={(resource) => resource.resourceUrn}
+          />
+        </Stack>
+      )}
+      <Dialog open={instructionsOpen} onOpenChange={setInstructionsOpen}>
+        <Dialog.Content className="max-w-2xl!">
+          <Dialog.Header>
+            <Dialog.Title>Add resources</Dialog.Title>
+            <Dialog.Description>
+              Resources come from functions. Deploy a function that defines one,
+              then add it here.
+            </Dialog.Description>
+          </Dialog.Header>
+          <GettingStartedInstructions />
+        </Dialog.Content>
+      </Dialog>
+    </>
   );
 }
 
+function RemoveResourceAction({ onRemove }: { onRemove: () => void }) {
+  const { hasScope } = useRBAC();
+  const actions: Action[] = [
+    {
+      label: "Remove from MCP server",
+      onClick: onRemove,
+      icon: "trash" as const,
+      destructive: true,
+      disabled: !hasScope("mcp:write"),
+    },
+  ];
+  return <MoreActions actions={actions} />;
+}
+
 function ResourceSelectPopover({
-  allResources,
-  currentResourceUrns,
+  availableResources,
   onSelect,
 }: {
-  allResources: Resource[];
-  currentResourceUrns: string[];
+  availableResources: Resource[];
   onSelect: (resourceUrn: string) => void;
 }) {
   const [open, setOpen] = useState(false);
 
-  // Filter out resources that are already in the toolset
-  const availableResources = allResources.filter(
-    (r) => r.resourceUrn && !currentResourceUrns.includes(r.resourceUrn),
-  );
-
-  if (availableResources.length === 0) {
-    return null;
-  }
-
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <div>
-          <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
-            <Card.Header>
-              <Stack direction="horizontal" gap={2} align="center">
-                <div className="bg-muted shrink-0 p-2">
-                  <Newspaper
-                    className="text-muted-foreground size-5"
-                    strokeWidth={1.5}
-                  />
-                </div>
-                <Card.Title className="normal-case">+ Add Resource</Card.Title>
-              </Stack>
-            </Card.Header>
-            <Card.Content>
-              <Card.Description>
-                Click to add a resource to this toolset
-              </Card.Description>
-            </Card.Content>
-          </Card>
-        </div>
+        <Button size="sm">Add resource</Button>
       </PopoverTrigger>
       <PopoverContent className="w-[400px] p-0" align="start">
         <Command>
-          <CommandInput placeholder="Search resources..." className="h-9" />
+          <CommandInput placeholder="Search resources…" className="h-9" />
           <CommandList>
-            <CommandEmpty>
-              {availableResources.length === 0
-                ? "No resources found."
-                : "No items found."}
-            </CommandEmpty>
+            <CommandEmpty>No resources match your search.</CommandEmpty>
             <CommandGroup>
               {availableResources.map((resource) => {
-                if (resource.type !== "function") return null;
-
                 return (
                   <CommandItem
                     key={resource.resourceUrn}

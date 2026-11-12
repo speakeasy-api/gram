@@ -41,6 +41,16 @@ const state = vi.hoisted(() => ({
   data: undefined as GatewayInspection | undefined,
   loading: false,
   accessToken: undefined as string | undefined,
+  members: [] as {
+    slug: string;
+    name: string;
+    tools: never[];
+    error?: string;
+    isLoading: boolean;
+    refetch: () => void;
+  }[],
+  unconnected: [] as string[],
+  connect: vi.fn(),
 }));
 vi.mock("./GatewayCodeExecution", () => ({
   GatewayCodeExecution: ({
@@ -67,7 +77,17 @@ vi.mock("../inspect/useToolHealth", async (importOriginal) => ({
   useToolHealth: () => ({ healthFor: () => undefined, isLoading: false }),
 }));
 vi.mock("./useGatewayMemberTools", () => ({
-  useGatewayMemberTools: () => [],
+  useGatewayMemberTools: () => state.members,
+}));
+vi.mock("./useGatewayMemberStates", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./useGatewayMemberStates")>()),
+  useGatewayMemberStates: () => ({
+    signIn: {
+      needsSignIn: (slug: string | undefined) =>
+        !!slug && state.unconnected.includes(slug),
+      connect: state.connect,
+    },
+  }),
 }));
 vi.mock("@/pages/playground/PlaygroundChat", () => ({
   PlaygroundChat: () => <div data-testid="playground-chat" />,
@@ -156,6 +176,8 @@ afterEach(() => {
   state.data = undefined;
   state.loading = false;
   state.accessToken = undefined;
+  state.members = [];
+  state.unconnected = [];
 });
 it("applies discovery choices to the URL and the minted connection", async () => {
   state.mint.mockClear();
@@ -262,13 +284,15 @@ it("preserves Python source while inspection reloads for a refreshed credential"
     discoveryMode: "code_mode",
   } as MetaMcpServer;
   const view = () => (
-    <MemoryRouter>
-      <GatewayInspectTab
-        metaMcpServer={gateway}
-        endpoints={[]}
-        isLoadingEndpoints={false}
-      />
-    </MemoryRouter>
+    <TooltipProvider>
+      <MemoryRouter>
+        <GatewayInspectTab
+          metaMcpServer={gateway}
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>
+    </TooltipProvider>
   );
   const { rerender } = render(view());
   fireEvent.change(screen.getByLabelText("Persistent source"), {
@@ -380,4 +404,82 @@ it("names a failed Code Mode catalog sign-in and retries the mint", () => {
   ).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
   expect(state.catalogMintRefetch).toHaveBeenCalled();
+});
+
+it("links a turned-off gateway to the availability setting", () => {
+  render(
+    <TooltipProvider>
+      <MemoryRouter>
+        <GatewayInspectTab
+          metaMcpServer={
+            {
+              id: "gateway-test",
+              discoveryMode: "progressive",
+              visibility: "disabled",
+            } as MetaMcpServer
+          }
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
+  );
+  expect(screen.getByText("This gateway is turned off")).toBeTruthy();
+  expect(
+    screen
+      .getByRole("link", { name: "Turn on in settings" })
+      .getAttribute("href"),
+  ).toBe("/settings#settings-general");
+});
+
+it("offers Connect for a member that needs the viewer's account", () => {
+  state.data = {
+    discoveryMode: "progressive",
+    tools: [{ name: "list_servers" }],
+    instructions: undefined,
+    protocolVersion: undefined,
+    serverName: undefined,
+    servers: [
+      { slug: "linear", name: "Linear" },
+      { slug: "slack", name: "Slack" },
+    ],
+  } as GatewayInspection;
+  const failed = (slug: string, name: string) => ({
+    slug,
+    name,
+    tools: [],
+    error: "failed",
+    isLoading: false,
+    refetch: vi.fn(),
+  });
+  state.members = [failed("linear", "Linear"), failed("slack", "Slack")];
+  state.unconnected = ["linear"];
+  render(
+    <TooltipProvider>
+      <MemoryRouter>
+        <GatewayInspectTab
+          metaMcpServer={
+            {
+              id: "gateway-test",
+              userSessionIssuerId: "issuer-test",
+              discoveryMode: "progressive",
+            } as MetaMcpServer
+          }
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
+  );
+
+  expect(screen.getByText(/Linear · Sign in needed/)).toBeTruthy();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Connect your account for Linear" }),
+  );
+  expect(state.connect).toHaveBeenCalled();
+  // Slack failed for another reason: no Connect, but a retry.
+  expect(
+    screen.queryByRole("button", { name: "Connect your account for Slack" }),
+  ).toBeNull();
+  expect(screen.getByText(/Slack · Unavailable/)).toBeTruthy();
 });

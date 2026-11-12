@@ -1,3 +1,4 @@
+import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +11,7 @@ import {
 } from "@/components/ui/Sheet";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useSession } from "@/contexts/Auth";
 import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import {
@@ -17,6 +19,7 @@ import {
   useResolvedMcpServerUrl,
 } from "@/hooks/useToolsetUrl";
 import { enumPresentation } from "@/lib/enum";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { getServerURL, mcpConnectionUrl } from "@/lib/utils";
 import { PlaygroundChat } from "@/pages/playground/PlaygroundChat";
@@ -30,6 +33,11 @@ import { runMcpTool } from "../inspect/runMcpTool";
 import type { InspectTool } from "../inspect/types";
 import { useToolHealth } from "../inspect/useToolHealth";
 import { GatewayCodeExecution } from "./GatewayCodeExecution";
+import { GatewayMemberConnect } from "./GatewayMemberConnect";
+import {
+  MEMBER_STATE_LABEL,
+  useGatewayMemberStates,
+} from "./useGatewayMemberStates";
 import { gatewayTabHref } from "./GatewayDetailsRouting";
 import { GATEWAY_INSTRUCTIONS_SECTION_ID } from "./GatewaySettingsTab";
 import { useGatewayInspection } from "./useGatewayInspection";
@@ -185,6 +193,22 @@ function GatewayInspectConnection({
 
   const { rows } = useGatewayMemberRows(metaMcpServer.id);
   const { healthFor } = useToolHealth({ metaMcpServerId: metaMcpServer.id });
+  // Members that need the viewer's own account: connecting lists them again.
+  // The same viewer status Overview and the header read, so all three agree.
+  const { signIn } = useGatewayMemberStates(
+    metaMcpServer,
+    endpoints,
+    isLoadingEndpoints,
+    rows,
+    {
+      checkTools: "cache",
+      onConnected: () => {
+        inspection.refetch();
+        catalog.refetch();
+        members.forEach((m) => m.refetch());
+      },
+    },
+  );
 
   // Keep the Code Mode editor across token refreshes; reconnects reset it.
   const [codeConnection, setCodeConnection] = useState<string>();
@@ -208,16 +232,21 @@ function GatewayInspectConnection({
     }));
     if (mode === "direct") return surface;
     const via =
-      mode === "code_mode" ? "reachable from code" : "behind execute_tool";
+      mode === "code_mode"
+        ? "callable from code"
+        : "reached through the gateway";
     const memberTools = members.flatMap((m) =>
       m.tools.map((tool) => ({ ...tool, group: `${m.name} · ${via}` })),
     );
     return [...surface, ...memberTools];
   }, [data, members, mode]);
 
+  // A rough size of the tool descriptions an agent loads on connect.
   const tokens = data
     ? Math.round(JSON.stringify(data.tools).length / 4)
     : undefined;
+  const surfaceCount = data?.tools.length ?? 0;
+  const memberToolCount = members.reduce((n, m) => n + m.tools.length, 0);
   const servedMembers =
     mode === "code_mode" ? catalog.data?.servers : data?.servers;
   const unserved =
@@ -246,14 +275,18 @@ function GatewayInspectConnection({
     disabled?: boolean;
   }[] = [
     { value: "default", label: defaultLabel, hint: "gateway default" },
-    { value: "direct", label: "Direct", hint: "every tool, flat" },
-    { value: "progressive", label: "Progressive", hint: "five fixed tools" },
+    { value: "direct", label: "Direct", hint: "every tool listed up front" },
+    {
+      value: "progressive",
+      label: "Progressive",
+      hint: "agents look tools up as they need them",
+    },
     ...(metaMcpServer.codeModeEnabled || choice === "code_mode"
       ? [
           {
             value: "code_mode" as const,
             label: "Code Mode",
-            hint: "one Python tool",
+            hint: "agents write code that calls tools",
             disabled: !metaMcpServer.codeModeEnabled,
           },
         ]
@@ -287,9 +320,18 @@ function GatewayInspectConnection({
           : " mode"}
         {data ? (
           <span className="text-muted-foreground">
-            {" "}
-            · {data.tools.length} {data.tools.length === 1 ? "tool" : "tools"}
-            {tokens !== undefined ? ` · ~${formatTokens(tokens)} tokens` : ""}
+            {" · "}
+            <SimpleTooltip
+              tooltip={`Agents load ${surfaceCount === 1 ? "this tool's description" : "these tool descriptions"} as soon as they connect: about ${formatTokens(tokens ?? 0)} tokens of their context.`}
+            >
+              <span className="decoration-muted-foreground/60 cursor-help underline decoration-dotted underline-offset-4">
+                {surfaceCount} {mode === "direct" ? "" : "gateway "}
+                {surfaceCount === 1 ? "tool" : "tools"}
+              </span>
+            </SimpleTooltip>
+            {mode === "direct"
+              ? null
+              : ` · ${memberToolCount} server ${memberToolCount === 1 ? "tool" : "tools"} ${mode === "code_mode" ? "callable from code" : "reached through them"}`}
           </span>
         ) : null}
       </Text>
@@ -319,13 +361,63 @@ function GatewayInspectConnection({
           : `${unserved} of ${rows.length} servers aren't served. This gateway has no sign-in, so every caller is anonymous and private servers are hidden.`}
       </Text>
     ) : null;
+  const unconnected = failedMembers.filter((m) => signIn.needsSignIn(m.slug));
+  const broken = failedMembers.filter((m) => !signIn.needsSignIn(m.slug));
+  // Same words as the Overview's Status column, so both pages agree.
+  const memberSignIn =
+    unconnected.length > 0 ? (
+      <div className="flex flex-col gap-1 text-sm">
+        {unconnected.map((m) => (
+          <p
+            key={m.slug}
+            className="text-muted-foreground flex flex-wrap items-center gap-x-2"
+          >
+            <StatusDot tone="warning" />
+            <span>
+              {m.name} · {MEMBER_STATE_LABEL.sign_in}. Connect your account to
+              see its tools.
+            </span>
+            <GatewayMemberConnect name={m.name} onConnect={signIn.connect} />
+          </p>
+        ))}
+      </div>
+    ) : null;
   const memberFailures =
-    failedMembers.length > 0 ? (
-      <p className="text-muted-foreground flex items-center gap-2 text-sm">
+    broken.length > 0 ? (
+      <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         <StatusDot tone="destructive" />
-        Couldn&apos;t read tools from{" "}
-        {failedMembers.map((m) => m.name).join(", ")}. Agents see the same
-        error.
+        <span>
+          {broken.map((m) => m.name).join(", ")} ·{" "}
+          {MEMBER_STATE_LABEL.unavailable}. Couldn&apos;t read{" "}
+          {broken.length === 1 ? "its" : "their"} tools, and agents see the same
+          error.
+        </span>
+        <span className="flex flex-wrap items-center gap-x-3">
+          <button
+            type="button"
+            onClick={() => broken.forEach((m) => m.refetch())}
+            className="text-foreground underline underline-offset-2"
+          >
+            Try again
+          </button>
+          {broken.map((m) => {
+            const server = rows.find(
+              (row) =>
+                (row.server?.slug ?? row.member.mcpServerSlug) === m.slug,
+            )?.server;
+            return server ? (
+              <Link
+                key={m.slug}
+                to={routes.mcp.details.overview.href(
+                  mcpServerRouteParam(server),
+                )}
+                className="text-foreground underline underline-offset-2"
+              >
+                Open {m.name}
+              </Link>
+            ) : null;
+          })}
+        </span>
       </p>
     ) : null;
   const catalogFailure = catalogFailed ? (
@@ -350,11 +442,16 @@ function GatewayInspectConnection({
     </p>
   ) : null;
   const notice =
-    fallbackNote || shortfall || memberFailures || catalogFailure ? (
+    fallbackNote ||
+    shortfall ||
+    memberSignIn ||
+    memberFailures ||
+    catalogFailure ? (
       <div className="flex flex-col gap-1">
         {fallbackNote}
         {shortfall}
         {catalogFailure}
+        {memberSignIn}
         {memberFailures}
       </div>
     ) : undefined;
@@ -366,7 +463,23 @@ function GatewayInspectConnection({
     : mcpUrl;
 
   let state: ReactNode;
-  if (!connectUrl && !resolvingUrl) {
+  if (metaMcpServer.visibility === "disabled") {
+    state = (
+      <InlineEmptyState
+        icon="power-off"
+        heading="This gateway is turned off"
+        description="Agents can't reach it or its servers' tools until it's turned on."
+        action={
+          <Button variant="secondary" asChild>
+            {/* Availability sits at the top of Settings' General area. */}
+            <Link to={`${settingsHref}#${SETTINGS_GROUPS.general.id}`}>
+              <Button.Text>Turn on in settings</Button.Text>
+            </Link>
+          </Button>
+        }
+      />
+    );
+  } else if (!connectUrl && !resolvingUrl) {
     state = (
       <InlineEmptyState
         icon="link"
@@ -417,7 +530,9 @@ function GatewayInspectConnection({
     );
   }
 
-  const isLoading = resolvingUrl || token.isLoading || inspection.isLoading;
+  const isLoading =
+    metaMcpServer.visibility !== "disabled" &&
+    (resolvingUrl || token.isLoading || inspection.isLoading);
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col">

@@ -171,6 +171,8 @@ describe("tunnel agent readiness", () => {
         ready,
         description,
         href,
+        // A tunnel that is down fails requests now; it is not a step left.
+        ...(ready === false ? { broken: true } : {}),
       });
     },
   );

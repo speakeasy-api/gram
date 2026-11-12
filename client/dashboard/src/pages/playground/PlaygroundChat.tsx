@@ -186,26 +186,32 @@ export function PlaygroundChat({
           showModelPicker: false,
         },
         welcome: {
-          title: "Test Your MCP Server",
+          title: "Test your MCP server",
           subtitle:
             "This chat has access to the selected MCP server. Use it to test your tools.",
-          suggestions: [
-            {
-              title: "Explore tools",
-              label: "See what's available",
-              prompt: "What tools does this server have?",
-            },
-          ],
+          // The compact panel sits beside the tool list, which already shows
+          // what is available, so it skips the suggestion pill.
+          suggestions: compact
+            ? []
+            : [
+                {
+                  title: "Explore tools",
+                  label: "See what's available",
+                  prompt: "What tools does this server have?",
+                },
+              ],
         },
         composer: {
-          placeholder: "Send a message...",
+          placeholder: "Send a message…",
           toolMentions: true,
           requireMcpTools: true,
         },
         theme: {
           colorScheme: resolvedTheme === "dark" ? "dark" : "light",
           density: "normal",
-          radius: "soft",
+          // Square corners when embedded in a detail page, matching the
+          // dashboard around it; the full Playground keeps its own look.
+          radius: compact ? "sharp" : "soft",
         },
         components: {
           ToolFallback: PlaygroundMcpToolFallback,

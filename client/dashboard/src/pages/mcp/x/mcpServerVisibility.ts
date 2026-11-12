@@ -21,6 +21,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+/**
+ * Remote and unproxied servers only switch on and off ("Availability");
+ * hosted and tunneled servers choose who may connect ("Visibility").
+ */
+export function isOnOffServer(mcpServer: McpServer): boolean {
+  return !standsInForToolset(mcpServer) && !mcpServer.tunneledMcpServerId;
+}
+
 export type VisibilityOption = {
   value: McpServerVisibility;
   label: string;

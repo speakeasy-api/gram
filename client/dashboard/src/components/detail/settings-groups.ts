@@ -6,6 +6,7 @@
 export const SETTINGS_GROUPS = {
   general: { id: "settings-general", title: "General" },
   access: { id: "settings-access", title: "Access" },
+  publishing: { id: "publishing", title: "Publishing" },
   identity: { id: "settings-sign-in", title: "Sign-in and identity" },
   connection: { id: "settings-connection", title: "Connection" },
   tools: { id: "settings-tools", title: "Tools" },

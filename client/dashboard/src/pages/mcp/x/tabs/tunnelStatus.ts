@@ -204,6 +204,7 @@ export function tunnelAgentReadiness({
         description:
           "No tunnel agent is connected, so requests to this server fail. View tunnel agent setup to connect one.",
         ready: false,
+        broken: true,
         href: agentSetupHref,
       };
     case "unreachable":
@@ -213,6 +214,7 @@ export function tunnelAgentReadiness({
         ...item,
         description: `${status.detail} Review tunnel agent setup.`,
         ready: false,
+        broken: true,
         href: agentSetupHref,
       };
     case "reachable":

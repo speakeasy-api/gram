@@ -227,10 +227,10 @@ export function ServedSkillsSection({
     body = (
       <InlineEmptyState
         icon="sparkles"
-        heading="No skills served yet"
+        heading="Give connected agents skills"
         description={
           canAdd
-            ? `Add a project skill to serve it to agents connected to ${surfaceName}.`
+            ? `Add a project skill and every agent that connects to ${surfaceName} loads it.`
             : `Agents connected to ${surfaceName} don't load any skills yet.`
         }
         action={addControl ?? undefined}

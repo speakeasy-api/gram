@@ -91,11 +91,16 @@ export function McpDetailFrame({
           data-page-bound=""
           className="min-h-0 w-full flex-1 overflow-y-auto px-8"
         >
-          {/* A definite height, so a tab like Inspect can fill the view and
-              scroll inside itself; taller tabs just overflow into the scroll. */}
+          {/* Inspect gets a definite height, so it can fill the view and
+              scroll inside itself. Other tabs grow with their content, so the
+              bottom padding lands after the last card and clears the floating
+              insights dock, which Inspect hides. */}
           <div
             ref={contentRef}
-            className="mx-auto flex h-full w-full max-w-[1270px] flex-col pt-8 pb-12"
+            className={cn(
+              "mx-auto flex w-full max-w-[1270px] flex-col pt-8",
+              activeTab === "inspect" ? "h-full pb-12" : "min-h-full pb-32",
+            )}
           >
             {children}
           </div>
@@ -199,27 +204,44 @@ function ReadinessChip({
   const required = chrome.readinessChecks.filter((check) => !check.optional);
   if (chrome.readinessChecks.length === 0) return null;
   // A check that can't be determined yet is neither a step left nor done.
-  const left = required.filter((check) => check.ready === false).length;
-  const checking = left === 0 && required.some((check) => check.ready === null);
+  const failing = required.filter((check) => check.ready === false);
+  // Broken now outranks a step not yet taken, so the chip names those first.
+  const issues = failing.filter((check) => check.broken);
+  const steps = failing.filter((check) => !check.broken);
+  const checking =
+    failing.length === 0 && required.some((check) => check.ready === null);
+  const label = summarize(issues, "issue") ?? summarize(steps, "step left");
+  const shown = issues.length > 0 ? issues : steps;
+  const pendingNames = shown.map((check) => check.label).join(", ");
+  const tone =
+    issues.length > 0
+      ? "destructive"
+      : steps.length > 0
+        ? "warning"
+        : checking
+          ? "neutral"
+          : "success";
 
   return (
     <Popover>
-      <PopoverTrigger className="flex h-6 items-center gap-2 leading-6 hover:underline">
-        <StatusDot
-          tone={left > 0 ? "warning" : checking ? "neutral" : "success"}
-        />
+      <PopoverTrigger
+        className="flex h-6 min-w-0 items-center gap-2 leading-6 hover:underline"
+        aria-label={
+          shown.length > 1
+            ? `${label}: ${pendingNames}. Open checklist`
+            : undefined
+        }
+        title={shown.length > 1 ? pendingNames : undefined}
+      >
+        <StatusDot tone={tone} />
         <span
           className={cn(
-            left === 0
+            failing.length === 0
               ? "text-muted-foreground"
               : "text-foreground font-medium",
           )}
         >
-          {left > 0
-            ? `${left} ${left === 1 ? "step" : "steps"} left`
-            : checking
-              ? "Checking…"
-              : "Ready"}
+          {label ?? (checking ? "Checking…" : "Ready")}
         </span>
       </PopoverTrigger>
       <PopoverContent
@@ -250,6 +272,19 @@ function ReadinessChip({
   );
 }
 
+/** "1 issue: Availability" or "2 issues"; null when there are none. */
+function summarize(
+  checks: ReadinessCheck[],
+  noun: "issue" | "step left",
+): string | null {
+  const [first] = checks;
+  if (!first) return null;
+  if (checks.length === 1) return `1 ${noun}: ${first.label}`;
+  return noun === "issue"
+    ? `${checks.length} issues`
+    : `${checks.length} steps left`;
+}
+
 function ReadinessRow({ check }: { check: ReadinessCheck }): JSX.Element {
   const body = (
     <span className="flex items-start gap-2.5 px-2 py-2">
@@ -261,7 +296,9 @@ function ReadinessRow({ check }: { check: ReadinessCheck }): JSX.Element {
             "mt-0.5 size-3.5 shrink-0",
             check.optional
               ? "text-muted-foreground"
-              : "text-warning-foreground",
+              : check.broken
+                ? "text-destructive"
+                : "text-warning-foreground",
           )}
         />
       )}
