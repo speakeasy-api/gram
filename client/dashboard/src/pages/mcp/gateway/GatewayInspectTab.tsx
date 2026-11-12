@@ -9,6 +9,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
+import { Alert } from "@/components/ui/Alert";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
@@ -34,12 +35,16 @@ import type { InspectTool } from "../inspect/types";
 import { useToolHealth } from "../inspect/useToolHealth";
 import { GatewayCodeExecution } from "./GatewayCodeExecution";
 import { GatewayMemberConnect } from "./GatewayMemberConnect";
-import {
-  MEMBER_STATE_LABEL,
-  useGatewayMemberStates,
-} from "./useGatewayMemberStates";
+import { useGatewayMemberStates } from "./useGatewayMemberStates";
 import { gatewayTabHref } from "./GatewayDetailsRouting";
-import { GATEWAY_INSTRUCTIONS_SECTION_ID } from "./GatewaySettingsTab";
+import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
+import {
+  GATEWAY_AUTHENTICATION_SECTION_ID,
+  GATEWAY_INSTRUCTIONS_SECTION_ID,
+} from "./GatewaySettingsTab";
+
+/** The discovery mode section's anchor in `GatewayDiscoverySection`. */
+const GATEWAY_DISCOVERY_SECTION_ID = "discovery";
 import { useGatewayInspection } from "./useGatewayInspection";
 import { useGatewayMemberRows } from "./useGatewayMemberRows";
 import { useGatewayMemberTools } from "./useGatewayMemberTools";
@@ -307,66 +312,72 @@ function GatewayInspectConnection({
       disabled: value === "code_mode" && !metaMcpServer.codeModeEnabled,
     }));
 
+  const counts = data ? (
+    <>
+      <SimpleTooltip
+        tooltip={`Agents load ${surfaceCount === 1 ? "this tool's description" : "these tool descriptions"} as soon as they connect: about ${formatTokens(tokens ?? 0)} tokens of their context.`}
+      >
+        <span className="decoration-muted-foreground/60 cursor-help underline decoration-dotted underline-offset-4">
+          {surfaceCount} {mode === "direct" ? "" : "gateway "}
+          {surfaceCount === 1 ? "tool" : "tools"}
+        </span>
+      </SimpleTooltip>
+      {mode === "direct"
+        ? null
+        : ` · ${memberToolCount} server ${memberToolCount === 1 ? "tool" : "tools"} ${mode === "code_mode" ? "callable from code" : "reached through them"}`}
+    </>
+  ) : null;
+
+  // One row: the mode on the left (a preview is marked beside it), the
+  // facts and instructions on the right. The control names the mode, so no
+  // sentence repeats it.
   const lens = (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Text className="text-base">
-          What <span className="font-medium">you</span> get in{" "}
-          <span className="font-medium">{modeLabels[shownMode]}</span>
-          {/* "Code Mode" already ends in the word. */}
-          {shownMode === "code_mode" ? null : " mode"}
-          {data ? (
-            <span className="text-muted-foreground">
-              {" · "}
-              <SimpleTooltip
-                tooltip={`Agents load ${surfaceCount === 1 ? "this tool's description" : "these tool descriptions"} as soon as they connect: about ${formatTokens(tokens ?? 0)} tokens of their context.`}
-              >
-                <span className="decoration-muted-foreground/60 cursor-help underline decoration-dotted underline-offset-4">
-                  {surfaceCount} {mode === "direct" ? "" : "gateway "}
-                  {surfaceCount === 1 ? "tool" : "tools"}
-                </span>
-              </SimpleTooltip>
-              {mode === "direct"
-                ? null
-                : ` · ${memberToolCount} server ${memberToolCount === 1 ? "tool" : "tools"} ${mode === "code_mode" ? "callable from code" : "reached through them"}`}
-            </span>
-          ) : null}
-        </Text>
-        <div className="flex flex-wrap items-center gap-4">
-          {data?.instructions ? (
-            <InstructionsLink
-              instructions={data.instructions}
-              editHref={`${settingsHref}#${GATEWAY_INSTRUCTIONS_SECTION_ID}`}
-            />
-          ) : null}
-          {/* The mode travels in the minted session token, so only a
-              gateway with sign-in can preview another one. */}
-          {hasIssuer ? (
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground text-xs">Preview</span>
-              <SegmentedControl
-                ariaLabel="Preview a mode"
-                value={shownMode}
-                options={modeOptions}
-                onChange={(next) =>
-                  chooseMode(next === defaultMode ? "default" : next)
-                }
-                className="h-8"
-              />
-            </div>
-          ) : null}
-        </div>
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+      <div className="flex items-center gap-3">
+        {/* The mode travels in the minted session token, so only a gateway
+            with sign-in can preview another one. */}
+        {hasIssuer ? (
+          <SegmentedControl
+            ariaLabel="Preview a mode"
+            value={shownMode}
+            options={modeOptions}
+            onChange={(next) =>
+              chooseMode(next === defaultMode ? "default" : next)
+            }
+            className="h-8"
+          />
+        ) : (
+          <Text className="text-base font-medium">
+            {modeLabels[shownMode]}
+            {shownMode === "code_mode" ? null : " mode"}
+          </Text>
+        )}
+        {choice !== "default" ? (
+          <SimpleTooltip
+            tooltip={`Only you see this preview. Agents get ${modeLabels[defaultMode]}, the gateway's saved mode.`}
+          >
+            <Link
+              to={`${settingsHref}#${GATEWAY_DISCOVERY_SECTION_ID}`}
+              className="text-muted-foreground hover:text-foreground text-xs whitespace-nowrap underline-offset-2 hover:underline"
+            >
+              Preview · saved mode is {modeLabels[defaultMode]}
+            </Link>
+          </SimpleTooltip>
+        ) : null}
       </div>
-      {choice !== "default" ? (
-        <Text muted small>
-          Previewing {modeLabels[shownMode]}. The gateway still uses{" "}
-          {modeLabels[defaultMode]}; change the default in{" "}
-          <Link to={settingsHref} className="underline underline-offset-2">
-            Settings
-          </Link>
-          .
-        </Text>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        {counts ? (
+          <Text muted small>
+            {counts}
+          </Text>
+        ) : null}
+        {data?.instructions ? (
+          <InstructionsLink
+            instructions={data.instructions}
+            editHref={`${settingsHref}#${GATEWAY_INSTRUCTIONS_SECTION_ID}`}
+          />
+        ) : null}
+      </div>
     </div>
   );
 
@@ -401,62 +412,91 @@ function GatewayInspectConnection({
       .map((row) => row.server?.slug ?? row.member.mcpServerSlug),
   ]);
   const broken = failedMembers.filter((m) => !signIn.needsSignIn(m.slug));
-  // Same words as the Overview's Status column, so both pages agree.
+  const memberServer = (slug: string) =>
+    rows.find((row) => (row.server?.slug ?? row.member.mcpServerSlug) === slug)
+      ?.server;
+  // One banner per kind of problem, one row per server with its own action,
+  // so a list of failures never runs together on one line.
   const memberSignIn =
     unconnected.length > 0 ? (
-      <div className="flex flex-col gap-1 text-sm">
-        {unconnected.map((m) => (
-          <p
-            key={m.slug}
-            className="text-muted-foreground flex flex-wrap items-center gap-x-2"
-          >
-            <StatusDot tone="warning" />
-            <span>
-              {m.name} · {MEMBER_STATE_LABEL.sign_in}. Connect your account to
-              see its tools.
-            </span>
-            <GatewayMemberConnect name={m.name} onConnect={signIn.connect} />
-          </p>
-        ))}
-      </div>
+      <Alert
+        variant="warning"
+        title={
+          unconnected.length === 1
+            ? `Connect your ${unconnected[0]!.name} account to see its tools`
+            : `Connect your accounts to see tools from ${unconnected.length} servers`
+        }
+      >
+        <ul className="mt-1 flex flex-col">
+          {unconnected.map((m) => (
+            <li
+              key={m.slug}
+              className="text-foreground flex items-center justify-between gap-3 py-1"
+            >
+              <span>{m.name}</span>
+              <GatewayMemberConnect name={m.name} onConnect={signIn.connect} />
+            </li>
+          ))}
+        </ul>
+      </Alert>
     ) : null;
   const memberFailures =
     broken.length > 0 ? (
-      <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-        <StatusDot tone="destructive" />
-        <span>
-          {broken.map((m) => m.name).join(", ")} ·{" "}
-          {MEMBER_STATE_LABEL.unavailable}. Couldn&apos;t read{" "}
-          {broken.length === 1 ? "its" : "their"} tools, and agents see the same
-          error.
-        </span>
-        <span className="flex flex-wrap items-center gap-x-3">
-          <button
-            type="button"
-            onClick={() => broken.forEach((m) => m.refetch())}
-            className="text-foreground underline underline-offset-2"
-          >
-            Try again
-          </button>
+      <Alert
+        variant="error"
+        title={
+          broken.length === 1
+            ? `Couldn't read ${broken[0]!.name}'s tools`
+            : `Couldn't read tools from ${broken.length} servers`
+        }
+      >
+        <p className="text-muted-foreground">
+          Agents connecting through this gateway get the same error.
+        </p>
+        <ul className="mt-2 flex flex-col">
           {broken.map((m) => {
-            const server = rows.find(
-              (row) =>
-                (row.server?.slug ?? row.member.mcpServerSlug) === m.slug,
-            )?.server;
-            return server ? (
-              <Link
+            const server = memberServer(m.slug);
+            const reason = memberFailureReason(m.error);
+            return (
+              <li
                 key={m.slug}
-                to={routes.mcp.details.overview.href(
-                  mcpServerRouteParam(server),
-                )}
-                className="text-foreground underline underline-offset-2"
+                className="flex items-start justify-between gap-3 py-1.5"
               >
-                Open {m.name}
-              </Link>
-            ) : null;
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-foreground">{m.name}</span>
+                  {reason.text ? (
+                    <span className="text-muted-foreground text-xs break-words">
+                      {reason.text}
+                    </span>
+                  ) : null}
+                </span>
+                {server ? (
+                  <Link
+                    to={
+                      reason.needsCredential
+                        ? `${routes.mcp.details.settings.href(mcpServerRouteParam(server))}#settings-sign-in`
+                        : routes.mcp.details.overview.href(
+                            mcpServerRouteParam(server),
+                          )
+                    }
+                    className="text-foreground shrink-0 underline underline-offset-2"
+                  >
+                    {reason.needsCredential ? "Set credential" : "Open server"}
+                  </Link>
+                ) : null}
+              </li>
+            );
           })}
-        </span>
-      </p>
+        </ul>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="mt-2"
+          onClick={() => broken.forEach((m) => m.refetch())}
+        >
+          <Button.Text>Try again</Button.Text>
+        </Button>
+      </Alert>
     ) : null;
   const catalogFailure = catalogFailed ? (
     <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
@@ -525,7 +565,7 @@ function GatewayInspectConnection({
         description="Add one so clients, and this tab, can connect."
         action={
           <Button variant="secondary" asChild>
-            <Link to={settingsHref}>
+            <Link to={`${settingsHref}#${MCP_SERVER_URL_SECTION_ID}`}>
               <Button.Text>Open settings</Button.Text>
             </Link>
           </Button>
@@ -540,7 +580,7 @@ function GatewayInspectConnection({
         description="Reload to try again, or review the gateway's authentication."
         action={
           <Button variant="secondary" asChild>
-            <Link to={settingsHref}>
+            <Link to={`${settingsHref}#${GATEWAY_AUTHENTICATION_SECTION_ID}`}>
               <Button.Text>Review authentication</Button.Text>
             </Link>
           </Button>
@@ -609,14 +649,22 @@ function GatewayInspectConnection({
         runner={
           // Keyed on the connection, not the live mode, so a token refresh
           // that briefly clears the inspection keeps the program.
-          connectUrl && codeConnection === configurationKey ? (
-            <GatewayCodeExecution
-              key={`${configurationKey}:${connectUrl}`}
-              connectUrl={connectUrl}
-              headers={headers}
-              disabled={isLoading || inspection.isError}
-            />
-          ) : undefined
+          connectUrl && codeConnection === configurationKey
+            ? (selected) => (
+                <GatewayCodeExecution
+                  key={`${configurationKey}:${connectUrl}`}
+                  connectUrl={connectUrl}
+                  headers={headers}
+                  // Only member tools are callable from code.
+                  tool={
+                    selected && memberToolNames.has(selected.name)
+                      ? selected
+                      : undefined
+                  }
+                  disabled={isLoading || inspection.isError}
+                />
+              )
+            : undefined
         }
         chat={
           chatUrl && data && !inspection.isError ? (
@@ -680,4 +728,21 @@ function InstructionsLink({
       </Sheet>
     </>
   );
+}
+
+/**
+ * Why a member's tools couldn't be read, in plain words. The gateway's own
+ * message is kept when nothing better is known, so the cause is never hidden.
+ */
+function memberFailureReason(error: string | undefined): {
+  text?: string;
+  needsCredential: boolean;
+} {
+  if (!error) return { needsCredential: false };
+  if (/requires authentication|no credential/i.test(error))
+    return {
+      text: "Needs a shared credential before the gateway can call it. An admin sets it in the server's sign-in settings.",
+      needsCredential: true,
+    };
+  return { text: error.replace(/\s+/g, " ").trim(), needsCredential: false };
 }

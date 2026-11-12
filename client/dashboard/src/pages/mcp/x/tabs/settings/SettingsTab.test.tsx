@@ -256,9 +256,9 @@ describe("SettingsTab", () => {
     );
   });
 
-  it("indexes every area it shows", () => {
+  it("indexes every area it shows, by its name while no section title registers", () => {
     renderTab(server({ unproxiedMcpServerId: "unproxied-source-1" }));
-    const index = screen.getByRole("navigation", { name: "Settings areas" });
+    const index = screen.getByRole("navigation", { name: "Settings sections" });
     expect(
       Array.from(index.querySelectorAll("a")).map((link) => [
         link.textContent,

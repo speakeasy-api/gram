@@ -473,7 +473,9 @@ it("offers Connect for a member that needs the viewer's account", () => {
     </TooltipProvider>,
   );
 
-  expect(screen.getByText(/Linear · Sign in needed/)).toBeTruthy();
+  expect(
+    screen.getByText(/Connect your Linear account to see its tools/i),
+  ).toBeTruthy();
   fireEvent.click(
     screen.getByRole("button", { name: "Connect your account for Linear" }),
   );
@@ -482,5 +484,5 @@ it("offers Connect for a member that needs the viewer's account", () => {
   expect(
     screen.queryByRole("button", { name: "Connect your account for Slack" }),
   ).toBeNull();
-  expect(screen.getByText(/Slack · Unavailable/)).toBeTruthy();
+  expect(screen.getByText(/Couldn't read Slack's tools/)).toBeTruthy();
 });

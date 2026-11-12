@@ -1,3 +1,4 @@
+import { useSettingsSectionHeading } from "@/components/detail/settings-layout";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -9,6 +10,7 @@ import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, ListOrdered, Search } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 interface ModeCardProps {
@@ -89,6 +91,8 @@ export function MCPPerformanceTab({
   const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
+  const [header, setHeader] = useState<HTMLDivElement | null>(null);
+  useSettingsSectionHeading("Tool selection mode", header);
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
@@ -118,13 +122,13 @@ export function MCPPerformanceTab({
 
   return (
     <Stack gap={4}>
-      <Stack gap={2}>
-        <Heading variant="h3">Tool Selection Mode</Heading>
+      <div ref={setHeader} className="flex flex-col gap-2">
+        <Heading variant="h3">Tool selection mode</Heading>
         <Text muted className="max-w-2xl text-sm">
           Choose how tools are exposed to the LLM. This affects token usage and
           how the model discovers available tools.
         </Text>
-      </Stack>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <ModeCard

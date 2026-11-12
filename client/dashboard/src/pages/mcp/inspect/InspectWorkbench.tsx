@@ -76,8 +76,11 @@ export function InspectWorkbench({
     tool: InspectTool,
     args: Record<string, unknown>,
   ) => Promise<McpToolRun>;
-  /** Replaces the per-tool form, e.g. Code Mode's program runner. */
-  runner?: ReactNode;
+  /**
+   * Replaces the per-tool form, e.g. Code Mode's program runner. It gets the
+   * selected tool, if any, so it can offer to use it.
+   */
+  runner?: (selected: InspectTool | undefined) => ReactNode;
   /** The chat tab's content; the tab is hidden without it. */
   chat?: ReactNode;
   /** Where blocked tools' rules can be changed. */
@@ -173,7 +176,7 @@ export function InspectWorkbench({
         {state ? (
           <InspectSteps />
         ) : runner ? (
-          runner
+          runner(selected)
         ) : (
           <PanelSummary
             tools={tools}

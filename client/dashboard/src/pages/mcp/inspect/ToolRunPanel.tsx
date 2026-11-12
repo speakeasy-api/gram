@@ -32,6 +32,8 @@ import { Link } from "react-router";
 import type { McpToolRun } from "./runMcpTool";
 import {
   extractFields,
+  isJsonField,
+  jsonFieldError,
   optionKey,
   toArguments,
   type ToolField,
@@ -47,18 +49,6 @@ import {
   isFailing,
   type ToolHealth,
 } from "./useToolHealth";
-
-/** Fields whose text must parse as JSON before the tool can run. */
-function isJsonField(field: ToolField): boolean {
-  return field.kind === "json" || field.kind === "arguments";
-}
-
-/** The error for one JSON field's text, or undefined when it parses. */
-function jsonFieldError(field: ToolField, raw: string): string | undefined {
-  if (!isJsonField(field) || raw.trim() === "") return undefined;
-  const parsed = toArguments([field], { [field.name]: raw });
-  return parsed.ok ? undefined : parsed.error;
-}
 
 function withoutKey(
   record: Record<string, string>,
@@ -241,6 +231,23 @@ export function ToolRunPanel({
               />
             ))
           )}
+          <div className="flex items-center justify-end gap-3">
+            {footerError ? (
+              <p role="alert" className="text-destructive mr-auto text-xs">
+                {footerError}
+              </p>
+            ) : null}
+            <Button
+              type="submit"
+              size="sm"
+              className="font-sans text-[13px] font-medium tracking-normal normal-case"
+              disabled={!canRun}
+            >
+              <Button.Text>
+                {execution.isPending ? "Executing…" : "Execute tool"}
+              </Button.Text>
+            </Button>
+          </div>
         </form>
 
         {draft.result ? (
@@ -248,33 +255,12 @@ export function ToolRunPanel({
         ) : null}
       </div>
 
-      {/* The one primary action, pinned to the panel's bottom edge so it
-          stays in reach however long the form runs. */}
-      <div className="border-border bg-card sticky bottom-0 z-10 flex items-center justify-end gap-3 border-t px-6 py-3">
-        {footerError ? (
-          <p role="alert" className="text-destructive mr-auto text-xs">
-            {footerError}
-          </p>
-        ) : null}
-        <Button
-          size="sm"
-          className="font-sans text-[13px] font-medium tracking-normal normal-case"
-          disabled={!canRun}
-          onClick={submit}
-          aria-label={`Run ${tool.name} as you`}
-        >
-          <Button.Text>
-            {execution.isPending ? "Running…" : "Run as you"}
-          </Button.Text>
-        </Button>
-      </div>
-
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title={`Run ${tool.name}?`}
-        description="This tool is marked destructive. It runs for real, with your own account."
-        confirmLabel="Run tool"
+        title={`Execute ${tool.name}?`}
+        description="This tool is marked destructive. It runs for real, as you."
+        confirmLabel="Execute tool"
         confirmVariant="destructive-primary"
         onConfirm={() => {
           setConfirming(false);
@@ -340,7 +326,7 @@ function HealthLine({
   );
 }
 
-function FieldInput({
+export function FieldInput({
   field,
   value,
   error,
@@ -508,8 +494,7 @@ function RunResult({
       <div
         ref={headerRef}
         tabIndex={-1}
-        // Clears the pinned Run footer when scrolled into view.
-        className="focus-visible:outline-foreground flex scroll-mb-20 items-center justify-between gap-2 outline-none focus-visible:outline-1 focus-visible:outline-offset-2"
+        className="focus-visible:outline-foreground flex items-center justify-between gap-2 outline-none focus-visible:outline-1 focus-visible:outline-offset-2"
       >
         <span className="text-eyebrow">Response</span>
         <span className="flex items-center gap-2 text-xs">

@@ -62,6 +62,8 @@ const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_SERVER_URL_SECTION_ID,
   GATEWAY_AUTHENTICATION_SECTION_ID,
   GATEWAY_INSTRUCTIONS_SECTION_ID,
+  // Gateway Inspect links here.
+  "discovery",
   ...SETTINGS_GROUP_IDS,
 ];
 
@@ -471,6 +473,9 @@ function GatewayDangerZoneSection({
 
   return (
     <DangerSettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Danger zone</SettingsSection.Title>
+      </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

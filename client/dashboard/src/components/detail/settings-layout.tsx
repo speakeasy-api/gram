@@ -8,6 +8,8 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -22,16 +24,66 @@ export type SettingsGroup = {
   content: ReactNode;
 };
 
-/** How far below the scroll container's top an area lands; matches `scroll-mt-8`. */
-const GROUP_SCROLL_MARGIN = 32;
+/** How far below the scroll container's top a section lands; matches `scroll-mt-8`. */
+const SECTION_SCROLL_MARGIN = 32;
+
+type SectionHeading = {
+  key: string;
+  groupId: string;
+  title: string;
+  element: HTMLElement;
+};
+
+type ReportHeading = (key: string, heading: SectionHeading | null) => void;
+
+const SettingsGroupContext = createContext<{
+  groupId: string;
+  report: ReportHeading;
+} | null>(null);
+
+/**
+ * Lists a section in the settings tab's sticky index under `title`, which
+ * must be the heading the section shows. `element` is the section's top,
+ * where its index link lands. Outside a `SettingsLayout` it does nothing.
+ */
+export function useSettingsSectionHeading(
+  title: string,
+  element: HTMLElement | null,
+): void {
+  const group = use(SettingsGroupContext);
+  const key = useId();
+  useLayoutEffect(() => {
+    if (!group || !element || !title) return;
+    group.report(key, { key, groupId: group.groupId, title, element });
+    return () => group.report(key, null);
+  }, [group, key, title, element]);
+}
+
+type IndexLink = {
+  key: string;
+  title: string;
+  href: string;
+  target: () => HTMLElement | null;
+};
+
+type IndexArea = {
+  group: SettingsGroup;
+  /** How many section headings the area shows. */
+  headingCount: number;
+  links: IndexLink[];
+};
 
 /**
  * A settings tab laid out as areas: a sticky index on the left, and each
- * area's sections under an eyebrow heading on the right. The page frame owns
- * the gutter, so this adds no padding of its own.
+ * area's sections on the right. The index is built from the section headings
+ * that render, so every entry reads exactly as a heading on the page. An
+ * area with several sections shows its name as an eyebrow, on the page and
+ * in the index; an area with one section lets that section's heading speak
+ * for it. The page frame owns the gutter, so this adds no padding of its own.
  *
- * Pass the group ids to `useScrollToSettingsHash` so the index links, and any
- * deep link to an area, land on it.
+ * Sections join the index with `useSettingsSectionHeading` (`SettingsSection`
+ * titles do this already). Pass the group ids to `useScrollToSettingsHash` so
+ * deep links to an area land on it.
  *
  * Sections report unsaved edits with `useReportUnsavedChanges`; leaving the
  * tab while any are dirty asks first.
@@ -42,9 +94,85 @@ export function SettingsLayout({
   groups: (SettingsGroup | false | null | undefined)[];
 }): JSX.Element {
   const shown = groups.filter((group): group is SettingsGroup => !!group);
-  const { activeId, rootRef, select } = useActiveGroup(
-    shown.map((group) => group.id),
-  );
+  const [headings, setHeadings] = useState<readonly SectionHeading[]>([]);
+  const report = useCallback<ReportHeading>((key, heading) => {
+    setHeadings((current) => {
+      const previous = current.find((entry) => entry.key === key);
+      if (!heading) {
+        return previous
+          ? current.filter((entry) => entry.key !== key)
+          : current;
+      }
+      if (
+        previous?.title === heading.title &&
+        previous.element === heading.element
+      ) {
+        return current;
+      }
+      // Page order, whatever order the sections mounted in.
+      return [...current.filter((entry) => entry.key !== key), heading].sort(
+        (a, b) =>
+          a.element.compareDocumentPosition(b.element) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+            ? -1
+            : 1,
+      );
+    });
+  }, []);
+
+  const areas = shown.map((group): IndexArea => {
+    const titled = headings.filter((heading) => heading.groupId === group.id);
+    // An area's first link lands on the area itself, so its eyebrow shows.
+    const area = {
+      href: `#${group.id}`,
+      target: () => document.getElementById(group.id),
+    };
+    return {
+      group,
+      headingCount: titled.length,
+      links:
+        titled.length === 0
+          ? [{ key: group.id, title: group.title, ...area }]
+          : titled.map((heading, index) =>
+              index === 0
+                ? { key: heading.key, title: heading.title, ...area }
+                : {
+                    key: heading.key,
+                    title: heading.title,
+                    // The nearest anchor: the section's own id, or one a
+                    // wrapper gives it, else the area.
+                    href: `#${heading.element.closest("[id]")?.id ?? group.id}`,
+                    target: () => heading.element,
+                  },
+            ),
+    };
+  });
+  const links = areas.flatMap((area) => area.links);
+  const { activeKey, rootRef, select } = useActiveSection(links);
+
+  const renderLink = (link: IndexLink) => {
+    const active = link.key === activeKey;
+    return (
+      <li key={link.key}>
+        <a
+          href={link.href}
+          aria-current={active ? "location" : undefined}
+          onClick={(event) => {
+            event.preventDefault();
+            select(link);
+          }}
+          className={cn(
+            "-ml-px block border-l py-1 pl-4 text-sm transition-colors hover:no-underline",
+            active
+              ? "border-foreground text-foreground font-medium"
+              : "text-muted-foreground hover:text-foreground border-transparent",
+          )}
+        >
+          {link.title}
+        </a>
+      </li>
+    );
+  };
 
   return (
     <UnsavedChangesGuard>
@@ -53,61 +181,43 @@ export function SettingsLayout({
           deep link's native hash scroll moves the window under the frame. */}
       <div
         ref={rootRef}
-        className="relative grid gap-x-16 gap-y-8 pb-8 lg:grid-cols-[176px_minmax(0,1fr)]"
+        className="relative grid gap-x-16 gap-y-8 pb-8 lg:-mb-32 lg:grid-cols-[176px_minmax(0,1fr)]"
       >
         <nav
-          aria-label="Settings areas"
+          aria-label="Settings sections"
           // Sticks inside the tab's scroll container, level with its top padding.
           className="sticky top-8 hidden self-start lg:block"
         >
           <ul className="border-border space-y-px border-l">
-            {shown.map((group) => {
-              const active = group.id === activeId;
-              return (
-                <li key={group.id}>
-                  <a
-                    href={`#${group.id}`}
-                    aria-current={active ? "location" : undefined}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      select(group.id);
-                    }}
-                    className={cn(
-                      "-ml-px block border-l py-1.5 pl-4 text-sm transition-colors hover:no-underline",
-                      active
-                        ? "border-foreground text-foreground font-medium"
-                        : "text-muted-foreground hover:text-foreground border-transparent",
-                    )}
-                  >
-                    {group.title}
-                  </a>
+            {areas.map((area) =>
+              area.links.length > 1 ? (
+                <li key={area.group.id} className="py-1.5 first:pt-0">
+                  <span className="text-eyebrow block pb-1 pl-4">
+                    {area.group.title}
+                  </span>
+                  <ul className="space-y-px">{area.links.map(renderLink)}</ul>
                 </li>
-              );
-            })}
+              ) : (
+                renderLink(area.links[0]!)
+              ),
+            )}
           </ul>
         </nav>
 
-        <div className="min-w-0">
-          {shown.map((group) => (
-            <section
+        {/* The frame's bottom padding (`pb-32` in McpDetailFrame) is pulled
+            into the content column, so the index's row runs to the bottom of
+            the scroll container and a long index never scrolls out under the
+            tabs at the end of the page. */}
+        <div className="min-w-0 lg:pb-32">
+          {areas.map(({ group, headingCount }) => (
+            <SettingsGroupSection
               key={group.id}
-              id={group.id}
-              data-settings-group=""
-              aria-labelledby={`${group.id}-title`}
-              // The last area keeps a viewport of room below it, so the index can
-              // bring even a short final area to the top.
-              className="border-border scroll-mt-8 border-t pt-8 pb-14 first:border-t-0 first:pt-0 last:min-h-[calc(100vh-24rem)] last:pb-0"
-            >
-              {/* The sticky index names each area on wide screens, so the
-                eyebrow only shows where the index is hidden. */}
-              <h2
-                id={`${group.id}-title`}
-                className="text-eyebrow mb-6 lg:sr-only"
-              >
-                {group.title}
-              </h2>
-              <div className="space-y-10">{group.content}</div>
-            </section>
+              group={group}
+              report={report}
+              // A lone section's heading names the area in the index, so the
+              // eyebrow only shows where the index is hidden.
+              labelHiddenOnWide={headingCount === 1}
+            />
           ))}
         </div>
       </div>
@@ -115,52 +225,89 @@ export function SettingsLayout({
   );
 }
 
+function SettingsGroupSection({
+  group,
+  report,
+  labelHiddenOnWide,
+}: {
+  group: SettingsGroup;
+  report: ReportHeading;
+  labelHiddenOnWide: boolean;
+}): JSX.Element {
+  const context = useMemo(
+    () => ({ groupId: group.id, report }),
+    [group.id, report],
+  );
+  return (
+    <section
+      id={group.id}
+      aria-labelledby={`${group.id}-title`}
+      // The last area keeps a viewport of room below it, so the index can
+      // bring even a short final area to the top.
+      className="border-border scroll-mt-8 border-t pt-8 pb-14 first:border-t-0 first:pt-0 last:min-h-[calc(100vh-24rem)] last:pb-0"
+    >
+      <h2
+        id={`${group.id}-title`}
+        className={cn("text-eyebrow mb-6", labelHiddenOnWide && "lg:sr-only")}
+      >
+        {group.title}
+      </h2>
+      <SettingsGroupContext.Provider value={context}>
+        <div className="space-y-10">{group.content}</div>
+      </SettingsGroupContext.Provider>
+    </section>
+  );
+}
+
 /**
- * The area the reader is in, for the index highlight: the last area whose top
- * has reached the line areas land on when scrolled to, or the last area once
- * the container is scrolled to the bottom. A clicked area holds the highlight
- * until its scroll settles, so the smooth scroll past earlier areas doesn't
- * flicker through them.
+ * The section the reader is in, for the index highlight: the last section
+ * whose top has reached the line sections land on when scrolled to, or the
+ * last section once the container is scrolled to the bottom. A clicked
+ * section holds the highlight until its scroll settles, so the smooth scroll
+ * past earlier sections doesn't flicker through them.
  */
-function useActiveGroup(ids: string[]): {
-  activeId: string | undefined;
+function useActiveSection(links: IndexLink[]): {
+  activeKey: string | undefined;
   rootRef: React.RefObject<HTMLDivElement | null>;
-  select: (id: string) => void;
+  select: (link: IndexLink) => void;
 } {
-  const [activeId, setActiveId] = useState<string | undefined>(ids[0]);
+  const [activeKey, setActiveKey] = useState<string | undefined>(links[0]?.key);
   const rootRef = useRef<HTMLDivElement>(null);
-  // The clicked area, held while its scroll runs.
+  const linksRef = useRef(links);
+  linksRef.current = links;
+  // The clicked section, held while its scroll runs.
   const heldRef = useRef<string | null>(null);
   const releaseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const key = ids.join(" ");
+  const key = links.map((link) => link.key).join(" ");
 
   const measure = useCallback(() => {
-    const root = rootRef.current;
-    const scroller = root?.closest<HTMLElement>("[data-page-bound]");
-    if (!root || !scroller) return;
+    const scroller = rootRef.current?.closest<HTMLElement>("[data-page-bound]");
+    if (!scroller) return;
     if (heldRef.current) {
-      setActiveId(heldRef.current);
+      setActiveKey(heldRef.current);
       return;
     }
-    const sections = [
-      ...root.querySelectorAll<HTMLElement>("[data-settings-group]"),
-    ];
-    if (sections.length === 0) return;
+    const targets = linksRef.current.flatMap((link) => {
+      const element = link.target();
+      return element ? [{ key: link.key, element }] : [];
+    });
+    if (targets.length === 0) return;
     const atBottom =
       scroller.scrollTop > 0 &&
       scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
     if (atBottom) {
-      setActiveId(sections[sections.length - 1]!.id);
+      setActiveKey(targets[targets.length - 1]!.key);
       return;
     }
-    // A pixel of slack: an area scrolled to its anchor sits exactly on the
+    // A pixel of slack: a section scrolled to its anchor sits exactly on the
     // line, and subpixel layout can leave it a fraction below.
-    const line = scroller.getBoundingClientRect().top + GROUP_SCROLL_MARGIN + 1;
-    let current = sections[0]!;
-    for (const section of sections) {
-      if (section.getBoundingClientRect().top <= line) current = section;
+    const line =
+      scroller.getBoundingClientRect().top + SECTION_SCROLL_MARGIN + 1;
+    let current = targets[0]!;
+    for (const target of targets) {
+      if (target.element.getBoundingClientRect().top <= line) current = target;
     }
-    setActiveId(current.id);
+    setActiveKey(current.key);
   }, []);
 
   useEffect(() => {
@@ -181,7 +328,7 @@ function useActiveGroup(ids: string[]): {
     };
     measure();
     scroller.addEventListener("scroll", onScroll, { passive: true });
-    // A deep link or late-mounting section moves areas without a scroll.
+    // A deep link or late-mounting section moves sections without a scroll.
     const resize = new ResizeObserver(() => measure());
     if (rootRef.current) resize.observe(rootRef.current);
     return () => {
@@ -191,15 +338,15 @@ function useActiveGroup(ids: string[]): {
     };
   }, [key, measure]);
 
-  const select = useCallback((id: string) => {
-    const element = document.getElementById(id);
+  const select = useCallback((link: IndexLink) => {
+    const element = link.target();
     if (!element) return;
-    heldRef.current = id;
-    setActiveId(id);
+    heldRef.current = link.key;
+    setActiveKey(link.key);
     // Only the page's scroll container moves; scrolling any ancestor would
     // push the pinned header and tabs out of view.
-    scrollWithinPage(element, { offset: GROUP_SCROLL_MARGIN });
-    window.history.replaceState(window.history.state, "", `#${id}`);
+    scrollWithinPage(element, { offset: SECTION_SCROLL_MARGIN });
+    window.history.replaceState(window.history.state, "", link.href);
     // Holds even when there was nothing to scroll.
     if (releaseRef.current) clearTimeout(releaseRef.current);
     releaseRef.current = setTimeout(() => {
@@ -207,7 +354,7 @@ function useActiveGroup(ids: string[]): {
     }, 1000);
   }, []);
 
-  return { activeId, rootRef, select };
+  return { activeKey, rootRef, select };
 }
 
 type ReportDirty = (key: string, dirty: boolean) => void;

@@ -272,6 +272,21 @@ export function toArguments(
   return { ok: true, args };
 }
 
+/** Fields whose text must parse as JSON before the tool can run. */
+export function isJsonField(field: ToolField): boolean {
+  return field.kind === "json" || field.kind === "arguments";
+}
+
+/** The error for one JSON field's text, or undefined when it parses. */
+export function jsonFieldError(
+  field: ToolField,
+  raw: string,
+): string | undefined {
+  if (!isJsonField(field) || raw.trim() === "") return undefined;
+  const parsed = toArguments([field], { [field.name]: raw });
+  return parsed.ok ? undefined : parsed.error;
+}
+
 function unionVariants(
   def: Record<string, unknown>,
 ): Record<string, unknown>[] | undefined {

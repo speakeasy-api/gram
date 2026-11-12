@@ -157,6 +157,9 @@ export function DangerZoneSection({
   return (
     <>
       <DangerSettingsSection>
+        <DangerSettingsSection.Header>
+          <DangerSettingsSection.Title>Danger zone</DangerSettingsSection.Title>
+        </DangerSettingsSection.Header>
         <DangerSettingsSection.Panel>
           <DangerSettingsSection.Body>
             <div className="divide-y">
