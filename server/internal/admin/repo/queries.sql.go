@@ -1346,6 +1346,81 @@ func (q *Queries) AdminListObservedOktaApplicationNames(ctx context.Context, arg
 	return items, nil
 }
 
+const adminListOrganizationAssistants = `-- name: AdminListOrganizationAssistants :many
+SELECT
+    a.id,
+    a.project_id,
+    p.slug AS project_slug,
+    p.name AS project_name,
+    a.name,
+    a.status,
+    a.runtime_version,
+    a.created_by_user_id,
+    u.email AS created_by_user_email,
+    (u.id IS NOT NULL AND u.deleted_at IS NULL AND EXISTS (
+        SELECT 1 FROM organization_user_relationships r
+        WHERE r.organization_id = a.organization_id
+          AND r.user_id = a.created_by_user_id
+          AND r.deleted_at IS NULL
+    ))::boolean AS creator_active,
+    a.created_at
+FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+LEFT JOIN users u ON u.id = a.created_by_user_id
+WHERE a.organization_id = $1
+  AND a.deleted IS FALSE
+ORDER BY p.name, a.name, a.id
+`
+
+type AdminListOrganizationAssistantsRow struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	ProjectSlug        string
+	ProjectName        string
+	Name               string
+	Status             string
+	RuntimeVersion     int16
+	CreatedByUserID    pgtype.Text
+	CreatedByUserEmail pgtype.Text
+	CreatorActive      bool
+	CreatedAt          pgtype.Timestamptz
+}
+
+// Every live assistant of an organization with its creator's membership, for
+// the staff identity and runtime migrations. Identity state is read
+// separately through assistantidentity.States, its single definition.
+func (q *Queries) AdminListOrganizationAssistants(ctx context.Context, organizationID string) ([]AdminListOrganizationAssistantsRow, error) {
+	rows, err := q.db.Query(ctx, adminListOrganizationAssistants, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListOrganizationAssistantsRow
+	for rows.Next() {
+		var i AdminListOrganizationAssistantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ProjectSlug,
+			&i.ProjectName,
+			&i.Name,
+			&i.Status,
+			&i.RuntimeVersion,
+			&i.CreatedByUserID,
+			&i.CreatedByUserEmail,
+			&i.CreatorActive,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListOrganizationMembers = `-- name: AdminListOrganizationMembers :many
 SELECT
     u.id,

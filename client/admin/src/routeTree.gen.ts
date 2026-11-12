@@ -42,6 +42,7 @@ import { Route as RemoteSessionIssuersIssuerIdRouteImport } from './routes/remot
 import { Route as UsersIndexRouteImport } from './routes/users.index'
 import { Route as OrganizationsIdOrSlugIndexRouteImport } from './routes/organizations.$idOrSlug.index'
 import { Route as OrganizationsIdOrSlugActivityRouteImport } from './routes/organizations.$idOrSlug.activity'
+import { Route as OrganizationsIdOrSlugAssistantsRouteImport } from './routes/organizations.$idOrSlug.assistants'
 import { Route as OrganizationsIdOrSlugBillingRouteImport } from './routes/organizations.$idOrSlug.billing'
 import { Route as OrganizationsIdOrSlugCoverageRouteImport } from './routes/organizations.$idOrSlug.coverage'
 import { Route as OrganizationsIdOrSlugCustomDomainRouteImport } from './routes/organizations.$idOrSlug.custom-domain'
@@ -229,6 +230,12 @@ const OrganizationsIdOrSlugActivityRoute =
     path: '/activity',
     getParentRoute: () => OrganizationsIdOrSlugRoute,
   } as any)
+const OrganizationsIdOrSlugAssistantsRoute =
+  OrganizationsIdOrSlugAssistantsRouteImport.update({
+    id: '/assistants',
+    path: '/assistants',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
 const OrganizationsIdOrSlugBillingRoute =
   OrganizationsIdOrSlugBillingRouteImport.update({
     id: '/billing',
@@ -353,6 +360,7 @@ export interface FileRoutesByFullPath {
   '/remote-session-issuers/': typeof RemoteSessionIssuersIndexRoute
   '/users/': typeof UsersIndexRoute
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
+  '/organizations/$idOrSlug/assistants': typeof OrganizationsIdOrSlugAssistantsRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
@@ -395,6 +403,7 @@ export interface FileRoutesByTo {
   '/remote-session-issuers': typeof RemoteSessionIssuersIndexRoute
   '/users': typeof UsersIndexRoute
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
+  '/organizations/$idOrSlug/assistants': typeof OrganizationsIdOrSlugAssistantsRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
@@ -445,6 +454,7 @@ export interface FileRoutesById {
   '/remote-session-issuers/': typeof RemoteSessionIssuersIndexRoute
   '/users/': typeof UsersIndexRoute
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
+  '/organizations/$idOrSlug/assistants': typeof OrganizationsIdOrSlugAssistantsRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
@@ -497,6 +507,7 @@ export interface FileRouteTypes {
     | '/remote-session-issuers/'
     | '/users/'
     | '/organizations/$idOrSlug/activity'
+    | '/organizations/$idOrSlug/assistants'
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/custom-domain'
@@ -539,6 +550,7 @@ export interface FileRouteTypes {
     | '/remote-session-issuers'
     | '/users'
     | '/organizations/$idOrSlug/activity'
+    | '/organizations/$idOrSlug/assistants'
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/custom-domain'
@@ -588,6 +600,7 @@ export interface FileRouteTypes {
     | '/remote-session-issuers/'
     | '/users/'
     | '/organizations/$idOrSlug/activity'
+    | '/organizations/$idOrSlug/assistants'
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/custom-domain'
@@ -861,6 +874,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizationsIdOrSlugActivityRouteImport
       parentRoute: typeof OrganizationsIdOrSlugRoute
     }
+    '/organizations/$idOrSlug/assistants': {
+      id: '/organizations/$idOrSlug/assistants'
+      path: '/assistants'
+      fullPath: '/organizations/$idOrSlug/assistants'
+      preLoaderRoute: typeof OrganizationsIdOrSlugAssistantsRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
     '/organizations/$idOrSlug/billing': {
       id: '/organizations/$idOrSlug/billing'
       path: '/billing'
@@ -989,6 +1009,7 @@ const OrganizationsIdOrSlugMcpServersRouteWithChildren =
 
 interface OrganizationsIdOrSlugRouteChildren {
   OrganizationsIdOrSlugActivityRoute: typeof OrganizationsIdOrSlugActivityRoute
+  OrganizationsIdOrSlugAssistantsRoute: typeof OrganizationsIdOrSlugAssistantsRoute
   OrganizationsIdOrSlugBillingRoute: typeof OrganizationsIdOrSlugBillingRoute
   OrganizationsIdOrSlugCoverageRoute: typeof OrganizationsIdOrSlugCoverageRoute
   OrganizationsIdOrSlugCustomDomainRoute: typeof OrganizationsIdOrSlugCustomDomainRoute
@@ -1004,6 +1025,7 @@ interface OrganizationsIdOrSlugRouteChildren {
 
 const OrganizationsIdOrSlugRouteChildren: OrganizationsIdOrSlugRouteChildren = {
   OrganizationsIdOrSlugActivityRoute: OrganizationsIdOrSlugActivityRoute,
+  OrganizationsIdOrSlugAssistantsRoute: OrganizationsIdOrSlugAssistantsRoute,
   OrganizationsIdOrSlugBillingRoute: OrganizationsIdOrSlugBillingRoute,
   OrganizationsIdOrSlugCoverageRoute: OrganizationsIdOrSlugCoverageRoute,
   OrganizationsIdOrSlugCustomDomainRoute:

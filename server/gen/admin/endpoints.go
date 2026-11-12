@@ -136,6 +136,8 @@ type Endpoints struct {
 	ListMemoryEvalRuns                      goa.Endpoint
 	GetMemoryEvalRun                        goa.Endpoint
 	StartMemoryEvalRun                      goa.Endpoint
+	ListOrganizationAssistants              goa.Endpoint
+	MigrateOrganizationAssistantIdentities  goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -280,6 +282,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ListMemoryEvalRuns:                      NewListMemoryEvalRunsEndpoint(s, a.APIKeyAuth),
 		GetMemoryEvalRun:                        NewGetMemoryEvalRunEndpoint(s, a.APIKeyAuth),
 		StartMemoryEvalRun:                      NewStartMemoryEvalRunEndpoint(s, a.APIKeyAuth),
+		ListOrganizationAssistants:              NewListOrganizationAssistantsEndpoint(s, a.APIKeyAuth),
+		MigrateOrganizationAssistantIdentities:  NewMigrateOrganizationAssistantIdentitiesEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -404,6 +408,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListMemoryEvalRuns = m(e.ListMemoryEvalRuns)
 	e.GetMemoryEvalRun = m(e.GetMemoryEvalRun)
 	e.StartMemoryEvalRun = m(e.StartMemoryEvalRun)
+	e.ListOrganizationAssistants = m(e.ListOrganizationAssistants)
+	e.MigrateOrganizationAssistantIdentities = m(e.MigrateOrganizationAssistantIdentities)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -3108,5 +3114,52 @@ func NewStartMemoryEvalRunEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.StartMemoryEvalRun(ctx, p)
+	}
+}
+
+// NewListOrganizationAssistantsEndpoint returns an endpoint function that
+// calls the method "listOrganizationAssistants" of service "admin".
+func NewListOrganizationAssistantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListOrganizationAssistantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListOrganizationAssistants(ctx, p)
+	}
+}
+
+// NewMigrateOrganizationAssistantIdentitiesEndpoint returns an endpoint
+// function that calls the method "migrateOrganizationAssistantIdentities" of
+// service "admin".
+func NewMigrateOrganizationAssistantIdentitiesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MigrateOrganizationAssistantIdentitiesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.MigrateOrganizationAssistantIdentities(ctx, p)
 	}
 }

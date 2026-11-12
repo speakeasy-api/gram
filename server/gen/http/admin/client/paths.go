@@ -601,3 +601,13 @@ func GetMemoryEvalRunAdminPath() string {
 func StartMemoryEvalRunAdminPath() string {
 	return "/admin/memoryEval.start"
 }
+
+// ListOrganizationAssistantsAdminPath returns the URL path to the admin service listOrganizationAssistants HTTP endpoint.
+func ListOrganizationAssistantsAdminPath() string {
+	return "/admin/organization.assistants"
+}
+
+// MigrateOrganizationAssistantIdentitiesAdminPath returns the URL path to the admin service migrateOrganizationAssistantIdentities HTTP endpoint.
+func MigrateOrganizationAssistantIdentitiesAdminPath() string {
+	return "/admin/organization.migrateAssistantIdentities"
+}

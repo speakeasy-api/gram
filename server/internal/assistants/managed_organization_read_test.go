@@ -17,7 +17,7 @@ func TestManagedAssistantOrganizationReadCeiling(t *testing.T) {
 	project := newProvisioningProject(t, db, "managed-org-read")
 	core := newProvisioningCore(t, db)
 	ordinary := createLegacyAssistant(t, db, project, "Ordinary assistant")
-	upgraded, err := core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: ordinary.ID, ActorUserID: "user-1", AgentID: uuid.Nil, AgentName: ""})
+	upgraded, err := core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: ordinary.ID, ActorUserID: "user-1", Staff: nil})
 	require.NoError(t, err)
 	ordinaryGrants, err := agentrepo.New(db).ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: uuid.MustParse(*upgraded.AgentID)})
 	require.NoError(t, err)

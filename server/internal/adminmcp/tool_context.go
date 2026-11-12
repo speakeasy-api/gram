@@ -17,7 +17,7 @@ type AdminContext struct {
 	WriteOperations []WriteOperation `json:"available_write_operations"`
 }
 
-func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, auditReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable, organizationStatsAvailable, organizationMembersAvailable, billingDetailsAvailable, registryAvailable, serverHealthAvailable, providerHealthAvailable, hookFleetAvailable, customDomainsAvailable bool, runtime *Runtime) {
+func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, auditReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable, organizationStatsAvailable, organizationMembersAvailable, billingDetailsAvailable, registryAvailable, serverHealthAvailable, providerHealthAvailable, hookFleetAvailable, customDomainsAvailable, assistantsAvailable bool, runtime *Runtime) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_admin_context",
 		Title:       "Get Staff Admin Context",
@@ -88,6 +88,9 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 		}
 		if customDomainsAvailable {
 			workflows = append(workflows, "inspect custom domains with their designated CNAME targets and observed DNS routing methods")
+		}
+		if assistantsAvailable {
+			workflows = append(workflows, "inspect an organization's assistants with their agent identity state, runtime and creator membership")
 		}
 		operations := []WriteOperation{}
 		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil && runtime.writes.writes.Enabled {

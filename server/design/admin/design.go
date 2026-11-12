@@ -1503,4 +1503,5 @@ var _ = Service("admin", func() {
 	customDomainMethods()
 	platformExternalCredentialMethods()
 	memoryEvalMethods()
+	assistantMethods()
 })

@@ -1388,3 +1388,31 @@ WHERE d.deleted IS FALSE
     OR COALESCE(d.dns_routing_method, 'unknown') = sqlc.narg(dns_routing_method)::text
   )
 ORDER BY d.domain, d.id;
+
+-- name: AdminListOrganizationAssistants :many
+-- Every live assistant of an organization with its creator's membership, for
+-- the staff identity and runtime migrations. Identity state is read
+-- separately through assistantidentity.States, its single definition.
+SELECT
+    a.id,
+    a.project_id,
+    p.slug AS project_slug,
+    p.name AS project_name,
+    a.name,
+    a.status,
+    a.runtime_version,
+    a.created_by_user_id,
+    u.email AS created_by_user_email,
+    (u.id IS NOT NULL AND u.deleted_at IS NULL AND EXISTS (
+        SELECT 1 FROM organization_user_relationships r
+        WHERE r.organization_id = a.organization_id
+          AND r.user_id = a.created_by_user_id
+          AND r.deleted_at IS NULL
+    ))::boolean AS creator_active,
+    a.created_at
+FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+LEFT JOIN users u ON u.id = a.created_by_user_id
+WHERE a.organization_id = @organization_id
+  AND a.deleted IS FALSE
+ORDER BY p.name, a.name, a.id;

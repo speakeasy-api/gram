@@ -85,7 +85,7 @@ func newIdentityFixture(t *testing.T) identityFixture {
 	assistant, err := assistantsrepo.New(tx).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{ProjectID: project.ID, OrganizationID: identityTestOrg, CreatedByUserID: pgtype.Text{String: "slack-owner", Valid: true}, Name: "Managed assistant", Model: "openai/gpt-4o-mini", Instructions: "", WarmTtlSeconds: 300, MaxConcurrency: 1, Status: "active"})
 	require.NoError(t, err)
 	require.NoError(t, assistantsrepo.New(tx).CreateProjectManagedAssistant(ctx, assistantsrepo.CreateProjectManagedAssistantParams{ProjectID: project.ID, AssistantID: assistant.ID}))
-	require.NoError(t, testIdentityService.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: identityTestOrg, ProjectID: project.ID, AssistantID: assistant.ID, ActorUserID: "slack-owner", AgentID: uuid.Nil, AgentName: ""}))
+	require.NoError(t, testIdentityService.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: identityTestOrg, ProjectID: project.ID, AssistantID: assistant.ID, ActorUserID: "slack-owner", Staff: nil}))
 	require.NoError(t, tx.Commit(ctx))
 	return identityFixture{db: db, projectID: project.ID, assistantID: assistant.ID}
 }

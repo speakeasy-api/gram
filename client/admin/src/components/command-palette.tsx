@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-hotkeys";
 import { useMatchRoute, useNavigate } from "@tanstack/react-router";
 import {
+  BotIcon,
   BuildingIcon,
   ListChecksIcon,
   CreditCardIcon,
@@ -85,6 +86,12 @@ const RECORD_PAGES = [
     to: "/organizations/$idOrSlug/mcp-servers",
     label: "MCP Servers",
     icon: ServerIcon,
+  },
+  {
+    to: "/organizations/$idOrSlug/assistants",
+    label: "Assistants",
+    icon: BotIcon,
+    keywords: "agent identity migration runtime kit",
   },
   {
     to: "/organizations/$idOrSlug/billing",
