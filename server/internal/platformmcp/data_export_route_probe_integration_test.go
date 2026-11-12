@@ -28,7 +28,7 @@ type recordingTestEventSender struct {
 	sent   []dataexports.TestDestination
 }
 
-func (s *recordingTestEventSender) SendTest(_ context.Context, sourceName string, destination dataexports.TestDestination) ([]dataexports.SignalTestResult, error) {
+func (s *recordingTestEventSender) SendTest(_ context.Context, sourceName string, destination dataexports.TestDestination, _ string) ([]dataexports.SignalTestResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sent = append(s.sent, destination)

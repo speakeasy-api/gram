@@ -312,17 +312,13 @@ func exportRecord(row Row) (log.Record, bool) {
 }
 
 // TestExportRecord is the event a destination test sends: the export schema with no
-// attempt, person or server in it, and message as its body and user message. The
-// pipeline adds the speakeasy.test_event marks, keys this producer may not write.
-// message must be otel.TestEventMessage: any other body is redacted for
-// destinations without sensitive data. This package cannot import otel.
+// attempt, person or server in it, and message as its user message. The route
+// tester adds the body and the test marks.
 func TestExportRecord(at time.Time, message string) log.Record {
-	record := newExportRecord(testExportEventName, at, log.SeverityInfo, "INFO", []attribute.KeyValue{
+	return newExportRecord(testExportEventName, at, log.SeverityInfo, "INFO", []attribute.KeyValue{
 		attr.LogRecordUID(uuid.NewString()),
 		attr.ExtMcpConnectionUserMessage(message),
 	})
-	record.SetBody(log.StringValue(message))
-	return record
 }
 
 func newExportRecord(eventName string, at time.Time, severity log.Severity, severityText string, attrs []attribute.KeyValue) log.Record {

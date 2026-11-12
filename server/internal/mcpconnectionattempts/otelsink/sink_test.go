@@ -79,9 +79,10 @@ func testEventDestination(includeSensitiveData bool) dataexports.TestDestination
 		EndpointURL:          "https://collector.example.com",
 		Headers:              map[string]string{"DD-API-KEY": "secret"},
 		IncludeSensitiveData: includeSensitiveData,
-		TestEventID:          "0b1e5f8a-3c2d-4e6f-9a7b-1c2d3e4f5a6b",
 	}
 }
+
+const testEventID = "0b1e5f8a-3c2d-4e6f-9a7b-1c2d3e4f5a6b"
 
 func otlpAttributes(kvs []*commonv1.KeyValue) map[string]*commonv1.AnyValue {
 	out := make(map[string]*commonv1.AnyValue, len(kvs))
@@ -93,11 +94,9 @@ func otlpAttributes(kvs []*commonv1.KeyValue) map[string]*commonv1.AnyValue {
 
 func buildTestRecord(t *testing.T, includeSensitiveData bool) (*logsv1.ResourceLogs, *logsv1.LogRecord) {
 	t.Helper()
-	requests, err := newTestSource(t).BuildTestRequests(t.Context(), testEventDestination(includeSensitiveData))
+	message, err := newTestSource(t).BuildTestRequest(t.Context(), dataexports.SignalLogs, testEventDestination(includeSensitiveData))
 	require.NoError(t, err)
-	require.Len(t, requests, 1)
-	require.Equal(t, dataexports.SignalLogs, requests[0].Signal)
-	request, ok := requests[0].Message.(*collectorlogsv1.ExportLogsServiceRequest)
+	request, ok := message.(*collectorlogsv1.ExportLogsServiceRequest)
 	require.True(t, ok)
 	require.Len(t, request.GetResourceLogs(), 1)
 	resourceLogs := request.GetResourceLogs()[0]
@@ -106,7 +105,7 @@ func buildTestRecord(t *testing.T, includeSensitiveData bool) (*logsv1.ResourceL
 	return resourceLogs, resourceLogs.GetScopeLogs()[0].GetLogRecords()[0]
 }
 
-func TestTestSource_BuildsOneMarkedRecordAndNothingReal(t *testing.T) {
+func TestTestSource_BuildsOneUnmarkedRecordAndNothingReal(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, dataexports.DataSourceMCPConnectionLogs, newTestSource(t).DataSource())
@@ -116,17 +115,14 @@ func TestTestSource_BuildsOneMarkedRecordAndNothingReal(t *testing.T) {
 
 		require.Equal(t, "speakeasy.test_event", record.GetEventName())
 		require.Equal(t, logsv1.SeverityNumber_SEVERITY_NUMBER_INFO, record.GetSeverityNumber())
-		// The marked test message is kept even where sensitive data is excluded.
-		require.Equal(t, "Speakeasy test event: this is not real data.", record.GetBody().GetStringValue())
+		require.Empty(t, record.GetBody().GetStringValue(), "the route tester sets the body")
 		attrs := otlpAttributes(record.GetAttributes())
-		require.True(t, attrs["speakeasy.test_event"].GetBoolValue())
-		require.Equal(t, "0b1e5f8a-3c2d-4e6f-9a7b-1c2d3e4f5a6b", attrs["speakeasy.test_event.id"].GetStringValue())
 		require.NotEmpty(t, attrs["log.record.uid"].GetStringValue())
 		require.Equal(t, "Speakeasy test event: this is not real data.", attrs["speakeasy.mcp_connection.user_message"].GetStringValue())
 		require.Equal(t, dialect.ConnectionLogScope, attrs["speakeasy.original_instrumentation_scope.name"].GetStringValue())
 		for key := range attrs {
 			switch key {
-			case "speakeasy.test_event", "speakeasy.test_event.id", "speakeasy.mcp_connection.user_message", "log.record.uid",
+			case "speakeasy.mcp_connection.user_message", "log.record.uid",
 				"speakeasy.original_instrumentation_scope.name", "speakeasy.organization.id", "speakeasy.project.id":
 			default:
 				t.Errorf("unexpected attribute %q on the test record", key)
@@ -136,6 +132,9 @@ func TestTestSource_BuildsOneMarkedRecordAndNothingReal(t *testing.T) {
 	}
 
 	// Each test gets its own uid.
+	_, err := newTestSource(t).BuildTestRequest(t.Context(), dataexports.SignalTraces, testEventDestination(false))
+	require.ErrorContains(t, err, "does not export traces")
+
 	_, first := buildTestRecord(t, false)
 	_, second := buildTestRecord(t, false)
 	require.NotEqual(t, otlpAttributes(first.GetAttributes())["log.record.uid"].GetStringValue(), otlpAttributes(second.GetAttributes())["log.record.uid"].GetStringValue())
@@ -163,7 +162,7 @@ func TestTestSource_SendsThroughTheRouteTester(t *testing.T) {
 	destination := testEventDestination(false)
 	destination.EndpointURL = server.URL
 
-	results, err := tester.SendTest(t.Context(), dataexports.DataSourceMCPConnectionLogs, destination)
+	results, err := tester.SendTest(t.Context(), dataexports.DataSourceMCPConnectionLogs, destination, testEventID)
 	require.NoError(t, err)
 	require.Equal(t, []dataexports.SignalTestResult{{Signal: dataexports.SignalLogs, StatusCode: http.StatusOK, Unreachable: false}}, results)
 	require.Len(t, bodies, 1)
@@ -174,5 +173,10 @@ func TestTestSource_SendsThroughTheRouteTester(t *testing.T) {
 	require.Equal(t, "gram-server", resource["service.name"].GetStringValue())
 	record := request.GetResourceLogs()[0].GetScopeLogs()[0].GetLogRecords()[0]
 	require.Equal(t, "speakeasy.test_event", record.GetEventName())
-	require.Equal(t, destination.TestEventID, otlpAttributes(record.GetAttributes())["speakeasy.test_event.id"].GetStringValue())
+	attrs := otlpAttributes(record.GetAttributes())
+	require.True(t, attrs["speakeasy.test_event"].GetBoolValue())
+	require.Equal(t, testEventID, attrs["speakeasy.test_event.id"].GetStringValue())
+	// The destination excludes sensitive data, and the test message is still the body.
+	require.Equal(t, otelsvc.TestEventMessage, record.GetBody().GetStringValue())
+	require.Equal(t, otelsvc.TestEventMessage, attrs["speakeasy.mcp_connection.user_message"].GetStringValue())
 }

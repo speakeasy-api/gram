@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
+	"google.golang.org/protobuf/proto"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -56,7 +57,10 @@ func NewTestSource(requests *otelsvc.ConnectionLogTestRequestBuilder, serviceNam
 
 func (s *TestSource) DataSource() string { return dataexports.DataSourceMCPConnectionLogs }
 
-func (s *TestSource) BuildTestRequests(ctx context.Context, destination dataexports.TestDestination) ([]otelsvc.RouteTestRequest, error) {
+func (s *TestSource) BuildTestRequest(ctx context.Context, signal dataexports.Signal, destination dataexports.TestDestination) (proto.Message, error) {
+	if signal != dataexports.SignalLogs {
+		return nil, fmt.Errorf("%s does not export %s", s.DataSource(), signal)
+	}
 	record := mcpconnectionattempts.TestExportRecord(time.Now(), otelsvc.TestEventMessage)
 	inbound, err := s.records.Prepare(otelpub.WithTenant(ctx, destination.OrganizationID, destination.ProjectID.String()), &record)
 	if err != nil {
@@ -66,5 +70,5 @@ func (s *TestSource) BuildTestRequests(ctx context.Context, destination dataexpo
 	if err != nil {
 		return nil, fmt.Errorf("build connection log test request: %w", err)
 	}
-	return []otelsvc.RouteTestRequest{request}, nil
+	return request, nil
 }

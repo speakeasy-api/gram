@@ -51,8 +51,7 @@ func TestDataExportRouteTesterCoversEverySourceAndSignal(t *testing.T) {
 			EndpointURL:          server.URL,
 			Headers:              nil,
 			IncludeSensitiveData: false,
-			TestEventID:          uuid.NewString(),
-		})
+		}, uuid.NewString())
 		require.NoError(t, err, source.Name)
 
 		want := make([]string, len(source.Signals))

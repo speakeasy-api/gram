@@ -18,9 +18,7 @@ func redactSensitiveOTLP(message proto.Message) {
 
 	switch value := message.(type) {
 	case *logsv1.LogRecord:
-		if !isTestEventLogBody(value) {
-			redactUnkeyedLogBody(value.GetBody())
-		}
+		redactUnkeyedLogBody(value.GetBody())
 	case *commonv1.KeyValue:
 		if dialect.IsSensitiveDataKey(value.GetKey()) {
 			value.Value = &commonv1.AnyValue{
@@ -79,11 +77,4 @@ func redactUnkeyedLogBody(value *commonv1.AnyValue) {
 	default:
 		value.Value = &commonv1.AnyValue_StringValue{StringValue: redactedSensitiveDataValue}
 	}
-}
-
-// isTestEventLogBody reports a data export test's own message, which carries
-// nothing sensitive. Producers cannot send the marker, so a real record cannot
-// keep its body this way.
-func isTestEventLogBody(record *logsv1.LogRecord) bool {
-	return record.GetBody().GetStringValue() == TestEventMessage && hasTestMarker(record.GetAttributes())
 }

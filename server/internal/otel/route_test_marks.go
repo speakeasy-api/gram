@@ -1,8 +1,8 @@
 package otel
 
 import (
-	"errors"
 	"fmt"
+	"slices"
 
 	collectorlogsv1 "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	collectormetricsv1 "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
@@ -15,44 +15,44 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
-// markTestRequest puts the test marker on every resource of a built request,
-// so backends that tag by resource see it. It refuses a log record or span
-// without both test marks, and a metric data point without the marker or with
-// an ID, since an ID would start a new time series every test.
-func markTestRequest(message proto.Message, testEventID string) error {
+// stampTestRequest marks a built, redacted test request. Metric data points get no ID: it would start a new time series every test.
+func stampTestRequest(message proto.Message, testEventID string) error {
+	marker := &commonv1.KeyValue{Key: string(attr.TestEventKey), Value: &commonv1.AnyValue{Value: &commonv1.AnyValue_BoolValue{BoolValue: true}}, KeyStrindex: 0}
+	id := &commonv1.KeyValue{Key: string(attr.TestEventIDKey), Value: otlpStringValue(testEventID), KeyStrindex: 0}
+	stampResource := func(resource *resourcev1.Resource) *resourcev1.Resource {
+		if resource == nil {
+			resource = &resourcev1.Resource{Attributes: nil, DroppedAttributesCount: 0, EntityRefs: nil}
+		}
+		resource.Attributes = setTestAttributes(resource.GetAttributes(), marker)
+		return resource
+	}
+
 	switch request := message.(type) {
 	case *collectorlogsv1.ExportLogsServiceRequest:
 		for _, resourceLogs := range request.GetResourceLogs() {
-			resourceLogs.Resource = markTestResource(resourceLogs.GetResource())
+			resourceLogs.Resource = stampResource(resourceLogs.GetResource())
 			for _, scopeLogs := range resourceLogs.GetScopeLogs() {
 				for _, record := range scopeLogs.GetLogRecords() {
-					if !hasTestMarks(record.GetAttributes(), testEventID) {
-						return errors.New("a test log record lacks the test marks")
-					}
+					record.Attributes = setTestAttributes(record.GetAttributes(), marker, id)
+					record.Body = otlpStringValue(TestEventMessage)
 				}
 			}
 		}
 	case *collectortracev1.ExportTraceServiceRequest:
 		for _, resourceSpans := range request.GetResourceSpans() {
-			resourceSpans.Resource = markTestResource(resourceSpans.GetResource())
+			resourceSpans.Resource = stampResource(resourceSpans.GetResource())
 			for _, scopeSpans := range resourceSpans.GetScopeSpans() {
 				for _, span := range scopeSpans.GetSpans() {
-					if !hasTestMarks(span.GetAttributes(), testEventID) {
-						return errors.New("a test span lacks the test marks")
-					}
+					span.Attributes = setTestAttributes(span.GetAttributes(), marker, id)
 				}
 			}
 		}
 	case *collectormetricsv1.ExportMetricsServiceRequest:
 		for _, resourceMetrics := range request.GetResourceMetrics() {
-			resourceMetrics.Resource = markTestResource(resourceMetrics.GetResource())
+			resourceMetrics.Resource = stampResource(resourceMetrics.GetResource())
 			for _, scopeMetrics := range resourceMetrics.GetScopeMetrics() {
 				for _, item := range scopeMetrics.GetMetrics() {
-					for _, attributes := range metricDataPointAttributes(item) {
-						if !hasTestMarker(attributes) || hasTestEventID(attributes) {
-							return errors.New("a test metric data point must carry the test marker and no test event ID")
-						}
-					}
+					stampMetricDataPoints(item, marker)
 				}
 			}
 		}
@@ -62,74 +62,36 @@ func markTestRequest(message proto.Message, testEventID string) error {
 	return nil
 }
 
-func markTestResource(resource *resourcev1.Resource) *resourcev1.Resource {
-	if resource == nil {
-		resource = &resourcev1.Resource{Attributes: nil, DroppedAttributesCount: 0, EntityRefs: nil}
-	}
-	for _, kv := range resource.GetAttributes() {
-		if kv.GetKey() == string(attr.TestEventKey) {
-			kv.Value = otlpTestMarker().GetValue()
-			return resource
-		}
-	}
-	resource.Attributes = append(resource.Attributes, otlpTestMarker())
-	return resource
-}
-
-func hasTestMarks(attributes []*commonv1.KeyValue, testEventID string) bool {
-	if !hasTestMarker(attributes) {
-		return false
-	}
-	for _, kv := range attributes {
-		if kv.GetKey() == string(attr.TestEventIDKey) {
-			return kv.GetValue().GetStringValue() == testEventID
-		}
-	}
-	return false
-}
-
-func hasTestMarker(attributes []*commonv1.KeyValue) bool {
-	for _, kv := range attributes {
-		if kv.GetKey() == string(attr.TestEventKey) {
-			return kv.GetValue().GetBoolValue()
-		}
-	}
-	return false
-}
-
-func hasTestEventID(attributes []*commonv1.KeyValue) bool {
-	for _, kv := range attributes {
-		if kv.GetKey() == string(attr.TestEventIDKey) {
-			return true
-		}
-	}
-	return false
-}
-
-// metricDataPointAttributes returns the attributes of every data point in a metric.
-func metricDataPointAttributes(item *metricsv1.Metric) [][]*commonv1.KeyValue {
-	var out [][]*commonv1.KeyValue
+func stampMetricDataPoints(item *metricsv1.Metric, marker *commonv1.KeyValue) {
 	switch data := item.GetData().(type) {
 	case *metricsv1.Metric_Gauge:
 		for _, point := range data.Gauge.GetDataPoints() {
-			out = append(out, point.GetAttributes())
+			point.Attributes = setTestAttributes(point.GetAttributes(), marker)
 		}
 	case *metricsv1.Metric_Sum:
 		for _, point := range data.Sum.GetDataPoints() {
-			out = append(out, point.GetAttributes())
+			point.Attributes = setTestAttributes(point.GetAttributes(), marker)
 		}
 	case *metricsv1.Metric_Histogram:
 		for _, point := range data.Histogram.GetDataPoints() {
-			out = append(out, point.GetAttributes())
+			point.Attributes = setTestAttributes(point.GetAttributes(), marker)
 		}
 	case *metricsv1.Metric_ExponentialHistogram:
 		for _, point := range data.ExponentialHistogram.GetDataPoints() {
-			out = append(out, point.GetAttributes())
+			point.Attributes = setTestAttributes(point.GetAttributes(), marker)
 		}
 	case *metricsv1.Metric_Summary:
 		for _, point := range data.Summary.GetDataPoints() {
-			out = append(out, point.GetAttributes())
+			point.Attributes = setTestAttributes(point.GetAttributes(), marker)
 		}
 	}
-	return out
+}
+
+// setTestAttributes replaces any test marks already in attributes with copies of marks.
+func setTestAttributes(attributes []*commonv1.KeyValue, marks ...*commonv1.KeyValue) []*commonv1.KeyValue {
+	attributes = slices.DeleteFunc(attributes, func(kv *commonv1.KeyValue) bool { return isTestEventMarkKey(kv.GetKey()) })
+	for _, mark := range marks {
+		attributes = append(attributes, proto.CloneOf(mark))
+	}
+	return attributes
 }

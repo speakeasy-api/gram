@@ -21,7 +21,11 @@ import (
 
 // spoofedMarks are the test marks a producer tries to send on real data.
 func spoofedMarks() []*commonv1.KeyValue {
-	return append(otlpTestMarks("spoofed"), &commonv1.KeyValue{Key: "kept", Value: otlpStringValue("yes"), KeyStrindex: 0})
+	return []*commonv1.KeyValue{
+		{Key: "speakeasy.test_event", Value: &commonv1.AnyValue{Value: &commonv1.AnyValue_BoolValue{BoolValue: true}}, KeyStrindex: 0},
+		{Key: "speakeasy.test_event.id", Value: otlpStringValue("spoofed"), KeyStrindex: 0},
+		{Key: "kept", Value: otlpStringValue("yes"), KeyStrindex: 0},
+	}
 }
 
 func spoofedResource() *resourcev1.Resource {
@@ -160,34 +164,12 @@ func TestTransformsStripProducerTestMarksBeforeTheRelay(t *testing.T) {
 	})
 }
 
-func TestRedactionKeepsOnlyTheMarkedTestMessage(t *testing.T) {
+func TestRedactionRedactsAMarkedTestMessage(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name   string
-		body   string
-		marked bool
-		kept   bool
-	}{
-		{name: "marked test message", body: TestEventMessage, marked: true, kept: true},
-		{name: "marked real text", body: "Speakeasy test event: user said something private", marked: true, kept: false},
-		{name: "unmarked test message", body: TestEventMessage, marked: false, kept: false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			record := &logsv1.LogRecord{Body: otlpStringValue(tc.body)}
-			if tc.marked {
-				record.Attributes = []*commonv1.KeyValue{otlpTestMarker()}
-			}
-			redactSensitiveOTLP(&collectorlogsv1.ExportLogsServiceRequest{ResourceLogs: []*logsv1.ResourceLogs{{
-				ScopeLogs: []*logsv1.ScopeLogs{{LogRecords: []*logsv1.LogRecord{record}}},
-			}}})
-			if tc.kept {
-				require.Equal(t, tc.body, record.GetBody().GetStringValue())
-			} else {
-				require.Equal(t, redactedSensitiveDataValue, record.GetBody().GetStringValue())
-			}
-		})
-	}
+	record := &logsv1.LogRecord{Body: otlpStringValue(TestEventMessage), Attributes: spoofedMarks()}
+	redactSensitiveOTLP(&collectorlogsv1.ExportLogsServiceRequest{ResourceLogs: []*logsv1.ResourceLogs{{
+		ScopeLogs: []*logsv1.ScopeLogs{{LogRecords: []*logsv1.LogRecord{record}}},
+	}}})
+	require.Equal(t, redactedSensitiveDataValue, record.GetBody().GetStringValue())
 }

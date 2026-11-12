@@ -332,7 +332,7 @@ type fixedTestSender struct {
 	onSend  func()
 }
 
-func (s *fixedTestSender) SendTest(_ context.Context, sourceName string, _ dataexports.TestDestination) ([]dataexports.SignalTestResult, error) {
+func (s *fixedTestSender) SendTest(_ context.Context, sourceName string, _ dataexports.TestDestination, _ string) ([]dataexports.SignalTestResult, error) {
 	s.sent.Add(1)
 	if s.onSend != nil {
 		s.onSend()

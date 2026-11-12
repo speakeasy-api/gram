@@ -79,8 +79,6 @@ type TestDestination struct {
 	EndpointURL          string
 	Headers              map[string]string
 	IncludeSensitiveData bool
-	// TestEventID is carried by every log and span one test sends, across all its signals.
-	TestEventID string
 }
 
 // SignalTestResult is what one signal's test request got back.
@@ -95,9 +93,10 @@ type SignalTestResult struct {
 
 // TestEventSender sends a source's test events straight to a destination,
 // through the relays' delivery path. It returns one result per signal the
-// source exports; an error means the test could not be built or sent.
+// source exports; an error means the test could not be built or sent. Every log
+// and span one test sends carries testEventID.
 type TestEventSender interface {
-	SendTest(ctx context.Context, source string, destination TestDestination) ([]SignalTestResult, error)
+	SendTest(ctx context.Context, source string, destination TestDestination, testEventID string) ([]SignalTestResult, error)
 }
 
 // RouteTestCore sends a test event for one route. The dashboard and the
@@ -201,8 +200,7 @@ func (c *RouteTestCore) SendTest(ctx context.Context, params SendRouteTestParams
 		EndpointURL:          destination.EndpointURL,
 		Headers:              destination.Headers,
 		IncludeSensitiveData: destination.IncludeSensitiveData,
-		TestEventID:          testEventID,
-	})
+	}, testEventID)
 	if err != nil {
 		return RouteTestResult{}, fmt.Errorf("send data export test event: %w", err)
 	}
