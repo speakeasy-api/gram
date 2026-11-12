@@ -733,7 +733,8 @@ INSERT INTO ai_integration_configs (
   , $5
   , $6
   , $7
-  , $8
+  -- Callers without provider settings pass nil; the column is NOT NULL.
+  , COALESCE($8::jsonb, '{}'::jsonb)
 )
 RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted, settings
 `
@@ -1329,7 +1330,8 @@ SET project_id = $1,
     external_organization_id = $2,
     enabled = $3,
     billing_mode = $4,
-    settings = $5,
+    -- nil keeps the saved settings.
+    settings = COALESCE($5::jsonb, settings),
     updated_at = clock_timestamp()
 WHERE organization_id = $6
   AND provider = $7

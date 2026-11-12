@@ -56,7 +56,8 @@ INSERT INTO ai_integration_configs (
   , @api_key_encrypted
   , @enabled
   , @billing_mode
-  , @settings
+  -- Callers without provider settings pass nil; the column is NOT NULL.
+  , COALESCE(sqlc.narg(settings)::jsonb, '{}'::jsonb)
 )
 RETURNING *;
 
@@ -66,7 +67,8 @@ SET project_id = @project_id,
     external_organization_id = @external_organization_id,
     enabled = @enabled,
     billing_mode = @billing_mode,
-    settings = @settings,
+    -- nil keeps the saved settings.
+    settings = COALESCE(sqlc.narg(settings)::jsonb, settings),
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND provider = @provider
