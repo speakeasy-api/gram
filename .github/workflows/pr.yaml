@@ -2149,9 +2149,14 @@ jobs:
           COUNT_FLAG: ${{ github.event_name != 'pull_request' && '-count=1' || '' }}
 
   # Asks a model the Platform MCP tool eval cases that this pull request's
-  # tool, instruction or case changes could move, and writes the report to the
-  # job summary. It starts only when catalogue.json or a case file changes,
-  # which every tool or instruction change forces. It spends LLM calls, so it is report-only, runs only on pull
+  # tool, instruction or case changes could move. On the progressive surface
+  # it runs each case three times and fails when a case that passes in
+  # tooleval/baseline.json now fails in most runs; the direct surface runs
+  # once and only reports.
+  # It starts when catalogue.json, a case, the baseline or the eval harness
+  # changes; every tool or instruction change forces a catalogue.json change.
+  # The report goes to the job summary, and the report and an updated
+  # baseline.json to the platform-tool-eval artifact. It spends LLM calls, so it is report-only, runs only on pull
   # requests, and skips when the eval key secret is not available (forks, or
   # before the secret is configured).
   platform-tool-eval:
@@ -2200,25 +2205,52 @@ jobs:
         if: steps.key.outputs.configured == 'true'
         run: mise run install:go
 
-      - name: Run eval
+      - name: Prepare output directory
         if: steps.key.outputs.configured == 'true'
-        # Report-only: the job passes whatever this step does, including a
-        # harness error, so read the summary rather than the check status.
-        continue-on-error: true
-        run: mise run eval:platform-tools --changed-since HEAD^1 --max-cases 60 --concurrency 4 --out "$RUNNER_TEMP/platform-tool-eval.md"
+        run: mkdir -p "$RUNNER_TEMP/platform-tool-eval"
+
+      # The progressive surface is gated: three runs per case against the
+      # committed baseline. It is what most hosts see, and a case costs
+      # cents rather than the direct surface's quarter dollar.
+      - name: Run gated eval (progressive)
+        if: steps.key.outputs.configured == 'true'
+        run: mise run eval:platform-tools --changed-since HEAD^1 --max-cases 60 --surfaces progressive --runs 3 --concurrency 8 --gate --out "$RUNNER_TEMP/platform-tool-eval/progressive.md" --baseline-out "$RUNNER_TEMP/platform-tool-eval/baseline.json"
         env:
           # Not OPENROUTER_DEV_KEY: mise.toml sets that to a placeholder,
           # which would override this inside mise run.
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_TOOL_EVAL_KEY }}
 
+      # The direct surface lists the whole catalogue on every turn, so it
+      # runs once per case and only reports.
+      - name: Run report-only eval (direct)
+        if: always() && steps.key.outputs.configured == 'true'
+        continue-on-error: true
+        run: mise run eval:platform-tools --changed-since HEAD^1 --max-cases 60 --surfaces direct --runs 1 --concurrency 8 --out "$RUNNER_TEMP/platform-tool-eval/direct.md"
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_TOOL_EVAL_KEY }}
+
       - name: Write summary
         if: always() && steps.key.outputs.configured == 'true'
         run: |
-          if [ -f "$RUNNER_TEMP/platform-tool-eval.md" ]; then
-            cat "$RUNNER_TEMP/platform-tool-eval.md" >>"$GITHUB_STEP_SUMMARY"
-          else
+          wrote=false
+          for surface in progressive direct; do
+            report="$RUNNER_TEMP/platform-tool-eval/$surface.md"
+            if [ -f "$report" ]; then
+              cat "$report" >>"$GITHUB_STEP_SUMMARY"
+              wrote=true
+            fi
+          done
+          if [ "$wrote" = false ]; then
             echo "No Platform MCP tool, instruction or eval case changed, or the eval failed before writing a report." >>"$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Upload report and baseline
+        if: always() && steps.key.outputs.configured == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: platform-tool-eval
+          path: ${{ runner.temp }}/platform-tool-eval/
+          if-no-files-found: ignore
 
   docker-build-client:
     name: docker-build-client
@@ -3256,6 +3288,7 @@ jobs:
       - server-test-plan
       - server-test
       - demo-seed-safety
+      - platform-tool-eval
       - docker-build-server
       - docker-build-client
       - upload-dashboard-assets

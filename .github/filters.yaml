@@ -151,10 +151,13 @@ preview-ui:
 
 # Gates the Platform MCP tool eval in .github/workflows/pr.yaml. Every tool,
 # instruction or case change shows up here: TestToolEvalCatalogueSnapshotIsCurrent
-# fails until catalogue.json is regenerated.
+# fails until catalogue.json is regenerated. A harness or baseline change starts
+# the job too; with no tool or case change it selects nothing and costs no LLM
+# calls.
 platform-tool-eval:
-  - "server/internal/platformmcp/tooleval/catalogue.json"
-  - "server/internal/platformmcp/tooleval/cases/**"
+  - "server/internal/platformmcp/tooleval/**"
+  - "server/internal/platformmcp/tooleval_*"
+  - ".mise-tasks/eval/platform-tools.sh"
 
 # Paths that were moved or retired. PRs must not add or modify files here —
 # stale generators, cherry-picks, or muscle memory can silently resurrect a

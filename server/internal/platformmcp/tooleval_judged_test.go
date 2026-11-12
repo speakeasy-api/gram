@@ -4,7 +4,9 @@ package platformmcp
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -74,6 +76,8 @@ func TestToolEvalJudged(t *testing.T) { //nolint:paralleltest // one long run th
 
 	cases, err := tooleval.LoadCases()
 	require.NoError(t, err)
+	allCases := cases
+	baseline := readToolEvalBaseline(t)
 	if filter := os.Getenv("TOOLEVAL_CASES"); filter != "" {
 		pattern, err := regexp.Compile(filter)
 		require.NoError(t, err, "TOOLEVAL_CASES")
@@ -144,10 +148,57 @@ func TestToolEvalJudged(t *testing.T) { //nolint:paralleltest // one long run th
 
 	report, err := tooleval.Run(t.Context(), client, cases, toolEvalCatalogue(t, registrar), surfaces, cfg)
 	require.NoError(t, err)
+
+	// The gate compares the one model the baseline was taken with.
+	model := cfg.Models[0]
+	results := report.Results(model)
+	var regressions []tooleval.Regression
+	gate := os.Getenv("TOOLEVAL_GATE") == "1"
+	switch {
+	case !gate:
+	case len(baseline.Cases) == 0:
+		notes = append(notes, "There is no committed baseline yet, so nothing is gated. Commit this run's baseline.json as tooleval/baseline.json.")
+	case len(cfg.Models) != 1 || model != baseline.Model:
+		notes = append(notes, fmt.Sprintf("The baseline was taken with %s, so a run of %s is not gated.", baseline.Model, strings.Join(cfg.Models, ", ")))
+	default:
+		regressions = tooleval.Regressions(baseline, results)
+		var missing []string
+		for _, c := range cases {
+			if _, ok := baseline.Cases[c.ID]; !ok {
+				missing = append(missing, c.ID)
+			}
+		}
+		if len(missing) > 0 {
+			notes = append(notes, fmt.Sprintf("%d cases have no baseline entry yet, so they are not gated: %s. Commit this run's baseline.json as tooleval/baseline.json to start gating them.", len(missing), strings.Join(missing, ", ")))
+		}
+	}
+
 	report.Notes = append(notes, report.Notes...)
-	markdown := report.Markdown()
+	markdown := tooleval.RegressionsMarkdown(regressions) + report.Markdown()
 	t.Log("\n" + markdown)
 	if out := os.Getenv("TOOLEVAL_OUT"); out != "" {
 		require.NoError(t, os.WriteFile(out, []byte(markdown), 0o600))
 	}
+	if out := os.Getenv("TOOLEVAL_BASELINE_OUT"); out != "" {
+		data, err := baseline.Merge(model, results, allCases).Marshal()
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(out, data, 0o600))
+	}
+	require.Empty(t, regressions, "Platform MCP tool eval cases regressed against tooleval/baseline.json; see the report")
+}
+
+// toolEvalBaselinePath is the committed per-case baseline the gate compares
+// against.
+const toolEvalBaselinePath = "tooleval/baseline.json"
+
+func readToolEvalBaseline(t *testing.T) tooleval.Baseline {
+	t.Helper()
+	var baseline tooleval.Baseline
+	data, err := os.ReadFile(toolEvalBaselinePath)
+	if errors.Is(err, fs.ErrNotExist) {
+		return baseline
+	}
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(data, &baseline), toolEvalBaselinePath)
+	return baseline
 }
