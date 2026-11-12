@@ -158,8 +158,11 @@ type WebSearchOptions struct {
 }
 
 type ObjectCompletionRequest struct {
-	OrgID          string
-	ProjectID      string
+	OrgID     string
+	ProjectID string
+	// ChatID attributes the call's usage and telemetry to a chat. uuid.Nil
+	// leaves it unattributed.
+	ChatID         uuid.UUID
 	Model          string
 	SystemPrompt   string
 	Prompt         string

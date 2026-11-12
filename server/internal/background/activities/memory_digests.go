@@ -462,7 +462,7 @@ func (m *MemoryDigests) complete(ctx context.Context, c memoryDigestCandidate, s
 		Temperature:               nil,
 		Model:                     m.model,
 		Stream:                    false,
-		UsageSource:               billing.ModelUsageSourceGram,
+		UsageSource:               billing.ModelUsageSourceOrgMemoryDigest,
 		KeyType:                   openrouter.KeyTypeInternal,
 		KeySlot:                   "",
 		UserID:                    "",

@@ -463,6 +463,7 @@ func buildRequest(model string, tc testCase, validationError string, reasoning *
 	}
 	temperature := 0.0
 	return openrouter.ObjectCompletionRequest{
+		ChatID:         uuid.Nil,
 		OrgID:          benchOrgID,
 		ProjectID:      benchProjectID,
 		Model:          model,

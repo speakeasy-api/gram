@@ -315,7 +315,9 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 
 	// Schedule chat title generation.
 	// Use WithoutCancel to ensure the workflow is scheduled even if the HTTP request is cancelled.
-	if c.chatTitleGenerator != nil && req.ChatID != uuid.Nil {
+	// Only customer chat traffic titles its chat: platform-initiated calls on the
+	// internal key (memory judges, summaries) carry ChatID for attribution only.
+	if c.chatTitleGenerator != nil && req.ChatID != uuid.Nil && req.KeyType.OrDefault() == KeyTypeChat {
 		if err := c.chatTitleGenerator.ScheduleChatTitleGeneration(
 			context.WithoutCancel(ctx),
 			req.ChatID.String(),
@@ -591,7 +593,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		HTTPMetadata:              req.HTTPMetadata,
 		JSONSchema:                req.JSONSchema,
 		CacheControl:              nil,
-		ChatID:                    uuid.Nil,
+		ChatID:                    req.ChatID,
 		APIKeyID:                  "",
 		Reasoning:                 reasoning,
 		NormalizeOutboundMessages: false,

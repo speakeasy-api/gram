@@ -75,6 +75,15 @@ const (
 	// decision, and this tag is what attributes their spend distinctly within
 	// that key's usage.
 	ModelUsageSourceMCPResearch ModelUsageSource = "mcp-research"
+
+	// The Organizational Memory pipeline tags each of its stages separately so
+	// its spend can be split out of the shared chat-analysis and gram sources.
+	// Unregistered like chat analysis: platform internal key, excluded from
+	// Polar and TUM billing, never a BYOK slot. Callers keep chat-analysis (or
+	// the empty slot) as their KeySlot so key resolution does not change.
+	ModelUsageSourceOrgMemorySummary ModelUsageSource = "org-memory-summary"
+	ModelUsageSourceOrgMemoryFacts   ModelUsageSource = "org-memory-facts"
+	ModelUsageSourceOrgMemoryDigest  ModelUsageSource = "org-memory-digest"
 )
 
 // The platform-initiated risk-analysis judges are likewise unregistered:
@@ -120,7 +129,7 @@ func GramHostedHookSourceStrings() []string {
 // history, but raw logs legitimately carry an empty hook_source on hook, tool
 // call, and import rows, and excluding the empty string there would drop real usage.
 func GramHostedHookSourceNames() []string {
-	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceSkillSuggestions), string(ModelUsageSourceChatAnalysis), string(ModelUsageSourceMCPResearch))
+	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceSkillSuggestions), string(ModelUsageSourceChatAnalysis), string(ModelUsageSourceMCPResearch), string(ModelUsageSourceOrgMemorySummary), string(ModelUsageSourceOrgMemoryFacts), string(ModelUsageSourceOrgMemoryDigest))
 }
 
 type ModelUsageEvent struct {
