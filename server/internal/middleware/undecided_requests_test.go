@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -174,4 +175,25 @@ func TestUndecidedRequests_RateLimitsPerRoute(t *testing.T) {
 	require.Equal(t, 2, strings.Count(out, "no authorization decision"))
 	// The second line accounts for the requests the interval suppressed.
 	require.Contains(t, out, "gram.authz.undecided.count=3")
+}
+
+func TestUndecidedRequests_BoundsDistinctRoutes(t *testing.T) {
+	t.Parallel()
+	logger, buf := newUndecidedTestLogger()
+	reporter := &undecidedReporter{
+		logger:   logger,
+		interval: time.Hour,
+		now:      time.Now,
+		mu:       sync.Mutex{},
+		last:     make(map[undecidedKey]time.Time),
+		count:    make(map[undecidedKey]int),
+	}
+	summary := authz.DecisionSummary{Enforced: 0, Skipped: 0, Operations: nil, Prepared: true, SkipReasons: nil}
+
+	for i := range undecidedMaxKeys + 50 {
+		reporter.observe(httptest.NewRequest(http.MethodPost, fmt.Sprintf("/rpc/example.m%d", i), nil), summary)
+	}
+
+	require.LessOrEqual(t, len(reporter.count), undecidedMaxKeys+1)
+	require.Contains(t, buf.String(), undecidedOverflowRoute)
 }

@@ -110,12 +110,18 @@ func (e *Engine) GetScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 	return overrides, true
 }
 
-func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
+func (e *Engine) PrepareContext(ctx context.Context) (_ context.Context, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return ctx, nil
 	}
-	recordPrepared(ctx)
+	// Only a request that was admitted reaches a handler, so only it can
+	// leave a handler that never asked for a decision.
+	defer func() {
+		if err == nil {
+			recordPrepared(ctx)
+		}
+	}()
 
 	if mode, hasMode := contextvalues.APIKeyAuthorization(ctx); hasMode {
 		switch mode {

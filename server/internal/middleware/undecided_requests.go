@@ -16,6 +16,14 @@ import (
 // request.
 const undecidedLogInterval = 10 * time.Minute
 
+// undecidedMaxKeys bounds the reporter's memory. Routes come from request
+// paths, so past this many distinct keys new ones are folded into one
+// overflow route instead of growing the maps.
+const undecidedMaxKeys = 1024
+
+// undecidedOverflowRoute is the route reported for keys past undecidedMaxKeys.
+const undecidedOverflowRoute = "(other)"
+
 // UndecidedRequests reports authenticated requests that finish without asking
 // the authz engine anything, and requests whose every decision was skipped
 // because RBAC is not enforced for the caller. It changes no response.
@@ -85,6 +93,9 @@ func (u *undecidedReporter) observe(r *http.Request, summary authz.DecisionSumma
 
 func (u *undecidedReporter) report(r *http.Request, key undecidedKey) {
 	u.mu.Lock()
+	if _, known := u.count[key]; !known && len(u.count) >= undecidedMaxKeys {
+		key.route = undecidedOverflowRoute
+	}
 	u.count[key]++
 	now := u.now()
 	last, seen := u.last[key]
