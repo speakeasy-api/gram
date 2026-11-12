@@ -139,7 +139,12 @@ func TestRecordedDecisions_RequireUserOrganizationScope(t *testing.T) {
 	}
 	for name, callerCtx := range contexts {
 		ctx := WithDecisionRecorder(callerCtx)
-		_ = engine.RequireUserOrganizationScope(ctx, "org_other", authCtx.UserID, ScopeOrgRead)
+		err := engine.RequireUserOrganizationScope(ctx, "org_other", authCtx.UserID, ScopeOrgRead)
+		if name == "sessionless" {
+			require.NoError(t, err, name)
+		} else {
+			require.Error(t, err, name)
+		}
 
 		summary, ok := RecordedDecisions(ctx)
 		require.True(t, ok, name)
