@@ -7,17 +7,14 @@ package authz
 // A handler writes e.Require(ctx, authz.MCPServer(id, project).Write()).
 // Kinds whose requests need hand-built dimensions are listed at the end.
 
-// OrgID identifies one org resource.
-type OrgID string
-
 // OrgRef names one org resource for a request.
 type OrgRef struct {
-	id OrgID
+	id string
 }
 
 // Org names the org resource id.
-func Org(id OrgID) OrgRef {
-	return OrgRef{id: id}
+func Org[I ID](id I) OrgRef {
+	return OrgRef{id: idString(id)}
 }
 
 func (r OrgRef) dimensions() map[string]string {
@@ -26,40 +23,37 @@ func (r OrgRef) dimensions() map[string]string {
 
 // Read requests ScopeOrgRead: View organization settings and members.
 func (r OrgRef) Read() Check {
-	return newRefCheck(ScopeOrgRead, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeOrgRead, r.id, r.dimensions(), MatchLoose)
 }
 
 // Admin requests ScopeOrgAdmin: Manage organization settings, members, roles and access. Includes removing members and changing what every role can do.
 func (r OrgRef) Admin() Check {
-	return newRefCheck(ScopeOrgAdmin, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeOrgAdmin, r.id, r.dimensions(), MatchLoose)
 }
 
 // DeviceAgentSync requests ScopeOrgDeviceAgentSync: Let an agent's device agent sync the plugins assigned to it.
 func (r OrgRef) DeviceAgentSync() Check {
-	return newRefCheck(ScopeOrgDeviceAgentSync, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeOrgDeviceAgentSync, r.id, r.dimensions(), MatchLoose)
 }
 
 // HooksIngest requests ScopeOrgHooksIngest: Let an agent send AI-tool hook events and telemetry.
-func (r OrgRef) HooksIngest(project ProjectID) Check {
+func (r OrgRef) HooksIngest(project string) Check {
 	dimensions := r.dimensions()
 	if dimensions == nil {
 		dimensions = map[string]string{}
 	}
-	dimensions["project_id"] = string(project)
-	return newRefCheck(ScopeOrgHooksIngest, string(r.id), dimensions, MatchLoose)
+	dimensions["project_id"] = project
+	return newRefCheck(ScopeOrgHooksIngest, r.id, dimensions, MatchLoose)
 }
-
-// ProjectID identifies one project resource.
-type ProjectID string
 
 // ProjectRef names one project resource for a request.
 type ProjectRef struct {
-	id ProjectID
+	id string
 }
 
 // Project names the project resource id.
-func Project(id ProjectID) ProjectRef {
-	return ProjectRef{id: id}
+func Project[I ID](id I) ProjectRef {
+	return ProjectRef{id: idString(id)}
 }
 
 func (r ProjectRef) dimensions() map[string]string {
@@ -68,100 +62,91 @@ func (r ProjectRef) dimensions() map[string]string {
 
 // Read requests ScopeProjectRead: View projects and project-related resources.
 func (r ProjectRef) Read() Check {
-	return newRefCheck(ScopeProjectRead, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeProjectRead, r.id, r.dimensions(), MatchLoose)
 }
 
 // Write requests ScopeProjectWrite: Create and modify projects and project-related resources.
 func (r ProjectRef) Write() Check {
-	return newRefCheck(ScopeProjectWrite, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeProjectWrite, r.id, r.dimensions(), MatchLoose)
 }
 
 // PluginWrite requests ScopePluginWrite: Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.
 func (r ProjectRef) PluginWrite() Check {
-	return newRefCheck(ScopePluginWrite, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopePluginWrite, r.id, r.dimensions(), MatchLoose)
 }
 
 // LogRead requests ScopeLogRead: View the project's tool-call logs and traces, including tool arguments, results, and prompt text from every member. Not implied by project or organization admin access.
 func (r ProjectRef) LogRead() Check {
-	return newRefCheck(ScopeLogRead, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeLogRead, r.id, r.dimensions(), MatchLoose)
 }
-
-// MCPServerID identifies one mcp resource.
-type MCPServerID string
 
 // MCPServerRef names one mcp resource for a request.
 type MCPServerRef struct {
-	id      MCPServerID
-	project ProjectID
+	id      string
+	project string
 }
 
 // MCPServer names the mcp resource id, in project project.
-func MCPServer(id MCPServerID, project ProjectID) MCPServerRef {
-	return MCPServerRef{id: id, project: project}
+func MCPServer[I, P ID](id I, project P) MCPServerRef {
+	return MCPServerRef{id: idString(id), project: idString(project)}
 }
 
 func (r MCPServerRef) dimensions() map[string]string {
 	return map[string]string{
-		"project_id": string(r.project),
+		"project_id": r.project,
 	}
 }
 
 // Read requests ScopeMCPRead: View MCP servers and their configuration.
 func (r MCPServerRef) Read() Check {
-	return newRefCheck(ScopeMCPRead, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeMCPRead, r.id, r.dimensions(), MatchLoose)
 }
 
 // Write requests ScopeMCPWrite: Create, change and delete MCP servers and their configuration.
 func (r MCPServerRef) Write() Check {
-	return newRefCheck(ScopeMCPWrite, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeMCPWrite, r.id, r.dimensions(), MatchLoose)
 }
 
 // Connect requests ScopeMCPConnect: Connect to MCP servers and call their tools.
 func (r MCPServerRef) Connect() Check {
-	return newRefCheck(ScopeMCPConnect, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeMCPConnect, r.id, r.dimensions(), MatchLoose)
 }
-
-// EnvironmentID identifies one environment resource.
-type EnvironmentID string
 
 // EnvironmentRef names one environment resource for a request.
 type EnvironmentRef struct {
-	id      EnvironmentID
-	project ProjectID
+	id      string
+	project string
 }
 
 // Environment names the environment resource id, in project project.
-func Environment(id EnvironmentID, project ProjectID) EnvironmentRef {
-	return EnvironmentRef{id: id, project: project}
+func Environment[I, P ID](id I, project P) EnvironmentRef {
+	return EnvironmentRef{id: idString(id), project: idString(project)}
 }
 
 func (r EnvironmentRef) dimensions() map[string]string {
 	return map[string]string{
-		"project_id": string(r.project),
+		"project_id": r.project,
 	}
 }
 
 // Read requests ScopeEnvironmentRead: View environments and their entries within the project, including secret values.
 func (r EnvironmentRef) Read() Check {
-	return newRefCheck(ScopeEnvironmentRead, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeEnvironmentRead, r.id, r.dimensions(), MatchLoose)
 }
 
 // Write requests ScopeEnvironmentWrite: Add, edit, clone, and remove environments within the project.
 func (r EnvironmentRef) Write() Check {
-	return newRefCheck(ScopeEnvironmentWrite, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeEnvironmentWrite, r.id, r.dimensions(), MatchLoose)
 }
-
-// SkillID identifies one skill resource.
-type SkillID string
 
 // SkillRef names one skill resource for a request.
 type SkillRef struct {
-	id SkillID
+	id string
 }
 
 // Skill names the skill resource id.
-func Skill(id SkillID) SkillRef {
-	return SkillRef{id: id}
+func Skill[I ID](id I) SkillRef {
+	return SkillRef{id: idString(id)}
 }
 
 func (r SkillRef) dimensions() map[string]string {
@@ -170,55 +155,49 @@ func (r SkillRef) dimensions() map[string]string {
 
 // Read requests ScopeSkillRead: View skills within the project.
 func (r SkillRef) Read() Check {
-	return newRefCheck(ScopeSkillRead, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeSkillRead, r.id, r.dimensions(), MatchLoose)
 }
 
 // Write requests ScopeSkillWrite: Create and modify skills within the project.
 func (r SkillRef) Write() Check {
-	return newRefCheck(ScopeSkillWrite, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeSkillWrite, r.id, r.dimensions(), MatchLoose)
 }
-
-// AssistantID identifies one assistant resource.
-type AssistantID string
 
 // AssistantRef names one assistant resource for a request.
 type AssistantRef struct {
-	id      AssistantID
-	project ProjectID
+	id      string
+	project string
 }
 
 // Assistant names the assistant resource id, in project project.
-func Assistant(id AssistantID, project ProjectID) AssistantRef {
-	return AssistantRef{id: id, project: project}
+func Assistant[I, P ID](id I, project P) AssistantRef {
+	return AssistantRef{id: idString(id), project: idString(project)}
 }
 
 func (r AssistantRef) dimensions() map[string]string {
 	return map[string]string{
-		"project_id": string(r.project),
+		"project_id": r.project,
 	}
 }
 
 // Read requests ScopeAssistantRead: View and interact with assistants within the project.
 func (r AssistantRef) Read() Check {
-	return newRefCheck(ScopeAssistantRead, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeAssistantRead, r.id, r.dimensions(), MatchLoose)
 }
 
 // Write requests ScopeAssistantWrite: Create and modify assistants within the project.
 func (r AssistantRef) Write() Check {
-	return newRefCheck(ScopeAssistantWrite, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeAssistantWrite, r.id, r.dimensions(), MatchLoose)
 }
-
-// ChatID identifies one chat resource.
-type ChatID string
 
 // ChatRef names one chat resource for a request.
 type ChatRef struct {
-	id ChatID
+	id string
 }
 
 // Chat names the chat resource id.
-func Chat(id ChatID) ChatRef {
-	return ChatRef{id: id}
+func Chat[I ID](id I) ChatRef {
+	return ChatRef{id: idString(id)}
 }
 
 func (r ChatRef) dimensions() map[string]string {
@@ -227,25 +206,22 @@ func (r ChatRef) dimensions() map[string]string {
 
 // Read requests ScopeChatRead: Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.
 func (r ChatRef) Read() Check {
-	return newRefCheck(ScopeChatRead, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeChatRead, r.id, r.dimensions(), MatchLoose)
 }
 
 // Write requests ScopeChatWrite: Rename, delete, and give feedback on other members' agent sessions, and read their transcripts. Everyone keeps their own.
 func (r ChatRef) Write() Check {
-	return newRefCheck(ScopeChatWrite, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeChatWrite, r.id, r.dimensions(), MatchLoose)
 }
-
-// AgentID identifies one agent resource.
-type AgentID string
 
 // AgentRef names one agent resource for a request.
 type AgentRef struct {
-	id AgentID
+	id string
 }
 
 // Agent names the agent resource id.
-func Agent(id AgentID) AgentRef {
-	return AgentRef{id: id}
+func Agent[I ID](id I) AgentRef {
+	return AgentRef{id: idString(id)}
 }
 
 func (r AgentRef) dimensions() map[string]string {
@@ -254,35 +230,32 @@ func (r AgentRef) dimensions() map[string]string {
 
 // Read requests ScopeAgentRead: View agents and their settings.
 func (r AgentRef) Read() Check {
-	return newRefCheck(ScopeAgentRead, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeAgentRead, r.id, r.dimensions(), MatchLoose)
 }
 
 // Write requests ScopeAgentWrite: Create, configure, and manage agents.
 func (r AgentRef) Write() Check {
-	return newRefCheck(ScopeAgentWrite, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeAgentWrite, r.id, r.dimensions(), MatchLoose)
 }
 
 // Authorize requests ScopeAgentAuthorize: Authorize agents and manage their credentials.
 func (r AgentRef) Authorize() Check {
-	return newRefCheck(ScopeAgentAuthorize, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeAgentAuthorize, r.id, r.dimensions(), MatchLoose)
 }
 
 // Transfer requests ScopeAgentTransfer: Hand an agent to another owner. The previous owner loses control of it.
 func (r AgentRef) Transfer() Check {
-	return newRefCheck(ScopeAgentTransfer, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeAgentTransfer, r.id, r.dimensions(), MatchLoose)
 }
-
-// WorkloadID identifies one workload resource.
-type WorkloadID string
 
 // WorkloadRef names one workload resource for a request.
 type WorkloadRef struct {
-	id WorkloadID
+	id string
 }
 
 // Workload names the workload resource id.
-func Workload(id WorkloadID) WorkloadRef {
-	return WorkloadRef{id: id}
+func Workload[I ID](id I) WorkloadRef {
+	return WorkloadRef{id: idString(id)}
 }
 
 func (r WorkloadRef) dimensions() map[string]string {
@@ -291,12 +264,12 @@ func (r WorkloadRef) dimensions() map[string]string {
 
 // Read requests ScopeWorkloadRead: View workload identity trust policy: issuers, admitted subjects, and assigned agents.
 func (r WorkloadRef) Read() Check {
-	return newRefCheck(ScopeWorkloadRead, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeWorkloadRead, r.id, r.dimensions(), MatchLoose)
 }
 
 // Write requests ScopeWorkloadWrite: Register workload issuers, admit and withdraw subjects, and assign agents to workloads.
 func (r WorkloadRef) Write() Check {
-	return newRefCheck(ScopeWorkloadWrite, string(r.id), r.dimensions(), MatchLoose)
+	return newRefCheck(ScopeWorkloadWrite, r.id, r.dimensions(), MatchLoose)
 }
 
 // Kinds without a generated ref, and the hand-written constructor each uses:

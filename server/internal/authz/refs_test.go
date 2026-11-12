@@ -1,6 +1,8 @@
 package authz
 
 import (
+	"github.com/google/uuid"
+
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -97,4 +99,14 @@ func TestRefs_MissingProjectIsInvalid(t *testing.T) {
 	require.Error(t, validateInput(Environment("env-1", "").Read()))
 	require.Error(t, validateInput(Assistant("assistant-1", "").Read()))
 	require.Error(t, validateInput(Org("org-1").HooksIngest("")))
+}
+
+// A ref built from uuids builds the same check as one built from their
+// strings.
+func TestRefs_AcceptUUIDsAndStrings(t *testing.T) {
+	t.Parallel()
+	env := uuid.New()
+	project := uuid.New()
+	require.Equal(t, Environment(env.String(), project.String()).Read(), Environment(env, project).Read())
+	require.Equal(t, Project(project.String()).Write(), Project(project).Write())
 }

@@ -91,7 +91,6 @@ func renderRefs(r authz.Registry) ([]byte, error) {
 			continue
 		}
 		name := RefName(t.Kind)
-		idType := name + "ID"
 		var dims []authz.Dimension
 		for _, d := range t.Dimensions {
 			if refDimension(r, d) {
@@ -99,25 +98,30 @@ func renderRefs(r authz.Registry) ([]byte, error) {
 			}
 		}
 
-		fmt.Fprintf(&b, "// %s identifies one %s resource.\ntype %s string\n\n", idType, t.Kind, idType)
-		fmt.Fprintf(&b, "// %sRef names one %s resource for a request.\ntype %sRef struct {\n\tid %s\n", name, t.Kind, name, idType)
+		fmt.Fprintf(&b, "// %sRef names one %s resource for a request.\ntype %sRef struct {\n\tid string\n", name, t.Kind, name)
 		for _, d := range dims {
-			fmt.Fprintf(&b, "\t%s %s\n", paramName(d.Key), paramType(r, d.Key))
+			fmt.Fprintf(&b, "\t%s string\n", paramName(d.Key))
 		}
 		b.WriteString("}\n\n")
 
-		params := []string{"id " + idType}
-		fields := []string{"id: id"}
-		for _, d := range dims {
-			params = append(params, paramName(d.Key)+" "+paramType(r, d.Key))
-			fields = append(fields, paramName(d.Key)+": "+paramName(d.Key))
+		typeParams := []string{"I"}
+		params := []string{"id I"}
+		fields := []string{"id: idString(id)"}
+		for i, d := range dims {
+			tp := fmt.Sprintf("P%d", i+1)
+			if len(dims) == 1 {
+				tp = "P"
+			}
+			typeParams = append(typeParams, tp)
+			params = append(params, paramName(d.Key)+" "+tp)
+			fields = append(fields, paramName(d.Key)+": idString("+paramName(d.Key)+")")
 		}
 		fmt.Fprintf(&b, "// %s names the %s resource id", name, t.Kind)
 		for _, d := range dims {
 			fmt.Fprintf(&b, ", in %s %s", strings.TrimSuffix(d.Key, "_id"), paramName(d.Key))
 		}
 		b.WriteString(".\n")
-		fmt.Fprintf(&b, "func %s(%s) %sRef {\n\treturn %sRef{%s}\n}\n\n", name, strings.Join(params, ", "), name, name, strings.Join(fields, ", "))
+		fmt.Fprintf(&b, "func %s[%s ID](%s) %sRef {\n\treturn %sRef{%s}\n}\n\n", name, strings.Join(typeParams, ", "), strings.Join(params, ", "), name, name, strings.Join(fields, ", "))
 
 		fmt.Fprintf(&b, "func (r %sRef) dimensions() map[string]string {\n", name)
 		if len(dims) == 0 {
@@ -125,7 +129,7 @@ func renderRefs(r authz.Registry) ([]byte, error) {
 		} else {
 			b.WriteString("\treturn map[string]string{\n")
 			for _, d := range dims {
-				fmt.Fprintf(&b, "\t\t%q: string(r.%s),\n", d.Key, paramName(d.Key))
+				fmt.Fprintf(&b, "\t\t%q: r.%s,\n", d.Key, paramName(d.Key))
 			}
 			b.WriteString("\t}\n}\n\n")
 		}
@@ -145,18 +149,18 @@ func renderRefs(r authz.Registry) ([]byte, error) {
 			fmt.Fprintf(&b, "// %s requests %s: %s\n", method, ScopeConstantName(t.ScopeFor(p)), p.Description)
 			var mparams []string
 			for _, d := range extra {
-				mparams = append(mparams, paramName(d.Key)+" "+paramType(r, d.Key))
+				mparams = append(mparams, paramName(d.Key)+" string")
 			}
 			fmt.Fprintf(&b, "func (r %sRef) %s(%s) Check {\n", name, method, strings.Join(mparams, ", "))
 			if len(extra) == 0 {
-				fmt.Fprintf(&b, "\treturn newRefCheck(%s, string(r.id), r.dimensions(), %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
+				fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id, r.dimensions(), %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
 				continue
 			}
 			b.WriteString("\tdimensions := r.dimensions()\n\tif dimensions == nil {\n\t\tdimensions = map[string]string{}\n\t}\n")
 			for _, d := range extra {
-				fmt.Fprintf(&b, "\tdimensions[%q] = string(%s)\n", d.Key, paramName(d.Key))
+				fmt.Fprintf(&b, "\tdimensions[%q] = %s\n", d.Key, paramName(d.Key))
 			}
-			fmt.Fprintf(&b, "\treturn newRefCheck(%s, string(r.id), dimensions, %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
+			fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id, dimensions, %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
 		}
 	}
 
