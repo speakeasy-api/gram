@@ -78,3 +78,38 @@ func TestRender_RejectsScopesThatAreNotIdentifiers(t *testing.T) {
 	_, err := Render(model)
 	require.ErrorContains(t, err, `scope "thing:read-only" renders as "ScopeThingRead-only", which is not a Go identifier`)
 }
+
+// withDimensionSet returns a copy of the definitions with set added to the
+// first permission of kind.
+func withDimensionSet(t *testing.T, kind registry.Kind, set registry.DimensionSet) registry.Registry {
+	t.Helper()
+	model := registry.Definitions
+	model.Types = append([]registry.ResourceType{}, registry.Definitions.Types...)
+	for i, rt := range model.Types {
+		if rt.Kind != kind {
+			continue
+		}
+		rt.Permissions = append([]registry.Permission{}, rt.Permissions...)
+		rt.Permissions[0].DimensionSets = append(append([]registry.DimensionSet{}, rt.Permissions[0].DimensionSets...), set)
+		model.Types[i] = rt
+		return model
+	}
+	t.Fatalf("no resource type %q", kind)
+	return model
+}
+
+func TestRender_RejectsDimensionSetsOnHandWrittenRefs(t *testing.T) {
+	t.Parallel()
+
+	model := withDimensionSet(t, "risk_policy", registry.DimensionSet{Method: "ForServer", Keys: []string{authz.SelectorKeyServerURL}})
+	_, err := Render(model)
+	require.ErrorContains(t, err, "refs are hand-written, so no method would be generated")
+}
+
+func TestRender_RejectsRefFilledKeysInDimensionSets(t *testing.T) {
+	t.Parallel()
+
+	model := withDimensionSet(t, "mcp", registry.DimensionSet{Method: "InProject", Keys: []string{authz.SelectorKeyProjectID}})
+	_, err := Render(model)
+	require.ErrorContains(t, err, `uses "project_id", which the ref already fills in from its constructor`)
+}

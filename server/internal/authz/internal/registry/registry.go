@@ -107,6 +107,17 @@ type Dimension struct {
 	Required bool
 }
 
+// DimensionSet names a request method that carries dimensions describing one
+// use of the resource rather than the resource itself: connect's ToolCall
+// takes the tool and its disposition. A value left empty is sent as unknown,
+// so a grant limited on that key never allows it and a block on it applies.
+type DimensionSet struct {
+	Method string
+	// Keys are dimensions declared on the resource type or the permission,
+	// in the order the method takes them.
+	Keys []string
+}
+
 // legacyScopes are the only stored strings a permission may keep through
 // LegacyScope. They predate the registry and are stored in grants, API key
 // and agent policies, and the public scope enum. They go, with the field,
@@ -128,6 +139,12 @@ type Permission struct {
 	// Dimensions are selector keys allowed on this permission only, beyond
 	// its resource type's.
 	Dimensions []Dimension
+	// DimensionSets are extra request methods on this permission's ref, each
+	// carrying a fixed set of dimensions declared on the type or on this
+	// permission as arguments, beside the plain method named after the action.
+	// Dimensions the ref fills in from its constructor, such as project_id,
+	// cannot be in a set.
+	DimensionSets []DimensionSet
 	// Source says where grants of this permission's scopes are set: through
 	// roles or through risk policies. Every permission sets it explicitly.
 	Source authz.GrantSource
