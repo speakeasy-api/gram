@@ -185,6 +185,17 @@ SELECT r.id AS mcp_server_id,
              )
            END
        )::boolean AS selected,
+       -- Any recorded choice, usable or not: the credential was issued a
+       -- choice for this server, so the server was within what it was issued
+       -- for.
+       EXISTS (
+         SELECT 1
+         FROM upstream_client_selections AS sel
+         WHERE sel.credential_kind = @credential_kind::text
+           AND sel.credential_id = @credential_id::uuid
+           AND sel.mcp_server_id = r.id
+           AND sel.deleted IS FALSE
+       )::boolean AS recorded,
        -- Any client choice, usable or not. A client choice is never replaced
        -- by another client, so one that is not also selected is resolved only
        -- by a reconnection. A no-auth choice is not one: when unusable,
@@ -286,7 +297,7 @@ VALUES (@id, sqlc.narg('project_id'), @organization_id, @user_session_issuer_id,
 -- Gives the session the policy a gateway consent issues, naming the catalog of
 -- servers it approved.
 UPDATE user_sessions
-SET tool_selection = jsonb_build_object('version', 1, 'catalog', jsonb_build_object('id', @catalog_id::uuid, 'mode', 'live', 'all_tools', TRUE))
+SET tool_selection = jsonb_build_object('version', 2, 'catalog', jsonb_build_object('id', @catalog_id::uuid, 'mode', 'live', 'all_tools', TRUE))
 WHERE id = @id;
 
 -- name: ListSelectionsFixture :many

@@ -32,7 +32,7 @@ var AdminUpstreamOAuthMigrationServer = Type("AdminUpstreamOAuthMigrationServer"
 
 var AdminUpstreamOAuthMigrationStatus = Type("AdminUpstreamOAuthMigrationStatus", func() {
 	Description("Where one organization stands in the upstream OAuth migration, read from a dry run of its backfills. The organization is migrated when nothing is left to write and no server needs configuring. Credentials that must reconnect do not block it: they are asked to sign in again once serving reads their choices. Typed auth clients are reported separately in auth_clients and never affect migrated.")
-	Required("organization_id", "migrated", "servers", "pending_associations", "unresolved_servers", "credentials", "pending_selections", "consent_scoped_selections", "reconnect_credentials")
+	Required("organization_id", "migrated", "servers", "pending_associations", "unresolved_servers", "credentials", "pending_selections", "reconnect_credentials")
 
 	Attribute("organization_id", String, "The organization ID.")
 	Attribute("migrated", Boolean, "Whether the organization has nothing left to write and no server needing configuration.")
@@ -41,7 +41,9 @@ var AdminUpstreamOAuthMigrationStatus = Type("AdminUpstreamOAuthMigrationStatus"
 	Attribute("unresolved_servers", ArrayOf(AdminUpstreamOAuthMigrationServer), "Servers whose upstream OAuth client must be associated by an administrator.")
 	Attribute("credentials", Int64, "Live user session credentials scanned.")
 	Attribute("pending_selections", Int64, "Credential choices the configuration decides that are not yet recorded.")
-	Attribute("consent_scoped_selections", Int64, "Credential and server pairs without a choice that are not pending, because the credential was issued for the servers approved at consent and is refused anywhere else.")
+	// Optional: replicas older than it omit it during a rolling deploy, and a
+	// client must still read the rest.
+	Attribute("consent_scoped_selections", Int64, "Credential and server pairs without a choice that are not pending, because the credential was issued for the servers approved at consent and is refused anywhere else. Absent means none.")
 	Attribute("reconnect_credentials", Int64, "Credentials with at least one server they will be asked to reconnect to, because no single client is decided for them.")
 	Attribute("auth_clients", AdminUpstreamOAuthMigrationAuthClients, "Where the organization stands in recording typed auth clients. Separate from migrated: it never gates the upstream OAuth cutover. Absent when its check failed.")
 	Attribute("execution_profiles", AdminUpstreamOAuthMigrationExecutionProfiles, "Where the organization stands in recording the auth client choices its assistants' turns use. Separate from migrated. Absent when its check failed.")
@@ -68,12 +70,14 @@ var AdminUpstreamOAuthMigrationExecutionProfileGap = Type("AdminUpstreamOAuthMig
 
 var AdminUpstreamOAuthMigrationExecutionProfiles = Type("AdminUpstreamOAuthMigrationExecutionProfiles", func() {
 	Description("Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.")
-	Required("complete", "targets", "pending_versions", "unexercised_versions", "gaps")
+	Required("complete", "targets", "pending_versions", "gaps")
 
 	Attribute("complete", Boolean, "Whether every profile that is pending is recorded and each holds a choice for every server its assistant reaches.")
 	Attribute("targets", Int64, "Assistant and trigger pairs, each with a profile per execution context.")
 	Attribute("pending_versions", Int64, "Profile versions not yet recorded.")
-	Attribute("unexercised_versions", Int64, "Profiles no turn has run under yet, in an organization enforcing upstream auth. They are not pending: a turn records its own profile when its credential is issued. Zero until enforcement is on, since a run records every profile before then.")
+	// Optional: replicas older than it omit it during a rolling deploy, and a
+	// client must still read the rest.
+	Attribute("unexercised_versions", Int64, "Profiles with no version recorded yet, in an organization enforcing upstream auth. They are not pending: a turn records its own profile when its credential is issued. Zero until enforcement is on, since a run records every profile before then. Absent means none.")
 	Attribute("gaps", ArrayOf(AdminUpstreamOAuthMigrationExecutionProfileGap), "Servers the profiles hold no choice for, by execution context and reason. They are never guessed: configure the server's auth clients.")
 })
 

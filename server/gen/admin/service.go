@@ -1977,11 +1977,11 @@ type AdminUpstreamOAuthMigrationExecutionProfiles struct {
 	Targets int64
 	// Profile versions not yet recorded.
 	PendingVersions int64
-	// Profiles no turn has run under yet, in an organization enforcing upstream
+	// Profiles with no version recorded yet, in an organization enforcing upstream
 	// auth. They are not pending: a turn records its own profile when its
 	// credential is issued. Zero until enforcement is on, since a run records
-	// every profile before then.
-	UnexercisedVersions int64
+	// every profile before then. Absent means none.
+	UnexercisedVersions *int64
 	// Servers the profiles hold no choice for, by execution context and reason.
 	// They are never guessed: configure the server's auth clients.
 	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGap
@@ -2117,8 +2117,8 @@ type AdminUpstreamOAuthMigrationStatus struct {
 	PendingSelections int64
 	// Credential and server pairs without a choice that are not pending, because
 	// the credential was issued for the servers approved at consent and is refused
-	// anywhere else.
-	ConsentScopedSelections int64
+	// anywhere else. Absent means none.
+	ConsentScopedSelections *int64
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials int64

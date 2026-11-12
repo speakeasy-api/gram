@@ -871,7 +871,7 @@ examples:
         application/json: {"organization_id": "<id>"}
       responses:
         "200":
-          application/json: {"consent_scoped_selections": 23173, "credentials": 23173, "migrated": false, "organization_id": "<id>", "pending_associations": 912265, "pending_selections": 44397, "reconnect_credentials": 169705, "servers": 411189, "unresolved_servers": []}
+          application/json: {"credentials": 23173, "migrated": false, "organization_id": "<id>", "pending_associations": 912265, "pending_selections": 44397, "reconnect_credentials": 169705, "servers": 411189, "unresolved_servers": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -893,7 +893,7 @@ examples:
         application/json: {"cross_organization_denial_communicated": true, "organization_id": "<id>", "shadow_parity_confirmed": false}
       responses:
         "200":
-          application/json: {"consent_scoped_selections": 52910, "credentials": 282773, "migrated": true, "organization_id": "<id>", "pending_associations": 614923, "pending_selections": 681368, "reconnect_credentials": 361153, "servers": 559255, "unresolved_servers": [{"mcp_server_id": "43f57f6e-9b2c-4a12-9c76-686930a3db4a", "project_id": "094eb9c1-e6da-4112-bf2b-5fd0bb742f20"}]}
+          application/json: {"credentials": 282773, "migrated": true, "organization_id": "<id>", "pending_associations": 614923, "pending_selections": 681368, "reconnect_credentials": 361153, "servers": 559255, "unresolved_servers": [{"mcp_server_id": "43f57f6e-9b2c-4a12-9c76-686930a3db4a", "project_id": "094eb9c1-e6da-4112-bf2b-5fd0bb742f20"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -1344,7 +1344,7 @@ examples:
           organization_id: "<id>"
       responses:
         "200":
-          application/json: {"consent_scoped_selections": 25241, "credentials": 25241, "migrated": false, "organization_id": "<id>", "pending_associations": 186443, "pending_selections": 857379, "reconnect_credentials": 119352, "servers": 862692, "unresolved_servers": []}
+          application/json: {"credentials": 25241, "migrated": false, "organization_id": "<id>", "pending_associations": 186443, "pending_selections": 857379, "reconnect_credentials": 119352, "servers": 862692, "unresolved_servers": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1753,7 +1753,7 @@ examples:
         application/json: {"organization_id": "<id>"}
       responses:
         "200":
-          application/json: {"associations_skipped": 67326, "associations_written": 330466, "selections_written": 785394, "status": {"consent_scoped_selections": 67326, "credentials": 750081, "migrated": false, "organization_id": "<id>", "pending_associations": 952390, "pending_selections": 757662, "reconnect_credentials": 960257, "servers": 262316, "unresolved_servers": [{"mcp_server_id": "72e356f1-554c-4c6e-ba60-b3eb618a9b9a", "project_id": "5b6f7a7d-b860-43fe-9479-f10f4cee3ed6"}]}}
+          application/json: {"associations_skipped": 67326, "associations_written": 330466, "selections_written": 785394, "status": {"credentials": 750081, "migrated": false, "organization_id": "<id>", "pending_associations": 952390, "pending_selections": 757662, "reconnect_credentials": 960257, "servers": 262316, "unresolved_servers": [{"mcp_server_id": "72e356f1-554c-4c6e-ba60-b3eb618a9b9a", "project_id": "5b6f7a7d-b860-43fe-9479-f10f4cee3ed6"}]}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

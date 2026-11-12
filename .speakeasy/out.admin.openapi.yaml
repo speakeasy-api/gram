@@ -12366,14 +12366,13 @@ components:
           format: int64
         unexercised_versions:
           type: integer
-          description: 'Profiles no turn has run under yet, in an organization enforcing upstream auth. They are not pending: a turn records its own profile when its credential is issued. Zero until enforcement is on, since a run records every profile before then.'
+          description: 'Profiles with no version recorded yet, in an organization enforcing upstream auth. They are not pending: a turn records its own profile when its credential is issued. Zero until enforcement is on, since a run records every profile before then. Absent means none.'
           format: int64
       description: Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.
       required:
         - complete
         - targets
         - pending_versions
-        - unexercised_versions
         - gaps
     AdminUpstreamOAuthMigrationOrganization:
       type: object
@@ -12561,7 +12560,7 @@ components:
           $ref: '#/components/schemas/AdminUpstreamOAuthMigrationAuthClients'
         consent_scoped_selections:
           type: integer
-          description: Credential and server pairs without a choice that are not pending, because the credential was issued for the servers approved at consent and is refused anywhere else.
+          description: Credential and server pairs without a choice that are not pending, because the credential was issued for the servers approved at consent and is refused anywhere else. Absent means none.
           format: int64
         credentials:
           type: integer
@@ -12607,7 +12606,6 @@ components:
         - unresolved_servers
         - credentials
         - pending_selections
-        - consent_scoped_selections
         - reconnect_credentials
     AdminUpstreamOAuthMigrationUnresolvedAssociation:
       type: object

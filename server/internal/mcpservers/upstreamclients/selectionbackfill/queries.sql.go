@@ -15,7 +15,7 @@ import (
 
 const approveConsentCatalogFixture = `-- name: ApproveConsentCatalogFixture :exec
 UPDATE user_sessions
-SET tool_selection = jsonb_build_object('version', 1, 'catalog', jsonb_build_object('id', $1::uuid, 'mode', 'live', 'all_tools', TRUE))
+SET tool_selection = jsonb_build_object('version', 2, 'catalog', jsonb_build_object('id', $1::uuid, 'mode', 'live', 'all_tools', TRUE))
 WHERE id = $2
 `
 
@@ -386,6 +386,17 @@ SELECT r.id AS mcp_server_id,
              )
            END
        )::boolean AS selected,
+       -- Any recorded choice, usable or not: the credential was issued a
+       -- choice for this server, so the server was within what it was issued
+       -- for.
+       EXISTS (
+         SELECT 1
+         FROM upstream_client_selections AS sel
+         WHERE sel.credential_kind = $1::text
+           AND sel.credential_id = $2::uuid
+           AND sel.mcp_server_id = r.id
+           AND sel.deleted IS FALSE
+       )::boolean AS recorded,
        -- Any client choice, usable or not. A client choice is never replaced
        -- by another client, so one that is not also selected is resolved only
        -- by a reconnection. A no-auth choice is not one: when unusable,
@@ -441,6 +452,7 @@ type ListUpstreamClientSelectionCoverageParams struct {
 type ListUpstreamClientSelectionCoverageRow struct {
 	McpServerID       uuid.UUID
 	Selected          bool
+	Recorded          bool
 	ChoseClient       bool
 	EligibleClients   int64
 	AssociatedClients int64
@@ -475,6 +487,7 @@ func (q *Queries) ListUpstreamClientSelectionCoverage(ctx context.Context, arg L
 		if err := rows.Scan(
 			&i.McpServerID,
 			&i.Selected,
+			&i.Recorded,
 			&i.ChoseClient,
 			&i.EligibleClients,
 			&i.AssociatedClients,

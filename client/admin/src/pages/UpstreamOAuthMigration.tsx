@@ -417,9 +417,10 @@ function MigrationStatus({
     s.reconnectCredentials > 0
       ? `${s.reconnectCredentials} ${s.reconnectCredentials === 1 ? "credential" : "credentials"} will be asked to reconnect`
       : null;
+  const consentScopedSelections = s.consentScopedSelections ?? 0;
   const consentScoped =
-    s.consentScopedSelections > 0
-      ? `${s.consentScopedSelections} ${s.consentScopedSelections === 1 ? "choice" : "choices"} outside what a gateway connection approved, not needed`
+    consentScopedSelections > 0
+      ? `${consentScopedSelections} ${consentScopedSelections === 1 ? "choice" : "choices"} outside what a gateway connection approved, no action needed`
       : null;
   if (s.migrated) {
     return (
@@ -696,12 +697,13 @@ function ExecutionProfileStatus({
   if (p.targets === 0) {
     return null;
   }
+  const unexercisedVersions = p.unexercisedVersions ?? 0;
   const unexercised =
-    p.unexercisedVersions > 0 ? (
+    unexercisedVersions > 0 ? (
       <p className="text-muted-foreground text-xs">
-        {p.unexercisedVersions}{" "}
-        {p.unexercisedVersions === 1 ? "profile" : "profiles"} not used by a
-        turn yet, recorded on first use
+        {unexercisedVersions}{" "}
+        {unexercisedVersions === 1 ? "profile" : "profiles"} not used by a turn
+        yet, recorded on first use
       </p>
     ) : null;
   if (p.complete) {

@@ -2986,8 +2986,8 @@ type GetUpstreamOAuthMigrationStatusResponseBody struct {
 	PendingSelections int64 `form:"pending_selections" json:"pending_selections" xml:"pending_selections"`
 	// Credential and server pairs without a choice that are not pending, because
 	// the credential was issued for the servers approved at consent and is refused
-	// anywhere else.
-	ConsentScopedSelections int64 `form:"consent_scoped_selections" json:"consent_scoped_selections" xml:"consent_scoped_selections"`
+	// anywhere else. Absent means none.
+	ConsentScopedSelections *int64 `form:"consent_scoped_selections,omitempty" json:"consent_scoped_selections,omitempty" xml:"consent_scoped_selections,omitempty"`
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials int64 `form:"reconnect_credentials" json:"reconnect_credentials" xml:"reconnect_credentials"`
@@ -3059,8 +3059,8 @@ type EnableUpstreamAuthEnforcementResponseBody struct {
 	PendingSelections int64 `form:"pending_selections" json:"pending_selections" xml:"pending_selections"`
 	// Credential and server pairs without a choice that are not pending, because
 	// the credential was issued for the servers approved at consent and is refused
-	// anywhere else.
-	ConsentScopedSelections int64 `form:"consent_scoped_selections" json:"consent_scoped_selections" xml:"consent_scoped_selections"`
+	// anywhere else. Absent means none.
+	ConsentScopedSelections *int64 `form:"consent_scoped_selections,omitempty" json:"consent_scoped_selections,omitempty" xml:"consent_scoped_selections,omitempty"`
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials int64 `form:"reconnect_credentials" json:"reconnect_credentials" xml:"reconnect_credentials"`
@@ -3097,8 +3097,8 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 	PendingSelections int64 `form:"pending_selections" json:"pending_selections" xml:"pending_selections"`
 	// Credential and server pairs without a choice that are not pending, because
 	// the credential was issued for the servers approved at consent and is refused
-	// anywhere else.
-	ConsentScopedSelections int64 `form:"consent_scoped_selections" json:"consent_scoped_selections" xml:"consent_scoped_selections"`
+	// anywhere else. Absent means none.
+	ConsentScopedSelections *int64 `form:"consent_scoped_selections,omitempty" json:"consent_scoped_selections,omitempty" xml:"consent_scoped_selections,omitempty"`
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials int64 `form:"reconnect_credentials" json:"reconnect_credentials" xml:"reconnect_credentials"`
@@ -26822,11 +26822,11 @@ type AdminUpstreamOAuthMigrationExecutionProfilesResponseBody struct {
 	Targets int64 `form:"targets" json:"targets" xml:"targets"`
 	// Profile versions not yet recorded.
 	PendingVersions int64 `form:"pending_versions" json:"pending_versions" xml:"pending_versions"`
-	// Profiles no turn has run under yet, in an organization enforcing upstream
+	// Profiles with no version recorded yet, in an organization enforcing upstream
 	// auth. They are not pending: a turn records its own profile when its
 	// credential is issued. Zero until enforcement is on, since a run records
-	// every profile before then.
-	UnexercisedVersions int64 `form:"unexercised_versions" json:"unexercised_versions" xml:"unexercised_versions"`
+	// every profile before then. Absent means none.
+	UnexercisedVersions *int64 `form:"unexercised_versions,omitempty" json:"unexercised_versions,omitempty" xml:"unexercised_versions,omitempty"`
 	// Servers the profiles hold no choice for, by execution context and reason.
 	// They are never guessed: configure the server's auth clients.
 	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody `form:"gaps" json:"gaps" xml:"gaps"`
@@ -26880,8 +26880,8 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	PendingSelections int64 `form:"pending_selections" json:"pending_selections" xml:"pending_selections"`
 	// Credential and server pairs without a choice that are not pending, because
 	// the credential was issued for the servers approved at consent and is refused
-	// anywhere else.
-	ConsentScopedSelections int64 `form:"consent_scoped_selections" json:"consent_scoped_selections" xml:"consent_scoped_selections"`
+	// anywhere else. Absent means none.
+	ConsentScopedSelections *int64 `form:"consent_scoped_selections,omitempty" json:"consent_scoped_selections,omitempty" xml:"consent_scoped_selections,omitempty"`
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials int64 `form:"reconnect_credentials" json:"reconnect_credentials" xml:"reconnect_credentials"`

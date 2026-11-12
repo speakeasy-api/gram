@@ -33,9 +33,9 @@ export type AdminUpstreamOAuthMigrationExecutionProfiles = {
    */
   targets: number;
   /**
-   * Profiles no turn has run under yet, in an organization enforcing upstream auth. They are not pending: a turn records its own profile when its credential is issued. Zero until enforcement is on, since a run records every profile before then.
+   * Profiles with no version recorded yet, in an organization enforcing upstream auth. They are not pending: a turn records its own profile when its credential is issued. Zero until enforcement is on, since a run records every profile before then. Absent means none.
    */
-  unexercisedVersions: number;
+  unexercisedVersions?: number | undefined;
 };
 
 /** @internal */
@@ -48,7 +48,7 @@ export const AdminUpstreamOAuthMigrationExecutionProfiles$inboundSchema:
       ),
       pending_versions: z.int(),
       targets: z.int(),
-      unexercised_versions: z.int(),
+      unexercised_versions: z.optional(z.int()),
     }),
     z.transform((v) => {
       return remap$(v, {
