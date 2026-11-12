@@ -90,7 +90,7 @@ vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => true,
 }));
 vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
-  PluginStatusBanner: () => <h2>Publishing</h2>,
+  PluginStatusBanner: () => <h2>Plugins</h2>,
 }));
 
 vi.mock("./sections/NetworkAccessSection", () => ({
@@ -204,7 +204,7 @@ describe("SettingsTab", () => {
       // On or off is about the server itself, so it leads General and the
       // server has no Access area.
       General: ["Availability", "General"],
-      Publishing: ["Publishing"],
+      Plugins: ["Plugins"],
       // Upstream headers are the Identity panel's Custom Headers disclosure,
       // not a section of their own.
       "Sign-in and identity": ["Identity", "Identity chaining"],
@@ -221,7 +221,7 @@ describe("SettingsTab", () => {
       // Every server leads with on or off; who may connect is Access.
       General: ["Availability", "General"],
       Access: ["Visibility", "Public Rate Limits"],
-      Publishing: ["Publishing"],
+      Plugins: ["Plugins"],
       "Sign-in and identity": [
         "Authentication",
         "Resource Identifier",
@@ -243,7 +243,7 @@ describe("SettingsTab", () => {
       renderAreas(server({ unproxiedMcpServerId: "unproxied-source-1" })),
     ).toEqual({
       General: ["Availability", "General"],
-      Publishing: ["Publishing"],
+      Plugins: ["Plugins"],
       "Sign-in and identity": ["Authentication"],
       "Danger zone": ["Danger Zone"],
     });
@@ -266,7 +266,7 @@ describe("SettingsTab", () => {
       ]),
     ).toEqual([
       ["General", "#settings-general"],
-      ["Publishing", "#publishing"],
+      ["Plugins", "#publishing"],
       ["Sign-in and identity", "#settings-sign-in"],
       ["Danger zone", "#settings-danger-zone"],
     ]);
@@ -300,7 +300,7 @@ describe("SettingsTab upstream identity gate", () => {
     expect(renderSettings(remoteServer())).toEqual([
       "Availability",
       "General",
-      "Publishing",
+      "Plugins",
       "Identity",
       "Identity chaining",
       "Server URL",
@@ -353,7 +353,7 @@ describe("SettingsTab upstream identity gate", () => {
       "General",
       "Visibility",
       "Public Rate Limits",
-      "Publishing",
+      "Plugins",
       "Authentication",
       "Identity",
     ]);
@@ -379,7 +379,7 @@ describe("SettingsTab upstream identity gate", () => {
       ).toEqual([
         "Availability",
         "General",
-        "Publishing",
+        "Plugins",
         "Authentication",
         "Danger Zone",
       ]);

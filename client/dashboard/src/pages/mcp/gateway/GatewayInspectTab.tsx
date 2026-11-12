@@ -447,7 +447,11 @@ function GatewayInspectConnection({
       })
       .map((row) => row.server?.slug ?? row.member.mcpServerSlug),
   ]);
-  const broken = failedMembers.filter((m) => !signIn.needsSignIn(m.slug));
+  // Until the viewer's sign-in status loads, a member that only needs the
+  // viewer to connect would read as broken and flash the error banner.
+  const broken = signIn.isLoading
+    ? []
+    : failedMembers.filter((m) => !signIn.needsSignIn(m.slug));
   const memberServer = (slug: string) =>
     rows.find((row) => (row.server?.slug ?? row.member.mcpServerSlug) === slug)
       ?.server;

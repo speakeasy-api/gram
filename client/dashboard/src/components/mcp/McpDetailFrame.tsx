@@ -64,7 +64,7 @@ export function McpDetailFrame({
         <HeaderBand>
           <div className="flex flex-wrap items-start justify-between gap-6">
             {chrome ? <TitleBlock chrome={chrome} /> : <TitleSkeleton />}
-            {/* Settings has its own Publishing area; one plugin box per view. */}
+            {/* Settings has its own Plugins area; one plugin box per view. */}
             {activeTab === "settings" ? null : chrome?.aside}
           </div>
         </HeaderBand>

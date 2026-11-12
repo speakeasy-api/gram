@@ -106,7 +106,7 @@ export function PluginStatusBanner({
   server: HostedServerRef;
   /**
    * "header" is the compact card in the MCP detail page header; "settings"
-   * is the Publishing section on the Settings tab.
+   * is the Plugins section on the Settings tab.
    */
   variant?: PluginStatusVariant;
 }): React.JSX.Element | null {
@@ -405,7 +405,7 @@ function WritablePluginStatusBanner({
     return (
       <SettingsSection>
         <SettingsSection.Header>
-          <SettingsSection.Title>Publishing</SettingsSection.Title>
+          <SettingsSection.Title>Plugins</SettingsSection.Title>
           <SettingsSection.Description>
             Choose which plugins distribute this server to your team&apos;s
             agents.

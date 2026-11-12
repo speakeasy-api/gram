@@ -343,10 +343,10 @@ describe("MCP plugin permission boundaries", () => {
     expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
     expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
   });
-  it("offers the header's plugin picker as a Publishing settings section", () => {
+  it("offers the header's plugin picker as a Plugins settings section", () => {
     state.grants = [{ scope: "plugin:write" }];
     banner("settings");
-    expect(screen.getByRole("heading", { name: "Publishing" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Plugins" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Plugins" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
   });

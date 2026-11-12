@@ -295,7 +295,7 @@ export function GatewayInstructionsSection({
   return (
     <SettingsSection id={GATEWAY_INSTRUCTIONS_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Instructions</SettingsSection.Title>
+        <SettingsSection.Title>Server instructions</SettingsSection.Title>
         <SettingsSection.Description>
           Sent to every client on connect. Speakeasy&apos;s built-in
           instructions reflect the active discovery mode and, when a user can
