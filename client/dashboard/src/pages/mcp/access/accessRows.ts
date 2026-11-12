@@ -77,6 +77,22 @@ function blockedScope(level: AudienceLevel): ScopeKey | null {
   return SCOPE_ROWS.find((row) => BLOCK_LEVEL[row.key] === level)?.key ?? null;
 }
 
+/**
+ * The scopes a block at `level` closes that opening `scope` does not reopen.
+ * A view block also closes manage, so lifting it to allow view alone has to
+ * keep manage closed.
+ */
+export function closedBesides(
+  level: AudienceLevel,
+  scope: ScopeKey,
+): ScopeKey[] {
+  const blocked = blockedScope(level);
+  if (!blocked) return [];
+  return SATISFIED_BY[blocked].filter(
+    (key) => key !== scope && !SATISFIED_BY[key].includes(scope),
+  );
+}
+
 /** Everything that decides one scope for one principal. */
 export interface ScopeCell {
   scope: ScopeKey;

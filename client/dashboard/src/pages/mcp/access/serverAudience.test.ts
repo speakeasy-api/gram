@@ -193,7 +193,11 @@ describe("principal precedence", () => {
       }),
     ];
 
-    expect(effectiveReach(reaching)?.capabilities).toEqual(["use"]);
+    const reach = effectiveReach(reaching, [
+      { name: "search", annotations: [] },
+    ]);
+    expect(reach?.capabilities).toEqual(["use"]);
+    expect(reach?.toolsLabel).toBe("Search");
   });
 
   it("does not let a rule covering every server outrank a block", () => {

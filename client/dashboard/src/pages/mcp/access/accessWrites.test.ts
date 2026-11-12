@@ -103,6 +103,35 @@ describe("allowWrite", () => {
   });
 });
 
+describe("allowWrite keeps what a lifted block also closed", () => {
+  it("keeps manage blocked when allowing view lifts a view block", () => {
+    // The view block also closes the manage the role grants. Allowing view
+    // must not hand that manage back.
+    const { direct, rows } = state([
+      role({ level: "manage" }),
+      role({ appliesTo: "resource", level: "blocked_view" }),
+    ]);
+
+    expect(allowWrite(direct, rows[0]!, "view").entries).toEqual([
+      {
+        principalUrn: "role:global:1",
+        level: "blocked_manage",
+        tools: [],
+        dispositions: [],
+      },
+    ]);
+  });
+
+  it("writes no manage block when nothing grants manage", () => {
+    const { direct, rows } = state([
+      role({ level: "view" }),
+      role({ appliesTo: "resource", level: "blocked_view" }),
+    ]);
+
+    expect(allowWrite(direct, rows[0]!, "view").entries).toEqual([]);
+  });
+});
+
 describe("revokeScopeWrite", () => {
   it("drops only the rule for that scope", () => {
     const { direct, rows } = state([
