@@ -111,16 +111,13 @@ func (s *Service) AcknowledgeRiskPolicyChallenge(ctx context.Context, payload *g
 		if errors.Is(err, errPolicyAckStoreUnavailable) {
 			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy challenge").LogError(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeInvalid, err, "invalid or expired risk policy challenge token")
+		return nil, errPolicyAckInvalid(err)
 	}
 
 	// Bind redemption to the caller: the token is a bearer reference, so a
 	// leaked link cannot be cashed by another org or user.
-	if record.OrganizationID != authCtx.ActiveOrganizationID {
-		return nil, oops.C(oops.CodeForbidden)
-	}
-	if record.UserID != authCtx.UserID {
-		return nil, oops.C(oops.CodeForbidden)
+	if !policyAckBelongsTo(record, authCtx) {
+		return nil, errPolicyAckNotYours()
 	}
 
 	projectID, err := uuid.Parse(record.ProjectID)
@@ -222,10 +219,10 @@ func (s *Service) GetRiskPolicyChallenge(ctx context.Context, payload *gen.GetRi
 		if errors.Is(err, errPolicyAckStoreUnavailable) {
 			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy challenge").LogError(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeInvalid, err, "invalid or expired risk policy challenge token")
+		return nil, errPolicyAckInvalid(err)
 	}
-	if record.OrganizationID != authCtx.ActiveOrganizationID || record.UserID != authCtx.UserID {
-		return nil, oops.C(oops.CodeForbidden)
+	if !policyAckBelongsTo(record, authCtx) {
+		return nil, errPolicyAckNotYours()
 	}
 
 	// Best-effort: surface whether it was already acknowledged (e.g. the link
@@ -275,10 +272,10 @@ func (s *Service) DeclineRiskPolicyChallenge(ctx context.Context, payload *gen.D
 		if errors.Is(err, errPolicyAckStoreUnavailable) {
 			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy challenge").LogError(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeInvalid, err, "invalid or expired risk policy challenge token")
+		return nil, errPolicyAckInvalid(err)
 	}
-	if record.OrganizationID != authCtx.ActiveOrganizationID || record.UserID != authCtx.UserID {
-		return nil, oops.C(oops.CodeForbidden)
+	if !policyAckBelongsTo(record, authCtx) {
+		return nil, errPolicyAckNotYours()
 	}
 	projectID, err := uuid.Parse(record.ProjectID)
 	if err != nil {
@@ -317,4 +314,23 @@ func ptrValOr(p *string) string {
 		return ""
 	}
 	return *p
+}
+
+// policyAckBelongsTo reports whether the caller is the warned user, in the
+// warned user's org.
+func policyAckBelongsTo(record *policyAckRecord, authCtx *contextvalues.AuthContext) bool {
+	return record.OrganizationID == authCtx.ActiveOrganizationID && record.UserID == authCtx.UserID
+}
+
+// errPolicyAckNotYours answers a token issued to someone else exactly like an
+// unknown or expired one. Short-link ids are short enough to probe, so the
+// response must not reveal that a live challenge exists for another user.
+func errPolicyAckNotYours() error {
+	return errPolicyAckInvalid(errors.New("risk policy ack belongs to another user"))
+}
+
+// errPolicyAckInvalid is the one public answer for a token that cannot be
+// used: unknown, expired, malformed, or issued to someone else.
+func errPolicyAckInvalid(cause error) error {
+	return oops.E(oops.CodeInvalid, cause, "invalid or expired risk policy challenge token")
 }

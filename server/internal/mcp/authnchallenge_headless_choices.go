@@ -105,12 +105,10 @@ func parseRequestedAuthClients(values []string) (map[uuid.UUID]headlessChoice, e
 // choice authenticates through, keyed by server, and the typed client. It
 // returns nil maps where typed auth client resolution is not enforced, where
 // the server's choice keeps being decided at recording, and for a session
-// that targets no one server.
-func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, caller headlessCaller, requested map[uuid.UUID]headlessChoice) (map[uuid.UUID]uuid.UUID, map[uuid.UUID]uuid.UUID, error) {
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read upstream auth enforcement: %w", err)
-	}
+// that targets no one server. enforced is the organization's enforcement
+// state as the caller read it, which it records the session's choices under
+// too, so the picks and the recording never disagree.
+func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, caller headlessCaller, requested map[uuid.UUID]headlessChoice, enforced bool) (map[uuid.UUID]uuid.UUID, map[uuid.UUID]uuid.UUID, error) {
 	if !enforced {
 		if len(requested) > 0 {
 			return nil, nil, oops.NewOAuthError(http.StatusBadRequest, "invalid_request", tokenParamUpstreamAuthClient+" is not accepted for this organization yet", errChoiceNotAccepted)

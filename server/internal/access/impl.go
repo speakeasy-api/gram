@@ -758,6 +758,8 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeChatRead), Selectors: nil},
 		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
 		{Scope: string(authz.ScopeLogRead), Selectors: nil},
+		{Scope: string(authz.ScopeMemoryRead), Selectors: nil},
+		{Scope: string(authz.ScopeMemoryWrite), Selectors: nil},
 		{Scope: string(authz.ScopeAgentRead), Selectors: nil},
 		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
@@ -766,6 +768,9 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeWorkloadWrite), Selectors: nil},
 		{Scope: string(authz.ScopeOrgDeviceAgentSync), Selectors: nil},
 		{Scope: string(authz.ScopeOrgHooksIngest), Selectors: nil},
+		{Scope: string(authz.ScopeChannelsConnect), Selectors: nil},
+		{Scope: string(authz.ScopeChannelsAdmin), Selectors: nil},
+		{Scope: string(authz.ScopeChannelsReadAll), Selectors: nil},
 	}
 }
 

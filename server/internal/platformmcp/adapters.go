@@ -24,6 +24,7 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -370,11 +371,13 @@ type PostgresReader struct {
 	riskFindingList           riskFindingListLister
 	chatMetadata              *ChatMetadataService
 	chatSearch                *ChatSearchService
+	teamMemory                *TeamMemoryService
 	organizationGateway       *OrganizationGatewayService
 	inboundEMATrust           *InboundEMATrustService
 	gatewayProxy              *GatewayProxyService
 	gatewaySessions           GatewaySessionManagement
 	agentIdentityReads        *AgentIdentityReadService
+	channelsAccess            *ChannelsAccessService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
@@ -385,6 +388,7 @@ type PostgresReader struct {
 	eventFeed                 *EventFeedReadService
 	networkIngress            *NetworkIngressStatusService
 	authz                     *authz.Engine
+	identityGate              CanonicalIdentityGate
 	shadowInventory           *ShadowInventoryService
 	shadowDecisions           *ShadowDecisionService
 	shadowAI                  *ShadowAIService
@@ -419,11 +423,13 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskFindingList:           nil,
 		chatMetadata:              nil,
 		chatSearch:                nil,
+		teamMemory:                nil,
 		organizationGateway:       nil,
 		inboundEMATrust:           nil,
 		gatewayProxy:              nil,
 		gatewaySessions:           nil,
 		agentIdentityReads:        nil,
+		channelsAccess:            nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
@@ -436,6 +442,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		xaaReadiness:              nil,
 		issuerGate:                nil,
 		authz:                     nil,
+		identityGate:              nil,
 		shadowInventory:           nil,
 		shadowDecisions:           nil,
 		shadowAI:                  nil,
@@ -474,6 +481,15 @@ func (r *PostgresReader) WithCodeModeAvailability(check CodeModeAvailability) *P
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
 	if r != nil {
 		r.authz = engine
+	}
+	return r
+}
+
+// WithCanonicalIdentityGate folds a member's own-scope email through the same
+// rollout switch the telemetry APIs use, so their hook rows match either way.
+func (r *PostgresReader) WithCanonicalIdentityGate(gate CanonicalIdentityGate) *PostgresReader {
+	if r != nil {
+		r.identityGate = gate
 	}
 	return r
 }
@@ -669,10 +685,28 @@ func (r *PostgresReader) WithChatSearch(service *ChatSearchService) *PostgresRea
 	return r
 }
 
+// WithTeamMemory attaches the project team memory tools.
+func (r *PostgresReader) WithTeamMemory(service *TeamMemoryService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.teamMemory = service
+	}
+	return r
+}
+
 // WithOrganizationGateway serves get_my_organization_gateway.
 func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewayService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.organizationGateway = service
+	}
+	return r
+}
+
+// WithChannelsAccess serves get_my_channels_access. A nil or incomplete
+// service leaves the tool registered as a stub, so it does not appear on and
+// disappear from the catalogue as the rollout flips.
+func (r *PostgresReader) WithChannelsAccess(service *ChannelsAccessService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.channelsAccess = service
 	}
 	return r
 }
@@ -1053,6 +1087,43 @@ func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Princ
 // individual tool calls. project:read alone does not satisfy it.
 func (r *PostgresReader) ResolveProjectLogRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
 	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeLogRead)
+}
+
+// ResolveProjectLogScope resolves one exact project and decides how much of its
+// tool calls the caller may list: everything with log:read, otherwise a member's
+// own sessions and owned agents, the rule the management API's Tool Logs apply.
+func (r *PostgresReader) ResolveProjectLogScope(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, *telemetryrepo.OwnScope, error) {
+	if r == nil || r.reader == nil || r.authz == nil || r.db == nil {
+		return ResolvedProject{}, nil, ErrUnavailable
+	}
+	// Only the OAuth-authenticated member surface reads as a person; the
+	// assistant runtime keeps the plain check whatever its context carries.
+	if principal.surface() != SurfacePlatformMCP {
+		project, err := r.ResolveProjectLogRead(ctx, principal, input)
+		return project, nil, err
+	}
+	project, err := r.resolveInventoryProject(ctx, principal.OrganizationID, input)
+	if err != nil {
+		return ResolvedProject{}, nil, err
+	}
+	readScope, err := r.authz.ResolveReadScope(ctx, authz.ScopeLogRead, project.ID.String())
+	if err != nil {
+		if isAuthorizationDenied(err) {
+			return ResolvedProject{}, nil, ErrForbidden
+		}
+		return ResolvedProject{}, nil, fmt.Errorf("resolve tool log scope: %w", err)
+	}
+	if readScope.Unrestricted() {
+		return project, nil, nil
+	}
+	return project, telemetryrepo.OwnScopeFrom(readScope, r.canonicalIdentityOrg(ctx, principal.OrganizationID)), nil
+}
+
+func (r *PostgresReader) canonicalIdentityOrg(ctx context.Context, organizationID string) string {
+	if r == nil || r.identityGate == nil {
+		return ""
+	}
+	return r.identityGate.CanonicalOrgFor(ctx, organizationID)
 }
 
 func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal Principal, input FindMCPInput, scope authz.Scope) (ResolvedProject, error) {

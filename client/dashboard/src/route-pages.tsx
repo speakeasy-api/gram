@@ -6,6 +6,7 @@ import type {
   OrgRouteStructure,
   RouteStructure,
 } from "./routes";
+import Channels from "./pages/channels/Channels";
 import AssistantPage from "./pages/assistants/Assistant";
 import AssistantsIndex, { AssistantsRoot } from "./pages/assistants/Assistants";
 import NewAssistantPage from "./pages/assistants/NewAssistant";
@@ -248,6 +249,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       },
     },
   },
+  channels: { component: Channels },
   assistants: {
     component: AssistantsRoot,
     indexComponent: AssistantsIndex,

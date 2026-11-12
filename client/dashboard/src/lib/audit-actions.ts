@@ -76,6 +76,8 @@ export const AUDIT_ACTIONS = [
   "catalog-promotion:reject",
   "catalog-promotion:restore",
   "catalog-promotion:retry-docs",
+  "channels:update_access",
+  "channels:update_settings",
   "chat_analysis_settings:upsert",
   "chat_session:access",
   "chat_session:handoff_export",
@@ -166,6 +168,7 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:research_start",
   "mcp_approval_request:supersede",
   "mcp_metadata:update",
+  "memory_memo:create",
   "meta-mcp:add_member",
   "meta-mcp:create",
   "meta-mcp:delete",
@@ -322,6 +325,7 @@ export const AUDIT_ACTIONS = [
   "spend_rule:archive",
   "spend_rule:create",
   "spend_rule:update",
+  "team_memory:read",
   "template:create",
   "template:delete",
   "template:update",
@@ -601,6 +605,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "restored catalog promotion candidate";
     case "catalog-promotion:retry-docs":
       return "retried setup documentation for";
+    case "channels:update_access":
+      return "changed Channels access for";
+    case "channels:update_settings":
+      return "changed Channels availability for";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":
@@ -1055,6 +1063,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated spend rule";
     case "spend_rule:archive":
       return "archived spend rule";
+
+    case "team_memory:read":
+      return "read team memory for";
+    case "memory_memo:create":
+      return "saved team memo";
 
     case "template:create":
       return "created template";

@@ -6,12 +6,13 @@ import (
 	"github.com/speakeasy-api/gram/hooks/sdk/internal/utils"
 )
 
-// Decision - Whether the local hook should allow or deny the action.
+// Decision - Whether the local hook should allow or deny the action. "ask" (tool calls from Claude Cowork only) asks the person to allow the call in the agent's own permission prompt; a client that does not support it must deny.
 type Decision string
 
 const (
 	DecisionAllow Decision = "allow"
 	DecisionDeny  Decision = "deny"
+	DecisionAsk   Decision = "ask"
 )
 
 func (e Decision) ToPointer() *Decision {
@@ -22,7 +23,7 @@ func (e Decision) ToPointer() *Decision {
 func (e *Decision) IsExact() bool {
 	if e != nil {
 		switch *e {
-		case "allow", "deny":
+		case "allow", "deny", "ask":
 			return true
 		}
 	}
@@ -31,7 +32,7 @@ func (e *Decision) IsExact() bool {
 
 // IngestHookResult - Provider-neutral decision returned by the unified hook endpoint.
 type IngestHookResult struct {
-	// Whether the local hook should allow or deny the action.
+	// Whether the local hook should allow or deny the action. "ask" (tool calls from Claude Cowork only) asks the person to allow the call in the agent's own permission prompt; a client that does not support it must deny.
 	Decision Decision `json:"decision"`
 	// Optional side-effect hints for hook SDKs.
 	Effects map[string]any `json:"effects,omitzero"`
