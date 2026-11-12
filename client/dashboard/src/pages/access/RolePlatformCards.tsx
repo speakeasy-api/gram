@@ -78,7 +78,7 @@ export function RolePlatformCards({
   const granted = areas.filter((area) => areaActive(grants, area)).length;
   return (
     <EditorSection
-      title="Platform access"
+      title="Platform Access"
       description="Everything else the role can see or change. One level per area; Manage includes View."
       count={`${granted} ${granted === 1 ? "area" : "areas"} granted`}
     >
@@ -411,6 +411,9 @@ function AppliesTo({
   onRemoveRule: (scope: Scope, ruleIndex: number) => void;
 }): JSX.Element | null {
   const type = resourceType as Parameters<typeof computeRuleLabel>[1];
+  // An organization permission always covers the whole organization and
+  // cannot be narrowed, so a line saying so adds nothing.
+  if (!isProjectScopedResourceType(type)) return null;
   const links = defs.flatMap((def, position) => {
     if (!def) return [];
     return (grants[def.slug]?.rules ?? []).map((rule, index) => ({
@@ -433,19 +436,6 @@ function AppliesTo({
         : "Applies to"}
     </span>
   );
-  if (!isProjectScopedResourceType(type)) {
-    return (
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        {lead}
-        <DropdownChip
-          label="Applies to the whole organization"
-          disabledReason="Organization permissions cannot be narrowed"
-        >
-          Whole organization
-        </DropdownChip>
-      </div>
-    );
-  }
   // The same place granted at both levels reads once; different places say
   // which level each is for.
   const allows = shown.filter((link) => !link.blocked);

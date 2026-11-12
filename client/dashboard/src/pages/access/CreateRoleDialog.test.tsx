@@ -261,8 +261,8 @@ beforeEach(() => {
 });
 it("splits permissions into MCP access and platform access on one page", () => {
   renderEditor();
-  expect(screen.getByRole("heading", { name: "MCP access" })).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Platform access" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "MCP Access" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Platform Access" })).toBeTruthy();
   expect(screen.queryByRole("tab")).toBeNull();
 });
 

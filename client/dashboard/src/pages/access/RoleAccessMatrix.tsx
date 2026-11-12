@@ -123,7 +123,7 @@ export function RoleAccessMatrix({
   );
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-12">
       {loading ? (
         <MatrixSkeleton />
       ) : (
@@ -612,7 +612,7 @@ function McpMatrix({
       reason = "Tick to allow every tool";
     }
     return (
-      <span className="flex items-center gap-2">
+      <span className="flex items-center gap-3">
         <Cell
           state={state}
           reason={reason}
@@ -715,7 +715,7 @@ function McpMatrix({
 
   return (
     <EditorSection
-      title="MCP access"
+      title="MCP Access"
       description="Which servers the role can connect to, see or manage. A level on a wider row reaches every server under it."
       count={count}
     >
@@ -1162,7 +1162,6 @@ function ServerToolRows({
             <td className="py-1.5 pr-2 pl-2 text-left">
               <span className="flex flex-wrap items-center gap-2">
                 <Cell
-                  size="sm"
                   state={state}
                   reason={reason}
                   narrowable

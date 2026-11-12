@@ -39,19 +39,12 @@ const CELL_STYLE: Record<CellState, string> = {
   off: "border-border hover:border-foreground/40 bg-card",
 };
 
-function CellGlyph({
-  state,
-  small = false,
-}: {
-  state: CellState;
-  small?: boolean;
-}): JSX.Element | null {
-  const size = small ? "size-3" : "size-4";
+function CellGlyph({ state }: { state: CellState }): JSX.Element | null {
   if (state === "on" || state === "inherited") {
-    return <Check aria-hidden="true" className={size} />;
+    return <Check aria-hidden="true" className="size-4" />;
   }
   if (state === "blocked" || state === "inherited-blocked") {
-    return <Ban aria-hidden="true" className={size} />;
+    return <Ban aria-hidden="true" className="size-4" />;
   }
   return null;
 }
@@ -77,7 +70,6 @@ export function Cell({
   label,
   reason,
   onToggle,
-  size = "md",
   narrowable = false,
 }: {
   state: CellState;
@@ -86,7 +78,6 @@ export function Cell({
   /** Why an inherited cell is ticked, e.g. "Comes from Manage". */
   reason?: string;
   onToggle?: () => void;
-  size?: "md" | "sm";
   /**
    * An inherited tick that can still be taken away here, such as one tool of
    * a server that gets Connect from a wider row.
@@ -117,47 +108,30 @@ export function Cell({
       onClick={interactive ? onToggle : undefined}
       className={cn(
         CELL_BASE,
-        size === "sm" && "size-5",
         CELL_STYLE[state],
         interactive ? "cursor-pointer" : "cursor-default",
       )}
     >
-      <CellGlyph state={state} small={size === "sm"} />
+      <CellGlyph state={state} />
     </button>
   );
   if (!reason) return button;
   return <SimpleTooltip tooltip={reason}>{button}</SimpleTooltip>;
 }
 
-/**
- * What a row covers, opening the editor that narrows it. Rows that cannot be
- * narrowed keep the same shape and say why.
- */
+/** What a row covers, opening the editor that narrows it. */
 export function DropdownChip({
   children,
   label,
   onClick,
-  disabledReason,
   tone = "default",
 }: {
   children: ReactNode;
   /** Names the control for assistive tech. */
   label: string;
   onClick?: () => void;
-  /** Set when the row cannot be narrowed here; shows plain text instead. */
-  disabledReason?: string;
   tone?: "default" | "destructive";
 }): JSX.Element {
-  // Nothing to choose: say what it covers, without a control.
-  if (disabledReason) {
-    return (
-      <SimpleTooltip tooltip={disabledReason}>
-        <span className="text-muted-foreground cursor-default text-sm">
-          {children}
-        </span>
-      </SimpleTooltip>
-    );
-  }
   return (
     <button
       type="button"
@@ -200,13 +174,15 @@ export function EditorSection({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <section className="border-foreground flex flex-col gap-3 border-t-2 pt-4">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3 className="text-display-xs font-thin">{title}</h3>
+    <section className="border-border flex flex-col gap-3 border-t pt-8">
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h3 className="text-display-xs font-thin">{title}</h3>
+          {count && (
+            <p className="text-muted-foreground ml-auto text-sm">{count}</p>
+          )}
+        </div>
         <p className="text-muted-foreground text-sm">{description}</p>
-        {count && (
-          <p className="text-muted-foreground ml-auto text-sm">{count}</p>
-        )}
       </div>
       {children}
     </section>
