@@ -5,6 +5,9 @@ import {
   MCPServerAvailabilityToggle,
   MCPServerStatusDropdown,
 } from "@/pages/mcp/x/MCPServerDetails";
+import { useMcpServerVisibilityUpdate } from "@/pages/mcp/x/mcpServerVisibility";
+import { Switch } from "@/components/ui/Switch";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { type IdentityMode } from "@/lib/remote-identity";
 import { IdentityExplainerDialog } from "@/lib/remote-identity";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -325,5 +328,55 @@ export function McpServerCardStatus({
       <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
       <MCPServerStatusDropdown server={server} />
     </div>
+  );
+}
+
+/**
+ * The header's on/off control. A remote server is a switch, and turning it
+ * off asks first, since every connection to it then fails; other kinds keep
+ * the visibility picker, which has its own confirmations.
+ */
+export function McpServerHeaderStatus({
+  server,
+}: {
+  server: McpServer;
+}): React.JSX.Element | null {
+  const { canWrite, updateVisibility, updating } =
+    useMcpServerVisibilityUpdate(server);
+  const [confirmOff, setConfirmOff] = React.useState(false);
+  if (server.unproxiedMcpServerId) return null;
+  if (!server.remoteMcpServerId) {
+    return <MCPServerStatusDropdown server={server} />;
+  }
+  const on = server.visibility === "private" || server.visibility === "public";
+  const name = server.name || "this server";
+  return (
+    <>
+      <label className="text-muted-foreground flex h-6 items-center gap-2 text-sm leading-6">
+        <Switch
+          checked={on}
+          disabled={!canWrite || updating}
+          aria-label={on ? `Turn off ${name}` : `Turn on ${name}`}
+          onCheckedChange={(checked) => {
+            if (checked) updateVisibility("private");
+            else setConfirmOff(true);
+          }}
+        />
+        {on ? "On" : "Off"}
+      </label>
+      <ConfirmDialog
+        open={confirmOff}
+        onOpenChange={setConfirmOff}
+        title={`Turn off ${name}?`}
+        description="Agents can't reach it or its tools until it's turned on again."
+        confirmLabel="Turn off"
+        pendingLabel="Turning off…"
+        isPending={updating}
+        onConfirm={() => {
+          updateVisibility("disabled");
+          setConfirmOff(false);
+        }}
+      />
+    </>
   );
 }

@@ -18,6 +18,10 @@ export interface McpDetailChrome {
   statusControl: ReactNode;
   /** The URL clients connect to, when there is one. */
   primaryUrl: string | undefined;
+  /** Every address the server answers on, when it has more than one. */
+  addresses?: { url: string; label: string }[];
+  /** Whose account the server acts as, for servers that sign in upstream. */
+  identity?: { label: string; href: string; warn?: boolean };
   readinessChecks: McpReadinessCheck[];
   /** The provider setup guide, for servers whose upstream has one. */
   setupGuide?: ReactNode;
@@ -26,6 +30,8 @@ export interface McpDetailChrome {
   items: DetailSidebarNavItem[];
   /** The header's top-right card, e.g. which plugins distribute the server. */
   aside?: ReactNode;
+  /** Overview's lead card: how the server reaches the team, with Install. */
+  overviewBanner?: ReactNode;
 }
 
 /** A header readiness check, with what the chip and popover need on top. */

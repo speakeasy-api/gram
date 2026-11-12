@@ -64,8 +64,12 @@ export function McpDetailFrame({
         <HeaderBand>
           <div className="flex flex-wrap items-start justify-between gap-6">
             {chrome ? <TitleBlock chrome={chrome} /> : <TitleSkeleton />}
-            {/* Settings has its own Plugins area; one plugin box per view. */}
-            {activeTab === "settings" ? null : chrome?.aside}
+            {/* Settings has its own Plugins area and Overview leads with the
+                full banner; one plugin box per view. */}
+            {activeTab === "settings" ||
+            (activeTab === "overview" && chrome?.overviewBanner)
+              ? null
+              : chrome?.aside}
           </div>
         </HeaderBand>
 
@@ -115,6 +119,9 @@ export function McpDetailFrame({
               )}
               pathname={pathname}
             >
+              {activeTab === "overview" && chrome?.overviewBanner ? (
+                <div className="mb-6">{chrome.overviewBanner}</div>
+              ) : null}
               {children}
             </ReadinessIssuesProvider>
           </div>
@@ -176,6 +183,7 @@ function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
       </div>
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+        {chrome.statusControl}
         <ReadinessChip chrome={chrome} />
         {chrome.primaryUrl ? (
           <span className="text-muted-foreground flex h-6 min-w-0 items-center gap-1">
@@ -188,7 +196,27 @@ function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
               {chrome.primaryUrl.replace(/^https?:\/\//, "")}
             </span>
             <CopyButton text={chrome.primaryUrl} size="xs" tooltip="Copy URL" />
+            {chrome.addresses ? (
+              <AddressList addresses={chrome.addresses} />
+            ) : null}
           </span>
+        ) : null}
+        {chrome.identity ? (
+          <Link
+            to={chrome.identity.href}
+            aria-label={`Identity: ${chrome.identity.label}. Open identity settings`}
+            className="text-muted-foreground hover:text-foreground flex h-6 items-center gap-1.5 leading-6 hover:no-underline"
+          >
+            <span className="text-eyebrow">Identity</span>
+            <span
+              className={cn(
+                "text-foreground",
+                chrome.identity.warn && "text-warning-foreground",
+              )}
+            >
+              {chrome.identity.label}
+            </span>
+          </Link>
         ) : null}
         {chrome.installLinks.map((link) => (
           <a
@@ -204,6 +232,45 @@ function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
         ))}
       </div>
     </div>
+  );
+}
+
+/** The server's other addresses, one click from the primary one. */
+function AddressList({
+  addresses,
+}: {
+  addresses: { url: string; label: string }[];
+}): JSX.Element {
+  return (
+    <Popover>
+      <PopoverTrigger className="hover:text-foreground ml-1 text-xs leading-6 underline-offset-2 hover:underline">
+        {`+${addresses.length - 1} more`}
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-auto max-w-[calc(100vw-2rem)] p-1"
+      >
+        <ul className="flex flex-col">
+          {addresses.map((address) => (
+            <li
+              key={address.url}
+              className="flex items-center justify-between gap-4 px-2 py-1.5"
+            >
+              <span className="flex min-w-0 flex-col">
+                <span className="text-eyebrow">{address.label}</span>
+                <span
+                  className="truncate font-mono text-xs"
+                  title={address.url}
+                >
+                  {address.url.replace(/^https?:\/\//, "")}
+                </span>
+              </span>
+              <CopyButton text={address.url} size="xs" tooltip="Copy URL" />
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
 

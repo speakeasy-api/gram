@@ -673,78 +673,96 @@ function ToolList({
 
   return (
     <div className="flex flex-col">
-      <div
-        className={cn(
-          "bg-card flex min-h-8 items-center justify-between gap-3 px-6 pt-4 pb-2",
-          stickyHeader && "sticky top-0 z-10",
-        )}
-      >
-        <span className="text-eyebrow shrink-0">
-          {searching && query
-            ? `${shown} of ${pluralize(total, "tool")}`
-            : searching
-              ? "Tools"
-              : (firstHeading ?? "Tools")}
-        </span>
-        {canSearch ? (
-          // The field grows leftward out of the icon, on the same row.
-          <div className="relative flex min-w-0 flex-1 items-center justify-end">
-            <div
-              aria-hidden={!searching}
-              className={cn(
-                "flex min-w-0 items-center overflow-hidden transition-[width,opacity,visibility] duration-200 ease-out motion-reduce:transition-none",
-                searching
-                  ? "visible w-full max-w-72 opacity-100"
-                  : "invisible w-0 opacity-0",
-              )}
-            >
-              <div className="relative w-full">
-                <Input
-                  ref={inputRef}
-                  value={query}
-                  onChange={changeQuery}
-                  placeholder={`Search ${pluralize(total, "tool")}`}
-                  aria-label="Search tools"
-                  role="combobox"
-                  aria-expanded={searching}
-                  aria-controls={listId}
-                  aria-autocomplete="list"
-                  aria-activedescendant={
-                    activeIndex >= 0 ? optionId(activeIndex) : undefined
-                  }
-                  icon="search"
-                  tabIndex={searching ? undefined : -1}
-                  className="h-8 w-full py-1 pr-8"
-                  onKeyDown={onSearchKeyDown}
-                  onBlur={() => {
-                    if (!query) setSearching(false);
-                  }}
-                />
-                <button
-                  type="button"
-                  aria-label="Close search"
-                  tabIndex={searching ? undefined : -1}
-                  // Keeps focus in the field, so blur doesn't collapse first.
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => closeSearch(true)}
-                  className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
-            </div>
-            {searching ? null : (
-              <button
-                ref={searchButtonRef}
-                type="button"
-                aria-label="Search tools"
-                title="Search tools (/)"
-                onClick={() => setSearching(true)}
-                className="text-muted-foreground hover:text-foreground absolute right-0"
+      <div className={cn("bg-card", stickyHeader && "sticky top-0 z-10")}>
+        <div className="flex min-h-8 items-center justify-between gap-3 px-6 pt-4 pb-2">
+          <span className="text-eyebrow shrink-0">
+            {searching && query
+              ? `${shown} of ${pluralize(total, "tool")}`
+              : searching
+                ? "Tools"
+                : (firstHeading ?? "Tools")}
+          </span>
+          {canSearch ? (
+            // The field grows leftward out of the icon, on the same row.
+            <div className="relative flex min-w-0 flex-1 items-center justify-end">
+              <div
+                aria-hidden={!searching}
+                className={cn(
+                  "flex min-w-0 items-center overflow-hidden transition-[width,opacity,visibility] duration-200 ease-out motion-reduce:transition-none",
+                  searching
+                    ? "visible w-full max-w-72 opacity-100"
+                    : "invisible w-0 opacity-0",
+                )}
               >
-                <Search className="size-4" />
+                <div className="relative w-full">
+                  <Input
+                    ref={inputRef}
+                    value={query}
+                    onChange={changeQuery}
+                    placeholder={`Search ${pluralize(total, "tool")}`}
+                    aria-label="Search tools"
+                    role="combobox"
+                    aria-expanded={searching}
+                    aria-controls={listId}
+                    aria-autocomplete="list"
+                    aria-activedescendant={
+                      activeIndex >= 0 ? optionId(activeIndex) : undefined
+                    }
+                    icon="search"
+                    tabIndex={searching ? undefined : -1}
+                    className="h-8 w-full py-1 pr-8"
+                    onKeyDown={onSearchKeyDown}
+                    onBlur={() => {
+                      if (!query) setSearching(false);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Close search"
+                    tabIndex={searching ? undefined : -1}
+                    // Keeps focus in the field, so blur doesn't collapse first.
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => closeSearch(true)}
+                    className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              </div>
+              {searching ? null : (
+                <button
+                  ref={searchButtonRef}
+                  type="button"
+                  aria-label="Search tools"
+                  title="Search tools (/)"
+                  onClick={() => setSearching(true)}
+                  className="text-muted-foreground hover:text-foreground absolute right-0"
+                >
+                  <Search className="size-4" />
+                </button>
+              )}
+            </div>
+          ) : null}
+        </div>
+        {/* The active filter, so a narrowed list never reads as the whole
+          server; the chip clears it. */}
+        {query.trim() ? (
+          <div className="px-6 pb-2">
+            <span className="bg-muted text-foreground inline-flex max-w-full items-center gap-1.5 py-0.5 pr-1 pl-2 text-xs">
+              <Search
+                aria-hidden="true"
+                className="text-muted-foreground size-3 shrink-0"
+              />
+              <span className="truncate">{query.trim()}</span>
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => closeSearch(false)}
+                className="text-muted-foreground hover:text-foreground shrink-0 p-0.5"
+              >
+                <X className="size-3" />
               </button>
-            )}
+            </span>
           </div>
         ) : null}
       </div>

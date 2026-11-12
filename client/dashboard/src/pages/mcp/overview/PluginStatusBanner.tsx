@@ -471,45 +471,56 @@ function WritablePluginStatusBanner({
 
   return (
     <StatusBanner tone={isTrulyPublished ? "success" : "warning"}>
-      {/* One row: state on the left, the plugin picker on the right. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-3.5">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            {isTrulyPublished ? (
-              <CircleCheck className="text-emerald-500 h-4 w-4 shrink-0" />
-            ) : (
-              <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
-            )}
-            <Text
-              className={cn(
-                "text-warning-foreground text-sm font-medium",
-                isTrulyPublished && "text-emerald-500",
+      {/* State, why plugins, and the picker on the left; the clients it
+          reaches on the right. */}
+      <div className="flex items-center justify-between gap-6 px-5 py-4">
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              {isTrulyPublished ? (
+                <CircleCheck className="text-emerald-500 h-4 w-4 shrink-0" />
+              ) : (
+                <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
               )}
-            >
+              <Text
+                className={cn(
+                  "text-warning-foreground text-sm font-medium",
+                  isTrulyPublished && "text-emerald-500",
+                )}
+              >
+                {isTrulyPublished
+                  ? `Published to ${memberPlugins.length} plugin${
+                      memberPlugins.length > 1 ? "s" : ""
+                    }`
+                  : isPublished
+                    ? "Marketplace needs setup"
+                    : "Not published to any plugin"}
+              </Text>
+            </div>
+            <Text variant="small" className="text-muted-foreground pl-6">
               {isTrulyPublished
-                ? `Published to ${memberPlugins.length} plugin${
-                    memberPlugins.length > 1 ? "s" : ""
-                  }`
-                : isPublished
-                  ? "Marketplace needs setup"
-                  : "Not published to any plugin"}
+                ? memberPlugins
+                    .map((plugin) => {
+                      const reason = describeMembership(
+                        plugin,
+                        rolesByPlugin.get(plugin.id) ?? [],
+                      );
+                      return reason
+                        ? `${plugin.name} · ${reason}`
+                        : plugin.name;
+                    })
+                    .join(", ")
+                : "Add it to a plugin so your team can install it from your marketplace."}
             </Text>
           </div>
-          <Text variant="small" className="text-muted-foreground pl-6">
-            {isTrulyPublished
-              ? memberPlugins
-                  .map((plugin) => {
-                    const reason = describeMembership(
-                      plugin,
-                      rolesByPlugin.get(plugin.id) ?? [],
-                    );
-                    return reason ? `${plugin.name} · ${reason}` : plugin.name;
-                  })
-                  .join(", ")
-              : "Add it to a plugin so your team can install it from your marketplace."}
+          <Text variant="small" className="text-muted-foreground/90 max-w-xl">
+            Plugins are the preferred way to distribute MCP servers to your
+            organization&apos;s users. They install from marketplaces: GitHub
+            repositories that Speakeasy hosts on your behalf.
           </Text>
+          {pickerControls}
         </div>
-        {pickerControls}
+        <ClientIconFan />
       </div>
 
       {isPublished && (

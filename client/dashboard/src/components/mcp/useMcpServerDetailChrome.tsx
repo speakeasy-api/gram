@@ -11,6 +11,7 @@ import {
   type McpReadinessCheck,
 } from "./mcpDetailChrome";
 import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
+import type { IdentityMode } from "@/lib/remote-identity";
 import {
   type McpServerReachability,
   useMcpServerReachability,
@@ -30,6 +31,7 @@ import {
 } from "@/hooks/usePrivateMcpServerUrls";
 import {
   useCustomDomains,
+  useMcpEndpointAddresses,
   useResolvedMcpServerUrl,
 } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -76,7 +78,7 @@ import {
 } from "@/hooks/useMcpServerAuthenticationReadiness";
 import { useLocation, useParams } from "react-router";
 
-import { McpServerCardStatus } from "./McpDetailRows";
+import { McpServerHeaderStatus } from "./McpDetailRows";
 import {
   buildMcpDetailNavItems,
   type McpDetailTabDef,
@@ -154,6 +156,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   } = usePrivateMcpServerUrls(mcpServer, endpoints);
   const publicRoutesEnabled =
     mcpServer?.networkAccessMode !== McpServerNetworkAccessMode.PrivateOnly;
+  const publicAddresses = useMcpEndpointAddresses(endpoints);
   const effectiveInstallPageLinks = mcpServerInstallPageLinks(
     mcpServer?.networkAccessMode,
     installPageUrl,
@@ -470,8 +473,29 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       <SourceMcpIcon mcpServerId={mcpServer.id} className={className} />
     ),
     kindLabel,
-    statusControl: <McpServerCardStatus server={mcpServer} />,
+    statusControl: <McpServerHeaderStatus server={mcpServer} />,
     primaryUrl: publicRoutesEnabled ? mcpUrl : privateMcpUrls[0],
+    // The primary URL first, then the rest: private ingress beside a public
+    // route, or a Speakeasy URL beside a custom domain.
+    addresses: orderAddresses(
+      publicRoutesEnabled ? mcpUrl : privateMcpUrls[0],
+      [
+        ...(publicRoutesEnabled ? publicAddresses : []),
+        ...privateMcpUrls.map((url) => ({ url, label: "Private network" })),
+      ],
+    ),
+    identity:
+      (isRemoteBacked || isTunneledBacked) &&
+      !authReadiness.isLoadingRemoteIdentity &&
+      !authReadiness.identityUnavailable
+        ? {
+            label: authReadiness.passThroughAuthorization
+              ? "Needs cleanup"
+              : IDENTITY_LABEL[authReadiness.remoteIdentityMode],
+            href: `${settingsHref}#${SETTINGS_GROUPS.identity.id}`,
+            warn: !!authReadiness.passThroughAuthorization,
+          }
+        : undefined,
     readinessChecks,
     // The upstream endpoint is what the guide catalog indexes; a server
     // with no upstream has no guide to point at.
@@ -482,8 +506,34 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     aside: pluginRef ? (
       <PluginStatusBanner variant="header" server={pluginRef} />
     ) : undefined,
+    overviewBanner: pluginRef ? (
+      <PluginStatusBanner variant="banner" server={pluginRef} />
+    ) : undefined,
     items,
   };
+}
+
+// The identity modes' names, as Settings' identity cards call them.
+const IDENTITY_LABEL: Record<IdentityMode, string> = {
+  user: "User Identity",
+  agent: "Shared credential",
+  none: "Manual",
+};
+
+/** The primary URL first, each address once; one address needs no list. */
+function orderAddresses(
+  primary: string | undefined,
+  all: { url: string; label: string }[],
+): { url: string; label: string }[] | undefined {
+  const unique = all.filter(
+    (address, index) =>
+      all.findIndex((other) => other.url === address.url) === index,
+  );
+  if (unique.length < 2) return undefined;
+  return [
+    ...unique.filter((address) => address.url === primary),
+    ...unique.filter((address) => address.url !== primary),
+  ];
 }
 
 type CheckState = Pick<
