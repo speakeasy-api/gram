@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tailscaleapi"
@@ -42,9 +43,6 @@ const (
 
 	// servicePortSpec is the only endpoint every ingress service advertises.
 	servicePortSpec = "tcp:443"
-
-	// serviceComment is shown next to the service in the admin console.
-	serviceComment = "Speakeasy private MCP ingress"
 )
 
 // ProvisionerConfig tunes the gateway provider.
@@ -54,6 +52,10 @@ type ProvisionerConfig struct {
 
 	// Slots is how many node identities host each ingress.
 	Slots int32
+
+	// Namer decides which services this stack may define and delete, so a
+	// local development stack never touches production's on a shared tailnet.
+	Namer networkingress.Namer
 
 	// AuthKeyTTL bounds unused one-shot keys.
 	AuthKeyTTL time.Duration
@@ -97,6 +99,9 @@ func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, enc *orgencryption.Se
 	}
 	if cfg.Slots <= 0 {
 		return nil, errors.New("tailnet gateway provisioner requires at least one slot")
+	}
+	if cfg.Namer == nil {
+		return nil, errors.New("tailnet gateway provisioner requires a namer")
 	}
 	if cfg.AuthKeyTTL <= 0 {
 		cfg.AuthKeyTTL = DefaultAuthKeyTTL
@@ -142,12 +147,19 @@ func errorObservation(code string) k8s.NetworkIngressObservation {
 
 // validateDesired checks everything Apply needs before any side effect. The
 // returned error observation carries the code Apply reports.
-func (p *Provisioner) validateDesired(desired k8s.NetworkIngressDesired) (tailscaleapi.Credentials, k8s.NetworkIngressObservation, error) {
+func (p *Provisioner) validateDesired(ctx context.Context, desired k8s.NetworkIngressDesired) (tailscaleapi.Credentials, k8s.NetworkIngressObservation, error) {
 	if desired.ID == uuid.Nil || desired.OrganizationID == "" || desired.Provider != k8s.NetworkIngressProviderTailscale || len(desired.Credentials) == 0 {
 		return tailscaleapi.Credentials{}, errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), fmt.Errorf("%w: desired state is incomplete", k8s.ErrNetworkIngressInvalidDesiredState)
 	}
 	if err := ValidateLabel(desired.Hostname); err != nil {
 		return tailscaleapi.Credentials{}, errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), fmt.Errorf("%w: %w", k8s.ErrNetworkIngressInvalidDesiredState, err)
+	}
+	owned, err := p.cfg.Namer.OwnsHostname(ctx, desired.Hostname)
+	if err != nil {
+		return tailscaleapi.Credentials{}, errorObservation(""), fmt.Errorf("check hostname ownership: %w", err)
+	}
+	if !owned {
+		return tailscaleapi.Credentials{}, errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), fmt.Errorf("%w: this stack does not own hostname %q", k8s.ErrNetworkIngressInvalidDesiredState, desired.Hostname)
 	}
 	if p.enc == nil || p.keys == nil {
 		return tailscaleapi.Credentials{}, errorObservation(""), errors.New("tailnet gateway provisioner needs organization encryption to store auth keys")
@@ -183,7 +195,7 @@ func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesir
 }
 
 func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
-	creds, observation, err := p.validateDesired(desired)
+	creds, observation, err := p.validateDesired(ctx, desired)
 	if err != nil {
 		return observation, err
 	}
@@ -199,8 +211,16 @@ func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesir
 		return encryptionFailure(err)
 	}
 
+	serviceName, err := p.cfg.Namer.ServiceName(ctx, desired.Hostname)
+	if err != nil {
+		return errorObservation(""), fmt.Errorf("name gateway service: %w", err)
+	}
+	serviceComment, err := p.cfg.Namer.ServiceComment(ctx)
+	if err != nil {
+		return errorObservation(""), fmt.Errorf("describe gateway service: %w", err)
+	}
 	err = p.api.UpsertService(ctx, creds, tailscaleapi.Service{
-		Name: ServiceName(desired.Hostname), Ports: []string{servicePortSpec}, Tags: []string{p.cfg.Tag}, Comment: serviceComment,
+		Name: serviceName, Ports: []string{servicePortSpec}, Tags: []string{p.cfg.Tag}, Comment: serviceComment,
 	})
 	if err != nil {
 		return apiFailure(err)
@@ -262,8 +282,12 @@ func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesir
 		if node.AuthKeyEncrypted.Valid && node.AuthKeyExpiresAt.Valid && node.AuthKeyExpiresAt.Time.After(now.Add(authKeyRenewMargin)) {
 			continue
 		}
+		description, err := p.cfg.Namer.AuthKeyDescription(ctx, desired.ID, node.Slot)
+		if err != nil {
+			return errorObservation(""), fmt.Errorf("describe gateway auth key: %w", err)
+		}
 		key, err := p.api.CreateAuthKey(ctx, creds, tailscaleapi.AuthKeyRequest{
-			Tag: p.cfg.Tag, Description: authKeyDescription(desired.ID, node.Slot), TTL: p.cfg.AuthKeyTTL,
+			Tag: p.cfg.Tag, Description: description, TTL: p.cfg.AuthKeyTTL,
 		})
 		if err != nil {
 			return apiFailure(err)
@@ -285,14 +309,6 @@ func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesir
 	}
 
 	return p.observe(ctx, desired.ID, desired.OrganizationID)
-}
-
-// authKeyDescription describes the auth key minted for one slot, as the admin
-// console lists it. Tailscale rejects descriptions with punctuation and caps
-// them at 50 characters, so it uses letters, digits and spaces and the first
-// eight characters of the connection id.
-func authKeyDescription(ingressID uuid.UUID, slot int32) string {
-	return fmt.Sprintf("Speakeasy gateway %s slot %d", ingressID.String()[:8], slot)
 }
 
 // resetRefusedSlot replaces an identity control no longer accepts, typically
@@ -347,11 +363,22 @@ func (p *Provisioner) deleteRenamedServices(ctx context.Context, creds tailscale
 		if previous == "" || previous == label {
 			continue
 		}
+		owned, err := p.cfg.Namer.OwnsHostname(ctx, previous)
+		if err != nil {
+			return fmt.Errorf("check renamed service ownership: %w", err)
+		}
+		if !owned {
+			continue
+		}
+		serviceName, err := p.cfg.Namer.ServiceName(ctx, previous)
+		if err != nil {
+			return fmt.Errorf("name renamed service: %w", err)
+		}
 		if _, done := seen[previous]; done {
 			continue
 		}
 		seen[previous] = struct{}{}
-		if err := p.api.DeleteService(ctx, creds, ServiceName(previous)); err != nil {
+		if err := p.api.DeleteService(ctx, creds, serviceName); err != nil {
 			return fmt.Errorf("delete renamed service: %w", err)
 		}
 	}
@@ -511,8 +538,18 @@ func (p *Provisioner) deleteWithCredentials(ctx context.Context, own owner, reso
 		}
 	}
 	if own.hostname != "" {
-		if err := p.api.DeleteService(ctx, creds, ServiceName(own.hostname)); err != nil {
-			return mapAPIError(err)
+		owned, err := p.cfg.Namer.OwnsHostname(ctx, own.hostname)
+		if err != nil {
+			return fmt.Errorf("check service ownership: %w", err)
+		}
+		if owned {
+			serviceName, err := p.cfg.Namer.ServiceName(ctx, own.hostname)
+			if err != nil {
+				return fmt.Errorf("name gateway service: %w", err)
+			}
+			if err := p.api.DeleteService(ctx, creds, serviceName); err != nil {
+				return mapAPIError(err)
+			}
 		}
 	}
 	if err := queries.DeleteNetworkIngressNodeStates(ctx, repo.DeleteNetworkIngressNodeStatesParams{NetworkIngressID: resources.OwnerID, OrganizationID: own.organizationID}); err != nil {

@@ -74,6 +74,11 @@ type GatewayRuntimeConfig struct {
 
 	// APIURL overrides the Tailscale API base URL; empty means the public API.
 	APIURL string
+
+	// Namer names hostnames, services and devices, and decides which this
+	// stack may touch: a LocalNamer in local development, the
+	// ProductionNamer otherwise.
+	Namer Namer
 }
 
 // Ready reports whether the gateway provider can mint keys and define services.

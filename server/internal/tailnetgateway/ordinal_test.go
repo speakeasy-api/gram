@@ -1,7 +1,6 @@
 package tailnetgateway_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -41,17 +40,8 @@ func TestParsePodOrdinal(t *testing.T) {
 	}
 }
 
-func TestNodeNaming(t *testing.T) {
+func TestNodeValidation(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "speakeasy-gw-0", tailnetgateway.NodeHostname("", 0))
-	require.Equal(t, "speakeasy-gw-dev-ab12-3", tailnetgateway.NodeHostname("dev-ab12", 3))
-	require.NoError(t, tailnetgateway.ValidateHostnameQualifier(""))
-	require.NoError(t, tailnetgateway.ValidateHostnameQualifier("dev-ab12"))
-	require.Error(t, tailnetgateway.ValidateHostnameQualifier("Dev"), "uppercase is not a DNS label")
-	require.Error(t, tailnetgateway.ValidateHostnameQualifier("dev_ab12"))
-	require.Error(t, tailnetgateway.ValidateHostnameQualifier("-dev"))
-	require.Error(t, tailnetgateway.ValidateHostnameQualifier(strings.Repeat("a", 25)), "the hostname must stay a short DNS label")
-	require.Equal(t, "svc:speakeasy", tailnetgateway.ServiceName("speakeasy"))
 	require.NoError(t, tailnetgateway.ValidateTag("tag:speakeasy"))
 	require.Error(t, tailnetgateway.ValidateTag("speakeasy"))
 	require.Error(t, tailnetgateway.ValidateTag("tag:"))

@@ -22,6 +22,7 @@ type Fake struct {
 	Now func() time.Time
 
 	keys     []AuthKey
+	requests []AuthKeyRequest
 	services map[string]Service
 	deleted  []string
 }
@@ -30,7 +31,7 @@ var _ Client = (*Fake)(nil)
 
 // NewFake returns an empty fake.
 func NewFake() *Fake {
-	return &Fake{mu: sync.Mutex{}, Reject: nil, Now: time.Now, keys: nil, services: make(map[string]Service), deleted: nil}
+	return &Fake{mu: sync.Mutex{}, Reject: nil, Now: time.Now, keys: nil, requests: nil, services: make(map[string]Service), deleted: nil}
 }
 
 func (f *Fake) check(creds Credentials) error {
@@ -59,6 +60,7 @@ func (f *Fake) CreateAuthKey(_ context.Context, creds Credentials, req AuthKeyRe
 		Expires: f.Now().Add(req.TTL),
 	}
 	f.keys = append(f.keys, key)
+	f.requests = append(f.requests, req)
 	return key, nil
 }
 
@@ -112,6 +114,13 @@ func (f *Fake) Keys() []AuthKey {
 }
 
 // DeletedDevices returns every node id passed to DeleteDevice.
+// KeyRequests returns every auth key request that succeeded, in order.
+func (f *Fake) KeyRequests() []AuthKeyRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.requests)
+}
+
 func (f *Fake) DeletedDevices() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()

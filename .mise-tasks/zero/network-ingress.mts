@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-//MISE description="Give this worktree's local tailnet gateway devices a name that cannot be mistaken for production's"
+//MISE description="Give this worktree's private network artifacts names that cannot collide with production's"
 //MISE hide=true
 //MISE dir="{{ config_root }}"
 
@@ -8,10 +8,12 @@ import { createHash } from "node:crypto";
 import { hostname } from "node:os";
 import { $ } from "zx";
 
-// The local gateway joins real tailnets, including ones production gateways
-// also serve. The start task names its devices speakeasy-gw-dev-<id>-<slot>
-// instead of production's speakeasy-gw-<slot>, using this id.
-const DEV_ID = "GRAM_TAILNET_GATEWAY_DEV_ID";
+// The local private network joins real tailnets, including ones production
+// gateways also serve. With this id the API server, reconciler and gateway
+// name everything they create there dev-<id>-... (hostnames and services
+// svc:dev-<id>-<hostname>, machines speakeasy-gw-dev-<id>-<slot>), and refuse
+// to touch anything else.
+const DEV_ID = "GRAM_NETWORK_INGRESS_DEV_ID";
 
 // Four base-36 characters give 1.6 million ids: plenty to keep every
 // developer's worktrees apart on a shared tailnet, short enough to read.
@@ -43,7 +45,7 @@ async function run(): Promise<void> {
   await $`touch mise.local.toml`;
   await $`mise set --file mise.local.toml ${DEV_ID}=${id}`;
   console.log(
-    `🔑 ${DEV_ID}=${id} has been set in mise.local.toml; local gateway devices are named speakeasy-gw-dev-${id}-<slot>.`,
+    `🔑 ${DEV_ID}=${id} has been set in mise.local.toml; local private network hostnames and machines are named dev-${id}-....`,
   );
 }
 

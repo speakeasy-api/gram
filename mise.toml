@@ -189,7 +189,10 @@ GRAM_TAILNET_GATEWAY_CONTROL_PORT = "8093"
 ## service-account token, and the listener verifies it with the key file; both
 ## files are created on first start. The API server accepts new connections
 ## only for organizations with the network_ingress entitlement, and queues
-## their reconciliation for the dedicated reconciler in that group.
+## their reconciliation for the dedicated reconciler in that group. Every
+## hostname, service and machine is named after GRAM_NETWORK_INGRESS_DEV_ID
+## in mise.local.toml (`mise run zero:network-ingress`), so a shared tailnet's
+## production artifacts are never touched.
 GRAM_NETWORK_INGRESS_ENABLED = "true"
 GRAM_NETWORK_INGRESS_RECONCILE_TASK_QUEUE = "network-ingress"
 GRAM_NETINGRESS_PORT = "8094"

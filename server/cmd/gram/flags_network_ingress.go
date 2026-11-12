@@ -1,6 +1,7 @@
 package gram
 
 import (
+	"errors"
 	"fmt"
 	"net/netip"
 	"regexp"
@@ -18,9 +19,25 @@ import (
 const (
 	networkIngressMutationFlag = "network-ingress-provider-mutations-enabled"
 	networkIngressQueueFlag    = "network-ingress-reconcile-task-queue"
+	networkIngressDevIDFlag    = "network-ingress-dev-id"
 )
 
 var networkIngressQueuePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
+
+// localDevelopmentNamer returns the namer for a process that changes or hosts
+// artifacts on a tailnet. In local development it insists on a development
+// id: without one the stack would use production's names, and could overwrite,
+// host or delete production's services on a tailnet both serve.
+func localDevelopmentNamer(environment, devID string) (networkingress.Namer, error) {
+	if environment == "local" && devID == "" {
+		return nil, errors.New("local development needs GRAM_NETWORK_INGRESS_DEV_ID; run `mise run zero:network-ingress`")
+	}
+	namer, err := networkingress.NewNamer(environment, devID)
+	if err != nil {
+		return nil, fmt.Errorf("network ingress development id: %w", err)
+	}
+	return namer, nil
+}
 
 // The reconciliation queue is explicit: preview processes must not implicitly
 // claim production lifecycle work through their general-purpose task queue.
@@ -147,6 +164,10 @@ func networkIngressProviderFlags() []cli.Flag {
 			Name: "network-ingress-tailscale-api-url", Usage: "Tailscale API base URL override for tests",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_TAILSCALE_API_URL"},
 		},
+		&cli.StringFlag{
+			Name: networkIngressDevIDFlag, Usage: "Local development only: names this stack's hostnames, services and devices dev-<id>-... so they stay apart from production's on a shared tailnet",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_DEV_ID"},
+		},
 		&cli.BoolFlag{
 			Name: "network-ingress-operator-provider-enabled", Usage: "Keep the Tailscale Kubernetes operator provider registered for existing ingresses and their teardown",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_OPERATOR_PROVIDER_ENABLED"}, Value: true,
@@ -179,6 +200,10 @@ func networkIngressConfigFromCLI(c *cli.Context) (networkingress.RuntimeConfig, 
 	if err := validateNetworkIngressPort(c, apiPort); err != nil {
 		return config, err
 	}
+	namer, err := networkingress.NewNamer(c.String("environment"), c.String(networkIngressDevIDFlag))
+	if err != nil {
+		return config, fmt.Errorf("network ingress development id: %w", err)
+	}
 	backendLabels, err := labels.ConvertSelectorToLabelsMap(c.String("network-ingress-backend-pod-labels"))
 	if err != nil {
 		return config, fmt.Errorf("invalid private ingress backend pod labels")
@@ -208,6 +233,8 @@ func networkIngressConfigFromCLI(c *cli.Context) (networkingress.RuntimeConfig, 
 			Tag:     c.String("network-ingress-gateway-tag"),
 			Slots:   int32(min(max(c.Int("network-ingress-gateway-slots"), -1), 1<<15)), // #nosec G115 -- clamped before conversion; -1 keeps negatives rejected by Validate.
 			APIURL:  c.String("network-ingress-tailscale-api-url"),
+
+			Namer: namer,
 		},
 		OperatorProviderEnabled: c.Bool("network-ingress-operator-provider-enabled"),
 	}

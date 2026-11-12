@@ -50,7 +50,7 @@ func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterPr
 		slots = tailnetgateway.DefaultSlots
 	}
 	gateway, err := tailnetgateway.NewProvisioner(logger, db, orgEnc, gatewayKeyProvisioner(orgKeys), api, tailnetgateway.ProvisionerConfig{
-		Tag: tag, Slots: slots, AuthKeyTTL: 0, StaleAfter: 0, Now: nil,
+		Tag: tag, Slots: slots, Namer: config.Gateway.Namer, AuthKeyTTL: 0, StaleAfter: 0, Now: nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configure tailnet gateway provider: %w", err)

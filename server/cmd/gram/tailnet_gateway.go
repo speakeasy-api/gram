@@ -76,9 +76,9 @@ func newTailnetGatewayCommand() *cli.Command {
 			EnvVars: []string{"GRAM_TAILNET_GATEWAY_TAG"},
 		},
 		&cli.StringFlag{
-			Name:    "hostname-qualifier",
-			Usage:   "Inserted into node hostnames (speakeasy-gw-<qualifier>-<slot>) to tell a non-production gateway's devices apart; leave empty in production",
-			EnvVars: []string{"GRAM_TAILNET_GATEWAY_HOSTNAME_QUALIFIER"},
+			Name:    networkIngressDevIDFlag,
+			Usage:   "Local development only: name this gateway's devices speakeasy-gw-dev-<id>-<slot> and host only dev-<id>-... hostnames",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_DEV_ID"},
 		},
 		&cli.StringFlag{
 			Name:     "upstream-url",
@@ -318,13 +318,18 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 		}
 	}
 
+	namer, err := localDevelopmentNamer(c.String("environment"), c.String(networkIngressDevIDFlag))
+	if err != nil {
+		return tailnetgateway.Config{}, err
+	}
+
 	config := tailnetgateway.Config{
 		Ordinal:            ordinal,
 		PodName:            podName,
 		Shard:              c.String("shard"),
 		StateDir:           stateDir,
 		Tag:                c.String("tag"),
-		HostnameQualifier:  c.String("hostname-qualifier"),
+		Namer:              namer,
 		Upstream:           upstream,
 		UpstreamTransport:  transport,
 		TokenPath:          c.String("token-path"),

@@ -55,10 +55,10 @@ mise run git:workmcp || echo "Warning: MCP setup failed; run 'mise run git:workm
 # no-op when the key pair was copied from the main worktree above.
 mise run zero:tunnel-identity
 
-# The local tailnet gateway's device names derive from the worktree path, so a
-# value copied from the main worktree must not survive into this one.
-mise unset --file mise.local.toml GRAM_TAILNET_GATEWAY_DEV_ID
-mise run zero:tailnet-gateway
+# Private network names derive from the worktree path, so a value copied
+# from the main worktree must not survive into this one.
+mise unset --file mise.local.toml GRAM_NETWORK_INGRESS_DEV_ID
+mise run zero:network-ingress
 
 # Ports are randomized, so `wt list`'s URL column can't derive them from the
 # branch name. Store the dashboard port as a per-branch var for it to read.
