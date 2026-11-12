@@ -157,11 +157,13 @@ func TestDirectUpstreamChainingRefusalWritesARequestRow(t *testing.T) {
 	pool, err := TestInfra.CloneTestDatabase(t, "mcp_direct_chaining_refusal")
 	require.NoError(t, err)
 	for _, tc := range []struct {
+		stage  identitychaining.Stage
 		reason identitychaining.Reason
 		code   mcpconnectionattempts.Code
 	}{
-		{identitychaining.ReasonReauthenticationRequired, mcpconnectionattempts.CodeReauthenticationRequired},
-		{identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.CodeIneligibleIdentity},
+		{identitychaining.StageAuthorization, identitychaining.ReasonReauthenticationRequired, mcpconnectionattempts.CodeReauthenticationRequired},
+		// At runtime only the signer refuses an account as ineligible.
+		{identitychaining.StageExchange, identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.CodeIneligibleIdentity},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			t.Parallel()
@@ -172,7 +174,7 @@ func TestDirectUpstreamChainingRefusalWritesARequestRow(t *testing.T) {
 			ctx = context.WithValue(ctx, liveSessionPolicyKey{}, true)
 			ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: "user_1", ActiveOrganizationID: f.orgID})
 			f.service.upstreamTokens = &fakeUpstreamTokens{issuerID: uuid.New()}
-			chainer := &recordingChainer{outcome: identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: tc.reason, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, governs: true}
+			chainer := &recordingChainer{outcome: identitychaining.Outcome{Stage: tc.stage, Reason: tc.reason, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, governs: true}
 			f.service.identityChainer = chainer
 			rec := mcpconnectionattemptstest.New(t)
 			f.service.connections = rec.Recorder
