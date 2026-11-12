@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
@@ -68,11 +70,12 @@ type ProvisionerConfig struct {
 // for empty slots; Observe reads gateway heartbeats; teardown deletes the
 // devices and service through the Tailscale API.
 type Provisioner struct {
-	db   *pgxpool.Pool
-	enc  *orgencryption.Service
-	keys KeyProvisioner
-	api  tailscaleapi.Client
-	cfg  ProvisionerConfig
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	enc    *orgencryption.Service
+	keys   KeyProvisioner
+	api    tailscaleapi.Client
+	cfg    ProvisionerConfig
 }
 
 var (
@@ -85,9 +88,9 @@ var (
 // the organization's data key on first use and enc encrypts with it. Either
 // may be nil when organization encryption is not configured, in which case
 // Apply is unavailable while observation and teardown still work.
-func NewProvisioner(db *pgxpool.Pool, enc *orgencryption.Service, keys KeyProvisioner, api tailscaleapi.Client, cfg ProvisionerConfig) (*Provisioner, error) {
-	if db == nil || api == nil {
-		return nil, errors.New("tailnet gateway provisioner requires a database and Tailscale API client")
+func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, enc *orgencryption.Service, keys KeyProvisioner, api tailscaleapi.Client, cfg ProvisionerConfig) (*Provisioner, error) {
+	if logger == nil || db == nil || api == nil {
+		return nil, errors.New("tailnet gateway provisioner requires a logger, a database and a Tailscale API client")
 	}
 	if err := ValidateTag(cfg.Tag); err != nil {
 		return nil, err
@@ -104,7 +107,7 @@ func NewProvisioner(db *pgxpool.Pool, enc *orgencryption.Service, keys KeyProvis
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Provisioner{db: db, enc: enc, keys: keys, api: api, cfg: cfg}, nil
+	return &Provisioner{logger: logger.With(attr.SlogComponent("tailnet_gateway_provisioner")), db: db, enc: enc, keys: keys, api: api, cfg: cfg}, nil
 }
 
 type owner struct {
@@ -165,6 +168,9 @@ func (p *Provisioner) validateDesired(desired k8s.NetworkIngressDesired) (tailsc
 // Tailscale outage or rate limit does not cut live traffic.
 func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
 	observation, err := p.apply(ctx, desired)
+	if err != nil {
+		p.logFailure(ctx, "apply", desired.ID, desired.OrganizationID, observation.ErrorCode, err)
+	}
 	if err == nil || observation.DNSName != "" || desired.ID == uuid.Nil || desired.OrganizationID == "" {
 		return observation, err
 	}
@@ -357,9 +363,14 @@ func (p *Provisioner) deleteRenamedServices(ctx context.Context, creds tailscale
 func (p *Provisioner) Observe(ctx context.Context, resources k8s.NetworkIngressResourceNames) (k8s.NetworkIngressObservation, error) {
 	own, err := p.owner(ctx, resources.OwnerID)
 	if err != nil {
+		p.logFailure(ctx, "observe", resources.OwnerID, "", k8s.NetworkIngressErrorInvalidDesiredState, err)
 		return errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), err
 	}
-	return p.observe(ctx, resources.OwnerID, own.organizationID)
+	observation, err := p.observe(ctx, resources.OwnerID, own.organizationID)
+	if err != nil {
+		p.logFailure(ctx, "observe", resources.OwnerID, own.organizationID, observation.ErrorCode, err)
+	}
+	return observation, err
 }
 
 //nolint:exhaustruct // observations populate only the state they know.
@@ -429,6 +440,15 @@ func (p *Provisioner) Delete(ctx context.Context, resources k8s.NetworkIngressRe
 // any devices exist on the customer's tailnet, so missing or unparseable
 // credentials block cleanup rather than silently leaving them behind.
 func (p *Provisioner) DeleteWithCredentials(ctx context.Context, resources k8s.NetworkIngressResourceNames, credentials []byte) error {
+	err := p.deleteWithCredentials(ctx, resources, credentials)
+	// Waiting for hosts to stop is the expected first answer to a delete.
+	if err != nil && !errors.Is(err, k8s.ErrNetworkIngressDeletionPending) {
+		p.logFailure(ctx, "delete", resources.OwnerID, "", "", err)
+	}
+	return err
+}
+
+func (p *Provisioner) deleteWithCredentials(ctx context.Context, resources k8s.NetworkIngressResourceNames, credentials []byte) error {
 	own, err := p.owner(ctx, resources.OwnerID)
 	if err != nil {
 		return err
@@ -494,6 +514,32 @@ func (p *Provisioner) DeleteWithCredentials(ctx context.Context, resources k8s.N
 		return fmt.Errorf("delete gateway slots: %w", err)
 	}
 	return nil
+}
+
+// logFailure records why a provisioner operation failed. The reconciler's
+// shared provider telemetry only reports a bounded error code, because the
+// Kubernetes operator's errors can carry Kubernetes request data. This
+// provider's errors come from the Tailscale API client and Postgres and never
+// carry the customer's OAuth client secret or auth keys (a rejected token
+// exchange reports Tailscale's response, such as invalid_client), so the full
+// error is logged here: it is the only place the cause of a failed reconcile
+// is visible. Failures the customer or Tailscale causes, which carry a
+// specific error code, are warnings; anything unclassified is an error.
+func (p *Provisioner) logFailure(ctx context.Context, operation string, ingressID uuid.UUID, organizationID, errorCode string, err error) {
+	attrs := []any{
+		attr.SlogNetworkIngressOperation(operation),
+		attr.SlogNetworkIngressID(ingressID.String()),
+		attr.SlogError(err),
+	}
+	if organizationID != "" {
+		attrs = append(attrs, attr.SlogOrganizationID(organizationID))
+	}
+	if errorCode != "" {
+		attrs = append(attrs, attr.SlogNetworkIngressErrorCode(errorCode))
+		p.logger.WarnContext(ctx, "tailnet gateway provisioner operation failed", attrs...)
+		return
+	}
+	p.logger.ErrorContext(ctx, "tailnet gateway provisioner operation failed", attrs...)
 }
 
 // mapAPIError tags a Tailscale API failure with the provider-neutral sentinel

@@ -1,9 +1,12 @@
 package tailnetgateway_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -19,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tailscaleapi"
 )
 
@@ -44,7 +48,7 @@ func newProvisionerFixture(t *testing.T, name string) *provisionerFixture {
 	ingressID, orgID := seedIngress(t, db, name)
 	resources, err := k8s.NewNetworkIngressResourceNames(ingressID)
 	require.NoError(t, err)
-	provisioner, err := tailnetgateway.NewProvisioner(db, orgEncryption(t, db).Service, orgEncryption(t, db).Provisioner, api, tailnetgateway.ProvisionerConfig{
+	provisioner, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), db, orgEncryption(t, db).Service, orgEncryption(t, db).Provisioner, api, tailnetgateway.ProvisionerConfig{
 		Tag: tailnetgateway.DefaultTag, Slots: 3, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
@@ -148,7 +152,7 @@ func TestProvisionerScaleDownPurgesRetiredSlotsAfterHostsStop(t *testing.T) {
 	require.NoError(t, err)
 	f.heartbeat(t, 2, tailnetgateway.NodeStatusOnline, "nTHREE")
 
-	smaller, err := tailnetgateway.NewProvisioner(f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
+	smaller, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
 		Tag: tailnetgateway.DefaultTag, Slots: 2, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
@@ -255,7 +259,7 @@ func TestProvisionerObserveFollowsHeartbeats(t *testing.T) {
 
 	// Heartbeats older than the staleness window mean the gateway is gone.
 	f.heartbeat(t, 0, tailnetgateway.NodeStatusOnline, "nONE")
-	stale, err := tailnetgateway.NewProvisioner(f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
+	stale, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
 		Tag: tailnetgateway.DefaultTag, Slots: 3, AuthKeyTTL: time.Hour, StaleAfter: 2 * time.Minute,
 		Now: func() time.Time { return time.Now().Add(time.Hour) },
 	})
@@ -600,7 +604,7 @@ func TestProvisionerReportsUnavailableOrganizationKey(t *testing.T) {
 func TestProvisionerApplyRequiresOrganizationEncryption(t *testing.T) {
 	t.Parallel()
 	f := newProvisionerFixture(t, "tailnetprovnoenc")
-	unconfigured, err := tailnetgateway.NewProvisioner(f.db, nil, nil, f.api, tailnetgateway.ProvisionerConfig{
+	unconfigured, err := tailnetgateway.NewProvisioner(testenv.NewLogger(t), f.db, nil, nil, f.api, tailnetgateway.ProvisionerConfig{
 		Tag: tailnetgateway.DefaultTag, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
@@ -608,4 +612,21 @@ func TestProvisionerApplyRequiresOrganizationEncryption(t *testing.T) {
 	_, err = unconfigured.Apply(t.Context(), f.desired(t))
 	require.ErrorContains(t, err, "organization encryption")
 	require.Empty(t, f.api.Services(), "nothing reaches the tailnet without somewhere to keep its secrets")
+}
+
+func TestProvisionerLogsTheCauseOfAFailedApply(t *testing.T) {
+	t.Parallel()
+	f := newProvisionerFixture(t, "tailnetprovlogs")
+	var logs bytes.Buffer
+	provisioner, err := tailnetgateway.NewProvisioner(slog.New(slog.NewJSONHandler(&logs, nil)), f.db, orgEncryption(t, f.db).Service, orgEncryption(t, f.db).Provisioner, f.api, tailnetgateway.ProvisionerConfig{
+		Tag: tailnetgateway.DefaultTag, Slots: 1, AuthKeyTTL: time.Hour, StaleAfter: time.Minute, Now: time.Now,
+	})
+	require.NoError(t, err)
+	f.api.Reject = errors.New("upsert service: when updating a service, addrs must contain 2 elements (400)")
+
+	_, err = provisioner.Apply(t.Context(), f.desired(t))
+	require.Error(t, err)
+	require.Contains(t, logs.String(), "addrs must contain 2 elements", "the reconciler's own telemetry only carries an error code, so the cause is logged here")
+	require.Contains(t, logs.String(), f.ingressID.String())
+	require.NotContains(t, logs.String(), "csecret", "the OAuth client secret never reaches the logs")
 }
