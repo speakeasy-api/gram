@@ -24,7 +24,7 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 	}
 	recordDecision(ctx, DecisionOperationRequireAnyUnblocked, decisionModeFor(enforce))
 	if !enforce {
-		return e.RequireAny(ctx, checks...)
+		return e.requireAny(ctx, enforce, checks...)
 	}
 	if len(checks) == 0 {
 		return e.mapError(ctx, ErrNoChecks)
@@ -76,5 +76,5 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 			return e.mapError(ctx, Denied(check.Scope, check.selector()))
 		}
 	}
-	return e.RequireAny(ctx, checks...)
+	return e.requireAny(ctx, enforce, checks...)
 }

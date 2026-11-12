@@ -32,12 +32,17 @@ const (
 	DecisionOperationEvaluateLoaded      DecisionOperation = "evaluate_loaded_grants"
 	DecisionOperationMandatory           DecisionOperation = "mandatory"
 	DecisionOperationShouldEnforce       DecisionOperation = "should_enforce"
+	// DecisionOperationRequireUserOrganization is RequireUserOrganizationScope
+	// refusing a caller before it loads grants, or skipping where enforcement
+	// is off. Its enforced evaluation is counted as evaluate_loaded_grants.
+	DecisionOperationRequireUserOrganization DecisionOperation = "require_user_organization_scope"
 )
 
 // DecisionSummary counts the authorization decisions one request made. It
 // carries no checks, grants or resource ids.
 type DecisionSummary struct {
-	// Enforced counts decisions evaluated against grants.
+	// Enforced counts decisions made while enforcement is on, including
+	// refusals decided before any grant is evaluated.
 	Enforced int
 	// Skipped counts entry point calls that returned without evaluating.
 	Skipped int

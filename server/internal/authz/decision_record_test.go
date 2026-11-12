@@ -103,3 +103,17 @@ func TestRecordedDecisions_ReturnsACopy(t *testing.T) {
 	require.Len(t, second.Operations, 1)
 	require.Equal(t, 1, second.Operations[DecisionOperationRequire])
 }
+
+func TestRecordedDecisions_RequireAnyUnblockedCountsOnce(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := WithDecisionRecorder(GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeLogRead, "proj_123")}))
+
+	require.NoError(t, engine.RequireAnyUnblocked(ctx, Check{Scope: ScopeLogRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil}))
+
+	summary, ok := RecordedDecisions(ctx)
+	require.True(t, ok)
+	require.Equal(t, 1, summary.Total())
+	require.Len(t, summary.Operations, 1)
+	require.Equal(t, 1, summary.Operations[DecisionOperationRequireAnyUnblocked])
+}

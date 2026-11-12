@@ -129,10 +129,16 @@ func (e *Engine) AuthorizeMandatory(ctx context.Context, checks ...Check) (Manda
 
 // PrepareMandatory admits the caller once for mandatory decisions. It does not
 // change ctx.
-func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, error) {
-	// Mandatory checks are evaluated for every caller, so preparing them
-	// counts as an enforced decision even where Require would skip.
-	recordDecision(ctx, DecisionOperationMandatory, DecisionModeEnforced)
+func (e *Engine) PrepareMandatory(ctx context.Context) (prepared MandatoryAuthorization, err error) {
+	// Mandatory checks are decided for every caller, so a successful
+	// preparation counts as an enforced decision even where Require would
+	// skip, including the callers it refuses outright (unauthenticated, no
+	// policy). A preparation that fails decides nothing and is not counted.
+	defer func() {
+		if err == nil {
+			recordDecision(ctx, DecisionOperationMandatory, DecisionModeEnforced)
+		}
+	}()
 	m := MandatoryAuthorization{
 		publicAnonymous: false,
 		organizationID:  "",

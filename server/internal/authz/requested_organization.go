@@ -20,9 +20,11 @@ func (e *Engine) RequireUserOrganizationScope(ctx context.Context, organizationI
 // connection, including a transaction that already holds a source lock.
 func (e *Engine) RequireUserOrganizationScopeWithDBTX(ctx context.Context, db accessrepo.DBTX, organizationID, userID string, scope Scope) error {
 	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		recordDecision(ctx, DecisionOperationRequireUserOrganization, DecisionModeEnforced)
 		return oops.C(oops.CodeForbidden)
 	}
 	if _, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok {
+		recordDecision(ctx, DecisionOperationRequireUserOrganization, DecisionModeEnforced)
 		return oops.C(oops.CodeForbidden)
 	}
 
@@ -31,7 +33,7 @@ func (e *Engine) RequireUserOrganizationScopeWithDBTX(ctx context.Context, db ac
 		return err
 	}
 	if !enforce {
-		recordDecision(ctx, DecisionOperationEvaluateLoaded, DecisionModeSkipped)
+		recordDecision(ctx, DecisionOperationRequireUserOrganization, DecisionModeSkipped)
 		authCtx, _ := contextvalues.GetAuthContext(ctx)
 		if authCtx.APIKeyID != "" {
 			// API keys are bound to their authenticated organization outside RBAC.

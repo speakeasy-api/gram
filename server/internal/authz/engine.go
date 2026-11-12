@@ -344,6 +344,13 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return err
 	}
 	recordDecision(ctx, DecisionOperationRequireAny, decisionModeFor(enforce))
+	return e.requireAny(ctx, enforce, checks...)
+}
+
+// requireAny is RequireAny once enforcement is known and the decision is
+// recorded, so RequireAnyUnblocked can finish with it without counting its
+// one decision twice.
+func (e *Engine) requireAny(ctx context.Context, enforce bool, checks ...Check) error {
 	if !enforce {
 		if len(checks) > 0 && !slices.ContainsFunc(checks, unenforcedAllows) {
 			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
