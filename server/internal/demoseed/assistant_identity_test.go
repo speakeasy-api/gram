@@ -39,8 +39,7 @@ func TestSeededLegacyAssistantProvisions(t *testing.T) {
 					ProjectID:      project,
 					AssistantID:    legacy,
 					ActorUserID:    s.userID(demoUsers[0].handle),
-					AgentID:        uuid.Nil,
-					AgentName:      "",
+					Staff:          nil,
 				})
 			}))
 
