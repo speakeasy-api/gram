@@ -124,19 +124,38 @@ so target the flag only once the gateway runs in that environment.
 
 ## Running locally
 
-The daemon needs a real tailnet, so it is opt-in. It also needs organization
-encryption, which `./zero` configures (`mise run zero:org-encryption`).
-Provision an ingress through
-the dashboard with the `tag:speakeasy` policy, then set in `mise.local.toml`:
+The whole path (tailnet client → gateway → private listener → MCP handler)
+runs without Kubernetes in the opt-in `private-network` pitchfork group:
 
-```toml
-GRAM_TAILNET_GATEWAY_UPSTREAM_URL = "https://localhost:<private-listener-port>"
-GRAM_TAILNET_GATEWAY_UPSTREAM_CA_FILE = "<absolute path to the listener CA>"
-GRAM_TAILNET_GATEWAY_TOKEN_PATH = "<absolute path to a file holding the attestation token>"
-```
+- `network-ingress-server`: the private listener on
+  `https://localhost:$GRAM_NETINGRESS_PORT`, with its own mkcert certificate.
+- `network-ingress-worker`: the reconciler, gateway provider only, one slot.
+- `tailnet-gateway`: this daemon, forwarding to the listener.
 
-and start it with `pitchfork start tailnet-gateway`. Readiness is served on
-`http://localhost:$GRAM_TAILNET_GATEWAY_CONTROL_PORT/readyz`.
+In a cluster the gateway attests with its projected service-account token and
+the listener checks it with Kubernetes TokenReview. Locally the gateway
+presents an HMAC-signed token with the same claims (subject
+`system:serviceaccount:gram-local:gram-tailnet-gateway`, audience
+`gram-netingress`, 24-hour expiry), and the listener verifies it with
+`netingress.LocalTokenReviewer`. Everything after the token review is the
+production code path. The key and token live in `local/netingress/`, are
+created on first start, and the token is re-minted on every gateway start.
+The listener accepts local tokens only in the `local` environment.
+
+1. Make sure `./zero` has configured organization encryption
+   (`mise run zero:org-encryption`).
+2. Grant your local organization the `network_ingress` feature on its
+   Features page in the admin dashboard.
+3. Start the group: `pitchfork start --group private-network`.
+4. On the dashboard's Domains page, connect Tailscale with an OAuth client
+   from a test tailnet and the `tag:speakeasy` policy the setup sheet shows.
+
+Readiness is served on `http://127.0.0.1:$GRAM_NETINGRESS_CONTROL_PORT/healthz`
+(which also reviews the gateway's token),
+`http://127.0.0.1:$GRAM_NETWORK_INGRESS_WORKER_CONTROL_PORT/healthz` and
+`http://localhost:$GRAM_TAILNET_GATEWAY_CONTROL_PORT/readyz`. To point the
+gateway at another listener, set `GRAM_TAILNET_GATEWAY_UPSTREAM_URL` and
+`GRAM_TAILNET_GATEWAY_UPSTREAM_CA_FILE` in `mise.local.toml`.
 
 The pod needs outbound HTTPS to `controlplane.tailscale.com`,
 `login.tailscale.com` and the DERP relays (`*.tailscale.com:443`). UDP 41641
