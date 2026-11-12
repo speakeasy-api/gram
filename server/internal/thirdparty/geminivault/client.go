@@ -178,6 +178,12 @@ type Export struct {
 	Files                 []File `json:"-"`
 	ExportedArtifactCount int64  `json:"-"`
 	TotalArtifactCount    int64  `json:"-"`
+	// SizeBytes is the export size Vault reports, or zero when it is absent.
+	SizeBytes int64 `json:"-"`
+	// Start and End are the export's query window, or zero when Vault does
+	// not report a valid one.
+	Start time.Time `json:"-"`
+	End   time.Time `json:"-"`
 }
 
 type File struct {
@@ -191,6 +197,10 @@ func (c *Client) matterPath() string { return c.baseURL + "/matters/" + url.Path
 
 // errNoMatter guards matter-scoped calls on a client built for setup only.
 var errNoMatter = errors.New("vault matter ID is not configured")
+
+// ErrTooLarge marks a response or export file over the client's size bound.
+// A Gemini export over the bound can fit when its time window is shorter.
+var ErrTooLarge = errors.New("vault response exceeds size limit")
 
 // EnsureMatter returns the ID of an open matter with this name that the
 // delegated admin can see, creating one when none exists. Reusing by name keeps
@@ -448,22 +458,38 @@ func parseExport(data []byte) (*Export, error) {
 		Stats  struct {
 			Exported int64 `json:"exportedArtifactCount,string"`
 			Total    int64 `json:"totalArtifactCount,string"`
+			Size     int64 `json:"sizeInBytes,string"`
 		} `json:"stats"`
 		Sink struct {
 			Files []File `json:"files"`
 		} `json:"cloudStorageSink"`
+		Query struct {
+			StartTime string `json:"startTime"`
+			EndTime   string `json:"endTime"`
+		} `json:"query"`
 	}
 	if err := json.Unmarshal(data, &wire); err != nil || wire.ID == "" || wire.Status == "" {
 		return nil, errors.New("invalid Vault export response")
 	}
-	return &Export{ID: wire.ID, Status: wire.Status, Files: wire.Sink.Files, ExportedArtifactCount: wire.Stats.Exported, TotalArtifactCount: wire.Stats.Total}, nil
+	export := &Export{ID: wire.ID, Status: wire.Status, Files: wire.Sink.Files, ExportedArtifactCount: wire.Stats.Exported, TotalArtifactCount: wire.Stats.Total, SizeBytes: wire.Stats.Size, Start: time.Time{}, End: time.Time{}}
+	// The window is informational. A missing or unreadable one leaves both
+	// times zero instead of rejecting an otherwise valid job.
+	start, startErr := time.Parse(time.RFC3339Nano, wire.Query.StartTime)
+	end, endErr := time.Parse(time.RFC3339Nano, wire.Query.EndTime)
+	if startErr == nil && endErr == nil && end.After(start) {
+		export.Start, export.End = start.UTC(), end.UTC()
+	}
+	return export, nil
 }
 
 // Download reads a bounded GCS object on a fixed host. No upstream-supplied URL
 // is followed, and slash-containing object names are escaped as one path segment.
 func (c *Client) Download(ctx context.Context, file File) ([]byte, error) {
-	if file.BucketName == "" || file.ObjectName == "" || file.BucketName == "." || file.BucketName == ".." || file.ObjectName == "." || file.ObjectName == ".." || file.Size < 0 || file.Size > c.maxDownloadBytes {
-		return nil, errors.New("invalid or oversized Vault export file")
+	if file.BucketName == "" || file.ObjectName == "" || file.BucketName == "." || file.BucketName == ".." || file.ObjectName == "." || file.ObjectName == ".." || file.Size < 0 {
+		return nil, errors.New("invalid Vault export file")
+	}
+	if file.Size > c.maxDownloadBytes {
+		return nil, fmt.Errorf("oversized Vault export file: %w", ErrTooLarge)
 	}
 	data, err := c.request(ctx, http.MethodGet, c.storageURL+"/b/"+url.PathEscape(file.BucketName)+"/o/"+url.PathEscape(file.ObjectName)+"?alt=media", nil, c.maxDownloadBytes)
 	if err != nil {
@@ -559,14 +585,14 @@ func (c *Client) requestWith(ctx context.Context, client *guardian.HTTPClient, m
 		return nil, &HTTPError{StatusCode: resp.StatusCode, TokenExchange: false}
 	}
 	if resp.ContentLength > limit {
-		return nil, errors.New("vault response exceeds size limit")
+		return nil, ErrTooLarge
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, errors.New("read Vault response")
 	}
 	if int64(len(data)) > limit {
-		return nil, errors.New("vault response exceeds size limit")
+		return nil, ErrTooLarge
 	}
 	return data, nil
 }
