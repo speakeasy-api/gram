@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -317,4 +320,81 @@ func TestBindKeepsEveryChoiceAndVersionsOnlyNewOnes(t *testing.T) {
 	require.Equal(t, int64(2), v2.Version)
 	require.Equal(t, map[uuid.UUID]uuid.UUID{first: firstClient, second: secondClient}, f.choices(v2.VersionID))
 	require.Equal(t, map[uuid.UUID]uuid.UUID{first: firstClient}, f.choices(v1.VersionID), "an earlier version never changes")
+}
+
+func (f *fixture) enforce() {
+	f.t.Helper()
+	_, err := productfeaturesrepo.New(f.pool).EnableFeature(f.t.Context(), productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: f.orgID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(f.t, err)
+}
+
+// offerOnly seeds an auth client linked to serverID whose upstream OAuth
+// client the server has no association with.
+func (f *fixture) offerOnly(serverID uuid.UUID, clientType string) uuid.UUID {
+	f.t.Helper()
+	return f.authClient(serverID, clientType, f.registration(f.server(unstored)))
+}
+
+func TestBindDecidesFromOfferedClientsUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	// An OAuth client the server offers with no association.
+	offered := f.server(unstored)
+	offeredClient := f.offerOnly(offered, typeServiceAccount)
+	// A leftover association whose client the server no longer offers.
+	leftover := f.server(unstored)
+	f.registration(leftover)
+	leftoverClient := f.authClient(leftover, typeStaticCredential, uuid.Nil)
+	several := f.server(unstored)
+	f.offerOnly(several, typeServiceAccount)
+	f.offerOnly(several, typeServiceAccount)
+	personal := f.server(unstored)
+	f.offerOnly(personal, typeRemoteSession)
+	// An OAuth client beside a header client: either could serve the server.
+	mixed := f.server(unstored)
+	f.offerOnly(mixed, typeServiceAccount)
+	f.authClient(mixed, typeStaticCredential, uuid.Nil)
+	// A personal client beside a header client: a userless turn can use one.
+	personalOrHeaders := f.server(unstored)
+	f.authClient(personalOrHeaders, typeRemoteSession, f.registration(personalOrHeaders))
+	personalOrHeadersClient := f.authClient(personalOrHeaders, typeStaticCredential, uuid.Nil)
+
+	// The servers holding the offered clients' associations are gaps of their
+	// own, so only these servers' gaps are compared.
+	reasons := func(binding Binding) map[uuid.UUID]GapReason {
+		out := map[uuid.UUID]GapReason{}
+		for _, gap := range binding.Gaps {
+			if slices.Contains([]uuid.UUID{offered, leftover, several, personal, mixed, personalOrHeaders}, gap.MCPServerID) {
+				out[gap.MCPServerID] = gap.Reason
+			}
+		}
+		return out
+	}
+
+	before := f.bind(ContextUserless)
+	require.Equal(t, map[uuid.UUID]GapReason{
+		offered:  GapSelectionRequired,
+		leftover: GapNoClient,
+		several:  GapSelectionRequired,
+		personal: GapSelectionRequired,
+		mixed:    GapSelectionRequired,
+		// The associated OAuth client is the server's own, and only a user can
+		// use the personal one.
+		personalOrHeaders: GapPersonalRequiresUser,
+	}, reasons(before), "associations decide while the organization does not enforce")
+
+	f.enforce()
+	binding := f.bind(ContextUserless)
+	choices := f.choices(binding.VersionID)
+	require.Equal(t, offeredClient, choices[offered])
+	require.Equal(t, leftoverClient, choices[leftover])
+	require.Equal(t, personalOrHeadersClient, choices[personalOrHeaders])
+	require.Equal(t, map[uuid.UUID]GapReason{
+		several:  GapSelectionRequired,
+		personal: GapPersonalRequiresUser,
+		mixed:    GapSelectionRequired,
+	}, reasons(binding))
 }
