@@ -85,6 +85,8 @@ func (r Registry) Validate() error {
 		}
 		if t.Category == "" {
 			fail("%s: no category", t.Kind)
+		} else if !slices.Contains(ScopeCategories, t.Category) {
+			fail("%s: unknown category %q", t.Kind, t.Category)
 		}
 		dimKeys := map[string]bool{}
 		for _, d := range t.Dimensions {
@@ -110,7 +112,7 @@ func (r Registry) Validate() error {
 		for _, p := range t.Permissions {
 			owner := fmt.Sprintf("%s.%s", t.Kind, p.Action)
 			scope := t.ScopeFor(p)
-			if parts := scope.Parts(); parts.Resource == "" || parts.Action == "" {
+			if parts := scope.Parts(); parts.Resource == "" || parts.Action == "" || strings.Count(string(scope), ":") != 1 {
 				fail("%s: scope %q is not resource:action", owner, scope)
 			}
 			if strings.HasPrefix(scope.Parts().Action, "blocked_") {
@@ -126,11 +128,16 @@ func (r Registry) Validate() error {
 			if c := t.CategoryFor(p); !slices.Contains(ScopeCategories, c) {
 				fail("%s: unknown category %q", owner, c)
 			}
+			permissionDimKeys := map[string]bool{}
 			for _, d := range p.Dimensions {
 				validateDimension(fail, owner, d)
+				if permissionDimKeys[d.Key] {
+					fail("%s: dimension %q is declared twice", owner, d.Key)
+				}
 				if dimKeys[d.Key] {
 					fail("%s: dimension %q is already declared on %s", owner, d.Key, t.Kind)
 				}
+				permissionDimKeys[d.Key] = true
 			}
 
 			for _, implied := range p.Implies {
