@@ -25,7 +25,7 @@ func TestMemoryEvalRunWorkflow_RunTimeoutOutlivesItsActivities(t *testing.T) {
 	require.EqualValues(t, 5, policy.MaximumAttempts)
 	require.GreaterOrEqual(t, memoryEvalCompensationScheduleToClose, 5*memoryEvalCompensationAttemptTimeout+75*time.Second)
 
-	require.Greater(t, memoryEvalRunWorkflowRunTimeout, memoryEvalRunScheduleToCloseTimeout+memoryEvalCompensationScheduleToClose)
+	require.Greater(t, MemoryEvalRunWorkflowRunTimeout, memoryEvalRunScheduleToCloseTimeout+memoryEvalCompensationScheduleToClose)
 }
 
 type fakeMemoryEvalRunner struct {

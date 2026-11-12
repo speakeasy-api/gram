@@ -534,6 +534,7 @@ func newAdminCommand() *cli.Command {
 			if temporalEnv != nil {
 				projectRedeployer = deployments.NewStaffRedeployer(logger, tracerProvider, db, temporalEnv, audit.NewLogger())
 				adminService.SetProjectRedeployer(projectRedeployer)
+				adminService.SetMemoryEvalRunStarter(&background.TemporalMemoryEvalRunStarter{TemporalEnv: temporalEnv})
 			}
 			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy))
 			adminService.SetMCPServerURL(mcpServerURL)

@@ -132,6 +132,10 @@ type Endpoints struct {
 	UpdateGcpIamPlatformCredential          goa.Endpoint
 	VerifyGcpIamPlatformCredential          goa.Endpoint
 	DeleteGcpIamPlatformCredential          goa.Endpoint
+	GetMemoryEvalOptions                    goa.Endpoint
+	ListMemoryEvalRuns                      goa.Endpoint
+	GetMemoryEvalRun                        goa.Endpoint
+	StartMemoryEvalRun                      goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -272,6 +276,10 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateGcpIamPlatformCredential:          NewUpdateGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
 		VerifyGcpIamPlatformCredential:          NewVerifyGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
 		DeleteGcpIamPlatformCredential:          NewDeleteGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
+		GetMemoryEvalOptions:                    NewGetMemoryEvalOptionsEndpoint(s, a.APIKeyAuth),
+		ListMemoryEvalRuns:                      NewListMemoryEvalRunsEndpoint(s, a.APIKeyAuth),
+		GetMemoryEvalRun:                        NewGetMemoryEvalRunEndpoint(s, a.APIKeyAuth),
+		StartMemoryEvalRun:                      NewStartMemoryEvalRunEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -392,6 +400,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateGcpIamPlatformCredential = m(e.UpdateGcpIamPlatformCredential)
 	e.VerifyGcpIamPlatformCredential = m(e.VerifyGcpIamPlatformCredential)
 	e.DeleteGcpIamPlatformCredential = m(e.DeleteGcpIamPlatformCredential)
+	e.GetMemoryEvalOptions = m(e.GetMemoryEvalOptions)
+	e.ListMemoryEvalRuns = m(e.ListMemoryEvalRuns)
+	e.GetMemoryEvalRun = m(e.GetMemoryEvalRun)
+	e.StartMemoryEvalRun = m(e.StartMemoryEvalRun)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -3004,5 +3016,97 @@ func NewDeleteGcpIamPlatformCredentialEndpoint(s Service, authAPIKeyFn security.
 			return nil, err
 		}
 		return nil, s.DeleteGcpIamPlatformCredential(ctx, p)
+	}
+}
+
+// NewGetMemoryEvalOptionsEndpoint returns an endpoint function that calls the
+// method "getMemoryEvalOptions" of service "admin".
+func NewGetMemoryEvalOptionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetMemoryEvalOptionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetMemoryEvalOptions(ctx, p)
+	}
+}
+
+// NewListMemoryEvalRunsEndpoint returns an endpoint function that calls the
+// method "listMemoryEvalRuns" of service "admin".
+func NewListMemoryEvalRunsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListMemoryEvalRunsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListMemoryEvalRuns(ctx, p)
+	}
+}
+
+// NewGetMemoryEvalRunEndpoint returns an endpoint function that calls the
+// method "getMemoryEvalRun" of service "admin".
+func NewGetMemoryEvalRunEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetMemoryEvalRunPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetMemoryEvalRun(ctx, p)
+	}
+}
+
+// NewStartMemoryEvalRunEndpoint returns an endpoint function that calls the
+// method "startMemoryEvalRun" of service "admin".
+func NewStartMemoryEvalRunEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*StartMemoryEvalRunPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.StartMemoryEvalRun(ctx, p)
 	}
 }
