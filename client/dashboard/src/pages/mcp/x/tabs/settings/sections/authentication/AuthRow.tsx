@@ -4,7 +4,6 @@ import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import {
   READINESS_OUTLINE,
-  ReadinessIssueMarker,
   useReadinessIssuesFor,
 } from "@/components/detail/readiness-issues";
 import { cn } from "@/lib/utils";
@@ -26,8 +25,8 @@ export function AuthRow({
 }: {
   label: ReactNode;
   /**
-   * The row's anchor. A header issue that links here outlines the row and
-   * names the problem under its hint, so the reader sees which field to change.
+   * The row's anchor. A header issue that links here outlines the row; the
+   * row's own content says what to change, so no extra words.
    */
   id?: string;
   /** One clause. Anything longer belongs behind a popover. */
@@ -55,7 +54,6 @@ export function AuthRow({
             {hint}
           </Text>
         ) : null}
-        <ReadinessIssueMarker anchorId={id} className="pt-2" />
       </div>
       <div className="min-w-0 space-y-3">{children}</div>
     </div>
