@@ -36,7 +36,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -1149,7 +1149,7 @@ func (s *Service) prepareProxyBackendContext(
 	}
 	ctx = authorized
 
-	accountType, _ := mv.ResolveOrganizationTier(ctx, logger, s.billingRepository, projectWithOrganization.ID, billing.Tier(projectWithOrganization.GramAccountType))
+	accountType, _ := orgaccount.ResolveTier(ctx, logger, s.billingRepository, projectWithOrganization.ID, billing.Tier(projectWithOrganization.GramAccountType))
 	ctx = remotemcp.WithServerContext(ctx, remotemcp.ServerContext{
 		OrganizationID:   projectWithOrganization.ID,
 		OrganizationSlug: projectWithOrganization.Slug,

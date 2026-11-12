@@ -60,7 +60,7 @@ The design, implementation, tests, and per-service generated code for every mana
 
 **`impl.go` layout.** Lives at `server/internal/<svc>/impl.go`. Contains the `Service` struct (injected dependencies — tracer, logger, database pool, `*auth.Auth`, `*access.Manager`, plus feature-specific fields), compile-time assertions (`var _ gen.Service = (*Service)(nil)`, and `var _ gen.Auther = (*Service)(nil)` when `ByKey` is advertised), a `NewService(...)` constructor, an `Attach(mux, service)` wiring function, `APIKeyAuth` when `ByKey` is advertised, and one method per Goa `Method` declaration.
 
-**Model view files.** `server/internal/mv/<svc>.go` (singular or per-resource — e.g. `remotemcpserver.go`). Exported functions are named `Build<Subject>View` and `Build<Subject>ListView`. The package doc calls these "model views", which is where the package name comes from.
+**Model view files.** `server/internal/mv/<svc>.go` (singular or per-resource — e.g. `remotemcpserver.go`). Exported functions are named `Build<Subject>View` and `Build<Subject>ListView`. The package doc calls these "model views", which is where the package name comes from. Keep views flat in `mv` by default. Give a view its own subpackage under `mv/` (e.g. `mv/orgaccount`) only when a lightweight caller such as `auth/sessions` needs it without the rest of `mv`, whose dependency set is large. Such a subpackage must never import `mv`; add a `depguard` rule in `server/.golangci.yaml` to enforce that, as `mv-orgaccount-no-mv` does.
 
 **Wiring.** New services are attached in `server/cmd/gram/start.go` with `<svc>.Attach(mux, <svc>.NewService(...))` near the other service attachments.
 

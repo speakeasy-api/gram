@@ -1,4 +1,4 @@
-package mv_test
+package orgaccount_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -24,7 +24,7 @@ func (r *organizationBillingRepo) GetCustomerTier(ctx context.Context, orgID str
 	return r.getCustomerTier(ctx, orgID)
 }
 
-func TestResolveOrganizationTier(t *testing.T) {
+func TestResolveTier(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -59,7 +59,7 @@ func TestResolveOrganizationTier(t *testing.T) {
 				}}
 			}
 
-			tier, active := mv.ResolveOrganizationTier(t.Context(), testenv.NewLogger(t), repo, "test-organization", tc.persisted)
+			tier, active := orgaccount.ResolveTier(t.Context(), testenv.NewLogger(t), repo, "test-organization", tc.persisted)
 			require.Equal(t, tc.want, tier)
 			require.Equal(t, tc.wantActive, active)
 			require.Equal(t, tc.wantCalls, calls)
@@ -67,7 +67,7 @@ func TestResolveOrganizationTier(t *testing.T) {
 	}
 }
 
-func TestDescribeOrganizationReconcilesResolvedTier(t *testing.T) {
+func TestDescribeReconcilesResolvedTier(t *testing.T) {
 	t.Parallel()
 
 	queries, orgID := seedOrganization(t, billing.TierBase)
@@ -77,7 +77,7 @@ func TestDescribeOrganizationReconcilesResolvedTier(t *testing.T) {
 		},
 	}
 
-	got, err := mv.DescribeOrganization(t.Context(), testenv.NewLogger(t), queries, repo, orgID)
+	got, err := orgaccount.Describe(t.Context(), testenv.NewLogger(t), queries, repo, orgID)
 	require.NoError(t, err)
 	require.Equal(t, string(billing.TierPro), got.GramAccountType)
 	require.True(t, got.HasActiveSubscription)
@@ -87,7 +87,7 @@ func TestDescribeOrganizationReconcilesResolvedTier(t *testing.T) {
 	require.Equal(t, string(billing.TierPro), persisted.GramAccountType)
 }
 
-func TestDescribeOrganizationPaygIsAuthoritative(t *testing.T) {
+func TestDescribePaygIsAuthoritative(t *testing.T) {
 	t.Parallel()
 
 	queries, orgID := seedOrganization(t, billing.TierPayg)
@@ -98,7 +98,7 @@ func TestDescribeOrganizationPaygIsAuthoritative(t *testing.T) {
 		},
 	}
 
-	got, err := mv.DescribeOrganization(t.Context(), testenv.NewLogger(t), queries, repo, orgID)
+	got, err := orgaccount.Describe(t.Context(), testenv.NewLogger(t), queries, repo, orgID)
 	require.NoError(t, err)
 	require.Equal(t, string(billing.TierPayg), got.GramAccountType)
 	require.True(t, got.HasActiveSubscription)
@@ -108,7 +108,7 @@ func TestDescribeOrganizationPaygIsAuthoritative(t *testing.T) {
 	require.Equal(t, string(billing.TierPayg), persisted.GramAccountType)
 }
 
-func TestDescribeOrganizationDoesNotOverwriteConcurrentPaygUpdate(t *testing.T) {
+func TestDescribeDoesNotOverwriteConcurrentPaygUpdate(t *testing.T) {
 	t.Parallel()
 
 	queries, orgID := seedOrganization(t, billing.TierBase)
@@ -124,7 +124,7 @@ func TestDescribeOrganizationDoesNotOverwriteConcurrentPaygUpdate(t *testing.T) 
 		},
 	}
 
-	got, err := mv.DescribeOrganization(t.Context(), testenv.NewLogger(t), queries, repo, orgID)
+	got, err := orgaccount.Describe(t.Context(), testenv.NewLogger(t), queries, repo, orgID)
 	require.NoError(t, err)
 	require.Equal(t, string(billing.TierPayg), got.GramAccountType)
 	require.True(t, got.HasActiveSubscription)
@@ -134,7 +134,7 @@ func TestDescribeOrganizationDoesNotOverwriteConcurrentPaygUpdate(t *testing.T) 
 	require.Equal(t, string(billing.TierPayg), persisted.GramAccountType)
 }
 
-func TestDescribeOrganizationPreservesResolvedTierWhenPersistenceFails(t *testing.T) {
+func TestDescribePreservesResolvedTierWhenPersistenceFails(t *testing.T) {
 	t.Parallel()
 
 	queries, orgID := seedOrganization(t, billing.TierBase)
@@ -147,7 +147,7 @@ func TestDescribeOrganizationPreservesResolvedTierWhenPersistenceFails(t *testin
 		},
 	}
 
-	got, err := mv.DescribeOrganization(ctx, testenv.NewLogger(t), queries, repo, orgID)
+	got, err := orgaccount.Describe(ctx, testenv.NewLogger(t), queries, repo, orgID)
 	require.NoError(t, err)
 	require.Equal(t, string(billing.TierPro), got.GramAccountType)
 	require.True(t, got.HasActiveSubscription)
