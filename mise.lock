@@ -473,43 +473,43 @@ url = "https://github.com/speakeasy-api/openapi/releases/download/v1.24.0/openap
 url_api = "https://api.github.com/repos/speakeasy-api/openapi/releases/assets/454075702"
 
 [[tools."github:speakeasy-api/speakeasy"]]
-version = "1.803.0"
+version = "1.808.1"
 backend = "github:speakeasy-api/speakeasy"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.linux-arm64"]
-checksum = "sha256:10f8c8add0b03209d27df43399f2c93ea64de981ee7a0b34bacaffcc9c76078b"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_linux_arm64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926702"
+checksum = "sha256:85b611592329b1e30db4a2e1718aee8094c1631ea8b8e34906407bf1fb3a2bf5"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_linux_arm64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734229"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.linux-arm64-musl"]
-checksum = "sha256:10f8c8add0b03209d27df43399f2c93ea64de981ee7a0b34bacaffcc9c76078b"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_linux_arm64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926702"
+checksum = "sha256:85b611592329b1e30db4a2e1718aee8094c1631ea8b8e34906407bf1fb3a2bf5"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_linux_arm64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734229"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.linux-x64"]
-checksum = "sha256:adae2df2b6c1aaca9d8380900df19a087a95bd35eced0217465e4b12fc6cccee"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_linux_amd64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926705"
+checksum = "sha256:9882904478c8aca5b868449de3b989f268f6632a7100c27eb50a8c749211f879"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_linux_amd64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734221"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.linux-x64-musl"]
-checksum = "sha256:adae2df2b6c1aaca9d8380900df19a087a95bd35eced0217465e4b12fc6cccee"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_linux_amd64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926705"
+checksum = "sha256:9882904478c8aca5b868449de3b989f268f6632a7100c27eb50a8c749211f879"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_linux_amd64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734221"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.macos-arm64"]
-checksum = "sha256:655b71b6fca7ee6a226b4e7702114df025a80a79841baffdac53a962c815add5"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_darwin_arm64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926706"
+checksum = "sha256:a897bd519aba0ecc1904d8618e0e93aefc411e2b3e14088931b3418d7d0a254d"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_darwin_arm64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734231"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.macos-x64"]
-checksum = "sha256:947308d553cf464ec74f97cfbec13d3eacdecfce648c67a67249ca0a90bea242"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_darwin_amd64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926700"
+checksum = "sha256:ca00b1394eb3261091076fa0e7114c0224e0295089098dbcfc770da33f725a30"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_darwin_amd64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734225"
 
 [tools."github:speakeasy-api/speakeasy"."platforms.windows-x64"]
-checksum = "sha256:ebfb07e6e726a4a6c877cd9b45e5caa52365ae09bc142b48cbe526050fedda54"
-url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.803.0/speakeasy_windows_amd64.zip"
-url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/658926697"
+checksum = "sha256:8119dc55295dce354b1a44c2bc8e81523f20cb5dae4f36615601c02f4a606778"
+url = "https://github.com/speakeasy-api/speakeasy/releases/download/v1.808.1/speakeasy_windows_amd64.zip"
+url_api = "https://api.github.com/repos/speakeasy-api/speakeasy/releases/assets/731734228"
 
 [[tools."github:sqlc-dev/sqlc"]]
 version = "1.31.1"
