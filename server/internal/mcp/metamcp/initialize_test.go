@@ -14,12 +14,30 @@ func TestResolveDiscoveryInstructions(t *testing.T) {
 	empty, blank, custom := "", " \t\n", "  Operator instructions.  "
 	for _, value := range []*string{nil, &empty, &blank} {
 		require.Equal(t, Instructions, ResolveDiscoveryInstructions(value, DiscoveryModeProgressive, nil))
-		require.Contains(t, ResolveDiscoveryInstructions(value, DiscoveryModeDirect, nil), "qualified server--tool name")
+		require.Contains(t, ResolveDiscoveryInstructions(value, DiscoveryModeDirect, nil), "Each tool is named server--tool")
 		require.NotContains(t, ResolveDiscoveryInstructions(value, DiscoveryModeDirect, nil), "execute_tool")
 	}
 	for _, mode := range []DiscoveryMode{DiscoveryModeDirect, DiscoveryModeProgressive} {
 		require.Equal(t, custom, ResolveDiscoveryInstructions(&custom, mode, nil))
 	}
+}
+
+func TestCopyOfBuiltInInstructionsIsNotCustom(t *testing.T) {
+	t.Parallel()
+	// The settings page offers each built-in text to copy. A gateway that
+	// stored one must keep following the built-in instructions.
+	for _, mode := range []DiscoveryMode{DiscoveryModeProgressive, DiscoveryModeDirect, DiscoveryModeCode} {
+		copied := "  " + ResolveDiscoveryInstructions(nil, mode, nil) + "\n"
+		require.False(t, HasCustomInstructions(&copied), mode)
+		require.Nil(t, CustomInstructions(&copied), mode)
+		members := []MemberLabel{{Slug: "linear", Name: "Linear"}}
+		// It follows the active mode, not the mode it was copied in.
+		require.Equal(t, ResolveDiscoveryInstructions(nil, DiscoveryModeCode, members), ResolveDiscoveryInstructions(&copied, DiscoveryModeCode, members), mode)
+	}
+	edited := ResolveDiscoveryInstructions(nil, DiscoveryModeCode, nil) + " Ask before writing."
+	require.True(t, HasCustomInstructions(&edited))
+	require.Equal(t, &edited, CustomInstructions(&edited))
+	require.Nil(t, CustomInstructions(nil))
 }
 
 func TestResolveInstructions(t *testing.T) {
