@@ -118,7 +118,7 @@ export function SendTestEventSection({
                 {sendsEverySignal
                   ? "Sends one test log, trace and metric to check the endpoint and API key. Each is marked "
                   : "Sends one test event to check the endpoint and API key. It is marked "}
-                <code className="font-mono text-xs wrap-anywhere">
+                <code className="font-mono text-xs whitespace-nowrap">
                   speakeasy.test_event=true
                 </code>
                 {sendsEverySignal
