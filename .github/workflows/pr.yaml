@@ -1505,9 +1505,7 @@ jobs:
           restore-keys: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-
 
       - name: Start lint timer
-        run: |
-          free -g
-          echo "LINT_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+        run: echo "LINT_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -1521,9 +1519,10 @@ jobs:
         env:
           # A run that has to analyse most of the server keeps about 10 GiB
           # live, and with the default GOGC the heap grows to more than twice
-          # that before a collection. The soft limit keeps the footprint near
-          # the live set and makes such a run faster (same value and reasoning
-          # as .mise-tasks/lint/server.sh).
+          # that before a collection, close to this runner's 30 GiB. The soft
+          # limit sits just above the live set: at 4 GiB, the value the local
+          # lint task uses, the collector ran continuously here and a cold
+          # run took 322s instead of 138s.
           GOMEMLIMIT: 12GiB
 
       - name: Decide whether to save the golangci-lint cache
