@@ -97,9 +97,12 @@ func newDemoSeedCommand() *cli.Command {
 					return fmt.Errorf("local seed site-url: %w", err)
 				}
 			}
+			// HTTP is only for an environment explicitly declared local: the
+			// environment flag's default must not relax the issuer check.
 			issuerURL := c.String("authz-issuer-url")
+			allowHTTP := c.IsSet("environment") && c.String("environment") == "local"
 			inv.Require("demo seed assistant trigger issuer",
-				"authz-issuer-url is a Speakeasy issuer origin", mcpauthz.ValidateIssuerOrigin(issuerURL, c.String("environment") == "local"),
+				"authz-issuer-url is a Speakeasy issuer origin", mcpauthz.ValidateIssuerOrigin(issuerURL, allowHTTP),
 			)
 			ctx := c.Context
 			logger := PullLogger(ctx)
