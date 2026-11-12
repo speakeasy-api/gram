@@ -123,13 +123,36 @@ var _ = Service("remoteSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ServerClientAssociations"}`)
 	})
 
-	Method("detachServerClientAssociation", func() {
-		Description("Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server's issuer) and synchronizes the backfill-derived typed links. Administrator-owned typed links are untouched. Requires mcp:write on the server.")
+	Method("attachServerClientAssociation", func() {
+		Description("Associate one MCP server with an upstream OAuth client, naming the client the server signs in through. The client must already be bound to the server's own user session issuer, or, for a server with none, to an issuer of a gateway fronting it. The client is also bound to the issuer of each gateway fronting the server, so its consent can offer the client. Refused when the server has another client, when another client of the provider holds a fronting gateway's issuer, or when the organization's organization-level issuer lacks the client. A per-user client is also refused when another proxied server uses it at a different upstream address, or would pick it up from a gateway's issuer. On a proxied server, a first association makes earlier no-auth choices unusable, so those people must reconnect, and other servers on the issuer stop falling back to the client. Attaching a client the server is already associated with refuses none of this and only completes the gateway bindings it can. Requires mcp:write on the server and on each gateway whose issuer gains the client.")
 
 		Payload(func() {
-			Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })
-			Attribute("remote_session_client_id", String, "The associated remote session client.", func() { Format(FormatUUID) })
-			Required("mcp_server_id", "remote_session_client_id")
+			Extend(ServerClientAssociationForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(AttachServerClientAssociationResult)
+
+		HTTP(func() {
+			POST("/rpc/remoteSessions.attachServerClientAssociation")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "attachServerClientAssociation")
+		Meta("openapi:extension:x-speakeasy-name-override", "attachServerClientAssociation")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AttachServerClientAssociation"}`)
+	})
+
+	Method("detachServerClientAssociation", func() {
+		Description("Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server's issuer) and synchronizes the backfill-derived typed links. Removing an association also releases the client from a project-level issuer of a fronting gateway when the client stays bound to the server's own issuer and nothing else on that gateway issuer signs in through it. Administrator-owned typed links are untouched. Requires mcp:write on the server.")
+
+		Payload(func() {
+			Extend(ServerClientAssociationForm)
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -611,6 +634,24 @@ var ServerClientAssociation = Type("ServerClientAssociation", func() {
 	Attribute("associated_at", String, "When the association was recorded.", func() { Format(FormatDateTime) })
 
 	Required("remote_session_client_id", "client_id", "remote_session_issuer_id", "issuer_slug", "issuer_url", "scope", "server_count", "associated_at")
+})
+
+var ServerClientAssociationForm = Type("ServerClientAssociationForm", func() {
+	Description("One MCP server and one upstream OAuth client, the pair an association is between.")
+
+	Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })
+	Attribute("remote_session_client_id", String, "The remote session client.", func() { Format(FormatUUID) })
+	Required("mcp_server_id", "remote_session_client_id")
+})
+
+var AttachServerClientAssociationResult = Type("AttachServerClientAssociationResult", func() {
+	Attribute("association", ServerClientAssociation, "The server's association with the client.")
+	Attribute("bound_user_session_issuer_ids", ArrayOf(String), "The issuers of gateways fronting the server that this attach bound the client to. Empty when they already held it.", func() {
+		Elem(func() {
+			Format(FormatUUID)
+		})
+	})
+	Required("association", "bound_user_session_issuer_ids")
 })
 
 var ListServerClientAssociationsResult = Type("ListServerClientAssociationsResult", func() {

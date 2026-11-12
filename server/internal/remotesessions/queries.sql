@@ -4125,6 +4125,157 @@ SELECT
       AND g.deleted IS FALSE
   ))::boolean AS reads_bindings;
 
+-- name: ListGatewaysFrontingMCPServer :many
+-- The live gateways one MCP server is a member of, each with the live user
+-- session issuer its consent signs in through. Ordered so callers lock the
+-- issuers deterministically.
+SELECT gateway.id AS meta_mcp_server_id, gateway_issuer.id AS user_session_issuer_id
+FROM meta_mcp_server_members AS member
+JOIN meta_mcp_servers AS gateway
+  ON gateway.id = member.meta_mcp_server_id
+ AND gateway.project_id = member.project_id
+ AND gateway.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = gateway.project_id
+ AND project.organization_id = @organization_id::text
+ AND project.deleted IS FALSE
+JOIN user_session_issuers AS gateway_issuer
+  ON gateway_issuer.id = gateway.user_session_issuer_id
+ AND gateway_issuer.deleted IS FALSE
+ AND (gateway_issuer.project_id = gateway.project_id
+      OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = project.organization_id))
+WHERE member.mcp_server_id = @mcp_server_id::uuid
+  AND member.project_id = @project_id::uuid
+  AND member.deleted IS FALSE
+ORDER BY gateway_issuer.id, gateway.id;
+
+-- name: ListOnlyOrganizationUserSessionIssuer :many
+-- The organization's organization-level user session issuer when it has exactly
+-- one, which is the issuer the organization gateway signs in through. No row
+-- when it has none or several.
+SELECT issuer.id
+FROM user_session_issuers AS issuer
+WHERE issuer.project_id IS NULL
+  AND issuer.organization_id = @organization_id::text
+  AND issuer.deleted IS FALSE
+  AND (
+    SELECT count(*)
+    FROM user_session_issuers AS sibling
+    WHERE sibling.organization_id = issuer.organization_id
+      AND sibling.project_id IS NULL
+      AND sibling.deleted IS FALSE
+  ) = 1;
+
+-- name: ListOtherProviderClientsBoundToUserSessionIssuer :many
+-- The live clients of one provider bound to a user session issuer, other than
+-- the given client. Reads every tenant tier, because an issuer holds one client
+-- per provider whichever project's client that is.
+SELECT client.id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS client
+  ON client.id = link.remote_session_client_id
+ AND client.deleted IS FALSE
+WHERE link.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND client.remote_session_issuer_id = @remote_session_issuer_id::uuid
+  AND client.id <> @remote_session_client_id::uuid
+ORDER BY client.id;
+
+-- name: ListProxiedMCPServersUsingClientAtAnotherAddress :many
+-- The other live proxied MCP servers of the organization associated with a
+-- client whose upstream address is not the given one. A person holds one grant
+-- per client, and that grant records one resource, so only one of these servers
+-- can use it at a time. A tunneled server has no fixed address, so it always
+-- counts as another address. Trailing slashes are ignored, as token routing
+-- ignores them.
+SELECT other.id
+FROM mcp_server_remote_session_clients AS association
+JOIN mcp_servers AS other
+  ON other.id = association.mcp_server_id
+ AND other.project_id = association.project_id
+ AND other.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = other.remote_mcp_server_id
+ AND remote.project_id = other.project_id
+ AND remote.deleted IS FALSE
+WHERE association.organization_id = @organization_id::text
+  AND association.remote_session_client_id = @remote_session_client_id::uuid
+  AND association.mcp_server_id <> @mcp_server_id::uuid
+  AND association.deleted IS FALSE
+  AND (other.remote_mcp_server_id IS NOT NULL OR other.tunneled_mcp_server_id IS NOT NULL)
+  AND (remote.url IS NULL OR rtrim(remote.url, '/') <> rtrim(@upstream_url::text, '/'))
+ORDER BY other.id;
+
+-- name: ListGatewayMembersCaptureWouldAddAtAnotherAddress :many
+-- The other live proxied members of gateways on a user session issuer that
+-- reconcile would associate with a client newly bound there, because the issuer
+-- then holds a client of their derived provider, and whose upstream address is
+-- not the given one. A recorded association or explicit detach for the pair
+-- stops that capture. Trailing slashes are ignored, as token routing ignores them.
+SELECT DISTINCT member_server.id
+FROM meta_mcp_servers AS gateway
+JOIN meta_mcp_server_members AS member
+  ON member.meta_mcp_server_id = gateway.id
+ AND member.project_id = gateway.project_id
+ AND member.deleted IS FALSE
+JOIN mcp_servers AS member_server
+  ON member_server.id = member.mcp_server_id
+ AND member_server.project_id = member.project_id
+ AND member_server.deleted IS FALSE
+ AND (member_server.remote_mcp_server_id IS NOT NULL OR member_server.tunneled_mcp_server_id IS NOT NULL)
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = member_server.remote_mcp_server_id
+ AND remote.project_id = member_server.project_id
+ AND remote.deleted IS FALSE
+WHERE gateway.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND gateway.organization_id = @organization_id::text
+  AND gateway.deleted IS FALSE
+  AND member_server.id <> @mcp_server_id::uuid
+  AND member_server.remote_session_issuer_id = @remote_session_issuer_id::uuid
+  AND (remote.url IS NULL OR rtrim(remote.url, '/') <> rtrim(@upstream_url::text, '/'))
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS recorded
+    WHERE recorded.mcp_server_id = member_server.id
+      AND recorded.remote_session_client_id = @remote_session_client_id::uuid
+  )
+ORDER BY member_server.id;
+
+-- name: UserSessionIssuerHasConsumersWithoutAssociations :one
+-- Whether anything signs in through a user session issuer's bindings without an
+-- association to show for it, besides one gateway member giving up a client: a
+-- server on the issuer itself, which can fall back to an unclaimed client, or a
+-- hosted member of a gateway on the issuer, which serves from every client the
+-- issuer binds.
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM mcp_servers AS direct
+    JOIN projects AS project
+      ON project.id = direct.project_id
+     AND project.organization_id = @organization_id::text
+     AND project.deleted IS FALSE
+    WHERE direct.user_session_issuer_id = @user_session_issuer_id::uuid
+      AND direct.deleted IS FALSE
+  ) OR EXISTS (
+    SELECT 1
+    FROM meta_mcp_servers AS gateway
+    JOIN meta_mcp_server_members AS member
+      ON member.meta_mcp_server_id = gateway.id
+     AND member.project_id = gateway.project_id
+     AND member.deleted IS FALSE
+    JOIN mcp_servers AS hosted
+      ON hosted.id = member.mcp_server_id
+     AND hosted.project_id = member.project_id
+     AND hosted.deleted IS FALSE
+     AND hosted.remote_mcp_server_id IS NULL
+     AND hosted.tunneled_mcp_server_id IS NULL
+    WHERE gateway.user_session_issuer_id = @user_session_issuer_id::uuid
+      AND gateway.organization_id = @organization_id::text
+      AND gateway.deleted IS FALSE
+      AND hosted.id <> @mcp_server_id::uuid
+  )
+)::boolean AS has_consumers;
+
 -- name: HasLivePrincipalRemoteSessionBindingsForClientBinding :one
 -- Report whether any unrevoked agent attachment goes through a client's binding
 -- to a user session issuer, which deleting that binding would cascade-delete.

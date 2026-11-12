@@ -255,6 +255,7 @@ export const AUDIT_ACTIONS = [
   "remote-mcp:delete",
   "remote-mcp:update",
   "remote-session-client:attach-json-web-key-set",
+  "remote-session-client:attach-mcp-server",
   "remote-session-client:attach-user-session-issuer",
   "remote-session-client:create",
   "remote-session-client:delete",
@@ -937,6 +938,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "attached a JSON Web Key Set to";
     case "remote-session-client:detach-json-web-key-set":
       return "detached a JSON Web Key Set from";
+    case "remote-session-client:attach-mcp-server":
+      return "attached an MCP server to";
     case "remote-session-client:detach-mcp-server":
       return "detached an MCP server from";
     case "remote-session-client:revoke-sessions":

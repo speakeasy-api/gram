@@ -424,7 +424,7 @@ export function RemoteMcpIdentitySectionBody({
     for (const remoteSessionClientId of releaseClientIds) {
       await detachAssociation.mutateAsync({
         request: {
-          detachServerClientAssociationRequestBody: {
+          serverClientAssociationForm: {
             mcpServerId: target.mcpServerId ?? target.permissionResourceId,
             remoteSessionClientId,
           },
