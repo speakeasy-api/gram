@@ -128,9 +128,9 @@ func (s *DataExportTestEventService) send(ctx context.Context, principal Princip
 	}
 
 	result, err := s.core.SendTest(ctx, dataexports.SendRouteTestParams{
-		OrganizationID: principal.OrganizationID,
-		ProjectID:      project.ID,
-		RouteID:        routeID,
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID,
+		RouteID:          routeID,
 		Expect:           expect,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 		ActorDisplayName: nil,
