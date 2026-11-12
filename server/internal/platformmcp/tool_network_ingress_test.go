@@ -127,6 +127,9 @@ func TestNetworkIngressNextActionNamesTheFirstBlockingStep(t *testing.T) {
 		{"gateway without a certificate", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
 			i.Status, i.LastError, i.DNSName = "error", "provider_certificate_unavailable", ""
 		})}, networkIngressNextWaitForCertificate},
+		{"organization key unusable", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) {
+			i.Status, i.LastError, i.DNSName = "error", "encryption_key_unavailable", ""
+		})}, networkIngressNextRestoreKey},
 		{"degraded", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Status = "degraded" })}, networkIngressNextRepair},
 		{"pending", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.Status = "pending" })}, networkIngressNextWait},
 		{"online without DNS", GetNetworkIngressOutput{Entitled: true, Ingress: with(func(i *NetworkIngressSummary) { i.DNSName = "" })}, networkIngressNextWait},
@@ -283,4 +286,10 @@ func TestNetworkIngressCertificateUnavailableMatchesReconcilerCode(t *testing.T)
 	t.Parallel()
 	require.Equal(t, k8s.NetworkIngressErrorProviderCertificateUnavailable, networkIngressCertificateUnavailable)
 	require.Equal(t, networkIngressCertificateUnavailable, safeNetworkIngressErrorCode(networkIngressCertificateUnavailable), "the code is returned to clients, not withheld")
+}
+
+func TestNetworkIngressEncryptionKeyUnavailableMatchesReconcilerCode(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, k8s.NetworkIngressErrorEncryptionKeyUnavailable, networkIngressEncryptionKeyUnavailable)
+	require.Equal(t, networkIngressEncryptionKeyUnavailable, safeNetworkIngressErrorCode(networkIngressEncryptionKeyUnavailable), "the code is returned to clients, not withheld")
 }
