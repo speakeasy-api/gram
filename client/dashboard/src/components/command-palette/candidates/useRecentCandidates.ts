@@ -33,25 +33,34 @@ export function useRecentCandidates({
 
   return useMemo(
     () =>
-      (resolved ? recents : []).map((recent): LauncherCandidate => {
-        // Prefer a live name override over a stored URL-derived fallback so
-        // id-keyed pages show the resource name once it has loaded.
-        const label = getRecentLabelOverride(recent.href) ?? recent.label;
+      (resolved ? recents : [])
+        // Channels is hidden from navigation; a stored visit must not
+        // resurface it.
+        .filter(
+          (recent) =>
+            !/\/projects\/[^/]+\/channels(\/|$)/.test(
+              recent.href.split("?")[0]!,
+            ),
+        )
+        .map((recent): LauncherCandidate => {
+          // Prefer a live name override over a stored URL-derived fallback so
+          // id-keyed pages show the resource name once it has loaded.
+          const label = getRecentLabelOverride(recent.href) ?? recent.label;
 
-        return {
-          id: `recent:${recent.href}`,
-          kind: "recent",
-          title: label,
-          detail: "Recently visited",
-          keywords: [recent.href],
-          verbs: ["open"],
-          icon: recent.icon as IconName | undefined,
-          group: "Recently Visited",
-          run: () => {
-            void navigate(recent.href);
-          },
-        };
-      }),
+          return {
+            id: `recent:${recent.href}`,
+            kind: "recent",
+            title: label,
+            detail: "Recently visited",
+            keywords: [recent.href],
+            verbs: ["open"],
+            icon: recent.icon as IconName | undefined,
+            group: "Recently Visited",
+            run: () => {
+              void navigate(recent.href);
+            },
+          };
+        }),
     [resolved, recents, navigate],
   );
 }

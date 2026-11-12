@@ -42,10 +42,9 @@ import { useSourceCandidates } from "./useSourceCandidates";
  * Agent Sessions page action opens the scoped search; an agent's profile links
  * there with its agent and time-window filters. See docs/rbac.md.
  */
-// Channels contributes its selected-project rollout-gated page action, not
-// named conversations. The page resolves effective access, including explicit
-// per-person exceptions. Private titles must not escape their project cache.
-// Discovery pages the live message archive (including DM previews and endpoint
+// Channels is hidden: it contributes no page action and no named
+// conversations, and is reachable only by direct URL. Private titles must not
+// escape their project cache. Discovery pages the live message archive (including DM previews and endpoint
 // attribution), with no metadata search/public-only endpoint. Crawling every
 // page on global launcher opens would duplicate the archive and its access-
 // revocation cache outside Channels. Keep this sensitive, high-volume archive

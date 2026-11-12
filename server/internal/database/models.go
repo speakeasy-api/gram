@@ -342,6 +342,9 @@ type AiIntegrationConfig struct {
 	ID uuid.UUID
 	// @access: confidential
 	Deleted bool
+	// Provider settings JSON; holds admin emails and customer directory structure.
+	// @access: opaque-restricted
+	Settings []byte
 }
 
 type AiIntegrationConfigChat struct {
@@ -3647,6 +3650,24 @@ type McpAuthClientHeader struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type McpConnectionLogRoute struct {
+	// @access: confidential
+	DataExportRouteID uuid.UUID
+	// @access: confidential
+	DataExportRoutesDataSource string
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Lowest log severity this route sends: info, warn or error.
+	// @access: confidential
+	MinSeverity string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type McpEndpoint struct {

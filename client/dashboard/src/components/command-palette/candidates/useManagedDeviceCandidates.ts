@@ -15,6 +15,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
 
+const DEVICE_INVENTORY_STALE_TIME_MS = 30_000;
+
 /**
  * Every device in the fleet by hostname or serial, MDM-synced or reported only
  * by its agent, opening the device's panel on the Devices tab. Hostnames often
@@ -44,6 +46,7 @@ export function useManagedDeviceCandidates({
     initialPageParam: undefined as FleetDevicesPageParams,
     getNextPageParam: (page) => page["~next"],
     enabled,
+    staleTime: DEVICE_INVENTORY_STALE_TIME_MS,
     retry: false,
     throwOnError: false,
   });

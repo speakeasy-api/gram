@@ -83,14 +83,19 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 		Timeout:         0,
 	}))
 
-	// Inside Claude's Cowork VM the relay only ships the session transcript
-	// from Stop (onStop); every other handler answers with its neutral
-	// decision and sends nothing. See coworkTranscriptMode.
-	runner.OnPromptSubmitted(outsideCowork(r.onPrompt, agenthooks.AcceptPrompt))
-	runner.OnToolPre(outsideCowork(r.onToolPre, agenthooks.NoDecision))
-	runner.OnPermission(outsideCowork(r.onPermission, agenthooks.NoDecision))
-	runner.OnToolPost(outsideCowork(r.onToolPost, agenthooks.Observed))
-	runner.OnToolError(outsideCowork(r.onToolPost, agenthooks.Observed))
+	// Inside Claude's Cowork VM, prompt, tool and permission events go to the
+	// server as they do in Claude Code, so policy is enforced in real time and
+	// the session is captured per event. The Stop hook also ships the session
+	// transcript (onStop) to backfill what no hook saw: the first prompt,
+	// typed in chat before the session moved to Cowork, and assistant text.
+	// The envelopes carry session.surface "cowork", so the server keys prompts and
+	// tool calls by the ids the transcript shares and stores each once. The
+	// observe-only handlers stay off there. See inCoworkVM.
+	runner.OnPromptSubmitted(r.onPrompt)
+	runner.OnToolPre(r.onToolPre)
+	runner.OnPermission(r.onPermission)
+	runner.OnToolPost(r.onToolPost)
+	runner.OnToolError(r.onToolPost)
 	runner.OnStop(r.onStop)
 	runner.OnSubagentStop(r.onStop)
 	runner.OnSessionStart(outsideCowork(r.onSessionStart, agenthooks.ContinueSession))
@@ -127,6 +132,10 @@ type verdict struct {
 	// blockEffect carries the server's structured requestable-block metadata
 	// for a denied gating event; nil otherwise.
 	blockEffect *wire.BlockEffect
+	// ask means the server wants the person to allow the tool call in the
+	// agent's own permission prompt (Claude Cowork). block is also set, so
+	// every event that cannot ask denies instead.
+	ask bool
 }
 
 const brokenAuthMessage = "Speakeasy hooks are configured for this workspace but this machine's credentials are missing or invalid. Run the Speakeasy hooks login command to reconnect."
@@ -356,13 +365,13 @@ func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
 	case stateNeverAuthed:
 		// A broken config suppresses the nudge: sign-in cannot recover an
 		// unknown deployment identity, only a reinstall can.
-		return verdict{block: false, message: "", nudge: r.cfg.ConfigError == "", blockEffect: nil}
+		return verdict{block: false, message: "", nudge: r.cfg.ConfigError == "", blockEffect: nil, ask: false}
 	case stateBroken:
 		msg := res.decision.Message
 		if msg == "" {
 			msg = brokenAuthMessage
 		}
-		return verdict{block: true, message: msg, nudge: false, blockEffect: nil}
+		return verdict{block: true, message: msg, nudge: false, blockEffect: nil, ask: false}
 	case stateReauthNeeded:
 		// Tool events fail closed on the rejection (or its memory); prompt
 		// handlers honor nudge and fail open instead.
@@ -370,15 +379,17 @@ func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
 		if res.statusCode != 0 {
 			msg = httpMessage(res)
 		}
-		return verdict{block: true, message: msg, nudge: true, blockEffect: nil}
+		return verdict{block: true, message: msg, nudge: true, blockEffect: nil, ask: false}
 	}
 
 	if res.accepted() {
 		switch {
 		case strings.EqualFold(res.decision.Decision, "allow"):
-			return verdict{block: false, message: "", nudge: false, blockEffect: nil}
+			return verdict{block: false, message: "", nudge: false, blockEffect: nil, ask: false}
+		case strings.EqualFold(res.decision.Decision, "ask"):
+			return verdict{block: true, message: res.decision.Message, nudge: false, blockEffect: nil, ask: true}
 		case res.decision.denied():
-			return verdict{block: true, message: res.decision.Message, nudge: false, blockEffect: res.blockEffect}
+			return verdict{block: true, message: res.decision.Message, nudge: false, blockEffect: res.blockEffect, ask: false}
 		default:
 			// A 2xx whose body carries no explicit verdict (an intermediary's
 			// JSON, a skewed server) is not an allow.
@@ -386,7 +397,7 @@ func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
 			if msg == "" {
 				msg = causeMessage(causeUnreadable)
 			}
-			return verdict{block: true, message: msg, nudge: false, blockEffect: nil}
+			return verdict{block: true, message: msg, nudge: false, blockEffect: nil, ask: false}
 		}
 	}
 	// Non-2xx or unreachable: the server could not confirm the action is
@@ -401,9 +412,9 @@ func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
 	// a broken credential into an enforcement bypass.
 	if (res.statusCode == 0 || res.statusCode >= 500) && failOpenAllowed(r.cfg) {
 		r.debugf("event=%s fail-open engaged status=%d cause=%s", agenthooks.EventOf(typed).NativeName, res.statusCode, res.cause)
-		return verdict{block: false, message: "", nudge: false, blockEffect: nil}
+		return verdict{block: false, message: "", nudge: false, blockEffect: nil, ask: false}
 	}
-	return verdict{block: true, message: httpMessage(res), nudge: false, blockEffect: nil}
+	return verdict{block: true, message: httpMessage(res), nudge: false, blockEffect: nil, ask: false}
 }
 
 func (r *Relay) onPrompt(ctx context.Context, e *agenthooks.PromptEvent) (agenthooks.PromptDecision, error) {
@@ -450,6 +461,11 @@ func (r *Relay) onToolPre(ctx context.Context, e *agenthooks.ToolPreEvent) (agen
 		return agenthooks.NoDecision(), nil
 	}
 	v := r.evaluate(ctx, e)
+	// Only Claude Code shows a permission prompt for "ask"; the relay's ask
+	// fallback would let the call through anywhere else, so those deny.
+	if v.ask && e.Provider == agenthooks.ProviderClaudeCode {
+		return agenthooks.AskUser(v.message), nil
+	}
 	if v.block {
 		r.notifyAgentBlock(ctx, v.blockEffect, e)
 		return denyTool(&e.Event, v.message), nil
@@ -510,9 +526,14 @@ func cursorMCPEcho(base *agenthooks.Event, toolName string) bool {
 }
 
 func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks.StopDecision, error) {
-	if coworkTranscriptMode(&e.Event) {
-		r.shipTranscript(ctx, e)
-		return agenthooks.Finish(), nil
+	if inCoworkVM(&e.Event) {
+		warnings := r.shipTranscript(ctx, e)
+		// A Stop that follows a warning continuation ships the reply but never
+		// continues again, so a replayed upload cannot loop Claude.
+		if len(warnings) == 0 || e.PreviouslyContinued {
+			return agenthooks.Finish(), nil
+		}
+		return coworkWarnDecision(warnings), nil
 	}
 	r.deliver(ctx, e)
 	return agenthooks.Finish(), nil
@@ -522,7 +543,7 @@ func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks
 // where it answers with the neutral decision instead.
 func outsideCowork[E any, D any](h func(context.Context, E) (D, error), neutral func() D) func(context.Context, E) (D, error) {
 	return func(ctx context.Context, e E) (D, error) {
-		if coworkTranscriptMode(agenthooks.EventOf(e)) {
+		if inCoworkVM(agenthooks.EventOf(e)) {
 			return neutral(), nil
 		}
 		return h(ctx, e)
@@ -533,7 +554,7 @@ func outsideCowork[E any, D any](h func(context.Context, E) (D, error), neutral 
 // Cowork VM.
 func observeOutsideCowork[E any](h func(context.Context, E) error) func(context.Context, E) error {
 	return func(ctx context.Context, e E) error {
-		if coworkTranscriptMode(agenthooks.EventOf(e)) {
+		if inCoworkVM(agenthooks.EventOf(e)) {
 			return nil
 		}
 		return h(ctx, e)

@@ -9426,6 +9426,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS data_export_routes_project_source_key
   ON data_export_routes (project_id, data_source)
   WHERE deleted IS FALSE;
 
+-- Composite FK target so a data source's settings row pins to its route, tenant and source.
+CREATE UNIQUE INDEX IF NOT EXISTS data_export_routes_tenant_id_source_key
+  ON data_export_routes (organization_id, project_id, id, data_source);
+
+-- Settings only an MCP connection logs route has. A route without a row uses the defaults.
+CREATE TABLE IF NOT EXISTS mcp_connection_log_routes (
+  data_export_route_id uuid NOT NULL,
+  data_export_routes_data_source TEXT NOT NULL DEFAULT 'mcp_connection_logs',
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  min_severity TEXT NOT NULL DEFAULT 'error',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_connection_log_routes_pkey PRIMARY KEY (data_export_route_id),
+  CONSTRAINT mcp_connection_log_routes_data_source_check CHECK (data_export_routes_data_source = 'mcp_connection_logs'),
+  CONSTRAINT mcp_connection_log_routes_fkey FOREIGN KEY (organization_id, project_id, data_export_route_id, data_export_routes_data_source) REFERENCES data_export_routes (organization_id, project_id, id, data_source) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN mcp_connection_log_routes.data_export_route_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_connection_log_routes.data_export_routes_data_source IS '@access: confidential';
+COMMENT ON COLUMN mcp_connection_log_routes.organization_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_connection_log_routes.project_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_connection_log_routes.min_severity IS 'Lowest log severity this route sends: info, warn or error.
+@access: confidential';
+COMMENT ON COLUMN mcp_connection_log_routes.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_connection_log_routes.updated_at IS '@access: confidential';
+
 -- AI integration configs: encrypted provider credentials and activation
 -- metadata. Provider-specific sync state lives in ai_integration_syncs.
 CREATE TABLE IF NOT EXISTS ai_integration_configs (
@@ -9452,6 +9481,11 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
   billing_mode TEXT,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  -- Non-secret, admin-visible provider settings, kept apart from
+  -- api_key_encrypted so the dashboard can redisplay and edit them without
+  -- resubmitting the key (e.g. gemini_compliance's delegated Workspace admin
+  -- and selected organizational unit). Validated in application code.
+  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
 
   CONSTRAINT ai_integration_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
@@ -9468,6 +9502,8 @@ COMMENT ON COLUMN ai_integration_configs.enabled IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.billing_mode IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.id IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.deleted IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_configs.settings IS 'Provider settings JSON; holds admin emails and customer directory structure.
+@access: opaque-restricted';
 
 CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_configs_org_provider_key
   ON ai_integration_configs (organization_id, provider)

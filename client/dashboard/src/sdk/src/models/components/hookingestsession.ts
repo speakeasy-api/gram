@@ -22,6 +22,10 @@ export type HookIngestSession = {
    */
   model?: string | undefined;
   /**
+   * Product surface that sent the event, set when it changes how the server handles the event. "cowork" is Claude Cowork. Its Stop hook also ships the session transcript, so the server keys the event's conversation row by the id the transcript shares (the prompt id in turn_id, or the tool call id) and each prompt and tool call is stored once. Cowork cannot show the acknowledgement link, so a warned prompt there is confirmed by sending the same message again. Unknown values are ignored.
+   */
+  surface?: string | undefined;
+  /**
    * Generation, request, or turn identifier.
    */
   turnId?: string | undefined;
@@ -32,6 +36,7 @@ export type HookIngestSession$Outbound = {
   cwd?: string | undefined;
   id?: string | undefined;
   model?: string | undefined;
+  surface?: string | undefined;
   turn_id?: string | undefined;
 };
 
@@ -44,6 +49,7 @@ export const HookIngestSession$outboundSchema: z.ZodMiniType<
     cwd: z.optional(z.string()),
     id: z.optional(z.string()),
     model: z.optional(z.string()),
+    surface: z.optional(z.string()),
     turnId: z.optional(z.string()),
   }),
   z.transform((v) => {
