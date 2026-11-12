@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { Check, Circle, CircleDashed, ExternalLink } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
+import { ReadinessIssuesProvider } from "@/components/detail/readiness-issues";
 import type { McpDetailChrome, McpReadinessCheck } from "./mcpDetailChrome";
 
 /** Link state that asks the frame to show the section a link lands on. */
@@ -107,7 +108,13 @@ export function McpDetailFrame({
               activeTab === "inspect" ? "h-full pb-12" : "min-h-full pb-32",
             )}
           >
-            {children}
+            <ReadinessIssuesProvider
+              checks={(chrome?.readinessChecks ?? []).filter(
+                (check) => !check.pending,
+              )}
+            >
+              {children}
+            </ReadinessIssuesProvider>
           </div>
         </div>
       </Page.Body>

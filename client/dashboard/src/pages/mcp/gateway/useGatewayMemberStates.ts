@@ -153,6 +153,12 @@ export type MemberViewerState =
       fromServer?: boolean;
       /** The server needs a shared credential set on its own settings. */
       needsCredential?: boolean;
+      /**
+       * The server signs people in through an authorization server this
+       * gateway has no link to, which an admin adds on the gateway's own
+       * sign-in settings. Retrying changes nothing until then.
+       */
+      needsGatewaySignIn?: boolean;
       /** The check itself failed, so nothing is known about the server. */
       checkFailed?: boolean;
       retry?: () => void;
@@ -173,6 +179,19 @@ export const MEMBER_STATE_LABEL: Record<MemberViewerState["kind"], string> = {
  */
 const NEEDS_CREDENTIAL =
   /requires authentication and has no credential|rejected the stored credential|rejected the credential configured/i;
+
+/**
+ * The gateway's wording when a member's sign-in runs through an
+ * authorization server the gateway isn't linked to, so no connection can be
+ * chosen for it. Its connect page says the same: "isn't set up on this
+ * gateway yet".
+ */
+export const NEEDS_GATEWAY_SIGN_IN =
+  /signed in to again to choose its connection/i;
+
+/** Plain words for a member whose sign-in isn't set up on the gateway. */
+export const GATEWAY_SIGN_IN_WHY =
+  "Its sign-in isn't set up on this gateway. An admin adds its authorization server in the gateway's sign-in settings.";
 
 const describedServerSchema = z.object({
   isError: z.boolean().optional(),
@@ -206,7 +225,14 @@ export function useGatewayMemberStates(
   const hasIssuer = !!metaMcpServer?.userSessionIssuerId;
   const live = !!metaMcpServer && metaMcpServer.visibility !== "disabled";
   const token = useUserSessionToken({
-    target: { kind: "metaMcpServer", id: live ? metaMcpServer.id : undefined },
+    // Direct and Code Mode serve no status tools, so the check always runs
+    // in Progressive, whatever mode the gateway is saved in.
+    target: {
+      kind: "metaMcpServer",
+      id: live ? metaMcpServer.id : undefined,
+      discoveryMode: "progressive",
+      connectionVersion: "member-status",
+    },
     userSessionIssuerId: metaMcpServer?.userSessionIssuerId,
     throwOnError: false,
   });
@@ -326,6 +352,12 @@ export function useGatewayMemberStates(
             };
       }
       if (!READY.has(status.status)) {
+        if (NEEDS_GATEWAY_SIGN_IN.test(status.detail ?? ""))
+          return {
+            kind: "unavailable",
+            why: GATEWAY_SIGN_IN_WHY,
+            needsGatewaySignIn: true,
+          };
         return {
           kind: "unavailable",
           why: status.detail || "This server can't be used right now.",

@@ -12,11 +12,14 @@ import {
   useMemo,
   useState,
 } from "react";
+import { ReadinessIssueNotice } from "./readiness-issues";
 import { useSettingsSectionHeading } from "./settings-layout";
 
 type SettingsSectionTone = "default" | "danger";
 type SettingsSectionContextValue = {
   tone: SettingsSectionTone;
+  /** The section's anchor, which header readiness checks link to. */
+  id?: string;
   /** The section's root, where the settings index links to it. */
   element: HTMLElement | null;
 };
@@ -27,6 +30,7 @@ type SettingsSectionSlotProps = {
 
 const SettingsSectionContext = createContext<SettingsSectionContextValue>({
   tone: "default",
+  id: undefined,
   element: null,
 });
 
@@ -40,7 +44,7 @@ function SettingsSectionShell({
   tone: SettingsSectionTone;
 }) {
   const [element, setElement] = useState<HTMLElement | null>(null);
-  const context = useMemo(() => ({ tone, element }), [tone, element]);
+  const context = useMemo(() => ({ tone, id, element }), [tone, id, element]);
 
   return (
     <SettingsSectionContext.Provider value={context}>
@@ -69,7 +73,17 @@ function SettingsSectionHeader({
   children,
   className,
 }: SettingsSectionSlotProps) {
-  return <div className={cn("space-y-1", className)}>{children}</div>;
+  const { id } = use(SettingsSectionContext);
+  // A header issue that links here says so under the title, so following
+  // "1 issue" lands on a section that shows what is wrong.
+  return (
+    <div className={cn("space-y-1", className)}>
+      {children}
+      <div className="pt-2 empty:hidden">
+        <ReadinessIssueNotice anchorId={id} />
+      </div>
+    </div>
+  );
 }
 
 function SettingsSectionTitle({

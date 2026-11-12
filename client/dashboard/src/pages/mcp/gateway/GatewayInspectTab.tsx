@@ -35,7 +35,11 @@ import type { InspectTool } from "../inspect/types";
 import { useToolHealth } from "../inspect/useToolHealth";
 import { GatewayCodeExecution } from "./GatewayCodeExecution";
 import { GatewayMemberConnect } from "./GatewayMemberConnect";
-import { useGatewayMemberStates } from "./useGatewayMemberStates";
+import {
+  GATEWAY_SIGN_IN_WHY,
+  NEEDS_GATEWAY_SIGN_IN,
+  useGatewayMemberStates,
+} from "./useGatewayMemberStates";
 import { gatewayTabHref } from "./GatewayDetailsRouting";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import {
@@ -470,7 +474,14 @@ function GatewayInspectConnection({
                     </span>
                   ) : null}
                 </span>
-                {server ? (
+                {reason.needsGatewaySignIn ? (
+                  <Link
+                    to={`${settingsHref}#${GATEWAY_AUTHENTICATION_SECTION_ID}`}
+                    className="text-foreground shrink-0 underline underline-offset-2"
+                  >
+                    Set up sign-in
+                  </Link>
+                ) : server ? (
                   <Link
                     to={
                       reason.needsCredential
@@ -737,8 +748,15 @@ function InstructionsLink({
 function memberFailureReason(error: string | undefined): {
   text?: string;
   needsCredential: boolean;
+  needsGatewaySignIn?: boolean;
 } {
   if (!error) return { needsCredential: false };
+  if (NEEDS_GATEWAY_SIGN_IN.test(error))
+    return {
+      text: GATEWAY_SIGN_IN_WHY,
+      needsCredential: false,
+      needsGatewaySignIn: true,
+    };
   if (/requires authentication|no credential/i.test(error))
     return {
       text: "Needs a shared credential before the gateway can call it. An admin sets it in the server's sign-in settings.",

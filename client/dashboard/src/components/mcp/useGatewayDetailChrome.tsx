@@ -152,6 +152,7 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
           gatewayTabHref(routes, id, "inspect"),
           (serverId) =>
             memberSettingsHref(serverId, SETTINGS_GROUPS.identity.id),
+          `${gatewayTabHref(routes, id, "settings")}#${GATEWAY_AUTHENTICATION_SECTION_ID}`,
         ),
         // Only a gateway set to Code Mode can be let down by it.
         ...(metaMcpServer.discoveryMode === "code_mode"
@@ -269,6 +270,7 @@ function memberAccessChecks(
   states: GatewayMemberStates,
   inspectHref: string,
   signInSettingsHref: (serverId: string) => string,
+  gatewaySignInHref: string,
 ): McpReadinessCheck[] {
   const checks: McpReadinessCheck[] = [];
   let checking = false;
@@ -291,6 +293,17 @@ function memberAccessChecks(
     // A failed check says nothing about the member, so it is no issue.
     if (state.kind === "unavailable" && state.checkFailed) {
       checkFailed = true;
+      continue;
+    }
+    if (state.kind === "unavailable" && state.needsGatewaySignIn) {
+      checks.push({
+        key: `member-unavailable-${slug}`,
+        label: `Set up sign-in for ${name}`,
+        description: `${name}'s sign-in isn't set up on this gateway. Add its authorization server here.`,
+        ready: false,
+        broken: true,
+        href: gatewaySignInHref,
+      });
       continue;
     }
     if (state.kind === "unavailable") {

@@ -1,4 +1,5 @@
 import { useScrollToSettingsHash } from "@/hooks/useScrollToSettingsHash";
+import { ReadinessIssueNotice } from "@/components/detail/readiness-issues";
 import { SettingsLayout } from "@/components/detail/settings-layout";
 import {
   SETTINGS_ENVIRONMENT_VARIABLES_ID,
@@ -232,6 +233,9 @@ export function SettingsTab({
                 content: (
                   <>
                     <div id={MCP_AUTHENTICATION_SECTION_ID}>
+                      <ReadinessIssueNotice
+                        anchorId={MCP_AUTHENTICATION_SECTION_ID}
+                      />
                       <ToolsetOAuthSection toolset={hostedToolset} />
                     </div>
                     <div id={MCP_ENVIRONMENT_SECTION_ID}>
@@ -240,6 +244,9 @@ export function SettingsTab({
                         id={SETTINGS_ENVIRONMENT_VARIABLES_ID}
                         className="scroll-mt-8"
                       >
+                        <ReadinessIssueNotice
+                          anchorId={SETTINGS_ENVIRONMENT_VARIABLES_ID}
+                        />
                         <MCPAuthenticationTab
                           toolset={hostedToolset}
                           showOAuth={false}
@@ -364,6 +371,9 @@ export function SettingsTab({
                 ) : upstreamAuth === "enforced" ? (
                   // Links to the legacy Identity anchor land on its replacement.
                   <div id={MCP_AUTHENTICATION_SECTION_ID} className="space-y-4">
+                    <ReadinessIssueNotice
+                      anchorId={MCP_AUTHENTICATION_SECTION_ID}
+                    />
                     <SetupStepBanner mcpServer={mcpServer} />
                     <UpstreamCredentialsSection mcpServer={mcpServer} />
                   </div>

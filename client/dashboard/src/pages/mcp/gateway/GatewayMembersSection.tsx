@@ -52,6 +52,8 @@ import {
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { GatewayMemberConnect } from "./GatewayMemberConnect";
+import { gatewayTabHref } from "./GatewayDetailsRouting";
+import { GATEWAY_AUTHENTICATION_SECTION_ID } from "./GatewaySettingsTab";
 import {
   MEMBER_STATE_LABEL,
   type MemberViewerState,
@@ -187,13 +189,28 @@ export function MemberStatusBadge({
   viewer,
   name,
   onConnect,
+  gatewaySignInHref,
+  credentialHref,
 }: {
   classification: MemberClassification;
   /** What the viewer gets now; excluded members have none. */
   viewer?: MemberViewerState;
   name: string;
   onConnect?: () => void;
+  /** The gateway's sign-in settings, where an admin links the member's sign-in. */
+  gatewaySignInHref?: string;
+  /** The member's own sign-in settings, where an admin sets a shared credential. */
+  credentialHref?: string;
 }): JSX.Element {
+  // A fix that lives in settings beats Try again, which changes nothing.
+  const fix =
+    viewer?.kind !== "unavailable"
+      ? undefined
+      : viewer.needsGatewaySignIn && gatewaySignInHref
+        ? { label: "Set up sign-in", href: gatewaySignInHref }
+        : viewer.needsCredential && credentialHref
+          ? { label: "Set credential", href: credentialHref }
+          : undefined;
   const fixed = STATUS_BY_CLASSIFICATION[classification];
   const status = viewer
     ? {
@@ -220,6 +237,13 @@ export function MemberStatusBadge({
       </SimpleTooltip>
       {viewer?.kind === "sign_in" && onConnect ? (
         <GatewayMemberConnect name={name} onConnect={onConnect} />
+      ) : fix ? (
+        <Link
+          to={fix.href}
+          className="text-foreground text-sm underline underline-offset-2"
+        >
+          {fix.label}
+        </Link>
       ) : viewer?.kind === "unavailable" && viewer.retry ? (
         <button
           type="button"
@@ -284,6 +308,7 @@ export function GatewayMembersSection({
     connect: () => void;
   };
 }): JSX.Element {
+  const routes = useRoutes();
   const client = useSdkClient();
   const queryClient = useQueryClient();
   const {
@@ -553,6 +578,12 @@ export function GatewayMembersSection({
           viewer={memberStates?.stateFor(row)}
           name={row.server?.name ?? row.member.mcpServerSlug ?? "this server"}
           onConnect={memberStates?.connect}
+          gatewaySignInHref={`${gatewayTabHref(routes, metaMcpServer.id, "settings")}#${GATEWAY_AUTHENTICATION_SECTION_ID}`}
+          credentialHref={
+            row.server
+              ? `${routes.mcp.details.settings.href(mcpServerRouteParam(row.server))}#settings-sign-in`
+              : undefined
+          }
         />
       ),
       width: memberStates ? "210px" : "140px",
