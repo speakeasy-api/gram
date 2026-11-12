@@ -96,6 +96,12 @@ func corpusSeeded(ctx context.Context, projects *projectsrepo.Queries, spec demo
 // Queue validates cfg and inserts a queued run for the corpus organization,
 // enforcing one active run and DailyRunLimit. The caller starts the workflow.
 func Queue(ctx context.Context, db *pgxpool.Pool, cfg Config, requestedBy string) (repo.MemoryEvalRun, error) {
+	return queue(ctx, db, cfg, requestedBy, time.Now().Add(-staleRunAge))
+}
+
+// queue is Queue with the stale-run cutoff passed in: unresolved runs that
+// started (or, never claimed, were created) before staleBefore are failed.
+func queue(ctx context.Context, db *pgxpool.Pool, cfg Config, requestedBy string, staleBefore time.Time) (repo.MemoryEvalRun, error) {
 	var none repo.MemoryEvalRun
 	if err := cfg.Validate(); err != nil {
 		return none, err
@@ -121,7 +127,7 @@ func Queue(ctx context.Context, db *pgxpool.Pool, cfg Config, requestedBy string
 	}
 	if _, err := q.FailStaleActiveRuns(ctx, repo.FailStaleActiveRunsParams{
 		Error:         pgtype.Text{String: staleRunError, Valid: true},
-		CreatedBefore: pgtype.Timestamptz{Time: time.Now().Add(-staleRunAge), InfinityModifier: pgtype.Finite, Valid: true},
+		CreatedBefore: pgtype.Timestamptz{Time: staleBefore, InfinityModifier: pgtype.Finite, Valid: true},
 	}); err != nil {
 		return none, fmt.Errorf("fail stale runs: %w", err)
 	}
