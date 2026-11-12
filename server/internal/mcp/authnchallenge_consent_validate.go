@@ -284,6 +284,12 @@ func (s *Service) probeRemoteSession(
 			if errors.Is(rerr, remotesessions.ErrChosenClientUnbound) {
 				continue
 			}
+		} else if serverID := endpoint.proxiedServerID(); serverID.Valid && !endpoint.IsOrganizationGateway() {
+			// Match runtime's server scope before checking binding ambiguity: another
+			// server's clients on the shared sign-in issuer cannot block this probe.
+			var serverTokens remotesessions.ServerAccessTokens
+			serverTokens, rerr = s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, serverID.UUID, true)
+			resolved = serverTokens.Tokens
 		} else {
 			resolved, rerr = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 		}
