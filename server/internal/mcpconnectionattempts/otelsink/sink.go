@@ -28,13 +28,11 @@ var _ mcpconnectionattempts.ExportSink = (*Sink)(nil)
 
 // New is the sink every recorder that exports uses.
 func New(publisher gcp.Publisher[*otelv1.InboundLogRecord], serviceName string) *Sink {
-	return &Sink{logs: newLogger(publisher, serviceName)}
+	return &Sink{logs: otelpub.NewLogger(publisher, connectionLogResource(serviceName), dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource))}
 }
 
-func newLogger(publisher gcp.Publisher[*otelv1.InboundLogRecord], serviceName string) *otelpub.Logger {
-	return otelpub.NewLogger(publisher,
-		resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(serviceName)),
-		dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource))
+func connectionLogResource(serviceName string) *resource.Resource {
+	return resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(serviceName))
 }
 
 func (s *Sink) Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) gcp.PublishResult {
@@ -46,19 +44,19 @@ func (s *Sink) Close() { s.logs.Close() }
 // TestSender sends a test connection event, built exactly as the sink builds
 // real ones, straight to one destination. It never publishes.
 type TestSender struct {
-	logs  *otelpub.Logger
-	probe *otelsvc.ConnectionLogProbe
+	records *otelpub.RecordBuilder
+	probe   *otelsvc.ConnectionLogProbe
 }
 
 var _ dataexports.TestEventSender = (*TestSender)(nil)
 
 func NewTestSender(probe *otelsvc.ConnectionLogProbe, serviceName string) *TestSender {
-	return &TestSender{logs: newLogger(nil, serviceName), probe: probe}
+	return &TestSender{records: otelpub.NewRecordBuilder(connectionLogResource(serviceName), dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource)), probe: probe}
 }
 
 func (s *TestSender) SendConnectionLogTest(ctx context.Context, destination dataexports.TestDestination) (int, error) {
 	record := mcpconnectionattempts.TestExportRecord(time.Now())
-	inbound, err := s.logs.Prepare(otelpub.WithTenant(ctx, destination.OrganizationID, destination.ProjectID.String()), &record)
+	inbound, err := s.records.Prepare(otelpub.WithTenant(ctx, destination.OrganizationID, destination.ProjectID.String()), &record)
 	if err != nil {
 		return 0, fmt.Errorf("prepare connection log test record: %w", err)
 	}
