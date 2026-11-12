@@ -1362,7 +1362,7 @@ describe("useActionCandidates", () => {
 });
 
 describe("useRecentCandidates", () => {
-  it("keeps persisted Channels conversations as local search candidates", () => {
+  it("does not offer stored Channels visits while Channels is hidden", () => {
     mocks.recents = [
       {
         label: "Private agent session",
@@ -1371,9 +1371,7 @@ describe("useRecentCandidates", () => {
       },
     ];
     const { result } = renderCandidates();
-    const recent = byKind(result.current, "recent")[0];
-    expect(recent?.title).toBe("Private agent session");
-    expect(recent?.verbs).toEqual(["open"]);
+    expect(byKind(result.current, "recent")).toHaveLength(0);
   });
 
   // The stored entries are keyed per user, and until the session resolves

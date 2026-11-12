@@ -381,6 +381,12 @@ describe("Channels", () => {
 
   it("opens on Home with what arrived, not on a conversation nobody chose", async () => {
     vi.useFakeTimers();
+    // A wide window, where Home sits beside the list.
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({ matches: true, media: query }) as unknown as MediaQueryList,
+    );
     snapshot.threads["thread-2"] = { id: "thread-2", title: "Implementation" };
     snapshot.messages.push({
       id: 2,
@@ -406,6 +412,7 @@ describe("Channels", () => {
     expect(
       screen.getByRole("heading", { name: /Implementation/ }),
     ).toBeDefined();
+    vi.unstubAllGlobals();
   });
 
   it("shows an administrator whose own access is withheld only what they can change", async () => {

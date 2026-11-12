@@ -562,7 +562,7 @@ function MessageRow({
               </span>
               {speaker.isAgent ? null : (
                 <span className="text-muted-foreground text-xs">
-                  {speaker.isYou ? "you" : "person"}
+                  {speaker.isYou ? "you" : speaker.owner}
                 </span>
               )}
               <time

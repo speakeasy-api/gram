@@ -254,6 +254,9 @@ const RouteProvider = () => {
     // so recording one would file a redirect under the reader's recent pages
     // instead of the page they actually ended up on.
     if (orgRoutes.killswitch.active) return;
+    // Channels is hidden from navigation, so a visit must not resurface it in
+    // Command K either.
+    if (routes.channels.active) return;
     const active =
       Object.values(routes).find((r) => r.active && !r.external) ??
       Object.values(orgRoutes).find((r) => r.active && !r.external);
