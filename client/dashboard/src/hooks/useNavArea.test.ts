@@ -1,15 +1,17 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-const pathname = vi.hoisted(() => ({ current: "/" }));
+const location = vi.hoisted(() => ({ pathname: "/", search: "" }));
 vi.mock("react-router", () => ({
-  useLocation: () => ({ pathname: pathname.current }),
+  useLocation: () => location,
 }));
 
 import { useNavArea } from "./useNavArea";
 
 function areaAt(path: string) {
-  pathname.current = path;
+  const url = new URL(path, "https://example.test");
+  location.pathname = url.pathname;
+  location.search = url.search;
   return renderHook(() => useNavArea()).result.current;
 }
 

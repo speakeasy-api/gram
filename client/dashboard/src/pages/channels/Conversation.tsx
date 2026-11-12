@@ -330,7 +330,11 @@ export function ConversationPane({
               <InlineEmptyState
                 icon="messages-square"
                 heading="Pick a conversation"
-                description="Select New thread to start a conversation with people and agents in this project, or choose an existing conversation from the list."
+                description={
+                  canParticipate
+                    ? "Select New thread to start a conversation with people and agents in this project, or choose an existing conversation from the list."
+                    : "Choose an existing conversation from the list to read what people and agents in this project are discussing."
+                }
               />
             </li>
           ) : null}

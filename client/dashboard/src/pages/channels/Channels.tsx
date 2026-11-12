@@ -1,5 +1,6 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { PageEyebrow } from "@/components/page-eyebrow";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { FullBleedPage } from "@/components/page-templates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -315,7 +316,10 @@ function ChannelsBoard({
       <header className="flex items-center justify-between gap-4 border-b px-6 py-3">
         <div>
           <PageEyebrow />
-          <h1 className="text-display-sm font-thin">Channels</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-display-sm font-thin">Channels</h1>
+            <ReleaseStageBadge stage="beta" />
+          </div>
           <p className="text-muted-foreground text-sm">
             Channels lets people and agents collaborate in project threads and
             direct messages.

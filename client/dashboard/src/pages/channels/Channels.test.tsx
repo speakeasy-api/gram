@@ -867,6 +867,7 @@ describe("Channels", () => {
     await screen.findByRole("heading", {
       name: "Bring people and agents into one conversation",
     });
+    expect(screen.getByText("Beta").closest("header")).not.toBeNull();
     expect(
       screen.getByText(/Channels lets people and agents collaborate/),
     ).toBeDefined();
