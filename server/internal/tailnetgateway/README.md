@@ -142,14 +142,32 @@ production code path. The key and token live in `local/netingress/`, are
 created on first start, and the token is re-minted on every gateway start.
 The listener accepts local tokens only in the `local` environment.
 
-Local devices are named `speakeasy-gw-dev-<id>-<slot>` rather than
-production's `speakeasy-gw-<slot>`, so they stand out on a tailnet that
-production gateways also serve. `<id>` is `GRAM_TAILNET_GATEWAY_DEV_ID` in
-`mise.local.toml`: four characters derived from the machine and worktree path,
-written by `mise run zero:tailnet-gateway` (also run by `./zero`, new
-worktrees and the gateway's first start). The service is still
-`svc:<hostname>`, so pick a private hostname that no production connection on
-that tailnet uses.
+### Isolation from production
+
+The local stack may join a tailnet that production gateways also serve, so
+everything it creates there is named after `GRAM_NETWORK_INGRESS_DEV_ID`, a
+four-character id in `mise.local.toml` derived from the machine and worktree
+path. `mise run zero:network-ingress` writes it; `./zero`, new worktrees and
+the first start of the API server, reconciler or gateway run that task.
+
+Naming lives behind `networkingress.Namer`, one method per artifact.
+`LocalNamer` gives:
+
+| Artifact                                 | Production            | Local                                        |
+| ---------------------------------------- | --------------------- | -------------------------------------------- |
+| Connection hostname                      | as requested          | `dev-<id>-<requested>` (the API prefixes it) |
+| Tailscale Service                        | `svc:<hostname>`      | `svc:dev-<id>-<hostname>`                    |
+| Gateway machine                          | `speakeasy-gw-<slot>` | `speakeasy-gw-dev-<id>-<slot>`               |
+| Service comment and auth key description | Speakeasy             | name `dev-<id>`                              |
+
+Beyond naming, a local stack never touches a hostname without its prefix. The
+reconciler refuses to define its service and leaves it alone on rename and
+teardown, and the gateway never hosts it. That covers connections created
+before the stack had an id. The reconciler and gateway refuse to start in
+local development without an id, and an id outside the `local` environment
+is rejected. Devices are always deleted by the node id the local database
+recorded, so they need no ownership check. Local machines still carry
+`tag:speakeasy`, so the tailnet's rules for that tag apply to them.
 
 1. Make sure `./zero` has configured organization encryption
    (`mise run zero:org-encryption`).

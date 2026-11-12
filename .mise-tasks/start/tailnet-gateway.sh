@@ -22,18 +22,16 @@ go run main.go netingress-local-token
 
 ordinal="${GRAM_TAILNET_GATEWAY_ORDINAL:-0}"
 
-# Local devices are named speakeasy-gw-dev-<id>-<slot>, so they cannot be
-# mistaken for production's speakeasy-gw-<slot> on a tailnet both join. A
-# worktree set up before the id existed gets one on first start; a fresh mise
-# process then reads it back from mise.local.toml.
-dev_id="${GRAM_TAILNET_GATEWAY_DEV_ID:-}"
-if [[ -z "$dev_id" ]]; then
-  mise run zero:tailnet-gateway
-  dev_id="$(mise exec -- printenv GRAM_TAILNET_GATEWAY_DEV_ID)"
+# Local private network artifacts are named dev-<id>-... so they cannot
+# collide with production's on a shared tailnet. A worktree set up before the
+# id existed gets one here; a fresh mise process reads it back.
+if [[ -z "${GRAM_NETWORK_INGRESS_DEV_ID:-}" ]]; then
+  mise run zero:network-ingress
+  GRAM_NETWORK_INGRESS_DEV_ID="$(mise exec -- printenv GRAM_NETWORK_INGRESS_DEV_ID)"
+  export GRAM_NETWORK_INGRESS_DEV_ID
 fi
 
 exec env \
-  GRAM_TAILNET_GATEWAY_HOSTNAME_QUALIFIER="dev-${dev_id}" \
   GRAM_TAILNET_GATEWAY_UPSTREAM_URL="${upstream_url}" \
   GRAM_TAILNET_GATEWAY_UPSTREAM_CA_FILE="${upstream_ca_file}" \
   GRAM_TAILNET_GATEWAY_ORDINAL="${ordinal}" \

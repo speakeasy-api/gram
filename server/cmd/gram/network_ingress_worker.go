@@ -180,6 +180,11 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			// The reconciler defines and deletes services, so a local one must
+			// carry a development id rather than fall back to production names.
+			if _, err := localDevelopmentNamer(c.String("environment"), c.String(networkIngressDevIDFlag)); err != nil {
+				return err
+			}
 			if config.ProviderMutationsEnabled && !config.MutationReady() {
 				return errors.New("private ingress provider mutation configuration is incomplete")
 			}

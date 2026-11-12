@@ -29,6 +29,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	nirepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
@@ -255,7 +256,7 @@ func newGatewayFixtureWithMeter(t *testing.T, name string, ordinal int32, meterP
 	runtime := &fakeRuntime{mu: sync.Mutex{}, nodes: nil, failStart: nil, writePartial: false, writeLogin: false, closeDelay: 0}
 	cfg := tailnetgateway.Config{
 		Ordinal: ordinal, PodName: "gram-tailnet-gateway-0", Shard: tailnetgateway.DefaultShard, StateDir: t.TempDir(),
-		Tag: tailnetgateway.DefaultTag, Upstream: upstreamURL, UpstreamTransport: transport, TokenPath: tokenPath,
+		Tag: tailnetgateway.DefaultTag, Namer: networkingress.ProductionNamer{}, Upstream: upstreamURL, UpstreamTransport: transport, TokenPath: tokenPath,
 		PollInterval: tailnetgateway.DefaultPollInterval, DrainTimeout: time.Second, StartTimeout: 5 * time.Second,
 		MaxHosts: 10, ReconcileTaskQueue: "test-tailnet-gateway", ControlURL: "",
 	}
@@ -298,13 +299,29 @@ func (f *gatewayFixture) waitForHosts(t *testing.T, count int) {
 	}, 10*time.Second, 20*time.Millisecond)
 }
 
-func TestGatewayQualifiesNodeHostnames(t *testing.T) {
+func renameIngress(t *testing.T, db *pgxpool.Pool, orgID, hostname string) {
+	t.Helper()
+	_, err := nirepo.New(db).UpdateNetworkIngressSettings(t.Context(), nirepo.UpdateNetworkIngressSettingsParams{
+		UpdateHostname: true, Hostname: hostname, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+}
+
+func localGatewayNamer(t *testing.T) networkingress.LocalNamer {
+	t.Helper()
+	namer, err := networkingress.NewLocalNamer("ab12")
+	require.NoError(t, err)
+	return namer
+}
+
+func TestLocalGatewayNamesItsMachinesAndServices(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	f := newGatewayFixture(t, "tailnetgatewayqualifier", 1, func(cfg *tailnetgateway.Config, _ *fakeRuntime) {
-		cfg.HostnameQualifier = "dev-ab12"
+	f := newGatewayFixture(t, "tailnetgatewaylocalnames", 1, func(cfg *tailnetgateway.Config, _ *fakeRuntime) {
+		cfg.Namer = localGatewayNamer(t)
 	})
-	ingressID, orgID := seedIngress(t, f.db, "gateway-qualifier")
+	ingressID, orgID := seedIngress(t, f.db, "gateway-local-names")
+	renameIngress(t, f.db, orgID, "dev-ab12-private")
 	f.seedSlot(t, ingressID, orgID, 1, "tskey-auth-one-shot")
 
 	f.gateway.Poll(ctx)
@@ -312,7 +329,27 @@ func TestGatewayQualifiesNodeHostnames(t *testing.T) {
 
 	nodes := f.runtime.started()
 	require.Len(t, nodes, 1)
-	require.Equal(t, "speakeasy-gw-dev-ab12-1", nodes[0].spec.Hostname, "the qualifier sits between the prefix and the slot")
+	require.Equal(t, "speakeasy-gw-dev-ab12-1", nodes[0].spec.Hostname)
+	require.Equal(t, "svc:dev-ab12-private", nodes[0].spec.ServiceName)
+}
+
+func TestLocalGatewayNeverHostsHostnamesItDoesNotOwn(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewaylocalskip", 0, func(cfg *tailnetgateway.Config, _ *fakeRuntime) {
+		cfg.Namer = localGatewayNamer(t)
+	})
+	// A connection named like production's, as one created before the stack
+	// had a namer would be: advertising svc:private could make this machine a
+	// host of production's service.
+	ingressID, orgID := seedIngress(t, f.db, "gateway-local-skip")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+
+	f.gateway.Poll(ctx)
+	f.gateway.Poll(ctx)
+
+	require.Empty(t, f.runtime.started(), "no node starts for a hostname the stack does not own")
+	require.Empty(t, f.gateway.Hosts())
 }
 
 func TestGatewayHostsIngressAtOrdinalAndHeartbeats(t *testing.T) {
@@ -836,7 +873,7 @@ func TestGatewayRunDrainsOnCancel(t *testing.T) {
 func TestConfigValidate(t *testing.T) {
 	t.Parallel()
 	valid := tailnetgateway.Config{
-		Ordinal: 0, PodName: "", Shard: "shared", StateDir: "/tmp/x", Tag: "tag:speakeasy",
+		Ordinal: 0, PodName: "", Shard: "shared", StateDir: "/tmp/x", Tag: "tag:speakeasy", Namer: networkingress.ProductionNamer{},
 		Upstream: &url.URL{Scheme: "https", Host: "listener"}, UpstreamTransport: http.DefaultTransport, TokenPath: "/token",
 		PollInterval: time.Second, DrainTimeout: time.Second, StartTimeout: time.Second, MaxHosts: 1, ReconcileTaskQueue: "", ControlURL: "",
 	}
@@ -845,7 +882,7 @@ func TestConfigValidate(t *testing.T) {
 		"negative ordinal": func(c *tailnetgateway.Config) { c.Ordinal = -1 },
 		"empty shard":      func(c *tailnetgateway.Config) { c.Shard = "" },
 		"bad tag":          func(c *tailnetgateway.Config) { c.Tag = "speakeasy" },
-		"bad qualifier":    func(c *tailnetgateway.Config) { c.HostnameQualifier = "Dev_AB12" },
+		"no namer":         func(c *tailnetgateway.Config) { c.Namer = nil },
 		"http upstream":    func(c *tailnetgateway.Config) { c.Upstream = &url.URL{Scheme: "http", Host: "listener"} },
 		"upstream path":    func(c *tailnetgateway.Config) { c.Upstream = &url.URL{Scheme: "https", Host: "listener", Path: "/mcp"} },
 		"upstream query": func(c *tailnetgateway.Config) {

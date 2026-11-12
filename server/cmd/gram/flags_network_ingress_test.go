@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
+
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 )
 
 func TestNetworkIngressProviderDefaultsDisabled(t *testing.T) {
@@ -243,4 +245,22 @@ func TestTailnetGatewayRegistersOnlyTheEncryptionSettingsItReads(t *testing.T) {
 	require.True(t, names[orgEncryptionCredentialIDFlag], "the gateway decrypts with the organization's key")
 	require.False(t, names[orgEncryptionSwitchGracePeriodFlag], "key switching is the provisioner's, not the gateway's")
 	require.False(t, names[orgEncryptionManagedKeyRetention])
+}
+
+func TestLocalDevelopmentNamerRequiresADevelopmentID(t *testing.T) {
+	t.Parallel()
+
+	_, err := localDevelopmentNamer("local", "")
+	require.ErrorContains(t, err, "GRAM_NETWORK_INGRESS_DEV_ID", "a local stack must not fall back to production names")
+
+	namer, err := localDevelopmentNamer("local", "ab12")
+	require.NoError(t, err)
+	require.IsType(t, networkingress.LocalNamer{}, namer)
+
+	namer, err = localDevelopmentNamer("prod", "")
+	require.NoError(t, err)
+	require.IsType(t, networkingress.ProductionNamer{}, namer)
+
+	_, err = localDevelopmentNamer("prod", "ab12")
+	require.ErrorIs(t, err, networkingress.ErrDevIDOutsideLocal)
 }
