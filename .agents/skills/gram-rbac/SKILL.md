@@ -1,309 +1,101 @@
 ---
 name: gram-rbac
-description: Concepts, external interfaces, and conventions for Speakeasy's role-based access control (RBAC) subsystem — scopes, grants, principals, system roles, and the `authz.Engine.Require` enforcement path used inside handlers. Activate whenever the task involves authorization (adding or modifying a scope or resource type, declaring a new role or grant, gating a handler, changing scope inheritance, exposing RBAC state through the dashboard).
+description: Use when a task touches authorization in Speakeasy — gating a handler or list endpoint, `authz.Require` / `RequireAny` / `RequireAnyUnblocked` / `Can` / `Evaluate` / `Filter`, typed refs like `authz.MCPServer(id, project).Write()` or `authz.Project(p).Environments().Create()`, `authz.Check{...}` literals, `authz.EnvironmentCheck` / `MCPCheck` / `MCPToolCallCheck`, adding or changing a scope, permission, resource type, block or dimension in `authz.Model` (`registry_resources.go`), system role defaults, agent-safe scopes (`SafeSince`, `AgentUnsafe`), `mise run gen:authz`, `refs_gen.go`, `scopes_gen.go`, `registry_tables.golden.yaml`, the `norawauthzchecks` lint, "invalid authz check", `ErrInvalidCheck`, `CodeForbidden` from authz, or RBAC state in the dashboard (`useRBAC`, `RequireScope`, access pages).
 metadata:
   relevant_files:
     - "server/internal/authz/**/*.go"
     - "server/internal/authztest/**/*.go"
     - "server/internal/access/**/*.go"
     - "server/internal/access/**/*.sql"
+    - "server/internal/agents/runtimepolicy/**/*.go"
     - "server/design/access/**"
     - "client/dashboard/src/pages/access/**"
+    - "client/dashboard/src/hooks/useRBAC.ts"
+    - "glint/no_raw_authz_checks.go"
 ---
 
-Speakeasy's RBAC is a scope-and-selector model. The server ships with a fixed set of **scopes** grouped into **system roles** (admin, member). A **grant** binds a scope to a **selector** (a Kubernetes-style `map[string]string` of `resource_kind`, `resource_id`, plus optional narrowing dimensions like `tool` or `disposition`) for a given **principal** (user or custom role). Handlers enforce scopes by calling `authz.Engine.Require(ctx, authz.Check{...})`; the dashboard renders the same scope vocabulary through a matching TypeScript union that is hand-maintained in lockstep with the server.
-
-## Concepts and terminology
-
-**Scope.** A named permission that authorizes an operation on a particular kind of resource.
-
-**Resource type.** The kind of resource a scope protects — for example `org`, `project`, `assistant`, or `mcp`. Every scope has exactly one resource type.
-
-**Scope expansion.** Higher-privilege scopes satisfy lower-privilege ones. In the read/write/connect family the privilege order is `write > read > connect`: `mcp:write` satisfies a `mcp:read` check, and either `mcp:read` or `mcp:write` satisfies a `mcp:connect` check (`connect` is the broadest, easiest-to-satisfy gate). The mapping lives in `scopeExpansions` in `authz/scopes.go` — key = required scope, value = higher-privilege scopes that also satisfy it.
-
-**Selector.** A `map[string]string` of constraints attached to a grant or check. Always carries `resource_kind` and `resource_id` (both required); MCP scopes additionally allow `tool` and `disposition`. Wildcards are explicit values — `{"resource_kind":"*","resource_id":"*"}`, never empty `{}`. Defined in [server/internal/authz/selector.go](server/internal/authz/selector.go).
-
-**Selector matching.** A grant selector satisfies a check selector when, for every key the grant constrains, either the values are equal or the grant value is `"*"`. Keys present on the grant but absent from the check are skipped — this is what lets a disposition-scoped grant (`{"disposition":"read_only"}`) still satisfy a connection-level check that doesn't constrain disposition. Auth client checks (`mcp:auth`, `mcp:blocked_auth`) are the exception: they always match strictly, and the `connection_owner` value `$represented_user` matches only the represented user the engine binds from trusted context. See "Auth client checks" in docs/rbac.md. Delegated policies older than version 5 read each `mcp:connect` grant as an auth client ceiling at admission (`runtimepolicy.admitStoredPolicy`); never raise `IssuedDelegatedPolicyVersion` to 5 until the agent session, workload and device agent encoders state `mcp:auth` themselves.
-
-**Grant.** A tuple of `{Scope, Selector}` held by a principal. The API-visible forms are `RoleGrant` (carrying `Selectors []Selector`) and `ListRoleGrant` (which also carries the transitively-implied `sub_scopes`). Use `authz.NewGrant(scope, resourceID)` to construct one — it derives the selector's `resource_kind` from the scope family.
-
-**Principal.** Who holds a grant — a `urn.Principal` with a type (user, role, agent, api_key) and an id. An `api_key:<api_keys.id>` principal holds only its own `mcp:connect`/`mcp:auth` policy, written through `keys.create` or provisioned by the auth client backfill (see docs/rbac.md, "Default auth permissions"); its grants always match strictly, never outrank a block, and never inherit `user:all` or the creator's grants.
-
-**Principal precedence.** Blocklist exclusions (`*:blocked_*`) normally subtract from allows regardless of which principal holds either. One exception: a grant made directly to the user (`user:<id>`) that names a concrete resource (`resource_id` not `*`) outranks a block the user inherits from a role or `user:all`. Agent grants never outrank, because agent owners can write them without being administrators. The user's own blocks always apply, wildcard direct grants never outrank, roles and `user:all` share one level, a narrowed direct grant outranks only as far as it reaches, and `risk_policy:bypass` is never outranked. The rule lives in `server/internal/authz/precedence.go` (`IsDirectGrant`, `DirectOverrideGrants`, `ExclusionYieldsToDirectGrants`) and is mirrored in `ListAccessibleMCPServersForUser` / `ListAccessibleSkillsForUser`, `runtimepolicy.DelegationContained`, `access.listGrants` (`direct_selectors`), and the dashboard's `useRBAC` and per-server access list. Any new code that evaluates exclusions outside `authz.Engine` must apply it too.
-
-**Dimensions.** Optional narrowing keys on a `Check` beyond `resource_id`. Today: `tool` and `disposition` for MCP scopes (see [server/internal/authz/checks.go](server/internal/authz/checks.go) and `MCPToolCallCheck`), `project_id` for MCP, environment, assistant, and `mcp:auth` scopes, and `client_type`, `connection_owner` and `upstream_client` for `mcp:auth` (built only through `MCPAuthClientCheck`). A `project_id` dimension is how a per-resource check inherits project-wide grants: the check names the resource and its project, so `{"resource_id":"*","project_id":P}` covers every resource in P while `{"resource_id":R}` covers only R (`MCPCheck`, `AssistantCheck`). Every check on the `mcp` resource kind (`mcp:read`, `mcp:write`, `mcp:connect` and their blocks) must carry `project_id`: `requiredCheckDimensions` in `authz/checks.go` makes the engine reject one without it as invalid, since matching would otherwise skip a project-bounded grant's bound. Never build such a check as a raw `authz.Check` literal; use `MCPCheck` or `MCPToolCallCheck` with `ProjectID`. `mcp:auth` checks are a separate kind (`mcp_auth_client`), built only through `MCPAuthClientCheck` with `MCPAuthClientDimensions.ProjectID`; they use strict matching, so a grant key the check omits never matches. Allowed keys per scope family are enforced by `ValidateSelector`; new dimensions must be added to `allowedSelectorKeys` in `selector.go`.
-
-**Disposition.** A snake_case bucket derived from MCP tool annotation hints — `read_only`, `destructive`, `idempotent`, `open_world`. Constants live in `authz/selector.go`; `conv.DispositionFromAnnotations(annotations)` is the canonical conversion from `*types.ToolAnnotations`.
-
-**System role.** A built-in role shipped with the server. Speakeasy defines two: **admin** (every scope) and **member** (the read-and-connect subset). Constants `authz.SystemRoleAdmin` and `authz.SystemRoleMember`.
-
-**Enforcement.** Inside a handler, authorization is an explicit one-line check: the handler names the scope (and resource, if project-scoped) it needs, and the RBAC engine either allows the call or returns a forbidden error.
-
-**Auth context invariant.** Organization-scoped handlers can assume `ActiveOrganizationID` is populated. During login, session authentication can briefly produce an org-less context; `Engine.PrepareContext` handles that middleware boundary by installing zero grants instead of trying organization-scoped principal resolution. Endpoints already exposed during login keep their explicit org-less behavior: for example, `access.ListGrants` returns no grants, `productfeatures.GetProductFeatures` returns unauthorized, and `auth.Info` continues the login flow. Do not spread defensive empty-org checks into other handlers.
-
-## Server
-
-RBAC is split across two Go packages: `server/internal/authz/` holds the enforcement primitives, and `server/internal/access/` implements the Goa management service that exposes them over HTTP. When adding new authorization primitives (scopes, checks, enforcement logic) edit `authz`; when adding or changing the management API (role/member endpoints) edit `access`.
-
-### `authz` package — the enforcer
-
-Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s imports are deliberately minimal (DB, logger, cache, WorkOS, urn) so any package that gates on RBAC can depend on it without import cycles — never add an import to `authz` from a package that transitively depends on `authz`, since the split exists specifically to prevent the cycles that motivated it.
-
-**Scope declarations.** `Scope` type and every `Scope*` constant live in `server/internal/authz/scopes.go`. Constants follow the `Scope<Name>` pattern; string values follow `<resource>:<verb>` (e.g. `mcp:read`, `org:admin`). `ScopeRoot` is reserved for service-internal superadmin overrides. The file also holds the `scopeExpansions` map and computes the inverse `scopeSubScopes` in `init()`. `CalculateSubScopes(scope)` exposes the inverse to callers.
-
-**System role grants.** `SystemRoleGrants` in `server/internal/authz/grants.go` — admin and member defaults. Adding a scope usually means adding it to admin, and optionally to member if end users should get it by default. `SeedSystemRoleGrants` upserts the full set; `SyncGrants` upserts grants for a single role slug.
-
-**`authz.Engine`.** The central enforcer. Methods: `PrepareContext`, `Require(ctx, checks...)`, `RequireAny(ctx, checks...)`, `Filter(ctx, scope, ids)`, `ShouldEnforce`, `InvalidateRoleCache`, `InvalidateAllRoleCaches`, `GetScopeOverrides`. Constructed in `server/cmd/gram/start.go` via `authz.NewEngine(logger, db, chDB, challengeLogging, membership, opts...)` and injected into every service that gates on RBAC. RBAC is always enforced for eligible authenticated requests; the `MembershipFetcher` is the WorkOS client used for role-slug lookups.
-
-**Organization provisioning.** `authz.Provisioner` seeds both built-in roles and their grants for every organization created through Speakeasy. `ProvisionOrganizationAdmin` performs that seed and assigns the first user to `SystemRoleAdmin` in one transaction. New organizations (provisioning, admin create, and WorkOS organizations created by their `organization` event) also get the `user:all` personal `mcp:auth` default; reconciling an existing organization never adds it back. The `identity` leaf package never imports `authz`. WorkOS organization event reconciliation calls `SeedSystemRoleGrantsTx` for organizations discovered through WorkOS. Default `mcp:auth` grants and legacy key policies the backfill provisions are recorded in `auth_permission_provisions`; any new explicit grant write path must mark a matching row taken over after writing (`authz.MarkAuthPermissionTakenOverTx`), as `UpsertPrincipalGrant` callers do.
-
-**`authz.Check`.** `{Scope, ResourceKind, ResourceID, Dimensions}` — the thing a handler asks `Require` to enforce. For the common single-resource case, leave `ResourceKind: ""` (auto-derived from the scope family) and `Dimensions: nil`; exhaustruct requires every field at every call site. `ResourceID` is typically `authCtx.ProjectID.String()` for project-scoped scopes. Defined in [server/internal/authz/access.go](server/internal/authz/access.go).
-
-**`authz.Filter` for list endpoints.** When a handler lists resources the caller might only partially own, `s.authz.Filter(ctx, scope, candidateIDs) ([]string, error)` returns the subset of IDs the caller holds the scope for. The standard pattern is: gather candidate IDs from the repo, call `Filter`, then rebuild the response from the allowed IDs. Prefer this over a post-hoc per-item `Require` loop. Canonical call sites: `server/internal/projects/impl.go` (projects list) and `server/internal/toolsets/impl.go` (toolsets list).
-
-**Auth context accessor.** `contextvalues.GetAuthContext(ctx)` returns the current `*AuthContext`. RBAC-relevant fields: `ActiveOrganizationID`, `ProjectID`, `UserID`, `Email`, `IsAdmin`, `APIKeyID`, `SessionID`. `AccountType` is billing metadata and does not control RBAC enforcement.
-
-**Scope overrides.** A local-dev/superadmin header can inject a restricted grant set for the request, parsed in `override.go` and surfaced via `Engine.GetScopeOverrides`. `access.ListGrants` returns the override set verbatim when active so the dashboard reflects what the engine will enforce.
-
-**Error model.** `errors.go` defines sentinel errors (`ErrDenied`, `ErrMissingGrants`, `ErrNoChecks`, `ErrInvalidCheck`) and typed errors (`DeniedError`, `InvalidCheckError`). The engine maps these to `oops` codes — `ErrDenied` → `oops.CodeForbidden`, everything else → `oops.CodeUnexpected` with a logged message.
-
-**Grant loading.** `LoadGrants(ctx, db, orgID, principals)` reads the principal URN set and returns the flattened `[]Grant`. Called by both `Engine.PrepareContext` (middleware path) and `access.ListGrants` (user-facing). Each row's `selectors` JSONB is parsed via `SelectorFromRow`. It returns exactly the stored rows and never synthesizes defaults: built-in role grants are editable per organization, so an empty grant set for a scope family may be an explicit revocation. When new default scopes must reach existing organizations, write the rows with a one-time operator backfill (as `server/cmd/tools/migrations/assistantrolegrants` does for the assistant scopes) instead of filling them in at load time.
-
-**Temporary grants.** A `principal_grants` row with `expires_at` set is a temporary grant, given to one principal (member, `user:all`, role or active agent) through `access.createTemporaryGrant` and ended by its deadline or `access.revokeTemporaryGrant` (`server/internal/access/temporary_grants.go`). `ListTemporaryGrants` takes one principal and returns its active grants by default, at most 500, soonest deadline first; `include_expired` adds expired rows as history. Any new SQL that reads `principal_grants` for authorization or for showing current access must add `(expires_at IS NULL OR expires_at > clock_timestamp())` (only the temporary grant history list, `ListTemporaryGrants` with `include_expired`, reads expired rows); audience reads and deletes and anything that derives permanent configuration from grants (backfills, provisioning) must read `expires_at IS NULL` only. Permanent writes clear `expires_at` on conflict, and nothing but the temporary grant endpoints may delete a row by `expires_at`. See "Temporary grants" in docs/rbac.md.
-
-**Sync semantics.** `SyncGrants` distinguishes nil from empty: `RoleGrant{Selectors: nil}` writes a single wildcard row; `RoleGrant{Selectors: []Selector{}}` writes nothing (no access). Each non-nil selector is validated by `ValidateSelector` before insert.
-
-### `access` package — the management API
-
-`server/internal/access/` implements the Goa `access` service on top of `authz`. Every handler calls `s.authz.Require(...)` with the appropriate scope before doing work. The package also owns `queries.sql` and the generated `server/internal/access/repo/` SQLc package that both `access` and `authz` use to read and write grant rows.
-
-**Scope metadata.** `ListScopes` in `server/internal/access/impl.go` supplies scope slugs, descriptions, resource types, and visibility to dashboard scope pickers. The RBAC override toolbar also uses this catalog: user-visible scopes and groups appear automatically, and `resourceType` controls narrowing (plugin scopes use `project`). Do not maintain a duplicate frontend scope list.
-
-**Override recovery.** `ListScopes` requires `org:read`. The override editor always renders an `org:read` toggle, but does not force it on. If catalog access is denied, saved choices and cached metadata remain available. With no cached catalog, the editor still shows `org:read` and saved scopes under a fallback group; undiscovered catalog scopes appear after recovery. Re-enabling `org:read` automatically clears stale organization restrictions and persists the change before refetching. Alternatively, disable the override.
-
-**Full-access grant list.** `ListGrants` returns a hard-coded full-access scope list when enforcement is intentionally skipped, such as sessionless or API-key requests. That inline list in `server/internal/access/impl.go` must grow whenever a new scope is added. The parallel test expectation is `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go`.
-
-**System role gating.** `isSystemRole(slug)` in `impl.go` checks against `authz.SystemRoleAdmin` and `authz.SystemRoleMember`. System roles cannot be renamed or deleted. Their grants are stored per organization and may be edited through `UpdateRole` (the Admin role must keep `org:admin`), and their members can be reassigned.
-
-### Non-generated files
-
-| File                                   | Purpose                                                                                                                                                   |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `server/design/access/design.go`       | Goa design for the `access` service. Regenerates `server/gen/access/` and `server/gen/http/access/` via `mise run gen:goa-server`.                        |
-| `server/internal/authz/access.go`      | The `Check` type and its expansion logic.                                                                                                                 |
-| `server/internal/authz/checks.go`      | Pre-built `Check` builders for multi-dimensional checks (e.g. `MCPToolCallCheck`, `MCPToolCallDimensions`).                                               |
-| `server/internal/authz/context.go`     | Request-context helpers for grants (`GrantsToContext`, `GrantsFromContext`).                                                                              |
-| `server/internal/authz/engine.go`      | The `Engine` type — central RBAC enforcer, role-slug caching, and override resolution.                                                                    |
-| `server/internal/authz/errors.go`      | Package sentinel errors and typed errors.                                                                                                                 |
-| `server/internal/authz/grants.go`      | `Grant`/`RoleGrant`/`ScopedGrant` types, `SystemRoleGrants`, `SyncGrants`, `SeedSystemRoleGrants`, `GrantsForRole`, `GrantsToScopedGrants`.               |
-| `server/internal/authz/load.go`        | Principal grant loading from the database.                                                                                                                |
-| `server/internal/authz/override.go`    | Scope override plumbing (header parsing, override-to-grants conversion).                                                                                  |
-| `server/internal/authz/precedence.go`  | Principal precedence: direct concrete grants outrank blocklist exclusions inherited from roles or `user:all`.                                             |
-| `server/internal/authz/provisioner.go` | New-organization provisioning for built-in role grants and the initial Admin assignment.                                                                  |
-| `server/internal/authz/scopes.go`      | Scope type, constants, and expansion rules.                                                                                                               |
-| `server/internal/authz/selector.go`    | `Selector` type, matching rules, `NewSelector`/`NewGrant` helpers, `ValidateSelector`, `ResourceKindForScope`, disposition vocabulary, `SelectorFromRow`. |
-| `server/internal/authztest/helpers.go` | Test helpers other packages reuse for RBAC setup, including `WithExactGrants`.                                                                            |
-| `server/internal/access/impl.go`       | Implementation of the `/rpc/access.*` Goa service.                                                                                                        |
-| `server/internal/access/queries.sql`   | SQLc queries for principals, grants, roles, and members. Regenerates `server/internal/access/repo/` via `mise run gen:sqlc-server`.                       |
-
-### Generated files
-
-| Path                                            | Generator                                                                                                                      |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `server/gen/access/`, `server/gen/http/access/` | `mise run gen:goa-server` from `server/design/access/design.go`.                                                               |
-| `server/internal/access/repo/`                  | `mise run gen:sqlc-server` from `server/internal/access/queries.sql` (via the `access` stanza in `server/database/sqlc.yaml`). |
-
-## Server-client contract
-
-Scope and resource-type changes on the server ripple into the generated SDK types (via `gen:sdk`) and a few hand-maintained docs and tests — adding a scope is not purely a server-package change.
-
-**HTTP routes** (design: `server/design/access/design.go`):
-
-- `/rpc/access.listScopes` — every scope the server knows about, with `resource_type` and description.
-- `/rpc/access.listRoles`, `getRole`, `createRole`, `updateRole`, `deleteRole` — custom role CRUD.
-- `/rpc/access.listMembers`, `updateMemberRole` — org membership and role assignment.
-- `/rpc/access.listUserGrants` — the caller's effective grants.
-
-**Three-place enum lockstep.** `server/design/access/design.go` repeats the scope slug enum in three places — `RoleGrantModel.scope`, `ListRoleGrantModel.scope`, and its `sub_scopes` element — plus `ScopeModel.slug` for the listing endpoint. All three must stay synchronized with `authz/scopes.go`, and `ScopeModel.resource_type` must contain every resource type in use. Adding a new resource type also means adding it to `SelectorModel.resource_kind`'s enum (`project`, `mcp`, `org`, `*`) — the model that backs `RoleGrant.selectors` and `ListRoleGrant.selectors`.
-
-**Generated SDK types.** `client/dashboard/src/sdk/src/models/components/scopedefinition.ts`, `rolegrant.ts`, `listrolegrant.ts`, `selector.ts`, etc. Regenerated by `mise run gen:sdk` after every design change.
-
-**UI-owned access-page types.** `client/dashboard/src/pages/access/types.ts` owns the dashboard-only abstractions layered over the generated SDK: the `ResourceType` string-literal union, `AnnotationHint`, `CustomTab`, `ActivePanel`, `PolicyEffect`, `ScopeRule`, a UI `RoleGrant` interface (`selectors: Selector[] | null`, distinct from the SDK's `RoleGrant`), and `toRoleSlug`. It also owns the `ANNOTATION_TO_DISPOSITION` / `DISPOSITION_TO_ANNOTATION` maps that mirror the disposition vocabulary in `authz/selector.go` — keep these in lockstep when adding or renaming dispositions. It `import`s `Scope` / `Selector` / `SelectorDisposition` from the SDK for local use in those definitions.
-
-## Client
-
-The dashboard pages under `client/dashboard/src/pages/access/` render membership and role management on top of the generated SDK and the `listScopes` response. RBAC-aware UI across the rest of the dashboard gates itself through a shared hook and component.
-
-### Conventions
-
-**`useRBAC` hook.** `client/dashboard/src/hooks/useRBAC.ts` wraps the generated `useGrants` React Query hook and exposes `hasScope(scope, resourceId?, projectId?)`, `hasAllScopes(scopes, resourceId?, projectId?)`, `hasAnyScope(scopes, resourceId?, projectId?)`, plus `isLoading`, `grants`, and `error`. Returns `false` from the `has*` checks while grants are loading. The module also exports `selectorMatches(grant, check)` and `resourceKindForScope(scope)` — direct mirrors of the server-side helpers in `authz/selector.go` — for code that needs parity with backend matching outside the standard `hasScope` flow.
-
-**`RequireScope` component.** `client/dashboard/src/components/require-scope.tsx` is the primary rendering gate. Props: `scope: Scope | Scope[]`, `all?: boolean` (AND vs OR when multiple scopes), `resourceId?: string`, `projectId?: string` (the project the resource belongs to, for scope families with a `project_id` dimension), `level: "page" | "section" | "component"`, `children`, and level-specific extras (`fallback` for page/section, `reason`/`className` for component).
-
-- `level="page"` — renders a full Unauthorized fallback page when the scope is missing.
-- `level="section"` — hides the children entirely.
-- `level="component"` — renders disabled with a tooltip explaining why (good for buttons and inputs).
-
-**Scope vocabulary import.** `useRBAC`, `RequireScope`, and the access pages import the `Scope` union directly from the generated SDK (`@gram/client/models/components/rolegrant.js`). That union is regenerated from the server scope enum by `gen:sdk`, so keeping `server/design/access/design.go` in lockstep with `authz/scopes.go` is what makes the client gates type-check.
-
-**Dashboard grant reference.** [docs/rbac.md](../../../docs/rbac.md) contains the "Dashboard Grant Reference" table that maps dashboard pages and actions to the grants required to use them. Whenever adding a new scope, changing a system-role grant default, adding a new dashboard RBAC gate, or changing the grant required by a dashboard feature, update that table in the same change. The table is the first place to answer questions like "what grant is required to create a project?"
-
-### Non-generated files
-
-| File                                                                                                     | Purpose                                                                                                                       |
-| -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `client/dashboard/src/components/require-scope.tsx`                                                      | `RequireScope` gating component — page, section, and component-level rendering gates.                                         |
-| `client/dashboard/src/hooks/useRBAC.ts`                                                                  | `useRBAC` hook — scope checks and raw grants for the dashboard.                                                               |
-| `client/dashboard/src/pages/access/Access.tsx`                                                           | Top-level access page shell.                                                                                                  |
-| `client/dashboard/src/pages/access/ChangeRoleDialog.tsx`, `CreateRoleDialog.tsx`, `DeleteRoleDialog.tsx` | Role and member-role mutation dialogs.                                                                                        |
-| `client/dashboard/src/pages/access/MembersTab.tsx`, `RolesTab.tsx`                                       | The two tabs of the access page.                                                                                              |
-| `client/dashboard/src/pages/access/ScopePickerPopover.tsx`                                               | Scope selection UI.                                                                                                           |
-| `client/dashboard/src/pages/access/types.ts`                                                             | UI-only access-page types (`ResourceType`, `ScopeRule`, UI `RoleGrant`) and disposition maps. (See "Server-client contract".) |
-
-## Jobs to be done
-
-### How to gate a handler with an existing scope
-
-1. Inject `*authz.Engine` into the service struct (if it isn't already) and keep it on `s.authz`.
-2. At the top of the handler — before any database work — call `s.authz.Require(ctx, authz.Check{Scope: authz.Scope<Name>, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})` and return the error as-is. The exhaustruct linter requires every `Check` field — leave `ResourceKind` empty to auto-derive from the scope family and `Dimensions` nil unless you're narrowing by tool/disposition.
-3. Choose the narrowest scope for the operation: `*:read` for GET/list, `*:write` for mutations, `*:connect` for runtime usage. Scope expansions mean write callers are still permitted to read.
-4. Use `RequireAny` instead of `Require` when a single handler legitimately satisfies multiple equivalent scopes.
-5. In the handler's test, add one case that builds the context without the scope and asserts an `oops.CodeForbidden` response, and one case that builds the context with the scope via `authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.Scope<Name>, resourceID))`. Construct grants with `authz.NewGrant` (or `authz.NewGrantWithSelector` for non-trivial selectors) — never set `Grant.Selector` by hand.
-
-### How to add a new scope to an existing resource type
-
-Use this when the resource type is already represented (e.g. adding a new verb on `mcp`).
-
-1. Add the `Scope<Name>` constant in `server/internal/authz/scopes.go`.
-2. Add the new scope to `scopeExpansions` in the same file. Usually: the new scope is the upper or lower end of an existing read/write/connect triple.
-3. Extend `SystemRoleGrants` in `server/internal/authz/grants.go`: admin always receives the new scope. Member receives it if and only if end users should have it by default (read and connect, yes; write, no).
-4. Add the scope metadata to `ListScopes` in `server/internal/access/impl.go`, with the correct resource type and visibility. The override toolbar discovers user-visible scopes from this backend catalog; do not add scopes or groups manually to the toolbar.
-5. Extend the hard-coded full-access scope list in `ListGrants` (same `impl.go`) so callers without grants loaded still see the complete catalogue.
-6. Update the three enums in `server/design/access/design.go` that have to stay in lockstep.
-7. No dashboard edit is needed for the `Scope` union — it is regenerated in the SDK (`@gram/client/models/components/rolegrant.js`) by `gen:sdk` in step 10. Confirm the new slug appears there after regeneration.
-8. Bump `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go` and the `require.Len(t, result.Scopes, N)` assertion in `server/internal/access/listscopes_test.go`.
-9. Update the "Dashboard Grant Reference" table in [docs/rbac.md](../../../docs/rbac.md) if the new scope affects any dashboard route, action, or user-facing grant question.
-10. Run `mise run gen:goa-server`, then `mise run gen:sdk`.
-11. Run `mise run lint:server` and `mise run test:server`.
-
-### How to add a new resource type
-
-Use this when introducing a resource type that doesn't exist yet (e.g. the first `foo:*` scopes).
-
-1. Follow every step under "How to add a new scope to an existing resource type" for each scope on the new type.
-2. Additionally, add the new resource type string to `ScopeModel.resource_type` in `server/design/access/design.go`.
-3. Additionally, add the new resource type to the `ResourceType` union in `client/dashboard/src/pages/access/types.ts`.
-
-### How to change system role defaults
-
-Use this when adjusting what `admin` or `member` gets out of the box. Prefer additive changes — removing a grant from a shipped role is an observable permissions change for existing users.
-
-1. Edit `SystemRoleGrants` in `server/internal/authz/grants.go`.
-2. Update `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go` if the admin set changed.
-3. Update the "Dashboard Grant Reference" table in [docs/rbac.md](../../../docs/rbac.md) if the default grant change affects what a built-in role can do in the dashboard.
-4. Consider whether existing orgs' grant tables need a migration to reflect the new defaults; new orgs pick up defaults automatically during organization provisioning.
-5. Run `mise run lint:server` and `mise run test:server`.
-
-### How to narrow an MCP check by tool or disposition
-
-Use this when a single handler should authorize per-tool — e.g. private MCP tool calls where a grant might allow only `read_only` tools. The canonical call site is [server/internal/mcp/rpc_tools_call.go](server/internal/mcp/rpc_tools_call.go).
-
-1. Build dimensions with the typed struct in `authz/checks.go` rather than a raw map: `authz.MCPToolCallDimensions{Tool: params.Name, Disposition: disposition}`. Zero-value fields are dropped automatically.
-2. For tool dispositions, derive the value from `*types.ToolAnnotations` via `conv.DispositionFromAnnotations(annotations)` — priority order is read_only > destructive > idempotent > open_world; missing or nil annotations yield an empty string (which gets dropped).
-3. Build the check with the matching helper: `authz.MCPToolCallCheck(toolsetID, dims)`. For new dimension shapes, add a fresh helper to `authz/checks.go` rather than scattering raw `Check{Dimensions: …}` literals across services.
-4. If you're introducing a brand-new dimension key, allowlist it in `allowedSelectorKeys` in `authz/selector.go`, otherwise `ValidateSelector` will reject any role grant that uses it. Then carry it through every selector mapper: `SelectorModel` in `design/access/design.go` and `AgentPolicySelector` in `design/agents/design.go`, `genSelectorToAuthz`/`authzSelectorToGen` in `access/impl.go`, `policySelector`/`policySelectorView` in `agentmanagement/policy.go`, `selectorFromForm`/`selectorModel` in `keys/agent_keys.go`, and the `accessgen.Selector` literal in `platformmcp/access_role_mutations.go`. New disposition values must also be added to `validDispositions` and to the `disposition` enum on `SelectorModel` in `server/design/access/design.go`.
-5. Selector-matching skips dimensions that the grant doesn't constrain — a grant of `mcp:connect` with no `tool` key still satisfies a check that names a specific tool. This is intentional; it lets less-narrow grants cover more checks.
-
-### How to filter a list handler to the caller's accessible resources
-
-Use this whenever a `list*` handler would otherwise return resources the caller has no grant for. `projects.List` and `toolsets.List` are the canonical examples.
-
-1. Query the repo for the full candidate set the org/project contains.
-2. Collect the candidate IDs into `[]string`.
-3. Call `allowedIDs, err := s.authz.Filter(ctx, authz.Scope<Name>, candidateIDs)`. Return the error as-is.
-4. Build a set from `allowedIDs` and rebuild the response by walking the original rows, keeping only the ones whose ID is in the set. Preserves repo ordering without a second query.
-5. Do not fall back to a per-item `Require` loop — `Filter` exists specifically to avoid N authorization round-trips.
-
-### How to gate dashboard UI with RBAC
-
-Dashboard code should never hand-roll scope checks — use the shared primitives so a change to `useRBAC` or `<RequireScope>` flows through the whole app.
-
-1. **Rendering gates — use `<RequireScope>`.** Pick the level that matches what you want the un-entitled user to see:
-   - `level="page"` around a full route component renders an Unauthorized fallback page.
-   - `level="section"` around a block hides it entirely.
-   - `level="component"` around a button or input renders disabled with a tooltip reason.
-
-   ```tsx
-   <RequireScope scope="org:admin" level="component" reason="Admin only">
-     <Button onClick={() => setDialogOpen(true)}>New API key</Button>
-   </RequireScope>
-   ```
-
-2. **Multi-scope gates.** Pass an array and set `all` to switch between OR (default) and AND logic: `<RequireScope scope={["org:read", "org:admin"]} level="page">`.
-
-3. **Resource-specific gates.** Pass `resourceId` when the scope only applies to a specific resource: `<RequireScope scope="mcp:write" resourceId={toolsetId} level="component">`. For scope families with a `project_id` dimension (assistants), also pass `projectId` so project-wide grants match and grants for other projects do not: `hasScope("assistant:write", assistant.id, project.id)` for one assistant, `hasScope("assistant:write", project.id, project.id)` for project-level actions such as create, and `hasScope("assistant:read", undefined, project.id)` for "any assistant in this project".
-
-4. **Imperative checks — use `useRBAC`.** When you need the scope result as a value (to compute a class name, skip an effect, pick a label), pull from the hook instead of wrapping markup:
-
-   ```tsx
-   const { hasScope, isLoading } = useRBAC();
-   const canEdit = hasScope("mcp:write", toolsetId);
-   ```
-
-5. **The `Scope` string you pass must match the server.** Import `Scope` directly from the generated SDK (`@gram/client/models/components/rolegrant.js`). If TypeScript complains about an unknown scope, you're missing the union update from the server scope add (see "How to add a new scope to an existing resource type").
-
-6. **Update the dashboard grant reference.** Any new or changed dashboard gate must update the "Dashboard Grant Reference" table in [docs/rbac.md](../../../docs/rbac.md), including page-level access, component/action-level access, resource selector target, and any notable server-side check that differs from the visible UI gate.
-
-### How to inspect the caller's grants
-
-- **In the dashboard**: `const { grants } = useRBAC();` returns the raw `RoleGrant[]`. Prefer `hasScope` for gating; reach for `grants` only when you need to render them (the access page itself, diagnostics, dev overlays).
-- **In Go handlers**: `authz.GrantsFromContext(ctx)` returns the grants on the request context after the engine's `PrepareContext` middleware has run.
-- **Within long-lived requests**: use `Engine.RefreshContext` before a later operation that must observe grant revocation. It clears resolved grant/policy snapshots and repeats admission while retaining the original credential constraints. Continue with the returned context and fail closed on error.
-- **Admitted jobs**: capture the originally prepared policies with `CaptureAdmissionBoundary`, then `Apply` that boundary to callback contexts when a job must never gain newly granted authority. The boundary retains no request context, survives later refreshes, and every policy must allow the operation.
-- **Over the API**: `GET /rpc/access.listUserGrants` returns the caller's effective grants.
-
-## Role hierarchy at a glance
-
-- `admin` — every scope. Write implies read via `scopeExpansions`, so admins can exercise every read operation transitively.
-- `member` — the read-and-connect subset.
-- Resource scoping — a grant's selector either names a specific resource (`{"resource_kind":"project","resource_id":"proj_123"}`) or wildcards it (`{"resource_kind":"*","resource_id":"*"}` via `authz.WildcardResource`). A grant value of `*` matches anything for that selector key.
-- `root` (`authz.ScopeRoot`) — held only by service-internal overrides; satisfies every check.
-
-## Relevant mise tasks
-
-| Task                       | Purpose                                                                                                                                                            |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `mise run gen:goa-server`  | Regenerate `server/gen/access/**` after editing `server/design/access/design.go`.                                                                                  |
-| `mise run gen:sdk`         | Regenerate the SDK and OpenAPI so dashboard/CLI consumers see the new scope vocabulary.                                                                            |
-| `mise run gen:sqlc-server` | Regenerate `server/internal/access/repo/` when `queries.sql` changes. Requires `mise run infra:start` (sqlc connects to the local Postgres to type-check queries). |
-| `mise run lint:server`     | Catches `exhaustruct` violations in the scope/grant structs.                                                                                                       |
-| `mise run test:server`     | Runs the scope-count assertions and RBAC tests. Filter with `./internal/authz/... ./internal/access/...` when iterating.                                           |
-
-## Maintaining this skill
-
-This file documents conventions that evolve over time. Adding a new scope, resource type, or tweaking system-role defaults is already covered by "Jobs to be done" — those don't require skill edits. Structural changes do. Update this skill in the same commit when you make any of the following kinds of changes:
-
-- Changing the `<resource>:<verb>` scope naming convention.
-- Adding or removing a system role beyond `admin` and `member`.
-- Replacing `authz.Engine` as the central enforcer, or changing its method set (`Require`, `RequireAny`, `Filter`, `PrepareContext`, `ShouldEnforce`, etc.) or constructor signature.
-- Moving authorization primitives back into `access` or into a new package — the `authz` / `access` split is deliberate and load-bearing for import-cycle reasons.
-- Changing the `Check` struct shape (currently `{Scope, ResourceKind, ResourceID, Dimensions}`) or the `Selector` type's matching rules.
-- Changing principal precedence (which principals count as direct, which exclusions yield, or where the rule is mirrored).
-- Adding a new selector dimension key (currently `tool`, `disposition` for MCP) — including changes to `allowedSelectorKeys` or `validDispositions` in `authz/selector.go`, or to the matching `SelectorModel` enums in the design file.
-- Changing scope-expansion semantics (e.g. how `scopeSubScopes` is computed from `scopeExpansions`, or introducing transitive expansion). The expansion algorithm currently emits one entry per scope level (relying on selector matching to handle wildcards) — switching back to per-scope×per-resource enumeration would change the perf profile and is worth re-documenting.
-- Changing where the full-access scope catalogue lives (currently inline in `access.ListGrants` and mirrored by `expectedFullAccessScopes` in tests), or where `ListScopes` is populated.
-- Moving the hand-maintained client scope vocabulary out of `client/dashboard/src/pages/access/types.ts`, or changing the three-place-enum-lockstep count in the design file. Same applies if the `ANNOTATION_TO_DISPOSITION` / `DISPOSITION_TO_ANNOTATION` maps move out of that file.
-- Changing the auth context invariant — e.g. if `ActiveOrganizationID` becomes optional, or a new invariant field is added.
-- Changing or replacing the dashboard's RBAC primitives — `useRBAC` return shape (including `selectorMatches`/`resourceKindForScope` helpers), `<RequireScope>` levels/props, or the SDK hook the dashboard reads grants from.
-- Renaming or replacing the canonical Go grant constructor (`authz.NewGrant`, `authz.NewGrantWithSelector`, `authz.NewSelector`) — every test in the codebase is wired through these.
-- Adding a new RBAC-relevant mise task that belongs on the cheat sheet.
-- Changing the test-helper surface in `authztest` (e.g. renaming `WithExactGrants` or adding a new canonical helper tests should use).
-
-## Cross-references
-
-- `gram-management-api` — the `access` service itself, and every service that gates handlers with `authz.Require`, follows that skill's flow.
-- `gram-audit-logging` — role and member mutations emit audit events via `server/internal/audit/access.go`; subjects are `access_role` and `access_member`.
-- `golang` — error handling through `oops`, the no-defensive-checks rule for `ActiveOrganizationID`, the `setup_test.go` / black-box test conventions used by RBAC tests.
-- `frontend` — everything under `client/dashboard/src/pages/access/` (component structure, `cn()`/design-system styling, React Query usage).
-- `postgresql` — the `principal_grants` (with `selectors JSONB NOT NULL`), `roles`, and related tables backing the `access/repo` SQLc package.
-- `mise-tasks` — when modifying the `.mise-tasks/gen/*.sh` scripts referenced above.
+# Speakeasy RBAC
+
+The whole permission model is one Go value, `authz.Model` in `server/internal/authz/registry_resources.go`. The scope constants (`scopes_gen.go`), the typed request refs (`refs_gen.go`), the expansion and block tables, the selector key allowlists, the scope catalogue, the scope enum in the Goa design and the `docs/rbac.md` scope table are all derived from it. One server-side evaluator, `authz.Engine`, decides every request. **Change the model, regenerate, and let the tests tell you what else moved.** Never hand-edit a derived table.
+
+## Mental model
+
+| Term             | Meaning                                                                                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Resource type    | A `ResourceType` in the model: `Kind` (`mcp`, `environment`, `project`, ...), optional `Parent` (`project`), its `Dimensions`, and its `Permissions`.                                                                    |
+| Permission       | One action on a type (`read`, `write`, `connect`). Its scope is `<kind>:<action>`; `Implies` lists the actions a grant of it also satisfies.                                                                             |
+| Block            | A permission's `Exclusions: Blocked(...)` generate `<kind>:blocked_<action>`. A block also takes away every permission that implies it.                                                                                  |
+| Grant            | Scope + selector held by a principal (user, role, `user:all`, agent, API key). Build with `authz.NewGrant` / `NewGrantWithSelector`.                                                                                     |
+| Check            | What a request asks for. Build it with a typed ref, never by hand.                                                                                                                                                       |
+| Dimension values | A concrete value matches an equal grant value or `*`. `authz.SelectorValueUnknown` (`$unknown`) never satisfies a constrained allow and always matches a constrained block. An empty value or `*` in a check is invalid. |
+| Precedence       | A user's direct grant naming a concrete resource outranks a block inherited from a role or `user:all`. Lives in `precedence.go`.                                                                                         |
+
+## Gating a handler
+
+```go
+// one resource
+if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerID(id), authz.ProjectID(project)).Write()); err != nil {
+	return err
+}
+// no resource yet (create), or a lookup that missed (do not leak existence)
+s.authz.Require(ctx, authz.Project(authz.ProjectID(p)).Environments().Create())
+s.authz.Require(ctx, authz.Project(authz.ProjectID(p)).Environments().Read())
+// a project-wide grant OR a grant on the resource, and a block on either refuses
+s.authz.Require(ctx, authz.AnyOf(authz.Project(p).Write(), authz.Skill(id).Write()))
+// a branch, not a denial (no challenge logged)
+ok, err := s.authz.Can(ctx, authz.Chat(id).Read())
+// discovery: "could they act on any matching resource?"
+ok, err := s.authz.Can(ctx, authz.MCPServer(id, p).Connect().Probe())
+```
+
+| Need                                             | Use                                                                                                                                                                    |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Refuse unless allowed                            | `Require(ctx, checks...)` (all must pass)                                                                                                                              |
+| Several equivalent grants, blocks must still win | `Require(ctx, authz.AnyOf(...))` (same as `RequireAnyUnblocked`)                                                                                                       |
+| Branch on the answer                             | `Can(ctx, ...)`. Accepts a single `AnyOf` and probes.                                                                                                                  |
+| Narrow a list                                    | `Filter(ctx, checks)` returns the allowed `ResourceID`s. `FindMatched` returns a bool per check, for many checks that share one resource id (tools in a `tools/list`). |
+| MCP tool call                                    | `authz.MCPServer(id, p).ToolCall(tool, disposition)`. An empty disposition becomes unknown, so disposition blocks apply to unannotated tools.                          |
+
+Refs exist for every kind in the model except `mcp_auth_client` (`MCPAuthClientCheck`), `risk_policy` (`RiskPolicyApplies` / bypass checks) and `inference` (`InferenceExecuteCheck`). The list sits at the end of `refs_gen.go`.
+
+For a list endpoint, load the candidate rows, build one ref per row, call `Filter`, and rebuild the response from the ids it returns. Never call `Require` per item.
+
+In the handler's test, add one case without the grant that asserts `oops.CodeForbidden`, and one case with it through `authztest.WithExactGrants(t, ctx, authz.NewGrant(scope, resourceID))`.
+
+## Adding or changing a permission
+
+1. Edit `authz.Model` in `registry_resources.go`: a `Permission` on the right type (with `Label`, `Description`, `Implies`, `Exclusions`, `Agent`), or a new `ResourceType`. Add it to `SystemRoles[SystemRoleAdmin]` too, and to member only if every user should have it. `Model.Validate` runs when the package loads, so a bad edit fails every test.
+2. `mise run gen:authz`. This rewrites `scopes_gen.go` and `refs_gen.go`, and `TestGeneratedFilesAreCurrent` fails until you run it.
+3. Update the snapshots, then review their diffs, because they are the change:
+   - `go test ./internal/authz -run TestModel_DerivedTablesGolden -args -update` (writes `testdata/registry_tables.golden.yaml`)
+   - `go test ./internal/authz -run DocTable -update-docs` (writes `docs/rbac.md`)
+   - `go test ./internal/access -run TestListScopes_DashboardFixture -args -update` (writes the dashboard's `listScopes.fixture.json`)
+4. `mise run gen:goa-server`, then `mise run gen:sdk`. The design's scope enum reads `authz.ScopeNames()`.
+5. The dashboard still mirrors some tables by hand in `client/dashboard/src/hooks/useRBAC.ts` (`resourceKindForScope`, `exclusionScopesByScope`). Update them, and fix the "Dashboard Grant Reference" in `docs/rbac.md` if a page's gate changes.
+6. Assess Platform MCP (`maintaining-platform-mcp`) and Command K (`maintaining-command-palette`) if the permission gates a user-facing capability.
+7. `mise run lint:server` and `mise run test:server ./internal/authz/... ./internal/access/...`.
+
+The invariant suite (`registry_invariants_test.go`) checks every permission automatically: implications hold, nothing else is satisfied, blocks win, and unknown values fail closed. Do not add per-scope tests for those properties.
+
+## Agents
+
+`Agent: AgentUnsafe()` means no agent policy may ever hold the permission. Use it by default. `SafeSince(N)` makes the permission agent-safe from delegated policy version `N`, and policies stored at an older version keep reading it as unsafe. Making a permission agent-safe therefore means adding a delegated policy version in `server/internal/agents/runtimepolicy/delegated_policy.go` and committing that version's stored-policy fixture:
+
+```
+go test ./internal/agents/runtimepolicy -run TestStoredPolicyFixtures -args -write-stored-policy-fixture=N
+```
+
+The flag refuses to overwrite a fixture. Never regenerate an existing one, because those fixtures are what old stored policies are decoded against.
+
+## Never
+
+- **Never build a raw `authz.Check{...}`, or call `authz.EnvironmentCheck` / `MCPCheck` / `MCPToolCallCheck` / `AssistantCheck` / `HooksIngestCheck` / `ChatReadCheck` / `ChatWriteCheck`, in a migrated package.** The `norawauthzchecks` glint rule reports it. When you migrate a package, add it to `noRawAuthzChecksPackages` in `glint/no_raw_authz_checks.go`.
+- **Never pass a probe to `Require`, or `AnyOf` anywhere but as the single check of `Require` or `Can`.** Both are invalid checks, which map to an unexpected error rather than a 403.
+- **Never build a ref with an empty project.** An empty dimension is an invalid check. Take the project from the row you loaded, not from the request, when they can differ.
+- **Never hand-edit `scopes_gen.go`, `refs_gen.go`, the golden YAML, or the derived maps in `scopes.go`.** Change the model.
+- **Never evaluate grants outside `authz`.** The two SQL list queries in `access/queries.sql` (`ListAccessibleMCPServersForUser`, `ListAccessibleSkillsForUser`) mirror the matcher and precedence. If you change either, change both.
+- **Never read a `principal_grants` row for authorization without `(expires_at IS NULL OR expires_at > clock_timestamp())`.** Temporary grants expire in place.
+
+## Reference
+
+[reference.md](reference.md) covers the rest: the `access` management API, grant loading and temporary grants, provisioning, scope overrides, auth-client checks, the dashboard's `useRBAC` and `<RequireScope>`, and inspecting a caller's grants.
