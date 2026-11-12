@@ -1,3 +1,4 @@
+import { accountSetupUrls } from "@/pages/catalog/account-provider";
 import { snowflakeSetupUrl } from "@/pages/catalog/snowflake-install";
 import { loadProviderProgress, saveProviderProgress } from "./provider-setup";
 import { queryKeyRemoteSessionClient } from "@gram/client/react-query/remoteSessionClient";
@@ -2199,23 +2200,27 @@ describe("Salesforce review recovery", () => {
 });
 
 describe("Snowflake shared actions", () => {
-  it("keeps an unconfigured Snowflake source disabled without sign-in or connection checks", async () => {
-    mocks.remote.mockResolvedValue({ id: "upstream", url: snowflakeSetupUrl });
-    const { result } = mount(
-      "snowflake",
-      { step: "test" },
-      { url: snowflakeSetupUrl, instanceUrl: "" },
-    );
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => {
-      result.current.signIn();
-      result.current.testConnection();
-    });
-    expect(window.open).not.toHaveBeenCalled();
-    expect(mocks.probe).not.toHaveBeenCalled();
-    expect(mocks.commit).not.toHaveBeenCalled();
-    expect(mocks.updateServer).not.toHaveBeenCalled();
-  });
+  it.each(["snowflake", "okta"] as const)(
+    "keeps an unconfigured %s source disabled without sign-in or connection checks",
+    async (provider) => {
+      const pendingUrl = accountSetupUrls[provider];
+      mocks.remote.mockResolvedValue({ id: "upstream", url: pendingUrl });
+      const { result } = mount(
+        provider,
+        { step: "test" },
+        { url: pendingUrl, instanceUrl: "" },
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => {
+        result.current.signIn();
+        result.current.testConnection();
+      });
+      expect(window.open).not.toHaveBeenCalled();
+      expect(mocks.probe).not.toHaveBeenCalled();
+      expect(mocks.commit).not.toHaveBeenCalled();
+      expect(mocks.updateServer).not.toHaveBeenCalled();
+    },
+  );
 
   const oldUrl =
     "https://example.snowflakecomputing.com/api/v2/databases/OLD/schemas/PUBLIC/mcp-servers/MCP";
@@ -2539,41 +2544,44 @@ it("restores a saved Native Okta client without a scope override or reading a se
   expect(mocks.commit).not.toHaveBeenCalled();
 });
 
-it("retries failed Okta credential saving against the resolved changed org without duplicate source writes", async () => {
-  mocks.remote.mockResolvedValue({
-    id: "upstream",
-    url: "https://example.okta.com/mcp",
-  });
-  mocks.provider.mockRejectedValue({ statusCode: 404 });
-  mocks.commit
-    .mockRejectedValueOnce(new Error("temporary"))
-    .mockResolvedValue({ status: "registered" });
-  const { result } = mount(
-    "okta",
-    {
-      step: "credentials",
-      values: {
-        ...initialState("okta").values,
-        oktaOrg: "other.okta.com",
-        clientId: "example-client",
-        clientSecret: "example-secret",
+it.each(["https://example.okta.com/mcp", accountSetupUrls.okta])(
+  "retries failed Okta credential saving from %s without duplicate source writes",
+  async (originalUrl) => {
+    mocks.remote.mockResolvedValue({
+      id: "upstream",
+      url: originalUrl,
+    });
+    mocks.provider.mockRejectedValue({ statusCode: 404 });
+    mocks.commit
+      .mockRejectedValueOnce(new Error("temporary"))
+      .mockResolvedValue({ status: "registered" });
+    const { result } = mount(
+      "okta",
+      {
+        step: "credentials",
+        values: {
+          ...initialState("okta").values,
+          oktaOrg: "other.okta.com",
+          clientId: "example-client",
+          clientSecret: "example-secret",
+        },
       },
-    },
-    { url: "https://example.okta.com/mcp", instanceUrl: "" },
-  );
-  await waitFor(() => expect(result.current.loading).toBe(false));
-  act(() => result.current.next());
-  await waitFor(() => expect(result.current.error).toBeTruthy());
-  expect(result.current.state.saved).toBe(false);
-  act(() => result.current.next());
-  await waitFor(() => expect(result.current.state.saved).toBe(true));
-  expect(mocks.updateRemote).toHaveBeenCalledTimes(1);
-  expect(mocks.updateRemote).toHaveBeenCalledWith({
-    updateServerForm: { id: "upstream", url: "https://other.okta.com/mcp" },
-  });
-  expect(mocks.commit).toHaveBeenCalledTimes(2);
-  expect(mocks.probe).not.toHaveBeenCalled();
-});
+      { url: originalUrl, instanceUrl: "" },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.next());
+    await waitFor(() => expect(result.current.error).toBeTruthy());
+    expect(result.current.state.saved).toBe(false);
+    act(() => result.current.next());
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    expect(mocks.updateRemote).toHaveBeenCalledTimes(1);
+    expect(mocks.updateRemote).toHaveBeenCalledWith({
+      updateServerForm: { id: "upstream", url: "https://other.okta.com/mcp" },
+    });
+    expect(mocks.commit).toHaveBeenCalledTimes(2);
+    expect(mocks.probe).not.toHaveBeenCalled();
+  },
+);
 
 it.each(["web", "native"])(
   "verifies Okta %s sign-in separately from the authenticated connection test (mocked API)",

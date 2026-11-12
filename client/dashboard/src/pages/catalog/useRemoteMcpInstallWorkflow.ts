@@ -1,7 +1,9 @@
 import {
-  isSnowflakeCatalogServer,
-  snowflakeSetupUrl,
-} from "./snowflake-install";
+  accountCatalogProvider,
+  accountSetupUrls,
+  pendingAccountProvider,
+} from "./account-provider";
+import { names } from "./provider-setup/state";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {
@@ -249,16 +251,8 @@ interface UseRemoteMcpInstallWorkflowOptions {
   offerGuardrails?: boolean;
   /** Fresh catalog admission before any create, never after acceptance. */
   beforeInstall?: () => Promise<boolean>;
-  /** Interactive native Snowflake installs start disabled and configure on Setup. */
-  snowflakeSetupEnabled?: boolean;
-  /** Defer Okta's account-specific User Identity install to its guided setup. */
-  deferSetup?: (
-    configs: ServerConfig[],
-    options: {
-      guardrail?: ServerGuardrailState;
-      customize?: ServerGuardrailState;
-    },
-  ) => boolean;
+  /** Interactive account-specific installs start disabled and configure on Setup. */
+  accountSetupEnabled?: boolean;
 }
 
 /** Key into [ServerConfig.headerValues] for one header of one remote. */
@@ -408,8 +402,7 @@ export function useRemoteMcpInstallWorkflow({
   serverNameSuffix = "",
   offerGuardrails = false,
   beforeInstall,
-  deferSetup,
-  snowflakeSetupEnabled = false,
+  accountSetupEnabled = false,
   initialConfiguration,
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
@@ -661,14 +654,15 @@ export function useRemoteMcpInstallWorkflow({
         return installUnproxiedTarget(client, target, reqOpts);
       }
 
-      const pendingSnowflake =
-        snowflakeSetupEnabled &&
+      const accountProvider = accountCatalogProvider(target.server);
+      const pendingAccount =
+        accountSetupEnabled &&
         target.identityMode === "user" &&
-        isSnowflakeCatalogServer(target.server);
-      const remoteUrl = pendingSnowflake
-        ? snowflakeSetupUrl
+        accountProvider;
+      const remoteUrl = pendingAccount
+        ? accountSetupUrls[pendingAccount]
         : target.remote.url;
-      if (!pendingSnowflake) {
+      if (!pendingAccount) {
         const probe = await client.remoteMcp.probeURL(
           { probeURLForm: { url: target.remote.url } },
           undefined,
@@ -770,13 +764,12 @@ export function useRemoteMcpInstallWorkflow({
       }
 
       const identityConfiguration: ConfigureCreatedIdentityResult =
-        pendingSnowflake
+        pendingAccount
           ? {
               status: "setup-required",
               mcpServer,
               identityMode: "user",
-              message:
-                "Finish Snowflake connection setup before enabling this server.",
+              message: `Finish ${names[pendingAccount]} connection setup before enabling this server.`,
             }
           : await configureCreatedRemoteMcpIdentity({
               client,
@@ -830,7 +823,7 @@ export function useRemoteMcpInstallWorkflow({
         identityConfiguration,
       };
     },
-    [client, defaultOrganizationIssuerId, orgSlug, snowflakeSetupEnabled],
+    [client, defaultOrganizationIssuerId, orgSlug, accountSetupEnabled],
   );
 
   const admissionInFlight = useRef(false);
@@ -859,7 +852,6 @@ export function useRemoteMcpInstallWorkflow({
       try {
         if (beforeInstall && !(await beforeInstall())) return [];
         if (generation !== admissionGeneration.current) return [];
-        if (deferSetup?.(serverConfigs, options ?? {})) return [];
       } finally {
         admissionInFlight.current = false;
       }
@@ -925,10 +917,9 @@ export function useRemoteMcpInstallWorkflow({
           }
           const identitySetupRequired =
             result.identityConfiguration?.status === "setup-required";
-          const setupPolicy =
-            result.remoteUrl === snowflakeSetupUrl
-              ? options?.customize
-              : undefined;
+          const setupPolicy = pendingAccountProvider(result.remoteUrl)
+            ? options?.customize
+            : undefined;
           deferredCustomization ||= !!setupPolicy;
           setStatusAt(index, {
             setupPolicy,
@@ -1036,7 +1027,6 @@ export function useRemoteMcpInstallWorkflow({
     },
     [
       beforeInstall,
-      deferSetup,
       canInstall,
       client,
       detectorMode,

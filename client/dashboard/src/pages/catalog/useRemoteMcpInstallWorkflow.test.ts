@@ -1,7 +1,6 @@
-import {
-  snowflakeRemoteTemplate,
-  snowflakeSetupUrl,
-} from "./snowflake-install";
+import { accountSpecifiers, accountSetupUrls } from "./account-provider";
+import { oktaRemoteTemplate } from "./provider-setup/okta";
+import { snowflakeRemoteTemplate } from "./snowflake-install";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -255,61 +254,70 @@ describe("useRemoteMcpInstallWorkflow", () => {
     expect(mockCreateServer).not.toHaveBeenCalled();
   });
 
-  it("creates native Snowflake disabled before account configuration without probing or OAuth", async () => {
-    const servers = [
-      makeServer({
-        registrySpecifier: "com.snowflake/cortex-mcp",
-        remotes: [remote(snowflakeRemoteTemplate)],
-      }),
-    ];
-    const initialConfiguration = { identityMode: "user" as const };
-    const { result } = renderHook(() =>
-      useRemoteMcpInstallWorkflow({
-        servers,
-        snowflakeSetupEnabled: true,
-        initialConfiguration,
-      }),
-    );
-    await act(async () => {
-      if (result.current.phase !== "configure")
-        throw new Error("Expected configure");
-      await result.current.startInstall();
-    });
-    expect(mockCreateServer).toHaveBeenCalledWith(
-      {
-        createServerForm: {
-          name: "com.snowflake/cortex-mcp",
-          url: snowflakeSetupUrl,
-          transportType: "streamable-http",
-        },
-      },
-      undefined,
-      undefined,
-    );
-    expect(mockMcpServersCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        createMcpServerForm: expect.objectContaining({
-          remoteMcpServerId: "rms-1",
-          visibility: "disabled",
+  it.each(["snowflake", "okta"] as const)(
+    "creates native %s disabled before account configuration without probing or OAuth",
+    async (provider) => {
+      const servers = [
+        makeServer({
+          registrySpecifier: accountSpecifiers[provider],
+          remotes: [
+            remote(
+              provider === "okta"
+                ? oktaRemoteTemplate
+                : snowflakeRemoteTemplate,
+            ),
+          ],
         }),
-      }),
-      undefined,
-      undefined,
-    );
-    expect(mockProbeURL).not.toHaveBeenCalled();
-    expect(mockDiscoverProtectedResourceMetadata).not.toHaveBeenCalled();
-    expect(mockCommitIdentity).not.toHaveBeenCalled();
-    expect(mockMcpServersUpdate).not.toHaveBeenCalled();
-    expect(result.current.phase).toBe("complete");
-    if (result.current.phase !== "complete")
-      throw new Error("Expected complete");
-    expect(result.current.statuses[0]).toMatchObject({
-      mcpServerId: "mcp-server-1",
-      remoteUrl: snowflakeSetupUrl,
-      identityMode: "user",
-      setupRequired: expect.any(String),
-    });
-  });
+      ];
+      const initialConfiguration = { identityMode: "user" as const };
+      const { result } = renderHook(() =>
+        useRemoteMcpInstallWorkflow({
+          servers,
+          accountSetupEnabled: true,
+          initialConfiguration,
+        }),
+      );
+      await act(async () => {
+        if (result.current.phase !== "configure")
+          throw new Error("Expected configure");
+        await result.current.startInstall();
+      });
+      expect(mockCreateServer).toHaveBeenCalledWith(
+        {
+          createServerForm: {
+            name: accountSpecifiers[provider],
+            url: accountSetupUrls[provider],
+            transportType: "streamable-http",
+          },
+        },
+        undefined,
+        undefined,
+      );
+      expect(mockMcpServersCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          createMcpServerForm: expect.objectContaining({
+            remoteMcpServerId: "rms-1",
+            visibility: "disabled",
+          }),
+        }),
+        undefined,
+        undefined,
+      );
+      expect(mockProbeURL).not.toHaveBeenCalled();
+      expect(mockDiscoverProtectedResourceMetadata).not.toHaveBeenCalled();
+      expect(mockCommitIdentity).not.toHaveBeenCalled();
+      expect(mockMcpServersUpdate).not.toHaveBeenCalled();
+      expect(result.current.phase).toBe("complete");
+      if (result.current.phase !== "complete")
+        throw new Error("Expected complete");
+      expect(result.current.statuses[0]).toMatchObject({
+        mcpServerId: "mcp-server-1",
+        remoteUrl: accountSetupUrls[provider],
+        identityMode: "user",
+        setupRequired: expect.any(String),
+      });
+    },
+  );
 
   it("retains Snowflake customize intent for server Setup instead of opening a competing editor", async () => {
     const servers = [
@@ -323,7 +331,7 @@ describe("useRemoteMcpInstallWorkflow", () => {
       useRemoteMcpInstallWorkflow({
         servers,
         initialConfiguration,
-        snowflakeSetupEnabled: true,
+        accountSetupEnabled: true,
         offerGuardrails: true,
       }),
     );

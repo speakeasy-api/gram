@@ -1,16 +1,9 @@
 import type { CatalogServer } from "./hooks";
-import { isSnowflakeCatalogServer } from "./snowflake-install";
 import {
-  snowflakeConnection,
-  snowflakeSelectionForUrl,
-} from "./provider-setup/snowflake";
-import {
-  oktaConnection,
-  oktaSelectionForUrl,
-  oktaRemoteTemplate,
-  oktaSpecifier,
-} from "./provider-setup/okta";
-import type { State } from "./provider-setup/state";
+  isSnowflakeCatalogServer,
+  snowflakeSetupUrl,
+} from "./snowflake-install";
+import { oktaRemoteTemplate, oktaSpecifier } from "./provider-setup/okta";
 
 export type AccountProvider = "snowflake" | "okta";
 export const accountSpecifiers = {
@@ -31,25 +24,17 @@ export function accountCatalogProvider(
     return "okta";
   return null;
 }
-export function accountSelection(
-  provider: AccountProvider,
-  url: string,
-): Partial<State["values"]> | null {
-  return provider === "okta"
-    ? oktaSelectionForUrl(url)
-    : snowflakeSelectionForUrl(url);
-}
-export function accountConnection(
-  s: State,
-): ReturnType<typeof oktaConnection> | ReturnType<typeof snowflakeConnection> {
-  switch (s.provider) {
-    case "okta":
-      return oktaConnection(s.values);
-    case "snowflake":
-      return snowflakeConnection(s.values);
-    case "github":
-    case "salesforce":
-    case "slack":
-      return null;
+
+// Disabled-only source markers. Setup replaces these before OAuth or testing.
+export const accountSetupUrls: Record<AccountProvider, string> = {
+  snowflake: snowflakeSetupUrl,
+  okta: "https://www.okta.com/speakeasy-mcp-setup",
+};
+export function pendingAccountProvider(
+  url: string | undefined,
+): AccountProvider | null {
+  for (const provider of ["snowflake", "okta"] as const) {
+    if (url === accountSetupUrls[provider]) return provider;
   }
+  return null;
 }

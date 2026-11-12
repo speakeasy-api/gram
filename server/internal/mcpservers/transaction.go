@@ -113,8 +113,8 @@ func createMCPServerInLockedTransaction(ctx context.Context, tx pgx.Tx, auditLog
 		if err != nil {
 			return repo.McpServer{}, fmt.Errorf("load remote source before enabling: %w", err)
 		}
-		if source.Url == snowflakeSetupURL {
-			return repo.McpServer{}, errSnowflakeSetupPending
+		if isPendingProviderSetupURL(source.Url) {
+			return repo.McpServer{}, errProviderSetupPending
 		}
 	}
 

@@ -1,3 +1,4 @@
+import { accountSetupUrls } from "./account-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import {
@@ -12,8 +13,6 @@ import { MemoryRouter } from "react-router";
 import { catalogPresetState } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AddServerDialog, GuardrailOutcomeNotice } from "./AddServerDialog";
-import { readCatalogSetupHandoff } from "./catalog-setup-handoff";
-import { providerProgressKey } from "@/pages/mcp/x/setup/provider-setup";
 
 const mocks = vi.hoisted(() => ({
   getServerDetails: vi.fn(),
@@ -860,149 +859,27 @@ it.each([{ headless: true }, { autoStartInstall: true }])(
   },
 );
 
-describe("Snowflake server setup handoff", () => {
-  const snowflake = {
-    ...server,
-    registrySpecifier: "com.snowflake/cortex-mcp",
-    title: "Snowflake",
-    supportsDcr: false,
-    remotes: [
-      {
-        transportType: "streamable-http" as const,
-        url: "https://{account_url}/api/v2/databases/{mcp_database}/schemas/{mcp_schema}/mcp-servers/{mcp_server_name}",
-      },
-    ],
-  };
-  function show(
-    props: { openProviderSetup?: boolean; attachToGatewayId?: string } = {},
-  ) {
-    return render(
-      <TooltipProvider>
-        <AddServerDialog
-          servers={[snowflake]}
-          open
-          openProviderSetup
-          {...props}
-          onOpenChange={(open) => {
-            mocks.onOpenChange(open);
-          }}
-        />
-      </TooltipProvider>,
-    );
-  }
-  it.each([{}, { openProviderSetup: false, attachToGatewayId: "gateway-id" }])(
-    "defaults to User Identity without adding connection fields (%j)",
-    async (props) => {
-      mockConfigureWorkflow(snowflake);
-      show(props);
-      await screen.findByRole("radio", { name: /User Identity/ });
-      expect(mocks.workflow.mock.calls.at(-1)![0]).toMatchObject({
-        initialConfiguration: { identityMode: "user" },
-        snowflakeSetupEnabled: true,
-      });
-      expect(
-        screen.getByRole("radio", { name: /Shared credential/ }),
-      ).toBeDefined();
-      expect(screen.getByRole("radio", { name: /Manual/ })).toBeDefined();
-      expect(
-        screen.queryByLabelText(/Public.*hostname|Public Account/),
-      ).toBeNull();
-      expect(screen.queryByLabelText(/MCP database/)).toBeNull();
-      expect(mocks.navigate).not.toHaveBeenCalled();
-    },
-  );
-  it.each([undefined, "gateway-id"])(
-    "opens the created server’s Setup page (gateway=%s)",
-    async (gateway) => {
-      mocks.workflow.mockReturnValue({
-        phase: "complete",
-        reset: mocks.reset,
-        statuses: [
-          {
-            key: "snowflake",
-            name: "Snowflake",
-            identityMode: "user",
-            remoteUrl: "https://app.snowflake.com/speakeasy-mcp-setup",
-            status: "failed",
-            setupRequired: "Finish Snowflake setup.",
-            mcpServerId: "server",
-            mcpServerParam: "snowflake-installed",
-          },
-        ],
-      });
-      show(
-        gateway ? { openProviderSetup: false, attachToGatewayId: gateway } : {},
-      );
-      await waitFor(() =>
-        expect(mocks.navigate).toHaveBeenCalledWith(
-          "/acme/projects/default/mcp/snowflake-installed/setup" +
-            (gateway ? "?attachToGateway=gateway-id" : ""),
-        ),
-      );
-      expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
-    },
-  );
-  it.each(["loading", "disabled"] as const)(
-    "does not enable Snowflake bootstrap while rollout is %s",
-    async (rollout) => {
-      mockConfigureWorkflow(snowflake);
-      mocks.providerSetup = rollout;
-      show();
-      await screen.findByRole("radio", { name: /User Identity/ });
-      const options = mocks.workflow.mock.calls.at(-1)![0];
-      expect(options.snowflakeSetupEnabled).toBe(false);
-      expect(options.initialConfiguration).toBeUndefined();
-      expect(mocks.navigate).not.toHaveBeenCalled();
-      if (rollout === "loading") {
-        expect(await options.beforeInstall()).toBe(false);
-        expect(mocks.info).toHaveBeenCalled();
-      }
-    },
-  );
-});
-
-describe.each(["okta"] as const)(
-  "%s keeps the existing identity modal",
+describe.each(["snowflake", "okta"] as const)(
+  "%s server setup handoff",
   (provider) => {
-    const isOkta = provider === "okta";
-    const specifier = isOkta
-      ? "com.okta/managed-mcp"
-      : "com.snowflake/cortex-mcp";
-    const display = isOkta ? "Okta" : "Snowflake";
-    const route = `/acme/projects/default/mcp/catalog/${encodeURIComponent(specifier)}/setup`;
-    const progressKey = providerProgressKey(
-      provider,
-      "person-1",
-      "org-1",
-      "project-1",
-      `catalog:${specifier}`,
-    );
     const snowflake = {
       ...server,
-      registrySpecifier: specifier,
-      title: display,
+      registrySpecifier:
+        provider === "okta"
+          ? "com.okta/managed-mcp"
+          : "com.snowflake/cortex-mcp",
+      title: provider,
       supportsDcr: false,
       remotes: [
         {
           transportType: "streamable-http" as const,
-          url: isOkta
-            ? "https://{yourOktaDomain}/mcp"
-            : "https://{account_url}/api/v2/databases/{mcp_database}/schemas/{mcp_schema}/mcp-servers/{mcp_server_name}",
+          url:
+            provider === "okta"
+              ? "https://{yourOktaDomain}/mcp"
+              : "https://{account_url}/api/v2/databases/{mcp_database}/schemas/{mcp_schema}/mcp-servers/{mcp_server_name}",
         },
       ],
     };
-    function configure(identityMode: "user" | "agent" | "none") {
-      mocks.hasScope.mockReturnValue(true);
-      mockConfigureWorkflow(snowflake);
-      const state = mocks.workflow();
-      state.serverConfigs[0].identityMode = identityMode;
-      state.serverConfigs[0].name = `${display} connection`;
-      mocks.startInstall.mockImplementation(async () => {
-        const options = mocks.workflow.mock.calls.at(-1)![0];
-        options.deferSetup(state.serverConfigs, {});
-      });
-      return state;
-    }
     function show(
       props: { openProviderSetup?: boolean; attachToGatewayId?: string } = {},
     ) {
@@ -1020,89 +897,78 @@ describe.each(["okta"] as const)(
         </TooltipProvider>,
       );
     }
-    afterEach(() => {
-      mocks.startInstall.mockReset();
-    });
-    it("shows the existing modal with identity choices and no Snowflake connection fields", async () => {
-      configure("none");
-      show();
-      await screen.findByRole("radio", { name: /User Identity/ });
-      expect(
-        screen.getByRole("radio", { name: /Shared credential/ }),
-      ).toBeDefined();
-      expect(screen.getByRole("radio", { name: /Manual/ })).toBeDefined();
-      expect(screen.queryByLabelText(/Public.*hostname/)).toBeNull();
-      expect(screen.queryByLabelText(/MCP database/)).toBeNull();
-      expect(screen.queryByLabelText(/Okta organization URL/)).toBeNull();
-      expect(mocks.navigate).not.toHaveBeenCalled();
-    });
-    it("opens setup only when the User Identity install action is submitted, retaining the name", async () => {
-      configure("user");
-      show();
-      const button = await screen.findByRole("button", {
-        name: "Add to Project",
-      });
-      expect(mocks.navigate).not.toHaveBeenCalled();
-      fireEvent.click(button);
-      await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith(route));
-      expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
-      const saved = readCatalogSetupHandoff(progressKey);
-      expect(saved).toMatchObject({ name: `${display} connection` });
-    });
-    it.each(["none", "agent"] as const)(
-      "does not open setup for %s identity",
-      async (mode) => {
-        const state = configure("none");
-        show();
+    it.each([
+      {},
+      { openProviderSetup: false, attachToGatewayId: "gateway-id" },
+    ])(
+      "defaults to User Identity without adding connection fields (%j)",
+      async (props) => {
+        mockConfigureWorkflow(snowflake);
+        show(props);
         await screen.findByRole("radio", { name: /User Identity/ });
-        const options = mocks.workflow.mock.calls.at(-1)![0];
-        state.serverConfigs[0].identityMode = mode;
-        expect(options.deferSetup(state.serverConfigs, {})).toBe(false);
+        expect(mocks.workflow.mock.calls.at(-1)![0]).toMatchObject({
+          initialConfiguration: { identityMode: "user" },
+          accountSetupEnabled: true,
+        });
+        expect(
+          screen.getByRole("radio", { name: /Shared credential/ }),
+        ).toBeDefined();
+        expect(screen.getByRole("radio", { name: /Manual/ })).toBeDefined();
+        expect(
+          screen.queryByLabelText(/Public.*hostname|Public Account/),
+        ).toBeNull();
+        expect(screen.queryByLabelText(/MCP database/)).toBeNull();
         expect(mocks.navigate).not.toHaveBeenCalled();
       },
     );
-
-    it("preserves a gateway-originated User Identity setup instead of installing its template", async () => {
-      configure("user");
-      show({ openProviderSetup: false, attachToGatewayId: "gateway-id" });
-      fireEvent.click(
-        await screen.findByRole("button", { name: "Add to Project" }),
-      );
-      await waitFor(() =>
-        expect(mocks.navigate).toHaveBeenCalledWith(
-          `${route}?attachToGateway=gateway-id`,
-        ),
-      );
-    });
-    it("retains the existing optional guardrail selection in the deferred handoff", async () => {
-      const state = configure("user");
-      show();
-      await screen.findByRole("radio", { name: /User Identity/ });
-      const options = mocks.workflow.mock.calls.at(-1)![0];
-      expect(
-        options.deferSetup(state.serverConfigs, {
-          guardrail: catalogPresetState([]),
-        }),
-      ).toBe(true);
-      const saved = readCatalogSetupHandoff(progressKey);
-      expect(saved?.guardrail?.categories).toEqual(new Set(["secrets", "pii"]));
-    });
+    it.each([undefined, "gateway-id"])(
+      "opens the created server’s Setup page (gateway=%s)",
+      async (gateway) => {
+        mocks.workflow.mockReturnValue({
+          phase: "complete",
+          reset: mocks.reset,
+          statuses: [
+            {
+              key: "snowflake",
+              name: "Snowflake",
+              identityMode: "user",
+              remoteUrl: accountSetupUrls[provider],
+              status: "failed",
+              setupRequired: "Finish Snowflake setup.",
+              mcpServerId: "server",
+              mcpServerParam: "snowflake-installed",
+            },
+          ],
+        });
+        show(
+          gateway
+            ? { openProviderSetup: false, attachToGatewayId: gateway }
+            : {},
+        );
+        await waitFor(() =>
+          expect(mocks.navigate).toHaveBeenCalledWith(
+            "/acme/projects/default/mcp/snowflake-installed/setup" +
+              (gateway ? "?attachToGateway=gateway-id" : ""),
+          ),
+        );
+        expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
+      },
+    );
     it.each(["loading", "disabled"] as const)(
-      "never opens setup while rollout is %s",
+      "does not enable Snowflake bootstrap while rollout is %s",
       async (rollout) => {
-        const state = configure("user");
+        mockConfigureWorkflow(snowflake);
         mocks.providerSetup = rollout;
         show();
         await screen.findByRole("radio", { name: /User Identity/ });
         const options = mocks.workflow.mock.calls.at(-1)![0];
-        expect(options.deferSetup(state.serverConfigs, {})).toBe(
-          rollout === "loading",
-        );
+        expect(options.accountSetupEnabled).toBe(false);
+        expect(options.initialConfiguration).toBeUndefined();
         expect(mocks.navigate).not.toHaveBeenCalled();
-        if (rollout === "loading")
-          expect(mocks.info).toHaveBeenCalledWith(
-            `${display} setup is loading. Try again in a moment.`,
-          );
+        if (rollout === "loading") {
+          expect(await options.beforeInstall()).toBe(false);
+          expect(mocks.info).toHaveBeenCalled();
+        }
       },
     );
   },

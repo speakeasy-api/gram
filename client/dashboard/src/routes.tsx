@@ -273,7 +273,6 @@ const ROUTE_STRUCTURE = {
           detail: {
             title: "Server Details",
             url: ":serverSpecifier",
-            subPages: { setup: { title: "Provider Setup", url: "setup" } },
           },
         },
       },

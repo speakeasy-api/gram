@@ -252,10 +252,12 @@ function RetainedProviderSetup({
   const navigate = useNavigate();
   const routes = useRoutes();
   const [params] = useSearchParams();
-  const gatewayId =
-    provider === "snowflake" ? params.get("attachToGateway") : null;
+  const gatewayId = ["snowflake", "okta"].includes(provider)
+    ? params.get("attachToGateway")
+    : null;
   const completionHref =
-    provider === "snowflake" && params.get("customizePolicy") === "true"
+    ["snowflake", "okta"].includes(provider) &&
+    params.get("customizePolicy") === "true"
       ? routes.policyCenter.new.href() +
         policyNewPrefillQuery({
           ...parsePolicyNewPrefill(params),
@@ -317,8 +319,9 @@ function LiveSetupConnection({
   const sdk = useSdkClient();
   const cache = useQueryClient();
   const [params] = useSearchParams();
-  const gatewayId =
-    s.provider === "snowflake" ? params.get("attachToGateway") : null;
+  const gatewayId = ["snowflake", "okta"].includes(s.provider)
+    ? params.get("attachToGateway")
+    : null;
   const live = useProviderConnection(
     s,
     dispatch,

@@ -1,4 +1,4 @@
-import { snowflakeSetupUrl } from "@/pages/catalog/snowflake-install";
+import { pendingAccountProvider } from "@/pages/catalog/account-provider";
 import { oktaSelectionForUrl } from "@/pages/catalog/provider-setup/okta";
 import { snowflakeSelectionForUrl } from "@/pages/catalog/provider-setup/snowflake";
 import {
@@ -20,7 +20,8 @@ export function setupProviderForUrl(
   value: string | undefined,
 ): SetupProvider | null {
   if (!value) return null;
-  if (value === snowflakeSetupUrl) return "snowflake";
+  const pending = pendingAccountProvider(value);
+  if (pending) return pending;
   try {
     const url = new URL(value);
     if (

@@ -1,4 +1,3 @@
-import AccountCatalogSetup from "./pages/catalog/AccountCatalogSetup";
 import React from "react";
 import { Navigate, Outlet } from "react-router";
 import type {
@@ -335,7 +334,6 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           detail: {
             component: CatalogDetailRoot,
             indexComponent: CatalogDetail,
-            subPages: { setup: { component: AccountCatalogSetup } },
           },
         },
       },
