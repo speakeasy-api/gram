@@ -67,6 +67,18 @@ const renderNav = () =>
   renderHook(() => useProjectNavRoutes(), { wrapper: MemoryRouter });
 
 describe("useProjectNavRoutes", () => {
+  it("marks Channels for the beta section without changing its page action", () => {
+    testState.featureFlags[FEATURE_FLAGS.channels] = { status: "enabled" };
+    const { result } = renderNav();
+    const entry = result.current.find(
+      (entry) => entry.route.href() === routes.channels.href(),
+    );
+    expect(entry?.route.stage).toBe("beta");
+    expect(entry?.route.title).toBe("Channels");
+    expect(entry?.scope).toEqual([]);
+    expect(entry?.projectId).toBe(testState.projectId);
+  });
+
   it.each(["disabled", "loading", "missing", "error"] as const)(
     "removes the Channels page-action source when its flag becomes %s",
     (status) => {

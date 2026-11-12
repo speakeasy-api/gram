@@ -26,6 +26,13 @@ describe("useNavArea", () => {
     expect(areaAt(path)).toBe("Identity");
   });
 
+  it("keeps Channels in the MCP Gateway area, including a selected thread", () => {
+    expect(areaAt("/org/projects/proj/channels")).toBe("MCP Gateway");
+    expect(areaAt("/org/projects/proj/channels?thread=thread-1")).toBe(
+      "MCP Gateway",
+    );
+  });
+
   it("leaves ungrouped project pages without an area", () => {
     expect(areaAt("/org/projects/proj")).toBeUndefined();
   });

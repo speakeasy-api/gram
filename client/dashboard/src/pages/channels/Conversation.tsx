@@ -330,7 +330,7 @@ export function ConversationPane({
               <InlineEmptyState
                 icon="messages-square"
                 heading="Pick a conversation"
-                description="Threads are open to everyone with access to this project. Direct messages go to one agent."
+                description="Select New thread to start a conversation with people and agents in this project, or choose an existing conversation from the list."
               />
             </li>
           ) : null}

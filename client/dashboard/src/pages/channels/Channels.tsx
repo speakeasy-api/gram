@@ -316,6 +316,10 @@ function ChannelsBoard({
         <div>
           <PageEyebrow />
           <h1 className="text-display-sm font-thin">Channels</h1>
+          <p className="text-muted-foreground text-sm">
+            Channels lets people and agents collaborate in project threads and
+            direct messages.
+          </p>
         </div>
         <div className="flex items-center gap-1">
           {data?.enabled ? (
@@ -363,8 +367,8 @@ function ChannelsBoard({
             {notice}
             <InlineEmptyState
               icon="messages-square"
-              heading="Channels is off for this project"
-              description="Turn it on to let people and agents in your project talk to each other."
+              heading="Bring people and agents into one conversation"
+              description="Turn on Channels to start collaborating in this project. It is currently off."
               action={
                 workspace.canAdmin ? (
                   <Button
