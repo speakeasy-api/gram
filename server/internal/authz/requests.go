@@ -58,15 +58,18 @@ func (e *Engine) Can(ctx context.Context, checks ...Check) (bool, error) {
 }
 
 func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, error) {
+	if len(alternatives) == 0 {
+		return false, e.mapError(ctx, ErrNoChecks)
+	}
+	if err := validateShape(alternatives, true); err != nil {
+		return false, e.mapError(ctx, err)
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return false, err
 	}
 	if !enforce {
 		return slices.ContainsFunc(alternatives, unenforcedAllows), nil
-	}
-	if len(alternatives) == 0 {
-		return false, e.mapError(ctx, ErrNoChecks)
 	}
 	authorization, ok := grantAuthorizationFromContext(ctx)
 	if !ok {
@@ -102,6 +105,19 @@ func singleAnyOf(checks []Check) ([]Check, bool) {
 		return nil, false
 	}
 	return checks[0].anyOf, true
+}
+
+// validateShape refuses request shapes the API never accepts, before the
+// unenforced short-circuit, so a misuse fails whether or not RBAC is enforced:
+// an AnyOf nested where a single check is expected, or a probe where only a
+// concrete check can be required.
+func validateShape(checks []Check, allowProbe bool) error {
+	for _, c := range checks {
+		if c.anyOf != nil || (c.probe && !allowProbe) {
+			return InvalidCheck(c.Scope, c.ResourceID)
+		}
+	}
+	return nil
 }
 
 // validateRequireInput is validateInput for the Require family, which also
