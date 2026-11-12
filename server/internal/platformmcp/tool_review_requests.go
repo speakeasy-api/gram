@@ -26,7 +26,9 @@ type MCPReviewProjectResolver interface {
 }
 
 type RequestMCPReviewInput struct {
-	ProjectID     string `json:"project_id" jsonschema:"explicit project ID returned by list_projects"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID     string `json:"-"`
 	TargetKind    string `json:"target_kind" jsonschema:"server_url or stdio_command"`
 	Target        string `json:"target" jsonschema:"server URL or command to review; credential-shaped values are redacted before storage"`
 	Justification string `json:"justification" jsonschema:"why you need this MCP server; required and visible to reviewers"`
@@ -45,7 +47,9 @@ type RequestMCPReviewOutput struct {
 }
 
 type GetMyMCPReviewRequestInput struct {
-	ProjectID string `json:"project_id" jsonschema:"explicit project ID returned by list_projects"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	RequestID string `json:"request_id" jsonschema:"request ID returned by request_mcp_review"`
 }
 

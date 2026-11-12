@@ -12,7 +12,7 @@
   expect: [get_mcp]
   allow: [find_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     mcp_id: 5f1e2a00-0000-4000-8000-000000000011
 
 # Addresses, network access, ingress and custom domains.
@@ -21,14 +21,14 @@
   expect: [get_mcp_connection_settings]
   allow: [find_mcp, get_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     target_id: 5f1e2a00-0000-4000-8000-000000000011
 - id: mcp-connection-settings-github-auth
   prompt: Has upstream sign-in for the GitHub server actually been finished, or is it still half set up? Which auth clients does it offer?
   expect: [get_mcp_connection_settings]
   allow: [find_mcp, get_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     target_id: 5f1e2a00-0000-4000-8000-000000000011
 - id: mcp-set-address-linear-slug
   prompt: Change the Linear server's URL path so it ends in linear-tools instead.
@@ -59,13 +59,13 @@
   prompt: I just pushed a new function to the Payments project. Has it produced any tools yet?
   expect: [list_project_tools]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
 - id: mcp-add-tool-billing
   prompt: Put the refund_invoice tool from Payments onto the Billing API server. Leave its other tools alone.
   expect: [add_tools_to_mcp]
   allow: [find_mcp, get_mcp, list_project_tools]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
     mcp_id: 5f1e2a00-0000-4000-8000-000000000021
     tool_urns: [refund_invoice]
 - id: mcp-remove-tool-github
@@ -73,7 +73,7 @@
   expect: [remove_tools_from_mcp]
   allow: [find_mcp, get_mcp, list_project_tools]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     mcp_id: 5f1e2a00-0000-4000-8000-000000000011
     tool_urns: [delete_repository]
 - id: mcp-create-from-functions-invoicing
@@ -81,7 +81,7 @@
   expect: [create_mcp_from_functions]
   allow: [find_mcp, list_project_tools]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
     name: invoicing
 
 # Gateways that bundle several servers behind one endpoint.
@@ -90,7 +90,7 @@
   expect: [create_gateway]
   allow: [find_mcp, get_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     name: dev tools
 - id: mcp-gateway-members-drop-linear
   prompt: Drop Linear from the Acme Gateway so only GitHub sits behind it.
@@ -233,21 +233,21 @@
   prompt: The Billing API tools look stale. Reprocess the current Payments deployment so they're regenerated from the OpenAPI document.
   expect: [redeploy_deployment]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
 
 # A member asking an administrator to review a server.
 - id: mcp-request-review-asana
   prompt: I'm not an admin, but my team needs the Asana MCP server at https://mcp.asana.example/mcp in the Default project to triage our sprint work. Can you ask an admin to review it?
   expect: [request_mcp_review]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     target_kind: server_url
     target: mcp.asana.example
 - id: mcp-my-review-status
   prompt: Did anyone look at the MCP review I asked for last week in Default? The request id was 8b1c2d00-0000-4000-8000-000000000091.
   expect: [get_my_mcp_review_request]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     request_id: 8b1c2d00-0000-4000-8000-000000000091
 
 # A member's own gateway URLs.

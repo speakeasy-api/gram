@@ -81,7 +81,9 @@ func NewMCPConnectionMutationService(db *pgxpool.Pool, settings *MCPConnectionSe
 }
 
 type SetMCPAddressInput struct {
-	ProjectID       string                          `json:"project_id" jsonschema:"project ID that owns the target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string                          `json:"-"`
 	TargetKind      MCPConnectionSettingsTargetKind `json:"target_kind" jsonschema:"exact target type: mcp_server or gateway"`
 	TargetID        string                          `json:"target_id" jsonschema:"ID of the exact MCP server or gateway"`
 	EndpointID      string                          `json:"endpoint_id,omitempty" jsonschema:"exact endpoint ID from get_mcp_connection_settings to change; omit to add a new endpoint"`
@@ -93,7 +95,9 @@ type SetMCPAddressInput struct {
 }
 
 type SetMCPNetworkAccessInput struct {
-	ProjectID       string                          `json:"project_id" jsonschema:"project ID that owns the target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string                          `json:"-"`
 	TargetKind      MCPConnectionSettingsTargetKind `json:"target_kind" jsonschema:"exact target type: mcp_server or gateway"`
 	TargetID        string                          `json:"target_id" jsonschema:"ID of the exact MCP server or gateway"`
 	Mode            string                          `json:"mode" jsonschema:"requested network access: public_only, dual, or private_only"`
@@ -347,7 +351,7 @@ func (s *MCPConnectionMutationService) validateInput(ctx context.Context, princi
 	projectID = strings.TrimSpace(projectID)
 	parsedProject, err := uuid.Parse(projectID)
 	if err != nil || (kind != MCPConnectionSettingsMCPServer && kind != MCPConnectionSettingsGateway) {
-		return fail(connectionMutationInvalid("Provide an explicit project ID, target ID, and target kind."))
+		return fail(connectionMutationInvalid("Provide a project slug, target ID, and target kind."))
 	}
 	parsedTarget, err := uuid.Parse(strings.TrimSpace(targetID))
 	if err != nil {

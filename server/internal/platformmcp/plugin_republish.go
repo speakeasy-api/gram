@@ -68,7 +68,9 @@ func (e *PluginRepublishError) Error() string { return e.Message }
 func (e *PluginRepublishError) Unwrap() error { return e.Cause }
 
 type RepublishPluginInput struct {
-	ProjectID      string `json:"project_id" jsonschema:"explicit project ID that owns the plugin"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID      string `json:"-"`
 	Plugin         string `json:"plugin" jsonschema:"exact plugin ID, slug, or name returned by list_plugins"`
 	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms republishing every plugin in this project, including changes waiting on plugins whose auto sync is off"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key, at most 128 characters; reuse only to retry this exact request"`

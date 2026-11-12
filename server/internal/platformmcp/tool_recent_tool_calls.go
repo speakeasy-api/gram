@@ -49,8 +49,9 @@ func (r *PostgresReader) WithRecentToolCalls(telemetry RecentToolCallReader, das
 }
 
 type ListRecentToolCallsInput struct {
-	ProjectID   string `json:"project_id,omitempty" jsonschema:"project ID to inspect; supply exactly one project selector"`
-	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"project slug to inspect; supply exactly one project selector"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	Window      string `json:"window,omitempty" jsonschema:"observation window: 1h (default) or 24h"`
 	Outcome     string `json:"outcome,omitempty" jsonschema:"optional outcome filter: success, error, blocked, or pending; pending means no result was reported; a call still pending ten minutes after it started most likely ended without reporting one, and Tool logs show it as Unknown"`
 	// AgentID selects only calls attributed to this authenticated agent.

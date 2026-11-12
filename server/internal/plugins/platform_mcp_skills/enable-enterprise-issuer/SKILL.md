@@ -17,7 +17,7 @@ read-only; it cannot enable, disable, rotate, or replace an issuer.
 1. Successfully call `list_projects` through this same connection to establish
    authenticated discovery. Package installation or another client's login is
    not authority. This issuer is organization-scoped; do not choose a project
-   or pass a project ID to its getter.
+   or pass a project to its getter.
 2. Call `get_internal_session_issuer` with `{}`. Use its exact `organization_id`,
    `state`, `can_enable`, optional `issuer`, and `next_step`. Match any organization the user
    specified; otherwise ask the user to confirm the returned organization.

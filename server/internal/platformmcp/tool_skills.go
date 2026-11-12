@@ -11,20 +11,20 @@ import (
 )
 
 type ListSkillsToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug whose skill registry to list"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	Search      string `json:"search,omitempty" jsonschema:"optional case-insensitive search over skill names and summaries"`
 	Cursor      string `json:"cursor,omitempty" jsonschema:"pagination cursor returned by a previous list_skills call"`
 	Limit       int    `json:"limit,omitempty" jsonschema:"maximum skills to return; defaults to 50 and is capped at 100"`
 }
 
 type GetSkillToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the skill"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID        string `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
 	IncludeContent bool   `json:"include_content,omitempty" jsonschema:"include the latest version's SKILL.md content; off by default because a manifest is up to 64 KiB"`
 }
 
 type ListSkillVersionsToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the skill"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID        string `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
 	IncludeContent bool   `json:"include_content,omitempty" jsonschema:"include each version's SKILL.md content; off by default because a manifest is up to 64 KiB"`
 	Cursor         string `json:"cursor,omitempty" jsonschema:"pagination cursor returned by a previous list_skill_versions call"`
@@ -32,14 +32,14 @@ type ListSkillVersionsToolInput struct {
 }
 
 type ListSkillFeedbackToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug that owns the skill"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID     string `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
 	Cursor      string `json:"cursor,omitempty" jsonschema:"pagination cursor returned by a previous list_skill_feedback call"`
 	Limit       int    `json:"limit,omitempty" jsonschema:"maximum feedback records to return; defaults to 20 and is capped at 50"`
 }
 
 type ListSkillSuggestionsToolInput struct {
-	ProjectSlug            string `json:"project_slug" jsonschema:"explicit project slug whose open suggestions to review"`
+	ProjectSlug            string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID                string `json:"skill_id,omitempty" jsonschema:"optional skill ID returned by list_skills; omit to review suggestions across the project"`
 	IncludeProposedContent bool   `json:"include_proposed_content,omitempty" jsonschema:"include each complete proposed SKILL.md; off by default because a manifest is up to 64 KiB"`
 	OmitDiffs              bool   `json:"omit_diffs,omitempty" jsonschema:"leave each change's proposed diff out; every other field, including its ID, rationale, whether it applies cleanly, and its feedback counts, is still returned. Use to triage a large queue, then read one skill's suggestions with diffs"`
@@ -48,13 +48,13 @@ type ListSkillSuggestionsToolInput struct {
 }
 
 type ListSkillSuggestionFeedbackToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug that owns the suggestion"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	ChangeID    string `json:"change_id" jsonschema:"change ID returned inside list_skill_suggestions"`
 	Limit       int    `json:"limit,omitempty" jsonschema:"maximum linked feedback records to return; defaults to 20 and is capped at 50"`
 }
 
 type ApproveSkillSuggestionToolInput struct {
-	ProjectSlug  string   `json:"project_slug" jsonschema:"explicit project slug that owns the suggestion"`
+	ProjectSlug  string   `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SuggestionID string   `json:"suggestion_id" jsonschema:"suggestion ID returned by list_skill_suggestions"`
 	ChangeIDs    []string `json:"change_ids,omitempty" jsonschema:"IDs of the reviewed changes to take, from list_skill_suggestions; name every change to take the whole suggestion. Exactly one of change_ids or content is required"`
 	Content      string   `json:"content,omitempty" jsonschema:"complete edited SKILL.md to record instead of the proposed changes, at most 65536 UTF-8 bytes; use when the user corrected the suggestion. Exactly one of change_ids or content is required"`
@@ -62,25 +62,25 @@ type ApproveSkillSuggestionToolInput struct {
 }
 
 type DismissSkillSuggestionToolInput struct {
-	ProjectSlug  string `json:"project_slug" jsonschema:"explicit project slug that owns the suggestion"`
+	ProjectSlug  string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SuggestionID string `json:"suggestion_id" jsonschema:"suggestion ID returned by list_skill_suggestions"`
 	Confirmed    bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms discarding this suggestion"`
 }
 
 type CreateSkillToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug that will own the skill"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	Content     string `json:"content" jsonschema:"the complete SKILL.md, including YAML frontmatter and instructions; at most 65536 UTF-8 bytes"`
 }
 
 type AddSkillVersionToolInput struct {
-	ProjectSlug             string `json:"project_slug" jsonschema:"explicit project slug that owns the skill"`
+	ProjectSlug             string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID                 string `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
 	Content                 string `json:"content" jsonschema:"the complete replacement SKILL.md; versions are immutable, so a correction is a new version rather than an edit"`
 	ExpectedLatestVersionID string `json:"expected_latest_version_id" jsonschema:"the version the caller read before writing, from get_skill; the write is refused as a conflict if the skill has moved on"`
 }
 
 type UpdateSkillMetadataToolInput struct {
-	ProjectSlug             string `json:"project_slug" jsonschema:"explicit project slug that owns the skill"`
+	ProjectSlug             string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID                 string `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
 	Name                    string `json:"name,omitempty" jsonschema:"new canonical skill name; omitted leaves it unchanged"`
 	DisplayName             string `json:"display_name,omitempty" jsonschema:"new user-facing skill name; omitted leaves it unchanged"`
@@ -90,14 +90,14 @@ type UpdateSkillMetadataToolInput struct {
 }
 
 type DistributeSkillToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug that owns both the skill and the target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID     string `json:"skill_id" jsonschema:"skill ID returned by list_skills or create_skill"`
 	Plugin      string `json:"plugin,omitempty" jsonschema:"exact existing plugin in the project, by ID, slug, or name; exactly one of plugin or assistant is required and there is no implicit default"`
 	Assistant   string `json:"assistant,omitempty" jsonschema:"exact existing assistant in the project, by ID or name; exactly one of plugin or assistant is required"`
 }
 
 type ListSkillDistributionsToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug whose skill distributions to list"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID     string `json:"skill_id,omitempty" jsonschema:"optional skill ID returned by list_skills; omit to list every distributed skill in the project"`
 	Plugin      string `json:"plugin,omitempty" jsonschema:"optional exact existing plugin in the project, by ID, slug, or name; a name matching more than one plugin is refused as ambiguous_target"`
 	Cursor      string `json:"cursor,omitempty" jsonschema:"pagination cursor returned by a previous list_skill_distributions call"`
@@ -105,7 +105,7 @@ type ListSkillDistributionsToolInput struct {
 }
 
 type UndistributeSkillToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns both the skill and the target"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID        string `json:"skill_id" jsonschema:"skill ID returned by list_skills or list_skill_distributions"`
 	Plugin         string `json:"plugin,omitempty" jsonschema:"exact existing plugin in the project, by ID, slug, or name; exactly one of plugin or assistant is required and there is no implicit default"`
 	Assistant      string `json:"assistant,omitempty" jsonschema:"exact existing assistant in the project, by ID or name; exactly one of plugin or assistant is required"`
@@ -114,7 +114,7 @@ type UndistributeSkillToolInput struct {
 }
 
 type LinkSkillToMCPToolInput struct {
-	ProjectSlug     string `json:"project_slug" jsonschema:"explicit project slug that owns both the skill and the MCP server or gateway"`
+	ProjectSlug     string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID         string `json:"skill_id" jsonschema:"skill ID returned by list_skills or create_skill"`
 	TargetKind      string `json:"target_kind" jsonschema:"which kind of MCP surface serves the skill: mcp_server, meta_mcp_server (a gateway), or organization_gateway"`
 	MCPServer       string `json:"mcp_server,omitempty" jsonschema:"exact existing MCP server in the project, by ID, slug, or name; required when target_kind is mcp_server and refused otherwise"`
@@ -125,7 +125,7 @@ type LinkSkillToMCPToolInput struct {
 }
 
 type UnlinkSkillFromMCPToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns both the skill and the MCP server or gateway"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID        string `json:"skill_id" jsonschema:"skill ID returned by list_skills or list_skill_distributions"`
 	TargetKind     string `json:"target_kind" jsonschema:"which kind of MCP surface stops serving the skill: mcp_server, meta_mcp_server (a gateway), or organization_gateway"`
 	MCPServer      string `json:"mcp_server,omitempty" jsonschema:"exact existing MCP server in the project, by ID, slug, or name; required when target_kind is mcp_server and refused otherwise"`
@@ -135,14 +135,14 @@ type UnlinkSkillFromMCPToolInput struct {
 }
 
 type ListSkillInsightsToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug whose skills to rank"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	Window      string `json:"window,omitempty" jsonschema:"how far back to look: 1h, 24h, 7d, or 30d (default and maximum)"`
 	SortBy      string `json:"sort_by,omitempty" jsonschema:"order the skills by estimated_minutes_saved (default), efficacy, activations, or session_cost"`
 	Limit       int    `json:"limit,omitempty" jsonschema:"how many skills to return; defaults to 10 and is capped at 20"`
 }
 
 type CompareSkillVersionsToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug that owns the skill"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	SkillID     string `json:"skill_id" jsonschema:"the skill whose versions to compare, by ID as returned by list_skills"`
 	Window      string `json:"window,omitempty" jsonschema:"how far back to look: 1h, 24h, 7d, or 30d (default and maximum)"`
 }

@@ -45,7 +45,7 @@ func mcpConnectionSettingsToolResult(err error) (*mcp.CallToolResult, bool) {
 	var result featureUnavailableResult
 	switch {
 	case errors.Is(err, ErrMCPConnectionSettingsInvalid):
-		result = featureUnavailableResult{Code: "invalid_request", Feature: "mcp_connection_settings", Message: "Provide a project ID, an exact target ID, and target_kind set to mcp_server or gateway."}
+		result = featureUnavailableResult{Code: "invalid_request", Feature: "mcp_connection_settings", Message: "Provide a project slug, an exact target ID, and target_kind set to mcp_server or gateway."}
 	case errors.Is(err, ErrMCPConnectionSettingsNotFound):
 		result = featureUnavailableResult{Code: "not_found", Feature: "mcp_connection_settings", Message: "That target is not available in the selected project."}
 	case errors.Is(err, ErrUnavailable):

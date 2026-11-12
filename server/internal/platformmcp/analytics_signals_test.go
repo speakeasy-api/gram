@@ -30,7 +30,7 @@ func TestSignalAnalyticsWorksIndependentlyOfExplore(t *testing.T) {
 	h.service.signalFeatures = signalAnalyticsFeatures(true)
 	sensor, signal := uuid.NewString(), uuid.NewString()
 	h.engine.result = &analytics.QueryResult{Dataset: "signals", Plan: "signals.canonical_final", Rows: []analytics.Row{{"matched_messages": int64(2)}}, SignalResult: &analytics.SignalResult{Metadata: analytics.SignalMetadata{Exact: true, Unit: "original_message", Coverage: "unknown", SeriesComplete: true}, Summary: analytics.Row{"answered": int64(4)}}}
-	args := fmt.Sprintf(`{"project_id":%q,"dataset":"signals",%s,"grain":"auto","signal_query":{"selection":{"sensor_id":%q,"signal_id":%q,"threshold":0.5},"group_by":[{"attribute":"department"}]}}`, h.project.ID.String(), analyticsTestWindow, sensor, signal)
+	args := fmt.Sprintf(`{"project_slug":%q,"dataset":"signals",%s,"grain":"auto","signal_query":{"selection":{"sensor_id":%q,"signal_id":%q,"threshold":0.5},"group_by":[{"attribute":"department"}]}}`, h.project.Slug, analyticsTestWindow, sensor, signal)
 	raw, err := h.invoke(t, runAnalyticsQueryToolName, args)
 	require.NoError(t, err)
 	out, ok := raw.(RunAnalyticsQueryOutput)
@@ -49,7 +49,7 @@ func TestSignalAnalyticsWorksIndependentlyOfExplore(t *testing.T) {
 func TestExploreDoesNotGrantSignalEntitlement(t *testing.T) {
 	t.Parallel()
 	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
-	args := fmt.Sprintf(`{"project_id":%q,"dataset":"signals",%s}`, h.project.ID.String(), analyticsTestWindow)
+	args := fmt.Sprintf(`{"project_slug":%q,"dataset":"signals",%s}`, h.project.Slug, analyticsTestWindow)
 	_, err := h.invoke(t, runAnalyticsQueryToolName, args)
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
@@ -72,8 +72,8 @@ func TestSignalEntitlementDoesNotGrantRiskDatasetAccess(t *testing.T) {
 		require.NotEqual(t, "risk_findings", dataset.Name)
 	}
 	for tool, arguments := range map[string]string{
-		runAnalyticsQueryToolName:            `{"project_id":"` + h.project.ID.String() + `","dataset":"risk_findings",` + analyticsTestWindow + `,"measures":[{"op":"count"}]}`,
-		listAnalyticsDimensionValuesToolName: `{"project_id":"` + h.project.ID.String() + `","dataset":"risk_findings","dimension":"category",` + analyticsTestWindow + `}`,
+		runAnalyticsQueryToolName:            `{"project_slug":"` + h.project.Slug + `","dataset":"risk_findings",` + analyticsTestWindow + `,"measures":[{"op":"count"}]}`,
+		listAnalyticsDimensionValuesToolName: `{"project_slug":"` + h.project.Slug + `","dataset":"risk_findings","dimension":"category",` + analyticsTestWindow + `}`,
 	} {
 		_, err := h.invokeWithGrants(t, tool, arguments, member)
 		require.Equal(t, "forbidden", requireAnalyticsRefusal(t, err).Code, tool)
@@ -85,6 +85,7 @@ func TestSignalDefinitionToolHasExactScopeAndUnavailableParity(t *testing.T) {
 	t.Parallel()
 	live := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
 	reg := newRegistrar(newTestMCPServer())
+	reg.withProjects(slugProjects{live.project.Slug: live.project.ID})
 	registerAnalyticsTools(reg, nil)
 	a, b := descriptorByName(t, live.reg, getSignalDefinitionToolName), descriptorByName(t, reg, getSignalDefinitionToolName)
 	require.Equal(t, a.Meta, b.Meta)
@@ -94,9 +95,9 @@ func TestSignalDefinitionToolHasExactScopeAndUnavailableParity(t *testing.T) {
 		Required []string `json:"required"`
 	}
 	require.NoError(t, json.Unmarshal(a.InputSchema, &schema))
-	require.ElementsMatch(t, []string{"project_id", "sensor_id", "definition_hash"}, schema.Required)
+	require.ElementsMatch(t, []string{"project_slug", "sensor_id", "definition_hash"}, schema.Required)
 	require.Contains(t, b.Description, "unavailable in this deployment")
-	arguments := fmt.Sprintf(`{"project_id":%q,"sensor_id":%q,"definition_hash":%q}`, live.project.ID.String(), uuid.NewString(), strings.Repeat("a", 64))
+	arguments := fmt.Sprintf(`{"project_slug":%q,"sensor_id":%q,"definition_hash":%q}`, live.project.Slug, uuid.NewString(), strings.Repeat("a", 64))
 	_, err := b.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(arguments))
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
@@ -106,7 +107,7 @@ func TestSignalDefinitionToolHasExactScopeAndUnavailableParity(t *testing.T) {
 func TestSignalSessionFinderSharesEntitlementAndUnavailableContract(t *testing.T) {
 	t.Parallel()
 	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
-	args := fmt.Sprintf(`{"project_id":%q,%s,"signal_query":{"selection":{"sensor_id":%q,"signal_id":%q,"threshold":0.5}},"compare_previous":true}`, h.project.ID.String(), analyticsTestWindow, uuid.NewString(), uuid.NewString())
+	args := fmt.Sprintf(`{"project_slug":%q,%s,"signal_query":{"selection":{"sensor_id":%q,"signal_id":%q,"threshold":0.5}},"compare_previous":true}`, h.project.Slug, analyticsTestWindow, uuid.NewString(), uuid.NewString())
 	_, err := h.invoke(t, findSignalSessionsToolName, args)
 	require.Equal(t, analyticsNotEnabledCode, requireAnalyticsRefusal(t, err).Code)
 	require.Zero(t, h.engine.calls)

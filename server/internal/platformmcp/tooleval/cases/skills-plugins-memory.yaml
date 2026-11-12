@@ -3,14 +3,14 @@
   prompt: How many skill activations have we had in the Default project over the last 24 hours?
   expect: [query_skill_usage]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     window: 24h
 - id: skill-usage-users-release-notes
   prompt: who's been using release-notes in Default today?
   expect: [list_skill_usage_users]
   allow: [query_skill_usage, list_skills, get_skill]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     skill_name: release-notes
 - id: skill-usage-users-named-person
   prompt: Has Priya Shah used the release-notes skill in Default at all today?
@@ -22,7 +22,7 @@
   prompt: In that release-notes usage list for Default, person reference subj-4b1d9e came up. Confirm whether they activated release-notes in the same 24 hour window.
   expect: [get_user_skill_status]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     skill_name: release-notes
     subject_reference: subj-4b1d9e
 - id: skill-insights-worth-keeping
@@ -206,18 +206,18 @@
   prompt: What plugins have we set up in Default?
   expect: [list_plugins]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: plugin-get-engineering
   prompt: What's bundled in the Engineering plugin in Default these days?
   expect: [get_plugin]
   allow: [list_plugins]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: plugin-assignment-targets
   prompt: Before I hand out a plugin in Payments, which roles and directory groups could receive it?
   expect: [list_plugin_assignments]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
 - id: plugin-install-instructions
   prompt: I'm Sam, a regular member. How do I get the Engineering plugin installed in Claude Code on my machine?
   expect: [get_my_install_instructions]
@@ -230,40 +230,40 @@
   prompt: Make a new plugin in Payments called Finance Tools. Nothing in it yet.
   expect: [create_plugin]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
     name: Finance Tools
 - id: plugin-rename-engineering
   prompt: Rename the Engineering plugin in Default to Platform Engineering.
   expect: [rename_plugin]
   allow: [list_plugins, get_plugin]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     name: Platform Engineering
 - id: plugin-set-assignments
   prompt: The Engineering plugin in Default should reach the Engineering directory group and the admin role, and nobody else.
   expect: [set_plugin_assignments]
   allow: [list_plugins, get_plugin, list_plugin_assignments]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: plugin-republish-now
   prompt: The Engineering plugin in Default is showing stale. Sync the changes out to everyone right now instead of waiting.
   expect: [republish_plugin]
   allow: [list_plugins, get_plugin]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: plugin-auto-sync-off
   prompt: From now on I want Engineering plugin edits in Default held back until we push them out by hand.
   expect: [set_plugin_auto_sync]
   allow: [list_plugins, get_plugin]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     auto_sync_enabled: false
 - id: plugin-auto-sync-back-on
   prompt: We're done with manual releases. Have Engineering plugin changes in Default go out on their own again.
   expect: [set_plugin_auto_sync]
   allow: [list_plugins, get_plugin]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     auto_sync_enabled: true
 
 # Plugin servers: adding, undoing an add, and removing a membership made some other way.
@@ -283,14 +283,14 @@
   expect: [remove_plugin_server]
   allow: [list_plugins, get_plugin, find_mcp, get_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     plugin_id: 3c4b5a00-0000-4000-8000-000000000041
 - id: plugin-remove-hand-added-github
   prompt: Sam put GitHub into the Engineering plugin in Default by hand on the dashboard. Take it back out of the plugin, but keep the server.
   expect: [remove_plugin_server]
   allow: [list_plugins, get_plugin, find_mcp, get_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     plugin_id: 3c4b5a00-0000-4000-8000-000000000041
 
 # Coding sessions: finding, continuing and handing off.

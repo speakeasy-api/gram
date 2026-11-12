@@ -86,13 +86,14 @@ type ListProjectsOutput struct {
 }
 
 type FindMCPInput struct {
-	// At most one project selector may be supplied. Without a selector, an
-	// unfiltered list uses the organization's Default project; a query searches
-	// the organization. The assistant policy injects project_id and removes both
-	// selectors from its model-visible schema.
-	ProjectID   string `json:"project_id,omitempty" jsonschema:"optional project ID; defaults to the organization's Default project when query is omitted"`
-	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"optional project slug; defaults to the organization's Default project when query is omitted"`
-	Query       string `json:"query,omitempty" jsonschema:"optional MCP name, slug, ID, or source URL search; without a project selector, searches the organization"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the
+	// project it names. Without one, an unfiltered list uses the
+	// organization's Default project and a query searches the organization.
+	// The assistant policy injects its own project_slug and removes it from
+	// its model-visible schema.
+	ProjectID   string `json:"-"`
+	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"the project's slug, as list_projects returns it; omit it to list the organization's Default project, or to search the whole organization with query"`
+	Query       string `json:"query,omitempty" jsonschema:"optional MCP name, slug, ID, or source URL search; without project_slug, searches the organization"`
 	Cursor      string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous unfiltered find_mcp result"`
 	Limit       int    `json:"limit,omitempty" jsonschema:"maximum number of MCPs to return; server clamps this to 100"`
 	Readiness   string `json:"readiness,omitempty" jsonschema:"optional persisted readiness state filter"`
@@ -180,7 +181,9 @@ type FindMCPOutput struct {
 }
 
 type GetMCPInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID"`
 	// ToolCursor continues a paged tool_exposure read. The other fields of
 	// the result are re-read in full on every page.
@@ -285,6 +288,9 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 
 	reg := newRegistrar(server)
 	reg.instructions = instructions
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		reg.withProjects(&RegistrationStore{db: postgresReader.db, icons: nil})
+	}
 
 	registerAssistantIdentityTool(reg, assistantIdentity)
 	registerSignalTools(reg, signalAuthoring)

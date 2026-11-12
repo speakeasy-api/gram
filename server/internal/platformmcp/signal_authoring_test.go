@@ -204,6 +204,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	require.NoError(t, err)
 
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "signals", Version: "1"}, nil))
+	reg.withProjects(slugProjects{f.project.Slug: f.project.ID})
 	registerSignalTools(reg, f.service)
 	search := descriptorByName(t, reg, "find_signals")
 
@@ -230,7 +231,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, second.ID, page.Signals[0].ID)
 	require.Empty(t, page.NextCursor)
-	input := signalAuthoringInput{ProjectID: f.project.ID.String(), Proposal: sigint.AuthoringInput{Operation: "update_sensor", ID: sensor.ID, Enabled: new(false), InputStrategy: new(types.SigintInputStrategy("sliding_window")), WindowSize: new(10), MatchExpression: new(`message.role == "assistant"`), Signals: &[]sigint.SignalReference{{ID: second.ID}, {ID: first.ID}}}}
+	input := signalAuthoringInput{ProjectSlug: f.project.Slug, Proposal: sigint.AuthoringInput{Operation: "update_sensor", ID: sensor.ID, Enabled: new(false), InputStrategy: new(types.SigintInputStrategy("sliding_window")), WindowSize: new(10), MatchExpression: new(`message.role == "assistant"`), Signals: &[]sigint.SignalReference{{ID: second.ID}, {ID: first.ID}}}}
 	mutation := descriptorByName(t, reg, "update_sensor")
 
 	data, err = json.Marshal(input)
@@ -295,6 +296,7 @@ func TestSignalToolsUnavailableRefusals(t *testing.T) {
 	bindExternalTestPrincipal(server)
 	reg := newRegistrar(server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	reg.withProjects(slugProjects{})
 	registerSignalTools(reg, nil)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 
@@ -308,7 +310,13 @@ func TestSignalToolsUnavailableRefusals(t *testing.T) {
 	defer o11y.NoLogDefer(session.Close)
 
 	for _, descriptor := range reg.For(AudienceExternal) {
-		args := map[string]any{"project_id": uuid.NewString()}
+		// find_signals, find_sensors, get_sensor and preview_sensor_match still
+		// name the project by ID; every other signal tool names it by slug.
+		args := map[string]any{"project_slug": "no-such-project"}
+		switch descriptor.Name {
+		case "find_signals", "find_sensors", "get_sensor", "preview_sensor_match":
+			args = map[string]any{"project_id": uuid.NewString()}
+		}
 		switch descriptor.Name {
 		case "create_sensor", "create_signal", "update_sensor", "update_signal":
 			args["proposal"] = map[string]any{"operation": descriptor.Name}

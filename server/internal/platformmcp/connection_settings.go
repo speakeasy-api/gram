@@ -25,7 +25,9 @@ const (
 )
 
 type GetMCPConnectionSettingsInput struct {
-	ProjectID  string                          `json:"project_id" jsonschema:"project ID that owns the target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID  string                          `json:"-"`
 	TargetKind MCPConnectionSettingsTargetKind `json:"target_kind" jsonschema:"exact target type: mcp_server or gateway"`
 	TargetID   string                          `json:"target_id" jsonschema:"ID of the exact MCP server or gateway"`
 }

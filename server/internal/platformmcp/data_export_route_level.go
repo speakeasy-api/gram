@@ -31,7 +31,9 @@ const (
 )
 
 type SetDataExportMinSeverityInput struct {
-	ProjectID      string `json:"project_id" jsonschema:"project ID that owns the route, from list_data_exports"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID      string `json:"-"`
 	RouteID        string `json:"route_id" jsonschema:"exact mcp_connection_logs route ID from list_data_exports"`
 	MinSeverity    string `json:"min_severity" jsonschema:"lowest level the route sends: error (failed connections), warn (adds blocked connections), or info (adds declined connections)"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-chosen key that makes a retry of this exact change safe"`
@@ -196,7 +198,7 @@ func validateDataExportLevel(input SetDataExportMinSeverityInput) (uuid.UUID, uu
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
 	if err != nil {
-		return uuid.Nil, uuid.Nil, "", "", dataExportLevelInvalid("Provide the explicit project ID that owns the route.")
+		return uuid.Nil, uuid.Nil, "", "", dataExportLevelInvalid("Provide the slug of the project that owns the route.")
 	}
 	routeID, err := uuid.Parse(strings.TrimSpace(input.RouteID))
 	if err != nil {

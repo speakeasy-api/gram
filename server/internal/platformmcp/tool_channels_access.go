@@ -19,7 +19,7 @@ import (
 const getMyChannelsAccessName = "get_my_channels_access"
 
 const getMyChannelsAccessDescription = "Get the Channels endpoint for one explicit project and which Channels permissions you personally hold in that project. " +
-	"Channels is project-scoped messaging between dashboard users and agent instances. Supply exactly one of project_id or project_slug; there is no default project fallback. Requires live project:read access to the selected project. " +
+	"Channels is project-scoped messaging between dashboard users and agent instances. Name the project by its slug, as list_projects returns it; there is no default project fallback. Requires live project:read access to the selected project. " +
 	"Returns the endpoint URL to add to an MCP client, whether you may connect an instance, administer Channels, and read every conversation in that project, plus the next action. " +
 	"It returns no messages, no conversations, no presence, no other member's permissions, and no credential: authorize against the returned endpoint to use Channels. " +
 	"Channels must be enabled for your organization; otherwise this tool returns channels_not_enabled without an endpoint."
@@ -37,8 +37,9 @@ var getMyChannelsAccessMeta = ToolMeta{
 }
 
 type GetMyChannelsAccessInput struct {
-	ProjectID   string `json:"project_id,omitempty" jsonschema:"exact project ID; supply exactly one project selector"`
-	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"exact project slug; supply exactly one project selector, with no default project fallback"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 }
 
 // GetMyChannelsAccessOutput is the caller's own Channels access.

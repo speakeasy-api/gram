@@ -8,7 +8,7 @@ import (
 )
 
 type UpdateMCPVisibilityToolInput struct {
-	ProjectSlug     string `json:"project_slug" jsonschema:"explicit project slug that owns the Platform-managed MCP"`
+	ProjectSlug     string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	RegistrationID  string `json:"registration_id" jsonschema:"Platform registration ID returned by find_mcp or get_mcp"`
 	MCPID           string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp or get_mcp"`
 	ExpectedVersion string `json:"expected_version" jsonschema:"opaque version returned by find_mcp, get_mcp, or a previous lifecycle update"`

@@ -30,7 +30,7 @@ func registerChangeRiskPolicyAudience(reg *Registrar, catalogAvailable bool, han
 		return &jsonschema.Schema{Type: "array", Items: stringSchema("Exact organization user or ROLE principal URN; Everyone is not supported.", 1, 0), MaxItems: new(100), UniqueItems: true}
 	}
 	schema := closedObject(map[string]*jsonschema.Schema{
-		"project_slug":     stringSchema("Exact project slug; never defaults.", 1, 0),
+		"project_slug":     stringSchema(projectSlugDescription, 1, 0),
 		"policy_id":        uuidSchema("Exact policy ID."),
 		"expected_version": stringSchema("Opaque version from a fresh get_risk_policy read.", 1, 0),
 		"idempotency_key":  stringSchema("Stable replay key for this confirmed delta.", 1, 128),

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -11,6 +12,7 @@ func TestAccessRoleMutationToolsAreStableExternalOnlyMutations(t *testing.T) {
 	t.Parallel()
 
 	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	registrar.withProjects(slugProjects{"access-project": uuid.MustParse("00000000-0000-0000-0000-000000000001")})
 	for _, name := range []string{operationCreateMCPAccessRole, operationUpdateMCPAccessRole, operationAssignMCPAccessRole, operationConfigureInferenceAccessRole, operationConfigureMemoryAccessRole, operationSetMCPRoleAuthClientAccess} {
 		descriptor := descriptorByName(t, registrar, name)
 		require.Equal(t, externalOnly, descriptor.Meta.Audiences)
@@ -22,23 +24,23 @@ func TestAccessRoleMutationToolsAreStableExternalOnlyMutations(t *testing.T) {
 		require.NotNil(t, descriptor.Annotations.DestructiveHint)
 		require.Equal(t, name == operationUpdateMCPAccessRole || name == operationConfigureInferenceAccessRole || name == operationConfigureMemoryAccessRole || name == operationSetMCPRoleAuthClientAccess, *descriptor.Annotations.DestructiveHint)
 
-		arguments := json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","role_reference":"opaque","expected_version":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","add_rules":[],"remove_rules":[],"idempotency_key":"key","confirmed":true}`)
+		arguments := json.RawMessage(`{"project_slug":"access-project","role_reference":"opaque","expected_version":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","add_rules":[],"remove_rules":[],"idempotency_key":"key","confirmed":true}`)
 		if name == operationCreateMCPAccessRole {
-			arguments = json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","name":"Operators","rules":[],"idempotency_key":"key","confirmed":true}`)
+			arguments = json.RawMessage(`{"project_slug":"access-project","name":"Operators","rules":[],"idempotency_key":"key","confirmed":true}`)
 		}
 		if name == operationAssignMCPAccessRole {
-			arguments = json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","member_reference":"opaque-member","role_reference":"opaque-role","expected_version":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","idempotency_key":"key","confirmed":true}`)
+			arguments = json.RawMessage(`{"project_slug":"access-project","member_reference":"opaque-member","role_reference":"opaque-role","expected_version":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","idempotency_key":"key","confirmed":true}`)
 		}
 		if name == operationConfigureInferenceAccessRole {
 			require.Contains(t, string(descriptor.InputSchema), `"all_projects"`)
-			arguments = json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","role_reference":"opaque","expected_version":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","enabled":true,"all_projects":true,"idempotency_key":"key","confirmed":true}`)
+			arguments = json.RawMessage(`{"project_slug":"access-project","role_reference":"opaque","expected_version":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","enabled":true,"all_projects":true,"idempotency_key":"key","confirmed":true}`)
 		}
 		if name == operationConfigureMemoryAccessRole {
 			require.NotContains(t, string(descriptor.InputSchema), `"all_projects"`)
-			arguments = json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","scope":"memory:read","role_reference":"opaque","expected_version":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","enabled":true,"idempotency_key":"key","confirmed":true}`)
+			arguments = json.RawMessage(`{"project_slug":"access-project","scope":"memory:read","role_reference":"opaque","expected_version":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","enabled":true,"idempotency_key":"key","confirmed":true}`)
 		}
 		if name == operationSetMCPRoleAuthClientAccess {
-			arguments = json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001","mcp_id":"00000000-0000-0000-0000-000000000002","role_reference":"opaque-role","auth_client_id":"00000000-0000-0000-0000-000000000003","access":"blocked","confirmed":true}`)
+			arguments = json.RawMessage(`{"project_slug":"access-project","mcp_id":"00000000-0000-0000-0000-000000000002","role_reference":"opaque-role","auth_client_id":"00000000-0000-0000-0000-000000000003","access":"blocked","confirmed":true}`)
 		}
 		_, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), arguments)
 		var refusal *ToolRefusalError

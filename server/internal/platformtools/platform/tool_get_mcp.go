@@ -17,6 +17,15 @@ type GetMCP struct {
 	reader platformmcp.Reader
 }
 
+// getMCPInput is this executor's own contract. It names the project by ID,
+// which platformmcp.GetMCPInput resolves from a project slug only on the
+// Platform MCP surface.
+type getMCPInput struct {
+	ProjectID  string `json:"project_id" jsonschema:"project ID that owns the MCP"`
+	MCPID      string `json:"mcp_id" jsonschema:"configured MCP ID"`
+	ToolCursor string `json:"tool_cursor,omitempty" jsonschema:"tool_exposure.next_tool_cursor from the previous get_mcp read of this same server; omit for the first page"`
+}
+
 func NewGetMCPTool(reader platformmcp.Reader) *GetMCP {
 	return &GetMCP{reader: reader}
 }
@@ -27,7 +36,7 @@ func (t *GetMCP) Descriptor() core.ToolDescriptor {
 		HandlerName: "get_mcp",
 		Name:        platformtools.ToolNameGetMCP,
 		Description: "Get an allowlisted summary of one configured MCP in an explicit project. " + platformmcp.GetMCPToolPagingNote,
-		InputSchema: core.BuildInputSchema[platformmcp.GetMCPInput](),
+		InputSchema: core.BuildInputSchema[getMCPInput](),
 		Variables:   nil,
 		Annotations: core.ReadOnlyAnnotations(),
 		Managed:     true,
@@ -41,13 +50,14 @@ func (t *GetMCP) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.
 		return fmt.Errorf("platform reader not configured")
 	}
 
-	input := platformmcp.GetMCPInput{ProjectID: "", MCPID: "", ToolCursor: ""}
-	if err := core.DecodeInput(payload, &input); err != nil {
+	var decoded getMCPInput
+	if err := core.DecodeInput(payload, &decoded); err != nil {
 		return err
 	}
-	if input.ProjectID == "" || input.MCPID == "" {
+	if decoded.ProjectID == "" || decoded.MCPID == "" {
 		return fmt.Errorf("project_id and mcp_id are required")
 	}
+	input := platformmcp.GetMCPInput{ProjectSlug: "", ProjectID: decoded.ProjectID, MCPID: decoded.MCPID, ToolCursor: decoded.ToolCursor}
 
 	principal, err := principalFromContext(ctx)
 	if err != nil {

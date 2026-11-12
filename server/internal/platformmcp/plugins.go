@@ -213,13 +213,17 @@ type PluginSkill struct {
 }
 
 type ListPluginsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"project ID whose plugins to list"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Limit     int    `json:"limit,omitempty" jsonschema:"maximum number of plugins to return; server clamps this to 50"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor from a previous list_plugins result"`
 }
 
 type ListPluginAssignmentsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"explicit project ID whose plugin assignment targets to list"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 }
 
 type ListPluginAssignmentsOutput struct {
@@ -242,7 +246,9 @@ type ListPluginsOutput struct {
 }
 
 type GetPluginInput struct {
-	ProjectID        string `json:"project_id" jsonschema:"project ID that owns the plugin"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID        string `json:"-"`
 	Plugin           string `json:"plugin" jsonschema:"exact plugin ID, slug, or name as returned by list_plugins"`
 	MembershipLimit  int    `json:"membership_limit,omitempty" jsonschema:"maximum MCP memberships to return; server clamps this to 100"`
 	MembershipCursor string `json:"membership_cursor,omitempty" jsonschema:"opaque membership cursor from a previous get_plugin result"`

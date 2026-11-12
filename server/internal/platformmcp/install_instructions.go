@@ -23,7 +23,9 @@ import (
 )
 
 type GetMyInstallInstructionsInput struct {
-	ProjectID string `json:"project_id,omitempty" jsonschema:"optional owning project ID; defaults to the organization's default project (a project assistant always uses its own)"`
+	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"the project's slug, as list_projects returns it; omit it to use the organization's Default project"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Plugin    string `json:"plugin,omitempty" jsonschema:"exact assigned plugin ID, slug, or name"`
 	MCPID     string `json:"mcp_id,omitempty" jsonschema:"exact configured MCP ID"`
 	// RegistrationID names a server added through setup without a find_mcp
@@ -70,7 +72,7 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 		return GetMyInstallInstructionsOutput{}, err
 	}
 	if strings.TrimSpace(input.Plugin) != "" {
-		plugin, err := s.GetAssignedPlugin(ctx, principal, GetPluginInput{ProjectID: projectID.String(), Plugin: input.Plugin, MembershipLimit: 0, MembershipCursor: ""})
+		plugin, err := s.GetAssignedPlugin(ctx, principal, GetPluginInput{ProjectSlug: "", ProjectID: projectID.String(), Plugin: input.Plugin, MembershipLimit: 0, MembershipCursor: ""})
 		if err != nil {
 			return GetMyInstallInstructionsOutput{}, err
 		}

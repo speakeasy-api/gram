@@ -71,12 +71,14 @@ func TestOrganizationGatewayActivitySpansProjects(t *testing.T) {
 	})
 	require.NoError(t, err)
 	projectIDs := make([]uuid.UUID, 0, 2)
+	projectSlugs := make([]string, 0, 2)
 	for range 2 {
 		project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
 			Name: "Gateway activity project", Slug: "project-" + uuid.NewString()[:8], OrganizationID: organizationID,
 		})
 		require.NoError(t, err)
 		projectIDs = append(projectIDs, project.ID)
+		projectSlugs = append(projectSlugs, project.Slug)
 	}
 	first := seedGatewayActivityServer(t, ctx, conn, projectIDs[0], "Alpha")
 	second := seedGatewayActivityServer(t, ctx, conn, projectIDs[1], "Beta")
@@ -109,8 +111,8 @@ func TestOrganizationGatewayActivitySpansProjects(t *testing.T) {
 	require.EqualValues(t, 2, out.FailedCalls)
 	require.Equal(t, OrganizationGatewayDiscovery{ListServers: 3, DescribeServer: 2, DescribeTools: 1}, out.Discovery)
 	require.Equal(t, []OrganizationGatewayServer{
-		{Name: "Beta", MCPID: second.String(), ProjectID: projectIDs[1].String(), ToolCalls: 3, ErrorCount: 2},
-		{Name: "Alpha", MCPID: first.String(), ProjectID: projectIDs[0].String(), ToolCalls: 1, ErrorCount: 0},
+		{Name: "Beta", MCPID: second.String(), ProjectID: projectIDs[1].String(), ProjectSlug: projectSlugs[1], ToolCalls: 3, ErrorCount: 2},
+		{Name: "Alpha", MCPID: first.String(), ProjectID: projectIDs[0].String(), ProjectSlug: projectSlugs[0], ToolCalls: 1, ErrorCount: 0},
 	}, out.TopServers, "servers no longer in the organization are left unnamed")
 	require.False(t, out.Envelope.NoObservations)
 }

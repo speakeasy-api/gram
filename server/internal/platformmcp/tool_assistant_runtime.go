@@ -24,7 +24,9 @@ type assistantRuntimeManagement interface {
 }
 
 type SelectAssistantRuntimeInput struct {
-	ProjectID              string `json:"project_id" jsonschema:"exact project UUID; never inferred"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID              string `json:"-"`
 	AssistantID            string `json:"assistant_id" jsonschema:"exact assistant UUID"`
 	RuntimeVersion         int    `json:"runtime_version" jsonschema:"2 for legacy runtime or 3 to opt into Kit"`
 	ExpectedRuntimeVersion int    `json:"expected_runtime_version,omitempty" jsonschema:"persisted version from a fresh assistant read: 2 or 3; omit for preview; on conflict read again and reconfirm"`

@@ -44,7 +44,8 @@ import (
 // project's assistant, so binding a project at startup would attribute every
 // call to whichever project happened to start first.
 type TargetPolicy struct {
-	ProjectID   string
+	// ProjectSlug is the assistant's own project, which every project-scoped
+	// tool takes as project_slug.
 	ProjectSlug string
 }
 
@@ -177,19 +178,8 @@ func (t Tool) applyTargetPolicy(policy TargetPolicy, arguments []byte) ([]byte, 
 			decoded = map[string]any{}
 		}
 	}
-	fields := projectFields(t.descriptor.InputSchema)
-	// Prefer the immutable project ID when a descriptor permits either selector.
-	// Supplying both would turn an externally valid optional-selector schema into
-	// an invalid assistant call; the assistant has one exact project to inject.
-	for _, field := range fields {
-		if field == "project_id" {
-			decoded["project_id"] = policy.ProjectID
-			delete(decoded, "project_slug")
-			break
-		}
-		if field == "project_slug" {
-			decoded["project_slug"] = policy.ProjectSlug
-		}
+	if slices.Contains(projectFields(t.descriptor.InputSchema), "project_slug") {
+		decoded["project_slug"] = policy.ProjectSlug
 	}
 	encoded, err := json.Marshal(decoded)
 	if err != nil {
@@ -341,14 +331,10 @@ func collectProjectFields(schema map[string]any, found map[string]bool) {
 // and guessing would act on the wrong project.
 func targetPolicyFromContext(ctx context.Context) (TargetPolicy, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	if !ok || authCtx == nil || authCtx.ProjectID == nil || authCtx.ProjectSlug == nil || *authCtx.ProjectSlug == "" {
 		return TargetPolicy{}, fmt.Errorf("assistant platform tools require a project auth context")
 	}
-	policy := TargetPolicy{ProjectID: authCtx.ProjectID.String(), ProjectSlug: ""}
-	if authCtx.ProjectSlug != nil {
-		policy.ProjectSlug = *authCtx.ProjectSlug
-	}
-	return policy, nil
+	return TargetPolicy{ProjectSlug: *authCtx.ProjectSlug}, nil
 }
 
 // principalFromContext builds the assistant's identity. The user is the person

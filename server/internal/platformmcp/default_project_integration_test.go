@@ -249,6 +249,7 @@ func TestInstallInstructionsUseTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
 		WithInstallLinks(serverURL, serverURL)
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg.withProjects(&RegistrationStore{db: conn, icons: nil})
 	registerPluginTools(reg, service)
 
 	actorCtx := func(principal Principal) context.Context {
@@ -262,7 +263,7 @@ func TestInstallInstructionsUseTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, omitted.Supported)
 
-	named, err := invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(defaultPrincipal), reg, "get_my_install_instructions", map[string]any{"project_id": defaultProject.ID.String(), "mcp_id": mcpID.String(), "client_family": string(OnboardingClientClaudeCode)})
+	named, err := invokeTool[GetMyInstallInstructionsOutput](t, actorCtx(defaultPrincipal), reg, "get_my_install_instructions", map[string]any{"project_slug": defaultProject.Slug, "mcp_id": mcpID.String(), "client_family": string(OnboardingClientClaudeCode)})
 	require.NoError(t, err)
 	require.Equal(t, named, omitted)
 
@@ -272,7 +273,7 @@ func TestInstallInstructionsUseTheDefaultProjectWhenNoneIsNamed(t *testing.T) {
 
 // A caller without find_mcp names the server by the registration that added
 // it. The registration also names the project, so an organization without a
-// default project needs no project_id, and mcp:connect still applies.
+// default project needs no project_slug, and mcp:connect still applies.
 func TestInstallInstructionsByRegistrationID(t *testing.T) {
 	t.Parallel()
 
@@ -328,6 +329,7 @@ func TestInstallInstructionsByRegistrationID(t *testing.T) {
 		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
 		WithInstallLinks(serverURL, serverURL)
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	reg.withProjects(&RegistrationStore{db: conn, icons: nil})
 	registerPluginTools(reg, service)
 
 	actorCtx := func(grants ...authz.Grant) context.Context {
@@ -346,7 +348,7 @@ func TestInstallInstructionsByRegistrationID(t *testing.T) {
 	require.NoError(t, err, "the registration's project is used, so no default project is needed")
 	require.True(t, byRegistration.Supported)
 
-	byMCP, err := install(actorCtx(connect), map[string]any{"project_id": project.ID.String(), "mcp_id": mcpID.String()})
+	byMCP, err := install(actorCtx(connect), map[string]any{"project_slug": project.Slug, "mcp_id": mcpID.String()})
 	require.NoError(t, err)
 	require.Equal(t, byMCP, byRegistration)
 

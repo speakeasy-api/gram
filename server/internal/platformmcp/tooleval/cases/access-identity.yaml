@@ -22,7 +22,7 @@
   prompt: Rename the Payments project to "Billing and Payments". Keep the links working.
   expect: [rename_project]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
     name: Billing and Payments
 
 # Outbound enterprise-managed authorization readiness for one server.
@@ -31,14 +31,14 @@
   expect: [get_xaa_readiness]
   allow: [find_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     mcp_server_id: 5f1e2a00-0000-4000-8000-000000000012
 - id: access-xaa-readiness-billing
   prompt: The vendor behind Billing API says they accept identity-provider-issued grants now. Is that path actually ready on our side for that server?
   expect: [get_xaa_readiness]
   allow: [find_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
     mcp_server_id: 5f1e2a00-0000-4000-8000-000000000021
 
 # Speakeasy's own issuer URI, which outside services register.
@@ -124,28 +124,28 @@
   expect: [get_my_mcp_access]
   allow: [find_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
     mcp_id: 5f1e2a00-0000-4000-8000-000000000021
 - id: access-my-access-one-github
   prompt: am i allowed to connect to the GitHub server or not
   expect: [get_my_mcp_access]
   allow: [find_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     mcp_id: 5f1e2a00-0000-4000-8000-000000000011
 - id: access-my-connection-status
   prompt: Is my Linear sign-in still valid, or do I need to authorize it again?
   expect: [get_my_mcp_connection_status]
   allow: [find_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     mcp_id: 5f1e2a00-0000-4000-8000-000000000012
 - id: access-my-connection-status-github
   prompt: GitHub keeps asking me to reconnect. Is my connection to it actually broken, and what URL do I reconnect through?
   expect: [get_my_mcp_connection_status]
   allow: [find_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     mcp_id: 5f1e2a00-0000-4000-8000-000000000011
 
 # Someone else's access, and who can reach one server.
@@ -166,14 +166,14 @@
   expect: [get_mcp_access]
   allow: [find_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     mcp_id: 5f1e2a00-0000-4000-8000-000000000011
 - id: access-server-access-billing-credential
   prompt: For Billing API, which roles are allowed to use its shared credential and which are blocked? Don't change anything.
   expect: [get_mcp_access]
   allow: [find_mcp]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
     mcp_id: 5f1e2a00-0000-4000-8000-000000000021
 
 # Role writes: create, update, assign.
@@ -183,20 +183,20 @@
   allow:
     [find_mcp, get_mcp_access, list_access_roles, describe_access_permissions]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
     name: Billing Readers
 - id: access-update-role
   prompt: Add Linear to our existing Default Engineers role so everyone holding it can connect.
   expect: [update_mcp_access_role]
   allow: [find_mcp, get_mcp_access, list_access_roles]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: access-assign-role
   prompt: Give Sam the Billing Readers role on the Billing API server.
   expect: [assign_mcp_access_role]
   allow: [find_mcp, get_mcp_access, list_access_roles, list_access_members]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
     mcp_id: 5f1e2a00-0000-4000-8000-000000000021
 
 # Shared upstream credentials: who may use them, and which servers offer them.
@@ -205,7 +205,7 @@
   expect: [set_mcp_role_auth_client_access]
   allow: [find_mcp, get_mcp_access, list_access_roles]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     mcp_id: 5f1e2a00-0000-4000-8000-000000000011
     access: blocked
 - id: access-offer-upstream-credential
@@ -213,14 +213,14 @@
   expect: [offer_mcp_upstream_credential]
   allow: [find_mcp, get_mcp_connection_settings]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     mcp_id: 5f1e2a00-0000-4000-8000-000000000012
 - id: access-headless-caller-credential
   prompt: Our nightly bot signs in to GitHub with no browser, so it never sees the consent screen. Which upstream credential does it end up with, and can we pin it to the shared one?
   expect: [choose_mcp_headless_caller_credential]
   allow: [find_mcp, get_mcp_connection_settings]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     mcp_id: 5f1e2a00-0000-4000-8000-000000000011
 
 # Non-MCP grants on custom roles: inference and team memory.
@@ -229,7 +229,7 @@
   expect: [configure_inference_access_role]
   allow: [list_access_roles]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
     enabled: true
 - id: access-inference-role-all-projects
   prompt: The Platform Team role should be able to call models in every project, not just one.
@@ -243,7 +243,7 @@
   expect: [configure_memory_access_role]
   allow: [list_access_roles]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     scope: memory:read
     enabled: true
 
@@ -268,14 +268,14 @@
   prompt: Move assistant a1b2c3d4-0000-4000-8000-000000000201 in the Default project over to Kit.
   expect: [select_assistant_runtime]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     assistant_id: a1b2c3d4-0000-4000-8000-000000000201
     runtime_version: 3
 - id: access-assistant-upstream-credential
   prompt: When nobody kicked off the run, which GitHub credential does assistant a1b2c3d4-0000-4000-8000-000000000201 in Default use? I want it on the shared one.
   expect: [choose_assistant_upstream_credential]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     assistant_id: a1b2c3d4-0000-4000-8000-000000000201
 # Identity requests no Platform tool serves, or that should be declined.
 - id: access-negative-okta-password
