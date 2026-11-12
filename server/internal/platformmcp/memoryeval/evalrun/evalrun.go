@@ -168,7 +168,25 @@ func (r *Runner) execute(ctx context.Context, client openrouter.CompletionClient
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
 	}
-	target, err := r.target(ctx, run.OrganizationID)
+	costCap := cfg.benchConfig().CostCapUSD()
+	ctx, client, stop := bench.WithSpendCap(ctx, client, costCap)
+	defer stop()
+	report, err := r.score(ctx, client, run.OrganizationID, cfg)
+	// A run stopped by its cap fails with the cap as the reason, not the
+	// cancellation it caused wherever the run was.
+	if capErr, ok := errors.AsType[*bench.SpendCapError](context.Cause(ctx)); ok {
+		return nil, capErr
+	}
+	if err != nil {
+		return nil, err
+	}
+	report.CostCapUSD = costCap
+	return report, nil
+}
+
+// score writes team memory with the run's models and scores every arm.
+func (r *Runner) score(ctx context.Context, client openrouter.CompletionClient, organizationID string, cfg Config) (*bench.Report, error) {
+	target, err := r.target(ctx, organizationID)
 	if err != nil {
 		return nil, err
 	}

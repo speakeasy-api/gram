@@ -3,6 +3,8 @@
 package memoryeval_test
 
 import (
+	"context"
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -75,7 +77,7 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	require.NoError(t, cfg.Validate())
 
 	provisioner := openrouter.NewDevelopment(apiKey)
-	client := openrouter.NewUnifiedClient(
+	var client openrouter.CompletionClient = openrouter.NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		provisioner,
@@ -85,6 +87,25 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 		nil,
 		nil,
 	)
+
+	// Every model call below goes through the capped client, so the cap
+	// covers memory writing and embedding as well as answers and grading.
+	costCap := cfg.CostCapUSD()
+	if value := os.Getenv("MEMORYEVAL_MAX_COST_USD"); value != "" {
+		parsed, err := strconv.ParseFloat(value, 64)
+		require.NoError(t, err, "MEMORYEVAL_MAX_COST_USD")
+		costCap = parsed
+	}
+	ctx, capped, stop := bench.WithSpendCap(t.Context(), client, costCap)
+	defer stop()
+	client = capped
+	requireUnderCap := func(err error) {
+		t.Helper()
+		if capErr, ok := errors.AsType[*bench.SpendCapError](context.Cause(ctx)); ok {
+			t.Fatal(capErr.Error() + "; raise it with --max-cost")
+		}
+		require.NoError(t, err)
+	}
 
 	corpus := memoryeval.Build(corpusNow)
 	loaded := loadCorpus(t, "memoryeval_judged", corpus)
@@ -97,21 +118,22 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 		Summary: envOr("MEMORYEVAL_SUMMARY_MODEL", bench.DefaultMemoryModels.Summary),
 		Digest:  envOr("MEMORYEVAL_DIGEST_MODEL", bench.DefaultMemoryModels.Digest),
 	}
-	prep, err := bench.Prepare(t.Context(), testenv.NewLogger(t), client, loaded.target(), models, cfg.Concurrency)
-	require.NoError(t, err)
+	prep, err := bench.Prepare(ctx, testenv.NewLogger(t), client, loaded.target(), models, cfg.Concurrency)
+	requireUnderCap(err)
 	memoryArm, err := bench.SearchTeamMemoryArm(testenv.NewLogger(t), loaded.target())
 	require.NoError(t, err)
 	// Arm E embeds the same masked items and fuses vector with full-text
 	// ranks, to decide whether team memory needs embeddings at all.
 	embedder := bench.NewOpenRouterEmbedder(client, loaded.organizationID, envOr("MEMORYEVAL_EMBEDDING_MODEL", bench.DefaultEmbeddingModel))
-	hybridArm, err := bench.HybridTeamMemoryArm(t.Context(), testenv.NewLogger(t), embedder, loaded.target())
-	require.NoError(t, err)
-	recall, err := bench.QuestionRecall(t.Context(), corpus, []bench.Arm{memoryArm, hybridArm})
-	require.NoError(t, err)
+	hybridArm, err := bench.HybridTeamMemoryArm(ctx, testenv.NewLogger(t), embedder, loaded.target())
+	requireUnderCap(err)
+	recall, err := bench.QuestionRecall(ctx, corpus, []bench.Arm{memoryArm, hybridArm})
+	requireUnderCap(err)
 
-	report, err := bench.Run(t.Context(), client, corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm, hybridArm}, cfg)
-	require.NoError(t, err)
+	report, err := bench.Run(ctx, client, corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm, hybridArm}, cfg)
+	requireUnderCap(err)
 	report.Preparation = &prep
+	report.CostCapUSD = costCap
 	markdown := report.Markdown() + "\n" + recall.Markdown()
 	t.Log("\n" + markdown)
 	if out := os.Getenv("MEMORYEVAL_OUT"); out != "" {
