@@ -124,7 +124,7 @@ function blockLevelFor(capabilities: AudienceLevel[]): AudienceLevel | null {
     [...levels].sort((a, b) => a.localeCompare(b)).join(",");
   const wanted = key(capabilities);
   for (const [level, taken] of Object.entries(BLOCKED_CAPABILITIES)) {
-    if (key(taken) === wanted) return level as AudienceLevel;
+    if (taken && key(taken) === wanted) return level as AudienceLevel;
   }
   return null;
 }
