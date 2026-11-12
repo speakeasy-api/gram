@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -21,7 +22,11 @@ import (
 // keeps its policy bytes and every replica decodes them again, recomputing
 // the implication closure for the policy's version. The fixtures under
 // testdata/stored_policies are those bytes, one file per policy version,
-// written once when the version was added and never regenerated. If a change
+// written once when the version was added and never regenerated. A version's
+// file holds only the policies whose bytes differ from the versions before
+// it; every other policy is inherited from the latest earlier file that has
+// it, since a credential issued at that version would carry the same bytes.
+// Each version is still decoded with every policy it inherits. If a change
 // to the authz model (an Implies edge, a block, an agent-safe version) makes
 // one of them stop decoding, the change must be versioned the way
 // delegatedScopeClosure versions mcp:connect, not the fixture updated.
@@ -48,12 +53,9 @@ func TestStoredPolicyFixtures_DecodeAtEveryVersion(t *testing.T) {
 	}
 
 	authorized := make(map[string]map[string][]string)
+	policies := make(map[string]json.RawMessage)
 	for version := DelegatedPolicyVersion1; version <= CurrentDelegatedPolicyVersion; version++ {
-		raw, err := os.ReadFile(storedPolicyFixturePath(version))
-		require.NoError(t, err, "every supported policy version needs a stored fixture; see the comment at the top of this file")
-
-		var policies map[string]json.RawMessage
-		require.NoError(t, json.Unmarshal(raw, &policies))
+		maps.Copy(policies, readStoredPolicyFixture(t, version))
 		require.NotEmpty(t, policies)
 
 		byName := make(map[string][]string, len(policies))
@@ -97,6 +99,34 @@ func TestStoredPolicyFixtures_NoneBeyondCurrentVersion(t *testing.T) {
 	}
 }
 
+// readStoredPolicyFixture returns the policies stored for version alone,
+// without the ones it inherits from earlier versions.
+func readStoredPolicyFixture(t *testing.T, version DelegatedPolicyVersion) map[string]json.RawMessage {
+	t.Helper()
+
+	raw, err := os.ReadFile(storedPolicyFixturePath(version))
+	require.NoError(t, err, "every supported policy version needs a stored fixture; see the comment at the top of this file")
+	var policies map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &policies))
+	return policies
+}
+
+// inheritedStoredPolicies returns the compacted bytes of every policy the
+// fixtures before version hold, each from the latest file that has it.
+func inheritedStoredPolicies(t *testing.T, version DelegatedPolicyVersion) map[string]string {
+	t.Helper()
+
+	inherited := make(map[string]string)
+	for earlier := DelegatedPolicyVersion1; earlier < version; earlier++ {
+		for name, stored := range readStoredPolicyFixture(t, earlier) {
+			var compact bytes.Buffer
+			require.NoError(t, json.Compact(&compact, stored))
+			inherited[name] = compact.String()
+		}
+	}
+	return inherited
+}
+
 func describeRuntimeGrant(grant authz.Grant) string {
 	selector, err := json.Marshal(grant.Selector)
 	if err != nil {
@@ -107,7 +137,8 @@ func describeRuntimeGrant(grant authz.Grant) string {
 
 // writeStoredPolicyFixtureFile issues, at version, one policy per scope that is
 // agent-runtime-safe at that version, one with a concrete MCP selector, and
-// one carrying a retired and an unknown scope, and stores their bytes.
+// one carrying a retired and an unknown scope, and stores the bytes of those
+// that differ from what earlier versions' fixtures already hold.
 func writeStoredPolicyFixtureFile(t *testing.T, version DelegatedPolicyVersion) {
 	t.Helper()
 
@@ -116,13 +147,16 @@ func writeStoredPolicyFixtureFile(t *testing.T, version DelegatedPolicyVersion) 
 	require.ErrorIs(t, err, fs.ErrNotExist, "%s already exists; stored fixtures are never regenerated", path)
 
 	registry := RuntimeScopeRegistryVersion(version)
+	inherited := inheritedStoredPolicies(t, version)
 	out := make(map[string]json.RawMessage)
 	issue := func(name string, grants ...authz.Grant) {
 		policy, err := NewDelegatedPolicy(version, grants)
 		require.NoError(t, err, "issue %q", name)
 		raw, err := EncodeDelegatedPolicy(version, policy)
 		require.NoError(t, err)
-		out[name] = raw
+		if inherited[name] != string(raw) {
+			out[name] = raw
+		}
 	}
 	for scope := range runtimeScopeDefinitions {
 		if IsRuntimeScopeSafe(registry, scope) {
@@ -137,7 +171,9 @@ func writeStoredPolicyFixtureFile(t *testing.T, version DelegatedPolicyVersion) 
 			"tool":                        "tool-a",
 		}))
 	}
-	out["retired and unknown entries"] = json.RawMessage(`{"requested":[{"scope":"future:read","selector":{"resource_id":"*","resource_kind":"future"}},{"scope":"mcp_approval:read","selector":{"resource_id":"*","resource_kind":"mcp_approval"}},{"scope":"project:read","selector":{"resource_id":"*","resource_kind":"project"}}],"effective":[{"scope":"future:read","selector":{"resource_id":"*","resource_kind":"future"}},{"scope":"mcp_approval:read","selector":{"resource_id":"*","resource_kind":"mcp_approval"}},{"scope":"project:read","selector":{"resource_id":"*","resource_kind":"project"}}]}`)
+	if _, ok := inherited["retired and unknown entries"]; !ok {
+		out["retired and unknown entries"] = json.RawMessage(`{"requested":[{"scope":"future:read","selector":{"resource_id":"*","resource_kind":"future"}},{"scope":"mcp_approval:read","selector":{"resource_id":"*","resource_kind":"mcp_approval"}},{"scope":"project:read","selector":{"resource_id":"*","resource_kind":"project"}}],"effective":[{"scope":"future:read","selector":{"resource_id":"*","resource_kind":"future"}},{"scope":"mcp_approval:read","selector":{"resource_id":"*","resource_kind":"mcp_approval"}},{"scope":"project:read","selector":{"resource_id":"*","resource_kind":"project"}}]}`)
+	}
 
 	raw, err := json.MarshalIndent(out, "", "  ")
 	require.NoError(t, err)
