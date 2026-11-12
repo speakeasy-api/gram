@@ -257,7 +257,7 @@ func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesir
 			continue
 		}
 		key, err := p.api.CreateAuthKey(ctx, creds, tailscaleapi.AuthKeyRequest{
-			Tag: p.cfg.Tag, Description: fmt.Sprintf("Speakeasy gateway slot %d (%s)", node.Slot, desired.ID), TTL: p.cfg.AuthKeyTTL,
+			Tag: p.cfg.Tag, Description: authKeyDescription(desired.ID, node.Slot), TTL: p.cfg.AuthKeyTTL,
 		})
 		if err != nil {
 			return apiFailure(err)
@@ -279,6 +279,14 @@ func (p *Provisioner) apply(ctx context.Context, desired k8s.NetworkIngressDesir
 	}
 
 	return p.observe(ctx, desired.ID, desired.OrganizationID)
+}
+
+// authKeyDescription describes the auth key minted for one slot, as the admin
+// console lists it. Tailscale rejects descriptions with punctuation and caps
+// them at 50 characters, so it uses letters, digits and spaces and the first
+// eight characters of the connection id.
+func authKeyDescription(ingressID uuid.UUID, slot int32) string {
+	return fmt.Sprintf("Speakeasy gateway %s slot %d", ingressID.String()[:8], slot)
 }
 
 // resetRefusedSlot replaces an identity control no longer accepts, typically
