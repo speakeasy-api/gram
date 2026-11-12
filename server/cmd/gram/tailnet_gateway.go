@@ -145,7 +145,7 @@ func newTailnetGatewayCommand() *cli.Command {
 		},
 	}
 	flags = append(flags, networkIngressQueueFlags()...)
-	flags = append(flags, orgEncryptionFlags()...)
+	flags = append(flags, orgEncryptionServiceFlags()...)
 	return &cli.Command{
 		Name:  "tailnet-gateway",
 		Usage: "Host private network ingresses on customer tailnets with tsnet",
