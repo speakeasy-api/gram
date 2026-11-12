@@ -182,12 +182,20 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 
 	fqdn := ln.FQDN
 	cert := newCertificateTracker(fqdn, func(ctx context.Context) error {
-		if locker, ok := spec.Store.(certificateLocker); ok {
-			unlock, err := locker.LockCertificate(ctx)
-			if err != nil {
-				return fmt.Errorf("wait for tailnet service certificate lock: %w", err)
+		// A stored certificate is reused without the lease: that is every
+		// start after the first issuance, so restarting a pod with many
+		// connections takes no leases.
+		if issuer, ok := spec.Store.(certificateIssuer); ok {
+			if _, _, err := issuer.ReadTLSCertAndKey(fqdn); err != nil {
+				release, claimed, err := issuer.ClaimCertificateIssuance(ctx)
+				if err != nil {
+					return fmt.Errorf("claim tailnet service certificate lease: %w", err)
+				}
+				if !claimed {
+					return errCertificateIssuing
+				}
+				defer release()
 			}
-			defer unlock()
 		}
 		if _, _, err := lc.CertPair(ctx, fqdn); err != nil {
 			return fmt.Errorf("obtain tailnet service certificate: %w", err)

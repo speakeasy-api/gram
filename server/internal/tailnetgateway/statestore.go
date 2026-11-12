@@ -287,28 +287,44 @@ func (s *PostgresStateStore) Reset(ctx context.Context) error {
 	return nil
 }
 
-// LockCertificate holds the connection's certificate lock until the returned
-// function is called, so its slots request the certificate one at a time:
-// tsnet reads the stored certificate before asking Let's Encrypt, so a slot
-// that waited finds the one the holder stored instead of issuing another.
-// The lock is held on one pooled connection for the duration.
-func (s *PostgresStateStore) LockCertificate(ctx context.Context) (func(), error) {
-	conn, err := s.db.Acquire(ctx)
+const (
+	// certificateLeaseStateKey stores the lease a slot holds while it
+	// requests the connection's certificate.
+	certificateLeaseStateKey = "issuance-lease"
+
+	// certificateLeaseDuration is how long a lease lasts if its holder never
+	// releases it, as when its pod dies mid-request. It outlasts
+	// certificateFetchTimeout, so a live request never loses its lease.
+	certificateLeaseDuration = 3 * time.Minute
+)
+
+// ClaimCertificateIssuance claims the connection's certificate lease, so its
+// slots request the certificate one at a time: tsnet reads the stored
+// certificate before asking Let's Encrypt, so a slot that found the lease
+// taken and retried later finds the certificate the holder stored instead of
+// issuing another. Claiming holds no database connection. It reports false
+// when another slot holds a live lease; otherwise release ends the lease.
+func (s *PostgresStateStore) ClaimCertificateIssuance(ctx context.Context) (func(), bool, error) {
+	marker, err := s.enc.Encrypt(ctx, nodeStateColumn, []byte("issuing"))
 	if err != nil {
-		return nil, fmt.Errorf("acquire connection for tailnet certificate lock: %w", err)
+		return nil, false, fmt.Errorf("encrypt tailnet certificate lease: %w", err)
 	}
-	if err := repo.New(conn).LockNetworkIngressCertificate(ctx, s.ingressID.String()); err != nil {
-		conn.Release()
-		return nil, fmt.Errorf("lock tailnet certificate: %w", err)
+	claimed, err := repo.New(s.db).ClaimNetworkIngressCertificateIssuance(ctx, repo.ClaimNetworkIngressCertificateIssuanceParams{
+		NetworkIngressID: s.ingressID, OrganizationID: s.orgID, StateKey: certificateLeaseStateKey,
+		ValueEncrypted: marker, LeaseSeconds: certificateLeaseDuration.Seconds(),
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("claim tailnet certificate lease: %w", err)
+	}
+	if claimed == 0 {
+		return nil, false, nil
 	}
 	return func() {
-		unlockCtx, cancel := context.WithTimeout(context.Background(), stateStoreTimeout)
+		releaseCtx, cancel := context.WithTimeout(context.Background(), stateStoreTimeout)
 		defer cancel()
-		// A failed unlock leaves the lock to the session; destroying the
-		// connection ends the session and releases it.
-		if err := repo.New(conn).UnlockNetworkIngressCertificate(unlockCtx, s.ingressID.String()); err != nil {
-			_ = conn.Conn().Close(unlockCtx)
-		}
-		conn.Release()
-	}, nil
+		// A lease left behind lapses after certificateLeaseDuration.
+		_ = repo.New(s.db).ReleaseNetworkIngressCertificateIssuance(releaseCtx, repo.ReleaseNetworkIngressCertificateIssuanceParams{
+			NetworkIngressID: s.ingressID, OrganizationID: s.orgID, StateKey: certificateLeaseStateKey,
+		})
+	}, true, nil
 }

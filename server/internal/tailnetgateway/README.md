@@ -53,9 +53,12 @@ per-ingress attestor pods.
   at start, and retries at Let's Encrypt's stated retry time when refused.
   Until it is issued the slot reports `awaiting_certificate`: its message says
   the request is in progress or, after a refusal, why and when it retries.
-  The ingress shows `provider_certificate_unavailable`. Slots of one
-  connection take turns requesting it, under a Postgres advisory lock, so
-  the one that waited finds the certificate already stored.
+  The ingress shows `provider_certificate_unavailable`. A slot reuses a
+  stored certificate directly; to request a missing one it first claims a
+  short lease row in `network_ingress_certificate_states`, so slots of one
+  connection take turns and the one that waited finds the certificate
+  already stored. The lease holds no database connection, so a pod
+  starting hundreds of connections cannot exhaust its pool.
 
 ## Encryption
 

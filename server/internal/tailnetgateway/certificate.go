@@ -2,6 +2,7 @@ package tailnetgateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -41,6 +42,10 @@ const (
 	// after approval.
 	certificateDomainRetry = 15 * time.Second
 
+	// certificateIssuingRetry is the retry while another slot holds the
+	// issuance lease; first issuance usually takes a few seconds.
+	certificateIssuingRetry = 5 * time.Second
+
 	// certificateRetryMin and certificateRetryMax bound the backoff after any
 	// other failure. The maximum stays under tsnet's hourly refresh so the
 	// node, not that refresh, is what notices a recovered issuer.
@@ -52,11 +57,18 @@ const (
 // refusal, such as "retry after 2026-11-12 22:53:32 UTC".
 var acmeRetryAfterPattern = regexp.MustCompile(`retry after (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})`)
 
-// certificateLocker is implemented by state stores that share a certificate
-// across a connection's slots, so the slots can request it one at a time.
-type certificateLocker interface {
-	LockCertificate(ctx context.Context) (func(), error)
+// certificateIssuer is implemented by state stores that share a certificate
+// across a connection's slots: a slot reads the stored certificate, and
+// claims the issuance lease before requesting a missing one.
+type certificateIssuer interface {
+	ReadTLSCertAndKey(domain string) ([]byte, []byte, error)
+	ClaimCertificateIssuance(ctx context.Context) (func(), bool, error)
 }
+
+// errCertificateIssuing reports that another slot holds the connection's
+// issuance lease. The slot retries shortly and then finds the certificate
+// stored; it is not a failure.
+var errCertificateIssuing = errors.New("another gateway slot is obtaining the certificate")
 
 // certificateFetcher obtains the certificate for the node's service name.
 type certificateFetcher func(ctx context.Context) error
@@ -205,7 +217,7 @@ func (t *certificateTracker) request() {
 	}
 
 	now := t.now()
-	if !isCertificateRateLimited(err) && !isCertificateDomainPending(err) {
+	if !isCertificateRateLimited(err) && !isCertificateDomainPending(err) && !errors.Is(err, errCertificateIssuing) {
 		t.failures++
 	}
 	t.lastErr = err
@@ -249,6 +261,9 @@ func nextCertificateRetry(now time.Time, err error, failures int) time.Time {
 	if isCertificateDomainPending(err) {
 		return now.Add(certificateDomainRetry)
 	}
+	if errors.Is(err, errCertificateIssuing) {
+		return now.Add(certificateIssuingRetry)
+	}
 
 	backoff := certificateRetryMin
 	for i := 1; i < max(failures, 1) && backoff < certificateRetryMax; i++ {
@@ -260,6 +275,9 @@ func nextCertificateRetry(now time.Time, err error, failures int) time.Time {
 // certificateFailureMessage is the slot's last_error while it waits for a
 // certificate.
 func certificateFailureMessage(domain string, err error, retryAt time.Time) string {
+	if errors.Is(err, errCertificateIssuing) {
+		return "another gateway slot is obtaining the TLS certificate for " + domain
+	}
 	retry := retryAt.UTC().Format("2006-01-02 15:04 UTC")
 	if isCertificateRateLimited(err) {
 		return fmt.Sprintf("Let's Encrypt is rate limiting new certificates for this tailnet; retrying after %s", retry)

@@ -228,11 +228,20 @@ DELETE FROM network_ingress_certificate_states
 WHERE network_ingress_id = @network_ingress_id
   AND organization_id = @organization_id;
 
--- name: LockNetworkIngressCertificate :exec
--- Session lock serializing certificate issuance across a connection's slots:
--- a slot that waits for it finds the certificate the holder stored and does
--- not request another.
-SELECT pg_advisory_lock(hashtextextended('network_ingress_certificate:' || @network_ingress_id::text, 0));
+-- name: ClaimNetworkIngressCertificateIssuance :execrows
+-- A lease, not a lock: claiming it holds no connection while the certificate
+-- is requested. One row is affected when this caller now holds the lease
+-- (none was held, or the holder's lease lapsed), none when another slot holds
+-- a live one.
+INSERT INTO network_ingress_certificate_states (network_ingress_id, organization_id, state_key, value_encrypted)
+VALUES (@network_ingress_id, @organization_id, @state_key, @value_encrypted)
+ON CONFLICT (network_ingress_id, state_key) DO UPDATE
+SET value_encrypted = EXCLUDED.value_encrypted,
+    updated_at = clock_timestamp()
+WHERE network_ingress_certificate_states.updated_at < clock_timestamp() - make_interval(secs => @lease_seconds::float8);
 
--- name: UnlockNetworkIngressCertificate :exec
-SELECT pg_advisory_unlock(hashtextextended('network_ingress_certificate:' || @network_ingress_id::text, 0));
+-- name: ReleaseNetworkIngressCertificateIssuance :exec
+DELETE FROM network_ingress_certificate_states
+WHERE network_ingress_id = @network_ingress_id
+  AND organization_id = @organization_id
+  AND state_key = @state_key;

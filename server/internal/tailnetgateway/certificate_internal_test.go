@@ -150,6 +150,27 @@ func TestCertificateTrackerBacksOffOnlyForRealFailures(t *testing.T) {
 	require.Equal(t, now.Add(certificateRetryMin), tracker.retryAt, "the first real failure backs off by the minimum")
 }
 
+func TestCertificateTrackerWaitsForAnotherSlotWithoutBackingOff(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
+	fetch := &scriptedFetch{mu: sync.Mutex{}, errs: []error{errCertificateIssuing}, calls: 0, called: make(chan struct{}, 4)}
+	tracker := newCertificateTracker("private.example.ts.net", fetch.fetch, testenv.NewLogger(t), func() time.Time { return now })
+	t.Cleanup(tracker.Close)
+
+	_, _ = tracker.Poll()
+	<-fetch.called
+	settle(t, tracker)
+	ready, reason := tracker.Poll()
+	require.False(t, ready)
+	require.Equal(t, "another gateway slot is obtaining the TLS certificate for private.example.ts.net", reason)
+	require.False(t, tracker.nextRequestAfter(now.Add(certificateStartWait)), "a start waits for the other slot to store the certificate")
+
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	require.Zero(t, tracker.failures, "waiting for another slot is not a failure")
+	require.Equal(t, now.Add(certificateIssuingRetry), tracker.retryAt)
+}
+
 func TestNextCertificateRetry(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
