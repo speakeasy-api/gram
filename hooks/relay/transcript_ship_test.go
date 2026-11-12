@@ -773,8 +773,8 @@ func TestCoworkUploadNamesTheClaudeAccount(t *testing.T) {
 	require.Equal(t, "cowork@example.com", uploads[0].UserEmail)
 }
 
-// TestCoworkSurfacesServerWarnings: Cowork relays no per-event hook, so a warn
-// policy can only act on the prompt once the transcript reaches the server.
+// TestCoworkSurfacesServerWarnings: the Stop-side transcript scan warns about
+// prompts no Cowork hook handled, such as the first message of a session.
 // The warnings the server returns make Claude continue once and tell the user;
 // a Stop that ships nothing new finishes as before.
 func TestCoworkSurfacesServerWarnings(t *testing.T) {

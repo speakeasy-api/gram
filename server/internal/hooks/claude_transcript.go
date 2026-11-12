@@ -285,7 +285,9 @@ func (s *Service) persistClaudeTranscript(ctx context.Context, authCtx *contextv
 	held, err := s.heldClaudePromptKeys(ctx, chatID, projectID, rows)
 	if err != nil {
 		s.logger.WarnContext(ctx, "could not list stored claude prompt keys; scanning every uploaded prompt",
+			attr.SlogEvent("hooks_claude_transcript_prompt_keys_failed"),
 			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
 			attr.SlogGenAIConversationID(upload.SessionID),
 		)
 		held = map[string]bool{}

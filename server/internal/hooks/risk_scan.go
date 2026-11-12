@@ -203,25 +203,37 @@ func renderUserBlockReason(scanResult *risk.ScanResult, auditReason string) stri
 }
 
 // maskBlockedMatch is %{match} in a block message. A block exists to keep the
-// value out of the session, so the message names it without repeating it:
-// the first and last four characters, or nothing for a short value. Repeating
-// a live credential also makes Claude's apps drop the whole message.
+// value out of the session, so the message only hints at it: up to four
+// characters from each end, and never more than a quarter of the value, so
+// the person can tell which value was caught. A value of 12 characters or
+// fewer shows as "…". A match with no value (an LLM judge finding) renders
+// as an empty string rather than suggest a hidden value. Repeating a live
+// credential in full also makes Claude's apps drop the whole message.
 func maskBlockedMatch(v string) string {
 	r := []rune(v)
+	if len(r) == 0 {
+		return ""
+	}
 	if len(r) <= 12 {
 		return "…"
 	}
-	return string(r[:4]) + "…" + string(r[len(r)-4:])
+	show := min(4, len(r)/8)
+	return string(r[:show]) + "…" + string(r[len(r)-show:])
 }
 
+// shadowMCPEntity is %{entity} in a shadow-MCP block message.
+const shadowMCPEntity = "shadow MCP server"
+
 // renderPolicyUserMessage applies a policy's user_message override to a deny
-// that has no ScanResult behind it (the shadow-MCP guard); the audit reason
-// is rendered verbatim when there is none.
-func renderPolicyUserMessage(userMessage *string, auditReason string) string {
-	if userMessage != nil && *userMessage != "" {
-		return *userMessage
+// that has no ScanResult behind it (the shadow-MCP guard). The template takes
+// the same placeholders as other block messages: %{match} is the observed
+// server, %{policy} the policy name, and %{rule} is empty. The audit reason
+// is rendered verbatim when there is no override.
+func renderPolicyUserMessage(userMessage *string, auditReason, policyName, server string) string {
+	if userMessage == nil || strings.TrimSpace(*userMessage) == "" {
+		return auditReason
 	}
-	return auditReason
+	return fillPolicyPlaceholders(*userMessage, server, shadowMCPEntity, policyName, "")
 }
 
 // analysisUnavailableReason is the user-facing deny copy for a fail-closed
@@ -340,11 +352,15 @@ func renderPolicyPlaceholders(message string, scanResult *risk.ScanResult, match
 	if entity == "" {
 		entity = scanResult.RuleID
 	}
+	return fillPolicyPlaceholders(message, match, entity, scanResult.PolicyName, scanResult.RuleID)
+}
+
+func fillPolicyPlaceholders(message, match, entity, policy, rule string) string {
 	return strings.NewReplacer(
 		"%{match}", match,
 		"%{entity}", entity,
-		"%{policy}", scanResult.PolicyName,
-		"%{rule}", scanResult.RuleID,
+		"%{policy}", policy,
+		"%{rule}", rule,
 	).Replace(message)
 }
 

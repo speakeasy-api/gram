@@ -44,7 +44,8 @@ type shadowMCPRequestLink struct {
 }
 
 func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params shadowMCPRequestLinkParams) string {
-	message := renderPolicyUserMessage(params.UserMessage, params.AuditReason)
+	server := conv.PtrValOr(shadowmcp.ObservedName(shadowmcp.NormalizeAccessEvidence(params.Evidence), params.ToolName), "")
+	message := renderPolicyUserMessage(params.UserMessage, params.AuditReason, params.PolicyName, server)
 	link, ok := s.shadowMCPApprovalRequestURL(ctx, params)
 	if !ok {
 		return message
