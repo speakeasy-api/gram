@@ -43,7 +43,7 @@ const (
 
 	memoryEvalCompensationAttemptTimeout   = 30 * time.Second
 	memoryEvalCompensationScheduleToClose  = 4 * time.Minute
-	memoryEvalRunWorkflowRunTimeout        = 3*time.Hour + 20*time.Minute
+	MemoryEvalRunWorkflowRunTimeout        = 3*time.Hour + 20*time.Minute
 	memoryEvalRunActivityHeartbeatInterval = 30 * time.Second
 )
 
@@ -66,7 +66,7 @@ func ExecuteMemoryEvalRunWorkflow(ctx context.Context, temporalEnv *tenv.Environ
 		TaskQueue:                string(temporalEnv.Queue()),
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		WorkflowRunTimeout:       memoryEvalRunWorkflowRunTimeout,
+		WorkflowRunTimeout:       MemoryEvalRunWorkflowRunTimeout,
 	}, MemoryEvalRunWorkflow, input)
 	if err != nil {
 		return nil, fmt.Errorf("execute memory eval run workflow: %w", err)

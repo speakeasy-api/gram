@@ -16,10 +16,12 @@ ORDER BY created_at DESC, id DESC
 LIMIT @row_limit;
 
 -- name: CountRunsSince :one
--- Runs started since a time, for the daily cap. Failed and deleted runs count
--- too: they spent credits, and deleting a run must not refund the cap.
+-- Runs created since a time, for the daily cap. Failed and deleted runs count
+-- too: they spent credits, and deleting a run must not refund the cap. A run
+-- that failed before any workflow claimed it spent nothing, so it is left out.
 SELECT count(*) FROM memory_eval_runs
-WHERE created_at >= @since;
+WHERE created_at >= @since
+  AND NOT (status = 'failed' AND started_at IS NULL);
 
 -- name: MarkRunRunning :one
 -- Claims a queued run. Returns no row when the run is gone or was already
@@ -49,9 +51,18 @@ SELECT pg_advisory_xact_lock(hashtext('memory_eval_runs.start'));
 
 -- name: CountActiveRuns :one
 -- Runs that may still write team memory. Two at once would overwrite each
--- other's summaries and digests in the shared eval projects.
+-- other's summaries and digests in the shared eval projects. A soft-deleted
+-- run counts while it is unresolved: deleting the row does not stop it.
 SELECT count(*) FROM memory_eval_runs
-WHERE deleted IS FALSE AND status IN ('queued', 'running');
+WHERE status IN ('queued', 'running');
+
+-- name: FailStaleActiveRuns :execrows
+-- Fails queued or running runs created before a cutoff older than any live
+-- workflow. Nothing else resolves a row whose workflow never started or was
+-- terminated, and an unresolved row blocks every later start.
+UPDATE memory_eval_runs
+SET status = 'failed', error = @error, finished_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE status IN ('queued', 'running') AND created_at < @created_before;
 
 -- name: GetRunStatus :one
 -- A live run's status, so a claim that found nothing can tell an orphaned

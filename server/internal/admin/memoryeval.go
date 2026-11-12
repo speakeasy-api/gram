@@ -32,7 +32,7 @@ func (s *Service) SetMemoryEvalRunStarter(starter MemoryEvalRunStarter) {
 }
 
 func (s *Service) GetMemoryEvalOptions(ctx context.Context, _ *gen.GetMemoryEvalOptionsPayload) (*gen.AdminMemoryEvalOptions, error) {
-	today, err := repo.New(s.db).CountRunsSince(ctx, memoryEvalDayStart())
+	today, err := evalrun.RunsInWindow(ctx, s.db)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count memory eval runs").LogError(ctx, s.logger)
 	}
@@ -99,14 +99,19 @@ func (s *Service) GetMemoryEvalRun(ctx context.Context, payload *gen.GetMemoryEv
 
 func (s *Service) StartMemoryEvalRun(ctx context.Context, payload *gen.StartMemoryEvalRunPayload) (*gen.AdminMemoryEvalRun, error) {
 	if s.memoryEvalStarter == nil {
-		return nil, oops.E(oops.CodeUnexpected, nil, "memory eval runs are not configured on this server")
+		return nil, oops.E(oops.CodeUnavailable, nil, "memory eval runs are not available on this server").LogWarn(ctx, s.logger)
 	}
 	cfg := memoryEvalConfigFromPayload(payload.Config)
 	if err := cfg.Validate(); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err.Error())
 	}
+	// requested_by is the only record of who started a run that spends
+	// model credit, so a start without a staff email is refused.
 	_, _, operatorEmail := adminActor(ctx)
-	requestedBy := conv.PtrValOr(operatorEmail, "unknown")
+	if operatorEmail == nil || *operatorEmail == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	requestedBy := *operatorEmail
 
 	run, err := evalrun.Queue(ctx, s.db, cfg, requestedBy)
 	switch {
@@ -115,7 +120,7 @@ func (s *Service) StartMemoryEvalRun(ctx context.Context, payload *gen.StartMemo
 	case errors.Is(err, evalrun.ErrRunActive):
 		return nil, oops.E(oops.CodeConflict, err, "another memory eval run is queued or running")
 	case errors.Is(err, evalrun.ErrDailyLimit):
-		return nil, oops.E(oops.CodeRateLimitExceeded, err, "%d memory eval runs already started in the last 24 hours", evalrun.DailyRunLimit)
+		return nil, oops.E(oops.CodeRateLimitExceeded, err, "%d memory eval runs already started in the last %s", evalrun.DailyRunLimit, evalrun.RunWindow)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "queue memory eval run").LogError(ctx, s.logger)
 	}
@@ -129,10 +134,6 @@ func (s *Service) StartMemoryEvalRun(ctx context.Context, payload *gen.StartMemo
 	}
 	logger.InfoContext(ctx, "started memory eval run")
 	return memoryEvalRunView(run, false), nil
-}
-
-func memoryEvalDayStart() pgtype.Timestamptz {
-	return pgtype.Timestamptz{Time: time.Now().Add(-24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true}
 }
 
 func memoryEvalConfigView(cfg evalrun.Config) *gen.AdminMemoryEvalRunConfig {
