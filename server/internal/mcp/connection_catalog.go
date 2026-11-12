@@ -94,6 +94,10 @@ type connectionCatalogMember struct {
 	// Auth binds a proxied member's shared-runtime choice; hosted members use
 	// their toolset's authentication and leave this nil.
 	Auth *connectionCatalogAuth `json:"auth,omitempty"`
+	// Description is the member's own one-line description, captured at
+	// consent so discovery can say what the server is for without contacting
+	// it. An approval stored before it was recorded has none.
+	Description string `json:"description,omitempty"`
 }
 
 // configurationChanged reports whether the member's stored configuration
@@ -401,7 +405,7 @@ func (s *Service) rejectConnectionCatalog(ctx context.Context, endpoint *Resolve
 // describeCachedMember applies current tool permissions to stored definitions.
 // It never resolves upstream tokens or starts an MCP session.
 func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, description: gate.catalog.Members[member.slug].Description}
 	checks := []authz.Check{}
 	var dispositions map[string]string
 	private := member.visibility != "public"

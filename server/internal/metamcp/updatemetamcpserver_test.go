@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	gatewaymcp "github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -526,6 +527,20 @@ func TestUpdateMetaMcpServer_Instructions(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Nil(t, fetched.Instructions)
+
+	// Saving a copy of a built-in text, as the settings page's copy button
+	// invites, keeps the gateway on the built-in instructions.
+	copied, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                "renamed gateway",
+		UserSessionIssuerID: nil,
+		Instructions:        conv.PtrEmpty("  " + gatewaymcp.Instructions + "\n"),
+	})
+	require.NoError(t, err)
+	require.Nil(t, copied.Instructions)
 }
 
 // Goa accepts a JSON \u0000 but Postgres text rejects NUL, so the handler
