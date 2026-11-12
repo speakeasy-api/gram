@@ -298,6 +298,23 @@ func (f *gatewayFixture) waitForHosts(t *testing.T, count int) {
 	}, 10*time.Second, 20*time.Millisecond)
 }
 
+func TestGatewayQualifiesNodeHostnames(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newGatewayFixture(t, "tailnetgatewayqualifier", 1, func(cfg *tailnetgateway.Config, _ *fakeRuntime) {
+		cfg.HostnameQualifier = "dev-ab12"
+	})
+	ingressID, orgID := seedIngress(t, f.db, "gateway-qualifier")
+	f.seedSlot(t, ingressID, orgID, 1, "tskey-auth-one-shot")
+
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+
+	nodes := f.runtime.started()
+	require.Len(t, nodes, 1)
+	require.Equal(t, "speakeasy-gw-dev-ab12-1", nodes[0].spec.Hostname, "the qualifier sits between the prefix and the slot")
+}
+
 func TestGatewayHostsIngressAtOrdinalAndHeartbeats(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -828,6 +845,7 @@ func TestConfigValidate(t *testing.T) {
 		"negative ordinal": func(c *tailnetgateway.Config) { c.Ordinal = -1 },
 		"empty shard":      func(c *tailnetgateway.Config) { c.Shard = "" },
 		"bad tag":          func(c *tailnetgateway.Config) { c.Tag = "speakeasy" },
+		"bad qualifier":    func(c *tailnetgateway.Config) { c.HostnameQualifier = "Dev_AB12" },
 		"http upstream":    func(c *tailnetgateway.Config) { c.Upstream = &url.URL{Scheme: "http", Host: "listener"} },
 		"upstream path":    func(c *tailnetgateway.Config) { c.Upstream = &url.URL{Scheme: "https", Host: "listener", Path: "/mcp"} },
 		"upstream query": func(c *tailnetgateway.Config) {

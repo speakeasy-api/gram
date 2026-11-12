@@ -76,6 +76,11 @@ func newTailnetGatewayCommand() *cli.Command {
 			EnvVars: []string{"GRAM_TAILNET_GATEWAY_TAG"},
 		},
 		&cli.StringFlag{
+			Name:    "hostname-qualifier",
+			Usage:   "Inserted into node hostnames (speakeasy-gw-<qualifier>-<slot>) to tell a non-production gateway's devices apart; leave empty in production",
+			EnvVars: []string{"GRAM_TAILNET_GATEWAY_HOSTNAME_QUALIFIER"},
+		},
+		&cli.StringFlag{
 			Name:     "upstream-url",
 			Usage:    "Speakeasy private listener URL",
 			EnvVars:  []string{"GRAM_TAILNET_GATEWAY_UPSTREAM_URL"},
@@ -319,6 +324,7 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 		Shard:              c.String("shard"),
 		StateDir:           stateDir,
 		Tag:                c.String("tag"),
+		HostnameQualifier:  c.String("hostname-qualifier"),
 		Upstream:           upstream,
 		UpstreamTransport:  transport,
 		TokenPath:          c.String("token-path"),

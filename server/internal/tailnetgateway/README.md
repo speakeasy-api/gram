@@ -142,6 +142,15 @@ production code path. The key and token live in `local/netingress/`, are
 created on first start, and the token is re-minted on every gateway start.
 The listener accepts local tokens only in the `local` environment.
 
+Local devices are named `speakeasy-gw-dev-<id>-<slot>` rather than
+production's `speakeasy-gw-<slot>`, so they stand out on a tailnet that
+production gateways also serve. `<id>` is `GRAM_TAILNET_GATEWAY_DEV_ID` in
+`mise.local.toml`: four characters derived from the machine and worktree path,
+written by `mise run zero:tailnet-gateway` (also run by `./zero`, new
+worktrees and the gateway's first start). The service is still
+`svc:<hostname>`, so pick a private hostname that no production connection on
+that tailnet uses.
+
 1. Make sure `./zero` has configured organization encryption
    (`mise run zero:org-encryption`).
 2. Grant your local organization the `network_ingress` feature on its

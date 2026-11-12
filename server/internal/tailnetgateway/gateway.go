@@ -76,6 +76,10 @@ type Config struct {
 	// Tag is the ACL tag every node advertises.
 	Tag string
 
+	// HostnameQualifier is inserted into every node hostname to tell this
+	// gateway's devices apart from production's; empty in production.
+	HostnameQualifier string
+
 	// Upstream is the private listener the gateway proxies to.
 	Upstream *url.URL
 
@@ -117,6 +121,9 @@ func (c Config) Validate() error {
 		return errors.New("tailnet gateway state directory is required")
 	}
 	if err := ValidateTag(c.Tag); err != nil {
+		return err
+	}
+	if err := ValidateHostnameQualifier(c.HostnameQualifier); err != nil {
 		return err
 	}
 	if c.Upstream == nil || c.Upstream.Scheme != "https" || c.Upstream.Host == "" {
@@ -651,7 +658,7 @@ func (g *Gateway) start(ctx context.Context, s *slot) {
 	startedAt := g.now()
 	node, err := g.runtime.Start(ctx, NodeSpec{
 		IngressID: want.id, OrganizationID: want.organizationID, Slot: g.cfg.Ordinal,
-		Hostname: NodeHostname(g.cfg.Ordinal), ServiceName: ServiceName(want.label), Tag: g.cfg.Tag,
+		Hostname: NodeHostname(g.cfg.HostnameQualifier, g.cfg.Ordinal), ServiceName: ServiceName(want.label), Tag: g.cfg.Tag,
 		AuthKey: authKey, Store: store, StateDir: filepath.Join(g.cfg.StateDir, want.id.String()),
 		ControlURL: g.cfg.ControlURL, StartTimeout: g.cfg.StartTimeout,
 		CertificateEvents: func(ctx context.Context, operation CertificateOperation, result CertificateResult) {

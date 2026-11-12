@@ -69,12 +69,35 @@ const (
 
 	// nodeHostnamePrefix precedes the slot number in a node's hostname.
 	nodeHostnamePrefix = "speakeasy-gw-"
+
+	// maxHostnameQualifierLength bounds a hostname qualifier so the full node
+	// hostname (prefix, qualifier, separator and a slot up to maxSlot) stays
+	// well inside the 63-character DNS label limit.
+	maxHostnameQualifierLength = 24
 )
 
 // NodeHostname is the tailnet hostname of the node hosting one slot. Node and
-// service names share MagicDNS, so it is distinct from the service label.
-func NodeHostname(slot int32) string {
-	return fmt.Sprintf("%s%d", nodeHostnamePrefix, slot)
+// service names share MagicDNS, so it is distinct from the service label. A
+// non-empty qualifier is inserted before the slot, so a non-production
+// gateway's devices (speakeasy-gw-dev-ab12-0) can be told apart from
+// production's (speakeasy-gw-0) on a tailnet both join.
+func NodeHostname(qualifier string, slot int32) string {
+	if qualifier == "" {
+		return fmt.Sprintf("%s%d", nodeHostnamePrefix, slot)
+	}
+	return fmt.Sprintf("%s%s-%d", nodeHostnamePrefix, qualifier, slot)
+}
+
+// ValidateHostnameQualifier accepts an empty qualifier or a short lowercase
+// DNS label.
+func ValidateHostnameQualifier(value string) error {
+	if value == "" {
+		return nil
+	}
+	if len(value) > maxHostnameQualifierLength || len(k8svalidation.IsDNS1123Label(value)) > 0 {
+		return fmt.Errorf("invalid node hostname qualifier %q: use up to %d lowercase letters, digits or hyphens", value, maxHostnameQualifierLength)
+	}
+	return nil
 }
 
 // ServiceName is the Tailscale Service advertised for one ingress label.
