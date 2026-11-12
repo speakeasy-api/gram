@@ -15,6 +15,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -155,6 +156,17 @@ func TestListAgentCredentialActivityRejectsDisagreeingTenancy(t *testing.T) {
 	foreignSessionProject := activitySessionFixture(t, conn, "org-a", agent.ID, used)
 	foreignSessionProject.ProjectID = uuid.NullUUID{UUID: foreignProject.ID, Valid: true}
 	require.NoError(t, queries.SeedAgentCredentialSessionActivityFixture(t.Context(), foreignSessionProject))
+	// A project-tier issuer whose project lives in another organization, with
+	// no organization of its own, must not lend its sessions to this one.
+	projectIssuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(t.Context(), usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID: foreignProject.ID, OrganizationID: conv.PtrToPGText(nil), Slug: "activity-" + uuid.NewString(), AuthnChallengeMode: "interactive",
+		SessionDuration:         pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+		AuthorizationServerMode: pgtype.Text{String: "", Valid: false}, UseAuthenticationHost: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+	foreignProjectIssuer := activitySessionFixture(t, conn, "org-a", agent.ID, used)
+	foreignProjectIssuer.IssuerID = projectIssuer.ID
+	require.NoError(t, queries.SeedAgentCredentialSessionActivityFixture(t.Context(), foreignProjectIssuer))
 	require.NoError(t, queries.SeedAgentCredentialKeyActivityFixture(t.Context(), activityKeyFixture("org-b", "owner", agent.ID, used)))
 	foreignKeyProject := activityKeyFixture("org-a", "owner", agent.ID, used)
 	foreignKeyProject.ProjectID = uuid.NullUUID{UUID: foreignProject.ID, Valid: true}
