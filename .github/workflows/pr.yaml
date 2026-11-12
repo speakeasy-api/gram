@@ -1918,7 +1918,11 @@ jobs:
           pattern: authz-coverage-shard-*
           path: authz-coverage
 
+      # Report-only until the allowlist is seeded from the candidate artifact
+      # below: the step prints every uncovered endpoint but does not fail the
+      # job. Remove continue-on-error once the allowlist is committed.
       - name: Check endpoint coverage
+        continue-on-error: true
         run: mise run test:authz-coverage --records authz-coverage
 
       - name: Write candidate allowlist
@@ -1934,6 +1938,7 @@ jobs:
           name: authz-coverage-candidate-allowlist
           path: ${{ runner.temp }}/allowlist.txt
           if-no-files-found: ignore
+          overwrite: true
           retention-days: 14
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed

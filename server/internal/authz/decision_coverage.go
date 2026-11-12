@@ -84,8 +84,13 @@ func (c *coverageRecorder) observe(_ context.Context, _ DecisionOperation, _ Dec
 	if len(fresh) == 0 {
 		return
 	}
-	// Each line is written whole with O_APPEND semantics from a single
-	// process, so a reader never sees a torn record.
-	_, _ = c.file.WriteString(strings.Join(fresh, "\n") + "\n")
-	_ = c.file.Sync()
+	// Each process writes its own file under the lock, so records never
+	// interleave. A failed write would drop coverage and turn a covered
+	// endpoint into a false report, so it stops the run like a failed setup.
+	if _, err := c.file.WriteString(strings.Join(fresh, "\n") + "\n"); err != nil {
+		panic(fmt.Sprintf("authz coverage: write record: %v", err))
+	}
+	if err := c.file.Sync(); err != nil {
+		panic(fmt.Sprintf("authz coverage: sync record: %v", err))
+	}
 }

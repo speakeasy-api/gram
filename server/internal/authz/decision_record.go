@@ -121,9 +121,11 @@ func RecordedDecisions(ctx context.Context) (summary DecisionSummary, ok bool) {
 	}, true
 }
 
-// recordDecision notes that an entry point was asked for a decision. It is a
-// no-op outside a recorded request, so the engine behaves the same in
-// background jobs and tests that install nothing.
+// recordDecision notes that an entry point was asked for a decision. It first
+// tells the test coverage observer, when one is installed, and then counts the
+// decision on the request. Outside a recorded request the count is a no-op, so
+// the engine behaves the same in background jobs and tests that install
+// nothing.
 func recordDecision(ctx context.Context, operation DecisionOperation, mode DecisionMode) {
 	if decisionObserver != nil {
 		decisionObserver(ctx, operation, mode)
