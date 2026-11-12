@@ -29,7 +29,8 @@ function failure(error: unknown): { title: string; message: string } {
   if (status === 429) {
     return {
       title: "Test event not sent",
-      message: "Too many test events were sent just now. Try again in a minute.",
+      message:
+        "Too many test events were sent just now. Try again in a minute.",
     };
   }
   if (status === 503) {
