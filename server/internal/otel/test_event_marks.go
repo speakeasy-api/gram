@@ -13,67 +13,75 @@ func isTestEventMarkKey(key string) bool {
 	return key == string(attr.TestEventKey) || key == string(attr.TestEventIDKey)
 }
 
-// withoutTestEventMarks drops the test marks from attributes, reporting whether any were there.
-func withoutTestEventMarks[KV interface{ GetKey() string }](attributes []KV) ([]KV, bool) {
+// stripTestEventMarks drops the test marks from one attribute list, writing it back only when it changed.
+func stripTestEventMarks[KV interface{ GetKey() string }](attributes []KV, set func([]KV)) {
 	before := len(attributes)
 	kept := slices.DeleteFunc(attributes, func(kv KV) bool { return isTestEventMarkKey(kv.GetKey()) })
-	return kept, len(kept) != before
+	if len(kept) != before {
+		set(kept)
+	}
 }
 
-// Producers may not send the test marks, on a record or its resource: a
-// destination that filters tests out would silently hide their real data.
+// Producers may not send the test marks in any attribute list the relays
+// forward: a destination that filters tests out would silently hide their
+// real data.
 
 func stripLogTestEventMarks(record *otelv1.LogRecord) {
-	if kept, changed := withoutTestEventMarks(record.GetAttributes()); changed {
-		record.SetAttributes(kept)
-	}
+	stripTestEventMarks(record.GetAttributes(), record.SetAttributes)
 	if resource := record.GetResource(); resource != nil {
-		if kept, changed := withoutTestEventMarks(resource.GetAttributes()); changed {
-			resource.SetAttributes(kept)
-		}
+		stripTestEventMarks(resource.GetAttributes(), resource.SetAttributes)
+	}
+	if scope := record.GetScope(); scope != nil {
+		stripTestEventMarks(scope.GetAttributes(), scope.SetAttributes)
 	}
 }
 
 func stripSpanTestEventMarks(span *otelv1.Span) {
-	if kept, changed := withoutTestEventMarks(span.GetAttributes()); changed {
-		span.SetAttributes(kept)
-	}
+	stripTestEventMarks(span.GetAttributes(), span.SetAttributes)
 	if resource := span.GetResource(); resource != nil {
-		if kept, changed := withoutTestEventMarks(resource.GetAttributes()); changed {
-			resource.SetAttributes(kept)
-		}
+		stripTestEventMarks(resource.GetAttributes(), resource.SetAttributes)
+	}
+	if scope := span.GetScope(); scope != nil {
+		stripTestEventMarks(scope.GetAttributes(), scope.SetAttributes)
+	}
+	for _, event := range span.GetEvents() {
+		stripTestEventMarks(event.GetAttributes(), event.SetAttributes)
+	}
+	for _, link := range span.GetLinks() {
+		stripTestEventMarks(link.GetAttributes(), link.SetAttributes)
 	}
 }
 
 func stripMetricTestEventMarks(item *otelv1.Metric) {
+	stripTestEventMarks(item.GetMetadata(), item.SetMetadata)
 	if resource := item.GetResource(); resource != nil {
-		if kept, changed := withoutTestEventMarks(resource.GetAttributes()); changed {
-			resource.SetAttributes(kept)
+		stripTestEventMarks(resource.GetAttributes(), resource.SetAttributes)
+	}
+	if scope := item.GetScope(); scope != nil {
+		stripTestEventMarks(scope.GetAttributes(), scope.SetAttributes)
+	}
+	stripExemplars := func(exemplars []*otelv1.Metric_Exemplar) {
+		for _, exemplar := range exemplars {
+			stripTestEventMarks(exemplar.GetFilteredAttributes(), exemplar.SetFilteredAttributes)
 		}
 	}
 	for _, point := range item.GetGauge().GetDataPoints() {
-		if kept, changed := withoutTestEventMarks(point.GetAttributes()); changed {
-			point.SetAttributes(kept)
-		}
+		stripTestEventMarks(point.GetAttributes(), point.SetAttributes)
+		stripExemplars(point.GetExemplars())
 	}
 	for _, point := range item.GetSum().GetDataPoints() {
-		if kept, changed := withoutTestEventMarks(point.GetAttributes()); changed {
-			point.SetAttributes(kept)
-		}
+		stripTestEventMarks(point.GetAttributes(), point.SetAttributes)
+		stripExemplars(point.GetExemplars())
 	}
 	for _, point := range item.GetHistogram().GetDataPoints() {
-		if kept, changed := withoutTestEventMarks(point.GetAttributes()); changed {
-			point.SetAttributes(kept)
-		}
+		stripTestEventMarks(point.GetAttributes(), point.SetAttributes)
+		stripExemplars(point.GetExemplars())
 	}
 	for _, point := range item.GetExponentialHistogram().GetDataPoints() {
-		if kept, changed := withoutTestEventMarks(point.GetAttributes()); changed {
-			point.SetAttributes(kept)
-		}
+		stripTestEventMarks(point.GetAttributes(), point.SetAttributes)
+		stripExemplars(point.GetExemplars())
 	}
 	for _, point := range item.GetSummary().GetDataPoints() {
-		if kept, changed := withoutTestEventMarks(point.GetAttributes()); changed {
-			point.SetAttributes(kept)
-		}
+		stripTestEventMarks(point.GetAttributes(), point.SetAttributes)
 	}
 }

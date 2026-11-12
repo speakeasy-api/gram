@@ -289,15 +289,15 @@ func summarizeRouteTest(sent []SignalTestResult) RouteTestResult {
 	}
 	sameOutcome := !slices.ContainsFunc(signals, func(signal SignalTestOutcome) bool { return signal.Outcome != result.Outcome })
 	if len(signals) > 1 {
+		names := make([]string, len(signals))
+		for i, signal := range signals {
+			names[i] = string(signal.Signal)
+		}
 		switch {
 		case result.Outcome == TestOutcomeAccepted:
-			names := make([]string, len(signals))
-			for i, signal := range signals {
-				names[i] = string(signal.Signal)
-			}
-			result.Message = fmt.Sprintf("The destination accepted the test events for %s.", joinWithAnd(names))
+			result.Message = fmt.Sprintf("The destination accepted the test events for %s.", joinNames(names, "and"))
 		case sameOutcome:
-			// Every signal failed the same way, so the worst signal's message speaks for all.
+			result.Message = uniformOutcomeMessage(result.Outcome, signals, names)
 		default:
 			result.Message = "The destination did not accept every test event. See each signal for details."
 		}
@@ -305,12 +305,34 @@ func summarizeRouteTest(sent []SignalTestResult) RouteTestResult {
 	return result
 }
 
-// joinWithAnd joins names as "a, b and c".
-func joinWithAnd(names []string) string {
+// joinNames joins names as "a, b and c", or with "or".
+func joinNames(names []string, conjunction string) string {
 	if len(names) < 2 {
 		return strings.Join(names, "")
 	}
-	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+	return strings.Join(names[:len(names)-1], ", ") + " " + conjunction + " " + names[len(names)-1]
+}
+
+// uniformOutcomeMessage is the message when every signal failed the same way.
+// It names no single signal, so it speaks for all of them.
+func uniformOutcomeMessage(outcome TestOutcome, signals []SignalTestOutcome, names []string) string {
+	switch outcome {
+	case TestOutcomeNotFound:
+		paths := make([]string, len(names))
+		for i, name := range names {
+			paths[i] = "/v1/" + name
+		}
+		return fmt.Sprintf("No endpoint at this address for %s. Check the URL; Speakeasy adds %s.", joinNames(names, "or"), joinNames(paths, "and"))
+	case TestOutcomeError:
+		if slices.ContainsFunc(signals, func(signal SignalTestOutcome) bool { return signal.StatusCode != signals[0].StatusCode }) {
+			return "The destination returned an error for every test event. See each signal for details."
+		}
+		return signals[0].Message
+	case TestOutcomeAccepted, TestOutcomeRefused, TestOutcomeUnreachable:
+		return signals[0].Message
+	default:
+		return signals[0].Message
+	}
 }
 
 // testOutcomeForStatus maps the destination's HTTP status to an outcome.

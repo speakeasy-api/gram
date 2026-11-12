@@ -497,21 +497,47 @@ func TestTestRouteTakesTheWorstSignal(t *testing.T) {
 	}
 }
 
-func TestTestRouteUsesTheSingleSignalMessageWhenEverySignalFailsAlike(t *testing.T) {
+func TestTestRouteGivesANeutralMessageWhenEverySignalFailsAlike(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	route := createTestableRoute(t, ctx, ti, "https://collector.example.com", dataexports.DataSourceProductTelemetry)
-	sender := &fixedTestSender{status: 0, results: map[dataexports.Signal]dataexports.SignalTestResult{
-		dataexports.SignalLogs:    {Signal: dataexports.SignalLogs, StatusCode: 0, Unreachable: true},
-		dataexports.SignalTraces:  {Signal: dataexports.SignalTraces, StatusCode: 0, Unreachable: true},
-		dataexports.SignalMetrics: {Signal: dataexports.SignalMetrics, StatusCode: 0, Unreachable: true},
-	}}
-	core := dataexports.NewRouteTestCore(testenv.NewLogger(t), ti.conn, audit.NewLogger(), ti.enc, sender, routeTestLimits(t, dataexports.RouteTestsPerMinute, dataexports.RouteTestsPerOrganizationPerMinute))
-	require.NotNil(t, core)
+	every := func(statusCodes [3]int, unreachable bool) map[dataexports.Signal]dataexports.SignalTestResult {
+		return map[dataexports.Signal]dataexports.SignalTestResult{
+			dataexports.SignalLogs:    {Signal: dataexports.SignalLogs, StatusCode: statusCodes[0], Unreachable: unreachable},
+			dataexports.SignalTraces:  {Signal: dataexports.SignalTraces, StatusCode: statusCodes[1], Unreachable: unreachable},
+			dataexports.SignalMetrics: {Signal: dataexports.SignalMetrics, StatusCode: statusCodes[2], Unreachable: unreachable},
+		}
+	}
+	cases := []struct {
+		name    string
+		results map[dataexports.Signal]dataexports.SignalTestResult
+		outcome dataexports.TestOutcome
+		message string
+	}{
+		{name: "unreachable", results: every([3]int{}, true), outcome: dataexports.TestOutcomeUnreachable,
+			message: "Speakeasy could not reach the destination. Check the URL, and that the address accepts connections from the internet."},
+		{name: "refused", results: every([3]int{http.StatusForbidden, http.StatusForbidden, http.StatusForbidden}, false), outcome: dataexports.TestOutcomeRefused,
+			message: "The destination refused the test event. Check the API key, and for Datadog, that the endpoint matches your site."},
+		{name: "not found", results: every([3]int{http.StatusNotFound, http.StatusNotFound, http.StatusNotFound}, false), outcome: dataexports.TestOutcomeNotFound,
+			message: "No endpoint at this address for logs, traces or metrics. Check the URL; Speakeasy adds /v1/logs, /v1/traces and /v1/metrics."},
+		{name: "same error", results: every([3]int{http.StatusBadGateway, http.StatusBadGateway, http.StatusBadGateway}, false), outcome: dataexports.TestOutcomeError,
+			message: "The destination returned an error (HTTP 502)."},
+		{name: "different errors", results: every([3]int{http.StatusBadGateway, http.StatusInternalServerError, http.StatusBadGateway}, false), outcome: dataexports.TestOutcomeError,
+			message: "The destination returned an error for every test event. See each signal for details."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	result, err := core.SendTest(ctx, routeTestParams(t, ctx, route.ID))
-	require.NoError(t, err)
-	require.Equal(t, dataexports.TestOutcomeUnreachable, result.Outcome)
-	require.Equal(t, "Speakeasy could not reach the destination. Check the URL, and that the address accepts connections from the internet.", result.Message)
+			ctx, ti := newTestService(t)
+			route := createTestableRoute(t, ctx, ti, "https://collector.example.com", dataexports.DataSourceProductTelemetry)
+			sender := &fixedTestSender{status: 0, results: tc.results}
+			core := dataexports.NewRouteTestCore(testenv.NewLogger(t), ti.conn, audit.NewLogger(), ti.enc, sender, routeTestLimits(t, dataexports.RouteTestsPerMinute, dataexports.RouteTestsPerOrganizationPerMinute))
+			require.NotNil(t, core)
+
+			result, err := core.SendTest(ctx, routeTestParams(t, ctx, route.ID))
+			require.NoError(t, err)
+			require.Equal(t, tc.outcome, result.Outcome)
+			require.Equal(t, tc.message, result.Message)
+		})
+	}
 }
