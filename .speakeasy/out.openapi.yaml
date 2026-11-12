@@ -11331,12 +11331,12 @@ paths:
       operationId: getAIIntegrationConfig
       parameters:
         - allowEmptyValue: true
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
           in: query
           name: provider
           required: true
           schema:
-            description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+            description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -11423,18 +11423,116 @@ paths:
       x-speakeasy-name-override: getConfig
       x-speakeasy-react-hook:
         name: AIIntegrationConfig
+  /rpc/aiIntegrations.listOrgUnits:
+    get:
+      description: List the Google Workspace organizational units a saved gemini_compliance connection can export, using its stored service account and delegated admin. Requires the admin.directory.orgunit.readonly delegation scope.
+      operationId: listAIIntegrationOrgUnits
+      parameters:
+        - allowEmptyValue: true
+          description: AI provider identifier. Only gemini_compliance is supported.
+          in: query
+          name: provider
+          required: true
+          schema:
+            description: AI provider identifier. Only gemini_compliance is supported.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAIIntegrationOrgUnitsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listOrgUnits aiIntegrations
+      tags:
+        - aiIntegrations
+      x-speakeasy-name-override: listOrgUnits
+      x-speakeasy-react-hook:
+        name: AIIntegrationOrgUnits
   /rpc/aiIntegrations.listSchedules:
     get:
       description: List the sync schedules and their scheduler state for a provider's org-wide AI integration config. Returns an empty list when no config is set.
       operationId: listAIIntegrationSchedules
       parameters:
         - allowEmptyValue: true
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
           in: query
           name: provider
           required: true
           schema:
-            description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+            description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -88807,12 +88905,15 @@ components:
           type: string
           description: ISO 8601 timestamp when the config was created. Omitted when no config is set.
           format: date-time
+        delegated_user:
+          type: string
+          description: 'gemini_compliance only: the Google Workspace admin email the service account acts as. Omitted for other providers.'
         enabled:
           type: boolean
           description: Whether the provider integration is active.
         external_organization_id:
           type: string
-          description: Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); omitted for providers that do not need one.
+          description: Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); for gemini_compliance, the Google Vault matter exports are created in. Omitted for providers that do not need one.
         has_api_key:
           type: boolean
           description: Whether an API key is currently stored. The key itself is never returned.
@@ -88841,6 +88942,12 @@ components:
           type: string
           description: ISO 8601 timestamp for the next scheduled usage poll. Omitted when no config is set.
           format: date-time
+        org_unit_id:
+          type: string
+          description: 'gemini_compliance only: the selected Google Workspace organizational unit. Omitted until one is saved.'
+        org_unit_path:
+          type: string
+          description: 'gemini_compliance only: the selected organizational unit''s path; "/" is the whole organization. Omitted until one is saved.'
         organization_id:
           type: string
           description: Organization the config belongs to.
@@ -88849,7 +88956,7 @@ components:
           description: Project used as the telemetry write target. Omitted when no config is set.
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
         updated_at:
           type: string
           description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
@@ -88860,6 +88967,26 @@ components:
         - provider
         - enabled
         - has_api_key
+    AIIntegrationOrgUnit:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Admin-entered description. Omitted when empty.
+        id:
+          type: string
+          description: Organizational unit ID, e.g. id:03ph8a2z1a2b3c4.
+        name:
+          type: string
+          description: Display name. Empty when Google omits it.
+        path:
+          type: string
+          description: Full path; "/" is the root, covering the whole organization.
+      description: A Google Workspace organizational unit the delegated admin can read.
+      required:
+        - id
+        - path
+        - name
     AIIntegrationScheduleState:
       type: object
       properties:
@@ -96549,7 +96676,7 @@ components:
       properties:
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
       required:
         - provider
     DeleteGlobalToolVariationResult:
@@ -103523,6 +103650,17 @@ components:
           description: Detected AI tools aggregated per target, most recently seen first.
       required:
         - detections
+    ListAIIntegrationOrgUnitsResult:
+      type: object
+      properties:
+        org_units:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIIntegrationOrgUnit'
+          description: Units the saved delegated admin can read, including the root.
+      description: Organizational units available to a gemini_compliance connection, sorted by path.
+      required:
+        - org_units
     ListAIIntegrationSchedulesResult:
       type: object
       properties:
@@ -113009,7 +113147,7 @@ components:
       properties:
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
         schedule:
           type: string
           description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
@@ -116893,7 +117031,7 @@ components:
           description: Whether the schedule should be polled.
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
         schedule:
           type: string
           description: Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).
@@ -124630,19 +124768,25 @@ components:
       properties:
         api_key:
           type: string
-          description: Provider API key. Stored encrypted at rest; never returned on reads.
+          description: Provider API key. For gemini_compliance, the Google service account JSON key file, unchanged. Empty keeps the saved key. Stored encrypted at rest; never returned on reads.
         billing_mode:
           type: string
           description: 'How the provider org is billed: ''metered'', ''flat_rate'', or ''unknown''. Free-form; omit to leave the existing value unchanged.'
+        delegated_user:
+          type: string
+          description: 'gemini_compliance only: the Google Workspace admin email the service account acts as through domain-wide delegation. Omit to keep the saved value.'
         enabled:
           type: boolean
-          description: Whether the integration should be active.
+          description: Whether the integration should be active. gemini_compliance stays inactive until an organizational unit is saved.
         external_organization_id:
           type: string
-          description: Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID).
+          description: Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID). Optional for gemini_compliance (an open Google Vault matter UUID); omit it and Speakeasy finds or creates its own matter.
+        org_unit_id:
+          type: string
+          description: 'gemini_compliance only: the Google Workspace organizational unit to export, from listOrgUnits. Select the root unit for the whole organization. Syncing starts once one is saved. Omit to keep the saved value.'
         provider:
           type: string
-          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+          description: AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
       required:
         - provider
         - api_key
