@@ -136,8 +136,8 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 // derivation lists every satisfying scope directly, since Check.expand only
 // walks scopeExpansions[c.Scope] one step.
 //
-// Derived from Model (Implies and Exclusions); see registry_resources.go for why
-// each family relates the way it does.
+// Derived from Model (Implies and Exclusions). The comments on each resource
+// type in registry_resources.go say why its permissions relate the way they do.
 var scopeExpansions = Model.deriveScopeExpansions()
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that

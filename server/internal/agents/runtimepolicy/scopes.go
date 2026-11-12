@@ -87,6 +87,8 @@ func deriveRuntimeScopeDefinitions() map[authz.Scope]runtimeScopeDefinition {
 			out[scope] = retiredRuntimeScope()
 		case eligibility.SafeSince == 0:
 			out[scope] = activeRuntimeScope()
+		case eligibility.SafeSince < int(RuntimeScopeRegistryVersion1) || eligibility.SafeSince > int(CurrentRuntimeScopeRegistryVersion):
+			panic(fmt.Sprintf("authz scope %q is agent-safe since registry version %d, outside 1..%d", scope, eligibility.SafeSince, CurrentRuntimeScopeRegistryVersion))
 		default:
 			out[scope] = safeRuntimeScopeSince(RuntimeScopeRegistryVersion(eligibility.SafeSince))
 		}
