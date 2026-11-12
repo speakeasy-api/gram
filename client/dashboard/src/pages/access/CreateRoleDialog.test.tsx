@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   refetchScopes: vi.fn(),
   scopesState: "ready" as "ready" | "loading" | "error",
   scimEnabled: false,
+  /** Projects beyond Default, which have no MCP servers. */
+  extraProjects: [] as { id: string; name: string; slug: string }[],
   members: [] as {
     id: string;
     name: string;
@@ -41,7 +43,10 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
-    projects: [{ id: "project-a", name: "Default", slug: "default" }],
+    projects: [
+      { id: "project-a", name: "Default", slug: "default" },
+      ...mocks.extraProjects,
+    ],
     scimEnabled: mocks.scimEnabled,
   }),
 }));
@@ -224,6 +229,14 @@ function openMenu(name: string) {
     ctrlKey: false,
   });
 }
+/** Unfold a project in the MCP grid; every project starts collapsed. */
+function openProject(name: string) {
+  const toggle = screen
+    .getAllByRole("button", { name: new RegExp(`^${name}\\b`) })
+    .find((button) => button.getAttribute("aria-expanded") === "false");
+  if (!toggle) throw new Error(`No collapsed project row named ${name}`);
+  fireEvent.click(toggle);
+}
 /** Pick a platform area's level from its card. */
 function setLevel(area: string, level: "No access" | "View" | "Manage") {
   openMenu(`${area} access level`);
@@ -254,6 +267,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.scopesState = "ready";
   mocks.scimEnabled = false;
+  mocks.extraProjects = [];
   mocks.members = [];
   // agents.list is paginated: it resolves to pages, which the dialog drains.
   mocks.list.mockResolvedValue([{ result: { items: [] } }]);
@@ -264,6 +278,54 @@ it("splits permissions into MCP access and platform access on one page", () => {
   expect(screen.getByRole("heading", { name: "MCP Access" })).toBeTruthy();
   expect(screen.getByRole("heading", { name: "Platform Access" })).toBeTruthy();
   expect(screen.queryByRole("tab")).toBeNull();
+});
+
+it("starts every project collapsed, Default included", () => {
+  renderEditor();
+  expect(screen.getByRole("button", { name: "Connect Default" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Connect GitHub" })).toBeNull();
+  openProject("Default");
+  expect(screen.getByRole("button", { name: "Connect GitHub" })).toBeTruthy();
+});
+
+describe("a long project list", () => {
+  const projectRow = (name: string) =>
+    screen.queryByRole("button", { name: `Connect ${name}` });
+
+  it("lists the first projects and folds the rest behind a control", () => {
+    // Default plus 14 more: 15 in all, 5 past the clip.
+    mocks.extraProjects = Array.from({ length: 14 }, (_, i) => ({
+      id: `project-${i + 1}`,
+      name: `Project ${i + 1}`,
+      slug: `project-${i + 1}`,
+    }));
+    renderEditor();
+    expect(projectRow("Default")).toBeTruthy();
+    expect(projectRow("Project 9")).toBeTruthy();
+    expect(projectRow("Project 10")).toBeNull();
+    expect(projectRow("Project 14")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show 5 more projects" }),
+    );
+    expect(projectRow("Project 14")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show fewer projects" }),
+    );
+    expect(projectRow("Project 14")).toBeNull();
+  });
+
+  it("shows no control while every project fits", () => {
+    mocks.extraProjects = Array.from({ length: 9 }, (_, i) => ({
+      id: `project-${i + 1}`,
+      name: `Project ${i + 1}`,
+      slug: `project-${i + 1}`,
+    }));
+    renderEditor();
+    expect(projectRow("Project 9")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /more projects/ })).toBeNull();
+  });
 });
 
 describe("starting a new role from a template", () => {
@@ -720,9 +782,11 @@ describe("the review step", () => {
 });
 
 describe("the access grid", () => {
-  /** The default project, which the servers sit in, starts open. */
+  /** Render the editor with the default project, which the servers sit in,
+   *  unfolded. */
   function show(editingRole: Parameters<typeof renderEditor>[0]) {
     renderEditor(editingRole);
+    openProject("Default");
   }
 
   function savedForm(how: "reviewed" | "direct") {
@@ -1162,6 +1226,7 @@ describe("a role read again while the editor is open", () => {
   it("shows a permission the role gained while the editor was open", () => {
     const { reread } = renderEditor(role);
     reread({ ...role, grants: [{ scope: "mcp:connect", selectors: linear }] });
+    openProject("Default");
 
     expect(
       screen
@@ -1200,6 +1265,7 @@ describe("a role read again while the editor is open", () => {
       ...role,
       grants: [{ scope: "mcp:connect", selectors: github }],
     });
+    openProject("Default");
     fireEvent.click(screen.getByRole("button", { name: "Connect GitHub" }));
     reread({
       ...role,

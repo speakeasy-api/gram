@@ -9,7 +9,7 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
-import { ChevronRight, Info, X } from "lucide-react";
+import { ChevronRight, Info, MoreHorizontal, X } from "lucide-react";
 import { Fragment, useMemo, useState, type JSX, type ReactNode } from "react";
 
 import {
@@ -65,6 +65,11 @@ import { useServerTools } from "./useServerTools";
 
 /** Above this many servers the table gets a search box. */
 const SEARCH_THRESHOLD = 8;
+/**
+ * How many projects the grid lists before the rest fold behind a "more"
+ * row, so a long list does not push Platform Access far down the page.
+ */
+const PROJECT_CLIP = 10;
 
 const DENY_HINT =
   "Rarely needed. Wins over every grant, including direct ones.";
@@ -289,11 +294,10 @@ function McpMatrix({
     },
   ];
   const [query, setQuery] = useState("");
-  // The default project starts open and the rest collapsed; a search opens
+  // Every project starts collapsed, so the grid stays short; a search opens
   // them all.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
-    () =>
-      new Set(projects.filter((p) => p.slug === "default").map((p) => p.id)),
+    () => new Set(),
   );
   /** Servers whose tools are unfolded under them. */
   const [openServers, setOpenServers] = useState<ReadonlySet<string>>(
@@ -332,6 +336,21 @@ function McpMatrix({
   );
   const serverCount = serverIndex.size;
 
+  /** A long project list shows its first few until "more" is pressed. */
+  const [showAllProjects, setShowAllProjects] = useState(false);
+  const projectIds = useMemo(
+    () =>
+      rowViews.flatMap((view) =>
+        view.row.kind === "project" ? [view.row.projectId] : [],
+      ),
+    [rowViews],
+  );
+  const clipped = projectIds.length > PROJECT_CLIP;
+  const hiddenProjects =
+    clipped && !showAllProjects && !query
+      ? projectIds.length - PROJECT_CLIP
+      : 0;
+
   // A project row stays while any of its servers match, so a match never
   // loses the project it sits in.
   const visibleRows = useMemo(() => {
@@ -339,10 +358,14 @@ function McpMatrix({
     // (its ticks show dashed on the rows under it) and is listed under the
     // table, where it can be taken back.
     if (!query) {
+      // A search reaches every project, so only the plain list is clipped.
+      const shown = new Set(
+        showAllProjects ? projectIds : projectIds.slice(0, PROJECT_CLIP),
+      );
       return rowViews.filter((view) =>
         view.row.kind === "server"
-          ? expanded.has(view.row.projectId)
-          : view.row.kind === "project",
+          ? shown.has(view.row.projectId) && expanded.has(view.row.projectId)
+          : view.row.kind === "project" && shown.has(view.row.projectId),
       );
     }
     const matches = new Set(
@@ -359,7 +382,7 @@ function McpMatrix({
       if (view.row.kind === "project") return matches.has(view.row.projectId);
       return fuzzyMatch(query, `${view.name} ${view.detail ?? ""}`);
     });
-  }, [rowViews, query, expanded]);
+  }, [rowViews, query, expanded, showAllProjects, projectIds]);
 
   // Blocks are listed with the role's other denies; only grants the grid has
   // no cell for are left to list here.
@@ -894,6 +917,25 @@ function McpMatrix({
                   </Fragment>
                 );
               })}
+              {clipped && !query && (
+                <tr>
+                  <td colSpan={COLUMN_COUNT} className="px-4 py-2">
+                    <button
+                      type="button"
+                      aria-expanded={showAllProjects}
+                      onClick={() => setShowAllProjects((prev) => !prev)}
+                      className="text-muted-foreground hover:text-foreground -ml-1 inline-flex cursor-pointer items-center gap-2 text-sm"
+                    >
+                      <MoreHorizontal aria-hidden="true" className="size-4" />
+                      {showAllProjects
+                        ? "Show fewer projects"
+                        : `Show ${hiddenProjects} more ${
+                            hiddenProjects === 1 ? "project" : "projects"
+                          }`}
+                    </button>
+                  </td>
+                </tr>
+              )}
               {!inventory.settled && (
                 <tr>
                   <td colSpan={COLUMN_COUNT} className="p-4">
