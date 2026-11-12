@@ -34,7 +34,6 @@ const (
 	TemplateKeyCustomDomainUnhealthy     TemplateKey = "custom_domain_unhealthy"
 	TemplateKeyWeeklyUsageSummary        TemplateKey = "weekly_usage_summary"
 	TemplateKeyAccessRequest             TemplateKey = "access_request"
-	TemplateKeyTrialEndingSoon           TemplateKey = "trial_ending_soon"
 	TemplateKeyAccessPaused              TemplateKey = "access_paused"
 	TemplateKeyPaygActivated             TemplateKey = "payg_activated"
 	TemplateKeySetupTaskAssignment       TemplateKey = "setup_task_assignment"
@@ -121,7 +120,6 @@ var RegisteredTemplates = []Template{
 	CustomDomainUnhealthy{Email: "", Domain: "", IssueMessage: "", DomainLink: ""},
 	WeeklyUsageSummary{OrganizationName: "", CycleEndDate: "", DaysRemaining: "", UsageThroughDate: "", StorageTokens: "", StorageChangePercent: "", ScanningTokens: "", ScanningChangePercent: "", EgressGib: "", EgressChangePercent: "", ShowEstimatedSpend: "", StorageCostUSD: "", ScanningCostUSD: "", EgressCostUSD: "", TotalCostUSD: "", ViewUsageURL: ""},
 	AccessRequest{RequesterName: "", OrganizationName: "", ManageAccessLink: "", PermissionLabel: "", PermissionScope: "", PermissionDescription: ""},
-	TrialEndingSoon{OrganizationName: "", TrialEndDate: "", ActionURL: ""},
 	AccessPaused{OrganizationName: "", ActionURL: ""},
 	PaygActivated{OrganizationName: "", TumPricePerMillionUsd: "", ActionURL: ""},
 	SetupTaskAssignment{AssignerName: "", OrganizationName: "", TaskTitle: "", TaskDescription: "", SetupLink: ""},
