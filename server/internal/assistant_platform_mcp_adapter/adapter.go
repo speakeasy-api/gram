@@ -116,7 +116,7 @@ func (t Tool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Rea
 		return fmt.Errorf("read platform tool arguments: %w", err)
 	}
 
-	principal, delegated, err := principalFromContext(ctx)
+	ctx, acting, err := actAs(ctx, t.authorizer)
 	if errors.Is(err, errPersonRequired) {
 		if _, writeErr := wr.Write(personRequiredRefusal); writeErr != nil {
 			return fmt.Errorf("write platform tool refusal: %w", writeErr)
@@ -124,37 +124,13 @@ func (t Tool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Rea
 		return nil
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("prepare assistant platform tool %q: %w", t.descriptor.Name, err)
 	}
-	if t.authorizer == nil {
-		return platformmcp.ErrUnavailable
-	}
+	principal := acting.principal
 
-	// The target policy comes from the assistant's own context, before any
-	// delegated context replaces it below.
-	policy, err := targetPolicyFromContext(ctx)
+	arguments, err = t.applyTargetPolicy(acting.policy, arguments)
 	if err != nil {
 		return err
-	}
-	arguments, err = t.applyTargetPolicy(policy, arguments)
-	if err != nil {
-		return err
-	}
-
-	// An agent-backed turn acts for the person who vouched for it, such as the
-	// dashboard user who sent the message. Platform tools need organization-wide
-	// authority, which an agent's own policy never holds, so the tool runs
-	// exactly as if that person called it: their auth context and their live
-	// grants, with the agent's admitted policy set aside. The assistant
-	// principal stays on the context, so writes are still attributed to the
-	// Project Assistant surface, and the assistant's tool-call audit entry
-	// records the agent acting for this person.
-	if delegated {
-		ctx, err = t.authorizer.PrepareExternalContext(ctx, principal)
-		if err != nil {
-			return fmt.Errorf("prepare delegated assistant platform tool %q: %w", t.descriptor.Name, err)
-		}
-		ctx = authz.WithoutAdmittedPolicies(ctx)
 	}
 	if err := t.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
 		return fmt.Errorf("authorize assistant platform tool %q: %w", t.descriptor.Name, err)
@@ -375,6 +351,80 @@ func targetPolicyFromContext(ctx context.Context) (TargetPolicy, error) {
 		policy.ProjectSlug = *authCtx.ProjectSlug
 	}
 	return policy, nil
+}
+
+// acting is who a platform tool call acts for and the project it acts in.
+type acting struct {
+	principal platformmcp.Principal
+	policy    TargetPolicy
+}
+
+// actingKey marks a context that actAs has already prepared, so a request
+// derives its acting context once and every later step reuses it.
+type actingKey struct{}
+
+// ActingContext returns the context the Project Assistant's platform toolset
+// lists and calls its tools in, so what a turn is offered matches what it may
+// call. A turn that acts for no person keeps its own context; its calls are
+// refused with person_required.
+func ActingContext(authorizer platformmcp.Authorizer) func(ctx context.Context) (context.Context, error) {
+	return func(ctx context.Context) (context.Context, error) {
+		prepared, _, err := actAs(ctx, authorizer)
+		if errors.Is(err, errPersonRequired) {
+			return ctx, nil
+		}
+		return prepared, err
+	}
+}
+
+// actAs resolves who a platform tool call acts for and the context it runs in.
+//
+// An agent-backed turn acts for the person who vouched for it, such as the
+// dashboard user who sent the message. Platform tools need organization-wide
+// authority, which an agent's own policy never holds, so these tools run
+// exactly as if that person called them: their auth context and their live
+// grants, with the agent's admitted policy set aside. The assistant principal
+// and turn credential stay on the context, so writes are still attributed to
+// the Project Assistant surface, and the assistant's tool-call audit entry
+// records the agent acting for this person.
+func actAs(ctx context.Context, authorizer platformmcp.Authorizer) (context.Context, acting, error) {
+	if prepared, ok := ctx.Value(actingKey{}).(acting); ok {
+		return ctx, prepared, nil
+	}
+	principal, delegated, err := principalFromContext(ctx)
+	if err != nil {
+		return ctx, acting{}, err
+	}
+	if authorizer == nil {
+		return ctx, acting{}, platformmcp.ErrUnavailable
+	}
+	// The project comes from the assistant's own context, before a delegated
+	// context replaces it.
+	policy, err := targetPolicyFromContext(ctx)
+	if err != nil {
+		return ctx, acting{}, err
+	}
+	if delegated {
+		assistantCtx, _ := contextvalues.GetAuthContext(ctx)
+		ctx, err = authorizer.PrepareExternalContext(ctx, principal)
+		if err != nil {
+			return ctx, acting{}, fmt.Errorf("act for the assistant turn's person: %w", err)
+		}
+		ctx = authz.WithoutAdmittedPolicies(ctx)
+
+		// The person acts in the assistant's project, which the platform
+		// toolset reads from the auth context.
+		personCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || personCtx == nil {
+			return ctx, acting{}, fmt.Errorf("act for the assistant turn's person: no auth context")
+		}
+		inProject := *personCtx
+		inProject.ProjectID = assistantCtx.ProjectID
+		inProject.ProjectSlug = assistantCtx.ProjectSlug
+		ctx = contextvalues.SetAuthContext(ctx, &inProject)
+	}
+	prepared := acting{principal: principal, policy: policy}
+	return context.WithValue(ctx, actingKey{}, prepared), prepared, nil
 }
 
 // errPersonRequired means the turn acts for no person, such as a workload

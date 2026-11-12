@@ -700,17 +700,20 @@ func buildTestMCPService(
 	})
 	assistantSkillTools := platformtoolsruntime.AssistantSkillTools(logger, conn, platformskills.WithEfficacySignaler(efficacySignaler))
 	var platformMCPReadTools []platformtools.ExternalTool
+	var platformMCPReadActingContext func(context.Context) (context.Context, error)
 	if withPlatformMCPReadTools {
 		// Composed the way the server composes it: descriptors admitted to the
 		// assistant audience, called directly by the adapter.
+		platformMCPAuthorizer := platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine)
 		platformMCPReadTools = assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
-				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "test-cursor-key",
+				logger, nil, nil, platformMCPAuthorizer, "", "test-cursor-key",
 				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
-			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),
+			platformMCPAuthorizer,
 		)
+		platformMCPReadActingContext = assistant_platform_mcp_adapter.ActingContext(platformMCPAuthorizer)
 	}
 	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 		AssistantMemoryTools:          nil,
@@ -718,6 +721,7 @@ func buildTestMCPService(
 		AssistantTriggerTools:         nil,
 		ManagedAssistantInsightsTools: managedLogsTools,
 		PlatformMCPReadTools:          platformMCPReadTools,
+		PlatformMCPReadActingContext:  platformMCPReadActingContext,
 	})
 	tunnelRoutes := route.NewRouteTable()
 	toolCallRecords := &toolCallRecorder{}

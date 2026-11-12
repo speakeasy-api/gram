@@ -102,14 +102,15 @@ func grantProjectRead(t *testing.T, ti *testInstance, authCtx *contextvalues.Aut
 	))
 }
 
-func listProjectsCallBody(t *testing.T) []byte {
+// platformToolCallBody is a tools/call request for name with no arguments.
+func platformToolCallBody(t *testing.T, name string) []byte {
 	t.Helper()
 
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  "tools/call",
-		"params":  map[string]any{"name": "list_projects", "arguments": map[string]any{}},
+		"params":  map[string]any{"name": name, "arguments": map[string]any{}},
 	})
 	require.NoError(t, err)
 	return body
@@ -131,7 +132,7 @@ func TestServePlatformToolset_AgentTurnActsForItsDelegator(t *testing.T) {
 	countBefore, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionAssistantToolCall)
 	require.NoError(t, err)
 
-	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, listProjectsCallBody(t), token)
+	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, platformToolCallBody(t, "list_projects"), token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.False(t, jsonToolCallFailed(w.Body.Bytes()), "an agent turn with an org-admin delegator must reach platform tools: %s", w.Body.String())
@@ -161,7 +162,7 @@ func TestServePlatformToolset_AgentTurnDeniedWithoutDelegatorAdmin(t *testing.T)
 	grantProjectRead(t, ti, authCtx)
 	token := mintAgentTurnCredential(t, ti, authCtx, managedID, agentID)
 
-	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, listProjectsCallBody(t), token)
+	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, platformToolCallBody(t, "list_projects"), token)
 	require.True(t, err != nil || w.Code >= http.StatusBadRequest || jsonToolCallFailed(w.Body.Bytes()), "a delegator without org:admin must be refused: %s", w.Body.String())
 	require.NotContains(t, w.Body.String(), authCtx.ProjectID.String())
 }
@@ -210,4 +211,84 @@ func TestAssistantPlatformTool_WorkloadTurnIsToldItNeedsAPerson(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(out.Bytes(), &refusal))
 	require.Equal(t, "person_required", refusal.Code)
+}
+
+// jsonRPCError reports whether the response is a protocol-level error, as a
+// call to a tool the caller is not offered is, rather than the tool's answer.
+func jsonRPCError(body []byte) bool {
+	var response struct {
+		Error json.RawMessage `json:"error"`
+	}
+	return json.Unmarshal(body, &response) != nil || len(response.Error) != 0
+}
+
+func TestServePlatformToolset_AgentTurnOffersLogReadToolsByDelegatorGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	managedID, agentID := managedAssistantWithAgent(t, ti, authCtx)
+	grantProjectRead(t, ti, authCtx)
+	grantProjectLogRead(t, ti, authCtx)
+	token := mintAgentTurnCredential(t, ti, authCtx, managedID, agentID)
+
+	listed, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
+	require.Contains(t, listed.Body.String(), `"query_mcp_traces"`, "the delegator's log:read decides what the turn is offered; the agent holds no grants")
+
+	// Every platform tool call also needs the delegator to be an org admin.
+	grantLiveOrgAdmin(t, ti, authCtx)
+	called, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, platformToolCallBody(t, "query_mcp_traces"), token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, called.Code, called.Body.String())
+	require.False(t, jsonRPCError(called.Body.Bytes()), "an offered tool must be callable: %s", called.Body.String())
+}
+
+func TestServePlatformToolset_AgentTurnWithholdsLogReadToolsWithoutDelegatorLogRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	managedID, agentID := managedAssistantWithAgent(t, ti, authCtx)
+	grantProjectRead(t, ti, authCtx)
+	token := mintAgentTurnCredential(t, ti, authCtx, managedID, agentID)
+
+	listed, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
+	require.Contains(t, listed.Body.String(), `"list_projects"`)
+	require.NotContains(t, listed.Body.String(), `"query_mcp_traces"`)
+
+	called, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, platformToolCallBody(t, "query_mcp_traces"), token)
+	require.True(t, err != nil || called.Code >= http.StatusBadRequest || jsonRPCError(called.Body.Bytes()), "a withheld tool must not be callable: %s", called.Body.String())
+}
+
+func TestServePlatformToolset_LegacyTurnOffersLogReadToolsByUserGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	managedID, _ := managedAssistantWithAgent(t, ti, authCtx)
+	token := mintAssistantToken(t, ti, authCtx, managedID)
+
+	listed, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
+	require.NotContains(t, listed.Body.String(), `"query_mcp_traces"`)
+
+	grantProjectLogRead(t, ti, authCtx)
+	listed, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
+	require.Contains(t, listed.Body.String(), `"query_mcp_traces"`)
 }
