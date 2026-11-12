@@ -5,35 +5,66 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"tailscale.com/ipn"
 
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
 )
 
-// stateStoreTimeout bounds each state read or write. tsnet calls the store
-// without a context, so a hung query must not stall the node forever.
-const stateStoreTimeout = 10 * time.Second
+const (
+	// stateStoreTimeout bounds each state read or write. tsnet calls the store
+	// without a context, so a hung query must not stall the node forever.
+	stateStoreTimeout = 10 * time.Second
+
+	// acmeAccountKeyStateKey is the key tsnet stores its ACME account key
+	// under when certificates live in the state store.
+	acmeAccountKeyStateKey = "acme-account.key.pem"
+)
+
+// sharedAcrossSlots reports whether a state key belongs to the whole
+// connection. Every slot serves the same Tailscale Service name, so they
+// share one TLS certificate and key (stored as "<domain>.crt" and
+// "<domain>.key") and the ACME account that issues and renews it. Without
+// this each slot requested its own certificate for the same name, spending
+// the tailnet's Let's Encrypt allowance once per slot, and again on every
+// renewal.
+func sharedAcrossSlots(id ipn.StateKey) bool {
+	key := string(id)
+	return key == acmeAccountKeyStateKey || strings.HasSuffix(key, ".crt") || strings.HasSuffix(key, ".key")
+}
 
 // PostgresStateStore persists one node's tsnet state in Postgres, encrypted
 // under the organization's key. It implements ipn.StateStore for a single
-// (ingress, slot) pair.
+// (ingress, slot) pair; the certificate state the connection's slots share
+// is kept once for the connection in network_ingress_certificate_states.
 type PostgresStateStore struct {
-	db        repo.DBTX
+	db        *pgxpool.Pool
 	enc       *orgencryption.Encryptor
 	ingressID uuid.UUID
 	orgID     string
 	slot      int32
 }
 
-var _ ipn.StateStore = (*PostgresStateStore)(nil)
+var (
+	_ ipn.StateStore = (*PostgresStateStore)(nil)
+
+	// tsnet stores certificates through these when the store offers them, so
+	// a certificate and its key are always read and written as a pair.
+	_ interface {
+		ReadTLSCertAndKey(domain string) ([]byte, []byte, error)
+		WriteTLSCertAndKey(domain string, cert, key []byte) error
+	} = (*PostgresStateStore)(nil)
+)
 
 // NewPostgresStateStore builds the store for one node identity.
-func NewPostgresStateStore(db repo.DBTX, enc *orgencryption.Service, ingressID uuid.UUID, orgID string, slot int32) (*PostgresStateStore, error) {
+func NewPostgresStateStore(db *pgxpool.Pool, enc *orgencryption.Service, ingressID uuid.UUID, orgID string, slot int32) (*PostgresStateStore, error) {
 	if db == nil || enc == nil {
 		return nil, errors.New("tailnet state store requires a database and organization encryption")
 	}
@@ -52,9 +83,18 @@ func (s *PostgresStateStore) ReadState(id ipn.StateKey) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), stateStoreTimeout)
 	defer cancel()
 
-	ciphertext, err := repo.New(s.db).GetNetworkIngressNodeState(ctx, repo.GetNetworkIngressNodeStateParams{
-		NetworkIngressID: s.ingressID, OrganizationID: s.orgID, Slot: s.slot, StateKey: string(id),
-	})
+	queries := repo.New(s.db)
+	var ciphertext string
+	var err error
+	if sharedAcrossSlots(id) {
+		ciphertext, err = queries.GetNetworkIngressCertificateState(ctx, repo.GetNetworkIngressCertificateStateParams{
+			NetworkIngressID: s.ingressID, OrganizationID: s.orgID, StateKey: string(id),
+		})
+	} else {
+		ciphertext, err = queries.GetNetworkIngressNodeState(ctx, repo.GetNetworkIngressNodeStateParams{
+			NetworkIngressID: s.ingressID, OrganizationID: s.orgID, Slot: s.slot, StateKey: string(id),
+		})
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ipn.ErrStateNotExist
 	}
@@ -70,15 +110,28 @@ func (s *PostgresStateStore) ReadState(id ipn.StateKey) ([]byte, error) {
 }
 
 // WriteState encrypts and upserts bs under id. A nil value deletes the key.
+// The connection's ACME account key is written once: when slots start
+// together and each generates one, the first stored wins and every later
+// read returns it, so renewals come from the account that issued the
+// certificate.
 func (s *PostgresStateStore) WriteState(id ipn.StateKey, bs []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), stateStoreTimeout)
 	defer cancel()
 
 	queries := repo.New(s.db)
+	shared := sharedAcrossSlots(id)
 	if bs == nil {
-		if err := queries.DeleteNetworkIngressNodeState(ctx, repo.DeleteNetworkIngressNodeStateParams{
-			NetworkIngressID: s.ingressID, OrganizationID: s.orgID, Slot: s.slot, StateKey: string(id),
-		}); err != nil {
+		var err error
+		if shared {
+			err = queries.DeleteNetworkIngressCertificateState(ctx, repo.DeleteNetworkIngressCertificateStateParams{
+				NetworkIngressID: s.ingressID, OrganizationID: s.orgID, StateKey: string(id),
+			})
+		} else {
+			err = queries.DeleteNetworkIngressNodeState(ctx, repo.DeleteNetworkIngressNodeStateParams{
+				NetworkIngressID: s.ingressID, OrganizationID: s.orgID, Slot: s.slot, StateKey: string(id),
+			})
+		}
+		if err != nil {
 			return fmt.Errorf("delete tailnet node state: %w", err)
 		}
 		return nil
@@ -88,10 +141,92 @@ func (s *PostgresStateStore) WriteState(id ipn.StateKey, bs []byte) error {
 	if err != nil {
 		return fmt.Errorf("encrypt tailnet node state: %w", err)
 	}
-	if err := queries.UpsertNetworkIngressNodeState(ctx, repo.UpsertNetworkIngressNodeStateParams{
-		NetworkIngressID: s.ingressID, OrganizationID: s.orgID, Slot: s.slot, StateKey: string(id), ValueEncrypted: ciphertext,
-	}); err != nil {
+	switch {
+	case id == acmeAccountKeyStateKey:
+		err = queries.InsertNetworkIngressCertificateStateIfAbsent(ctx, repo.InsertNetworkIngressCertificateStateIfAbsentParams{
+			NetworkIngressID: s.ingressID, OrganizationID: s.orgID, StateKey: string(id), ValueEncrypted: ciphertext,
+		})
+	case shared:
+		err = queries.UpsertNetworkIngressCertificateState(ctx, repo.UpsertNetworkIngressCertificateStateParams{
+			NetworkIngressID: s.ingressID, OrganizationID: s.orgID, StateKey: string(id), ValueEncrypted: ciphertext,
+		})
+	default:
+		err = queries.UpsertNetworkIngressNodeState(ctx, repo.UpsertNetworkIngressNodeStateParams{
+			NetworkIngressID: s.ingressID, OrganizationID: s.orgID, Slot: s.slot, StateKey: string(id), ValueEncrypted: ciphertext,
+		})
+	}
+	if err != nil {
 		return fmt.Errorf("write tailnet node state: %w", err)
+	}
+	return nil
+}
+
+// ReadTLSCertAndKey returns the connection's certificate and key for domain
+// from one statement, or ipn.ErrStateNotExist when either is missing.
+// Reading them separately could pair a key with the certificate another slot
+// replaced in between, which tsnet would treat as invalid and re-issue.
+func (s *PostgresStateStore) ReadTLSCertAndKey(domain string) ([]byte, []byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), stateStoreTimeout)
+	defer cancel()
+
+	certKey, keyKey := domain+".crt", domain+".key"
+	rows, err := repo.New(s.db).ListNetworkIngressCertificateStates(ctx, repo.ListNetworkIngressCertificateStatesParams{
+		NetworkIngressID: s.ingressID, OrganizationID: s.orgID, StateKeys: []string{certKey, keyKey},
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("read tailnet TLS certificate: %w", err)
+	}
+
+	var cert, key []byte
+	for _, row := range rows {
+		value, err := s.enc.Decrypt(ctx, nodeStateColumn, row.ValueEncrypted)
+		if err != nil {
+			return nil, nil, fmt.Errorf("decrypt tailnet TLS certificate: %w", err)
+		}
+		switch row.StateKey {
+		case certKey:
+			cert = value
+		case keyKey:
+			key = value
+		}
+	}
+	if cert == nil || key == nil {
+		return nil, nil, ipn.ErrStateNotExist
+	}
+	return cert, key, nil
+}
+
+// WriteTLSCertAndKey stores the connection's certificate and key for domain
+// in one transaction, so every slot sees either the old pair or the new one.
+func (s *PostgresStateStore) WriteTLSCertAndKey(domain string, cert, key []byte) (err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), stateStoreTimeout)
+	defer cancel()
+
+	certCiphertext, err := s.enc.Encrypt(ctx, nodeStateColumn, cert)
+	if err != nil {
+		return fmt.Errorf("encrypt tailnet TLS certificate: %w", err)
+	}
+	keyCiphertext, err := s.enc.Encrypt(ctx, nodeStateColumn, key)
+	if err != nil {
+		return fmt.Errorf("encrypt tailnet TLS key: %w", err)
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tailnet TLS certificate write: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	queries := repo.New(tx)
+	for stateKey, ciphertext := range map[string]string{domain + ".crt": certCiphertext, domain + ".key": keyCiphertext} {
+		if err := queries.UpsertNetworkIngressCertificateState(ctx, repo.UpsertNetworkIngressCertificateStateParams{
+			NetworkIngressID: s.ingressID, OrganizationID: s.orgID, StateKey: stateKey, ValueEncrypted: ciphertext,
+		}); err != nil {
+			return fmt.Errorf("write tailnet TLS certificate: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tailnet TLS certificate: %w", err)
 	}
 	return nil
 }
