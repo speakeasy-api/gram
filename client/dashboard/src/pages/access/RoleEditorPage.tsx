@@ -66,8 +66,8 @@ export function RoleEditorPage(): JSX.Element {
             </Page.Section.Title>
             <Page.Section.Description>
               Roles carry permissions, enabling access to different features in
-              the product. Some permissions can be narrowed to include or
-              exclude certain resources.
+              the product. MCP access is set per project or server, and platform
+              access per area. Some of it can be narrowed to certain projects.
             </Page.Section.Description>
             <Page.Section.Body>
               {isLoading && roleId ? (
@@ -81,6 +81,7 @@ export function RoleEditorPage(): JSX.Element {
                   open
                   presentation="page"
                   editingRole={role ?? null}
+                  templateRoles={data?.roles}
                   hideAssignments={fromMapping}
                   defaultName={fromMapping ? suggestedRoleName(params) : ""}
                   onOpenChange={(open) => {

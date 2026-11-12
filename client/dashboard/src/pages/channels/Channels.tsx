@@ -497,6 +497,7 @@ function ChannelsBoard({
               onMarkAllRead={markAllRead}
               connectRef={connectRef}
               notice={notice}
+              partial={workspace.moreConversations.hasMore}
             />
           ) : (
             <ConversationPane

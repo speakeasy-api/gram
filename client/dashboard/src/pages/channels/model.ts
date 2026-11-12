@@ -333,12 +333,20 @@ export function setupProgressOf(snapshot: ChannelsSnapshot): SetupProgress {
     ...Object.values(snapshot.instances),
     ...Object.values(snapshot.participants ?? {}),
   ]) {
-    if (isAgent(participant)) seen.add(participant.id);
+    // A reconnect is a new session under the same name, not a second agent.
+    if (isAgent(participant))
+      seen.add(`${participant.subjectId}\u0000${participant.label.trim()}`);
   }
-  const fromAgent = (message: ChannelMessage | undefined) =>
-    message !== undefined &&
-    isAgent(participantOf(snapshot, message.instanceId)) &&
-    (snapshot.threads[message.threadId]?.participants?.length ?? 0) === 0;
+  const fromAgent = (message: ChannelMessage | undefined) => {
+    if (!message) return false;
+    // A thread the snapshot does not carry cannot be shown to be public.
+    const thread = snapshot.threads[message.threadId];
+    return (
+      thread !== undefined &&
+      (thread.participants?.length ?? 0) === 0 &&
+      isAgent(participantOf(snapshot, message.instanceId))
+    );
+  };
   const agentsTalking =
     snapshot.messages.some(fromAgent) ||
     Object.values(snapshot.threads).some((thread) =>

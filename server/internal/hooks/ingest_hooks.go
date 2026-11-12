@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -312,6 +313,12 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
+	// A tool call that ran after Cowork's permission prompt was allowed by the
+	// person, which confirms the warning that asked for it. A call that ran
+	// and then failed was allowed too.
+	if fromCowork(payload) && toolRan(payload) && !s.isHookDuplicate(ctx) {
+		s.confirmCoworkToolAsk(context.WithoutCancel(ctx), payload, canonicalHookEvent(payload, authCtx, actor, timestamp))
+	}
 	skillCapture, observed, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)
 	if observationErr != nil {
 		logger.WarnContext(ctx, "failed to record skill activation",
@@ -362,6 +369,12 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// cache write failed transiently (the retry arrives already marked
 	// duplicate).
 	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
+	if blockReason != "" && blockEffects.ask {
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAskResult(userReason), skillCapture),
+			Actor:  ResolvedActor(actor),
+		}, nil
+	}
 	if blockReason != "" {
 		return &AuthenticatedIngestResult{
 			Result: withBlockEffect(blockEffects, s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture)),
@@ -714,12 +727,28 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
 			}
 			if scanResult.IsWarnChallenge() && opts.AllowWarnAcknowledgement {
+				if fromCowork(payload) && scanResult.CallFingerprint != "" {
+					// Cowork names the minute a message was sent in the prompt,
+					// so a retry a minute later must still match its challenge.
+					scanResult.CallFingerprint = risk.CoworkPromptCallFingerprint(ev.Prompt)
+				}
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
 				}
-				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
-					auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-					return auditReason, userReason
+				// Cowork cuts the acknowledgement link off and shows it as plain
+				// text, so there the warning leads with a short link.
+				if fromCowork(payload) {
+					if ackURL := s.coworkWarnAckURL(ctx, ev.Event, scanResult); ackURL != "" {
+						s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, "", scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
+						auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						return auditReason, coworkWarnUserReason(scanResult, ackURL)
+					}
+				}
+				if !fromCowork(payload) {
+					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
+						auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						return auditReason, userReason
+					}
 				}
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
@@ -772,6 +801,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 					if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
 						return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, toolInput)
 					}
+					if fromCowork(payload) {
+						if auditReason, userReason, ok := s.askCoworkToolWarn(ctx, payload, ev.Event, scanResult, toolName); ok {
+							return auditReason, userReason
+						}
+					}
 					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
 						auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 						return auditReason, userReason
@@ -796,6 +830,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			if scanResult.IsWarnChallenge() {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
 					return "", ""
+				}
+				if fromCowork(payload) {
+					if auditReason, userReason, ok := s.askCoworkToolWarn(ctx, payload, ev.Event, scanResult, toolName); ok {
+						return auditReason, userReason
+					}
 				}
 				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
 					auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
@@ -1173,6 +1212,14 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 		}
 	}
 	s.teeCanonicalHookToEventFeed(ctx, payload, authCtx, &metadata, hookSource, blockReason, teeRows)
+	// Cowork also ships the session transcript, so its rows are keyed by the
+	// ids the transcript shares and the two paths store each prompt and tool
+	// call once. See claude_cowork_rows.go.
+	if fromCowork(payload) {
+		s.persistCoworkEventRow(ctx, payload, authCtx, &metadata, hookSource, timestamp)
+		s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, timestamp)
+		return
+	}
 	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 	if err != nil {
 		event := "hooks_ingest_chat_persist_failed"
@@ -1192,7 +1239,13 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	} else if promptCaptured && usesNativeTranscriptFallback(payload.Source.Adapter) {
 		s.markNativePromptSession(ctx, authCtx.ProjectID.String(), canonicalSessionID(payload), payload.Source.Adapter)
 	}
-	if err := s.persistPromptAttachments(ctx, payload, authCtx, &metadata, timestamp); err != nil {
+	s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, timestamp)
+}
+
+// persistPromptAttachmentsLogged stores the event's prompt attachments and
+// logs, rather than returns, a failure: attachment capture is best effort.
+func (s *Service) persistPromptAttachmentsLogged(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time) {
+	if err := s.persistPromptAttachments(ctx, payload, authCtx, metadata, timestamp); err != nil {
 		event := "hooks_ingest_prompt_attachment_persist_failed"
 		msg := "failed to persist prompt attachments"
 		if errors.Is(err, errChatProjectMismatch) {
@@ -2231,6 +2284,16 @@ func canonicalAllowResult() *gen.IngestHookResult {
 	}
 }
 
+func canonicalAskResult(message string) *gen.IngestHookResult {
+	reason := "policy_warn_ask"
+	return &gen.IngestHookResult{
+		Decision: "ask",
+		Reason:   &reason,
+		Message:  &message,
+		Effects:  nil,
+	}
+}
+
 func canonicalDenyResult(message string) *gen.IngestHookResult {
 	if strings.TrimSpace(message) == "" {
 		message = "Request denied by Speakeasy policy."
@@ -2614,5 +2677,62 @@ func jsonString(v any) string {
 			return fmt.Sprint(t)
 		}
 		return string(b)
+	}
+}
+
+// surfaceCowork is session.surface on events sent from inside Claude Cowork.
+// It is the same name the server stores for Cowork sessions.
+const surfaceCowork = agentVariantCowork
+
+// fromCowork reports whether the event came from inside Claude Cowork. Two
+// things differ there. The Stop hook also ships the session transcript, so
+// event rows use the keys the transcript shares (claude_cowork_rows.go).
+// Cowork cannot show the acknowledgement link, so a warned prompt is
+// confirmed by sending it again (cowork_warn_confirm.go).
+func fromCowork(payload *gen.IngestPayload) bool {
+	return payload != nil && payload.Session != nil &&
+		strings.EqualFold(strings.TrimSpace(conv.PtrValOr(payload.Session.Surface, "")), surfaceCowork)
+}
+
+// persistCoworkEventRow stores a Cowork event under the
+// key its transcript entry shares. Events without a shared id are left to the
+// transcript.
+func (s *Service) persistCoworkEventRow(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) {
+	sessionID := canonicalSessionID(payload)
+	if sessionID == "" || authCtx.ProjectID == nil {
+		return
+	}
+	row, ok := coworkEventRow(payload, occurredAt)
+	if !ok {
+		return
+	}
+	enabled, err := s.sessionCaptureEnabled(ctx, metadata, *authCtx.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not resolve session capture for a cowork hook event, skipping its row",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+		)
+		return
+	}
+	if !enabled {
+		return
+	}
+	title := canonicalPlaceholderTitle(hookSource)
+	if row.role == "user" {
+		title = chat.DerivedTitle(row.content)
+	}
+	if _, err := s.writeClaudeRows(ctx, authCtx, metadata, sessionIDToUUID(sessionID), []claudeTranscriptRow{row}, hookSource, "", title); err != nil {
+		event := "hooks_ingest_chat_persist_failed"
+		if errors.Is(err, errChatProjectMismatch) {
+			event = "hooks_ingest_chat_project_mismatch"
+		}
+		s.logger.WarnContext(ctx, "failed to persist cowork hook conversation event",
+			attr.SlogEvent(event),
+			attr.SlogError(err),
+			attr.SlogHookSource(payload.Source.Adapter),
+			attr.SlogHookEvent(payload.Event.Type),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogProjectID(authCtx.ProjectID.String()),
+		)
 	}
 }
