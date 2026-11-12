@@ -9452,6 +9452,11 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
   billing_mode TEXT,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  -- Non-secret, admin-visible provider settings, kept apart from
+  -- api_key_encrypted so the dashboard can redisplay and edit them without
+  -- resubmitting the key (e.g. gemini_compliance's delegated Workspace admin
+  -- and selected organizational unit). Validated in application code.
+  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
 
   CONSTRAINT ai_integration_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
@@ -9468,6 +9473,8 @@ COMMENT ON COLUMN ai_integration_configs.enabled IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.billing_mode IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.id IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.deleted IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_configs.settings IS 'Provider settings JSON; holds admin emails and customer directory structure.
+@access: opaque-restricted';
 
 CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_configs_org_provider_key
   ON ai_integration_configs (organization_id, provider)
