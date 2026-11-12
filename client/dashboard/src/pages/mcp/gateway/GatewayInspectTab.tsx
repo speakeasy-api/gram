@@ -403,7 +403,17 @@ function GatewayInspectConnection({
           : `${unserved} of ${rows.length} servers aren't served. This gateway has no sign-in, so every caller is anonymous and private servers are hidden.`}
       </Text>
     ) : null;
-  const unconnected = failedMembers.filter((m) => signIn.needsSignIn(m.slug));
+  // Every member the viewer still has to connect, in any mode: Direct reads
+  // no member on its own, so the shared member status supplies them too.
+  const unconnected = [
+    ...failedMembers.filter((m) => signIn.needsSignIn(m.slug)),
+    ...rows.flatMap((row) => {
+      const slug = row.server?.slug ?? row.member.mcpServerSlug;
+      if (!slug || stateFor(row)?.kind !== "sign_in") return [];
+      if (failedMembers.some((m) => m.slug === slug)) return [];
+      return [{ slug, name: row.server?.name ?? slug }];
+    }),
+  ];
   // Tools behind these servers can't be counted, so the summary counts the
   // servers: the ones whose tools couldn't be read, plus any the shared
   // member status says need sign-in or are unavailable.

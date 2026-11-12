@@ -285,15 +285,8 @@ function memberAccessChecks(
     const slug = row.server?.slug ?? row.member.mcpServerSlug ?? row.member.id;
     const name = row.server?.name ?? row.member.mcpServerSlug ?? "A member";
     if (state.kind === "checking") checking = true;
-    if (state.kind === "sign_in") {
-      checks.push({
-        key: `member-sign-in-${slug}`,
-        label: `Sign in to ${name}`,
-        description: `Connect your own account so its tools work for you. Inspect has the Connect step.`,
-        ready: false,
-        href: inspectHref,
-      });
-    }
+    // The viewer's own account is theirs to connect on Inspect, not a step
+    // in setting the gateway up, so it is no readiness item.
     // A failed check says nothing about the member, so it is no issue.
     if (state.kind === "unavailable" && state.checkFailed) {
       checkFailed = true;

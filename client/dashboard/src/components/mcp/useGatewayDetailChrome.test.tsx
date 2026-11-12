@@ -238,14 +238,11 @@ const remote = (slug: string, name: string) => ({
   member: { id: `member-${slug}`, mcpServerSlug: slug },
 });
 
-it("asks the viewer to sign in to a member that needs their account", () => {
+it("leaves the viewer's own sign-in out of the gateway's readiness", () => {
   state.rows = [remote("linear", "Linear")];
   state.memberStates = { linear: { kind: "sign_in" } };
   renderReadiness();
-  const check = row("Sign in to Linear");
-  expect(check.getAttribute("data-ready")).toBe("false");
-  expect(check.getAttribute("data-broken")).toBe("false");
-  expect(check.getAttribute("data-href")).toContain("/gateway/gw/inspect");
+  expect(screen.queryByText(/Sign in to Linear/)).toBeNull();
 });
 
 it("flags a member whose tools couldn't be read as broken", () => {
