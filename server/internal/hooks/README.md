@@ -130,8 +130,10 @@ retrying. Cowork shows a hook's block text cut off after two lines with no way
 to expand it, and shows it as plain text, so a long link is cut off and none
 is clickable. For events with `session.surface: "cowork"` the challenge leads
 with a short link, `<site>/ack#<token>`, that the person copies into a
-browser. The dashboard's `/ack` route redeems it like the long link, and the
-person then tries again. The challenge key masks the "Message sent at …"
+browser. The dashboard's `/ack` route redeems it like the long link: the link
+works for 10 minutes, approving it is recorded in the audit log, and the
+approval lets that exact prompt through for 5 minutes. The person then tries
+again; a retry after that is challenged again. The challenge key masks the "Message sent at …"
 sentence Claude's apps add to the prompt's reminder, because it names the
 minute the message was sent, so a retry a minute later still matches.
 
