@@ -28,7 +28,7 @@ func newRefCheck(scope Scope, resourceID string, dimensions map[string]string, m
 	if match == MatchStrict {
 		mode = selectorMatchStrict
 	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: mode, representedUser: ""}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: mode, representedUser: "", probe: false, anyOf: nil}
 }
 
 // ToolCall requests mcp:connect for calling one tool on the server. A tool
