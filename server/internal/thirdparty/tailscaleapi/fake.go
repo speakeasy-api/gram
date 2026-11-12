@@ -113,7 +113,6 @@ func (f *Fake) Keys() []AuthKey {
 	return append([]AuthKey(nil), f.keys...)
 }
 
-// DeletedDevices returns every node id passed to DeleteDevice.
 // KeyRequests returns every auth key request that succeeded, in order.
 func (f *Fake) KeyRequests() []AuthKeyRequest {
 	f.mu.Lock()
@@ -121,6 +120,7 @@ func (f *Fake) KeyRequests() []AuthKeyRequest {
 	return slices.Clone(f.requests)
 }
 
+// DeletedDevices returns every node id passed to DeleteDevice.
 func (f *Fake) DeletedDevices() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()

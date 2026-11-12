@@ -56,7 +56,7 @@ async function run(): Promise<void> {
   await $`touch mise.local.toml`;
   await $`mise set --file mise.local.toml ${DEV_ID}=${id}`;
   console.log(
-    `🔑 ${DEV_ID}=${id} has been set in mise.local.toml; local private network hostnames and machines are named local-${id}-....`,
+    `🔑 ${DEV_ID}=${id} has been set in mise.local.toml; local private network hostnames are named local-${id}-<hostname> and gateway machines speakeasy-gw-local-${id}-<slot>.`,
   );
 }
 
