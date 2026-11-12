@@ -1,6 +1,7 @@
 package networkingress_test
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
@@ -20,8 +21,8 @@ func TestProductionNamer(t *testing.T) {
 	require.Equal(t, "svc:speakeasy", must(namer.ServiceName(ctx, "speakeasy")))
 	require.Equal(t, "Speakeasy private MCP ingress", must(namer.ServiceComment(ctx)))
 	require.Equal(t, "speakeasy-gw-0", must(namer.MachineName(ctx, 0)))
-	ingressID := uuid.New()
-	require.Equal(t, "Speakeasy gateway slot 2 ("+ingressID.String()+")", must(namer.AuthKeyDescription(ctx, ingressID, 2)))
+	ingressID := uuid.MustParse("1a2b3c4d-0000-4000-8000-000000000000")
+	require.Equal(t, "Speakeasy gateway 1a2b3c4d slot 2", must(namer.AuthKeyDescription(ctx, ingressID, 2)))
 }
 
 func TestLocalNamer(t *testing.T) {
@@ -37,7 +38,7 @@ func TestLocalNamer(t *testing.T) {
 	require.Error(t, err, "a service the stack does not own cannot even be named")
 	require.Equal(t, "Speakeasy local development (local-ab12)", must(namer.ServiceComment(ctx)))
 	require.Equal(t, "speakeasy-gw-local-ab12-3", must(namer.MachineName(ctx, 3)))
-	require.Contains(t, must(namer.AuthKeyDescription(ctx, uuid.New(), 1)), "local-ab12")
+	require.Equal(t, "Speakeasy local ab12 1a2b3c4d slot 1", must(namer.AuthKeyDescription(ctx, uuid.MustParse("1a2b3c4d-0000-4000-8000-000000000000"), 1)))
 
 	require.True(t, must(namer.OwnsHostname(ctx, "local-ab12-speakeasy")))
 	require.False(t, must(namer.OwnsHostname(ctx, "speakeasy")), "production's hostnames are never owned")
@@ -64,6 +65,25 @@ func TestNewNamer(t *testing.T) {
 	for _, environment := range []string{"dev", "prod", ""} {
 		_, err := networkingress.NewNamer(environment, "ab12")
 		require.ErrorIs(t, err, networkingress.ErrDevIDOutsideLocal, "environment %q", environment)
+	}
+}
+
+// authKeyDescriptionPattern is what Tailscale accepts for an auth key
+// description: letters, digits and spaces, at most 50 characters.
+var authKeyDescriptionPattern = regexp.MustCompile(`^[A-Za-z0-9 ]{1,50}$`)
+
+func TestAuthKeyDescriptionsAreAcceptedByTailscale(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	// The longest development id and slot give the longest descriptions.
+	local, err := networkingress.NewLocalNamer("abcd1234")
+	require.NoError(t, err)
+	for _, namer := range []networkingress.Namer{networkingress.ProductionNamer{}, local} {
+		for _, slot := range []int32{0, 1000} {
+			description := must(namer.AuthKeyDescription(ctx, uuid.New(), slot))
+			require.Regexp(t, authKeyDescriptionPattern, description)
+		}
 	}
 }
 
