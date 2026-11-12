@@ -45,7 +45,7 @@ const (
 
 	// MemoryDigestLookback is how far back the job looks for periods
 	// without a digest. It covers the 90-day summary backfill an org gets
-	// when the Business Memory Extraction gate turns on, plus margin for the month that straddles it.
+	// when the Organizational Memory gate turns on, plus margin for the month that straddles it.
 	MemoryDigestLookback = 100 * 24 * time.Hour
 
 	// memoryDigestBatchSize is how many digests one activity writes. At
