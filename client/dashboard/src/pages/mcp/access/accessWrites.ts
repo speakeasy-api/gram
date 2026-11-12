@@ -426,8 +426,9 @@ export function allowDestructiveWrite(
 
 /**
  * Take a principal off this server. The rules it owns here go, and anything
- * still reaching it is subtracted. Blocks are independent, so "no access at
- * all" is all three of them.
+ * still reaching it is subtracted. A view block also takes manage, but
+ * connect's block stands alone, so "no access at all" writes a block for each
+ * line rather than leaning on one to cover the rest.
  */
 export function revokeRowWrite(
   direct: AudienceRule[],

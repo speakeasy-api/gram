@@ -71,9 +71,26 @@ describe("blockingRules", () => {
 });
 
 describe("blockingRules names only the blocks that took something away", () => {
-  // The mcp:blocked_* scopes are independent. A block on a capability nobody
-  // was granted changed nothing, and naming it sends an administrator to a
-  // role that is not the reason.
+  // A block on a capability nobody was granted changed nothing, and naming it
+  // sends an administrator to a role that is not the reason.
+  it("names a view block that took manage away too", () => {
+    const viewBlock = entry({
+      principalUrn: "role:global:admin",
+      displayName: "Admin",
+      level: "blocked_view",
+      appliesTo: "resource",
+    });
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "manage" }),
+      viewBlock,
+    ];
+
+    expect(effectiveReach(reaching)).toBeNull();
+    expect(blockingRules(reaching).map((rule) => rule.displayName)).toEqual([
+      "Admin",
+    ]);
+  });
+
   it("ignores a block on a capability the grants never opened", () => {
     const reaching = [
       gtmGrant,
@@ -139,6 +156,23 @@ describe("principal precedence", () => {
     ];
 
     expect(effectiveReach(reaching, [], hana)?.capabilities).toContain("view");
+  });
+
+  it("lets an own view rule outrank a role's view block for view only", () => {
+    // The view block also takes manage; a direct view rule restores view and
+    // nothing it does not grant.
+    const reaching = [
+      entry({ principalUrn: "role:organization:gtm", level: "manage" }),
+      entry({
+        principalUrn: "role:global:admin",
+        displayName: "Admin",
+        level: "blocked_view",
+        appliesTo: "resource",
+      }),
+      ownRule({ level: "view" }),
+    ];
+
+    expect(effectiveReach(reaching, [], hana)?.capabilities).toEqual(["view"]);
   });
 
   it("does not let a rule covering every server outrank a block", () => {

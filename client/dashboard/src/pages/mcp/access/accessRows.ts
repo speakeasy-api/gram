@@ -58,10 +58,9 @@ const SATISFIED_BY: Record<ScopeKey, ScopeKey[]> = {
 };
 
 /**
- * The level that takes one scope away. Each block stands on its own — see
- * scopeExpansions in authz/scopes.go, where the mcp:blocked_* scopes do not
- * satisfy one another — so closing connect leaves view and manage as they
- * were, and taking a principal off the server writes all three.
+ * The level that takes one scope away. Blocks follow SATISFIED_BY in
+ * reverse — see scopeExpansions in authz/scopes.go — so a view block also
+ * takes manage, while closing connect leaves view and manage as they were.
  */
 export const BLOCK_LEVEL: Record<ScopeKey, AudienceLevel> = {
   use: "blocked",
@@ -224,8 +223,11 @@ export function buildAccessRows(entries: ResourceAudienceEntry[]): AccessRow[] {
       const blocked = blockedScope(entry.level);
 
       if (blocked) {
-        // A block reaches the scope it names and nothing else.
-        row.cells[blocked].blocks.push(entry);
+        // A block reaches the scope it names and every scope that satisfies
+        // it: a view block takes manage as well.
+        for (const key of SATISFIED_BY[blocked]) {
+          row.cells[key].blocks.push(entry);
+        }
         if (own && entry.appliesTo === "resource") {
           row.cells[blocked].ownBlock = entry;
         }
