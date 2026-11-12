@@ -77,7 +77,7 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
     endpoints,
     isLoadingEndpoints,
     rows,
-    { checkTools: "cache" },
+    { checkTools: "fetch" },
   );
   const { hasScope } = useRBAC();
   // Mirrors the mcp_servers sidebar: the tab reads org membership as well as

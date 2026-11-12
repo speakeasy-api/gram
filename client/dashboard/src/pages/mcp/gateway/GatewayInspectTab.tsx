@@ -35,7 +35,7 @@ import { runMcpTool } from "../inspect/runMcpTool";
 import type { InspectTool } from "../inspect/types";
 import { useToolHealth } from "../inspect/useToolHealth";
 import { GatewayCodeExecution } from "./GatewayCodeExecution";
-import { GatewayMemberConnect } from "./GatewayMemberConnect";
+import { GatewayConnectStep } from "./GatewayConnectStep";
 import {
   GATEWAY_SIGN_IN_WHY,
   NEEDS_GATEWAY_SIGN_IN,
@@ -116,6 +116,9 @@ function GatewayInspectConnection({
       ? requested
       : "default";
   const [version, setVersion] = useState<string>(choice);
+  // Connecting accounts is optional: skipping shows the tools the viewer can
+  // already use, and a line above them leads back to connecting.
+  const [skippedConnect, setSkippedConnect] = useState(false);
   const chooseMode = (next: ModeChoice) => {
     setSearchParams(
       (current) => {
@@ -432,28 +435,24 @@ function GatewayInspectConnection({
       ?.server;
   // One banner per kind of problem, one row per server with its own action,
   // so a list of failures never runs together on one line.
+  const unconnectedNames =
+    unconnected.length === 1
+      ? `${unconnected[0]!.name} isn't connected`
+      : `${unconnected.length} servers aren't connected`;
   const memberSignIn =
-    unconnected.length > 0 ? (
-      <Alert
-        variant="warning"
-        title={
-          unconnected.length === 1
-            ? `Connect your ${unconnected[0]!.name} account to see its tools`
-            : `Connect your accounts to see tools from ${unconnected.length} servers`
-        }
-      >
-        <ul className="mt-1 flex flex-col">
-          {unconnected.map((m) => (
-            <li
-              key={m.slug}
-              className="text-foreground flex items-center justify-between gap-3 py-1"
-            >
-              <span>{m.name}</span>
-              <GatewayMemberConnect name={m.name} onConnect={signIn.connect} />
-            </li>
-          ))}
-        </ul>
-      </Alert>
+    unconnected.length > 0 && skippedConnect ? (
+      <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
+        <StatusDot tone="warning" />
+        {unconnectedNames}, so {unconnected.length === 1 ? "its" : "their"}{" "}
+        tools aren&apos;t listed.
+        <button
+          type="button"
+          onClick={() => setSkippedConnect(false)}
+          className="text-foreground underline underline-offset-2"
+        >
+          Connect
+        </button>
+      </p>
     ) : null;
   const memberFailures =
     broken.length > 0 ? (
@@ -626,6 +625,26 @@ function GatewayInspectConnection({
             <Button.Text>Try again</Button.Text>
           </Button>
         }
+      />
+    );
+  }
+
+  if (
+    !state &&
+    !skippedConnect &&
+    unconnected.length > 0 &&
+    !inspection.isLoading
+  ) {
+    state = (
+      <GatewayConnectStep
+        members={unconnected.map((m) => ({
+          slug: m.slug,
+          name: m.name,
+          mcpServerId: memberServer(m.slug)?.id,
+        }))}
+        onConnect={signIn.connect}
+        onSkip={() => setSkippedConnect(true)}
+        availableCount={tools.length}
       />
     );
   }

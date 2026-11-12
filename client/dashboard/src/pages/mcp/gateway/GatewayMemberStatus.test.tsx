@@ -22,20 +22,15 @@ function renderBadge(props: Partial<ComponentProps<typeof MemberStatusBadge>>) {
   );
 }
 
-it("shows what the viewer gets, with Connect while sign-in is needed", () => {
-  const onConnect = vi.fn<() => void>();
-  renderBadge({ viewer: { kind: "sign_in" }, onConnect });
-  expect(screen.getByText("Sign in needed")).toBeTruthy();
-  fireEvent.click(
-    screen.getByRole("button", { name: "Connect your account for Linear" }),
-  );
-  expect(onConnect).toHaveBeenCalled();
+it("reads as Available when each person signs in on connecting", () => {
+  renderBadge({ viewer: { kind: "sign_in" } });
+  expect(screen.getByText("Available")).toBeTruthy();
+  expect(screen.queryByRole("button")).toBeNull();
 });
 
 it("flips to Available after connecting, with no action", () => {
   renderBadge({
     viewer: { kind: "available" },
-    onConnect: vi.fn<() => void>(),
   });
   expect(screen.getByText("Available")).toBeTruthy();
   expect(screen.queryByRole("button")).toBeNull();

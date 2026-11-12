@@ -291,8 +291,8 @@ export function useGatewayMemberStates(
     onConnected: options.onConnected,
   });
   const fetchChecks = (options.checkTools ?? "fetch") === "fetch";
-  // One subscriber is enough; the header is on every gateway tab.
-  useRefreshOnSavedChanges(options.checkTools === "cache" && live);
+  // Every caller subscribes; react-query folds the repeated invalidations.
+  useRefreshOnSavedChanges(live);
 
   const slugOf = (row: MemberRow) =>
     row.server?.slug ?? row.member.mcpServerSlug;

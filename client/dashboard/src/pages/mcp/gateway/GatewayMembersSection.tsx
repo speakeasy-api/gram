@@ -52,7 +52,6 @@ import {
 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
-import { GatewayMemberConnect } from "./GatewayMemberConnect";
 import { gatewayTabHref } from "./GatewayDetailsRouting";
 import {
   MEMBER_STATE_LABEL,
@@ -177,9 +176,11 @@ const VIEWER_STATUS: Record<
 > = {
   checking: { variant: "neutral", why: "Checking this server for you." },
   available: { variant: "success", why: "Its tools load for you." },
+  // Each person signs in when their own client connects, so this is the
+  // normal, working state, not a step anyone has to take here.
   sign_in: {
-    variant: "warning",
-    why: "Connect your own account to use this server's tools.",
+    variant: "success",
+    why: "Each person signs in with their own account when they connect.",
   },
   unavailable: { variant: "destructive", why: "" },
 };
@@ -188,7 +189,6 @@ export function MemberStatusBadge({
   classification,
   viewer,
   name,
-  onConnect,
   gatewaySignInHref,
   credentialHref,
 }: {
@@ -196,7 +196,6 @@ export function MemberStatusBadge({
   /** What the viewer gets now; excluded members have none. */
   viewer?: MemberViewerState;
   name: string;
-  onConnect?: () => void;
   /** The gateway's sign-in settings, where an admin links the member's sign-in. */
   gatewaySignInHref?: string;
   /** The member's own sign-in settings, where an admin sets a shared credential. */
@@ -214,7 +213,12 @@ export function MemberStatusBadge({
   const fixed = STATUS_BY_CLASSIFICATION[classification];
   const status = viewer
     ? {
-        label: MEMBER_STATE_LABEL[viewer.kind],
+        // Each person signing in on connecting is the normal case, so it
+        // reads the same as any member that works.
+        label:
+          viewer.kind === "sign_in"
+            ? MEMBER_STATE_LABEL.available
+            : MEMBER_STATE_LABEL[viewer.kind],
         variant: VIEWER_STATUS[viewer.kind].variant,
         why:
           viewer.kind === "unavailable"
@@ -223,7 +227,7 @@ export function MemberStatusBadge({
       }
     : fixed;
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
+    <span className="inline-flex items-center gap-x-3 whitespace-nowrap">
       <SimpleTooltip tooltip={status.why}>
         <span className="inline-flex cursor-default items-center gap-2">
           <span
@@ -235,9 +239,7 @@ export function MemberStatusBadge({
           </Text>
         </span>
       </SimpleTooltip>
-      {viewer?.kind === "sign_in" && onConnect ? (
-        <GatewayMemberConnect name={name} onConnect={onConnect} />
-      ) : fix ? (
+      {fix ? (
         <Link
           to={fix.href}
           className="text-foreground text-sm underline underline-offset-2"
@@ -567,7 +569,7 @@ export function GatewayMembersSection({
       key: "backend",
       header: "Backend",
       render: (row) => <BackendKindTag row={row} />,
-      width: "140px",
+      width: "120px",
     },
     {
       key: "status",
@@ -577,7 +579,6 @@ export function GatewayMembersSection({
           classification={row.classification}
           viewer={memberStates?.stateFor(row)}
           name={row.server?.name ?? row.member.mcpServerSlug ?? "this server"}
-          onConnect={memberStates?.connect}
           gatewaySignInHref={`${gatewayTabHref(routes, metaMcpServer.id, "settings")}#${AUTHORIZATION_SERVERS_FIELD_ID}`}
           credentialHref={
             row.server
@@ -586,7 +587,8 @@ export function GatewayMembersSection({
           }
         />
       ),
-      width: memberStates ? "210px" : "140px",
+      // Room for a state and its fix on one line, e.g. "Unavailable Set credential".
+      width: memberStates ? "300px" : "160px",
     },
     {
       key: "actions",

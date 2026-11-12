@@ -141,6 +141,9 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("./GatewayDetailsRouting", () => ({
   gatewayTabHref: () => "/settings",
 }));
+vi.mock("@/components/sources/SourceCard", () => ({
+  SourceMcpIcon: () => null,
+}));
 vi.mock("./GatewaySettingsTab", () => ({
   GATEWAY_INSTRUCTIONS_SECTION_ID: "instructions",
   GATEWAY_AUTHENTICATION_SECTION_ID: "authentication",
@@ -479,16 +482,21 @@ it("offers Connect for a member that needs the viewer's account", () => {
     </TooltipProvider>,
   );
 
-  expect(
-    screen.getByText(/Connect your Linear account to see its tools/i),
-  ).toBeTruthy();
+  // Connecting comes first, in place of the tool list.
+  expect(screen.getByText("Connect your accounts")).toBeTruthy();
   fireEvent.click(
-    screen.getByRole("button", { name: "Connect your account for Linear" }),
+    screen.getByRole("button", { name: "Connect your Linear account" }),
   );
   expect(state.connect).toHaveBeenCalled();
   // Slack failed for another reason: no Connect, but a retry.
   expect(
-    screen.queryByRole("button", { name: "Connect your account for Slack" }),
+    screen.queryByRole("button", { name: "Connect your Slack account" }),
   ).toBeNull();
   expect(screen.getByText(/Couldn't read Slack's tools/)).toBeTruthy();
+  // Optional: skipping shows the tools, with a way back to connecting.
+  fireEvent.click(screen.getByRole("button", { name: /Skip for now/ }));
+  expect(screen.queryByText("Connect your accounts")).toBeNull();
+  expect(screen.getByText(/Linear isn't connected/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+  expect(screen.getByText("Connect your accounts")).toBeTruthy();
 });
