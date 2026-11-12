@@ -2204,7 +2204,9 @@ jobs:
         if: steps.key.outputs.configured == 'true'
         run: mise run eval:platform-tools --changed-since HEAD^1 --max-cases 60 --concurrency 4 --out "$RUNNER_TEMP/platform-tool-eval.md"
         env:
-          OPENROUTER_DEV_KEY: ${{ secrets.OPENROUTER_TOOL_EVAL_KEY }}
+          # Not OPENROUTER_DEV_KEY: mise.toml sets that to a placeholder,
+          # which would override this inside mise run.
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_TOOL_EVAL_KEY }}
 
       - name: Write summary
         if: always() && steps.key.outputs.configured == 'true'

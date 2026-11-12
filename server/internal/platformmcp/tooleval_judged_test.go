@@ -56,7 +56,7 @@ func toolEvalEnvInt(t *testing.T, name string, fallback int) int {
 func TestToolEvalJudged(t *testing.T) { //nolint:paralleltest // one long run that fans out internally
 	apiKey := toolEvalEnv("OPENROUTER_DEV_KEY", os.Getenv("OPENROUTER_API_KEY"))
 	if apiKey == "" {
-		t.Skip("set OPENROUTER_DEV_KEY to run the Platform MCP tool eval")
+		t.Skip("set OPENROUTER_DEV_KEY or OPENROUTER_API_KEY to run the Platform MCP tool eval")
 	}
 	cfg := tooleval.Config{
 		Models:      strings.Split(toolEvalEnv("TOOLEVAL_MODELS", defaultToolEvalModels), ","),

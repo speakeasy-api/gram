@@ -14,8 +14,10 @@
 
 set -euo pipefail
 
-if [ -z "${OPENROUTER_DEV_KEY:-}" ] || [ "${OPENROUTER_DEV_KEY}" = "unset" ]; then
-  echo "Set OPENROUTER_DEV_KEY in mise.local.toml (mise run zero:openrouter)" >&2
+# CI passes OPENROUTER_API_KEY, because mise.toml sets OPENROUTER_DEV_KEY to
+# an "unset" placeholder that would override a key from the environment.
+if { [ -z "${OPENROUTER_DEV_KEY:-}" ] || [ "${OPENROUTER_DEV_KEY}" = "unset" ]; } && [ -z "${OPENROUTER_API_KEY:-}" ]; then
+  echo "Set OPENROUTER_DEV_KEY in mise.local.toml (mise run zero:openrouter), or OPENROUTER_API_KEY" >&2
   exit 1
 fi
 
