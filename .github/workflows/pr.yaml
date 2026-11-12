@@ -2369,8 +2369,11 @@ jobs:
           - target: gram-admin
             runner: blacksmith-2vcpu-ubuntu-2404
             checks: true
+          # The overlay tests run here to balance job lengths: they take
+          # about as long as the spec check left in the gram-admin job.
           - target: hooks-go
             runner: blacksmith-2vcpu-ubuntu-2404
+            overlay-tests: true
     env:
       SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
     steps:
@@ -2413,7 +2416,7 @@ jobs:
         run: mise run test:gen-resolve
 
       - name: Test SDK overlays
-        if: matrix.checks
+        if: matrix.overlay-tests
         run: mise run test:sdk-overlays
 
       - name: Test SDK generation check
