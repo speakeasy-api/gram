@@ -34,24 +34,24 @@ The whole permission model is one Go value, `authz.Model` in `server/internal/au
 
 ```go
 // one resource
-if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerID(id), authz.ProjectID(project)).Write()); err != nil {
+if err := s.authz.Require(ctx, authz.MCPServer(id, project).Write()); err != nil {
 	return err
 }
 // no resource yet (create), or a lookup that missed (do not leak existence)
-if err := s.authz.Require(ctx, authz.Project(authz.ProjectID(p)).Environments().Create()); err != nil {
+if err := s.authz.Require(ctx, authz.Project(p).Environments().Create()); err != nil {
 	return err
 }
-if err := s.authz.Require(ctx, authz.Project(authz.ProjectID(p)).Environments().Read()); err != nil {
+if err := s.authz.Require(ctx, authz.Project(p).Environments().Read()); err != nil {
 	return err
 }
 // a project-wide grant OR a grant on the resource, and a block on either refuses
-if err := s.authz.Require(ctx, authz.AnyOf(authz.Project(authz.ProjectID(p)).Write(), authz.Skill(authz.SkillID(id)).Write())); err != nil {
+if err := s.authz.Require(ctx, authz.AnyOf(authz.Project(p).Write(), authz.Skill(id).Write())); err != nil {
 	return err
 }
 // a branch, not a denial (no challenge logged)
-ok, err := s.authz.Can(ctx, authz.Chat(authz.ChatID(id)).Read())
+ok, err := s.authz.Can(ctx, authz.Chat(id).Read())
 // discovery: "could they act on any matching resource?"
-ok, err := s.authz.Can(ctx, authz.MCPServer(authz.MCPServerID(id), authz.ProjectID(p)).Connect().Probe())
+ok, err := s.authz.Can(ctx, authz.MCPServer(id, p).Connect().Probe())
 ```
 
 | Need                                             | Use                                                                                                                                                                    |
@@ -62,17 +62,17 @@ ok, err := s.authz.Can(ctx, authz.MCPServer(authz.MCPServerID(id), authz.Project
 | Narrow a list                                    | `Filter(ctx, checks)` returns the allowed `ResourceID`s. `FindMatched` returns a bool per check, for many checks that share one resource id (tools in a `tools/list`). |
 | MCP tool call                                    | `authz.MCPServer(id, p).ToolCall(tool, disposition)`. An empty disposition becomes unknown, so disposition blocks apply to unannotated tools.                          |
 
-Ref constructors take named string types (`authz.ProjectID`, `authz.EnvironmentID`, `authz.MCPServerID`, ...), so convert a uuid with `authz.EnvironmentID(id.String())`. A project collection (`Project(p).Environments()`, `.MCPServers()`, `.Assistants()`) builds a check on the resource type whose resource id is the project id, exactly what `EnvironmentCheck(scope, p, p)` built before, so existing grants match it the same way and `Filter` returns the project id for it.
+Ref constructors take each id as you hold it, a `uuid.UUID` or a string: `authz.Environment(env.ID, projectID)`. The argument order is always the resource, then its project. A project collection (`Project(p).Environments()`, `.MCPServers()`, `.Assistants()`) builds a check on the resource type whose resource id is the project id, exactly what `EnvironmentCheck(scope, p, p)` built before, so existing grants match it the same way and `Filter` returns the project id for it.
 
 When migrating a package from the old constructors:
 
-| Before                                      | After                                                                                   |
-| ------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `EnvironmentCheck(s, envID, p)`             | `authz.Environment(authz.EnvironmentID(envID), authz.ProjectID(p)).Read()` / `.Write()` |
-| `EnvironmentCheck(s, p, p)`                 | `authz.Project(authz.ProjectID(p)).Environments().Read()` / `.Write()` / `.Create()`    |
-| `MCPCheck(ScopeMCPWrite, p, p)`             | `authz.Project(authz.ProjectID(p)).MCPServers().Create()`                               |
-| `AssistantCheck(ScopeAssistantWrite, p, p)` | `authz.Project(authz.ProjectID(p)).Assistants().Create()`                               |
-| `MCPToolCallCheck(...)`                     | `authz.MCPServer(id, p).ToolCall(tool, disposition)`                                    |
+| Before                                      | After                                                               |
+| ------------------------------------------- | ------------------------------------------------------------------- |
+| `EnvironmentCheck(s, envID, p)`             | `authz.Environment(envID, p).Read()` / `.Write()`                   |
+| `EnvironmentCheck(s, p, p)`                 | `authz.Project(p).Environments().Read()` / `.Write()` / `.Create()` |
+| `MCPCheck(ScopeMCPWrite, p, p)`             | `authz.Project(p).MCPServers().Create()`                            |
+| `AssistantCheck(ScopeAssistantWrite, p, p)` | `authz.Project(p).Assistants().Create()`                            |
+| `MCPToolCallCheck(...)`                     | `authz.MCPServer(id, p).ToolCall(tool, disposition)`                |
 
 Keep `Require` and its `CodeForbidden` branch where the code already has one. Swapping it for `Can` keeps enforcement the same but stops logging the challenge, so do that only where the denial is not a refusal the user sees.
 
