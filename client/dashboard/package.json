@@ -76,7 +76,7 @@
     "fflate": "^0.8.3",
     "lucide-react": "catalog:",
     "monaco-editor": "^0.57.0",
-    "motion": "^13.2.0",
+    "motion": "^14.9.0",
     "nuqs": "^2.9.0",
     "posthog-js": "^1.442.1",
     "radix-ui": "^1.8.1",

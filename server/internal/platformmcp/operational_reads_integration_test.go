@@ -420,29 +420,32 @@ func TestListRecentToolCallsUsesBoundedSafeSummaryProjection(t *testing.T) {
 	require.NotContains(t, string(encoded), "trace-id")
 }
 
-func TestListRecentToolCallsRequiresLogRead(t *testing.T) {
+// Project access and organization administration do not imply log:read; such a
+// member is not refused but reads only their own scope, like the dashboard.
+func TestListRecentToolCallsWithoutLogReadStaysInOwnScope(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_recent_tool_calls_log_read")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	agents := seedOwnerScopeAgents(t, ctx, conn, principal)
 	telemetry := &recordingRecentToolCallReader{rows: nil}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
 		WithAuthorization(engine).
 		WithRecentToolCalls(telemetry, mustParseURL(t, "https://app.getgram.test"))
-	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
-	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
-	ctx = authz.GrantsToContext(ctx, []authz.Grant{
+	ctx = platformMemberContext(ctx, principal,
 		authz.NewGrant(authz.ScopeProjectRead, project.ID.String()),
 		authz.NewGrant(authz.ScopeProjectWrite, project.ID.String()),
 		authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID),
-	})
+	)
 
 	_, err = reader.ListRecentToolCalls(ctx, principal, ListRecentToolCallsInput{ProjectSlug: project.Slug})
-	require.ErrorIs(t, err, ErrForbidden)
-	require.Empty(t, telemetry.params.GramProjectID, "no tool-call rows are read without log:read")
+	require.NoError(t, err)
+	require.Equal(t, project.ID.String(), telemetry.params.GramProjectID)
+	require.Equal(t, &telemetryrepo.OwnScope{UserID: principal.UserID, UserEmail: agents.email, AgentIDs: []string{agents.own.String()}, IdentityOrg: ""}, telemetry.params.OwnScope,
+		"without log:read the read is scoped to the member and the agents they currently own")
 }
 
 func TestListRecentToolCallsProjectsAgentIdentityAndFilters(t *testing.T) {
@@ -511,7 +514,8 @@ func TestRecentToolCallAgentContractMatchesUnavailable(t *testing.T) {
 	require.Equal(t, a.output, b.output)
 	require.Equal(t, a.Meta, b.Meta)
 	require.Equal(t, bothAudiences, a.Meta.Audiences)
-	require.Equal(t, discoveryLogRead, a.Meta.DiscoveryScopes)
+	require.Equal(t, ExternalAuthorizationMember, a.Meta.Authorization)
+	require.Empty(t, a.Meta.DiscoveryScopes, "every member has their own calls to list")
 }
 
 func TestRecentToolCallTargetOmitsUnclassifiedShadowSource(t *testing.T) {

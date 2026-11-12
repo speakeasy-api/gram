@@ -1,4 +1,28 @@
-import type { State } from "./state";
+import { steps, type State } from "./state";
+export const setupPlanCopy = {
+  github: {
+    introduction:
+      "We’ll walk you through setting up an OAuth app in GitHub, adding its credentials here, and testing the connection.",
+    requirements:
+      "You’ll need permission to manage OAuth apps in your GitHub organization—or a teammate who can help.",
+  },
+  slack: {
+    introduction:
+      "We’ll walk you through creating or configuring a Slack app, choosing its permissions, adding its credentials here, and testing the connection.",
+    requirements:
+      "You’ll need access to your Slack workspace and permission to manage an app—or a teammate who can help. Your workspace may also require app approval.",
+  },
+  salesforce: {
+    introduction:
+      "Choose a Salesforce MCP server and either create your own External Client App or install Speakeasy’s Salesforce app and finish OAuth with support.",
+    requirements:
+      "You’ll need Salesforce System Administrator access—or a teammate who can help—in an API-enabled production or sandbox org with Hosted MCP Servers available. Salesforce documents availability for Enterprise Edition and above.",
+  },
+} satisfies Record<
+  State["provider"],
+  { introduction: string; requirements: string }
+>;
+
 const slackScopes = [
   "search:read.public",
   "search:read.private",
@@ -37,6 +61,10 @@ export const scopesFor = (s: { values: { access: string } }): string[] =>
     : slackScopes;
 
 export function taskTitle(s: State): string {
+  if (s.provider === "salesforce")
+    return (
+      steps(s).find((step) => step.id === s.step)?.title ?? "Salesforce setup"
+    );
   if (s.step === "begin") return "Setup plan";
   if (s.step === "test") return "Connect and test";
   if (s.step === "credentials") return "Enter app credentials";

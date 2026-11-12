@@ -859,6 +859,13 @@ INSERT INTO chats (id, project_id, organization_id, user_id, external_chat_id, t
 VALUES (@id, @project_id, @organization_id, @user_id, sqlc.narg(external_chat_id), @title, sqlc.narg(cwd), sqlc.narg(user_account_id))
 RETURNING id;
 
+-- name: SetChatAgentFixture :exec
+-- Test-only fixture: attributes a chat to an agent principal, as capture under
+-- an agent credential does, so owner-visibility tests can seed agent sessions.
+UPDATE chats
+SET agent_id = @agent_id
+WHERE id = @id;
+
 -- name: SetCapturedAgentChatSummaryFixture :exec
 -- Test-only fixture: stores a summary so callers can prove metadata reads do not disclose it.
 UPDATE chats
@@ -2667,3 +2674,18 @@ WHERE remote_session_client_id = @remote_session_client_id;
 UPDATE custom_domains
 SET health_status = 'unhealthy', health_issue = 'check_failed', health_checked_at = @checked_at
 WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;
+
+-- name: SetChatMemorySweepFixture :exec
+-- Test-only fixture: backdates a chat and, when given, its summary and
+-- memory-exclusion timestamps so the team memory sweep sees it as idle,
+-- excluded or stale.
+UPDATE chats
+SET updated_at = @updated_at,
+    summary_generated_at = COALESCE(sqlc.narg(summary_generated_at), summary_generated_at),
+    memory_excluded_at = COALESCE(sqlc.narg(memory_excluded_at), memory_excluded_at)
+WHERE id = @id;
+
+-- name: SetChatMessagesCreatedAtFixture :exec
+-- Test-only fixture: backdates every message in a chat so the team memory
+-- sweep reads the chat's last activity as created_at.
+UPDATE chat_messages SET created_at = @created_at WHERE chat_id = @chat_id;
