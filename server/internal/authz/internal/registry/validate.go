@@ -90,6 +90,7 @@ func (r Registry) Validate() error {
 			}
 			dimKeys[d.Key] = true
 		}
+		validateParentDimension(fail, t)
 
 		actions := make(map[Action]Permission)
 		for _, p := range t.Permissions {
@@ -308,4 +309,21 @@ func camelAction(action Action) string {
 		}
 	}
 	return b.String()
+}
+
+// validateParentDimension requires a loosely matched type that can be bounded
+// to its parent (mcp grants by project_id) to mark that dimension Required.
+// Loose matching skips grant keys a check omits, so a check that left the
+// parent out would pass a grant bounded to any parent. Strictly matched types
+// fail closed on a missing key already.
+func validateParentDimension(fail func(string, ...any), t ResourceType) {
+	if t.Parent == "" || t.Match != MatchLoose {
+		return
+	}
+	key := string(t.Parent) + "_id"
+	for _, d := range t.Dimensions {
+		if d.Key == key && !d.Required {
+			fail("%s: dimension %q names the parent %s, so it must be Required", t.Kind, key, t.Parent)
+		}
+	}
 }

@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -55,7 +56,7 @@ func TestEvaluateGrantCheck_rootGrantNotSelfExcluded(t *testing.T) {
 			t.Parallel()
 
 			var dimensions map[string]string
-			if ResourceKindForScope(tc.scope) == ResourceKindMCP {
+			if slices.Contains(requiredCheckDimensions[ResourceKindForScope(tc.scope)], SelectorKeyProjectID) {
 				dimensions = map[string]string{SelectorKeyProjectID: testProjectID}
 			}
 			eval, err := evaluateGrantCheck(grants, Check{Scope: tc.scope, ResourceKind: "", ResourceID: tc.resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil})
