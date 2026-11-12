@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,4 +71,13 @@ func TestProbeTransitionFollowsTheNode(t *testing.T) {
 			require.Equal(t, tc.want, probeTransition(tc.from, "private", tc.state, tc.err))
 		})
 	}
+}
+
+func TestAuthKeyDescriptionIsAcceptedByTailscale(t *testing.T) {
+	t.Parallel()
+
+	ingressID := uuid.MustParse("1a2b3c4d-0000-4000-8000-000000000000")
+	require.Equal(t, "Speakeasy gateway 1a2b3c4d slot 2", authKeyDescription(ingressID, 2))
+	// Tailscale accepts letters, digits and spaces, at most 50 characters.
+	require.Regexp(t, `^[A-Za-z0-9 ]{1,50}$`, authKeyDescription(uuid.New(), 1000))
 }
