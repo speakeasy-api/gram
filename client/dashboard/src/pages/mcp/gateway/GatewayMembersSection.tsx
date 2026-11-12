@@ -36,8 +36,6 @@ import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMem
 
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDown,
-  ArrowUp,
   Blocks,
   Boxes,
   Cable,
@@ -72,7 +70,6 @@ import {
   type AddBatchState,
   memberBackendKind,
   nextSortOrder,
-  planReorder,
 } from "./memberRows";
 import {
   useGatewayMemberRows,
@@ -380,29 +377,11 @@ export function GatewayMembersSection({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : failure);
     } finally {
-      // Always refetch: a reorder writes rows one at a time, so a failure
-      // partway through still changed the server and the table must not keep
-      // rendering the pre-move order.
+      // Always refetch, so the table shows what the server holds.
       await invalidateMembers();
       setMutating(false);
     }
   };
-
-  const handleMove = (index: number, direction: -1 | 1) =>
-    runMutation(async () => {
-      const plan = planReorder(
-        rows.map((row) => row.member),
-        index,
-        index + direction,
-      );
-      // Sequential: each call is a full sortOrder write and the plan is
-      // consistent only as a whole.
-      for (const change of plan) {
-        await client.metaMcp.updateMember({
-          updateMetaMcpMemberForm: change,
-        });
-      }
-    }, "Failed to reorder servers");
 
   const handleRemove = (row: MemberRow) =>
     runMutation(async () => {
@@ -506,60 +485,7 @@ export function GatewayMembersSection({
     }
   };
 
-  const indexByMemberId = new Map(
-    rows.map((row, index) => [row.member.id, index]),
-  );
-
-  // A single member has nothing to reorder against, so the column would be
-  // two permanently disabled arrows taking up a fifth of the row.
-  const reorderColumn: Column<MemberRow>[] =
-    rows.length < 2
-      ? []
-      : [
-          {
-            key: "order",
-            header: "",
-            width: "88px",
-            render: (row) => {
-              const index = indexByMemberId.get(row.member.id) ?? 0;
-              return (
-                <RequireScope
-                  scope="mcp:write"
-                  resourceId={metaMcpServer.id}
-                  level="component"
-                >
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="tertiary"
-                      size="sm"
-                      disabled={mutating || index === 0}
-                      onClick={() => void handleMove(index, -1)}
-                      aria-label="Move up"
-                    >
-                      <Button.Icon>
-                        <ArrowUp className="size-4" />
-                      </Button.Icon>
-                    </Button>
-                    <Button
-                      variant="tertiary"
-                      size="sm"
-                      disabled={mutating || index === rows.length - 1}
-                      onClick={() => void handleMove(index, 1)}
-                      aria-label="Move down"
-                    >
-                      <Button.Icon>
-                        <ArrowDown className="size-4" />
-                      </Button.Icon>
-                    </Button>
-                  </div>
-                </RequireScope>
-              );
-            },
-          },
-        ];
-
   const columns: Column<MemberRow>[] = [
-    ...reorderColumn,
     {
       key: "server",
       header: "Server",
@@ -626,7 +552,7 @@ export function GatewayMembersSection({
             Servers
           </Page.Section.Title>
           <Page.Section.Description>
-            Agents see these servers in this order.
+            The MCP servers this gateway serves to agents.
           </Page.Section.Description>
           <Page.Section.CTA>
             <RequireScope

@@ -53,37 +53,6 @@ export function buildMemberRows(
   });
 }
 
-/**
- * Plan the updateMember calls for moving one row. Recomputes sequential
- * sortOrder over the whole target order and returns only the rows whose
- * stored value differs — robust to duplicate sortOrder values (all rows
- * default to 0).
- */
-export function planReorder(
-  orderedMembers: MetaMcpMember[],
-  fromIndex: number,
-  toIndex: number,
-): { id: string; sortOrder: number }[] {
-  if (
-    fromIndex === toIndex ||
-    fromIndex < 0 ||
-    toIndex < 0 ||
-    fromIndex >= orderedMembers.length ||
-    toIndex >= orderedMembers.length
-  ) {
-    return [];
-  }
-  const next = [...orderedMembers];
-  const [moved] = next.splice(fromIndex, 1);
-  next.splice(toIndex, 0, moved!);
-  return next
-    .map((member, index) => ({ id: member.id, sortOrder: index }))
-    .filter(
-      ({ id, sortOrder }) =>
-        orderedMembers.find((m) => m.id === id)?.sortOrder !== sortOrder,
-    );
-}
-
 /** sortOrder for a newly added member: after every existing member. */
 export function nextSortOrder(members: MetaMcpMember[]): number {
   return members.reduce((max, m) => Math.max(max, m.sortOrder + 1), 0);
