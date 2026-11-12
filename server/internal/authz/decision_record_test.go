@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -8,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestRecordedDecisions_AbsentWithoutRecorder(t *testing.T) {
@@ -116,4 +118,38 @@ func TestRecordedDecisions_RequireAnyUnblockedCountsOnce(t *testing.T) {
 	require.Equal(t, 1, summary.Total())
 	require.Len(t, summary.Operations, 1)
 	require.Equal(t, 1, summary.Operations[DecisionOperationRequireAnyUnblocked])
+}
+
+// RequireUserOrganizationScope records its early refusals and its skip under
+// its own operation, before any grant is loaded.
+func TestRecordedDecisions_RequireUserOrganizationScope(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	base := enterpriseSessionCtx(t)
+	authCtx, ok := contextvalues.GetAuthContext(base)
+	require.True(t, ok)
+	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	sessionless := *authCtx
+	sessionless.SessionID = nil
+
+	for name, tc := range map[string]struct {
+		ctx  context.Context
+		mode DecisionMode
+	}{
+		"principal api key":    {contextvalues.WithPrincipalAPIKeyAuthorization(base, authCtx, actor, contextvalues.PrincipalCredential{}), DecisionModeEnforced},
+		"principal credential": {contextvalues.WithPrincipalCredentialAuthorization(base, authCtx, actor, contextvalues.PrincipalCredential{}), DecisionModeEnforced},
+		"sessionless":          {contextvalues.SetAuthContext(base, &sessionless), DecisionModeSkipped},
+	} {
+		ctx := WithDecisionRecorder(tc.ctx)
+		_ = engine.RequireUserOrganizationScope(ctx, "org_other", authCtx.UserID, ScopeOrgRead)
+
+		summary, ok := RecordedDecisions(ctx)
+		require.True(t, ok, name)
+		require.Equal(t, map[DecisionOperation]int{DecisionOperationRequireUserOrganization: 1}, summary.Operations, name)
+		if tc.mode == DecisionModeEnforced {
+			require.Equal(t, 1, summary.Enforced, name)
+		} else {
+			require.Equal(t, 1, summary.Skipped, name)
+		}
+	}
 }
