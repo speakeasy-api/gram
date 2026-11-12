@@ -26,8 +26,8 @@ func registerChangeRiskPolicyAudience(reg *Registrar, catalogAvailable bool, han
 		handler = handlers.ChangeAudience
 		description = "Atomically add and remove exact organization user/ROLE principal URNs on one targeted risk policy, preserving settings and unrelated grants. Read get_risk_policy first and confirm the delta. Both arrays are required (empty allowed), max 100 each, with at least one change; duplicates, overlap, already-present additions and absent removals are refused. The resulting audience must contain 1–100 principals. Everyone deltas are refused. Removal changes only explicit positive grants, not role-derived or inherited coverage, and never creates an exclusion or proves effective non-membership. For removal of the authenticated user use remove_self_from_risk_policy; do not bypass its refusal. Reuse the idempotency key only for the same confirmed request; re-read after writing."
 	}
-	principals := func() *jsonschema.Schema {
-		return &jsonschema.Schema{Type: "array", Items: stringSchema("Exact organization user or ROLE principal URN; Everyone is not supported.", 1, 0), MaxItems: new(100), UniqueItems: true}
+	principals := func(description string) *jsonschema.Schema {
+		return &jsonschema.Schema{Type: "array", Description: description, Items: stringSchema("Exact organization user or ROLE principal URN; Everyone is not supported.", 1, 0), MaxItems: new(100), UniqueItems: true}
 	}
 	schema := closedObject(map[string]*jsonschema.Schema{
 		"project_slug":     stringSchema("Exact project slug; never defaults.", 1, 0),
@@ -35,12 +35,8 @@ func registerChangeRiskPolicyAudience(reg *Registrar, catalogAvailable bool, han
 		"expected_version": stringSchema("Opaque version from a fresh get_risk_policy read.", 1, 0),
 		"idempotency_key":  stringSchema("Stable replay key for this confirmed delta.", 1, 128),
 		"confirmed":        {Type: "boolean", Enum: []any{true}},
-		"add_principals":   principals(), "remove_principals": principals(),
+		"add_principals":   principals("Principals to grant; may be empty when remove_principals is not. At least one of the two arrays must name a principal."), "remove_principals": principals("Principals whose exact grant to remove; may be empty when add_principals is not."),
 	}, []string{"project_slug", "policy_id", "expected_version", "idempotency_key", "confirmed", "add_principals", "remove_principals"})
-	schema.AnyOf = []*jsonschema.Schema{
-		{Properties: map[string]*jsonschema.Schema{"add_principals": {MinItems: new(1)}}},
-		{Properties: map[string]*jsonschema.Schema{"remove_principals": {MinItems: new(1)}}},
-	}
 	addTool(reg, &mcp.Tool{Meta: nil, OutputSchema: nil, Icons: nil, Name: operationChangeRiskPolicyAudience, Title: "Change Risk Policy Audience", Description: description, InputSchema: schema, Annotations: &mcp.ToolAnnotations{OpenWorldHint: new(false), ReadOnlyHint: false, Title: "", DestructiveHint: new(true), IdempotentHint: true}}, ToolMeta{DiscoveryScopes: nil, Authorization: ExternalAuthorizationOrgAdmin, Audiences: []Audience{AudienceExternal}, ProjectScope: ProjectScopeExplicit}, instrumentRiskMutation(reg, operationChangeRiskPolicyAudience, handler))
 }
 
@@ -51,8 +47,13 @@ func (s *riskPolicyMutationService) changePolicyAudienceTool(ctx context.Context
 // Validate both sides before canonicalizing so duplicates and conflicts cannot
 // disappear during receipt normalization. Removals need live org validation too.
 func validateRiskPolicyAudienceDelta(input changeRiskPolicyAudienceInput) ([]urn.Principal, error) {
-	if !input.Confirmed || input.AddPrincipals == nil || input.RemovePrincipals == nil || len(input.AddPrincipals) > 100 || len(input.RemovePrincipals) > 100 || len(input.AddPrincipals)+len(input.RemovePrincipals) == 0 {
+	if !input.Confirmed || input.AddPrincipals == nil || input.RemovePrincipals == nil || len(input.AddPrincipals) > 100 || len(input.RemovePrincipals) > 100 {
 		return nil, invalidRiskPolicyRequest()
+	}
+	// The input schema cannot require one change, because Anthropic rejects
+	// a top-level anyOf, so an empty delta is refused here.
+	if len(input.AddPrincipals)+len(input.RemovePrincipals) == 0 {
+		return nil, &RiskMutationError{Code: "invalid_request", Message: "Add or remove at least one principal. No policy was changed.", Cause: ErrRiskMutationInvalid}
 	}
 	seen := map[string]bool{}
 	principals := make([]urn.Principal, 0, len(input.AddPrincipals)+len(input.RemovePrincipals))

@@ -44,6 +44,11 @@ func TestRiskPolicyAudienceDeltaValidation(t *testing.T) {
 			require.ErrorIs(t, err, ErrRiskMutationInvalid)
 		})
 	}
+	_, err = validateRiskPolicyAudienceDelta(changeRiskPolicyAudienceInput{Confirmed: true, AddPrincipals: []string{}, RemovePrincipals: []string{}})
+	var mutation *RiskMutationError
+	require.ErrorAs(t, err, &mutation)
+	require.Equal(t, "invalid_request", mutation.Code)
+	require.Contains(t, mutation.Message, "Add or remove at least one principal.")
 	require.NoError(t, validateRiskPolicyAudienceDeltaTarget("targeted", []string{"user:old", "user:other"}, valid))
 	for _, test := range []struct {
 		name, kind string
@@ -102,8 +107,11 @@ func TestRiskPolicyAudienceChangeToolContract(t *testing.T) {
 		args["confirmed"] = false
 		require.Error(t, resolved.Validate(args))
 		args["confirmed"] = true
+		// An empty delta fits the flat schema (Anthropic rejects a top-level
+		// anyOf); validateRiskPolicyAudienceDelta refuses it.
 		args["add_principals"] = []any{}
-		require.Error(t, resolved.Validate(args))
+		require.NoError(t, resolved.Validate(args))
+		require.NotContains(t, string(descriptor.InputSchema), `"anyOf"`)
 		args["add_principals"] = []any{"user:new", "user:new"}
 		require.Error(t, resolved.Validate(args))
 		args["add_principals"] = []any{"user:new"}
