@@ -220,7 +220,7 @@ WITH session_issuer AS (
            CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END AS organization_id
     FROM user_session_issuers AS usi
     LEFT JOIN projects AS p ON p.id = usi.project_id
-    WHERE usi.id = $3
+    WHERE usi.id = $4
       AND usi.deleted IS FALSE
       AND (usi.project_id IS NULL OR p.deleted IS FALSE)
 ),
@@ -248,10 +248,51 @@ reachable AS (
             AND g.user_session_issuer_id = si.id
         )
       )
+),
+offered_oauth AS (
+    SELECT l.mcp_server_id,
+           ac.id AS auth_client_id,
+           ac.client_type,
+           ac.remote_session_client_id
+    FROM mcp_server_auth_clients AS l
+    JOIN reachable AS r
+      ON r.id = l.mcp_server_id
+    JOIN mcp_auth_clients AS ac
+      ON ac.id = l.auth_client_id
+     AND ac.organization_id = l.organization_id
+     AND (ac.project_id IS NULL OR ac.project_id = r.project_id)
+     AND ac.deleted IS FALSE
+     AND ac.enabled
+     AND ac.client_type NOT IN ('static_credential', 'pass_through')
+    WHERE l.deleted IS FALSE
+      AND l.organization_id = (SELECT organization_id FROM session_issuer)
+),
+typed_eligible AS (
+    SELECT o.mcp_server_id,
+           o.remote_session_client_id
+    FROM offered_oauth AS o
+    JOIN remote_session_clients AS c
+      ON c.id = o.remote_session_client_id
+     AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS rsi
+      ON rsi.id = c.remote_session_issuer_id
+     AND rsi.deleted IS FALSE
+    JOIN remote_session_client_user_session_issuers AS binding
+      ON binding.remote_session_client_id = o.remote_session_client_id
+     AND binding.user_session_issuer_id = $4
+    WHERE o.client_type IN ('remote_session', 'service_account')
+    GROUP BY o.mcp_server_id, o.remote_session_client_id
+    HAVING count(DISTINCT o.auth_client_id) = 1
 )
 SELECT r.id AS mcp_server_id,
-       -- A recorded choice counts only while it is usable, by the predicate
-       -- GetUpstreamClientSelection serves with; the two must stay identical.
+       -- A recorded choice counts only while it is usable. Without typed_only
+       -- that is the predicate GetUpstreamClientSelection serves with; the two
+       -- must stay identical. With it, a choice naming an auth client counts
+       -- while that client is live, enabled and offered (and, for one backed by
+       -- a registration, while the registration and its issuer are live, as the
+       -- resolver requires), a no-auth choice while
+       -- the server offers no enabled OAuth-backed client, and an unmapped
+       -- client choice while it could be decided today.
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel
@@ -266,6 +307,37 @@ SELECT r.id AS mcp_server_id,
            AND sel.mcp_server_id = r.id
            AND sel.deleted IS FALSE
            AND CASE
+             WHEN $3::boolean AND sel.auth_client_id IS NOT NULL THEN EXISTS (
+               SELECT 1
+               FROM mcp_server_auth_clients AS l
+               JOIN mcp_auth_clients AS ac
+                 ON ac.id = l.auth_client_id
+                AND ac.organization_id = l.organization_id
+                AND (ac.project_id IS NULL OR ac.project_id = r.project_id)
+                AND ac.deleted IS FALSE
+                AND ac.enabled
+               WHERE l.mcp_server_id = r.id
+                 AND l.auth_client_id = sel.auth_client_id
+                 AND l.deleted IS FALSE
+                 AND (ac.client_type NOT IN ('remote_session', 'service_account') OR EXISTS (
+                   SELECT 1
+                   FROM remote_session_clients AS reg
+                   JOIN remote_session_issuers AS rsi
+                     ON rsi.id = reg.remote_session_issuer_id
+                    AND rsi.deleted IS FALSE
+                   WHERE reg.id = ac.remote_session_client_id
+                     AND reg.deleted IS FALSE
+                 ))
+             )
+             WHEN $3::boolean AND sel.no_auth THEN NOT EXISTS (
+               SELECT 1 FROM offered_oauth AS o WHERE o.mcp_server_id = r.id
+             )
+             WHEN $3::boolean THEN EXISTS (
+               SELECT 1
+               FROM typed_eligible AS e
+               WHERE e.mcp_server_id = r.id
+                 AND e.remote_session_client_id = sel.remote_session_client_id
+             )
              WHEN sel.no_auth OR headers_only.id IS NOT NULL THEN NOT EXISTS (
                SELECT 1
                FROM mcp_server_remote_session_clients AS a
@@ -280,7 +352,7 @@ SELECT r.id AS mcp_server_id,
                 AND c.deleted IS FALSE
                JOIN remote_session_client_user_session_issuers AS link
                  ON link.remote_session_client_id = a.remote_session_client_id
-                AND link.user_session_issuer_id = $3
+                AND link.user_session_issuer_id = $4
                WHERE a.mcp_server_id = r.id
                  AND a.remote_session_client_id = sel.remote_session_client_id
                  AND a.deleted IS FALSE
@@ -303,22 +375,30 @@ SELECT r.id AS mcp_server_id,
            AND NOT sel.no_auth
        )::boolean AS chose_client,
        (
-         SELECT count(*)
-         FROM mcp_server_remote_session_clients AS a
-         JOIN remote_session_clients AS c
-           ON c.id = a.remote_session_client_id
-          AND c.deleted IS FALSE
-         JOIN remote_session_client_user_session_issuers AS link
-           ON link.remote_session_client_id = a.remote_session_client_id
-          AND link.user_session_issuer_id = $3
-         WHERE a.mcp_server_id = r.id
-           AND a.deleted IS FALSE
+         CASE WHEN $3::boolean THEN (
+           SELECT count(*) FROM typed_eligible AS e WHERE e.mcp_server_id = r.id
+         ) ELSE (
+           SELECT count(*)
+           FROM mcp_server_remote_session_clients AS a
+           JOIN remote_session_clients AS c
+             ON c.id = a.remote_session_client_id
+            AND c.deleted IS FALSE
+           JOIN remote_session_client_user_session_issuers AS link
+             ON link.remote_session_client_id = a.remote_session_client_id
+            AND link.user_session_issuer_id = $4
+           WHERE a.mcp_server_id = r.id
+             AND a.deleted IS FALSE
+         ) END
        )::bigint AS eligible_clients,
        (
-         SELECT count(*)
-         FROM mcp_server_remote_session_clients AS a
-         WHERE a.mcp_server_id = r.id
-           AND a.deleted IS FALSE
+         CASE WHEN $3::boolean THEN (
+           SELECT count(*) FROM offered_oauth AS o WHERE o.mcp_server_id = r.id
+         ) ELSE (
+           SELECT count(*)
+           FROM mcp_server_remote_session_clients AS a
+           WHERE a.mcp_server_id = r.id
+             AND a.deleted IS FALSE
+         ) END
        )::bigint AS associated_clients
 FROM reachable AS r
 ORDER BY r.id
@@ -327,6 +407,7 @@ ORDER BY r.id
 type ListUpstreamClientSelectionCoverageParams struct {
 	CredentialKind      string
 	CredentialID        uuid.UUID
+	TypedOnly           bool
 	UserSessionIssuerID uuid.UUID
 }
 
@@ -341,9 +422,22 @@ type ListUpstreamClientSelectionCoverageRow struct {
 // Every server one credential can reach, with its recorded choice and the
 // evidence RecordUpstreamClientSelectionsForCredentials decides from. The reach and the
 // evidence must stay identical to that statement's, so a prediction made here
-// is what the write records.
+// is what the write records. typed_only means what it does there: the evidence
+// is the auth clients a server offers, not its upstream OAuth client
+// associations, and a recorded choice counts as the typed resolver reads it.
+// The enabled OAuth-backed auth clients each reachable server offers.
+// The registrations of those clients the credential's issuer binds, which is
+// what a choice can be decided from without a person picking it, as
+// RecordUpstreamClientSelections decides it: the registration and its issuer
+// are live, and exactly one offered client uses it. A registration two
+// clients share names neither, so the resolver serves its choice as ambiguous.
 func (q *Queries) ListUpstreamClientSelectionCoverage(ctx context.Context, arg ListUpstreamClientSelectionCoverageParams) ([]ListUpstreamClientSelectionCoverageRow, error) {
-	rows, err := q.db.Query(ctx, listUpstreamClientSelectionCoverage, arg.CredentialKind, arg.CredentialID, arg.UserSessionIssuerID)
+	rows, err := q.db.Query(ctx, listUpstreamClientSelectionCoverage,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.TypedOnly,
+		arg.UserSessionIssuerID,
+	)
 	if err != nil {
 		return nil, err
 	}

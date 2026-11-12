@@ -121,13 +121,17 @@ func TestOrganizationUserSessionIssuerMigrateReconcilesCredentialChoices(t *test
 				}
 			}
 			// A recorded typed choice remains authoritative even after the issuer
-			// binds a second eligible registration. A credential that only reaches
-			// the server through the move was never served there, so it must not guess.
+			// binds additional eligible registrations. Keep two offered registrations
+			// after detaching the recorded client so the missing choice is ambiguous
+			// under both legacy and typed-only enforcement. A credential that only
+			// reaches the server through the move must not guess.
 			thirdID := seedIssuer(t, ctx, ti, "selection-third")
 			undecided, err := seedUserSession(t, ctx, ti.conn, thirdID, urn.NewUserSubject("undecided"))
 			require.NoError(t, err)
-			_, thirdClient := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, thirdID)
-			require.NoError(t, fixtures.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: servers[0], RemoteSessionClientID: thirdClient}))
+			for range 2 {
+				_, additionalClient := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, thirdID)
+				require.NoError(t, fixtures.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: servers[0], RemoteSessionClientID: additionalClient}))
+			}
 			_, err = authclientsrepo.New(ti.conn).DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{OrganizationID: auth.ActiveOrganizationID, McpServerID: servers[0], AuthClientID: firstAuthClient})
 			require.NoError(t, err)
 			_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: thirdID.String(), TargetID: target.ID})

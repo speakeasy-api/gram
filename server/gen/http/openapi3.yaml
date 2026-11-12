@@ -101355,7 +101355,7 @@ components:
                     format: int64
                 auth_clients_error:
                     type: string
-                    description: Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.
+                    description: Why recording typed auth clients failed, when it did. For an organization enforcing upstream auth, the run recorded no credential choices, since those are decided from the typed auth clients. Otherwise the upstream OAuth migration itself is unaffected.
                 auth_clients_written:
                     type: integer
                     description: Typed auth clients recorded.

@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
 // CredentialClass is the kind of inbound credential a choice belongs to, as
@@ -162,10 +164,18 @@ type liveCredential struct {
 // resolver reads it, whatever the legacy issuer binding. An unmapped OAuth
 // choice holds while its registration is associated with the server and
 // bound to issuer, which is what the upstream client choice serves it on.
-func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID) (SelectionOutcome, uuid.UUID) {
+// For an organization enforcing upstream auth (typedOnly), a server's upstream
+// OAuth client associations make no choice stale or rejected, as issuance reads
+// them there, but an unmapped OAuth choice still needs its registration and
+// that registration's issuer to be live.
+func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID, typedOnly bool) (SelectionOutcome, uuid.UUID) {
 	readsNoAuth := row.NoAuth || row.NamesHeaders
-	staleNoAuth := readsNoAuth && (row.ServerHasAssociations || row.ServerHasOauthClients || slices.Contains(row.EmaGatewayIssuerIds, issuer))
-	oauthRejected := !readsNoAuth && (!row.RegistrationAssociated || !slices.Contains(row.RegistrationIssuerIds, issuer))
+	staleNoAuth := readsNoAuth && ((row.ServerHasAssociations && !typedOnly) || row.ServerHasOauthClients || slices.Contains(row.EmaGatewayIssuerIds, issuer))
+	registrationServes := row.RegistrationLive
+	if !typedOnly {
+		registrationServes = row.RegistrationAssociated
+	}
+	oauthRejected := !readsNoAuth && (!registrationServes || !slices.Contains(row.RegistrationIssuerIds, issuer))
 	switch {
 	case staleNoAuth:
 		return SelectionStaleNoAuth, uuid.Nil
@@ -254,13 +264,13 @@ func visitSelectionMappings(ctx context.Context, q *Queries, params ListSelectio
 }
 
 func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write bool, credential liveCredential, row ListSelectionMappingsRow, report *Report) error {
-	outcome, clientID := decideSelection(row, credential.issuer)
+	outcome, clientID := decideSelection(row, credential.issuer, opts.TypedOnly)
 	counts := report.selectionClass(credential.class)
 	counts.Selections++
 	if outcome == SelectionMap {
 		report.PendingSelectionMappings++
 		if write {
-			written, final, err := mapSelection(ctx, q, opts.OrganizationID, credential.issuer, row, clientID)
+			written, final, err := mapSelection(ctx, q, opts.OrganizationID, credential.issuer, opts.TypedOnly, row, clientID)
 			if err != nil {
 				return err
 			}
@@ -292,7 +302,7 @@ func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write boo
 // header changed concurrently either commits before the read or waits for
 // this phase to commit. It returns whether it wrote and the choice's outcome.
 // The locks are held until the phase commits.
-func mapSelection(ctx context.Context, q *Queries, organizationID string, issuerID uuid.UUID, row ListSelectionMappingsRow, clientID uuid.UUID) (bool, SelectionOutcome, error) {
+func mapSelection(ctx context.Context, q *Queries, organizationID string, issuerID uuid.UUID, typedOnly bool, row ListSelectionMappingsRow, clientID uuid.UUID) (bool, SelectionOutcome, error) {
 	if err := q.LockSelectionRemoteSource(ctx, row.McpServerID); err != nil {
 		return false, "", fmt.Errorf("lock source of selection %s: %w", row.ID, err)
 	}
@@ -317,7 +327,7 @@ func mapSelection(ctx context.Context, q *Queries, organizationID string, issuer
 	if len(fresh) == 0 {
 		return false, SelectionSkippedRace, nil
 	}
-	outcome, decided := decideSelection(fresh[0], issuerID)
+	outcome, decided := decideSelection(fresh[0], issuerID, typedOnly)
 	switch {
 	case outcome != SelectionMap:
 		return false, outcome, nil
@@ -359,17 +369,25 @@ func ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx context.Con
 	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
 		return 0, errors.New("reconcile user session selections: no transaction or tenant scope")
 	}
+	// Read the feature repository directly to avoid a dependency cycle through
+	// the product feature service, which invokes this backfill.
+	typedOnly, err := productfeaturesrepo.New(tx).IsFeatureEnabled(ctx, productfeaturesrepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID, FeatureName: "upstream_auth_enforced",
+	})
+	if err != nil {
+		return 0, fmt.Errorf("read enforcement for selection reconciliation: %w", err)
+	}
 	q := New(tx)
 	confirmed := make(map[selectionMappingGroup]bool)
 	var skipped int64
-	err := visitSelectionMappings(ctx, q, ListSelectionMappingsParams{
+	err = visitSelectionMappings(ctx, q, ListSelectionMappingsParams{
 		OrganizationID: organizationID, PageSize: defaultPageSize, OnlyUnmapped: true, ScopeMcpServerIds: serverIDs,
 		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 	}, func(rows []ListSelectionMappingsRow) error {
 		groups := make(map[selectionMappingGroup][]ListSelectionMappingsRow)
 		var ordered []selectionMappingGroup
 		for _, row := range rows {
-			outcome, clientID := decideSelection(row, issuerID)
+			outcome, clientID := decideSelection(row, issuerID, typedOnly)
 			if outcome != SelectionMap {
 				continue
 			}
@@ -388,7 +406,7 @@ func ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx context.Con
 				for len(group) > 0 {
 					representative := group[0]
 					group = group[1:]
-					written, outcome, err := mapSelection(ctx, q, organizationID, issuerID, representative, key.clientID)
+					written, outcome, err := mapSelection(ctx, q, organizationID, issuerID, typedOnly, representative, key.clientID)
 					if err != nil {
 						return err
 					}
