@@ -265,46 +265,78 @@ func TestListProjectMcpServers_IgnoresDeletedServers(t *testing.T) {
 
 func TestListProjectMcpServers_UpstreamURL(t *testing.T) {
 	t.Parallel()
-	ctx, svc, conn := newTestMCPServersService(t)
-	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
-	projectID := seedProject(t, ctx, conn, "org_one", "upstream")
-	backing := seedToolset(t, ctx, conn, "org_one", projectID, "backing", false)
-	seedMCPServer(t, ctx, conn, projectID, backing, "toolset")
-	remoteID, serverID := uuid.New(), uuid.New()
-	const upstream = "https://upstream.example.test/mcp"
-	_, err := remotemcpRepo.New(conn).CreateServer(ctx, remotemcpRepo.CreateServerParams{
-		ID:            remoteID,
-		ProjectID:     projectID,
-		Name:          pgtype.Text{String: "remote", Valid: true},
-		Slug:          pgtype.Text{String: "remote", Valid: true},
-		TransportType: "streamable-http",
-		Url:           upstream,
-	})
-	require.NoError(t, err)
-	_, err = mcpserversRepo.New(conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
-		ID:                    serverID,
-		ProjectID:             projectID,
-		Name:                  pgtype.Text{String: "remote", Valid: true},
-		Slug:                  pgtype.Text{String: "remote", Valid: true},
-		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:     uuid.NullUUID{UUID: remoteID, Valid: true},
-		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:            "private",
-		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
-	})
-	require.NoError(t, err)
-	got := listMCPServers(t, ctx, svc, "org_one", projectID)
-	require.Len(t, got, 2)
-	for _, server := range got {
-		if server.Source == "remote" {
-			require.NotNil(t, server.UpstreamURL)
-			require.Equal(t, upstream, *server.UpstreamURL)
-		} else {
-			require.Nil(t, server.UpstreamURL)
-		}
+	for _, tc := range []struct {
+		name         string
+		deleted      bool
+		otherProject bool
+	}{
+		{name: "live remote"},
+		{name: "deleted remote", deleted: true},
+		{name: "cross-project remote", otherProject: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, svc, conn := newTestMCPServersService(t)
+			seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
+			projectID := seedProject(t, ctx, conn, "org_one", "upstream")
+			backing := seedToolset(t, ctx, conn, "org_one", projectID, "backing", false)
+			toolsetID := seedMCPServer(t, ctx, conn, projectID, backing, "toolset")
+			remoteProjectID := projectID
+			if tc.otherProject {
+				remoteProjectID = seedProject(t, ctx, conn, "org_one", "other")
+			}
+			remoteID, serverID := uuid.New(), uuid.New()
+			const upstream = "https://upstream.example.test/mcp"
+			_, err := remotemcpRepo.New(conn).CreateServer(ctx, remotemcpRepo.CreateServerParams{
+				ID:            remoteID,
+				ProjectID:     remoteProjectID,
+				Name:          pgtype.Text{String: "remote", Valid: true},
+				Slug:          pgtype.Text{String: "remote", Valid: true},
+				TransportType: "streamable-http",
+				Url:           upstream,
+			})
+			require.NoError(t, err)
+			_, err = mcpserversRepo.New(conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+				ID:                    serverID,
+				ProjectID:             projectID,
+				Name:                  pgtype.Text{String: "remote", Valid: true},
+				Slug:                  pgtype.Text{String: "remote", Valid: true},
+				EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				RemoteMcpServerID:     uuid.NullUUID{UUID: remoteID, Valid: true},
+				TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				Visibility:            "private",
+				NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
+			})
+			require.NoError(t, err)
+			if tc.deleted {
+				_, err = remotemcpRepo.New(conn).DeleteServer(ctx, remotemcpRepo.DeleteServerParams{
+					ID:        remoteID,
+					ProjectID: remoteProjectID,
+				})
+				require.NoError(t, err)
+			}
+			got := listMCPServers(t, ctx, svc, "org_one", projectID)
+			require.Len(t, got, 2)
+			byID := make(map[string]*gen.AdminMcpServer, len(got))
+			for _, server := range got {
+				byID[server.ID] = server
+			}
+			require.Contains(t, byID, serverID.String())
+			remote := byID[serverID.String()]
+			require.Equal(t, "remote", remote.Source)
+			if tc.deleted || tc.otherProject {
+				require.Nil(t, remote.UpstreamURL)
+			} else {
+				require.NotNil(t, remote.UpstreamURL)
+				require.Equal(t, upstream, *remote.UpstreamURL)
+			}
+			require.Contains(t, byID, toolsetID.String())
+			require.Equal(t, "toolset", byID[toolsetID.String()].Source)
+			require.Nil(t, byID[toolsetID.String()].UpstreamURL)
+		})
 	}
 }

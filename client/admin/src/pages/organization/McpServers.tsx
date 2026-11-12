@@ -54,9 +54,7 @@ function serverColumns(idOrSlug: string, project: string) {
   return serverColumn.columns([
     serverColumn.accessor("name", {
       header: "Name",
-      // A floor, because the URL columns share the remaining width and would
-      // otherwise fold a two-word name onto three lines.
-      meta: { cellClassName: "min-w-48 whitespace-normal" },
+      meta: { cellClassName: "whitespace-normal break-words" },
       // The link, not the row, carries the keyboard path and the accessible
       // name. It also lets the operator open the health page in a new tab.
       cell: ({ row }) => (
@@ -72,8 +70,7 @@ function serverColumns(idOrSlug: string, project: string) {
     }),
     serverColumn.accessor("url", {
       header: "Server URL",
-      // Share remaining width between URLs and truncate long addresses.
-      meta: { cellClassName: "max-w-0 w-1/2" },
+      // The un-sized columns share the remaining table width.
       cell: ({ row }) =>
         row.original.url ? (
           <CopyValue
@@ -86,7 +83,6 @@ function serverColumns(idOrSlug: string, project: string) {
     }),
     serverColumn.accessor("upstream_url", {
       header: "Source",
-      meta: { cellClassName: "max-w-0 w-1/2" },
       cell: ({ row }) =>
         row.original.upstream_url ? (
           <CopyValue
@@ -252,8 +248,17 @@ export function McpServers({ org }: { org: AdminOrganization }): JSX.Element {
           </p>
         )}
       </div>
-      <div className="overflow-clip rounded-lg border">
-        <Table cellPadding="condensed">
+      <div className="overflow-x-auto rounded-lg border">
+        <Table cellPadding="condensed" className="min-w-3xl table-fixed">
+          <colgroup>
+            <col className="w-48" />
+            <col />
+            <col />
+            <col className="w-24" />
+            <col className="w-24" />
+            <col className="w-28" />
+            <col className="w-8" />
+          </colgroup>
           <Table.Header table={table} />
           <Table.Body>
             {serversRead.isPending || rows.length === 0 ? (
