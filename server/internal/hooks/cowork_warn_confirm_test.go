@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"testing"
 	"time"
 
@@ -137,14 +138,23 @@ func TestIngest_CoworkPromptWarnConfirmedByResend(t *testing.T) {
 	first := send(prompt)
 	require.Equal(t, "deny", first.Decision, "the first send is challenged")
 	require.NotNil(t, first.Message)
+	require.Regexp(t, `^https?://\S+/ack#rpak1\.[A-Za-z0-9_-]+ Speakeasy warning:`, *first.Message, "the short acknowledgement link leads, before Cowork cuts the text off")
 	require.Contains(t, *first.Message, "send the same message again")
 	require.Contains(t, *first.Message, "618-27-4093 looks like sensitive information.")
-	require.NotContains(t, *first.Message, "ack_token=", "Cowork cannot show the link, so it is left out")
+	require.NotContains(t, *first.Message, "ack_token=", "Cowork gets the short link, not the long one")
 	require.NotContains(t, *first.Message, "\x1b", "no terminal escapes in a web UI")
 
 	require.Equal(t, "allow", send(prompt).Decision, "resending the same prompt confirms the warning")
 	require.Equal(t, "allow", send(prompt).Decision, "the confirmation holds for an immediate retry")
 	require.Equal(t, "deny", send(prompt+" and 472-81-3365").Decision, "a different prompt is challenged on its own")
+
+	// Claude's apps put the minute a message was sent in a reminder before the
+	// prompt, so a resend a minute later differs only there and still confirms.
+	minute := func(m int) string {
+		return fmt.Sprintf("<system-reminder>Message sent at Thu 2026-11-12 13:%02d local time.</system-reminder>\nCheck Priya Okafor 731-52-8806", m)
+	}
+	require.Equal(t, "deny", send(minute(36)).Decision)
+	require.Equal(t, "allow", send(minute(37)).Decision, "a resend in the next minute is the same prompt")
 
 	// A resend after the window is a fresh first send, so it is challenged.
 	late := "Sort these too: Noah Castellanos 472-81-3365"
@@ -158,7 +168,7 @@ func TestIngest_CoworkPromptWarnConfirmedByResend(t *testing.T) {
 
 	audited, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyChallengeAcknowledge)
 	require.NoError(t, err)
-	require.EqualValues(t, 2, audited, "each confirmation is audited once")
+	require.EqualValues(t, 3, audited, "each confirmation is audited once")
 }
 
 // TestIngest_CoworkToolWarnAsksAndConfirms: in Cowork a warned tool call is

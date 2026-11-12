@@ -128,9 +128,32 @@ func (s *Service) acknowledgePendingChallenge(ctx context.Context, ev hookevents
 	return true
 }
 
-// coworkWarnUserReason is the block text shown in Cowork. The confirmation
-// instruction leads, because Cowork cuts the reason off after a couple of
-// lines and the instruction is the part the person must not miss.
-func coworkWarnUserReason(scanResult *risk.ScanResult) string {
-	return fmt.Sprintf("Speakeasy warning. To send it anyway, send the same message again. %s", renderWarnBody(scanResult))
+// coworkWarnUserReason is the block text shown in Cowork. The short
+// acknowledgement link and the confirmation instruction lead, because Cowork
+// cuts the reason off after a couple of lines and shows it as plain text: the
+// person copies the link, or sends the same message again.
+func coworkWarnUserReason(scanResult *risk.ScanResult, ackURL string) string {
+	if ackURL == "" {
+		return fmt.Sprintf("Speakeasy warning. To send it anyway, send the same message again. %s", renderWarnBody(scanResult))
+	}
+	return fmt.Sprintf("%s Speakeasy warning: to send it anyway, approve at this link or send the same message again. %s", ackURL, renderWarnBody(scanResult))
+}
+
+// coworkWarnAckURL mints the short acknowledgement link for a Cowork prompt
+// warning. It returns "" when no link can be made, and the person then
+// confirms by sending the message again.
+func (s *Service) coworkWarnAckURL(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult) string {
+	if s.cache == nil || ev.Context.User.ID == "" {
+		return ""
+	}
+	siteURL := s.orgSiteURL(ctx, ev.Context.OrganizationID)
+	if siteURL == nil {
+		return ""
+	}
+	ackURL, _, err := risk.GeneratePolicyAckShortURL(ctx, s.cache, siteURL, policyAckInput(ev, scanResult, ""), 0)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to generate cowork ack link", attr.SlogError(err))
+		return ""
+	}
+	return ackURL
 }

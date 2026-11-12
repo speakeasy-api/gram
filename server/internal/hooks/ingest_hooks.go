@@ -729,8 +729,9 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
 				}
-				// Cowork cannot show the acknowledgement link, so there the
-				// person confirms by sending the same prompt again.
+				// Cowork cuts the acknowledgement link off and shows it as plain
+				// text, so there the warning leads with a short link and the
+				// person can also confirm by sending the same prompt again.
 				if fromCowork(payload) {
 					// A transport retry of the challenged send reuses its
 					// idempotency key. It must get the same challenge, never
@@ -740,7 +741,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 					}
 					s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, "", scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
 					auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-					return auditReason, coworkWarnUserReason(scanResult)
+					return auditReason, coworkWarnUserReason(scanResult, s.coworkWarnAckURL(ctx, ev.Event, scanResult))
 				}
 				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
 					auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)

@@ -60,6 +60,7 @@ const SLUG_EXEMPT_PATHS = [
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
+  "/ack",
   "/blocks",
   "/shared",
 ];

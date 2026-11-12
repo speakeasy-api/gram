@@ -41,7 +41,14 @@ func (s *Service) scanUserPromptForEnforcement(ctx context.Context, ev *hookeven
 	if ev == nil {
 		return nil
 	}
-	return s.scanHookEventForEnforcement(ctx, ev.Event, ev.Prompt, message.User, "")
+	scanResult := s.scanHookEventForEnforcement(ctx, ev.Event, ev.Prompt, message.User, "")
+	if scanResult != nil && scanResult.CallFingerprint != "" {
+		// Claude's apps put a per-minute "Message sent at" reminder in front of
+		// each prompt, so the whole text of a resent prompt differs from the
+		// first send. Key the challenge on what the person typed.
+		scanResult.CallFingerprint = risk.PromptCallFingerprint(ev.Prompt)
+	}
+	return scanResult
 }
 
 func (s *Service) scanToolRequestForEnforcement(ctx context.Context, ev *hookevents.BeforeToolUse) *risk.ScanResult {
@@ -292,11 +299,22 @@ func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanR
 	// Record the challenge (log-safe fields only — never the matched value).
 	s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, toolName, scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
 
+	ackURL, _, err := risk.GeneratePolicyAckURL(ctx, s.cache, siteURL, policyAckInput(ev, scanResult, toolName), 0)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to generate risk policy ack link; falling back to block",
+			attr.SlogError(err))
+		return "", "", false
+	}
+	return renderWarnAgentReason(scanResult), renderWarnUserReason(scanResult, ackURL), true
+}
+
+// policyAckInput is the challenge state an acknowledgement link redeems.
+func policyAckInput(ev hookevents.Event, scanResult *risk.ScanResult, toolName string) risk.PolicyAckTokenInput {
 	var toolPtr *string
 	if toolName != "" {
 		toolPtr = &toolName
 	}
-	ackURL, _, err := risk.GeneratePolicyAckURL(ctx, s.cache, siteURL, risk.PolicyAckTokenInput{
+	return risk.PolicyAckTokenInput{
 		OrganizationID: ev.Context.OrganizationID,
 		ProjectID:      ev.Context.ProjectID.String(),
 		UserID:         ev.Context.User.ID,
@@ -310,13 +328,7 @@ func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanR
 		ChallengeMessage: renderWarnBody(scanResult),
 		// Zero: use the ack-window default (defaultAckGrace) so the retry passes.
 		RememberFor: 0,
-	}, 0)
-	if err != nil {
-		s.logger.WarnContext(ctx, "failed to generate risk policy ack link; falling back to block",
-			attr.SlogError(err))
-		return "", "", false
 	}
-	return renderWarnAgentReason(scanResult), renderWarnUserReason(scanResult, ackURL), true
 }
 
 // renderWarnBody builds the challenge message body. Uses the policy's

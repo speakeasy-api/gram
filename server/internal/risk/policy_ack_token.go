@@ -129,6 +129,23 @@ func GeneratePolicyAckURL(ctx context.Context, c cache.Cache, siteURL *url.URL, 
 	return ackURL.String(), expiry, nil
 }
 
+// GeneratePolicyAckShortURL is GeneratePolicyAckURL in its shortest form,
+// <site>/ack#<token>, for surfaces that cut a message off after a line or two
+// (Claude Cowork). The token stays in the fragment, so it never reaches a
+// server log, and the dashboard's /ack route redeems it like the long form.
+func GeneratePolicyAckShortURL(ctx context.Context, c cache.Cache, siteURL *url.URL, input PolicyAckTokenInput, ttl time.Duration) (string, time.Time, error) {
+	if siteURL == nil {
+		return "", time.Time{}, fmt.Errorf("site url is required")
+	}
+	token, expiry, err := GeneratePolicyAckToken(ctx, c, input, ttl)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	ackURL := siteURL.JoinPath("ack")
+	ackURL.Fragment = token
+	return ackURL.String(), expiry, nil
+}
+
 // GeneratePolicyAckToken stores the challenge state in the cache and returns the
 // rpak1 token (prefix + cache id) plus its expiry.
 func GeneratePolicyAckToken(ctx context.Context, c cache.Cache, input PolicyAckTokenInput, ttl time.Duration) (string, time.Time, error) {

@@ -127,9 +127,13 @@ line, is never stored twice.
 A warn on a typed prompt challenges it: the prompt is blocked, and in Claude
 Code the block text carries an acknowledgement link the person opens before
 retrying. Cowork shows a hook's block text cut off after two lines with no way
-to expand it, so that link never shows. For events with
-`session.surface: "cowork"` the challenge instead tells the person to send the same message
-again, and an identical resend within 10 minutes is the confirmation: the
+to expand it, and shows it as plain text, so a long link is cut off and none
+is clickable. For events with `session.surface: "cowork"` the challenge leads
+with a short link, `<site>/ack#<token>`, that the person can copy into a
+browser, and also tells them to send the same message again. Either confirms.
+The challenge is keyed on the prompt without its leading `<system-reminder>`
+blocks, because Claude's apps put the minute the message was sent there. An
+identical resend within 10 minutes is the confirmation: the
 pending challenge for that prompt's call fingerprint becomes a two-minute
 acknowledgement, recorded in the audit log. Only a person submits prompts, so
 the agent cannot confirm on their behalf.

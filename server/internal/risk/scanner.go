@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/claudetag"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
@@ -186,6 +187,19 @@ func (r *ScanResult) IsWarnChallenge() bool {
 func callFingerprint(text string) string {
 	sum := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(sum[:])
+}
+
+// PromptCallFingerprint is callFingerprint for a typed prompt: leading
+// harness framing (<system-reminder>, <session-context>) is skipped, because
+// Claude's apps add a reminder that names the minute the message was sent, so
+// the same prompt sent again a minute later must still match its challenge.
+// A prompt that is only framing keeps its whole text.
+func PromptCallFingerprint(prompt string) string {
+	body, _ := claudetag.Envelope(prompt)
+	if strings.TrimSpace(body) == "" {
+		return callFingerprint(prompt)
+	}
+	return callFingerprint(body)
 }
 
 const (

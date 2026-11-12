@@ -177,9 +177,12 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
 }
 
 function getAckToken(): string | null {
-  const hashParams = new URLSearchParams(
-    window.location.hash.replace(/^#/, ""),
-  );
+  const hash = window.location.hash.replace(/^#/, "");
+  // The short link (/ack#<token>) carries the bare token as the fragment.
+  if (hash.startsWith("rpak1.")) {
+    return hash;
+  }
+  const hashParams = new URLSearchParams(hash);
   return hashParams.get("ack_token") ?? hashParams.get("token");
 }
 
