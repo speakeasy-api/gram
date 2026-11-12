@@ -1,4 +1,4 @@
-import { useState, type JSX } from "react";
+import { useState, useSyncExternalStore, type JSX } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 
+import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,12 +27,16 @@ import {
 } from "@/lib/gramAdminApi";
 
 import {
+  accuracyLabel,
   citationRate,
   comparisonRows,
   isActive,
+  MAX_ANSWER_MODELS,
+  MAX_RUNS,
+  memoryWriteCost,
   parseReport,
-  percent,
   runLabel,
+  runTiming,
   usd,
   validateConfig,
   type MemoryEvalConfig,
@@ -49,6 +54,8 @@ const runsPageSize = 50;
 
 type RunsPage = { runs: MemoryEvalRun[]; next_cursor?: string };
 
+// Native selects on purpose: the allowed model list is long and plain text,
+// and the browser's own picker searches it by typing.
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs";
 
@@ -87,7 +94,7 @@ export function MemoryEvalsPage(): JSX.Element {
         }`,
       ),
     getNextPageParam: (page) => page.next_cursor,
-    // A run takes up to an hour; poll while one is in flight. Active runs
+    // A run can take hours; poll while one is in flight. Active runs
     // are always the newest, so they are on the first page.
     refetchInterval: (query) =>
       query.state.data?.pages[0]?.runs.some(isActive) ? 15_000 : false,
@@ -96,7 +103,9 @@ export function MemoryEvalsPage(): JSX.Element {
   const [compared, setCompared] = useState<string[]>([]);
   const mutation = useMutation({
     mutationFn: startRun,
-    onSuccess: async () => {
+    // Re-read after any attempt: a refused start means another run appeared,
+    // and a failed one may still have used a slot of the daily limit.
+    onSettled: async () => {
       await Promise.all([
         client.invalidateQueries({ queryKey: runsKey }),
         client.invalidateQueries({ queryKey: optionsKey }),
@@ -190,7 +199,19 @@ function StartRunForm(props: {
   const { options } = props;
   const [config, setConfig] = useState<MemoryEvalConfig>(options.defaults);
   const [adding, setAdding] = useState("");
+  const [confirm, confirmDialog] = useConfirmDialog();
   const invalid = validateConfig(config, options.allowed_models);
+
+  // A start spends model credit, uses a slot of the shared daily limit and
+  // blocks every other start until it finishes, so it is confirmed first.
+  const confirmStart = async () => {
+    const confirmed = await confirm({
+      title: "Start a memory eval run?",
+      description: `${config.answer_models.join(", ")} × ${config.runs}, judged by ${config.judge_model}, with ${config.summary_model} summaries and ${config.digest_model} digests. It spends model credit, uses 1 of ${options.daily_run_limit} runs for the next 24 hours, and no other run can start until it finishes.`,
+      confirmLabel: "Start run",
+    });
+    if (confirmed) props.onStart(config);
+  };
 
   const modelSelect = (
     label: string,
@@ -219,9 +240,11 @@ function StartRunForm(props: {
       className="space-y-4 rounded-lg border p-4"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!invalid && !props.disabledReason) props.onStart(config);
+        if (!invalid && !props.disabledReason && !props.pending)
+          void confirmStart();
       }}
     >
+      {confirmDialog}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Start a run</h2>
         <span className="text-sm text-muted-foreground">
@@ -231,7 +254,9 @@ function StartRunForm(props: {
       </div>
 
       <div className="space-y-2">
-        <span className="text-sm">Answer models (up to 4)</span>
+        <span className="text-sm">
+          Answer models (up to {MAX_ANSWER_MODELS})
+        </span>
         <div className="flex flex-wrap gap-2">
           {config.answer_models.map((m) => (
             <Badge key={m} variant="secondary" className="gap-1">
@@ -270,7 +295,11 @@ function StartRunForm(props: {
           <Button
             type="button"
             variant="outline"
-            disabled={!adding || config.answer_models.length >= 4}
+            disabled={
+              !adding ||
+              config.answer_models.includes(adding) ||
+              config.answer_models.length >= MAX_ANSWER_MODELS
+            }
             onClick={() => {
               setConfig({
                 ...config,
@@ -293,7 +322,7 @@ function StartRunForm(props: {
           <Input
             type="number"
             min={1}
-            max={3}
+            max={MAX_RUNS}
             value={config.runs}
             onChange={(event) =>
               setConfig({ ...config, runs: Number(event.target.value) })
@@ -319,7 +348,10 @@ function StartRunForm(props: {
         <Button
           type="button"
           variant="outline"
-          onClick={() => setConfig(options.defaults)}
+          onClick={() => {
+            setConfig(options.defaults);
+            setAdding("");
+          }}
         >
           Reset to defaults
         </Button>
@@ -328,17 +360,33 @@ function StartRunForm(props: {
   );
 }
 
+function subscribeToMinutes(onTick: () => void): () => void {
+  const id = setInterval(onTick, 60_000);
+  return () => clearInterval(id);
+}
+
+// Floored to the minute so the snapshot is stable between renders.
+function currentMinute(): number {
+  return Math.floor(Date.now() / 60_000) * 60_000;
+}
+
+/** useNow ticks once a minute so elapsed times stay current. */
+function useNow(): number {
+  return useSyncExternalStore(subscribeToMinutes, currentMinute);
+}
+
 function RunsTable(props: {
   runs: MemoryEvalRun[];
   compared: string[];
   onToggle: (id: string) => void;
 }): JSX.Element {
+  const now = useNow();
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Compare</TableHead>
-          <TableHead>Started</TableHead>
+          <TableHead>Queued (UTC)</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Answer models</TableHead>
           <TableHead>Summary / digest</TableHead>
@@ -361,7 +409,13 @@ function RunsTable(props: {
                 onCheckedChange={() => props.onToggle(run.id)}
               />
             </TableCell>
-            <TableCell className="font-mono text-xs">{runLabel(run)}</TableCell>
+            <TableCell className="font-mono text-xs">
+              {runLabel(run)}
+              <br />
+              <span className="text-muted-foreground">
+                {runTiming(run, now)}
+              </span>
+            </TableCell>
             <TableCell>
               <Badge variant={statusVariant[run.status]}>{run.status}</Badge>
               {run.error && (
@@ -417,9 +471,11 @@ function Comparison(props: { runIds: string[] }): JSX.Element {
       <h2 className="text-lg font-semibold">Comparison</h2>
       <p className="text-sm text-muted-foreground">
         Accuracy is correct over graded answers, so compare runs graded by the
-        same judge. The best accuracy per arm is bold. A red row leaked a
-        planted secret or another project's canary, which disqualifies it
-        whatever its accuracy.
+        same judge. The best accuracy per arm among rows without leaks is bold.
+        A red row leaked a planted secret or another project's canary, which
+        disqualifies it whatever its accuracy. A dash means nothing in that arm
+        was graded. A cost marked ≥ is a lower bound: some calls reported no
+        price. Times are UTC.
       </p>
       {failed?.error && <p role="alert">{errorMessage(failed.error)}</p>}
       {results.some((r) => r.isPending) && <p>Loading reports…</p>}
@@ -429,11 +485,8 @@ function Comparison(props: { runIds: string[] }): JSX.Element {
             {runLabel(run)}: {report.preparation.summaries} summaries (
             {report.preparation.failed_summaries} failed) and{" "}
             {report.preparation.digests} digests, memory written for{" "}
-            {usd(
-              report.preparation.summary_spend.cost_usd +
-                report.preparation.digest_spend.cost_usd,
-            )}
-            ; grading {usd(report.judge_cost_usd)}.
+            {memoryWriteCost(report.preparation)}; grading{" "}
+            {usd(report.judge_cost_usd)}.
           </p>
         ) : null,
       )}
@@ -445,7 +498,7 @@ function Comparison(props: { runIds: string[] }): JSX.Element {
               <TableHead>Answer model</TableHead>
               <TableHead>Summary / digest</TableHead>
               <TableHead>Judge</TableHead>
-              <TableHead>Run</TableHead>
+              <TableHead>Run (UTC)</TableHead>
               <TableHead>Accuracy</TableHead>
               <TableHead>Valid citations</TableHead>
               <TableHead>Leaks</TableHead>
@@ -482,7 +535,7 @@ function Comparison(props: { runIds: string[] }): JSX.Element {
                   {row.runLabel}
                 </TableCell>
                 <TableCell className={row.best ? "font-semibold" : undefined}>
-                  {percent(row.score.accuracy)}
+                  {accuracyLabel(row.score)}
                 </TableCell>
                 <TableCell>{citationRate(row.score)}</TableCell>
                 <TableCell>
