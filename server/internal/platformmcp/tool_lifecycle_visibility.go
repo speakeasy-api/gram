@@ -9,22 +9,20 @@ import (
 
 type UpdateMCPVisibilityToolInput struct {
 	ProjectSlug     string `json:"project_slug" jsonschema:"explicit project slug that owns the Platform-managed MCP"`
-	RegistrationID  string `json:"registration_id" jsonschema:"Platform registration ID returned by find_mcp or get_mcp"`
-	MCPID           string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp or get_mcp"`
+	MCPID           string `json:"mcp_id" jsonschema:"MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"`
 	ExpectedVersion string `json:"expected_version" jsonschema:"opaque version returned by find_mcp, get_mcp, or a previous lifecycle update"`
 	IdempotencyKey  string `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry this exact visibility update"`
 }
 
 type UpdateMCPVisibilityToolOutput struct {
-	ProjectSlug    string       `json:"project_slug"`
-	RegistrationID string       `json:"registration_id"`
-	MCPID          string       `json:"mcp_id"`
-	Visibility     string       `json:"visibility"`
-	Version        string       `json:"version"`
-	ReceiptID      string       `json:"receipt_id"`
-	Replayed       bool         `json:"replayed"`
-	Readiness      MCPReadiness `json:"readiness"`
-	Published      bool         `json:"published"`
+	ProjectSlug string       `json:"project_slug"`
+	MCPID       string       `json:"mcp_id"`
+	Visibility  string       `json:"visibility"`
+	Version     string       `json:"version"`
+	ReceiptID   string       `json:"receipt_id"`
+	Replayed    bool         `json:"replayed"`
+	Readiness   MCPReadiness `json:"readiness"`
+	Published   bool         `json:"published"`
 }
 
 func registerLifecycleVisibilityTools(reg *Registrar, registrations *RegistrationService) {
@@ -55,7 +53,17 @@ func registerLifecycleVisibilityTools(reg *Registrar, registrations *Registratio
 			if err != nil {
 				return nil, UpdateMCPVisibilityToolOutput{}, err
 			}
-			result, err := tool.call(ctx, principal, UpdateMCPVisibilityInput(input))
+			registrationID, err := registrations.registrationIDForMCP(ctx, principal, input.ProjectSlug, input.MCPID, tool.name)
+			if err != nil {
+				if toolResult, ok := operationBudgetToolResult(err); ok {
+					return toolResult, UpdateMCPVisibilityToolOutput{}, nil
+				}
+				return nil, UpdateMCPVisibilityToolOutput{}, err
+			}
+			result, err := tool.call(ctx, principal, UpdateMCPVisibilityInput{
+				ProjectSlug: input.ProjectSlug, RegistrationID: registrationID, MCPID: input.MCPID,
+				ExpectedVersion: input.ExpectedVersion, IdempotencyKey: input.IdempotencyKey,
+			})
 			if err != nil {
 				if toolResult, ok := operationBudgetToolResult(err); ok {
 					return toolResult, UpdateMCPVisibilityToolOutput{}, nil
@@ -63,7 +71,7 @@ func registerLifecycleVisibilityTools(reg *Registrar, registrations *Registratio
 				return nil, UpdateMCPVisibilityToolOutput{}, err
 			}
 			return nil, UpdateMCPVisibilityToolOutput{
-				ProjectSlug: result.Project.Slug, RegistrationID: result.RegistrationID, MCPID: result.MCPID,
+				ProjectSlug: result.Project.Slug, MCPID: result.MCPID,
 				Visibility: result.Visibility, Version: result.Version, ReceiptID: result.Receipt.ID.String(), Replayed: result.Receipt.Replayed,
 				Readiness: result.Readiness, Published: result.Published,
 			}, nil

@@ -149,11 +149,15 @@ type MCP struct {
 	// EnabledState distinguishes confirmed disabled servers from unknown visibility.
 	EnabledState string `json:"enabled_state" jsonschema:"enabled for private or public visibility; disabled for disabled visibility; unknown for unrecognized visibility"`
 
-	Model         string            `json:"model"`
-	BackendKind   MCPBackendKind    `json:"backend_kind"`
-	UpstreamURL   string            `json:"upstream_url,omitempty"`
-	Source        MCPSource         `json:"source"`
-	Registration  *MCPRegistration  `json:"registration,omitempty"`
+	Model       string         `json:"model"`
+	BackendKind MCPBackendKind `json:"backend_kind"`
+	UpstreamURL string         `json:"upstream_url,omitempty"`
+	Source      MCPSource      `json:"source"`
+
+	// Registration is the Platform setup record behind a platform_managed
+	// server. It is internal: agents name the server by ID and every tool
+	// resolves this record itself, so it is never serialized.
+	Registration  *MCPRegistration  `json:"-"`
 	Readiness     MCPReadiness      `json:"readiness"`
 	Distributions []MCPDistribution `json:"distributions"`
 	Operations    []string          `json:"operations"`
@@ -231,10 +235,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		"For signals intelligence, discover the exact project and reusable signals before authoring a sensor. Sensors are classifiers, not enforcement policies. Choose multi_label for independent labels, exclusive for one choice, or ordered_score for two to ten ordered levels with criteria. Only message.role is available to matching predicates. Use create_sensor or create_signal with confirmed:false, show the normalized configuration, and obtain explicit confirmation before resending the identical proposal with its preview token, expected version and a stable idempotency key. Preview creation IDs are provisional. Update shared signals only after showing every affected sensor. A configuration version covers the whole project, so any concurrent configuration change requires a new preview. Re-read the committed target; configuration readiness does not prove inference is active. Receipt replay reports a historical write and a separate live target. If snapshot_scope is verification_unavailable, the write committed but the fresh read failed; preserve all retry inputs and the key, and do not interpret target_available:false as deletion. Only a current_configuration snapshot can establish target absence. Matching examples use caller-supplied metadata, never stored transcripts or inference. These tools currently admit external users only; never infer a human from assistant attribution.",
 		"Risk policy audiences are positive user/role grants, not exclusions. Read the exact policy and obtain confirmation before changing its audience. Self-removal and effective exclusion are unavailable pending organization-scoped coordination of audience grants; remove_self_from_risk_policy always refuses before database transactions or receipt replay. Never infer a human from managed-assistant attribution. For self-removal requests, do not bypass the refusal with an audience replacement, policy disablement, role change, or risk exclusion. For approved incremental user/ROLE audience changes, external organization admins can use change_risk_policy_audience with confirmed bounded add_principals/remove_principals, a fresh expected_version and a stable idempotency_key. It refuses Everyone deltas and empty resulting audiences and only changes exact positive grants; it does not prove effective exclusion. Managed assistants cannot invoke it or read exact audiences. General audience replacements require confirmation of the complete desired audience and must not be presented as Everyone-except-one or role exceptions. Re-read the policy after a write; receipt replay is historical evidence, not proof of current state.",
 		"Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. When the organization's default project is the only eligible project, use it without asking: the tools that add, check and connect an MCP server act on it when no project is named, and their result names the project used. When no listed project fits, or there is none yet, an organization administrator can create one here instead of leaving for the dashboard: ask for the exact name, confirm it, and create the project, which starts empty. Its slug is derived from the name and cannot be chosen; a rename changes only the display name and keeps the slug. Renaming a project needs only write access to that project, as in the dashboard, not organization administrator access. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately.",
-		"Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream authorization server is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action.",
+		"Every tool names an MCP server by its mcp_id: the id find_mcp and get_mcp return, or the mcp_id register_catalog_mcp and register_remote_mcp return.",
+		"Use get_mcp_readiness with the server's mcp_id to inspect persisted readiness. If readiness says an upstream authorization server is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action.",
 		"Once get_mcp_readiness reports the server ready, setup is complete and the server works for the person who added it; no plugin is needed for that. Ask how they want to use it. To use it from this connection, call list_my_servers or search_my_tools, then describe_tools and execute_tool. Offer to share it with other people only after that, and only as an option.",
-		"To install a ready server in another app, call get_my_install_instructions with the registration ID setup returned as registration_id and the app as client_family; the registration names its project. Show each step's link as a clickable link and each snippet verbatim.",
-		"Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization.",
+		"To install a ready server in another app, call get_my_install_instructions with its mcp_id and the app as client_family; the server names its own project. Show each step's link as a clickable link and each snippet verbatim.",
+		"Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The dashboard_setup_url that adding the server returns is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization.",
 		"Setup also decides which MCP clients may sign in to the new server: read get_mcp_client_admission, explain in plain words which apps that lets in, and only change it with set_mcp_client_admission after the user explicitly confirms.",
 		"Registration never distributes an MCP, and the person who added it needs no plugin to use it. Only when the user wants other people to have it, use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly and the server by its mcp_id from find_mcp. There is no implicit default for either: when the chat has added more than one server, name the one the user asked to share. When no existing plugin fits, offer to create one: agree its name with the user, choose one idempotency key for this create and pass it on the unconfirmed preview and on the confirmed call: the preview returns the exact permanent install name it would use, show that to the user, and call it again confirmed once they agree, then distribute to the new plugin. A plugin created in the organization's default project is delivered to every member; elsewhere it reaches no one until people are assigned to it. rename_plugin changes only a plugin's display name, never its install name. A plugin's auto sync decides whether its changes publish to the marketplace on their own: while it is off, every change to that plugin, including its first publish, waits for a manual sync, which republish_plugin performs for the whole project. Turn it on or off only with set_plugin_auto_sync, after the user confirms.",
 		"To remove existing plugin content, use remove_plugin_server with exact project, plugin and membership IDs after explicit confirmation. This changes distribution only, never server access. remove_mcp_from_plugin only undoes a membership that distribute_mcp_to_plugin created for the named server and plugin, whoever created it; one an administrator made by hand stays. Call it only after the user explicitly confirms the exact project, server and plugin. Re-read the plugin and distinguish a publication update from installed-client refresh.",
@@ -707,7 +712,10 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 		return distributionToolError(err, "")
 	}
 	var result operationBudgetResult
+	var target *mcpTargetError
 	switch {
+	case errors.As(err, &target):
+		result = mcpTargetRefusal(target)
 	case errors.Is(err, ErrReadinessRegistrationNotFound):
 		result = operationBudgetResult{Code: "registration_not_found", Message: "That MCP server is not one this project and caller can act on. Use the one returned when it was added to the project."}
 	case errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrLifecycleMetadataInvalid), errors.Is(err, ErrLifecycleVisibilityInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrCatalogConfigurationRejected), errors.Is(err, ErrCatalogRejected), errors.Is(err, ErrCatalogCursorInvalid):
@@ -740,6 +748,19 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 		return nil, false
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
+}
+
+// mcpTargetRefusal explains why the MCP server named by mcp_id cannot be acted
+// on, naming the refused tool.
+func mcpTargetRefusal(target *mcpTargetError) operationBudgetResult {
+	switch {
+	case errors.Is(target.err, ErrMCPNotAddedThroughSetup):
+		return operationBudgetResult{Code: "not_added_through_setup", Message: "This MCP server was not added through Platform setup, so " + target.operation + " does not apply to it. Manage it on its page in the dashboard instead."}
+	case errors.Is(target.err, ErrMCPAddedByAnotherMember):
+		return operationBudgetResult{Code: "added_by_another_member", Message: "This MCP server was added by another member; only the member who added it can use " + target.operation + " on it. Ask them to do it, or manage the server on its page in the dashboard."}
+	default:
+		return operationBudgetResult{Code: "mcp_not_found", Message: "No MCP server with that mcp_id is in this project. Use the id find_mcp or get_mcp returns for a server in the named project."}
+	}
 }
 
 func unavailableTool(feature string) mcp.ToolHandlerFor[map[string]any, featureUnavailableResult] {

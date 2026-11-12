@@ -25,11 +25,10 @@ import (
 type GetMyInstallInstructionsInput struct {
 	ProjectID string `json:"project_id,omitempty" jsonschema:"optional owning project ID; defaults to the organization's default project (a project assistant always uses its own)"`
 	Plugin    string `json:"plugin,omitempty" jsonschema:"exact assigned plugin ID, slug, or name"`
-	MCPID     string `json:"mcp_id,omitempty" jsonschema:"exact configured MCP ID"`
-	// RegistrationID names a server added through setup without a find_mcp
-	// read, which the ChatGPT catalogue does not have.
-	RegistrationID string                 `json:"registration_id,omitempty" jsonschema:"or the registration ID setup returned"`
-	ClientFamily   OnboardingClientFamily `json:"client_family" jsonschema:"client receiving the installation guidance"`
+	// MCPID names its own project, so a server added through setup can be
+	// named without a find_mcp read, which the ChatGPT catalogue does not have.
+	MCPID        string                 `json:"mcp_id,omitempty" jsonschema:"exact MCP server ID: the id find_mcp or get_mcp returns, or the mcp_id setup returned; it names its own project, so the project may be omitted"`
+	ClientFamily OnboardingClientFamily `json:"client_family" jsonschema:"client receiving the installation guidance"`
 }
 
 type InstallInstruction struct {
@@ -57,7 +56,7 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 		return GetMyInstallInstructionsOutput{}, ErrUnavailable
 	}
 	targets := 0
-	for _, target := range []string{input.Plugin, input.MCPID, input.RegistrationID} {
+	for _, target := range []string{input.Plugin, input.MCPID} {
 		if strings.TrimSpace(target) != "" {
 			targets++
 		}
@@ -80,9 +79,9 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return GetMyInstallInstructionsOutput{}, err
 	}
-	mcpID, err := s.installMCPID(ctx, principal.OrganizationID, projectID, input)
+	mcpID, err := uuid.Parse(strings.TrimSpace(input.MCPID))
 	if err != nil {
-		return GetMyInstallInstructionsOutput{}, err
+		return GetMyInstallInstructionsOutput{}, ErrInstallTargetNotFound
 	}
 	row, err := platformrepo.New(s.db).GetPlatformMCPInstallTarget(ctx, platformrepo.GetPlatformMCPInstallTargetParams{
 		OrganizationID: principal.OrganizationID,
@@ -106,37 +105,6 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 		name = row.Slug.String
 	}
 	return s.standaloneMCPInstallInstructions(ctx, principal.OrganizationID, input.ClientFamily, name, row.EndpointSlug)
-}
-
-// installMCPID returns the MCP server an install request names, either
-// directly or through the registration that added it.
-func (s *PluginsService) installMCPID(ctx context.Context, organizationID string, projectID uuid.UUID, input GetMyInstallInstructionsInput) (uuid.UUID, error) {
-	if strings.TrimSpace(input.RegistrationID) == "" {
-		mcpID, err := uuid.Parse(strings.TrimSpace(input.MCPID))
-		if err != nil {
-			return uuid.Nil, ErrInstallTargetNotFound
-		}
-		return mcpID, nil
-	}
-	registrationID, err := uuid.Parse(strings.TrimSpace(input.RegistrationID))
-	if err != nil {
-		return uuid.Nil, ErrInstallTargetNotFound
-	}
-	registration, err := platformrepo.New(s.db).GetPlatformMCPCatalogRegistrationByID(ctx, platformrepo.GetPlatformMCPCatalogRegistrationByIDParams{
-		ID:             registrationID,
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, ErrInstallTargetNotFound
-	}
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("get platform mcp registration for install: %w", err)
-	}
-	if !registration.McpServerID.Valid {
-		return uuid.Nil, ErrInstallTargetNotFound
-	}
-	return registration.McpServerID.UUID, nil
 }
 
 // memberLinkBases returns the server and dashboard base URLs of links given to
@@ -167,22 +135,22 @@ func (s *PluginsService) installProjectID(ctx context.Context, principal Princip
 		}
 		return parsed, nil
 	}
-	// A registration belongs to one project, so naming it is enough even in a
+	// An MCP server belongs to one project, so naming it is enough even in a
 	// project other than the default one.
-	if registrationID := strings.TrimSpace(input.RegistrationID); registrationID != "" {
-		parsed, err := uuid.Parse(registrationID)
+	if mcpID := strings.TrimSpace(input.MCPID); mcpID != "" {
+		parsed, err := uuid.Parse(mcpID)
 		if err != nil {
 			return uuid.Nil, ErrInstallTargetNotFound
 		}
-		project, err := platformrepo.New(s.db).GetPlatformMCPCatalogRegistrationProject(ctx, platformrepo.GetPlatformMCPCatalogRegistrationProjectParams{
-			ID:             parsed,
+		project, err := platformrepo.New(s.db).GetPlatformMCPServerProject(ctx, platformrepo.GetPlatformMCPServerProjectParams{
 			OrganizationID: principal.OrganizationID,
+			McpServerID:    parsed,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return uuid.Nil, ErrInstallTargetNotFound
 		}
 		if err != nil {
-			return uuid.Nil, fmt.Errorf("resolve platform mcp install registration project: %w", err)
+			return uuid.Nil, fmt.Errorf("resolve platform mcp install server project: %w", err)
 		}
 		return project, nil
 	}
