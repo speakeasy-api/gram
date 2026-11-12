@@ -19,9 +19,7 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
-	adminecgen "github.com/speakeasy-api/gram/server/gen/admin_external_credentials"
 	gen "github.com/speakeasy-api/gram/server/gen/external_credentials"
-	adminecsrv "github.com/speakeasy-api/gram/server/gen/http/admin_external_credentials/server"
 	srv "github.com/speakeasy-api/gram/server/gen/http/external_credentials/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -62,16 +60,13 @@ type Service struct {
 	authz           *authz.Engine
 	audit           *audit.Logger
 	gcpIdentity     *gcpauth.Identity
-	sessions        auth.PlatformAdminEntitlementReader
 	productFeatures *productfeatures.Client
 	verifyLimiter   *ratelimit.Limiter
 }
 
 var (
-	_ gen.Service        = (*Service)(nil)
-	_ gen.Auther         = (*Service)(nil)
-	_ adminecgen.Service = (*Service)(nil)
-	_ adminecgen.Auther  = (*Service)(nil)
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
 )
 
 func NewService(
@@ -93,7 +88,6 @@ func NewService(
 		logger:          logger,
 		db:              db,
 		auth:            auth.New(logger, db, sessions, authzEngine),
-		sessions:        sessions,
 		authz:           authzEngine,
 		audit:           auditLogger,
 		gcpIdentity:     gcpIdentity,
@@ -101,28 +95,6 @@ func NewService(
 		verifyLimiter: ratelimit.New(verifyStore, "external-credential-verify",
 			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
-	}
-}
-
-// NewPlatformService builds a service for the standalone admin server, which
-// serves only the platform-tier handlers under its own verified staff
-// identity. It has no dashboard sessions, RBAC engine, audit logger or verify
-// limiter, and mounts no routes: the organization-tier handlers must not be
-// reached through it.
-func NewPlatformService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity) *Service {
-	logger = logger.With(attr.SlogComponent("externalcredentials"))
-
-	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/externalcredentials"),
-		logger:          logger,
-		db:              db,
-		auth:            nil,
-		sessions:        nil,
-		authz:           nil,
-		audit:           nil,
-		gcpIdentity:     gcpIdentity,
-		productFeatures: nil,
-		verifyLimiter:   nil,
 	}
 }
 
@@ -279,14 +251,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	}
 	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 
-	// The platform-admin (adminExternalCredentials) surface shares this Service
-	// struct; its handlers live in adminhandlers.go and gate on the platform-admin
-	// flag rather than an org RBAC scope.
-	adminEndpoints := adminecgen.NewEndpoints(service)
-	for _, m := range mw {
-		adminEndpoints.Use(m)
-	}
-	adminecsrv.Mount(mux, adminecsrv.New(adminEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -464,8 +428,7 @@ func (s *Service) CreateGcpIamCredential(ctx context.Context, payload *gen.Creat
 	}
 
 	// The organization tier is impersonation-only, so the WIF columns are never
-	// written here and resolveGcpColumns (which infers between all three modes)
-	// does not apply.
+	// written here.
 	decision, err := s.resolveOrgImpersonationTarget(ctx, logger, payload.ImpersonateServiceAccount, authCtx.IsAdmin, priorTarget{
 		ImpersonateServiceAccount: "",
 		SkipProjectVerification:   false,
@@ -867,7 +830,7 @@ func (s *Service) DeleteGcpIamCredential(ctx context.Context, payload *gen.Delet
 // pointing at a tombstone — the key still lists and still looks healthy, but
 // nothing can reach it, and the failure only surfaces at signing time.
 //
-// The platform tier has its own delete path in adminhandlers.go and no such
+// The platform tier has its own delete path in the admin service and no such
 // guard. That is sound rather than an oversight: an external key is written with
 // a non-NULL organization_id and validated against a credential in that same
 // organization, while platform credentials carry organization_id IS NULL, so no
@@ -1021,58 +984,6 @@ func (s *Service) resolveAwsColumns(ctx context.Context, logger *slog.Logger, in
 	// key-policy grant approach (no assume_role_arn).
 	if region.Valid && !arn.Valid {
 		return cols, oops.E(oops.CodeBadRequest, nil, "sts_region requires assume_role_arn").LogError(ctx, logger)
-	}
-
-	return cols, nil
-}
-
-type gcpCredentialInput struct {
-	impersonateServiceAccount *string
-	wifPoolID                 *string
-	wifProviderID             *string
-	wifProjectNumber          *string
-}
-
-type gcpColumns struct {
-	ImpersonateServiceAccount pgtype.Text
-	WifPoolID                 pgtype.Text
-	WifProviderID             pgtype.Text
-	WifProjectNumber          pgtype.Text
-}
-
-// resolveGcpColumns validates the GCP form and produces the subtype column
-// values. The wif_* fields must be provided together; the approach (Workload
-// Identity Federation, impersonation, or ambient) follows from which fields are
-// set.
-func (s *Service) resolveGcpColumns(ctx context.Context, logger *slog.Logger, in gcpCredentialInput) (gcpColumns, error) {
-	// Service account emails are case-insensitive; store one form so IAM
-	// members built from it always match.
-	impersonate := conv.PtrToPGTextTrimmed(in.impersonateServiceAccount)
-	impersonate.String = strings.ToLower(impersonate.String)
-	poolID := conv.PtrToPGTextTrimmed(in.wifPoolID)
-	providerID := conv.PtrToPGTextTrimmed(in.wifProviderID)
-	projectNumber := conv.PtrToPGTextTrimmed(in.wifProjectNumber)
-
-	cols := gcpColumns{
-		ImpersonateServiceAccount: impersonate,
-		WifPoolID:                 poolID,
-		WifProviderID:             providerID,
-		WifProjectNumber:          projectNumber,
-	}
-
-	wifSet := 0
-	for _, f := range []pgtype.Text{poolID, providerID, projectNumber} {
-		if f.Valid {
-			wifSet++
-		}
-	}
-	if wifSet != 0 && wifSet != 3 {
-		return cols, oops.E(oops.CodeBadRequest, nil, "wif_pool_id, wif_provider_id, and wif_project_number must be set together").LogError(ctx, logger)
-	}
-	// GCP project numbers are decimal digits; anything else could never
-	// resolve as a Workload Identity Federation audience.
-	if projectNumber.Valid && strings.IndexFunc(projectNumber.String, func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
-		return cols, oops.E(oops.CodeBadRequest, nil, "wif_project_number must be the numeric GCP project number").LogWarn(ctx, logger)
 	}
 
 	return cols, nil
