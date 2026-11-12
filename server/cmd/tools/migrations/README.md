@@ -12,6 +12,7 @@ the shared harness. The migrations shipped today:
 | `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md)                 |
 | Default auth permissions (`mcp:auth` defaults and legacy API key policies)          | [AUTH_PERMISSION_DEFAULTS_BACKFILL.md](./AUTH_PERMISSION_DEFAULTS_BACKFILL.md)     |
 | Stored assistant grants for legacy built-in Admin and Member roles                  | [ASSISTANT_ROLE_GRANTS_BACKFILL.md](./ASSISTANT_ROLE_GRANTS_BACKFILL.md)           |
+| Stored memory grants for legacy built-in Admin roles                                | [MEMORY_ROLE_GRANTS_BACKFILL.md](./MEMORY_ROLE_GRANTS_BACKFILL.md)                 |
 | Kit runtime workload admission audit entries moved to `security_audit_logs`         | [AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md](./AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md) |
 
 ## Concepts
