@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
-//MISE description="Give this worktree's private network artifacts names that cannot collide with production's"
+//MISE description="Give this developer's local private network artifacts a stable name that cannot collide with production's"
 //MISE hide=true
 //MISE dir="{{ config_root }}"
 
 import { createHash } from "node:crypto";
 import { hostname } from "node:os";
+import { dirname } from "node:path";
 import { $ } from "zx";
 
 // The local private network joins real tailnets, including ones production
@@ -15,17 +16,27 @@ import { $ } from "zx";
 // to touch anything else.
 const DEV_ID = "GRAM_NETWORK_INGRESS_DEV_ID";
 
-// Four base-36 characters give 1.6 million ids: plenty to keep every
-// developer's worktrees apart on a shared tailnet, short enough to read.
+// Four base-36 characters give 1.6 million ids: plenty to keep developers
+// apart on a shared tailnet, short enough to read.
 const DEV_ID_LENGTH = 4;
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
-// Derived from the machine and the worktree path, so rerunning on the same
-// worktree gives the same id and its devices keep their names, while another
-// worktree or machine gets a different one.
-function deriveDevID(): string {
+// One id per developer and checkout, shared by every worktree of it. Each new
+// hostname costs a new certificate from the tailnet's Let's Encrypt
+// allowance (50 a week, shared with everyone on the tailnet), while
+// re-issuing an existing name counts as a renewal and does not. So the name
+// must not change from worktree to worktree. The developer's git email keeps
+// identically provisioned machines, which share a hostname and repository
+// path, from colliding; the main checkout's path is the same from every
+// worktree. Worktrees of one checkout share the names, so run the private
+// network group in one worktree at a time.
+async function deriveDevID(): Promise<string> {
+  const email = (await $`git config user.email`.nothrow()).stdout.trim();
+  const commonDir = (
+    await $`git rev-parse --path-format=absolute --git-common-dir`
+  ).stdout.trim();
   const digest = createHash("sha256")
-    .update(`${hostname()}\0${process.cwd()}`)
+    .update(`${email}\0${hostname()}\0${dirname(commonDir)}`)
     .digest();
   let id = "";
   for (let i = 0; i < DEV_ID_LENGTH; i++) {
@@ -41,7 +52,7 @@ async function run(): Promise<void> {
     return;
   }
 
-  const id = deriveDevID();
+  const id = await deriveDevID();
   await $`touch mise.local.toml`;
   await $`mise set --file mise.local.toml ${DEV_ID}=${id}`;
   console.log(
