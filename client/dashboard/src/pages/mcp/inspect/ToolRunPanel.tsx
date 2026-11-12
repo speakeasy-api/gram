@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/Button";
+import { ToolResponseView } from "./ToolResponseView";
 import { toast } from "sonner";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -512,7 +513,14 @@ function RunResult({
         </span>
       </div>
       <div className="border-border flex flex-col border">
-        {run.summary && (!run.ok || value === undefined) ? (
+        {run.ok ? (
+          <ToolResponseView
+            // Text that is itself JSON reads better as JSON.
+            text={isJson(run.summary) ? undefined : run.summary}
+            json={value}
+          />
+        ) : null}
+        {!run.ok && run.summary ? (
           <p
             className={cn(
               "px-3 py-2.5 text-[13px] break-words whitespace-pre-wrap",
@@ -522,7 +530,7 @@ function RunResult({
             {run.summary}
           </p>
         ) : null}
-        {value !== undefined ? (
+        {!run.ok && value !== undefined ? (
           <div className="max-h-80 overflow-auto">
             <CodeSnippet
               language="json"
@@ -584,6 +592,16 @@ function RunResult({
       </div>
     </section>
   );
+}
+
+function isJson(text: string | undefined): boolean {
+  if (!text) return false;
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const COPIED_MS = 1500;
