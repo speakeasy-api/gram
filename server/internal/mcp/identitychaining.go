@@ -317,10 +317,11 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, ki
 		if exchangeRejectedSignIn(outcome) {
 			return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.", member.slug)}
 		}
+		failure := &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Contact your administrator.", member.slug)}
 		if outcome.Reason == identitychaining.ReasonIneligibleIdentity {
-			return "", memberConnectionError{&metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Contact your administrator.", member.slug)}, mcpconnectionattempts.CodeIneligibleIdentity}
+			return "", memberConnectionError{failure, mcpconnectionattempts.CodeIneligibleIdentity}
 		}
-		return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Contact your administrator.", member.slug)}
+		return "", failure
 	}
 }
 

@@ -770,6 +770,7 @@ func TestConnectionOutcome_ChainCheckRecordsIneligibleIdentity(t *testing.T) {
 	require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
 	row := rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeIneligibleIdentity)
 	require.Equal(t, state.FlowID, row.AttemptID.String())
+	require.Equal(t, fx.clientA.String(), row.UserSessionClientID, "the row names the refused server's client")
 	rec.RequireNotEnded()
 }
 

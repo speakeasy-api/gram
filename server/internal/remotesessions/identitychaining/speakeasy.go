@@ -131,8 +131,7 @@ func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Log
 	return success
 }
 
-// signInRefusalReason separates a consent sign-in a new one replaces from an account or
-// method Speakeasy will not vouch for, which signing in again the same way repeats.
+// signInRefusalReason: refusals a new sign-in can fix ask for one; the rest are the admin's.
 func signInRefusalReason(reason signins.Reason) Reason {
 	switch reason {
 	case signins.ReasonUnmanagedAccount, signins.ReasonMethodNotEligible, signins.ReasonMethodNotAllowed, signins.ReasonTenantNotAllowed,
