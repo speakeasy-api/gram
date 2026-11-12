@@ -46,6 +46,7 @@ func TestWorkers_Run_RegistersSchedules(t *testing.T) {
 			chatAnalysisSweepScheduleID,
 			aiUsagePollerCoordinatorScheduleID,
 			deviceIntegrationSyncCoordinatorScheduleID,
+			memoryDigestsScheduleID,
 			indexToolsetSweepScheduleID(string(env.Queue())),
 		}, "the long-running worker owns the recurring sweeps")
 	}, 60*time.Second, 250*time.Millisecond, "Run should register the recurring schedules")
@@ -210,6 +211,7 @@ func TestWorkers_RegisterSchedulesSkipsFleetWideOnPreviewQueue(t *testing.T) {
 		slackDirectorySweepScheduleID(env.Queue()),
 		oktaApplicationSyncCoordinatorScheduleID(queue),
 		fmt.Sprintf("v1:trusted-delegation-cleanup:%s", queue),
+		fmt.Sprintf("v1:channels-retention:%s", queue),
 		fmt.Sprintf("v1:tenant-dimensions-sync:%s", queue),
 		indexToolsetSweepScheduleID(queue),
 	}, recorder.requireCreated(t))
@@ -229,9 +231,11 @@ func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
 		assistantReaperScheduleID,
 		chatAnalysisSweepScheduleID,
 		organizationEncryptionSweepScheduleID(queue),
+		internalSessionIssuerKeySweepScheduleID(queue),
 		fmt.Sprintf("v1:directory-review-emails:%s", queue),
 		fmt.Sprintf("v1:trusted-delegation-cleanup:%s", queue),
 		fmt.Sprintf("v1:mcp-finding-evidence-cleanup:%s", queue),
+		fmt.Sprintf("v1:channels-retention:%s", queue),
 		indexToolsetSweepScheduleID(queue),
 	}, "the shared queue registers both the fleet-wide and the per-queue schedules")
 

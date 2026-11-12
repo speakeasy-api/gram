@@ -53,6 +53,8 @@ const (
 	ScopeChatWrite               Scope = "chat:write"
 	ScopeInferenceExecute        Scope = "inference:execute"
 	ScopeLogRead                 Scope = "log:read"
+	ScopeMemoryRead              Scope = "memory:read"
+	ScopeMemoryWrite             Scope = "memory:write"
 	ScopeAgentRead               Scope = "agent:read"
 	ScopeAgentWrite              Scope = "agent:write"
 	ScopeAgentAuthorize          Scope = "agent:authorize"
@@ -77,6 +79,14 @@ const (
 	ScopeOrgHooksIngest     Scope = "org:hooks_ingest"
 )
 
+// Channels permissions are independent: administration does not imply connecting
+// or reading other members' messages, and MCP grants do not grant channel access.
+const (
+	ScopeChannelsConnect Scope = "channels:connect"
+	ScopeChannelsAdmin   Scope = "channels:admin"
+	ScopeChannelsReadAll Scope = "channels:read_all"
+)
+
 type scopeVisibility int
 
 const (
@@ -90,6 +100,14 @@ const (
 )
 
 var adminScopes = []Scope{
+	ScopeChannelsConnect,
+	ScopeChannelsAdmin,
+	// channels:read_all is intentionally NOT an administrator default. It
+	// discloses the content of other members' private conversations, which
+	// administering Channels does not require: an administrator configures
+	// instances and membership without reading what was said in them. An
+	// organization that does need a transcript reviewer grants the scope
+	// explicitly through a custom role, the same way chat:read is granted.
 	ScopeOrgRead,
 	ScopeOrgAdmin,
 	ScopeProjectRead,
@@ -115,6 +133,15 @@ var adminScopes = []Scope{
 	// agent a credential.
 	ScopeWorkloadRead,
 	ScopeWorkloadWrite,
+	// Organizational Memory is an org-level capability that admins turn on and
+	// curate, so org:admin gets memory:read and memory:write by default.
+	// Members still need an explicit grant because team memory summarizes
+	// every member's sessions in a project. It exposes masked session
+	// summaries, memos and digests, never raw transcripts, so the scope
+	// catalog does not mark it sensitive the way it marks chat:read.
+	// memory:write satisfies memory:read via scopeExpansions.
+	ScopeMemoryRead,
+	ScopeMemoryWrite,
 	// chat:read and chat:write are intentionally NOT defaults for any system
 	// role: reading other members' session transcripts is sensitive, and
 	// mutating them (rename, feedback, delete) is destructive, so both must be
@@ -135,6 +162,9 @@ var adminScopes = []Scope{
 // to clients as a first-class permission or only used internally for storage
 // and evaluation.
 var scopeVisibilityByScope = map[Scope]scopeVisibility{
+	ScopeChannelsConnect:         scopeVisibilityUserVisible,
+	ScopeChannelsAdmin:           scopeVisibilityUserVisible,
+	ScopeChannelsReadAll:         scopeVisibilityUserVisible,
 	ScopeRoot:                    scopeVisibilityInternal,
 	ScopeOrgRead:                 scopeVisibilityUserVisible,
 	ScopeOrgBlockedRead:          scopeVisibilityInternal,
@@ -173,6 +203,8 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeChatWrite:               scopeVisibilityUserVisible,
 	ScopeInferenceExecute:        scopeVisibilityUserVisible,
 	ScopeLogRead:                 scopeVisibilityUserVisible,
+	ScopeMemoryRead:              scopeVisibilityUserVisible,
+	ScopeMemoryWrite:             scopeVisibilityUserVisible,
 	ScopeAgentRead:               scopeVisibilityUserVisible,
 	ScopeAgentWrite:              scopeVisibilityUserVisible,
 	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
@@ -273,6 +305,9 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 // mcp:auth is independent of every other scope: server access, authoring and
 // administration imply no use of an auth client.
 var scopeExpansions = map[Scope][]Scope{
+	ScopeChannelsConnect:         nil,
+	ScopeChannelsAdmin:           nil,
+	ScopeChannelsReadAll:         nil,
 	ScopeRoot:                    nil,
 	ScopeOrgRead:                 {ScopeOrgAdmin},
 	ScopeOrgBlockedRead:          nil,
@@ -311,6 +346,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeChatWrite:               nil,
 	ScopeInferenceExecute:        nil,
 	ScopeLogRead:                 nil,
+	ScopeMemoryRead:              {ScopeMemoryWrite},
+	ScopeMemoryWrite:             nil,
 	ScopeAgentRead:               nil,
 	ScopeAgentWrite:              nil,
 	ScopeAgentAuthorize:          nil,
@@ -327,6 +364,9 @@ var scopeExpansions = map[Scope][]Scope{
 // stores exception grants for it. Broader blocklist scopes are handled by
 // scopeExpansions on the blocklist scope itself.
 var scopeExclusions = map[Scope]Scope{
+	ScopeChannelsConnect:         "",
+	ScopeChannelsAdmin:           "",
+	ScopeChannelsReadAll:         "",
 	ScopeRoot:                    "",
 	ScopeOrgRead:                 ScopeOrgBlockedRead,
 	ScopeOrgBlockedRead:          "",
@@ -365,6 +405,8 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeChatWrite:               "",
 	ScopeInferenceExecute:        "",
 	ScopeLogRead:                 "",
+	ScopeMemoryRead:              "",
+	ScopeMemoryWrite:             "",
 	ScopeAgentRead:               "",
 	ScopeAgentWrite:              "",
 	ScopeAgentAuthorize:          "",

@@ -3,6 +3,8 @@ package feature
 type Flag string
 
 const (
+	// FlagChannels gates the Channels rollout for an organization.
+	FlagChannels Flag = "channels"
 	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
 	// based") risk policy MVP. While set, only opted-in organizations can
 	// create or update nl-type risk policies and have them enforced. The

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 )
@@ -105,6 +106,10 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 	if err != nil {
 		return View{}, fmt.Errorf("list execution profile servers: %w", err)
 	}
+	typedOnly, err := authenforcement.ReadEnforced(ctx, db, target.OrganizationID)
+	if err != nil {
+		return View{}, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
 	recorded := map[uuid.UUID]Choice{}
 	if profile.Version > 0 {
 		rows, err := q.ListVersionChoices(ctx, ListVersionChoicesParams{VersionID: profile.VersionID, OrganizationID: target.OrganizationID})
@@ -164,7 +169,7 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 				}
 				server.Gap = &reason
 			}
-		} else if d, gap := decide(row, target.Context); gap != nil {
+		} else if d, gap := decide(row, target.Context, typedOnly); gap != nil {
 			server.Gap = &gap.Reason
 		} else {
 			server.Choice = &Choice{AuthClientID: uuid.NullUUID{UUID: d.authClientID, Valid: d.authClientID != uuid.Nil}, Source: SourceAutomatic}
@@ -234,8 +239,12 @@ func SetChoice(ctx context.Context, db TxStarter, target Target, serverID uuid.U
 	}
 	var previous *Choice
 	if !reachedRow.HasChoice {
+		typedOnly, err := authenforcement.ReadEnforced(ctx, tx, target.OrganizationID)
+		if err != nil {
+			return fmt.Errorf("read upstream auth enforcement: %w", err)
+		}
 		// The choice the next turn would make on its own is what this replaces.
-		if d, gap := decide(*reachedRow, target.Context); gap == nil {
+		if d, gap := decide(*reachedRow, target.Context, typedOnly); gap == nil {
 			previous = &Choice{AuthClientID: uuid.NullUUID{UUID: d.authClientID, Valid: d.authClientID != uuid.Nil}, Source: SourceAutomatic}
 		}
 	}

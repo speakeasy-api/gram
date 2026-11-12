@@ -15,6 +15,9 @@ import (
 )
 
 var expectedFullAccessScopes = []string{
+	string(authz.ScopeChannelsConnect),
+	string(authz.ScopeChannelsAdmin),
+	string(authz.ScopeChannelsReadAll),
 	string(authz.ScopeOrgRead),
 	string(authz.ScopeOrgAdmin),
 	string(authz.ScopeProjectRead),
@@ -36,6 +39,8 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeChatWrite),
 	string(authz.ScopeInferenceExecute),
 	string(authz.ScopeLogRead),
+	string(authz.ScopeMemoryRead),
+	string(authz.ScopeMemoryWrite),
 	string(authz.ScopeAgentRead),
 	string(authz.ScopeAgentWrite),
 	string(authz.ScopeAgentAuthorize),
