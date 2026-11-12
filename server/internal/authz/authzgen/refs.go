@@ -163,6 +163,11 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 			}
 			fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id, dimensions, %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
 		}
+		for _, p := range t.Permissions {
+			for _, set := range p.DimensionSets {
+				renderDimensionSet(&b, name, ScopeConstantName(t.ScopeFor(p)), match, set)
+			}
+		}
 	}
 
 	kinds := make([]string, 0, len(handWrittenRefs))
@@ -180,4 +185,22 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 		return nil, fmt.Errorf("format refs_gen.go: %w\n%s", err, b.String())
 	}
 	return formatted, nil
+}
+
+// renderDimensionSet writes the ref method for one dimension set: the
+// permission's check plus the set's dimensions as arguments, an empty one sent
+// as unknown.
+func renderDimensionSet(b *strings.Builder, ref, scope, match string, set registry.DimensionSet) {
+	params := make([]string, 0, len(set.Keys))
+	for _, key := range set.Keys {
+		params = append(params, paramName(key))
+	}
+	fmt.Fprintf(b, "// %s requests %s with %s. An empty value is sent as unknown, so a\n", set.Method, scope, strings.Join(set.Keys, " and "))
+	b.WriteString("// grant limited on that key never allows it and a block on it applies.\n")
+	fmt.Fprintf(b, "func (r %sRef) %s(%s string) Check {\n", ref, set.Method, strings.Join(params, ", "))
+	b.WriteString("\tdimensions := r.dimensions()\n\tif dimensions == nil {\n\t\tdimensions = map[string]string{}\n\t}\n")
+	for i, key := range set.Keys {
+		fmt.Fprintf(b, "\tdimensions[%q] = valueOrUnknown(%s)\n", key, params[i])
+	}
+	fmt.Fprintf(b, "\treturn newRefCheck(%s, r.id, dimensions, %s)\n}\n\n", scope, match)
 }

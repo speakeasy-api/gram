@@ -108,6 +108,12 @@ func (r Registry) Validate() error {
 			actions[p.Action] = p
 		}
 
+		// Ref methods share one namespace per kind: an action's method and
+		// every dimension set's.
+		methods := map[string]bool{}
+		for _, p := range t.Permissions {
+			methods[camelAction(p.Action)] = true
+		}
 		for _, p := range t.Permissions {
 			owner := fmt.Sprintf("%s.%s", t.Kind, p.Action)
 			scope := t.ScopeFor(p)
@@ -137,6 +143,27 @@ func (r Registry) Validate() error {
 					fail("%s: dimension %q is already declared on %s", owner, d.Key, t.Kind)
 				}
 				permissionDimKeys[d.Key] = true
+			}
+
+			for _, set := range p.DimensionSets {
+				if set.Method == "" || len(set.Keys) == 0 {
+					fail("%s: a dimension set needs a method name and at least one key", owner)
+					continue
+				}
+				if methods[set.Method] {
+					fail("%s: dimension set method %q clashes with another method on %s", owner, set.Method, t.Kind)
+				}
+				methods[set.Method] = true
+				seen := map[string]bool{}
+				for _, key := range set.Keys {
+					if !dimKeys[key] && !permissionDimKeys[key] {
+						fail("%s: dimension set %s uses %q, which is not a dimension of %s", owner, set.Method, key, t.Kind)
+					}
+					if seen[key] {
+						fail("%s: dimension set %s lists %q twice", owner, set.Method, key)
+					}
+					seen[key] = true
+				}
 			}
 
 			for _, implied := range p.Implies {
@@ -267,4 +294,16 @@ func impliesCycle(t ResourceType) string {
 		}
 	}
 	return ""
+}
+
+// camelAction is the ref method name of an action (plugin_write is
+// PluginWrite), for spotting a dimension set that would reuse it.
+func camelAction(action Action) string {
+	var b strings.Builder
+	for _, word := range strings.Split(string(action), "_") {
+		if word != "" {
+			b.WriteString(strings.ToUpper(word[:1]) + word[1:])
+		}
+	}
+	return b.String()
 }

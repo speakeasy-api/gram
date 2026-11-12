@@ -42,12 +42,6 @@ func newRefCheck(scope Scope, resourceID string, dimensions map[string]string, m
 	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: mode, representedUser: "", probe: false, anyOf: nil}
 }
 
-// ToolCall requests mcp:connect for calling one tool on the server. A tool
-// or disposition that is empty is carried as unknown (see MCPToolCallCheck).
-func (r MCPServerRef) ToolCall(tool, disposition string) Check {
-	return MCPToolCallCheck(r.id, MCPToolCallDimensions{Tool: tool, Disposition: disposition, ProjectID: r.project})
-}
-
 // Collections name the resources of one kind inside a project, for requests
 // that have no resource yet. Create is stored as the kind's write permission
 // on the project id, as it always has been, so existing grants keep working.

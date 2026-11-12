@@ -112,6 +112,18 @@ func (r MCPServerRef) Connect() Check {
 	return newRefCheck(ScopeMCPConnect, r.id, r.dimensions(), MatchLoose)
 }
 
+// ToolCall requests ScopeMCPConnect with tool and disposition. An empty value is sent as unknown, so a
+// grant limited on that key never allows it and a block on it applies.
+func (r MCPServerRef) ToolCall(tool, disposition string) Check {
+	dimensions := r.dimensions()
+	if dimensions == nil {
+		dimensions = map[string]string{}
+	}
+	dimensions["tool"] = valueOrUnknown(tool)
+	dimensions["disposition"] = valueOrUnknown(disposition)
+	return newRefCheck(ScopeMCPConnect, r.id, dimensions, MatchLoose)
+}
+
 // EnvironmentRef names one environment resource for a request.
 type EnvironmentRef struct {
 	id      string
