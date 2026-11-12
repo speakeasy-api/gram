@@ -110,7 +110,7 @@ func TestQueueDoesNotCountRunsThatNeverStarted(t *testing.T) {
 
 // A run left queued or running past any workflow's lifetime has nothing
 // behind it to resolve it. A soft-deleted run that is still unresolved blocks
-// starts like any other, and the stale-run sweep Queue runs is what clears it.
+// starts like any other, and the sweep a later start runs is what clears it.
 func TestQueueFailsRunsOlderThanAnyWorkflow(t *testing.T) {
 	t.Parallel()
 
@@ -129,18 +129,18 @@ func TestQueueFailsRunsOlderThanAnyWorkflow(t *testing.T) {
 	_, err = evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
 	require.ErrorIs(t, err, evalrun.ErrRunActive, "a deleted run that is still running keeps writing memory")
 
-	// Queue sweeps with a cutoff past the workflow run timeout. A cutoff in
-	// the future stands in for the run having aged past it.
-	failed, err := q.FailStaleActiveRuns(t.Context(), repo.FailStaleActiveRunsParams{
-		Error:         pgtype.Text{String: "test", Valid: true},
-		CreatedBefore: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), failed)
-
-	next, err := evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
+	// A start made after any workflow could still be running fails the orphan
+	// under the lock and then queues.
+	next, err := evalrun.QueueAt(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com", time.Now().Add(evalrun.StaleRunAge+time.Minute))
 	require.NoError(t, err)
 	require.Equal(t, "queued", next.Status)
+
+	// The orphan is failed, not just skipped: with the new run failed too,
+	// a plain start goes through.
+	_, err = q.FailRun(t.Context(), repo.FailRunParams{Error: pgtype.Text{String: "test", Valid: true}, CostUsd: pgtype.Numeric{}, ID: next.ID})
+	require.NoError(t, err)
+	_, err = evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
+	require.NoError(t, err)
 }
 
 // The start lock is what makes the one-active-run rule hold when starts race:
