@@ -130,7 +130,7 @@ func TestIngest_CoworkPromptWarnLeadsWithShortLink(t *testing.T) {
 	first := send(sentAt(36))
 	require.Equal(t, "deny", first.Decision, "the first send is challenged")
 	require.NotNil(t, first.Message)
-	require.Regexp(t, `^https?://\S+/ack#rpak1\.[A-Za-z0-9_-]+ Speakeasy warning:`, *first.Message, "the short acknowledgement link leads, before Cowork cuts the text off")
+	require.Regexp(t, `^https?://\S+/ack#[0-9A-Za-z]{10} Speakeasy warning:`, *first.Message, "the short acknowledgement link leads, before Cowork cuts the text off")
 	require.Contains(t, *first.Message, "618-27-4093 looks like sensitive information.")
 	require.NotContains(t, *first.Message, "ack_token=", "Cowork gets the short link, not the long one")
 	require.NotContains(t, *first.Message, "\x1b", "no terminal escapes in a web UI")

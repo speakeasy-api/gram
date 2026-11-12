@@ -129,26 +129,129 @@ func GeneratePolicyAckURL(ctx context.Context, c cache.Cache, siteURL *url.URL, 
 	return ackURL.String(), expiry, nil
 }
 
+// policyAckShortIDLength is the length of a short link's bare id: 10 base62
+// characters, about 60 bits. That is enough because the id grants nothing by
+// itself: every endpoint that reads it requires the warned user's own
+// session, the record lives for at most maxPolicyAckTTL, and minting never
+// reuses a live id.
+const policyAckShortIDLength = 10
+
+const base62Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+// newPolicyAckShortID returns a random base62 id of policyAckShortIDLength.
+func newPolicyAckShortID() (string, error) {
+	out := make([]byte, policyAckShortIDLength)
+	buf := make([]byte, 1)
+	for i := 0; i < len(out); {
+		if _, err := io.ReadFull(rand.Reader, buf); err != nil {
+			return "", fmt.Errorf("generate risk policy ack short id: %w", err)
+		}
+		// Rejection sampling keeps every character equally likely.
+		if buf[0] >= 248 {
+			continue
+		}
+		out[i] = base62Alphabet[int(buf[0])%len(base62Alphabet)]
+		i++
+	}
+	return string(out), nil
+}
+
+// isPolicyAckShortID reports whether a token is a bare short-link id.
+func isPolicyAckShortID(token string) bool {
+	if len(token) != policyAckShortIDLength {
+		return false
+	}
+	for _, r := range token {
+		if !strings.ContainsRune(base62Alphabet, r) {
+			return false
+		}
+	}
+	return true
+}
+
 // GeneratePolicyAckShortURL is GeneratePolicyAckURL in its shortest form,
-// <site>/ack#<token>, for surfaces that cut a message off after a line or two
-// (Claude Cowork). The token stays in the fragment, so it never reaches a
-// server log, and the dashboard's /ack route redeems it like the long form.
+// <site>/ack#<id>, for surfaces that cut a message off after a line or two
+// (Claude Cowork). The id is a bare 10-character key with no rpak1. prefix.
+// It stays in the fragment, so it never reaches a server log, and the
+// dashboard's /ack route redeems it like the long form.
 func GeneratePolicyAckShortURL(ctx context.Context, c cache.Cache, siteURL *url.URL, input PolicyAckTokenInput, ttl time.Duration) (string, time.Time, error) {
 	if siteURL == nil {
 		return "", time.Time{}, fmt.Errorf("site url is required")
 	}
-	token, expiry, err := GeneratePolicyAckToken(ctx, c, input, ttl)
+	record, ttl, err := newPolicyAckRecord(input, ttl)
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	ackURL := siteURL.JoinPath("ack")
-	ackURL.Fragment = token
-	return ackURL.String(), expiry, nil
+	if c == nil {
+		return "", time.Time{}, fmt.Errorf("risk policy ack cache is not configured")
+	}
+	// A short id could collide with a live one, so it is only stored where
+	// no record exists, and minting retries with a fresh id.
+	for range 3 {
+		id, err := newPolicyAckShortID()
+		if err != nil {
+			return "", time.Time{}, err
+		}
+		stored, err := setPolicyAckIfAbsent(ctx, c, policyAckCacheKey(id), record, ttl)
+		if err != nil {
+			return "", time.Time{}, fmt.Errorf("store risk policy ack: %w", err)
+		}
+		if !stored {
+			continue
+		}
+		ackURL := siteURL.JoinPath("ack")
+		ackURL.Fragment = id
+		return ackURL.String(), record.ExpiresAt, nil
+	}
+	return "", time.Time{}, fmt.Errorf("store risk policy ack: no free short id")
+}
+
+// setPolicyAckIfAbsent stores record only where key holds nothing. A cache
+// without an atomic set-if-absent falls back to a read before the write.
+func setPolicyAckIfAbsent(ctx context.Context, c cache.Cache, key string, record policyAckRecord, ttl time.Duration) (bool, error) {
+	if conditional, ok := c.(cache.ConditionalCache); ok {
+		stored, err := conditional.SetIfAbsent(ctx, key, record, ttl)
+		if err != nil {
+			return false, fmt.Errorf("set if absent: %w", err)
+		}
+		return stored, nil
+	}
+	var existing policyAckRecord
+	err := c.Get(ctx, key, &existing)
+	if err == nil {
+		return false, nil
+	}
+	if !errors.Is(err, redisCache.ErrCacheMiss) {
+		return false, fmt.Errorf("read: %w", err)
+	}
+	if err := c.Set(ctx, key, record, ttl); err != nil {
+		return false, fmt.Errorf("write: %w", err)
+	}
+	return true, nil
 }
 
 // GeneratePolicyAckToken stores the challenge state in the cache and returns the
 // rpak1 token (prefix + cache id) plus its expiry.
 func GeneratePolicyAckToken(ctx context.Context, c cache.Cache, input PolicyAckTokenInput, ttl time.Duration) (string, time.Time, error) {
+	record, ttl, err := newPolicyAckRecord(input, ttl)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	if c == nil {
+		return "", time.Time{}, fmt.Errorf("risk policy ack cache is not configured")
+	}
+	id, err := newPolicyAckID()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	if err := c.Set(ctx, policyAckCacheKey(id), record, ttl); err != nil {
+		return "", time.Time{}, fmt.Errorf("store risk policy ack: %w", err)
+	}
+	return policyAckTokenPrefix + id, record.ExpiresAt, nil
+}
+
+// newPolicyAckRecord validates the challenge state and clamps its lifetime.
+func newPolicyAckRecord(input PolicyAckTokenInput, ttl time.Duration) (policyAckRecord, time.Duration, error) {
 	if ttl <= 0 {
 		ttl = defaultPolicyAckTTL
 	}
@@ -170,19 +273,9 @@ func GeneratePolicyAckToken(ctx context.Context, c cache.Cache, input PolicyAckT
 		ExpiresAt:        expiry,
 	}
 	if err := validatePolicyAckFields(record.OrganizationID, record.ProjectID, record.UserID, record.RiskPolicyID); err != nil {
-		return "", time.Time{}, err
+		return policyAckRecord{}, 0, err
 	}
-	if c == nil {
-		return "", time.Time{}, fmt.Errorf("risk policy ack cache is not configured")
-	}
-	id, err := newPolicyAckID()
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	if err := c.Set(ctx, policyAckCacheKey(id), record, ttl); err != nil {
-		return "", time.Time{}, fmt.Errorf("store risk policy ack: %w", err)
-	}
-	return policyAckTokenPrefix + id, expiry, nil
+	return record, ttl, nil
 }
 
 // lookupPolicyAckRecord resolves an rpak1 token to its cached state. A cache
@@ -192,10 +285,15 @@ func lookupPolicyAckRecord(ctx context.Context, c cache.Cache, tokenString strin
 	if c == nil {
 		return nil, fmt.Errorf("%w: cache is not configured", errPolicyAckStoreUnavailable)
 	}
-	if !strings.HasPrefix(tokenString, policyAckTokenPrefix) {
+	id := ""
+	switch {
+	case strings.HasPrefix(tokenString, policyAckTokenPrefix):
+		id = strings.TrimPrefix(tokenString, policyAckTokenPrefix)
+	case isPolicyAckShortID(tokenString):
+		id = tokenString
+	default:
 		return nil, fmt.Errorf("invalid risk policy ack token format")
 	}
-	id := strings.TrimPrefix(tokenString, policyAckTokenPrefix)
 	if strings.TrimSpace(id) == "" {
 		return nil, fmt.Errorf("invalid risk policy ack token format")
 	}

@@ -178,8 +178,9 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
 
 function getAckToken(): string | null {
   const hash = window.location.hash.replace(/^#/, "");
-  // The short link (/ack#<token>) carries the bare token as the fragment.
-  if (hash.startsWith("rpak1.")) {
+  // The short link (/ack#<id>) carries a bare id as the whole fragment; the
+  // long link uses ack_token=<token>.
+  if (hash !== "" && !hash.includes("=")) {
     return hash;
   }
   const hashParams = new URLSearchParams(hash);
