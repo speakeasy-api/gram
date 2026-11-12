@@ -235,6 +235,9 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	// Decided before the transaction: the flag can need a network call.
 	runtime := s.newIngressRuntime(ctx, authCtx)
 	hostname, err := s.namer.Hostname(ctx, conv.PtrValOr(payload.Hostname, DefaultHostname))
+	if errors.Is(err, ErrReservedHostname) {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "name network ingress hostname").LogError(ctx, s.logger)
 	}
@@ -329,6 +332,9 @@ func (s *Service) UpdateIngress(ctx context.Context, payload *gen.UpdateIngressP
 	}
 	if payload.Hostname != nil {
 		hostname, err := s.namer.Hostname(ctx, *payload.Hostname)
+		if errors.Is(err, ErrReservedHostname) {
+			return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
+		}
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "name network ingress hostname").LogError(ctx, s.logger)
 		}

@@ -17,7 +17,9 @@ func TestProductionNamer(t *testing.T) {
 	namer := networkingress.ProductionNamer{}
 	require.Equal(t, "speakeasy", must(namer.Hostname(ctx, "speakeasy")))
 	require.True(t, must(namer.OwnsHostname(ctx, "speakeasy")))
-	require.True(t, must(namer.OwnsHostname(ctx, "local-ab12-speakeasy")))
+	require.False(t, must(namer.OwnsHostname(ctx, "local-ab12-speakeasy")), "production never manages a local stack's service")
+	_, err := namer.Hostname(ctx, "local-ab12-speakeasy")
+	require.ErrorIs(t, err, networkingress.ErrReservedHostname, "production reserves the local- prefix")
 	require.Equal(t, "svc:speakeasy", must(namer.ServiceName(ctx, "speakeasy")))
 	require.Equal(t, "Speakeasy private MCP ingress", must(namer.ServiceComment(ctx)))
 	require.Equal(t, "speakeasy-gw-0", must(namer.MachineName(ctx, 0)))
