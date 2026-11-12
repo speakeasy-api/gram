@@ -107,7 +107,10 @@ func (s speakeasySource) checkConsent(ctx context.Context, logger *slog.Logger, 
 }
 
 func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Logger, req Request, sel *selection, result signins.Result) Outcome {
-	if !result.Eligible() || result.Identity.UserID != req.UserID {
+	if !result.Eligible() {
+		return newOutcome(StageAuthorization, signInRefusalReason(result.Reason), ConfidenceVerified, false)
+	}
+	if result.Identity.UserID != req.UserID {
 		return newOutcome(StageAuthorization, ReasonReauthenticationRequired, ConfidenceVerified, false)
 	}
 	status, outcome := s.configuration(ctx, logger, req.OrganizationID)
@@ -121,6 +124,20 @@ func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Log
 	sel.internalKeyPublishedAt = status.ActiveKey.CreatedAt.Time
 	sel.audience = sel.issuer
 	return success
+}
+
+// signInRefusalReason separates a sign-in a new one replaces from an account or
+// method Speakeasy will not vouch for, which signing in again the same way repeats.
+func signInRefusalReason(reason signins.Reason) Reason {
+	switch reason {
+	case signins.ReasonUnmanagedAccount, signins.ReasonMethodNotEligible, signins.ReasonMethodNotAllowed, signins.ReasonTenantNotAllowed,
+		signins.ReasonOrganizationDisabled, signins.ReasonNotMember, signins.ReasonDeprovisioned, signins.ReasonEmailNotVerified, signins.ReasonEmailDomain:
+		return ReasonIneligibleIdentity
+	case signins.ReasonEligible, signins.ReasonSessionNotFound, signins.ReasonSessionExpired, signins.ReasonNotLinked, signins.ReasonNotUserSubject,
+		signins.ReasonSignInRevoked, signins.ReasonExpired, signins.ReasonEmailChanged, signins.ReasonAuthTimeUnknown:
+		return ReasonReauthenticationRequired
+	}
+	return ReasonReauthenticationRequired
 }
 
 // configuration checks live issuer readiness without requiring a user's grant
