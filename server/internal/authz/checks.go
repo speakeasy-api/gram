@@ -191,7 +191,7 @@ func expressionForCheck(check Check) GrantExpression {
 	return GrantDifference{
 		Base: base,
 		Exclusion: GrantCheck{
-			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, selectorMatch: selectorMatchStrict, representedUser: check.representedUser},
+			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, selectorMatch: selectorMatchStrict, representedUser: check.representedUser, probe: false, anyOf: nil},
 			Instance: instance,
 		},
 	}

@@ -390,48 +390,39 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		}
 	}
 
-	anyDenied := false
-	blocked := make([]bool, len(checks))
-	for i, check := range checks {
-		evaluation, err := authorization.evaluate(check)
-		if err != nil {
-			challengeLogger{
-				Operation:            authzrepo.OperationRequireAny,
-				Outcome:              authzrepo.OutcomeError,
-				Reason:               authzrepo.ReasonInvalidCheck,
-				Checks:               checks,
-				Focus:                &check,
-				Matches:              nil,
-				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
-				FilterCandidateCount: 0,
-				FilterAllowedCount:   0,
-			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, err)
-		}
-		if evaluation.Denied {
-			anyDenied = true
-			blocked[i] = true
-			continue
-		}
-		if evaluation.Grant != nil {
-			challengeLogger{
-				Operation:            authzrepo.OperationRequireAny,
-				Outcome:              authzrepo.OutcomeAllow,
-				Reason:               authzrepo.ReasonGrantMatched,
-				Checks:               checks,
-				Focus:                &check,
-				Matches:              []grantMatch{{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check}},
-				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
-				FilterCandidateCount: 0,
-				FilterAllowedCount:   0,
-			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return nil
-		}
+	decision, err := authorization.decideAnyOf(checks)
+	if err != nil {
+		challengeLogger{
+			Operation:            authzrepo.OperationRequireAny,
+			Outcome:              authzrepo.OutcomeError,
+			Reason:               authzrepo.ReasonInvalidCheck,
+			Checks:               checks,
+			Focus:                &checks[decision.index],
+			Matches:              nil,
+			EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
+			FilterCandidateCount: 0,
+			FilterAllowedCount:   0,
+		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+		return e.mapError(ctx, err)
+	}
+	if decision.allowed() {
+		challengeLogger{
+			Operation:            authzrepo.OperationRequireAny,
+			Outcome:              authzrepo.OutcomeAllow,
+			Reason:               authzrepo.ReasonGrantMatched,
+			Checks:               checks,
+			Focus:                &checks[decision.index],
+			Matches:              []grantMatch{{Grant: *decision.match.Grant, ViaCheck: *decision.match.Check}},
+			EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
+			FilterCandidateCount: 0,
+			FilterAllowedCount:   0,
+		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+		return nil
 	}
 
 	reason := authzrepo.ReasonScopeUnsatisfied
 	switch {
-	case anyDenied:
+	case slices.Contains(decision.blocked, true):
 		reason = authzrepo.ReasonDenyGrant
 	case authorization.grantCount() == 0:
 		reason = authzrepo.ReasonNoGrants
@@ -449,7 +440,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 	// The alternatives are equivalent to the handler but not to the person
 	// asking for access: explain the one that grants the least.
-	if suggested, ok := leastPrivilegedAlternative(checks, blocked); ok {
+	if suggested, ok := leastPrivilegedAlternative(checks, decision.blocked); ok {
 		recordDenial(ctx, Denied(suggested.Scope, suggested.selector()))
 	}
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
@@ -610,16 +601,48 @@ func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, erro
 	if blocked != nil {
 		return false, nil
 	}
-	for _, check := range alternatives {
-		evaluation, err := authorization.evaluate(check)
+	decision, err := authorization.decideAnyOf(alternatives)
+	if err != nil {
+		return false, e.mapError(ctx, err)
+	}
+	return decision.allowed(), nil
+}
+
+// anyOfDecision is the outcome of evaluating alternatives in order, shared by
+// RequireAny and Can(AnyOf(...)) so the two cannot drift apart. Callers add
+// their own challenge logging and result mapping.
+type anyOfDecision struct {
+	// match is the evaluation of the first alternative a grant allows, nil when
+	// none does.
+	match *grantCheckEvaluation
+	// index is the alternative that matched, or the one that failed to evaluate.
+	index int
+	// blocked marks the alternatives a deny grant refused.
+	blocked []bool
+}
+
+func (d anyOfDecision) allowed() bool { return d.match != nil }
+
+// decideAnyOf evaluates the alternatives in order and stops at the first one a
+// grant allows. Alternatives a deny grant refuses are marked and skipped.
+func (a grantAuthorization) decideAnyOf(checks []Check) (anyOfDecision, error) {
+	decision := anyOfDecision{match: nil, index: 0, blocked: make([]bool, len(checks))}
+	for i, check := range checks {
+		decision.index = i
+		evaluation, err := a.evaluate(check)
 		if err != nil {
-			return false, e.mapError(ctx, err)
+			return decision, err
 		}
-		if !evaluation.Denied && evaluation.Grant != nil {
-			return true, nil
+		if evaluation.Denied {
+			decision.blocked[i] = true
+			continue
+		}
+		if evaluation.Grant != nil {
+			decision.match = &evaluation
+			return decision, nil
 		}
 	}
-	return false, nil
+	return decision, nil
 }
 
 // Filter evaluates each check and returns the resource IDs of those the caller
