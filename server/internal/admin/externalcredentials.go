@@ -190,7 +190,8 @@ func requireNoManagedEncryptionKeys(ctx context.Context, logger *slog.Logger, q 
 
 // platformOwnProjectExemption screens a platform credential's impersonation
 // target. A target that is not a user-managed service account is refused, as on
-// the organization tier: it could never be impersonated. A service account in
+// the organization tier: it cannot be placed in a project, so it cannot be
+// screened. A service account in
 // Speakeasy's own project records the own-project exemption. Platform rows back
 // Speakeasy's own signing keys, so that is the expected shape; the provisioner
 // screens the stored row at use and would refuse it otherwise.
