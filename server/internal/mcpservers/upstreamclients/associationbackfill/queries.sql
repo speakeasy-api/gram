@@ -374,8 +374,9 @@ ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO 
 -- the one derived for the server, the comparison consent claimed members by.
 -- claimed_by_sibling reports that the client is associated with another live
 -- server of the organization on the same remote upstream URL. A grant's
--- resource is that URL, so the client's grants are that server's and prove
--- nothing about this one.
+-- resource is that URL, so the client's grants match both servers alike; its
+-- association with the other one already accounts for them, so they do not
+-- leave this server waiting for configuration.
 -- offers_own_oauth_client reports that the server offers an OAuth-backed auth
 -- client an administrator or a server-only identity commit configured for it.
 WITH fronted AS (

@@ -582,10 +582,11 @@ func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 // registrations can share an authorization server, so a derived match does not
 // distinguish them or outweigh existing associations. Inbound issuer bindings
 // alone do not justify adding outbound clients. A detached client stays
-// detached. Grants name an upstream, not a server, so those of a client another
-// server on that upstream is associated with are that server's; a grant for a
-// client associated with no such server still needs configuration. This
-// decides nothing new and writes nothing.
+// detached. Grants name an upstream, not a server, so a client's grants match
+// every server on it: a client another server on that upstream is associated
+// with is already accounted for, while a grant for a client associated with no
+// such server still needs configuration. This decides nothing new and writes
+// nothing.
 func settledByConfiguration(result GatewayResult, rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 	associated := false
 	for _, row := range rows {
