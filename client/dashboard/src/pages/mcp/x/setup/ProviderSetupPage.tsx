@@ -1,3 +1,10 @@
+import {
+  parsePolicyNewPrefill,
+  policyNewPrefillQuery,
+} from "@/pages/security/policy-new-prefill";
+import { useSdkClient } from "@/contexts/Sdk";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
@@ -11,7 +18,7 @@ import {
 import type { State } from "@/pages/catalog/provider-setup/state";
 import { useEffect, useReducer } from "react";
 import { useProviderConnection } from "./useProviderConnection";
-import { Link, Navigate, useNavigate } from "react-router";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useRoutes } from "@/routes";
@@ -232,6 +239,20 @@ function RetainedProviderSetup({
   overviewHref: string;
 }): JSX.Element {
   const navigate = useNavigate();
+  const routes = useRoutes();
+  const [params] = useSearchParams();
+  const gatewayId =
+    provider === "snowflake" ? params.get("attachToGateway") : null;
+  const completionHref =
+    provider === "snowflake" && params.get("customizePolicy") === "true"
+      ? routes.policyCenter.new.href() +
+        policyNewPrefillQuery({
+          ...parsePolicyNewPrefill(params),
+          mcpServerIds: [mcpServer.id],
+        })
+      : gatewayId
+        ? routes.mcp.gateway.overview.href(gatewayId)
+        : overviewHref;
   const [s, dispatch] = useReducer(reduce, storageKey, (key) => {
     return loadProviderProgress(
       provider,
@@ -247,8 +268,9 @@ function RetainedProviderSetup({
   });
   useEffect(() => {
     saveProviderProgress(storageKey, s);
-    if (s.screen === "success") void navigate(overviewHref, { replace: true });
-  }, [storageKey, s, overviewHref, navigate]);
+    if (s.screen === "success")
+      void navigate(completionHref, { replace: true });
+  }, [storageKey, s, completionHref, navigate]);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [s.step, s.screen]);
@@ -279,10 +301,35 @@ function LiveSetupConnection({
   serverUrl: string;
   serverName: string;
 }): JSX.Element {
-  const live = useProviderConnection(s, dispatch, mcpServer, {
-    url: serverUrl,
-    instanceUrl: sourceInstance,
-  });
+  const sdk = useSdkClient();
+  const cache = useQueryClient();
+  const [params] = useSearchParams();
+  const gatewayId =
+    s.provider === "snowflake" ? params.get("attachToGateway") : null;
+  const live = useProviderConnection(
+    s,
+    dispatch,
+    mcpServer,
+    {
+      url: serverUrl,
+      instanceUrl: sourceInstance,
+    },
+    gatewayId
+      ? async () => {
+          const { members } = await sdk.metaMcp.listMembers({
+            metaMcpServerId: gatewayId,
+          });
+          if (!members.some((member) => member.mcpServerId === mcpServer.id))
+            await sdk.metaMcp.addMember({
+              addMetaMcpMemberForm: {
+                metaMcpServerId: gatewayId,
+                mcpServerId: mcpServer.id,
+              },
+            });
+          await invalidateAllMetaMcpMembers(cache);
+        }
+      : undefined,
+  );
   const routes = useRoutes();
   const settingsHref =
     routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer)) +

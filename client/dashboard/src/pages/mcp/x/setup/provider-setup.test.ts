@@ -619,3 +619,32 @@ describe("Snowflake source-bound progress", () => {
     expect(changed.step).toBe("account");
   });
 });
+
+it("restores the Snowflake SQL workspace step after reload", () => {
+  const state = initialState("snowflake");
+  state.step = "workspace";
+  state.values.host = "example.snowflakecomputing.com";
+  saveProviderProgress("snowflake-workspace", state);
+  const restored = loadProviderProgress("snowflake", "snowflake-workspace");
+  expect(restored.step).toBe("workspace");
+  expect(restored.values.host).toBe("example.snowflakecomputing.com");
+});
+
+it("prefills a new Snowflake server name and retains a chosen name after reload", () => {
+  const key = "snowflake-server-name";
+  sessionStorage.removeItem(key);
+  expect(loadProviderProgress("snowflake", key).values.serverName).toBe(
+    "SPEAKEASY_MCP",
+  );
+  const state = initialState("snowflake");
+  state.values.serverName = "";
+  saveProviderProgress(key, state);
+  expect(loadProviderProgress("snowflake", key).values.serverName).toBe(
+    "SPEAKEASY_MCP",
+  );
+  state.values.serverName = "CUSTOM_MCP";
+  saveProviderProgress(key, state);
+  expect(loadProviderProgress("snowflake", key).values.serverName).toBe(
+    "CUSTOM_MCP",
+  );
+});

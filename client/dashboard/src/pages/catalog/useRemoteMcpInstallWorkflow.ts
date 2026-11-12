@@ -1,3 +1,7 @@
+import {
+  isSnowflakeCatalogServer,
+  snowflakeSetupUrl,
+} from "./snowflake-install";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {
@@ -101,6 +105,7 @@ export interface ServerInstallStatus {
    * that tally results, but the dialog shows it as a next step, not an error.
    */
   setupRequired?: string;
+  setupPolicy?: ServerGuardrailState;
   identityMode?: RemoteMcpCreationIdentity;
   /** Exact remote endpoint selected for this installed server. */
   remoteUrl?: string;
@@ -244,14 +249,8 @@ interface UseRemoteMcpInstallWorkflowOptions {
   offerGuardrails?: boolean;
   /** Fresh catalog admission before any create, never after acceptance. */
   beforeInstall?: () => Promise<boolean>;
-  /** Defer an account-specific User Identity install to its guided setup. */
-  deferSetup?: (
-    configs: ServerConfig[],
-    options: {
-      guardrail?: ServerGuardrailState;
-      customize?: ServerGuardrailState;
-    },
-  ) => boolean;
+  /** Interactive native Snowflake installs start disabled and configure on Setup. */
+  snowflakeSetupEnabled?: boolean;
 }
 
 /** Key into [ServerConfig.headerValues] for one header of one remote. */
@@ -401,7 +400,7 @@ export function useRemoteMcpInstallWorkflow({
   serverNameSuffix = "",
   offerGuardrails = false,
   beforeInstall,
-  deferSetup,
+  snowflakeSetupEnabled = false,
   initialConfiguration,
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
@@ -647,31 +646,41 @@ export function useRemoteMcpInstallWorkflow({
       mcpEndpointUrl?: string;
       authConfigured: boolean;
       identityConfiguration?: ConfigureCreatedIdentityResult;
+      remoteUrl?: string;
     }> => {
       if (isFigmaCatalogServer(target.server)) {
         return installUnproxiedTarget(client, target, reqOpts);
       }
 
-      const probe = await client.remoteMcp.probeURL(
-        { probeURLForm: { url: target.remote.url } },
-        undefined,
-        reqOpts,
-      );
-      if (
-        probe.outcome === "unreachable" ||
-        probe.outcome === "invalid_mcp_response"
-      ) {
-        throw new Error(
-          probe.outcome === "unreachable"
-            ? "The Remote MCP server is unreachable."
-            : "The URL did not return a valid MCP response.",
+      const pendingSnowflake =
+        snowflakeSetupEnabled &&
+        target.identityMode === "user" &&
+        isSnowflakeCatalogServer(target.server);
+      const remoteUrl = pendingSnowflake
+        ? snowflakeSetupUrl
+        : target.remote.url;
+      if (!pendingSnowflake) {
+        const probe = await client.remoteMcp.probeURL(
+          { probeURLForm: { url: target.remote.url } },
+          undefined,
+          reqOpts,
         );
+        if (
+          probe.outcome === "unreachable" ||
+          probe.outcome === "invalid_mcp_response"
+        ) {
+          throw new Error(
+            probe.outcome === "unreachable"
+              ? "The Remote MCP server is unreachable."
+              : "The URL did not return a valid MCP response.",
+          );
+        }
       }
       const remoteMcpServer = await client.remoteMcp.createServer(
         {
           createServerForm: {
             name: target.name,
-            url: target.remote.url,
+            url: remoteUrl,
             transportType: "streamable-http",
           },
         },
@@ -751,23 +760,32 @@ export function useRemoteMcpInstallWorkflow({
         }
       }
 
-      const identityConfiguration = await configureCreatedRemoteMcpIdentity({
-        client,
-        remoteMcpServer,
-        mcpServer,
-        identityMode: target.identityMode,
-        // Already the whole header value: the credential form assembles the
-        // Bearer/Basic prefix so the operator can see exactly what is sent.
-        agentAuthorization:
-          target.identityMode === "agent"
-            ? target.agentAuthorization.trim()
-            : undefined,
-        serviceAccountClient:
-          target.identityMode === "agent"
-            ? (target.serviceAccountClient ?? undefined)
-            : undefined,
-        options: reqOpts,
-      });
+      const identityConfiguration: ConfigureCreatedIdentityResult =
+        pendingSnowflake
+          ? {
+              status: "setup-required",
+              mcpServer,
+              identityMode: "user",
+              message:
+                "Finish Snowflake connection setup before enabling this server.",
+            }
+          : await configureCreatedRemoteMcpIdentity({
+              client,
+              remoteMcpServer,
+              mcpServer,
+              identityMode: target.identityMode,
+              // Already the whole header value: the credential form assembles the
+              // Bearer/Basic prefix so the operator can see exactly what is sent.
+              agentAuthorization:
+                target.identityMode === "agent"
+                  ? target.agentAuthorization.trim()
+                  : undefined,
+              serviceAccountClient:
+                target.identityMode === "agent"
+                  ? (target.serviceAccountClient ?? undefined)
+                  : undefined,
+              options: reqOpts,
+            });
       const configuredMcpServer =
         identityConfiguration.status === "configured"
           ? identityConfiguration.mcpServer
@@ -789,6 +807,7 @@ export function useRemoteMcpInstallWorkflow({
 
       return {
         mcpServer: configuredMcpServer,
+        remoteUrl,
         mcpEndpointUrl: endpoint
           ? `${getServerURL()}/mcp/${endpoint.slug}`
           : undefined,
@@ -802,7 +821,7 @@ export function useRemoteMcpInstallWorkflow({
         identityConfiguration,
       };
     },
-    [client, defaultOrganizationIssuerId, orgSlug],
+    [client, defaultOrganizationIssuerId, orgSlug, snowflakeSetupEnabled],
   );
 
   const admissionInFlight = useRef(false);
@@ -831,7 +850,6 @@ export function useRemoteMcpInstallWorkflow({
       try {
         if (beforeInstall && !(await beforeInstall())) return [];
         if (generation !== admissionGeneration.current) return [];
-        if (deferSetup?.(serverConfigs, options ?? {})) return [];
       } finally {
         admissionInFlight.current = false;
       }
@@ -878,6 +896,7 @@ export function useRemoteMcpInstallWorkflow({
         );
       };
 
+      let deferredCustomization = false;
       let anyAuthConfigured = false;
       let anyUnproxiedInstalled = false;
       // Servers that were created, for scoping the guardrail. A server kept
@@ -896,10 +915,16 @@ export function useRemoteMcpInstallWorkflow({
           }
           const identitySetupRequired =
             result.identityConfiguration?.status === "setup-required";
+          const setupPolicy =
+            result.remoteUrl === snowflakeSetupUrl
+              ? options?.customize
+              : undefined;
+          deferredCustomization ||= !!setupPolicy;
           setStatusAt(index, {
+            setupPolicy,
             status: identitySetupRequired ? "failed" : "completed",
             identityMode: target.identityMode,
-            remoteUrl: target.remote.url,
+            remoteUrl: result.remoteUrl ?? target.remote.url,
             mcpServerId: result.mcpServer.id,
             mcpServerParam: mcpServerRouteParam(result.mcpServer),
             mcpEndpointUrl: result.mcpEndpointUrl,
@@ -997,11 +1022,10 @@ export function useRemoteMcpInstallWorkflow({
       }
 
       setPhase("complete");
-      return installedServerIds;
+      return deferredCustomization ? [] : installedServerIds;
     },
     [
       beforeInstall,
-      deferSetup,
       canInstall,
       client,
       detectorMode,

@@ -489,6 +489,41 @@ it("renders the published installation link and support handoff details", async 
 });
 
 describe("Snowflake instructions", () => {
+  it("keeps SQL workspace instructions on their own step without input fields", () => {
+    const account = task("account");
+    expect(screen.queryByText(/Projects → Workspaces/)).toBeNull();
+    account.unmount();
+    task("workspace");
+    expect(screen.getByText("Projects → Workspaces")).toBeDefined();
+    expect(screen.getByText("SQL File")).toBeDefined();
+    expect(screen.getByText(/Choose an available warehouse/)).toBeDefined();
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+  it("normalizes a pasted account URL to its hostname when leaving the field", async () => {
+    function Account() {
+      const [s, dispatch] = useReducer(reduce, {
+        ...initialState("snowflake"),
+        step: "account",
+      });
+      return (
+        <SetupContext
+          value={{ s, dispatch, live: connectionFixture(dispatch) }}
+        >
+          <ProviderTask serverName="Snowflake" />
+        </SetupContext>
+      );
+    }
+    const user = userEvent.setup();
+    render(<Account />);
+    const input = screen.getByLabelText("Public Account/Server URL");
+    await user.click(input);
+    await user.paste("https://EXAMPLE-ACCOUNT.snowflakecomputing.com/");
+    await user.tab();
+    expect(input).toHaveProperty(
+      "value",
+      "example-account.snowflakecomputing.com",
+    );
+  });
   function task(
     step: string,
     values = {},
@@ -556,29 +591,61 @@ describe("Snowflake instructions", () => {
       screen.getByRole("button", { name: "Review server details" }),
     ).toBeDefined();
   });
-  it("withholds incomplete SQL", () => {
+  it("keeps creation instructions visible while incomplete SQL cannot be copied", () => {
     const { container } = task("create", {
       creatorRole: "EXAMPLE_CREATOR",
       database: "",
       schema: "",
       serverName: "",
     });
-    expect(container.querySelector("[data-sql]")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Copy SQL" })).toBeNull();
+    expect(container.querySelector("[data-sql]")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Copy SQL" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(
+      screen.getByText(/Copy the SQL below into your SQL file/),
+    ).toBeDefined();
   });
 
+  it.each([
+    ["creator", "Grant access"],
+    ["access", "4. Assign the role and user defaults"],
+    ["oauth", "Create the integration in Snowflake"],
+  ])(
+    "keeps %s instructions visible before inputs are filled",
+    (step, heading) => {
+      task(step, {
+        creatorRole: "",
+        accessRole: "",
+        warehouse: "",
+        users: "",
+        oauthIntegration: "",
+      });
+      expect(screen.getByRole("heading", { name: heading })).toBeDefined();
+      for (const button of screen.getAllByRole("button", { name: "Copy SQL" }))
+        expect(button).toHaveProperty("disabled", true);
+      for (const summary of screen.getAllByText("View SQL"))
+        expect(summary.closest("details")).toHaveProperty("open", false);
+    },
+  );
+
   it.each([false, true])(
-    "shows callback recovery without an empty SQL instruction (failed=%s)",
+    "keeps OAuth instructions visible during callback recovery (failed=%s)",
     (failed) => {
       callback.data.callbackUrl = "";
       callback.isError = failed;
       const { container } = task("oauth", {
         oauthIntegration: "EXAMPLE_OAUTH",
       });
-      expect(container.querySelector('[data-sql="oauth"]')).toBeNull();
+      expect(container.querySelector('[data-sql="oauth"]')).not.toBeNull();
       expect(
         screen.queryByText("Create the integration in Snowflake"),
-      ).toBeNull();
+      ).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Copy SQL" })).toHaveProperty(
+        "disabled",
+        true,
+      );
       expect(
         screen.getByText(
           failed ? /Couldn’t load the callback URL/ : /Loading callback URL/,

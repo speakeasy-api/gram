@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
@@ -105,6 +106,16 @@ func createMCPServerInLockedTransaction(ctx context.Context, tx pgx.Tx, auditLog
 	sources := credentialSourcesOf([]uuid.NullUUID{input.RemoteMCPServerID}, []uuid.NullUUID{input.TunneledMCPServerID})
 	if err := verifyLiveCredentialSources(ctx, tx, input.ProjectID, sources); err != nil {
 		return repo.McpServer{}, err
+	}
+
+	if input.RemoteMCPServerID.Valid && input.Visibility != VisibilityDisabled {
+		source, err := remotemcprepo.New(tx).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: input.RemoteMCPServerID.UUID, ProjectID: input.ProjectID})
+		if err != nil {
+			return repo.McpServer{}, fmt.Errorf("load remote source before enabling: %w", err)
+		}
+		if source.Url == snowflakeSetupURL {
+			return repo.McpServer{}, errSnowflakeSetupPending
+		}
 	}
 
 	serverID, err := uuid.NewV7()

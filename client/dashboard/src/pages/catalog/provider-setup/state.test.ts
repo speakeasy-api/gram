@@ -147,6 +147,14 @@ it("does not treat saved-configuration hydration as a permission change", () => 
 });
 
 describe("Snowflake setup state", () => {
+  it("prepares a SQL workspace between the account and server details steps", () => {
+    const account = { ...initialState("snowflake"), step: "account" };
+    account.values.host = "example.snowflakecomputing.com";
+    const workspace = reduce(account, { type: "next" });
+    expect(workspace.step).toBe("workspace");
+    expect(reduce(workspace, { type: "back" }).step).toBe("account");
+    expect(reduce(workspace, { type: "next" }).step).toBe("server");
+  });
   it("requires confidential credentials and clears them when server details change", () => {
     const initial = initialState("snowflake");
     const values = {
@@ -181,12 +189,25 @@ describe("Snowflake setup state", () => {
   it("omits server creation for an existing server", () => {
     const initial = initialState("snowflake");
     expect(steps(initial).map((x) => x.id)).toContain("create");
+    expect(steps(initial).map((x) => x.id)).toContain("creator");
     expect(
       steps({
         ...initial,
         values: { ...initial.values, method: "existing" },
       }).map((x) => x.id),
-    ).not.toContain("create");
+    ).not.toEqual(expect.arrayContaining(["creator", "create"]));
+  });
+  it("requires a creator role before advancing to server creation", () => {
+    const state = { ...initialState("snowflake"), step: "creator" };
+    expect(reduce(state, { type: "next" }).errors.creatorRole).toBeDefined();
+    const ready = reduce(state, {
+      type: "field",
+      field: "creatorRole",
+      value: "EXAMPLE_CREATOR",
+    });
+    const next = reduce(ready, { type: "next" });
+    expect(next.step).toBe("create");
+    expect(reduce(next, { type: "back" }).step).toBe("creator");
   });
 });
 

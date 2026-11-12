@@ -26,6 +26,12 @@ const values = {
   oauthIntegration: "example_oauth",
 };
 
+it("generates server creation SQL without requiring a creator-role name", () => {
+  const sql = snowflakeSql({ ...values, creatorRole: "" });
+  expect(sql.create).toContain("CREATE MCP SERVER");
+  expect(sql.creator).toBeUndefined();
+});
+
 describe("Snowflake native setup contract", () => {
   it("configures the native account endpoint and confidential OAuth", () => {
     expect(snowflakeConnection(values)).toMatchObject({

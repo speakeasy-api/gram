@@ -40,7 +40,19 @@ When design evidence is needed, follow `setup-design-lineage.json`. Approved app
 
 Trace first-time entry through every intermediate screen and decision to completion. Catalog onboarding includes the actual **Add** action; other entries matter when affected. Compare handlers and user actions against the established working flow and approved React implementation.
 
-Keep each provider choice at its approved step. Preserve approved identity choices and unaffected installation paths. An existing generic component does not authorize extra steps or relocating fields; restore the approved sequence or obtain approval under the gate above.
+Keep each provider choice at its approved step. Preserve approved identity choices and unaffected installation paths. Keep provider setup details—account information, endpoint variables, app registration and OAuth credentials—on the MCP server's Setup page, outside the Add modal. Preserve the modal's existing name, identity and guardrail controls.
+
+If blocked on creating the server without those details, pause that implementation path and ask the user for guidance. Explain the exact contract checked and the missing behavior; continue independent work. Do not add setup fields to the modal or introduce a pre-creation configuration page as a workaround. An existing generic component does not authorize extra steps or relocating fields; restore the approved sequence or obtain approval under the gate above.
+
+## Server creation and connection readiness
+
+Treat creation, configuration, verification and serving as separate transitions. Preserve the approved server-page flow: create the disabled MCP server, open its Setup page, then configure its connection there.
+
+Before declaring missing connection details a creation blocker, trace the existing create/update APIs, disabled-state gates and working provider flows. A required URL at creation does not establish that it must be the final connection URL. Check whether an approved temporary endpoint can be replaced through existing operations while the server stays unconfigured and disabled.
+
+For a temporary endpoint, verify it cannot be probed, used for OAuth or connection testing, or enabled before replacement. Check reloads, direct routes, Settings and gateway entry points; a disabled wizard button alone is insufficient. Keep catalog authentication metadata accurate.
+
+If existing contracts cannot safely preserve the approved sequence, identify the exact missing contract and ask before expanding scope. An API constraint does not authorize moving setup into Catalog or adding pre-creation fields or steps. Tests must exercise the real Catalog Add → MCP server page handoff, not merely a standalone wizard.
 
 ## Reuse map
 

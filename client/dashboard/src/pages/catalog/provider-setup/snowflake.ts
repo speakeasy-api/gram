@@ -205,8 +205,9 @@ export function snowflakeSql(
     creator = id(v.creatorRole);
   const ns = [v.database, v.schema].map(id).join("."),
     server = [v.database, v.schema, v.serverName].map(id).join(".");
-  if (v.method === "new" && serverValid(v) && idValid(v.creatorRole)) {
-    result.creator = `GRANT USAGE ON DATABASE ${id(v.database)} TO ROLE ${creator};\nGRANT USAGE ON SCHEMA ${ns} TO ROLE ${creator};\nGRANT CREATE MCP SERVER ON SCHEMA ${ns} TO ROLE ${creator};\nGRANT USAGE ON DATABASE ${a[0]} TO ROLE ${creator};\nGRANT USAGE ON SCHEMA ${a.slice(0, 2).join(".")} TO ROLE ${creator};\nGRANT USAGE ON AGENT ${a.join(".")} TO ROLE ${creator};`;
+  if (v.method === "new" && serverValid(v)) {
+    if (idValid(v.creatorRole))
+      result.creator = `GRANT USAGE ON DATABASE ${id(v.database)} TO ROLE ${creator};\nGRANT USAGE ON SCHEMA ${ns} TO ROLE ${creator};\nGRANT CREATE MCP SERVER ON SCHEMA ${ns} TO ROLE ${creator};\nGRANT USAGE ON DATABASE ${a[0]} TO ROLE ${creator};\nGRANT USAGE ON SCHEMA ${a.slice(0, 2).join(".")} TO ROLE ${creator};\nGRANT USAGE ON AGENT ${a.join(".")} TO ROLE ${creator};`;
     if (
       /^[A-Za-z_][A-Za-z0-9_]*$/.test(v.toolName) &&
       v.toolTitle.trim() &&

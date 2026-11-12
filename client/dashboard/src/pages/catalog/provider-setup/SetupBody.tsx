@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
-import { Check } from "lucide-react";
+import { BookOpen, Check, ExternalLink } from "lucide-react";
 import { SetupGuideLink } from "@/components/setup-guide/SetupGuideLink";
 import { Page } from "@/components/page-layout";
 import { PageEyebrow } from "@/components/page-eyebrow";
@@ -132,11 +132,34 @@ export function SetupBody({
                   {taskTitle(s)}
                 </Heading>
               </div>
-              <SetupGuideLink
-                serverUrl={serverUrl}
-                variant="secondary"
-                className="mb-2 justify-self-start bg-card"
-              />
+              {s.provider === "snowflake" ? (
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className="mb-2 justify-self-start bg-card"
+                  asChild
+                >
+                  <a
+                    href="https://www.speakeasy.com/docs/ai-control-plane/guides/snowflake"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Button.LeftIcon>
+                      <BookOpen />
+                    </Button.LeftIcon>
+                    <Button.Text>Read the guide</Button.Text>
+                    <Button.RightIcon>
+                      <ExternalLink />
+                    </Button.RightIcon>
+                  </a>
+                </Button>
+              ) : (
+                <SetupGuideLink
+                  serverUrl={serverUrl}
+                  variant="secondary"
+                  className="mb-2 justify-self-start bg-card"
+                />
+              )}
             </div>
           </div>
           <div

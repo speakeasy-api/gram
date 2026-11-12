@@ -1,3 +1,4 @@
+import { snowflakeSetupUrl } from "@/pages/catalog/snowflake-install";
 import { loadProviderProgress, saveProviderProgress } from "./provider-setup";
 import { queryKeyRemoteSessionClient } from "@gram/client/react-query/remoteSessionClient";
 import { useReducer, type PropsWithChildren } from "react";
@@ -2003,6 +2004,24 @@ describe("Salesforce review recovery", () => {
 });
 
 describe("Snowflake shared actions", () => {
+  it("keeps an unconfigured Snowflake source disabled without sign-in or connection checks", async () => {
+    mocks.remote.mockResolvedValue({ id: "upstream", url: snowflakeSetupUrl });
+    const { result } = mount(
+      "snowflake",
+      { step: "test" },
+      { url: snowflakeSetupUrl, instanceUrl: "" },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => {
+      result.current.signIn();
+      result.current.testConnection();
+    });
+    expect(window.open).not.toHaveBeenCalled();
+    expect(mocks.probe).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.updateServer).not.toHaveBeenCalled();
+  });
+
   const oldUrl =
     "https://example.snowflakecomputing.com/api/v2/databases/OLD/schemas/PUBLIC/mcp-servers/MCP";
   const values = {
@@ -2090,46 +2109,56 @@ describe("Snowflake shared actions", () => {
     act(() => result.current.signIn());
     expect(window.open).not.toHaveBeenCalled();
   });
-  it("saves the native endpoint and confidential account OAuth configuration", async () => {
-    mocks.remote.mockResolvedValue({ id: "upstream", url: oldUrl });
-    mocks.provider.mockRejectedValue({ statusCode: 404 });
-    const { result } = mount(
-      "snowflake",
-      { step: "credentials", values },
-      { url: oldUrl, instanceUrl: "" },
-    );
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => result.current.next());
-    await waitFor(() => expect(result.current.state.saved).toBe(true));
-    expect(mocks.updateRemote).toHaveBeenCalledWith({
-      updateServerForm: {
-        id: "upstream",
-        url: oldUrl.replace("/OLD/", "/APP/"),
-      },
-    });
-    expect(mocks.commit).toHaveBeenCalledWith({
-      commitServerIdentityConfigurationForm: expect.objectContaining({
-        targetServerOnly: true,
-        createProvider: expect.objectContaining({
-          issuer: "https://example.snowflakecomputing.com",
-          authorizationEndpoint:
-            "https://example.snowflakecomputing.com/oauth/authorize",
-          tokenEndpoint:
-            "https://example.snowflakecomputing.com/oauth/token-request",
-          tokenEndpointAuthMethodsSupported: ["client_secret_post"],
-        }),
-        clientConfiguration: {
-          clientId: "app-id",
-          clientSecret: "app-secret",
-          tokenEndpointAuthMethod: "client_secret_post",
-          scope: ["session:role:all"],
+  it.each([oldUrl, snowflakeSetupUrl])(
+    "saves the native endpoint and confidential OAuth from %s",
+    async (originalUrl) => {
+      mocks.remote.mockResolvedValue({ id: "upstream", url: originalUrl });
+      mocks.server.mockResolvedValue({ ...server, visibility: "disabled" });
+      mocks.provider.mockRejectedValue({ statusCode: 404 });
+      const { result } = mount(
+        "snowflake",
+        { step: "credentials", values },
+        { url: originalUrl, instanceUrl: "" },
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.next());
+      await waitFor(() => expect(result.current.state.saved).toBe(true));
+      expect(mocks.updateRemote).toHaveBeenCalledWith({
+        updateServerForm: {
+          id: "upstream",
+          url: oldUrl.replace("/OLD/", "/APP/"),
         },
-      }),
-    });
-    expect(mocks.createHeader).not.toHaveBeenCalled();
-    expect(result.current.state.values.clientSecret).toBe("");
-    expect(result.current.state.authorized).toBe(false);
-  });
+      });
+      expect(mocks.commit).toHaveBeenCalledWith({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          targetServerOnly: true,
+          createProvider: expect.objectContaining({
+            issuer: "https://example.snowflakecomputing.com",
+            authorizationEndpoint:
+              "https://example.snowflakecomputing.com/oauth/authorize",
+            tokenEndpoint:
+              "https://example.snowflakecomputing.com/oauth/token-request",
+            tokenEndpointAuthMethodsSupported: ["client_secret_post"],
+          }),
+          clientConfiguration: {
+            clientId: "app-id",
+            clientSecret: "app-secret",
+            tokenEndpointAuthMethod: "client_secret_post",
+            scope: ["session:role:all"],
+          },
+        }),
+      });
+      expect(mocks.updateRemote.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.commit.mock.invocationCallOrder[0]!,
+      );
+      expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.updateServer.mock.invocationCallOrder[0]!,
+      );
+      expect(mocks.createHeader).not.toHaveBeenCalled();
+      expect(result.current.state.values.clientSecret).toBe("");
+      expect(result.current.state.authorized).toBe(false);
+    },
+  );
   it.each([false, true])(
     "finishes the catalog handoff after committing credentials (failure=%s)",
     async (fails) => {

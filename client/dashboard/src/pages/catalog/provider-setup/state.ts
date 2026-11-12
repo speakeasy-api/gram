@@ -84,9 +84,13 @@ export function steps(s: State): { id: string; title: string }[] {
     return [
       { id: "begin", title: "Setup plan" },
       { id: "account", title: "Snowflake account" },
+      { id: "workspace", title: "Prepare SQL workspace" },
       { id: "server", title: "MCP server details" },
       ...(s.values.method === "new"
-        ? [{ id: "create", title: "Create MCP server" }]
+        ? [
+            { id: "creator", title: "Server-creator role" },
+            { id: "create", title: "Create MCP server" },
+          ]
         : []),
       { id: "access", title: "Grant user access" },
       { id: "oauth", title: "OAuth integration" },
@@ -215,7 +219,7 @@ export function validate(s: State): State["errors"] {
             "Use an agent identifier without $$ delimiters in the server specification.";
       }
     }
-    if (s.step === "create" && !idValid(v.creatorRole))
+    if (["creator", "create"].includes(s.step) && !idValid(v.creatorRole))
       errors.creatorRole = "Enter the server-creator role.";
     if (s.step === "access") {
       if (!roleAllowed(v.accessRole))

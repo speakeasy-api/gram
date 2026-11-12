@@ -1,3 +1,4 @@
+import { snowflakeSetupUrl } from "@/pages/catalog/snowflake-install";
 import { snowflakeSelectionForUrl } from "@/pages/catalog/provider-setup/snowflake";
 import {
   salesforceSelectionForUrl,
@@ -18,6 +19,7 @@ export function setupProviderForUrl(
   value: string | undefined,
 ): SetupProvider | null {
   if (!value) return null;
+  if (value === snowflakeSetupUrl) return "snowflake";
   try {
     const url = new URL(value);
     if (
@@ -268,6 +270,8 @@ export function loadProviderProgress(
       }
       if (!["new", "existing"].includes(initial.values.method))
         initial.values.method = "new";
+      if (initial.values.method === "new" && !initial.values.serverName.trim())
+        initial.values.serverName = initialState("snowflake").values.serverName;
       if (!["public", "private"].includes(initial.values.network))
         initial.values.network = "public";
     }

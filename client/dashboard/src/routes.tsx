@@ -273,9 +273,6 @@ const ROUTE_STRUCTURE = {
           detail: {
             title: "Server Details",
             url: ":serverSpecifier",
-            subPages: {
-              setup: { title: "MCP Server Setup", url: "setup" },
-            },
           },
         },
       },

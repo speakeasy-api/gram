@@ -1,7 +1,8 @@
+import { snowflakeSetupUrl } from "@/pages/catalog/snowflake-install";
 import { StrictMode, type Dispatch, type PropsWithChildren } from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader";
 import type { McpServer } from "@gram/client/models/components/mcpserver";
@@ -13,6 +14,18 @@ import {
 import { ProviderSetupPage } from "./ProviderSetupPage";
 import { providerSourceFingerprint } from "./provider-setup";
 
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    metaMcp: {
+      listMembers: mocks.members,
+      addMember: mocks.addMember,
+    },
+  }),
+}));
+vi.mock("@gram/client/react-query/metaMcpMembers", () => ({
+  invalidateAllMetaMcpMembers: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
 const mocks = vi.hoisted(() => ({
   fire: Object.assign(vi.fn<(options: Record<string, unknown>) => void>(), {
     reset: vi.fn<() => void>(),
@@ -20,6 +33,8 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   dispatch: vi.fn<Dispatch<Action>>(),
   provider: "github",
+  snowflakeUrl:
+    "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
   initiallyValidated: false,
   initialStep: "test",
   salesforcePath: "own",
@@ -28,6 +43,10 @@ const mocks = vi.hoisted(() => ({
   loading: false,
   headers: [] as RemoteMcpServerHeader[],
   loadProgress: vi.fn(),
+  entry: "/setup",
+  members: vi.fn(),
+  addMember: vi.fn(),
+  configured: undefined as (() => Promise<void>) | undefined,
 }));
 vi.mock("canvas-confetti", () => ({ default: { create: mocks.create } }));
 vi.mock("@/contexts/Auth", () => ({
@@ -37,7 +56,9 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
+    policyCenter: { new: { href: () => "/policy/new" } },
     mcp: {
+      gateway: { overview: { href: (id: string) => `/gateway/${id}` } },
       details: {
         overview: { href: () => "/overview" },
         settings: { href: () => "/settings" },
@@ -52,8 +73,7 @@ vi.mock("@gram/client/react-query/getRemoteMcpServer", () => ({
       slack: "https://mcp.slack.com/mcp",
       salesforce:
         "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
-      snowflake:
-        "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
+      snowflake: mocks.snowflakeUrl,
     };
     return { data: { url: urls[mocks.provider] } };
   },
@@ -96,7 +116,14 @@ vi.mock("./provider-setup", async (importOriginal) => {
   };
 });
 vi.mock("./useProviderConnection", () => ({
-  useProviderConnection: (_state: State, dispatch: Dispatch<Action>) => {
+  useProviderConnection: (
+    _state: State,
+    dispatch: Dispatch<Action>,
+    _server: McpServer,
+    _source: unknown,
+    configured?: () => Promise<void>,
+  ) => {
+    mocks.configured = configured;
     mocks.dispatch.mockImplementation(dispatch);
     return {
       dispatch,
@@ -149,8 +176,14 @@ function Location() {
 function Setup() {
   return (
     <StrictMode>
-      <MemoryRouter initialEntries={["/setup"]}>
-        <ProviderSetupPage mcpServer={server} />
+      <MemoryRouter initialEntries={[mocks.entry]}>
+        <Routes>
+          <Route
+            path="/setup"
+            element={<ProviderSetupPage mcpServer={server} />}
+          />
+          <Route path="*" element={null} />
+        </Routes>
         <Location />
       </MemoryRouter>
     </StrictMode>
@@ -206,9 +239,15 @@ it.each(["slack", "github", "salesforce"])(
 );
 beforeEach(() => {
   mocks.headers = [];
+  mocks.entry = "/setup";
+  mocks.configured = undefined;
   vi.resetAllMocks();
   mocks.create.mockReturnValue(mocks.fire);
+  mocks.members.mockResolvedValue({ members: [] });
+  mocks.addMember.mockResolvedValue({});
   mocks.provider = "github";
+  mocks.snowflakeUrl =
+    "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP";
   mocks.initiallyValidated = false;
   mocks.initialStep = "test";
   mocks.salesforcePath = "own";
@@ -418,3 +457,52 @@ it("allows Salesforce installation instructions but disables Continue at the sup
   await user.click(screen.getByRole("button", { name: "Back" }));
   expect(next().disabled).toBe(false);
 });
+
+it("opens the installed Snowflake Setup page before its account details exist", () => {
+  mocks.provider = "snowflake";
+  mocks.snowflakeUrl = snowflakeSetupUrl;
+  mocks.initialStep = "begin";
+  render(<Setup />);
+  expect(screen.getByRole("heading", { name: "Setup plan" })).toBeDefined();
+  expect(
+    screen.getByRole("link", { name: "Read the guide" }).getAttribute("href"),
+  ).toBe("https://www.speakeasy.com/docs/ai-control-plane/guides/snowflake");
+  expect(mocks.loadProgress).toHaveBeenCalledWith(
+    "snowflake",
+    expect.any(String),
+    undefined,
+    providerSourceFingerprint(server.remoteMcpServerId!, {
+      url: snowflakeSetupUrl,
+    }),
+  );
+});
+
+it.each([false, true])(
+  "keeps the Snowflake server setup destination (customize=%s)",
+  async (customize) => {
+    mocks.provider = "snowflake";
+    mocks.entry =
+      "/setup?attachToGateway=gateway-id" +
+      (customize
+        ? "&customizePolicy=true&categories=pii&action=block&score=3"
+        : "");
+    render(<Setup />);
+    expect(mocks.addMember).not.toHaveBeenCalled();
+    if (!mocks.configured)
+      throw new Error("Expected post-configuration handoff");
+    await act(async () => {
+      await mocks.configured!();
+    });
+    expect(mocks.addMember).toHaveBeenCalledWith({
+      addMetaMcpMemberForm: {
+        metaMcpServerId: "gateway-id",
+        mcpServerId: server.id,
+      },
+    });
+    validate();
+    await userEvent.click(completeButton());
+    expect(screen.getByLabelText("Current location").textContent).toBe(
+      customize ? "/policy/new" : "/gateway/gateway-id",
+    );
+  },
+);

@@ -1,9 +1,11 @@
+import { effectiveAction } from "@/pages/security/server-guardrails/server-guardrail-policy";
+import { policyNewPrefillQuery } from "@/pages/security/policy-new-prefill";
+import { useProject } from "@/contexts/Auth";
 import { toast } from "sonner";
 import {
   isSnowflakeCatalogServer,
-  writeSnowflakeHandoff,
+  snowflakeSetupUrl,
 } from "./snowflake-install";
-import { providerProgressKey } from "@/pages/mcp/x/setup/provider-setup";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
@@ -28,7 +30,6 @@ import {
 } from "@/lib/remote-identity";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
-import { useProject, useSession } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateAllListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
@@ -238,10 +239,30 @@ export function AddServerDialog({
     [guidedSalesforce, salesforceEntry, enrichedServers],
   );
   const initialConfiguration = useMemo(() => {
-    if (providerSetupRollout !== "enabled" || !salesforceEntry)
-      return undefined;
-    return salesforceIdentity ?? { identityMode: "user" as const };
-  }, [providerSetupRollout, salesforceEntry, salesforceIdentity]);
+    if (providerSetupRollout !== "enabled") return undefined;
+    if (salesforceEntry)
+      return salesforceIdentity ?? { identityMode: "user" as const };
+    if (
+      (openProviderSetup || attachToGatewayId) &&
+      !bulk &&
+      !headless &&
+      !autoStartInstall &&
+      enrichedServers.length === 1 &&
+      isSnowflakeCatalogServer(enrichedServers[0]!)
+    )
+      return { identityMode: "user" as const };
+    return undefined;
+  }, [
+    providerSetupRollout,
+    salesforceEntry,
+    salesforceIdentity,
+    openProviderSetup,
+    attachToGatewayId,
+    bulk,
+    headless,
+    autoStartInstall,
+    enrichedServers,
+  ]);
 
   // Use enriched servers (with remotes) for the workflow. Callers that run
   // without a visible dialog can never answer the selectRemotes phase, so
@@ -249,64 +270,28 @@ export function AddServerDialog({
   // Guardrails are an interactive step (there is nobody to draft a policy in a
   // headless or auto-started install) and follow the policy admin permission.
   const organization = useOrganization();
-  const project = useProject();
-  const session = useSession();
   const { hasScope } = useRBAC();
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
   const workflow = useRemoteMcpInstallWorkflow({
     servers: installServers,
     initialConfiguration,
-    beforeInstall,
-    deferSetup: (configs, options) => {
-      const config = configs[0];
+    beforeInstall: async () => {
       if (
-        providerSetupRollout === "disabled" ||
-        (!openProviderSetup && !attachToGatewayId) ||
-        !open ||
-        headless ||
-        autoStartInstall ||
-        configs.length !== 1 ||
-        !config ||
-        config.identityMode !== "user" ||
-        !isSnowflakeCatalogServer(config.server)
-      )
-        return false;
-      if (providerSetupRollout === "loading") {
-        toast.info("Snowflake setup is loading. Try again in a moment.");
-        return true;
-      }
-      const key = providerProgressKey(
-        "snowflake",
-        session.user.id,
-        organization.id,
-        project.id,
-        "catalog:com.snowflake/cortex-mcp",
-      );
-      if (
-        !writeSnowflakeHandoff(key, {
-          name: config.name,
-          guardrail: options.guardrail ?? options.customize,
-          customize: !!options.customize,
-        })
+        providerSetupRollout === "loading" &&
+        enrichedServers.some(isSnowflakeCatalogServer)
       ) {
-        toast.error(
-          "Couldn’t open Snowflake setup. Allow browser storage and try again.",
-        );
-        return true;
+        toast.info("Snowflake setup is loading. Try again in a moment.");
+        return false;
       }
-      setupHandoffRef.current = true;
-      onOpenChange(false);
-      void navigate(
-        routes.mcp.catalog.detail.setup.href(
-          encodeURIComponent(config.server.registrySpecifier),
-        ) +
-          (attachToGatewayId
-            ? `?attachToGateway=${encodeURIComponent(attachToGatewayId)}`
-            : ""),
-      );
-      return true;
+      return beforeInstall();
     },
+    snowflakeSetupEnabled:
+      providerSetupRollout === "enabled" &&
+      !!(openProviderSetup || attachToGatewayId) &&
+      !bulk &&
+      !headless &&
+      !autoStartInstall,
     projectSlug,
     autoSelectRemotes: !!(autoStartInstall || headless),
     offerGuardrails:
@@ -452,7 +437,6 @@ export function AddServerDialog({
   useEffect(() => {
     if (
       providerSetupRollout !== "enabled" ||
-      !openProviderSetup ||
       !open ||
       headless ||
       autoStartInstall ||
@@ -465,12 +449,34 @@ export function AddServerDialog({
       releaseState.statuses,
     );
     if (!target) return;
+    const status = releaseState.statuses[0]!;
+    const pendingSnowflake = status.remoteUrl === snowflakeSetupUrl;
+    if (!openProviderSetup && !(attachToGatewayId && pendingSnowflake)) return;
+    const params = new URLSearchParams();
+    if (attachToGatewayId && pendingSnowflake)
+      params.set("attachToGateway", attachToGatewayId);
+    if (status.setupPolicy) {
+      params.set("customizePolicy", "true");
+      const prefill = new URLSearchParams(
+        policyNewPrefillQuery({
+          categories: status.setupPolicy.categories,
+          action: effectiveAction(status.setupPolicy),
+          score: status.setupPolicy.score,
+          mcpServerIds: [status.mcpServerId!],
+          name: `${status.name} guardrail`,
+        }),
+      );
+      for (const [key, value] of prefill) params.set(key, value);
+    }
     setupHandoffRef.current = true;
     onOpenChange(false);
-    void navigate(routes.mcp.details.setup.href(target));
+    void navigate(
+      routes.mcp.details.setup.href(target) + (params.size ? `?${params}` : ""),
+    );
   }, [
     providerSetupRollout,
     openProviderSetup,
+    attachToGatewayId,
     open,
     headless,
     autoStartInstall,
