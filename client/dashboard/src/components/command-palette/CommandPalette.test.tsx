@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LauncherCandidate } from "./candidates/types";
 
@@ -18,6 +19,7 @@ const slugs = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   candidates: [] as unknown[],
+  capture: vi.fn(),
 }));
 
 vi.mock("@/contexts/CommandPalette", () => ({
@@ -31,6 +33,9 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
+}));
+vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetry: () => ({ capture: mocks.capture }),
 }));
 vi.mock("./recentlyVisited", () => ({
   useRecentsUserId: () => "user_1",
@@ -103,6 +108,8 @@ beforeEach(() => {
   slugs.orgSlug = "acme";
   slugs.projectSlug = "widgets";
   mocks.candidates = [SETTINGS, SLACK];
+  mocks.capture.mockReset();
+  palette.isOpen = true;
   palette.close.mockReset();
   runSettings.mockReset();
   runSlack.mockReset().mockResolvedValue(undefined);
@@ -112,6 +119,32 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("CommandPalette", () => {
+  it("captures one performance event per open under StrictMode", () => {
+    const view = render(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+
+    palette.isOpen = false;
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(mocks.capture).toHaveBeenCalledWith(
+      "command_palette_open_performance",
+      expect.objectContaining({ cache_state: "warm", scope: "project" }),
+    );
+  });
+
   it("offers the Project Assistant for a query that matches nothing", async () => {
     render(<CommandPalette />);
 
