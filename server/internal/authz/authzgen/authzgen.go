@@ -4,7 +4,9 @@
 //
 // It imports the registry and nothing from package authz. Everything it
 // writes into authz it spells by name, so it builds, and can rewrite the
-// generated files, even when they are missing or do not compile.
+// generated files, even when they are missing or do not compile. The
+// dashboard's cases, which are answered by the evaluator, are written by
+// package authzcases for that reason.
 package authzgen
 
 import (
@@ -26,7 +28,7 @@ type File struct {
 const header = "// Code generated from registry.Definitions by authzgen. DO NOT EDIT.\n// Regenerate with `mise run gen:authz`.\n\n"
 
 // Files validates the registry and renders every file generated from it. It is
-// what `mise run gen:authz` writes.
+// what `mise run gen:authz` writes first; authzcases writes the rest.
 func Files() ([]File, error) {
 	if err := registry.Definitions.Validate(); err != nil {
 		return nil, fmt.Errorf("the authorization registry is invalid: %w", err)
@@ -56,6 +58,7 @@ func Render(r registry.Registry) ([]File, error) {
 		{Path: "internal/authz/scopes_gen.go", Content: scopes},
 		{Path: "internal/authz/refs_gen.go", Content: refs},
 		{Path: "internal/authz/tables_gen.go", Content: tables},
+		{Path: dashboardTablesPath, Content: renderDashboardTables(r)},
 	}...), nil
 }
 
