@@ -35,6 +35,9 @@ const (
 
 	// localTokenKeyFileMode keeps the signing key readable only by its owner.
 	localTokenKeyFileMode fs.FileMode = 0o600
+
+	// localTokenKeyForeignAccess is any permission for the group or others.
+	localTokenKeyForeignAccess fs.FileMode = 0o077
 	// localTokenDirMode is used when creating the directories that hold the
 	// key and token files.
 	localTokenDirMode fs.FileMode = 0o700
@@ -134,8 +137,8 @@ func MintLocalToken(key []byte, claims LocalTokenClaims, now time.Time) (string,
 	if len(key) < localTokenKeyBytes {
 		return "", fmt.Errorf("local attestation key must be at least %d bytes", localTokenKeyBytes)
 	}
-	if claims.Audience == "" || claims.TTL <= 0 {
-		return "", errors.New("local attestation token needs an audience and a positive lifetime")
+	if claims.Audience == "" || claims.TTL < time.Second {
+		return "", errors.New("local attestation token needs an audience and a lifetime of at least a second")
 	}
 	subject := fmt.Sprintf("system:serviceaccount:%s:%s", claims.Namespace, claims.ServiceAccount)
 	if _, _, err := parseServiceAccountSubject(subject); err != nil {
@@ -182,10 +185,13 @@ func LoadOrCreateLocalTokenKey(path string) ([]byte, error) {
 	}
 	defer func() { _ = os.Remove(candidate.Name()) }()
 
+	// Synced before it is linked into place, so a crash cannot publish a key
+	// file whose contents never reached the disk.
 	_, writeErr := candidate.Write(key)
 	chmodErr := candidate.Chmod(localTokenKeyFileMode)
+	syncErr := candidate.Sync()
 	closeErr := candidate.Close()
-	if err := errors.Join(writeErr, chmodErr, closeErr); err != nil {
+	if err := errors.Join(writeErr, chmodErr, syncErr, closeErr); err != nil {
 		return nil, fmt.Errorf("write local attestation key: %w", err)
 	}
 
@@ -195,7 +201,26 @@ func LoadOrCreateLocalTokenKey(path string) ([]byte, error) {
 	case err != nil:
 		return nil, fmt.Errorf("install local attestation key: %w", err)
 	}
+	if err := syncDir(dir); err != nil {
+		return nil, err
+	}
 	return key, nil
+}
+
+// syncDir flushes a directory's entries, so a file just linked into it
+// survives a crash.
+func syncDir(dir string) error {
+	// #nosec G304 -- dir is the developer-supplied key directory, not request input.
+	handle, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("open local attestation key directory: %w", err)
+	}
+	syncErr := handle.Sync()
+	closeErr := handle.Close()
+	if err := errors.Join(syncErr, closeErr); err != nil {
+		return fmt.Errorf("sync local attestation key directory: %w", err)
+	}
+	return nil
 }
 
 // ReadLocalTokenKey reads an existing signing key.
@@ -207,6 +232,15 @@ func ReadLocalTokenKey(path string) ([]byte, error) {
 	}
 	if len(key) < localTokenKeyBytes {
 		return nil, fmt.Errorf("local attestation key must be at least %d bytes", localTokenKeyBytes)
+	}
+	// Anyone who can read the key can mint tokens the listener accepts as
+	// the gateway, so a key other users can read is refused, not used.
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("stat local attestation key: %w", err)
+	}
+	if info.Mode().Perm()&localTokenKeyForeignAccess != 0 {
+		return nil, fmt.Errorf("local attestation key %s is readable by other users (mode %s); run chmod 600 on it", path, info.Mode().Perm())
 	}
 	return key, nil
 }

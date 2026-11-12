@@ -2,6 +2,7 @@ package netingress
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -130,6 +131,7 @@ func TestMintLocalTokenRejectsInvalidClaims(t *testing.T) {
 		{name: "no service account", mutate: func(c *LocalTokenClaims) { c.ServiceAccount = "" }},
 		{name: "no audience", mutate: func(c *LocalTokenClaims) { c.Audience = "" }},
 		{name: "no lifetime", mutate: func(c *LocalTokenClaims) { c.TTL = 0 }},
+		{name: "sub-second lifetime", mutate: func(c *LocalTokenClaims) { c.TTL = 500 * time.Millisecond }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -175,17 +177,17 @@ func TestLoadOrCreateLocalTokenKeyAgreesOnOneKey(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "netingress", "token.key")
 	const callers = 8
 	keys := make([][]byte, callers)
+	errs := make([]error, callers)
 	var wg sync.WaitGroup
 	for i := range callers {
 		wg.Go(func() {
-			key, err := LoadOrCreateLocalTokenKey(path)
-			require.NoError(t, err)
-			keys[i] = key
+			keys[i], errs[i] = LoadOrCreateLocalTokenKey(path)
 		})
 	}
 	wg.Wait()
 
-	for _, key := range keys {
+	for i, key := range keys {
+		require.NoError(t, errs[i])
 		require.Len(t, key, localTokenKeyBytes)
 		require.Equal(t, keys[0], key)
 	}
@@ -207,4 +209,19 @@ func TestWriteLocalTokenReplacesTheFile(t *testing.T) {
 	matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), ".token-*"))
 	require.NoError(t, err)
 	require.Empty(t, matches, "no temporary files are left behind")
+}
+
+func TestReadLocalTokenKeyRefusesAKeyOtherUsersCanRead(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "token.key")
+	_, err := LoadOrCreateLocalTokenKey(path)
+	require.NoError(t, err)
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "a new key is readable by its owner only")
+
+	require.NoError(t, os.Chmod(path, 0o640))
+	_, err = ReadLocalTokenKey(path)
+	require.ErrorContains(t, err, "readable by other users", "a key others can read could mint tokens the listener accepts")
 }

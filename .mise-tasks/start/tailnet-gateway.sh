@@ -16,8 +16,8 @@ fi
 upstream_url="${GRAM_TAILNET_GATEWAY_UPSTREAM_URL:-https://localhost:${GRAM_NETINGRESS_PORT}}"
 upstream_ca_file="${GRAM_TAILNET_GATEWAY_UPSTREAM_CA_FILE:-$(mkcert -CAROOT)/rootCA.pem}"
 
-# Stands in for the projected service-account token. Minting on every start
-# keeps it well inside its lifetime for as long as the stack stays up.
+# Stands in for the projected service-account token. It is minted on every
+# start and lasts 30 days, which outlasts a stack left running.
 go run main.go netingress-local-token
 
 ordinal="${GRAM_TAILNET_GATEWAY_ORDINAL:-0}"
