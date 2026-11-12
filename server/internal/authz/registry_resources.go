@@ -145,9 +145,8 @@ var Model = Registry{
 		{
 			// mcp:connect is implied by neither read nor write: viewing or
 			// managing a server is not permission to call its tools, so who
-			// may connect is decided per server. Its blocks are derived as
-			// independent of one another for now (independentBlockKinds in
-			// registry_derive.go).
+			// may connect is decided per server. Its blocks follow Implies
+			// like every other type's.
 			Kind:     "mcp",
 			Parent:   "project",
 			Category: ScopeCategoryMCP,
