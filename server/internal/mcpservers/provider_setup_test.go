@@ -15,7 +15,7 @@ import (
 )
 
 func testPendingSourceCannotBeCreatedEnabled(t *testing.T, marker string) {
-	t.Parallel()
+	t.Helper()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -31,7 +31,7 @@ func testPendingSourceCannotBeCreatedEnabled(t *testing.T, marker string) {
 }
 
 func testPendingSourceStaysDisabledUntilConfigured(t *testing.T, marker string) {
-	t.Parallel()
+	t.Helper()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -61,12 +61,21 @@ func testPendingSourceStaysDisabledUntilConfigured(t *testing.T, marker string) 
 }
 
 func TestProviderPendingSourceCannotBeCreatedEnabled(t *testing.T) {
+	t.Parallel()
 	for _, marker := range []string{"https://app.snowflake.com/speakeasy-mcp-setup", "https://www.okta.com/speakeasy-mcp-setup"} {
-		t.Run(marker, func(t *testing.T) { testPendingSourceCannotBeCreatedEnabled(t, marker) })
+		t.Run(marker, func(t *testing.T) {
+			t.Parallel()
+			testPendingSourceCannotBeCreatedEnabled(t, marker)
+		})
 	}
 }
+
 func TestProviderPendingSourceStaysDisabledUntilConfigured(t *testing.T) {
+	t.Parallel()
 	for _, marker := range []string{"https://app.snowflake.com/speakeasy-mcp-setup", "https://www.okta.com/speakeasy-mcp-setup"} {
-		t.Run(marker, func(t *testing.T) { testPendingSourceStaysDisabledUntilConfigured(t, marker) })
+		t.Run(marker, func(t *testing.T) {
+			t.Parallel()
+			testPendingSourceStaysDisabledUntilConfigured(t, marker)
+		})
 	}
 }
