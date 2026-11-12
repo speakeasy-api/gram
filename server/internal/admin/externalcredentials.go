@@ -188,18 +188,22 @@ func requireNoManagedEncryptionKeys(ctx context.Context, logger *slog.Logger, q 
 	return nil
 }
 
-// platformOwnProjectExemption records the own-project exemption on a platform
-// credential whose target is a service account in Speakeasy's own project.
-// Platform rows back Speakeasy's own signing keys, so that is the expected
-// shape; the provisioner screens the stored row at use and would refuse it
-// otherwise.
+// platformOwnProjectExemption screens a platform credential's impersonation
+// target. A target that is not a user-managed service account is refused, as on
+// the organization tier: it could never be impersonated. A service account in
+// Speakeasy's own project records the own-project exemption. Platform rows back
+// Speakeasy's own signing keys, so that is the expected shape; the provisioner
+// screens the stored row at use and would refuse it otherwise.
 func (s *Service) platformOwnProjectExemption(ctx context.Context, logger *slog.Logger, target pgtype.Text) (bool, error) {
 	if !target.Valid || strings.TrimSpace(target.String) == "" {
 		return false, nil
 	}
-	kind, _, err := s.gcpIdentity.ImpersonationTargetProblem(ctx, logger, strings.TrimSpace(target.String))
+	kind, reason, err := s.gcpIdentity.ImpersonationTargetProblem(ctx, logger, strings.TrimSpace(target.String))
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "cannot validate impersonate_service_account right now, try again shortly").LogError(ctx, logger)
+	}
+	if kind == gcpauth.TargetMalformed {
+		return false, oops.E(oops.CodeBadRequest, nil, "%s", reason).LogWarn(ctx, logger)
 	}
 	return kind == gcpauth.TargetOwnProject, nil
 }

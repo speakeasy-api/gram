@@ -830,12 +830,13 @@ func (s *Service) DeleteGcpIamCredential(ctx context.Context, payload *gen.Delet
 // pointing at a tombstone — the key still lists and still looks healthy, but
 // nothing can reach it, and the failure only surfaces at signing time.
 //
-// The platform tier has its own delete path in the admin service and no such
-// guard. That is sound rather than an oversight: an external key is written with
-// a non-NULL organization_id and validated against a credential in that same
-// organization, while platform credentials carry organization_id IS NULL, so no
-// key can name one. Giving the platform tier keys of its own (AGE-3069) would
-// end that, and would need this guard mirrored there.
+// Platform credentials are deleted through the admin service
+// (server/internal/admin/externalcredentials.go), not here. A customer-managed
+// external key is validated against a credential in its own organization, so it
+// can never name a platform credential (organization_id IS NULL). The keys
+// Speakeasy provisions itself do name one — managed signing keys, issuer keys
+// and managed organization encryption keys — and the admin delete refuses
+// while any of them still depend on it.
 func (s *Service) deleteExternalCredential(ctx context.Context, provider, rawID string) error {
 	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
 	if err != nil {

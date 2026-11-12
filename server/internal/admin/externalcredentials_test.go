@@ -376,6 +376,8 @@ func TestCreateGcpIamPlatformCredential_RejectsInvalidForms(t *testing.T) {
 			AdminSessionToken: nil, Name: "partial-wif", ImpersonateServiceAccount: nil,
 			WifPoolID: new("pool"), WifProviderID: nil, WifProjectNumber: nil,
 		},
+		"impersonation target is not a service account":     createPayload("user-target", new("operator@example.com")),
+		"impersonation target is a default compute account": createPayload("compute-target", new("123456789-compute@developer.gserviceaccount.com")),
 		"non-numeric wif project number": {
 			AdminSessionToken: nil, Name: "wif", ImpersonateServiceAccount: nil,
 			WifPoolID: new("pool"), WifProviderID: new("provider"), WifProjectNumber: new("abc"),
@@ -491,6 +493,9 @@ func TestUpdateGcpIamPlatformCredential_Errors(t *testing.T) {
 	_, err := f.svc.UpdateGcpIamPlatformCredential(ctx, updatePayload(created.ID, "   ", nil))
 	requirePlatformCredentialCode(t, err, oops.CodeBadRequest)
 
+	_, err = f.svc.UpdateGcpIamPlatformCredential(ctx, updatePayload(created.ID, "user-target", new("operator@example.com")))
+	requirePlatformCredentialCode(t, err, oops.CodeBadRequest)
+
 	_, err = f.svc.UpdateGcpIamPlatformCredential(ctx, updatePayload(uuid.NewString(), "nope", nil))
 	requirePlatformCredentialCode(t, err, oops.CodeNotFound)
 
@@ -523,7 +528,7 @@ func TestVerifyGcpIamPlatformCredential_Outcomes(t *testing.T) {
 			resolve: func(context.Context, gcpauth.Credential) (gcpauth.Principal, error) {
 				return gcpauth.Principal{Email: "", Source: gcpauth.SourceADC}, nil
 			},
-			verified: true, principal: nil, source: new("application_default_credentials"), detail: true, detailSubstr: "",
+			verified: true, principal: nil, source: new("application_default_credentials"), detail: true, detailSubstr: "did not report a principal email",
 		},
 		{
 			name: "unsupported mode",
