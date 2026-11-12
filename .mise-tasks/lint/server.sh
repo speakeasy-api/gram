@@ -72,7 +72,15 @@ gcl_inputs=$(
 # to clear the shared cache on its first build, and the next run anywhere then
 # rebuilt every dependency's facts from source (7 minutes, 27 GiB footprint,
 # against 9 seconds warm).
-export GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/gcl}/glint-${gcl_inputs:0:12}"
+gcl_cache_root="${GOLANGCI_LINT_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/gcl}"
+export GOLANGCI_LINT_CACHE="$gcl_cache_root/glint-${gcl_inputs:0:12}"
+
+# Every run touches its cache directory, so one that no worktree has linted
+# with for two weeks belongs to a glint nobody builds any more. Reads alone
+# would not update its modification time.
+mkdir -p "$GOLANGCI_LINT_CACHE"
+touch "$GOLANGCI_LINT_CACHE"
+find "$gcl_cache_root" -mindepth 1 -maxdepth 1 -type d -name 'glint-*' -mtime +14 -exec rm -rf {} +
 
 gcl_stamp=
 if [ -r "$gcl_fingerprint_file" ]; then
