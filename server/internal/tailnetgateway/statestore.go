@@ -294,7 +294,9 @@ const (
 
 	// certificateLeaseDuration is how long a lease lasts if its holder never
 	// releases it, as when its pod dies mid-request. It outlasts
-	// certificateFetchTimeout, so a live request never loses its lease.
+	// certificateFetchTimeout plus the release's stateStoreTimeout, so a live
+	// request never loses its lease and a release never deletes another
+	// slot's; TestCertificateLeaseOutlastsALiveRequest holds that.
 	certificateLeaseDuration = 3 * time.Minute
 )
 
