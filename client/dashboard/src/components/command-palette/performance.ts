@@ -28,7 +28,9 @@ interface Session {
   candidateCountAtOpen: number;
   candidateCount: number;
   pageActionCountAtOpen: number;
+  firstPageActionAt: number | null;
   firstResourceAt: number | null;
+  warm: boolean;
   rankingInvocationCount: number;
   rankingDuration: number;
   rankingMaxDuration: number;
@@ -61,19 +63,29 @@ export class CommandPalettePerformanceTracker {
       candidateCountAtOpen: candidates.total,
       candidateCount: candidates.total,
       pageActionCountAtOpen: candidates.pages,
+      firstPageActionAt: candidates.pages > 0 ? now : null,
       firstResourceAt: candidates.resources > 0 ? now : null,
+      warm: candidates.resources > 0,
       rankingInvocationCount: 0,
       rankingDuration: 0,
       rankingMaxDuration: 0,
     };
   }
 
-  candidates(now: number, total: number, resources: number): void {
+  candidates(
+    now: number,
+    total: number,
+    pages: number,
+    resources: number,
+  ): void {
     const session = this.session;
     if (!session) return;
     if (total !== session.candidateCount) {
       session.candidateCount = total;
       session.lastCandidateChangeAt = now;
+    }
+    if (pages > 0 && session.firstPageActionAt === null) {
+      session.firstPageActionAt = now;
     }
     if (resources > 0 && session.firstResourceAt === null) {
       session.firstResourceAt = now;
@@ -102,12 +114,14 @@ export class CommandPalettePerformanceTracker {
     return {
       schema_version: 1,
       scope,
-      cache_state:
-        session.firstResourceAt === session.startedAt ? "warm" : "cold",
+      cache_state: session.warm ? "warm" : "cold",
       candidate_count_at_open: session.candidateCountAtOpen,
       candidate_count_final: session.candidateCount,
       page_action_count_at_open: session.pageActionCountAtOpen,
-      time_to_page_actions_ms: session.pageActionCountAtOpen > 0 ? 0 : null,
+      time_to_page_actions_ms:
+        session.firstPageActionAt === null
+          ? null
+          : Math.max(0, session.firstPageActionAt - session.startedAt),
       time_to_first_resource_ms:
         session.firstResourceAt === null
           ? null

@@ -294,11 +294,10 @@ export function CommandPalette(): JSX.Element {
   const hasQuery = trimmedQuery.length > 0;
 
   const ranked = useMemo(() => {
-    if (!isOpen) return { rows: [], duration: 0 };
     const startedAt = performance.now();
     const rows = rank(prefilter(trimmedQuery, candidates));
     return { rows, duration: performance.now() - startedAt };
-  }, [isOpen, trimmedQuery, candidates]);
+  }, [trimmedQuery, candidates]);
   const rows = ranked.rows;
   const idle = useMemo(() => idleRows(candidates), [candidates]);
 
@@ -319,7 +318,7 @@ export function CommandPalette(): JSX.Element {
       });
     }
     if (isOpen) {
-      tracker.candidates(now, candidates.length, resources);
+      tracker.candidates(now, candidates.length, pages, resources);
     } else if (wasOpen.current) {
       const payload = tracker.close(
         now,

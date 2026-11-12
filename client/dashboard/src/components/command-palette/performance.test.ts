@@ -10,7 +10,7 @@ describe("CommandPalettePerformanceTracker", () => {
     const tracker = new CommandPalettePerformanceTracker();
     tracker.open(100, { total: 4, pages: 4, resources: 0 });
     tracker.open(101, { total: 4, pages: 4, resources: 0 });
-    tracker.candidates(180, 7, 3);
+    tracker.candidates(180, 7, 4, 3);
     tracker.ranking(2.5);
     tracker.ranking(1.5);
 
@@ -42,6 +42,13 @@ describe("CommandPalettePerformanceTracker", () => {
     expect(payload?.resource_quiet_before_close).toBe(false);
   });
 
+  it("measures page actions that become available after open", () => {
+    const tracker = new CommandPalettePerformanceTracker();
+    tracker.open(10, { total: 0, pages: 0, resources: 0 });
+    tracker.candidates(35, 2, 2, 0);
+    expect(tracker.close(40, "project")?.time_to_page_actions_ms).toBe(25);
+  });
+
   it("captures a fixed privacy-safe payload without query or candidate fields", () => {
     const capture = vi.fn();
     const tracker = new CommandPalettePerformanceTracker();
@@ -54,8 +61,9 @@ describe("CommandPalettePerformanceTracker", () => {
       COMMAND_PALETTE_PERFORMANCE_EVENT,
       payload,
     );
-    expect(Object.keys(payload)).not.toEqual(
-      expect.arrayContaining(["query", "candidate", "name", "id", "route"]),
-    );
+    const keys = Object.keys(payload);
+    for (const forbidden of ["query", "candidate", "name", "id", "route"]) {
+      expect(keys).not.toContain(forbidden);
+    }
   });
 });

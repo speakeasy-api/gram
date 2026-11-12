@@ -143,6 +143,21 @@ describe("CommandPalette", () => {
       "command_palette_open_performance",
       expect.objectContaining({ cache_state: "warm", scope: "project" }),
     );
+
+    palette.isOpen = true;
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+    palette.isOpen = false;
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+
+    expect(mocks.capture).toHaveBeenCalledTimes(2);
   });
 
   it("offers the Project Assistant for a query that matches nothing", async () => {
