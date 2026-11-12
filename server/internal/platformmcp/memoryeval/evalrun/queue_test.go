@@ -95,8 +95,8 @@ func TestQueueDoesNotCountRunsThatNeverStarted(t *testing.T) {
 }
 
 // A run left queued or running past any workflow's lifetime has nothing
-// behind it to resolve it, so the next start fails it instead of conflicting
-// forever. A soft-deleted run that is still unresolved blocks like any other.
+// behind it to resolve it. A soft-deleted run that is still unresolved blocks
+// starts like any other, and the stale-run sweep Queue runs is what clears it.
 func TestQueueFailsRunsOlderThanAnyWorkflow(t *testing.T) {
 	t.Parallel()
 
@@ -115,17 +115,18 @@ func TestQueueFailsRunsOlderThanAnyWorkflow(t *testing.T) {
 	_, err = evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
 	require.ErrorIs(t, err, evalrun.ErrRunActive, "a deleted run that is still running keeps writing memory")
 
-	_, err = db.Exec(t.Context(), `UPDATE memory_eval_runs SET created_at = created_at - interval '1 day' WHERE id = $1`, orphan.ID)
+	// Queue sweeps with a cutoff past the workflow run timeout. A cutoff in
+	// the future stands in for the run having aged past it.
+	failed, err := q.FailStaleActiveRuns(t.Context(), repo.FailStaleActiveRunsParams{
+		Error:         pgtype.Text{String: "test", Valid: true},
+		CreatedBefore: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
+	})
 	require.NoError(t, err)
+	require.Equal(t, int64(1), failed)
 
 	next, err := evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
 	require.NoError(t, err)
 	require.Equal(t, "queued", next.Status)
-
-	var status, reason string
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT status, error FROM memory_eval_runs WHERE id = $1`, orphan.ID).Scan(&status, &reason))
-	require.Equal(t, "failed", status)
-	require.NotEmpty(t, reason)
 }
 
 // The start lock is what makes the one-active-run rule hold when starts race:
