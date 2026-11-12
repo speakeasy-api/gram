@@ -2204,6 +2204,7 @@ func newStartCommand() *cli.Command {
 				AssistantTriggerTools:         triggerTools,
 				ManagedAssistantInsightsTools: managedInsightsTools,
 				PlatformMCPReadTools:          assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
+				PlatformMCPReadActingContext:  assistant_platform_mcp_adapter.ActingContext(platformMCPAssistant.Authorizer),
 				SpeakeasySlackTools:           platformtoolsruntime.SpeakeasySlackTools(guardianPolicy.PooledClient(), triggerApp, speakeasySlackDirectory),
 			}))
 
