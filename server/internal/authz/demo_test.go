@@ -42,7 +42,7 @@ func TestPrepareContext_demoOrgGetsEveryUserVisibleScope(t *testing.T) {
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeOrgRead, ResourceID: constants.DemoOrganizationID}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeChatRead, ResourceID: "chat_demo"}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: constants.DemoOrganizationID}))
-	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeEnvironmentRead, ResourceID: "env_demo"}))
+	require.NoError(t, engine.Require(ctx, EnvironmentCheck(ScopeEnvironmentRead, "env_demo", testProjectID)))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceID: "project_demo"}))
 	require.NoError(t, engine.Require(ctx, MCPCheck(ScopeMCPWrite, "mcp_demo", testProjectID)))
 

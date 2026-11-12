@@ -261,7 +261,7 @@ var Definitions = Registry{
 			Parent:     "project",
 			Category:   authz.ScopeCategoryEnvironment,
 			Match:      authz.MatchLoose,
-			Dimensions: []Dimension{{Key: authz.SelectorKeyProjectID, Values: nil, Required: false}},
+			Dimensions: []Dimension{{Key: authz.SelectorKeyProjectID, Values: nil, Required: true}},
 			Permissions: []Permission{
 				{
 					Action:        "read",
@@ -335,7 +335,7 @@ var Definitions = Registry{
 			Parent:     "project",
 			Category:   authz.ScopeCategoryAssistant,
 			Match:      authz.MatchLoose,
-			Dimensions: []Dimension{{Key: authz.SelectorKeyProjectID, Values: nil, Required: false}},
+			Dimensions: []Dimension{{Key: authz.SelectorKeyProjectID, Values: nil, Required: true}},
 			Permissions: []Permission{
 				{
 					Action:        "read",
@@ -467,7 +467,7 @@ var Definitions = Registry{
 			Parent:     "project",
 			Category:   authz.ScopeCategoryInference,
 			Match:      authz.MatchLoose,
-			Dimensions: []Dimension{{Key: authz.SelectorKeyProjectID, Values: nil, Required: false}},
+			Dimensions: []Dimension{{Key: authz.SelectorKeyProjectID, Values: nil, Required: true}},
 			Permissions: []Permission{
 				{
 					Action:        "execute",
