@@ -417,6 +417,10 @@ function MigrationStatus({
     s.reconnectCredentials > 0
       ? `${s.reconnectCredentials} ${s.reconnectCredentials === 1 ? "credential" : "credentials"} will be asked to reconnect`
       : null;
+  const consentScoped =
+    s.consentScopedSelections > 0
+      ? `${s.consentScopedSelections} ${s.consentScopedSelections === 1 ? "choice" : "choices"} outside what a gateway connection approved, not needed`
+      : null;
   if (s.migrated) {
     return (
       <div className="space-y-1">
@@ -426,6 +430,9 @@ function MigrationStatus({
         </span>
         {reconnect ? (
           <p className="text-muted-foreground text-xs">{reconnect}</p>
+        ) : null}
+        {consentScoped ? (
+          <p className="text-muted-foreground text-xs">{consentScoped}</p>
         ) : null}
         {authClients}
       </div>
@@ -470,6 +477,9 @@ function MigrationStatus({
       ) : null}
       {reconnect ? (
         <p className="text-muted-foreground text-xs">{reconnect}</p>
+      ) : null}
+      {consentScoped ? (
+        <p className="text-muted-foreground text-xs">{consentScoped}</p>
       ) : null}
       {authClients}
     </div>
@@ -686,14 +696,25 @@ function ExecutionProfileStatus({
   if (p.targets === 0) {
     return null;
   }
+  const unexercised =
+    p.unexercisedVersions > 0 ? (
+      <p className="text-muted-foreground text-xs">
+        {p.unexercisedVersions}{" "}
+        {p.unexercisedVersions === 1 ? "profile" : "profiles"} not used by a
+        turn yet, recorded on first use
+      </p>
+    ) : null;
   if (p.complete) {
     return (
-      <p className="text-muted-foreground text-xs">
-        Assistant profiles: recorded for {p.targets}{" "}
-        {p.targets === 1
-          ? "assistant and trigger pair"
-          : "assistant and trigger pairs"}
-      </p>
+      <div className="space-y-1">
+        <p className="text-muted-foreground text-xs">
+          Assistant profiles: recorded for {p.targets}{" "}
+          {p.targets === 1
+            ? "assistant and trigger pair"
+            : "assistant and trigger pairs"}
+        </p>
+        {unexercised}
+      </div>
     );
   }
   return (
@@ -704,6 +725,7 @@ function ExecutionProfileStatus({
           ? `${p.pendingVersions} to record`
           : "every profile recorded"}
       </p>
+      {unexercised}
       {p.gaps.length > 0 ? (
         <ul className="text-muted-foreground text-xs">
           {p.gaps.map((gap) => (

@@ -3,11 +3,14 @@
 -- rows refresh rotation continues, named by COALESCE(credential_id, id). A
 -- credential is live while a row of it is not deleted and can still refresh.
 -- Its organization is its issuer's, which a project issuer takes from its
--- project.
+-- project. consent_scoped is read from the credential's newest live row: its
+-- session policy names the catalog of servers approved at consent, which is
+-- all issuance recorded choices for.
 SELECT DISTINCT ON (COALESCE(s.credential_id, s.id))
        COALESCE(s.credential_id, s.id)::uuid AS credential_id,
        s.user_session_issuer_id,
-       COALESCE(CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END, '')::text AS organization_id
+       COALESCE(CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END, '')::text AS organization_id,
+       COALESCE(jsonb_typeof(s.tool_selection -> 'catalog') = 'object', FALSE)::boolean AS consent_scoped
 FROM user_sessions AS s
 JOIN user_session_issuers AS usi
   ON usi.id = s.user_session_issuer_id
@@ -278,6 +281,13 @@ WHERE mcp_server_id = @mcp_server_id AND remote_session_client_id = @remote_sess
 -- name: SeedUserSessionFixture :exec
 INSERT INTO user_sessions (id, project_id, organization_id, user_session_issuer_id, subject_urn, jti, refresh_expires_at, expires_at, credential_id)
 VALUES (@id, sqlc.narg('project_id'), @organization_id, @user_session_issuer_id, @subject_urn, @jti, @refresh_expires_at, clock_timestamp(), sqlc.narg('credential_id'));
+
+-- name: ApproveConsentCatalogFixture :exec
+-- Gives the session the policy a gateway consent issues, naming the catalog of
+-- servers it approved.
+UPDATE user_sessions
+SET tool_selection = jsonb_build_object('version', 1, 'catalog', jsonb_build_object('id', @catalog_id::uuid, 'mode', 'live', 'all_tools', TRUE))
+WHERE id = @id;
 
 -- name: ListSelectionsFixture :many
 SELECT mcp_server_id, remote_session_client_id, no_auth, source

@@ -13,6 +13,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const approveConsentCatalogFixture = `-- name: ApproveConsentCatalogFixture :exec
+UPDATE user_sessions
+SET tool_selection = jsonb_build_object('version', 1, 'catalog', jsonb_build_object('id', $1::uuid, 'mode', 'live', 'all_tools', TRUE))
+WHERE id = $2
+`
+
+type ApproveConsentCatalogFixtureParams struct {
+	CatalogID uuid.UUID
+	ID        uuid.UUID
+}
+
+// Gives the session the policy a gateway consent issues, naming the catalog of
+// servers it approved.
+func (q *Queries) ApproveConsentCatalogFixture(ctx context.Context, arg ApproveConsentCatalogFixtureParams) error {
+	_, err := q.db.Exec(ctx, approveConsentCatalogFixture, arg.CatalogID, arg.ID)
+	return err
+}
+
 const copyServerHeadersFixture = `-- name: CopyServerHeadersFixture :exec
 INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, is_required, is_secret, value, value_from_request_header)
 SELECT $1, $2, h.name, h.is_required, h.is_secret, h.value, h.value_from_request_header
@@ -108,7 +126,8 @@ const listLiveUserSessionCredentials = `-- name: ListLiveUserSessionCredentials 
 SELECT DISTINCT ON (COALESCE(s.credential_id, s.id))
        COALESCE(s.credential_id, s.id)::uuid AS credential_id,
        s.user_session_issuer_id,
-       COALESCE(CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END, '')::text AS organization_id
+       COALESCE(CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END, '')::text AS organization_id,
+       COALESCE(jsonb_typeof(s.tool_selection -> 'catalog') = 'object', FALSE)::boolean AS consent_scoped
 FROM user_sessions AS s
 JOIN user_session_issuers AS usi
   ON usi.id = s.user_session_issuer_id
@@ -137,13 +156,16 @@ type ListLiveUserSessionCredentialsRow struct {
 	CredentialID        uuid.UUID
 	UserSessionIssuerID uuid.UUID
 	OrganizationID      string
+	ConsentScoped       bool
 }
 
 // One row per live user session credential after the cursor: the lineage of
 // rows refresh rotation continues, named by COALESCE(credential_id, id). A
 // credential is live while a row of it is not deleted and can still refresh.
 // Its organization is its issuer's, which a project issuer takes from its
-// project.
+// project. consent_scoped is read from the credential's newest live row: its
+// session policy names the catalog of servers approved at consent, which is
+// all issuance recorded choices for.
 func (q *Queries) ListLiveUserSessionCredentials(ctx context.Context, arg ListLiveUserSessionCredentialsParams) ([]ListLiveUserSessionCredentialsRow, error) {
 	rows, err := q.db.Query(ctx, listLiveUserSessionCredentials,
 		arg.IssuerID,
@@ -158,7 +180,12 @@ func (q *Queries) ListLiveUserSessionCredentials(ctx context.Context, arg ListLi
 	var items []ListLiveUserSessionCredentialsRow
 	for rows.Next() {
 		var i ListLiveUserSessionCredentialsRow
-		if err := rows.Scan(&i.CredentialID, &i.UserSessionIssuerID, &i.OrganizationID); err != nil {
+		if err := rows.Scan(
+			&i.CredentialID,
+			&i.UserSessionIssuerID,
+			&i.OrganizationID,
+			&i.ConsentScoped,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

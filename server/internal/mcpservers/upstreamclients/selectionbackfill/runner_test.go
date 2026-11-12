@@ -379,6 +379,50 @@ func TestRunBackfillsLiveCredentials(t *testing.T) {
 	require.Len(t, rerun.Gaps, 1)
 }
 
+// A credential issued for the servers approved at consent has choices for those
+// servers only. What the rest of its issuer's reach could be decided as is
+// counted apart from a credential that is missing its choices.
+func TestRunCountsAConsentScopedCredentialsUndecidedReachApart(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	client := f.client(issuer)
+	approved := f.server(issuer, client)
+	f.server(issuer, client)
+	f.server(issuer)
+
+	scoped := f.session(issuer)
+	require.NoError(t, f.q.ApproveConsentCatalogFixture(t.Context(), ApproveConsentCatalogFixtureParams{CatalogID: uuid.New(), ID: scoped}))
+	_, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelections(t.Context(), usersessionsrepo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: issuer,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        scoped,
+		Source:              upstreamclients.SelectionSourceIssuance,
+		PickedMcpServerIds:  []uuid.UUID{},
+		PickedClientIds:     []uuid.UUID{},
+		PickedAuthClientIds: nil,
+		ScopeMcpServerIds:   []uuid.UUID{approved},
+		TypedOnly:           false,
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{approved: client}, f.selections(scoped))
+
+	preview, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 1, preview.Pairs[OutcomeSelected])
+	require.Equal(t, 1, preview.Pairs[OutcomeClient])
+	require.Equal(t, 1, preview.Pairs[OutcomeNoAuth])
+	require.Equal(t, 2, preview.ConsentScoped, "the servers outside the approved catalog are not missing choices")
+
+	unscoped := f.session(issuer)
+	preview, err = Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
+	require.NoError(t, err)
+	require.Equal(t, 3, preview.Pairs[OutcomeClient])
+	require.Equal(t, 2, preview.Pairs[OutcomeNoAuth])
+	require.Equal(t, 2, preview.ConsentScoped, "a credential with no consent catalog is missing every choice")
+	require.Empty(t, f.selections(unscoped))
+}
+
 func TestClassifyMatchesTheRecordedChoice(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

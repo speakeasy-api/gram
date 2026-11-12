@@ -33,6 +33,10 @@ export type AdminUpstreamOAuthMigrationStatus = {
    */
   authClients?: AdminUpstreamOAuthMigrationAuthClients | undefined;
   /**
+   * Credential and server pairs without a choice that are not pending, because the credential was issued for the servers approved at consent and is refused anywhere else.
+   */
+  consentScopedSelections: number;
+  /**
    * Live user session credentials scanned.
    */
   credentials: number;
@@ -83,6 +87,7 @@ export const AdminUpstreamOAuthMigrationStatus$inboundSchema: z.ZodMiniType<
     auth_clients: z.optional(
       AdminUpstreamOAuthMigrationAuthClients$inboundSchema,
     ),
+    consent_scoped_selections: z.int(),
     credentials: z.int(),
     enforcement: z.optional(AdminUpstreamAuthEnforcement$inboundSchema),
     execution_profiles: z.optional(
@@ -101,6 +106,7 @@ export const AdminUpstreamOAuthMigrationStatus$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "auth_clients": "authClients",
+      "consent_scoped_selections": "consentScopedSelections",
       "execution_profiles": "executionProfiles",
       "organization_id": "organizationId",
       "pending_associations": "pendingAssociations",

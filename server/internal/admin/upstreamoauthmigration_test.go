@@ -140,6 +140,39 @@ func TestUpstreamOAuthMigration_MigratesAnOrganizationIdempotently(t *testing.T)
 	require.True(t, again.Status.Migrated)
 }
 
+// A credential issued through a gateway consent has choices for the servers
+// that consent approved and is refused anywhere else, so the rest of its
+// issuer's reach must not report the organization as unmigrated.
+func TestUpstreamOAuthMigration_ConsentScopedCredentialDoesNotPendTheRestOfItsReach(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+
+	org := newMigrationOrg(t, ctx, db, "migrate-consent-scoped")
+	issuer := org.issuer()
+	org.client(issuer)
+	org.server(issuer)
+	org.session(issuer)
+	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.True(t, run.Status.Migrated)
+
+	scoped := org.session(issuer)
+	require.NoError(t, org.q.ApproveConsentCatalogFixture(ctx, selectionbackfill.ApproveConsentCatalogFixtureParams{CatalogID: uuid.New(), ID: scoped}))
+	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.True(t, status.Migrated)
+	require.Zero(t, status.PendingSelections)
+	require.Equal(t, int64(1), status.ConsentScopedSelections)
+
+	org.session(issuer)
+	status, err = svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.False(t, status.Migrated, "a credential with no consent catalog is missing its choice")
+	require.Equal(t, int64(1), status.PendingSelections)
+	require.Equal(t, int64(1), status.ConsentScopedSelections)
+}
+
 // Under enforcement a client an issuer binds is not inferred onto the issuer's
 // only server, so it must not keep the organization reported as unmigrated.
 func TestUpstreamOAuthMigration_EnforcedOrganizationHasNoPendingInferredAssociations(t *testing.T) {

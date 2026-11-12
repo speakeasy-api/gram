@@ -231,20 +231,25 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 			reconnect[gap.CredentialID] = true
 		}
 	}
-	pendingSelections := int64(selections.Pairs[selectionbackfill.OutcomeClient] + selections.Pairs[selectionbackfill.OutcomeNoAuth])
+	// A credential issued for the servers approved at consent has choices for
+	// those servers only and is refused anywhere else, so the rest of its
+	// issuer's reach is not pending.
+	consentScopedSelections := int64(selections.ConsentScoped)
+	pendingSelections := int64(selections.Pairs[selectionbackfill.OutcomeClient]+selections.Pairs[selectionbackfill.OutcomeNoAuth]) - consentScopedSelections
 
 	status := &gen.AdminUpstreamOAuthMigrationStatus{
-		AuthClients:          s.authClientMigrationStatus(ctx, organizationID),
-		ExecutionProfiles:    s.executionProfileMigrationStatus(ctx, organizationID),
-		Enforcement:          nil,
-		OrganizationID:       organizationID,
-		Migrated:             pendingAssociations == 0 && len(unresolved) == 0 && pendingSelections == 0,
-		Servers:              int64(associations.Servers),
-		PendingAssociations:  pendingAssociations,
-		UnresolvedServers:    unresolved,
-		Credentials:          int64(selections.Credentials),
-		PendingSelections:    pendingSelections,
-		ReconnectCredentials: int64(len(reconnect)),
+		AuthClients:             s.authClientMigrationStatus(ctx, organizationID),
+		ExecutionProfiles:       s.executionProfileMigrationStatus(ctx, organizationID),
+		Enforcement:             nil,
+		OrganizationID:          organizationID,
+		Migrated:                pendingAssociations == 0 && len(unresolved) == 0 && pendingSelections == 0,
+		Servers:                 int64(associations.Servers),
+		PendingAssociations:     pendingAssociations,
+		UnresolvedServers:       unresolved,
+		Credentials:             int64(selections.Credentials),
+		PendingSelections:       pendingSelections,
+		ConsentScopedSelections: consentScopedSelections,
+		ReconnectCredentials:    int64(len(reconnect)),
 	}
 	status.Enforcement = s.upstreamAuthEnforcement(ctx, status)
 	return status, nil
@@ -430,11 +435,26 @@ func (s *Service) executionProfileMigrationStatus(ctx context.Context, organizat
 			})
 		}
 	}
+	// Before enforcement a run records every profile from the configuration
+	// that serves turns today, so none is left to be decided differently
+	// later. Under enforcement a turn's own bind decides exactly what a run
+	// would, so a profile no turn has run under yet is not pending.
+	enforced, err := s.productFeatures.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeatureUpstreamAuthEnforced)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "read upstream auth enforcement for execution selection profiles", attr.SlogOrganizationID(organizationID), attr.SlogError(err))
+		return nil
+	}
+	unexercised := 0
+	if enforced {
+		unexercised = report.FirstVersions
+	}
+	pending := report.VersionsWritten - unexercised
 	return &gen.AdminUpstreamOAuthMigrationExecutionProfiles{
-		Complete:        report.VersionsWritten == 0 && len(gaps) == 0,
-		Targets:         int64(report.Targets),
-		PendingVersions: int64(report.VersionsWritten),
-		Gaps:            gaps,
+		Complete:            pending == 0 && len(gaps) == 0,
+		Targets:             int64(report.Targets),
+		PendingVersions:     int64(pending),
+		UnexercisedVersions: int64(unexercised),
+		Gaps:                gaps,
 	}
 }
 

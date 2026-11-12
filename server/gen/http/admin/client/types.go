@@ -2976,6 +2976,10 @@ type GetUpstreamOAuthMigrationStatusResponseBody struct {
 	Credentials *int64 `form:"credentials,omitempty" json:"credentials,omitempty" xml:"credentials,omitempty"`
 	// Credential choices the configuration decides that are not yet recorded.
 	PendingSelections *int64 `form:"pending_selections,omitempty" json:"pending_selections,omitempty" xml:"pending_selections,omitempty"`
+	// Credential and server pairs without a choice that are not pending, because
+	// the credential was issued for the servers approved at consent and is refused
+	// anywhere else.
+	ConsentScopedSelections *int64 `form:"consent_scoped_selections,omitempty" json:"consent_scoped_selections,omitempty" xml:"consent_scoped_selections,omitempty"`
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials *int64 `form:"reconnect_credentials,omitempty" json:"reconnect_credentials,omitempty" xml:"reconnect_credentials,omitempty"`
@@ -3045,6 +3049,10 @@ type EnableUpstreamAuthEnforcementResponseBody struct {
 	Credentials *int64 `form:"credentials,omitempty" json:"credentials,omitempty" xml:"credentials,omitempty"`
 	// Credential choices the configuration decides that are not yet recorded.
 	PendingSelections *int64 `form:"pending_selections,omitempty" json:"pending_selections,omitempty" xml:"pending_selections,omitempty"`
+	// Credential and server pairs without a choice that are not pending, because
+	// the credential was issued for the servers approved at consent and is refused
+	// anywhere else.
+	ConsentScopedSelections *int64 `form:"consent_scoped_selections,omitempty" json:"consent_scoped_selections,omitempty" xml:"consent_scoped_selections,omitempty"`
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials *int64 `form:"reconnect_credentials,omitempty" json:"reconnect_credentials,omitempty" xml:"reconnect_credentials,omitempty"`
@@ -3079,6 +3087,10 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 	Credentials *int64 `form:"credentials,omitempty" json:"credentials,omitempty" xml:"credentials,omitempty"`
 	// Credential choices the configuration decides that are not yet recorded.
 	PendingSelections *int64 `form:"pending_selections,omitempty" json:"pending_selections,omitempty" xml:"pending_selections,omitempty"`
+	// Credential and server pairs without a choice that are not pending, because
+	// the credential was issued for the servers approved at consent and is refused
+	// anywhere else.
+	ConsentScopedSelections *int64 `form:"consent_scoped_selections,omitempty" json:"consent_scoped_selections,omitempty" xml:"consent_scoped_selections,omitempty"`
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials *int64 `form:"reconnect_credentials,omitempty" json:"reconnect_credentials,omitempty" xml:"reconnect_credentials,omitempty"`
@@ -26824,13 +26836,18 @@ type AdminUpstreamOAuthMigrationSelectionGapResponseBody struct {
 // AdminUpstreamOAuthMigrationExecutionProfilesResponseBody is used to define
 // fields on response body types.
 type AdminUpstreamOAuthMigrationExecutionProfilesResponseBody struct {
-	// Whether every profile is recorded and holds a choice for every server its
-	// assistant reaches.
+	// Whether every profile that is pending is recorded and each holds a choice
+	// for every server its assistant reaches.
 	Complete *bool `form:"complete,omitempty" json:"complete,omitempty" xml:"complete,omitempty"`
 	// Assistant and trigger pairs, each with a profile per execution context.
 	Targets *int64 `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 	// Profile versions not yet recorded.
 	PendingVersions *int64 `form:"pending_versions,omitempty" json:"pending_versions,omitempty" xml:"pending_versions,omitempty"`
+	// Profiles no turn has run under yet, in an organization enforcing upstream
+	// auth. They are not pending: a turn records its own profile when its
+	// credential is issued. Zero until enforcement is on, since a run records
+	// every profile before then.
+	UnexercisedVersions *int64 `form:"unexercised_versions,omitempty" json:"unexercised_versions,omitempty" xml:"unexercised_versions,omitempty"`
 	// Servers the profiles hold no choice for, by execution context and reason.
 	// They are never guessed: configure the server's auth clients.
 	Gaps []*AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody `form:"gaps,omitempty" json:"gaps,omitempty" xml:"gaps,omitempty"`
@@ -26882,6 +26899,10 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	Credentials *int64 `form:"credentials,omitempty" json:"credentials,omitempty" xml:"credentials,omitempty"`
 	// Credential choices the configuration decides that are not yet recorded.
 	PendingSelections *int64 `form:"pending_selections,omitempty" json:"pending_selections,omitempty" xml:"pending_selections,omitempty"`
+	// Credential and server pairs without a choice that are not pending, because
+	// the credential was issued for the servers approved at consent and is refused
+	// anywhere else.
+	ConsentScopedSelections *int64 `form:"consent_scoped_selections,omitempty" json:"consent_scoped_selections,omitempty" xml:"consent_scoped_selections,omitempty"`
 	// Credentials with at least one server they will be asked to reconnect to,
 	// because no single client is decided for them.
 	ReconnectCredentials *int64 `form:"reconnect_credentials,omitempty" json:"reconnect_credentials,omitempty" xml:"reconnect_credentials,omitempty"`
@@ -45624,13 +45645,14 @@ func NewListUpstreamOAuthMigrationOrganizationsGatewayError(body *ListUpstreamOA
 // HTTP "OK" response.
 func NewGetUpstreamOAuthMigrationStatusAdminUpstreamOAuthMigrationStatusOK(body *GetUpstreamOAuthMigrationStatusResponseBody) *admin.AdminUpstreamOAuthMigrationStatus {
 	v := &admin.AdminUpstreamOAuthMigrationStatus{
-		OrganizationID:       *body.OrganizationID,
-		Migrated:             *body.Migrated,
-		Servers:              *body.Servers,
-		PendingAssociations:  *body.PendingAssociations,
-		Credentials:          *body.Credentials,
-		PendingSelections:    *body.PendingSelections,
-		ReconnectCredentials: *body.ReconnectCredentials,
+		OrganizationID:          *body.OrganizationID,
+		Migrated:                *body.Migrated,
+		Servers:                 *body.Servers,
+		PendingAssociations:     *body.PendingAssociations,
+		Credentials:             *body.Credentials,
+		PendingSelections:       *body.PendingSelections,
+		ConsentScopedSelections: *body.ConsentScopedSelections,
+		ReconnectCredentials:    *body.ReconnectCredentials,
 	}
 	v.UnresolvedServers = make([]*admin.AdminUpstreamOAuthMigrationServer, len(body.UnresolvedServers))
 	for i, val := range body.UnresolvedServers {
@@ -45979,13 +46001,14 @@ func NewRunUpstreamOAuthMigrationGatewayError(body *RunUpstreamOAuthMigrationGat
 // "OK" response.
 func NewEnableUpstreamAuthEnforcementAdminUpstreamOAuthMigrationStatusOK(body *EnableUpstreamAuthEnforcementResponseBody) *admin.AdminUpstreamOAuthMigrationStatus {
 	v := &admin.AdminUpstreamOAuthMigrationStatus{
-		OrganizationID:       *body.OrganizationID,
-		Migrated:             *body.Migrated,
-		Servers:              *body.Servers,
-		PendingAssociations:  *body.PendingAssociations,
-		Credentials:          *body.Credentials,
-		PendingSelections:    *body.PendingSelections,
-		ReconnectCredentials: *body.ReconnectCredentials,
+		OrganizationID:          *body.OrganizationID,
+		Migrated:                *body.Migrated,
+		Servers:                 *body.Servers,
+		PendingAssociations:     *body.PendingAssociations,
+		Credentials:             *body.Credentials,
+		PendingSelections:       *body.PendingSelections,
+		ConsentScopedSelections: *body.ConsentScopedSelections,
+		ReconnectCredentials:    *body.ReconnectCredentials,
 	}
 	v.UnresolvedServers = make([]*admin.AdminUpstreamOAuthMigrationServer, len(body.UnresolvedServers))
 	for i, val := range body.UnresolvedServers {
@@ -46163,13 +46186,14 @@ func NewEnableUpstreamAuthEnforcementGatewayError(body *EnableUpstreamAuthEnforc
 // HTTP "OK" response.
 func NewDisableUpstreamAuthEnforcementAdminUpstreamOAuthMigrationStatusOK(body *DisableUpstreamAuthEnforcementResponseBody) *admin.AdminUpstreamOAuthMigrationStatus {
 	v := &admin.AdminUpstreamOAuthMigrationStatus{
-		OrganizationID:       *body.OrganizationID,
-		Migrated:             *body.Migrated,
-		Servers:              *body.Servers,
-		PendingAssociations:  *body.PendingAssociations,
-		Credentials:          *body.Credentials,
-		PendingSelections:    *body.PendingSelections,
-		ReconnectCredentials: *body.ReconnectCredentials,
+		OrganizationID:          *body.OrganizationID,
+		Migrated:                *body.Migrated,
+		Servers:                 *body.Servers,
+		PendingAssociations:     *body.PendingAssociations,
+		Credentials:             *body.Credentials,
+		PendingSelections:       *body.PendingSelections,
+		ConsentScopedSelections: *body.ConsentScopedSelections,
+		ReconnectCredentials:    *body.ReconnectCredentials,
 	}
 	v.UnresolvedServers = make([]*admin.AdminUpstreamOAuthMigrationServer, len(body.UnresolvedServers))
 	for i, val := range body.UnresolvedServers {
@@ -51449,6 +51473,9 @@ func ValidateGetUpstreamOAuthMigrationStatusResponseBody(body *GetUpstreamOAuthM
 	if body.PendingSelections == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pending_selections", "body"))
 	}
+	if body.ConsentScopedSelections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("consent_scoped_selections", "body"))
+	}
 	if body.ReconnectCredentials == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reconnect_credentials", "body"))
 	}
@@ -51524,6 +51551,9 @@ func ValidateEnableUpstreamAuthEnforcementResponseBody(body *EnableUpstreamAuthE
 	if body.PendingSelections == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pending_selections", "body"))
 	}
+	if body.ConsentScopedSelections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("consent_scoped_selections", "body"))
+	}
 	if body.ReconnectCredentials == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reconnect_credentials", "body"))
 	}
@@ -51575,6 +51605,9 @@ func ValidateDisableUpstreamAuthEnforcementResponseBody(body *DisableUpstreamAut
 	}
 	if body.PendingSelections == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pending_selections", "body"))
+	}
+	if body.ConsentScopedSelections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("consent_scoped_selections", "body"))
 	}
 	if body.ReconnectCredentials == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reconnect_credentials", "body"))
@@ -82947,6 +82980,9 @@ func ValidateAdminUpstreamOAuthMigrationExecutionProfilesResponseBody(body *Admi
 	if body.PendingVersions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pending_versions", "body"))
 	}
+	if body.UnexercisedVersions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unexercised_versions", "body"))
+	}
 	if body.Gaps == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("gaps", "body"))
 	}
@@ -83014,6 +83050,9 @@ func ValidateAdminUpstreamOAuthMigrationStatusResponseBody(body *AdminUpstreamOA
 	}
 	if body.PendingSelections == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pending_selections", "body"))
+	}
+	if body.ConsentScopedSelections == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("consent_scoped_selections", "body"))
 	}
 	if body.ReconnectCredentials == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reconnect_credentials", "body"))
