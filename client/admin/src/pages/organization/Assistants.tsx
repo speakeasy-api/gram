@@ -257,10 +257,13 @@ export function Assistants({ org }: { org: AdminOrganization }): JSX.Element {
   const migratable = unmigrated.filter((assistant) => assistant.creator_active);
   const kitCandidates = assistants.filter(canMoveToKit);
 
+  // Every target is reported, so a run over the whole organization also says
+  // which assistants were not eligible and why.
   const runKit = async (
     targets: AdminOrganizationAssistant[],
     title: string,
   ): Promise<void> => {
+    const eligible = targets.filter(canMoveToKit).length;
     const confirmed = await confirm({
       title,
       description:
@@ -270,7 +273,7 @@ export function Assistants({ org }: { org: AdminOrganization }): JSX.Element {
           <li>
             {targets.length === 1
               ? "1 assistant with an agent identity is on the default runtime"
-              : `${targets.length} assistants with an agent identity are on the default runtime`}
+              : `${eligible} of ${targets.length} assistants have an agent identity and are on the default runtime`}
           </li>
           <li>
             Assistants that may still be working are skipped; run it again later
@@ -362,7 +365,7 @@ export function Assistants({ org }: { org: AdminOrganization }): JSX.Element {
           disabled={moveToKit.isPending || kitCandidates.length === 0}
           onClick={() => {
             void runKit(
-              kitCandidates,
+              assistants,
               `Migrate ${org.name} assistants to the Kit runtime?`,
             );
           }}

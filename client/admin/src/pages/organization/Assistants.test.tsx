@@ -254,14 +254,14 @@ describe("Assistants", () => {
     );
   });
 
-  it("migrates every eligible assistant to Kit and reports skipped ones", async () => {
+  it("runs Kit over every listed assistant and reports skipped ones", async () => {
     await renderAssistants();
     fireEvent.click(
       screen.getByRole("button", { name: "Migrate eligible to Kit" }),
     );
     const dialog = await screen.findByRole("dialog");
     expect(dialog.textContent).toContain(
-      "2 assistants with an agent identity are on the default runtime",
+      "2 of 5 assistants have an agent identity and are on the default runtime",
     );
 
     fireEvent.click(
@@ -275,7 +275,7 @@ describe("Assistants", () => {
     ).toBeTruthy();
     expect(mocks.migrateOrganizationAssistantsToKit).toHaveBeenCalledWith(
       ORG.id,
-      [KIT_READY.id, KIT_BUSY.id],
+      [LEGACY.id, ORPHANED.id, CONFIGURED.id, KIT_READY.id, KIT_BUSY.id],
     );
   });
 
