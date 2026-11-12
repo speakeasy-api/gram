@@ -14,7 +14,7 @@ type ScopeParts struct {
 	Action   string
 }
 
-// The Scope* constants are generated from Model into scopes_gen.go.
+// The Scope* constants are generated from the registry into scopes_gen.go.
 
 type scopeVisibility int
 
@@ -27,12 +27,6 @@ const (
 	ScopeVisibilityUserVisible = "user_visible"
 	ScopeVisibilityInternal    = "internal"
 )
-
-// scopeVisibilityByScope says whether a scope is exposed to clients as a
-// first-class permission or only used internally for storage and evaluation.
-// Derived from Model: declared permissions are user-visible, generated blocks
-// and root are internal.
-var scopeVisibilityByScope = Model.deriveScopeVisibility()
 
 func (s Scope) Parts() ScopeParts {
 	resource, action, ok := strings.Cut(string(s), ":")
@@ -68,21 +62,6 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 		return "", false
 	}
 }
-
-// scopeExpansions maps a checked scope to the other scopes that also satisfy
-// it. For allow scopes, these are higher-privilege scopes. For blocklist
-// scopes, these are broader blocklist scopes. Expansion is non-transitive: the
-// derivation lists every satisfying scope directly, since Check.expand only
-// walks scopeExpansions[c.Scope] one step.
-//
-// Derived from Model (Implies and Exclusions). The comments on each resource
-// type in registry_resources.go say why its permissions relate the way they do.
-var scopeExpansions = Model.deriveScopeExpansions()
-
-// scopeExclusions maps a checked base scope to the direct blocklist scope that
-// stores exception grants for it. Broader blocklist scopes are handled by
-// scopeExpansions on the blocklist scope itself. Derived from Model.
-var scopeExclusions = Model.deriveScopeExclusions()
 
 // ExclusionScopeFor returns the scope that stores exception grants for the
 // provided base scope.

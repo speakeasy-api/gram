@@ -1,4 +1,4 @@
-// Code generated from authz.Model by authzgen. DO NOT EDIT.
+// Code generated from registry.Definitions by authzgen. DO NOT EDIT.
 // Regenerate with `mise run gen:authz`.
 
 package authz

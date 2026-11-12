@@ -1,5 +1,5 @@
 // Package authzgen renders the files generated from the authorization model,
-// authz.Model. `mise run gen:authz` writes them; TestGeneratedFilesAreCurrent
+// registry.Definitions. `mise run gen:authz` writes them; TestGeneratedFilesAreCurrent
 // fails CI when one is stale.
 package authzgen
 
@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authz/internal/registry"
 )
 
 // File is one generated file, with its path relative to the server directory.
@@ -19,10 +20,19 @@ type File struct {
 	Content []byte
 }
 
-const header = "// Code generated from authz.Model by authzgen. DO NOT EDIT.\n// Regenerate with `mise run gen:authz`.\n\n"
+const header = "// Code generated from registry.Definitions by authzgen. DO NOT EDIT.\n// Regenerate with `mise run gen:authz`.\n\n"
+
+// Files validates the registry and renders every file generated from it. It is
+// what `mise run gen:authz` writes.
+func Files() ([]File, error) {
+	if err := registry.Definitions.Validate(); err != nil {
+		return nil, fmt.Errorf("the authorization registry is invalid: %w", err)
+	}
+	return Render(registry.Definitions)
+}
 
 // Render renders every file generated from r.
-func Render(r authz.Registry) ([]File, error) {
+func Render(r registry.Registry) ([]File, error) {
 	scopes, err := renderScopeConstants(r)
 	if err != nil {
 		return nil, err
@@ -31,9 +41,14 @@ func Render(r authz.Registry) ([]File, error) {
 	if err != nil {
 		return nil, err
 	}
+	tables, err := renderTables(r)
+	if err != nil {
+		return nil, err
+	}
 	return []File{
 		{Path: "internal/authz/scopes_gen.go", Content: scopes},
 		{Path: "internal/authz/refs_gen.go", Content: refs},
+		{Path: "internal/authz/tables_gen.go", Content: tables},
 	}, nil
 }
 
@@ -65,7 +80,7 @@ func ScopeConstantName(scope authz.Scope) string {
 // flags although they hold scope names.
 var gosecSensitiveName = regexp.MustCompile(`(?i)pass|secret|token|credential`)
 
-func renderScopeConstants(r authz.Registry) ([]byte, error) {
+func renderScopeConstants(r registry.Registry) ([]byte, error) {
 	var b strings.Builder
 	b.WriteString(header)
 	b.WriteString("package authz\n\n")
