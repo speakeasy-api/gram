@@ -30,16 +30,40 @@ func TestUnknownDisposition_DoesNotSatisfyAConstrainedAllow(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, allowed)
 
-	// An unconstrained grant, or one wildcarding the dimension, still does.
+	// A grant that does not constrain the dimension still does.
 	allowed, err = GrantsAuthorize([]Grant{NewGrant(ScopeMCPConnect, "server-1")}, unannotatedToolCall())
 	require.NoError(t, err)
 	require.True(t, allowed)
 
-	anyDisposition := NewSelector(ScopeMCPConnect, "server-1")
-	anyDisposition[SelectorKeyDisposition] = WildcardResource
-	allowed, err = GrantsAuthorize([]Grant{NewGrantWithSelector(ScopeMCPConnect, anyDisposition)}, unannotatedToolCall())
+	// So does one wildcarding a dimension that accepts a wildcard. Disposition
+	// does not: its values are a closed set.
+	anyTool := NewSelector(ScopeMCPConnect, "server-1")
+	anyTool[SelectorKeyTool] = WildcardResource
+	allowed, err = GrantsAuthorize([]Grant{NewGrantWithSelector(ScopeMCPConnect, anyTool)}, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "", Disposition: DispositionReadOnly, ProjectID: "project-1"}))
 	require.NoError(t, err)
 	require.True(t, allowed)
+}
+
+// A legacy API key's block matches an undeterminable value the way every
+// other block does.
+func TestUnknownTool_IsCoveredByAnAPIKeyBlock(t *testing.T) {
+	t.Parallel()
+
+	const key = "api_key:key-1"
+	connect := NewSelector(ScopeMCPConnect, "server-1")
+	connect[SelectorKeyProjectID] = "project-1"
+	block := NewSelector(ScopeMCPBlockedConnect, "server-1")
+	block[SelectorKeyProjectID] = "project-1"
+	block[SelectorKeyTool] = "lookup"
+	grants := []Grant{
+		{PrincipalUrn: key, Scope: ScopeMCPConnect, Selector: connect, Inferred: false},
+		{PrincipalUrn: key, Scope: ScopeMCPBlockedConnect, Selector: block, Inferred: false},
+	}
+	check := MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "", Disposition: DispositionReadOnly, ProjectID: "project-1"})
+
+	allowed, err := GrantsAuthorize(grants, check)
+	require.NoError(t, err)
+	require.False(t, allowed)
 }
 
 // A block limited to destructive tools applies to a tool whose disposition

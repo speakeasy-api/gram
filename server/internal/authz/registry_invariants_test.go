@@ -184,6 +184,9 @@ func TestModelInvariant_UnknownValuesFailClosed(t *testing.T) {
 			scope := typ.ScopeFor(p)
 			for key := range unknownableDimensions[scope] {
 				value := "value-1"
+				if key == SelectorKeyServerURL {
+					value = "https://example.com"
+				}
 				if values := Model.deriveDimensionValues(typ.Kind, key); len(values) > 0 {
 					for v := range values {
 						value = v
