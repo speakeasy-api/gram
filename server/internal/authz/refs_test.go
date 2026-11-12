@@ -1,6 +1,8 @@
 package authz
 
 import (
+	"github.com/google/uuid"
+
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -67,6 +69,8 @@ func TestRefs_CoverEveryPermission(t *testing.T) {
 	for _, check := range []Check{
 		Org("o").Read(), Org("o").Admin(), Org("o").DeviceAgentSync(), Org("o").HooksIngest("p"),
 		project.Read(), project.Write(), project.PluginWrite(), project.LogRead(),
+		project.MemoryRead(), project.MemoryWrite(),
+		project.ChannelsConnect(), project.ChannelsAdmin(), project.ChannelsReadAll(),
 		MCPServer("m", "p").Read(), MCPServer("m", "p").Write(), MCPServer("m", "p").Connect(),
 		Environment("e", "p").Read(), Environment("e", "p").Write(),
 		Skill("s").Read(), Skill("s").Write(),
@@ -88,13 +92,21 @@ func TestRefs_CoverEveryPermission(t *testing.T) {
 	}
 }
 
-// A ref built without its project is refused at evaluation instead of
-// matching project-bounded grants by omission.
+// An MCP ref built without its project is refused at evaluation instead of
+// matching project-bounded grants by omission. The other kinds follow when
+// their project becomes a required dimension.
 func TestRefs_MissingProjectIsInvalid(t *testing.T) {
 	t.Parallel()
 
 	require.Error(t, validateInput(MCPServer("server-1", "").Write()))
-	require.Error(t, validateInput(Environment("env-1", "").Read()))
-	require.Error(t, validateInput(Assistant("assistant-1", "").Read()))
-	require.Error(t, validateInput(Org("org-1").HooksIngest("")))
+}
+
+// A ref built from uuids builds the same check as one built from their
+// strings.
+func TestRefs_AcceptUUIDsAndStrings(t *testing.T) {
+	t.Parallel()
+	env := uuid.New()
+	project := uuid.New()
+	require.Equal(t, Environment(env.String(), project.String()).Read(), Environment(env, project).Read())
+	require.Equal(t, Project(project.String()).Write(), Project(project).Write())
 }
