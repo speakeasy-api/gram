@@ -55,7 +55,7 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 			"Only the datasets this caller can read are listed: risk_findings, which counts what risk policies caught, is listed to organization administrators alone. A dataset of kind metric answers grouped queries only. " +
 			"Composed datasets require Explore. signal_metrics describes the entitled Signals Intelligence measurement contract, current sensors, signal names and ordered membership, independently of Explore.",
 		Annotations: readOnlyAnnotations(),
-		InputSchema: analyticsProjectSchema(nil, []string{"project_id"}),
+		InputSchema: analyticsProjectSchema(nil, []string{"project_slug"}),
 	}
 	values := &mcp.Tool{
 		Name:  listAnalyticsDimensionValuesToolName,
@@ -72,7 +72,7 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 			"limit":        {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(analytics.MaxValuesLimit)), Description: fmt.Sprintf("Maximum values to return; defaults to %d and cannot exceed %d.", analytics.DefaultValuesLimit, analytics.MaxValuesLimit)},
 			"signal_scope": signalScopeSchema(),
 			"attribute":    stringSchema("Exact label key when dimension is attribute.", 1, 256),
-		}, []string{"project_id", "dataset", "dimension", "from", "to"}),
+		}, []string{"project_slug", "dataset", "dimension", "from", "to"}),
 	}
 	query := &mcp.Tool{
 		Name:  runAnalyticsQueryToolName,
@@ -85,11 +85,11 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 		Annotations: readOnlyAnnotations(),
 		InputSchema: runAnalyticsQuerySchema(),
 	}
-	definition := &mcp.Tool{Name: getSignalDefinitionToolName, Title: "Explain How a Signal Was Measured", Description: "Read the immutable question, signal criteria, ordering and input contract behind a definition_hash returned by a signal measurement. Select the exact project, sensor and fingerprint. An absent historical snapshot is reported as unavailable, never reconstructed from current configuration. Requires Signals Intelligence and project:read; returns definition content, not conversation content.", Annotations: readOnlyAnnotations(), InputSchema: analyticsProjectSchema(map[string]*jsonschema.Schema{"sensor_id": uuidSchema("Contributing sensor UUID."), "definition_hash": stringSchema("Exact 64-character semantic fingerprint from the measurement.", 64, 64)}, []string{"project_id", "sensor_id", "definition_hash"})}
+	definition := &mcp.Tool{Name: getSignalDefinitionToolName, Title: "Explain How a Signal Was Measured", Description: "Read the immutable question, signal criteria, ordering and input contract behind a definition_hash returned by a signal measurement. Select the exact project, sensor and fingerprint. An absent historical snapshot is reported as unavailable, never reconstructed from current configuration. Requires Signals Intelligence and project:read; returns definition content, not conversation content.", Annotations: readOnlyAnnotations(), InputSchema: analyticsProjectSchema(map[string]*jsonschema.Schema{"sensor_id": uuidSchema("Contributing sensor UUID."), "definition_hash": stringSchema("Exact 64-character semantic fingerprint from the measurement.", 64, 64)}, []string{"project_slug", "sensor_id", "definition_hash"})}
 
 	finder := &mcp.Tool{Name: findSignalSessionsToolName, Title: "Find Signal Patterns Across Chats", Description: "Count how many conversations in one exact project showed a sensor's signal over a window, how widely and how concentrated, and compare with the previous window. To learn which sensors and signals exist, use describe_analytics_catalog; to read one sensor's settings, use get_sensor. Measures signal presence, breadth and concentration across conversations. Optionally select a peer predicate for separately named same-message and same-session co-occurrence with joint-answer denominators, and compare an equal-duration previous window with explicit comparability gates. signal_query uses the chart's sensor, probability rule, trigger/run and filters, without group_by. Evidence is an opt-in sample of at most twenty recent permitted conversations, containing reference coordinates only; open transcripts in the dashboard. Coverage remains unknown and differences are exploratory, not causal or significance claims. Requires Signals Intelligence and project:read; every evidence reference additionally passes chat access checks.", Annotations: readOnlyAnnotations(), InputSchema: analyticsProjectSchema(map[string]*jsonschema.Schema{
 		"from": dateTimeSchema("Inclusive source-time boundary."), "to": dateTimeSchema("Exclusive source-time boundary."), "signal_query": signalFindingsQuerySchema(), "peer": signalSelectionSchema(), "compare_previous": {Type: "boolean", Description: "Compare the adjacent equal-duration window, with comparability markers."}, "evidence": {Type: "boolean", Description: "Include bounded, permission-checked conversation references. Defaults to false."},
-	}, []string{"project_id", "from", "to", "signal_query"})}
+	}, []string{"project_slug", "from", "to", "signal_query"})}
 	if !live {
 		for _, tool := range []*mcp.Tool{describe, values, query, definition, finder} {
 			tool.Description += " Analytics queries are unavailable in this deployment."
@@ -166,7 +166,7 @@ func analyticsRefusalFor(err error) (refusal analyticsRefusal, named bool) {
 		refusal.Message = invalid.Message + ". Correct that from describe_analytics_catalog rather than retrying the same request."
 	case errors.Is(err, ErrAnalyticsInvalid):
 		refusal.Code = "invalid_request"
-		refusal.Message = "Name exactly one project by its ID, as list_projects returns it."
+		refusal.Message = "Name one project by its slug, as list_projects returns it."
 	case errors.Is(err, ErrAnalyticsNotEnabled):
 		refusal.Code = analyticsNotEnabledCode
 		refusal.Message = "The requested analytics capability is not enabled. Composed datasets require Explore; signal measurements require Signals Intelligence."
@@ -190,12 +190,12 @@ func analyticsRefusalFor(err error) (refusal analyticsRefusal, named bool) {
 	return refusal, true
 }
 
-// analyticsProjectSchema is the tool's own fields beside the exact project ID
-// every analytics tool takes.
+// analyticsProjectSchema is the tool's own fields beside the project slug every
+// analytics tool takes.
 func analyticsProjectSchema(common map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
 	properties := make(map[string]*jsonschema.Schema, len(common)+1)
 	maps.Copy(properties, common)
-	properties["project_id"] = uuidSchema("Exact project ID to read, as list_projects returns it.")
+	properties["project_slug"] = stringSchema(projectSlugDescription, 1, 128)
 	return closedObject(properties, required)
 }
 
@@ -239,7 +239,7 @@ func runAnalyticsQuerySchema() *jsonschema.Schema {
 		"order_by":     described(arraySchema(order, 0, false), "Sort for a grouped result, by measure alias. Ungrouped rows are always newest first."),
 		"limit":        {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(analytics.MaxLimit)), Description: fmt.Sprintf("Maximum rows; defaults to %d, at most %d for a grouped result and %d for ungrouped rows. Narrow the window or filter rather than raising it.", analytics.DefaultLimit, analytics.MaxLimit, analytics.MaxRowsLimit)},
 		"ungrouped":    {Type: "boolean", Description: "Return rows at the dataset's grain instead of aggregating. Defaults to false."},
-	}, []string{"project_id", "dataset", "from", "to"})
+	}, []string{"project_slug", "dataset", "from", "to"})
 }
 
 func signalDimensionSchema() *jsonschema.Schema {

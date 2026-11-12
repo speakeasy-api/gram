@@ -112,9 +112,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID; never inferred"
+            "description": "the project's slug, as list_projects returns it"
           },
           "assistant_id": {
             "type": "string",
@@ -134,7 +134,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "assistant_id",
           "runtime_version",
           "confirmed"
@@ -155,9 +155,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID; never inferred"
+            "description": "the project's slug, as list_projects returns it"
           },
           "assistant_id": {
             "type": "string",
@@ -196,7 +196,7 @@
             "description": "false previews every profile; true only after explicit confirmation of this exact assistant, trigger, context, server and choice"
           }
         },
-        "required": ["project_id", "assistant_id", "confirmed"],
+        "required": ["project_slug", "assistant_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -213,9 +213,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID"
+            "description": "the project's slug, as list_projects returns it"
           },
           "proposal": {
             "type": "object",
@@ -311,7 +311,7 @@
             "description": "required for confirmation; reuse only for retries of this exact confirmed request"
           }
         },
-        "required": ["project_id", "proposal", "confirmed"],
+        "required": ["project_slug", "proposal", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -328,9 +328,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID"
+            "description": "the project's slug, as list_projects returns it"
           },
           "proposal": {
             "type": "object",
@@ -426,7 +426,7 @@
             "description": "required for confirmation; reuse only for retries of this exact confirmed request"
           }
         },
-        "required": ["project_id", "proposal", "confirmed"],
+        "required": ["project_slug", "proposal", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -443,9 +443,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID"
+            "description": "the project's slug, as list_projects returns it"
           },
           "proposal": {
             "type": "object",
@@ -541,7 +541,7 @@
             "description": "required for confirmation; reuse only for retries of this exact confirmed request"
           }
         },
-        "required": ["project_id", "proposal", "confirmed"],
+        "required": ["project_slug", "proposal", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -558,9 +558,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID"
+            "description": "the project's slug, as list_projects returns it"
           },
           "proposal": {
             "type": "object",
@@ -656,7 +656,7 @@
             "description": "required for confirmation; reuse only for retries of this exact confirmed request"
           }
         },
-        "required": ["project_id", "proposal", "confirmed"],
+        "required": ["project_slug", "proposal", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -803,13 +803,13 @@
     },
     {
       "name": "redeploy_deployment",
-      "description": "Clone and reprocess an exact project deployment snapshot, including all of its OpenAPI, function and package sources. External MCP sources are not carried forward. This is project-wide, not a restart of one MCP server or upstream provider. An older snapshot can roll back newer tools and configuration. Requires project:write and project:read; external user clients only. First call with confirmed:false, an exact project_id and a stable idempotency_key; omit deployment_id only to preview the active snapshot. Show the returned source_deployment_id, active_deployment_id, source counts, and whole-project impact to the user. After explicit confirmation, resend the same key with deployment_id set to that source ID, expected_active_deployment_id set to the preview's active ID (or none), and confirmed:true. A changed active deployment is refused; preview and reconfirm before making a new attempt. Processing is dispatched without waiting for completion, and activation checks the expected active snapshot again atomically; if it changed while processing, the clone fails instead of replacing it. The same key and input reuse the committed clone instead of creating another deployment. Keep them unchanged on timeout or unavailable processing; do not automatically use a new key. Processing can fail or still be pending: report the returned status, verified and active fields, never claim that tools are ready just because a clone exists. A verification_unavailable result still identifies a committed clone; inspect its dashboard_path before proceeding. No source contents, secrets or deployment logs are returned.",
+      "description": "Clone and reprocess an exact project deployment snapshot, including all of its OpenAPI, function and package sources. External MCP sources are not carried forward. This is project-wide, not a restart of one MCP server or upstream provider. An older snapshot can roll back newer tools and configuration. Requires project:write and project:read; external user clients only. First call with confirmed:false, the project_slug and a stable idempotency_key; omit deployment_id only to preview the active snapshot. Show the returned source_deployment_id, active_deployment_id, source counts, and whole-project impact to the user. After explicit confirmation, resend the same key with deployment_id set to that source ID, expected_active_deployment_id set to the preview's active ID (or none), and confirmed:true. A changed active deployment is refused; preview and reconfirm before making a new attempt. Processing is dispatched without waiting for completion, and activation checks the expected active snapshot again atomically; if it changed while processing, the clone fails instead of replacing it. The same key and input reuse the committed clone instead of creating another deployment. Keep them unchanged on timeout or unavailable processing; do not automatically use a new key. Processing can fail or still be pending: report the returned status, verified and active fields, never claim that tools are ready just because a clone exists. A verification_unavailable result still identifies a committed clone; inspect its dashboard_path before proceeding. No source contents, secrets or deployment logs are returned.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID; never inferred"
+            "description": "the project's slug, as list_projects returns it"
           },
           "deployment_id": {
             "type": "string",
@@ -828,7 +828,7 @@
             "description": "true only after the user confirms the exact project, source snapshot, active snapshot, and project-wide impact shown in the preview"
           }
         },
-        "required": ["project_id", "idempotency_key", "confirmed"],
+        "required": ["project_slug", "idempotency_key", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -845,16 +845,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID establishing organization context; the policy applies organization-wide, not just to this project"
+            "description": "the project's slug, as list_projects returns it"
           },
           "issuer_id": {
             "type": "string",
             "description": "exact organization-tier workload issuer UUID; never a name or URL"
           }
         },
-        "required": ["project_id", "issuer_id"],
+        "required": ["project_slug", "issuer_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -871,9 +871,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID establishing organization context; this does not limit the issuer-wide change to one project"
+            "description": "the project's slug, as list_projects returns it"
           },
           "issuer_id": {
             "type": "string",
@@ -889,7 +889,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "issuer_id",
           "allow_assertion_reuse",
           "confirmed"
@@ -946,17 +946,13 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "type": "string",
-            "description": "optional project ID; defaults to the organization's Default project when query is omitted"
-          },
           "project_slug": {
             "type": "string",
-            "description": "optional project slug; defaults to the organization's Default project when query is omitted"
+            "description": "the project's slug, as list_projects returns it; omit it to list the organization's Default project, or to search the whole organization with query"
           },
           "query": {
             "type": "string",
-            "description": "optional MCP name, slug, ID, or source URL search; without a project selector, searches the organization"
+            "description": "optional MCP name, slug, ID, or source URL search; without project_slug, searches the organization"
           },
           "cursor": {
             "type": "string",
@@ -987,9 +983,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -1000,7 +996,7 @@
             "description": "tool_exposure.next_tool_cursor from the previous get_mcp read of this same server; omit for the first page"
           }
         },
-        "required": ["project_id", "mcp_id"],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1017,16 +1013,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project ID that owns the MCP server"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_server_id": {
             "type": "string",
             "description": "exact MCP server ID, not a Platform MCP registration or legacy toolset ID"
           }
         },
-        "required": ["project_id", "mcp_server_id"],
+        "required": ["project_slug", "mcp_server_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1156,9 +1152,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the target"
+            "description": "the project's slug, as list_projects returns it"
           },
           "target_kind": {
             "type": "string",
@@ -1169,7 +1165,7 @@
             "description": "ID of the exact MCP server or gateway"
           }
         },
-        "required": ["project_id", "target_kind", "target_id"],
+        "required": ["project_slug", "target_kind", "target_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1303,9 +1299,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the target"
+            "description": "the project's slug, as list_projects returns it"
           },
           "target_kind": {
             "type": "string",
@@ -1341,7 +1337,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "target_kind",
           "target_id",
           "slug",
@@ -1365,9 +1361,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the target"
+            "description": "the project's slug, as list_projects returns it"
           },
           "target_kind": {
             "type": "string",
@@ -1395,7 +1391,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "target_kind",
           "target_id",
           "mode",
@@ -1449,9 +1445,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID whose tools to list"
+            "description": "the project's slug, as list_projects returns it"
           },
           "query": {
             "type": "string",
@@ -1470,7 +1466,7 @@
             "description": "maximum number of tools to return; server clamps this to 100"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1487,9 +1483,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the MCP server"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -1516,7 +1512,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "mcp_id",
           "tool_urns",
           "expected_version",
@@ -1539,9 +1535,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the MCP server"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -1568,7 +1564,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "mcp_id",
           "tool_urns",
           "expected_version",
@@ -1591,9 +1587,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID the new MCP server belongs to"
+            "description": "the project's slug, as list_projects returns it"
           },
           "name": {
             "type": "string",
@@ -1616,7 +1612,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "name",
           "tool_urns",
           "idempotency_key",
@@ -1638,9 +1634,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "ID of the project the gateway belongs to; every member must be in it"
+            "description": "the project's slug, as list_projects returns it"
           },
           "name": {
             "type": "string",
@@ -1654,7 +1650,7 @@
             "description": "exact IDs of the MCP servers to put behind the gateway, from find_mcp in this project, in the order the gateway lists them; at most 50"
           }
         },
-        "required": ["project_id", "name", "mcp_ids"],
+        "required": ["project_slug", "name", "mcp_ids"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -1671,9 +1667,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "ID of the project the gateway belongs to"
+            "description": "the project's slug, as list_projects returns it"
           },
           "gateway_id": {
             "type": "string",
@@ -1687,7 +1683,7 @@
             "description": "the complete list of MCP servers the gateway should front afterwards, in order; servers left out are removed and an empty list removes them all; at most 50"
           }
         },
-        "required": ["project_id", "gateway_id", "mcp_ids"],
+        "required": ["project_slug", "gateway_id", "mcp_ids"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -1730,13 +1726,13 @@
     },
     {
       "name": "rename_project",
-      "description": "Change the display name of one exact project. Nothing else changes: the project's slug stays the same, so dashboard links and anything addressing the project by slug keep working, and its MCP servers, skills, plugins, and their audiences are untouched. Supply the project ID from list_projects, an idempotency key, and confirmed: true only after the user confirms the exact project and new name. Needs write access to that exact project, as in the dashboard; without it the call is refused with the missing permission, and the refusal is the same whether or not the project exists.",
+      "description": "Change the display name of one exact project. Nothing else changes: the project's slug stays the same, so dashboard links and anything addressing the project by slug keep working, and its MCP servers, skills, plugins, and their audiences are untouched. Supply the project's slug from list_projects, an idempotency key, and confirmed: true only after the user confirms the exact project and new name. Needs write access to that exact project, as in the dashboard; without it the call is refused with the missing permission, and the refusal is the same whether or not the project exists.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "ID of the project to rename, from list_projects"
+            "description": "the project's slug, as list_projects returns it"
           },
           "name": {
             "type": "string",
@@ -1751,7 +1747,7 @@
             "description": "true only after the user confirmed this exact project and new name"
           }
         },
-        "required": ["project_id", "name", "idempotency_key", "confirmed"],
+        "required": ["project_slug", "name", "idempotency_key", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -1768,9 +1764,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID returned by list_projects"
+            "description": "the project's slug, as list_projects returns it"
           },
           "target_kind": {
             "type": "string",
@@ -1785,7 +1781,7 @@
             "description": "why you need this MCP server; required and visible to reviewers"
           }
         },
-        "required": ["project_id", "target_kind", "target", "justification"],
+        "required": ["project_slug", "target_kind", "target", "justification"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -1802,16 +1798,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID returned by list_projects"
+            "description": "the project's slug, as list_projects returns it"
           },
           "request_id": {
             "type": "string",
             "description": "request ID returned by request_mcp_review"
           }
         },
-        "required": ["project_id", "request_id"],
+        "required": ["project_slug", "request_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1828,22 +1824,14 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "type": "string",
-            "description": "Optional exact project ID. Omit both project selectors to use the literal default project.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Optional exact project slug. Omit both project selectors to use the literal default project.",
+            "description": "The project's slug, as list_projects returns it. Omit it to use the organization's Default project.",
             "minLength": 1,
             "maxLength": 128
           }
         },
-        "additionalProperties": false,
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "additionalProperties": false
       },
       "read_only": true,
       "annotations": {
@@ -1869,22 +1857,14 @@
             "minimum": 1,
             "maximum": 50
           },
-          "project_id": {
-            "type": "string",
-            "description": "Optional exact project ID. Omit both project selectors to use the literal default project.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Optional exact project slug. Omit both project selectors to use the literal default project.",
+            "description": "The project's slug, as list_projects returns it. Omit it to use the organization's Default project.",
             "minLength": 1,
             "maxLength": 128
           }
         },
-        "additionalProperties": false,
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "additionalProperties": false
       },
       "read_only": true,
       "annotations": {
@@ -1905,23 +1885,15 @@
             "description": "Exact policy ID to read.",
             "format": "uuid"
           },
-          "project_id": {
-            "type": "string",
-            "description": "Optional exact project ID. Omit both project selectors to use the literal default project.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Optional exact project slug. Omit both project selectors to use the literal default project.",
+            "description": "The project's slug, as list_projects returns it. Omit it to use the organization's Default project.",
             "minLength": 1,
             "maxLength": 128
           }
         },
         "required": ["policy_id"],
-        "additionalProperties": false,
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "additionalProperties": false
       },
       "read_only": true,
       "annotations": {
@@ -1952,22 +1924,14 @@
             "description": "Optional exact policy ID filter.",
             "format": "uuid"
           },
-          "project_id": {
-            "type": "string",
-            "description": "Optional exact project ID. Omit both project selectors to use the literal default project.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Optional exact project slug. Omit both project selectors to use the literal default project.",
+            "description": "The project's slug, as list_projects returns it. Omit it to use the organization's Default project.",
             "minLength": 1,
             "maxLength": 128
           }
         },
-        "additionalProperties": false,
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "additionalProperties": false
       },
       "read_only": true,
       "annotations": {
@@ -2005,7 +1969,7 @@
           },
           "project_slug": {
             "type": "string",
-            "description": "Exact project slug; never defaults.",
+            "description": "The project's slug, as list_projects returns it.",
             "minLength": 1
           }
         },
@@ -2065,7 +2029,7 @@
           },
           "project_slug": {
             "type": "string",
-            "description": "Exact project slug; never defaults.",
+            "description": "The project's slug, as list_projects returns it.",
             "minLength": 1
           },
           "remove_principals": {
@@ -2593,7 +2557,7 @@
           },
           "project_slug": {
             "type": "string",
-            "description": "Exact project slug; writes never default a project.",
+            "description": "The project's slug, as list_projects returns it.",
             "minLength": 1
           },
           "prompt": {
@@ -3179,7 +3143,7 @@
           },
           "project_slug": {
             "type": "string",
-            "description": "Exact project slug; writes never default a project.",
+            "description": "The project's slug, as list_projects returns it.",
             "minLength": 1
           }
         },
@@ -3233,7 +3197,7 @@
           },
           "project_slug": {
             "type": "string",
-            "description": "Exact project slug; writes never default a project.",
+            "description": "The project's slug, as list_projects returns it.",
             "minLength": 1
           },
           "rule_id_filter": {
@@ -3577,7 +3541,7 @@
           },
           "project_slug": {
             "type": "string",
-            "description": "Exact project slug; writes never default a project.",
+            "description": "The project's slug, as list_projects returns it.",
             "minLength": 1
           }
         },
@@ -3627,7 +3591,7 @@
           },
           "project_slug": {
             "type": "string",
-            "description": "Exact project slug; writes never default a project.",
+            "description": "The project's slug, as list_projects returns it.",
             "minLength": 1,
             "maxLength": 128
           },
@@ -3682,7 +3646,7 @@
           },
           "project_slug": {
             "type": "string",
-            "description": "Exact project slug; writes never default a project.",
+            "description": "The project's slug, as list_projects returns it.",
             "minLength": 1,
             "maxLength": 128
           }
@@ -3723,14 +3687,9 @@
             "maxItems": 5,
             "uniqueItems": true
           },
-          "project_id": {
-            "type": "string",
-            "description": "Optional exact project ID. Omit both project selectors to use the literal default project.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Optional exact project slug. Omit both project selectors to use the literal default project.",
+            "description": "The project's slug, as list_projects returns it. Omit it to use the organization's Default project.",
             "minLength": 1,
             "maxLength": 128
           },
@@ -3744,10 +3703,7 @@
             "description": "Exclusive detection time (created_at) in RFC3339. Defaults to now. No future bounds; maximum interval 31 days."
           }
         },
-        "additionalProperties": false,
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "additionalProperties": false
       },
       "read_only": true,
       "annotations": {
@@ -3868,14 +3824,9 @@
             "description": "Optional exact policy ID, including a disabled policy. Without it, findings from every non-deleted policy are listed.",
             "format": "uuid"
           },
-          "project_id": {
-            "type": "string",
-            "description": "Optional exact project ID. Omit both project selectors to use the literal default project.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Optional exact project slug. Omit both project selectors to use the literal default project.",
+            "description": "The project's slug, as list_projects returns it. Omit it to use the organization's Default project.",
             "minLength": 1,
             "maxLength": 128
           },
@@ -3905,10 +3856,7 @@
             "maxLength": 256
           }
         },
-        "additionalProperties": false,
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "additionalProperties": false
       },
       "read_only": true,
       "annotations": {
@@ -3934,22 +3882,14 @@
             "minimum": 1,
             "maximum": 50
           },
-          "project_id": {
-            "type": "string",
-            "description": "Optional exact project ID. Omit both project selectors to use the literal default project.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Optional exact project slug. Omit both project selectors to use the literal default project.",
+            "description": "The project's slug, as list_projects returns it. Omit it to use the organization's Default project.",
             "minLength": 1,
             "maxLength": 128
           }
         },
-        "additionalProperties": false,
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "additionalProperties": false
       },
       "read_only": true,
       "annotations": {
@@ -3990,14 +3930,9 @@
             "type": "string",
             "description": "Inclusive detection time in RFC3339. Defaults to the start (UTC) of the day six days before to."
           },
-          "project_id": {
-            "type": "string",
-            "description": "Optional exact project ID. Omit both project selectors to use the literal default project.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Optional exact project slug. Omit both project selectors to use the literal default project.",
+            "description": "The project's slug, as list_projects returns it. Omit it to use the organization's Default project.",
             "minLength": 1,
             "maxLength": 128
           },
@@ -4007,10 +3942,7 @@
           }
         },
         "required": ["category"],
-        "additionalProperties": false,
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "additionalProperties": false
       },
       "read_only": true,
       "annotations": {
@@ -4026,13 +3958,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "type": "string",
-            "description": "optional project ID; omit both project selectors to list the organization's exports"
-          },
           "project_slug": {
             "type": "string",
-            "description": "optional project slug; omit both project selectors to list the organization's exports"
+            "description": "the project's slug, as list_projects returns it; omit it to list the organization's exports"
           },
           "limit": {
             "type": "integer",
@@ -4055,13 +3983,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "type": "string",
-            "description": "project ID that will export telemetry; supply exactly one project selector"
-          },
           "project_slug": {
             "type": "string",
-            "description": "project slug that will export telemetry; supply exactly one project selector"
+            "description": "the project's slug, as list_projects returns it"
           },
           "name": {
             "type": "string",
@@ -4092,7 +4016,13 @@
             "description": "true only after the user explicitly confirms the project, endpoint, data source, enabled state, sensitive-data policy, and, for mcp_connection_logs only, the minimum level"
           }
         },
-        "required": ["name", "endpoint_url", "data_source", "confirmed"],
+        "required": [
+          "project_slug",
+          "name",
+          "endpoint_url",
+          "data_source",
+          "confirmed"
+        ],
         "additionalProperties": false
       },
       "read_only": false,
@@ -4105,13 +4035,13 @@
     },
     {
       "name": "pause_data_export",
-      "description": "Stop one data export route from sending data to its destination, leaving the route and its destination configured so it can be resumed later. Supply the project ID and the exact route ID from list_data_exports, an idempotency key, and confirmed: true only after the user confirms the exact project and route. Only the route's on/off state changes: its data source and destination stay exactly as they are, and destinations, headers, and routes cannot be edited or deleted from here. A route already in the requested state is reported as unchanged rather than refused. The result reports the route's committed state; Speakeasy does not record when a route last delivered, so the result says that rather than giving a time. While a route is paused, the data it would have exported is dropped, not buffered: resuming does not send anything produced in between. The pause reaches the export relays within about a minute, so data can keep flowing briefly; for a destination that includes sensitive fields it stops on the next batch.",
+      "description": "Stop one data export route from sending data to its destination, leaving the route and its destination configured so it can be resumed later. Supply the project's slug and the exact route ID from list_data_exports, an idempotency key, and confirmed: true only after the user confirms the exact project and route. Only the route's on/off state changes: its data source and destination stay exactly as they are, and destinations, headers, and routes cannot be edited or deleted from here. A route already in the requested state is reported as unchanged rather than refused. The result reports the route's committed state; Speakeasy does not record when a route last delivered, so the result says that rather than giving a time. While a route is paused, the data it would have exported is dropped, not buffered: resuming does not send anything produced in between. The pause reaches the export relays within about a minute, so data can keep flowing briefly; for a destination that includes sensitive fields it stops on the next batch.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the route, from list_data_exports"
+            "description": "the project's slug, as list_projects returns it"
           },
           "route_id": {
             "type": "string",
@@ -4126,7 +4056,12 @@
             "description": "true only after the user confirmed this exact project and route"
           }
         },
-        "required": ["project_id", "route_id", "idempotency_key", "confirmed"],
+        "required": [
+          "project_slug",
+          "route_id",
+          "idempotency_key",
+          "confirmed"
+        ],
         "additionalProperties": false
       },
       "read_only": false,
@@ -4139,13 +4074,13 @@
     },
     {
       "name": "resume_data_export",
-      "description": "Start a paused data export route sending data to its destination again. Supply the project ID and the exact route ID from list_data_exports, the route's data_source and destination_id from that same read as expected_data_source and expected_destination_id, an idempotency key, and confirmed: true only after the user confirms the exact project, route, data source, and destination. If the route's destination or data source changed after that read, the resume is refused as route_changed and nothing is changed; read the data exports again and confirm what the route now points at. Only the route's on/off state changes: its data source and destination stay exactly as they are, and destinations, headers, and routes cannot be edited or deleted from here. A route already in the requested state is reported as unchanged rather than refused. The result reports the route's committed state; Speakeasy does not record when a route last delivered, so the result says that rather than giving a time. While a route is paused, the data it would have exported is dropped, not buffered: resuming does not send anything produced in between. The resume reaches the export relays within about a minute for every destination, so the first batches after it can still be dropped. A route cannot be resumed, and nothing is changed, when it has no destination, when its destination was deleted, or when its destination's stored configuration (endpoint, sensitive-data setting, or headers) can no longer be used; this applies even if the route is already on. The refusal names which, and the destination has to be repaired in the dashboard.",
+      "description": "Start a paused data export route sending data to its destination again. Supply the project's slug and the exact route ID from list_data_exports, the route's data_source and destination_id from that same read as expected_data_source and expected_destination_id, an idempotency key, and confirmed: true only after the user confirms the exact project, route, data source, and destination. If the route's destination or data source changed after that read, the resume is refused as route_changed and nothing is changed; read the data exports again and confirm what the route now points at. Only the route's on/off state changes: its data source and destination stay exactly as they are, and destinations, headers, and routes cannot be edited or deleted from here. A route already in the requested state is reported as unchanged rather than refused. The result reports the route's committed state; Speakeasy does not record when a route last delivered, so the result says that rather than giving a time. While a route is paused, the data it would have exported is dropped, not buffered: resuming does not send anything produced in between. The resume reaches the export relays within about a minute for every destination, so the first batches after it can still be dropped. A route cannot be resumed, and nothing is changed, when it has no destination, when its destination was deleted, or when its destination's stored configuration (endpoint, sensitive-data setting, or headers) can no longer be used; this applies even if the route is already on. The refusal names which, and the destination has to be repaired in the dashboard.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the route, from list_data_exports"
+            "description": "the project's slug, as list_projects returns it"
           },
           "route_id": {
             "type": "string",
@@ -4169,7 +4104,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "route_id",
           "expected_data_source",
           "expected_destination_id",
@@ -4188,13 +4123,13 @@
     },
     {
       "name": "set_data_export_min_severity",
-      "description": "Change which MCP connections an existing mcp_connection_logs export sends, by setting its lowest level: error sends failed connections, warn adds blocked connections, and info adds declined connections. Supply the project ID and the exact route ID from list_data_exports, the new min_severity, an idempotency key, and confirmed: true only after the user confirms the exact project, route, its current level from list_data_exports, and the new level. Only the level changes: the route's data source, destination, and on/off state stay as they are. Other data sources have no level and are refused as invalid_input. A route already at the requested level is reported as unchanged. The result reports the previous level and the route's committed state. The change reaches the export relays within about a minute; for a destination that includes sensitive fields it applies on the next batch.",
+      "description": "Change which MCP connections an existing mcp_connection_logs export sends, by setting its lowest level: error sends failed connections, warn adds blocked connections, and info adds declined connections. Supply the project's slug and the exact route ID from list_data_exports, the new min_severity, an idempotency key, and confirmed: true only after the user confirms the exact project, route, its current level from list_data_exports, and the new level. Only the level changes: the route's data source, destination, and on/off state stay as they are. Other data sources have no level and are refused as invalid_input. A route already at the requested level is reported as unchanged. The result reports the previous level and the route's committed state. The change reaches the export relays within about a minute; for a destination that includes sensitive fields it applies on the next batch.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the route, from list_data_exports"
+            "description": "the project's slug, as list_projects returns it"
           },
           "route_id": {
             "type": "string",
@@ -4214,7 +4149,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "route_id",
           "min_severity",
           "idempotency_key",
@@ -4236,13 +4171,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "type": "string",
-            "description": "project ID to inspect; supply exactly one project selector"
-          },
           "project_slug": {
             "type": "string",
-            "description": "project slug to inspect; supply exactly one project selector"
+            "description": "the project's slug, as list_projects returns it"
           },
           "window": {
             "type": "string",
@@ -4261,6 +4192,7 @@
             "description": "maximum calls to return; defaults to 10 and is capped at 50"
           }
         },
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -4277,9 +4209,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project ID"
+            "description": "the project's slug, as list_projects returns it"
           },
           "target_kind": {
             "type": "string",
@@ -4294,7 +4226,7 @@
             "description": "24h or 7d (default)"
           }
         },
-        "required": ["project_id", "target_kind", "target_id"],
+        "required": ["project_slug", "target_kind", "target_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -4340,9 +4272,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID returned by list_projects"
+            "description": "the project's slug, as list_projects returns it"
           },
           "cursor": {
             "type": "string",
@@ -4353,7 +4285,7 @@
             "description": "maximum targets to return; server clamps this to 50"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -4370,16 +4302,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID used to list this target"
+            "description": "the project's slug, as list_projects returns it"
           },
           "target_reference": {
             "type": "string",
             "description": "short-lived opaque target reference returned by list_shadow_mcp_inventory"
           }
         },
-        "required": ["project_id", "target_reference"],
+        "required": ["project_slug", "target_reference"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -4396,9 +4328,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID used to inspect the Shadow MCP target"
+            "description": "the project's slug, as list_projects returns it"
           },
           "target_reference": {
             "type": "string",
@@ -4433,7 +4365,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "target_reference",
           "decision",
           "rationale",
@@ -4561,7 +4493,7 @@
     },
     {
       "name": "get_organization_gateway_activity",
-      "description": "Summarize calls dispatched through this organization's Organization Gateway across every project over a recent window: dispatched and failed calls, the discovery steps agents took (list_servers, describe_server, describe_tools), and the busiest MCP servers with their errors. Each server carries its mcp_id and project_id for use with get_mcp and the diagnostics tools. Constraints: aggregated server-side; carries the window it covers, how fresh the observations are, and whether there were any. No users, clients, or tokens are returned.",
+      "description": "Summarize calls dispatched through this organization's Organization Gateway across every project over a recent window: dispatched and failed calls, the discovery steps agents took (list_servers, describe_server, describe_tools), and the busiest MCP servers with their errors. Each server carries its mcp_id and project_slug for use with get_mcp and the diagnostics tools. Constraints: aggregated server-side; carries the window it covers, how fresh the observations are, and whether there were any. No users, clients, or tokens are returned.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -4586,13 +4518,14 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "Exact project ID to read, as list_projects returns it.",
-            "format": "uuid"
+            "description": "The project's slug, as list_projects returns it.",
+            "minLength": 1,
+            "maxLength": 128
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -4638,10 +4571,11 @@
             "minimum": 1,
             "maximum": 200
           },
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "Exact project ID to read, as list_projects returns it.",
-            "format": "uuid"
+            "description": "The project's slug, as list_projects returns it.",
+            "minLength": 1,
+            "maxLength": 128
           },
           "signal_scope": {
             "type": "object",
@@ -4672,7 +4606,7 @@
             "format": "date-time"
           }
         },
-        "required": ["project_id", "dataset", "dimension", "from", "to"],
+        "required": ["project_slug", "dataset", "dimension", "from", "to"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -4819,10 +4753,11 @@
             "description": "Sort for a grouped result, by measure alias. Ungrouped rows are always newest first.",
             "minItems": 0
           },
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "Exact project ID to read, as list_projects returns it.",
-            "format": "uuid"
+            "description": "The project's slug, as list_projects returns it.",
+            "minLength": 1,
+            "maxLength": 128
           },
           "signal_query": {
             "type": "object",
@@ -4988,7 +4923,7 @@
             "description": "Return rows at the dataset's grain instead of aggregating. Defaults to false."
           }
         },
-        "required": ["project_id", "dataset", "from", "to"],
+        "required": ["project_slug", "dataset", "from", "to"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5011,10 +4946,11 @@
             "minLength": 64,
             "maxLength": 64
           },
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "Exact project ID to read, as list_projects returns it.",
-            "format": "uuid"
+            "description": "The project's slug, as list_projects returns it.",
+            "minLength": 1,
+            "maxLength": 128
           },
           "sensor_id": {
             "type": "string",
@@ -5022,7 +4958,7 @@
             "format": "uuid"
           }
         },
-        "required": ["project_id", "sensor_id", "definition_hash"],
+        "required": ["project_slug", "sensor_id", "definition_hash"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5089,10 +5025,11 @@
               }
             ]
           },
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "Exact project ID to read, as list_projects returns it.",
-            "format": "uuid"
+            "description": "The project's slug, as list_projects returns it.",
+            "minLength": 1,
+            "maxLength": 128
           },
           "signal_query": {
             "type": "object",
@@ -5210,7 +5147,7 @@
             "format": "date-time"
           }
         },
-        "required": ["project_id", "from", "to", "signal_query"],
+        "required": ["project_slug", "from", "to", "signal_query"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5227,12 +5164,12 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID, as list_projects returns it"
+            "description": "the project's slug, as list_projects returns it"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5249,16 +5186,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID, as list_projects returns it"
+            "description": "the project's slug, as list_projects returns it"
           },
           "widget_id": {
             "type": "string",
             "description": "exact widget UUID from list_widgets"
           }
         },
-        "required": ["project_id", "widget_id"],
+        "required": ["project_slug", "widget_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5275,9 +5212,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID, as list_projects returns it"
+            "description": "the project's slug, as list_projects returns it"
           },
           "widget_id": {
             "type": "string",
@@ -5323,7 +5260,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "name",
           "dataset",
           "query",
@@ -5346,9 +5283,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID, as list_projects returns it"
+            "description": "the project's slug, as list_projects returns it"
           },
           "widget_id": {
             "type": "string",
@@ -5371,7 +5308,7 @@
             "description": "required to confirm; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": ["project_id", "widget_id", "confirmed"],
+        "required": ["project_slug", "widget_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -5388,9 +5325,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID, as list_projects returns it"
+            "description": "the project's slug, as list_projects returns it"
           },
           "widget_id": {
             "type": "string",
@@ -5413,7 +5350,7 @@
             "description": "required to confirm; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": ["project_id", "widget_id", "confirmed"],
+        "required": ["project_slug", "widget_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -5430,12 +5367,12 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID, as list_projects returns it"
+            "description": "the project's slug, as list_projects returns it"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5452,16 +5389,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID, as list_projects returns it"
+            "description": "the project's slug, as list_projects returns it"
           },
           "dashboard_id": {
             "type": "string",
             "description": "a project dashboard id, or a Speakeasy-built dashboard slug, as list_dashboards returns them"
           }
         },
-        "required": ["project_id", "dashboard_id"],
+        "required": ["project_slug", "dashboard_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5478,9 +5415,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID, as list_projects returns it"
+            "description": "the project's slug, as list_projects returns it"
           },
           "dashboard_id": {
             "type": "string",
@@ -5511,7 +5448,7 @@
             "description": "required to confirm, at most 128 characters; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": ["project_id", "name", "confirmed"],
+        "required": ["project_slug", "name", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -5528,9 +5465,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID, as list_projects returns it"
+            "description": "the project's slug, as list_projects returns it"
           },
           "dashboard_id": {
             "type": "string",
@@ -5553,7 +5490,7 @@
             "description": "required to confirm, at most 128 characters; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": ["project_id", "dashboard_id", "confirmed"],
+        "required": ["project_slug", "dashboard_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -5570,9 +5507,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID, as list_projects returns it"
+            "description": "the project's slug, as list_projects returns it"
           },
           "dashboard_id": {
             "type": "string",
@@ -5595,7 +5532,7 @@
             "description": "required to confirm, at most 128 characters; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": ["project_id", "dashboard_id", "confirmed"],
+        "required": ["project_slug", "dashboard_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -5612,9 +5549,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID, as list_projects returns it"
+            "description": "the project's slug, as list_projects returns it"
           },
           "dashboard_id": {
             "type": "string",
@@ -5676,7 +5613,7 @@
             "description": "required to confirm, at most 128 characters; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": ["project_id", "dashboard_id", "operations", "confirmed"],
+        "required": ["project_slug", "dashboard_id", "operations", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -5693,9 +5630,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID, as list_projects returns it"
+            "description": "the project's slug, as list_projects returns it"
           },
           "dashboard_id": {
             "type": "string",
@@ -5758,7 +5695,7 @@
             "description": "required to confirm, at most 128 characters; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": ["project_id", "dashboard_id", "filters", "confirmed"],
+        "required": ["project_slug", "dashboard_id", "filters", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -5861,7 +5798,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "optional owning project slug; defaults to the organization's default project (a project assistant always uses its own)"
+            "description": "the project's slug, as list_projects returns it; omit it to use the organization's Default project"
           },
           "provider_key": {
             "type": "string",
@@ -5902,7 +5839,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "optional owning project slug; defaults to the organization's default project (a project assistant always uses its own)"
+            "description": "the project's slug, as list_projects returns it; omit it to use the organization's Default project"
           },
           "remote_url": {
             "type": "string",
@@ -5936,7 +5873,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "optional owning project slug; defaults to the organization's default project (a project assistant always uses its own)"
+            "description": "the project's slug, as list_projects returns it; omit it to use the organization's Default project"
           },
           "mcp_id": {
             "type": "string",
@@ -5966,7 +5903,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the Platform-managed MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6010,7 +5947,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the Platform-managed MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6049,7 +5986,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the Platform-managed MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6088,7 +6025,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the reviewed MCP registration"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6122,7 +6059,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the reviewed MCP registration"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6148,7 +6085,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the reviewed MCP registration"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6182,7 +6119,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "optional owning project slug; defaults to the organization's default project (a project assistant always uses its own)"
+            "description": "the project's slug, as list_projects returns it; omit it to use the organization's Default project"
           },
           "mcp_id": {
             "type": "string",
@@ -6212,7 +6149,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the reviewed MCP registration"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6238,7 +6175,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug selected by the user"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6268,7 +6205,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug selected by the user"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6296,16 +6233,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID to summarize"
+            "description": "the project's slug, as list_projects returns it"
           },
           "window": {
             "type": "string",
             "description": "observation window: 1h, 24h (default), 7d, or 30d"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6322,9 +6259,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6335,7 +6272,7 @@
             "description": "observation window: 1h (default) or 24h"
           }
         },
-        "required": ["project_id", "mcp_id"],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6352,9 +6289,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6365,7 +6302,7 @@
             "description": "observation window: 1h or 24h (default); this tool looks back at most 24h"
           }
         },
-        "required": ["project_id", "mcp_id"],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6382,9 +6319,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6395,7 +6332,7 @@
             "description": "observation window: 1h or 24h (default); this tool looks back at most 24h"
           }
         },
-        "required": ["project_id", "mcp_id"],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6412,9 +6349,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6433,7 +6370,7 @@
             "description": "opaque cursor returned by a previous query_mcp_traces result"
           }
         },
-        "required": ["project_id", "mcp_id"],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6450,9 +6387,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6463,7 +6400,7 @@
             "description": "observation window: 1h, 24h (default), or 7d"
           }
         },
-        "required": ["project_id", "mcp_id"],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6480,9 +6417,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -6497,7 +6434,7 @@
             "description": "observation window: 1h or 24h (default); this tool looks back at most 24h"
           }
         },
-        "required": ["project_id", "mcp_id", "subject_reference"],
+        "required": ["project_slug", "mcp_id", "subject_reference"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6514,16 +6451,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID to summarize"
+            "description": "the project's slug, as list_projects returns it"
           },
           "window": {
             "type": "string",
             "description": "observation window: 1h, 24h, 7d (default), or 30d"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6540,9 +6477,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID to search"
+            "description": "the project's slug, as list_projects returns it"
           },
           "query": {
             "type": "string",
@@ -6565,7 +6502,7 @@
             "description": "opaque cursor returned by a previous search_users result"
           }
         },
-        "required": ["project_id", "query"],
+        "required": ["project_slug", "query"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6582,9 +6519,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID to summarize"
+            "description": "the project's slug, as list_projects returns it"
           },
           "user_reference": {
             "type": "string",
@@ -6599,7 +6536,7 @@
             "description": "configured MCP ID that minted the reference through list_mcp_usage_users; only needed for such a reference, and the summary itself stays project-wide"
           }
         },
-        "required": ["project_id", "user_reference"],
+        "required": ["project_slug", "user_reference"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6616,9 +6553,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID to search"
+            "description": "the project's slug, as list_projects returns it"
           },
           "window": {
             "type": "string",
@@ -6679,7 +6616,7 @@
             "description": "opaque cursor returned by a previous search_tool_calls result; it pins the observation window to the interval the first page read, so paging a relative window does not drift as time passes. One search walks at most 500 calls in total, so a missing next cursor can mean that budget ran out rather than that nothing else matches"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6696,16 +6633,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID to inspect"
+            "description": "the project's slug, as list_projects returns it"
           },
           "window": {
             "type": "string",
             "description": "observation window: 1h, 24h, 7d (default), or 30d"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6722,16 +6659,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID to summarize"
+            "description": "the project's slug, as list_projects returns it"
           },
           "window": {
             "type": "string",
             "description": "observation window: 1h or 24h (default); this tool looks back at most 24h"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6748,9 +6685,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the skill"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_name": {
             "type": "string",
@@ -6761,7 +6698,7 @@
             "description": "observation window: 1h or 24h (default); this tool looks back at most 24h"
           }
         },
-        "required": ["project_id", "skill_name"],
+        "required": ["project_slug", "skill_name"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6778,9 +6715,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the skill"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_name": {
             "type": "string",
@@ -6795,7 +6732,7 @@
             "description": "observation window: 1h or 24h (default); must match the window used to mint the reference"
           }
         },
-        "required": ["project_id", "skill_name", "subject_reference"],
+        "required": ["project_slug", "skill_name", "subject_reference"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6814,7 +6751,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug whose skill registry to list"
+            "description": "the project's slug, as list_projects returns it"
           },
           "search": {
             "type": "string",
@@ -6848,7 +6785,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the skill"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_id": {
             "type": "string",
@@ -6878,7 +6815,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the skill"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_id": {
             "type": "string",
@@ -6916,7 +6853,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the skill"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_id": {
             "type": "string",
@@ -6950,7 +6887,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug whose open suggestions to review"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_id": {
             "type": "string",
@@ -6992,7 +6929,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the suggestion"
+            "description": "the project's slug, as list_projects returns it"
           },
           "change_id": {
             "type": "string",
@@ -7022,7 +6959,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the suggestion"
+            "description": "the project's slug, as list_projects returns it"
           },
           "suggestion_id": {
             "type": "string",
@@ -7063,7 +7000,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the suggestion"
+            "description": "the project's slug, as list_projects returns it"
           },
           "suggestion_id": {
             "type": "string",
@@ -7093,7 +7030,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that will own the skill"
+            "description": "the project's slug, as list_projects returns it"
           },
           "content": {
             "type": "string",
@@ -7119,7 +7056,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the skill"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_id": {
             "type": "string",
@@ -7158,7 +7095,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the skill"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_id": {
             "type": "string",
@@ -7204,7 +7141,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns both the skill and the target"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_id": {
             "type": "string",
@@ -7238,7 +7175,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug whose skill distributions to list"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_id": {
             "type": "string",
@@ -7276,7 +7213,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns both the skill and the target"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_id": {
             "type": "string",
@@ -7323,7 +7260,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns both the skill and the MCP server or gateway"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_id": {
             "type": "string",
@@ -7379,7 +7316,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns both the skill and the MCP server or gateway"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_id": {
             "type": "string",
@@ -7431,7 +7368,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug whose skills to rank"
+            "description": "the project's slug, as list_projects returns it"
           },
           "window": {
             "type": "string",
@@ -7465,7 +7402,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "explicit project slug that owns the skill"
+            "description": "the project's slug, as list_projects returns it"
           },
           "skill_id": {
             "type": "string",
@@ -7493,9 +7430,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID owning the plugin"
+            "description": "the project's slug, as list_projects returns it"
           },
           "plugin_id": {
             "type": "string",
@@ -7510,7 +7447,7 @@
             "description": "true only after the user confirms removal of this exact membership"
           }
         },
-        "required": ["project_id", "plugin_id", "membership_id", "confirmed"],
+        "required": ["project_slug", "plugin_id", "membership_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -7527,9 +7464,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID that owns the plugin"
+            "description": "the project's slug, as list_projects returns it"
           },
           "plugin": {
             "type": "string",
@@ -7563,7 +7500,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "plugin",
           "assignment_references",
           "expected_assignment_version",
@@ -7586,12 +7523,12 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID whose plugin assignment targets to list"
+            "description": "the project's slug, as list_projects returns it"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7608,9 +7545,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID whose plugins to list"
+            "description": "the project's slug, as list_projects returns it"
           },
           "limit": {
             "type": "integer",
@@ -7621,7 +7558,7 @@
             "description": "opaque cursor from a previous list_plugins result"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7638,9 +7575,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the plugin"
+            "description": "the project's slug, as list_projects returns it"
           },
           "plugin": {
             "type": "string",
@@ -7655,7 +7592,7 @@
             "description": "opaque membership cursor from a previous get_plugin result"
           }
         },
-        "required": ["project_id", "plugin"],
+        "required": ["project_slug", "plugin"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7672,9 +7609,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID that owns the plugin"
+            "description": "the project's slug, as list_projects returns it"
           },
           "plugin": {
             "type": "string",
@@ -7689,7 +7626,7 @@
             "description": "caller-generated idempotency key, at most 128 characters; reuse only to retry this exact request"
           }
         },
-        "required": ["project_id", "plugin", "confirmed", "idempotency_key"],
+        "required": ["project_slug", "plugin", "confirmed", "idempotency_key"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -7706,9 +7643,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "optional owning project ID; defaults to the organization's default project (a project assistant always uses its own)"
+            "description": "the project's slug, as list_projects returns it; omit it to use the organization's Default project"
           },
           "plugin": {
             "type": "string",
@@ -7740,16 +7677,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID that owns the MCP server"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
             "description": "exact configured MCP server ID"
           }
         },
-        "required": ["project_id", "mcp_id"],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7766,16 +7703,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID that owns the MCP server"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
             "description": "exact configured MCP server ID"
           }
         },
-        "required": ["project_id", "mcp_id"],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7792,9 +7729,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID the plugin is created in"
+            "description": "the project's slug, as list_projects returns it"
           },
           "name": {
             "type": "string",
@@ -7821,7 +7758,7 @@
             "description": "set true only after the user explicitly confirms the project, name, and slug of the plugin to create"
           }
         },
-        "required": ["project_id", "name", "idempotency_key", "confirmed"],
+        "required": ["project_slug", "name", "idempotency_key", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -7838,9 +7775,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID that owns the plugin"
+            "description": "the project's slug, as list_projects returns it"
           },
           "plugin": {
             "type": "string",
@@ -7860,7 +7797,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "plugin",
           "name",
           "idempotency_key",
@@ -7882,9 +7819,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID that owns the plugin"
+            "description": "the project's slug, as list_projects returns it"
           },
           "plugin": {
             "type": "string",
@@ -7904,7 +7841,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "plugin",
           "auto_sync_enabled",
           "idempotency_key",
@@ -8022,16 +7959,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "project ID that owns the configured MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
             "description": "configured MCP ID returned by find_mcp"
           }
         },
-        "required": ["project_id", "mcp_id"],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -8048,9 +7985,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID that owns every configured MCP in rules"
+            "description": "the project's slug, as list_projects returns it"
           },
           "name": {
             "type": "string",
@@ -8093,7 +8030,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "name",
           "rules",
           "idempotency_key",
@@ -8115,9 +8052,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID that owns every configured MCP in the delta"
+            "description": "the project's slug, as list_projects returns it"
           },
           "role_reference": {
             "type": "string",
@@ -8183,7 +8120,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "role_reference",
           "expected_version",
           "idempotency_key",
@@ -8205,9 +8142,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID for the access workflow"
+            "description": "the project's slug, as list_projects returns it"
           },
           "member_reference": {
             "type": "string",
@@ -8239,7 +8176,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "member_reference",
           "role_reference",
           "expected_version",
@@ -8262,9 +8199,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID that owns the configured MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -8288,7 +8225,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "mcp_id",
           "role_reference",
           "auth_client_id",
@@ -8311,9 +8248,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID that owns the configured MCP that should offer the credential"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -8328,7 +8265,7 @@
             "description": "set true only after the user confirms this exact credential and server; the credential stays one credential, so changing or rotating it changes every server that offers it"
           }
         },
-        "required": ["project_id", "mcp_id", "auth_client_id", "confirmed"],
+        "required": ["project_slug", "mcp_id", "auth_client_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -8345,9 +8282,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID that owns the configured MCP"
+            "description": "the project's slug, as list_projects returns it"
           },
           "mcp_id": {
             "type": "string",
@@ -8386,7 +8323,7 @@
             "description": "false previews the server's credentials and every caller's choice; true only after the user confirms this exact caller, server and choice"
           }
         },
-        "required": ["project_id", "mcp_id", "confirmed"],
+        "required": ["project_slug", "mcp_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -8399,17 +8336,17 @@
     },
     {
       "name": "configure_inference_access_role",
-      "description": "Add or remove only the selected inference:execute grant for one explicit project, or every project when all_projects is true, on a selected custom role, preserving all other grants and assignments. First read list_access_roles for its reference and version; confirm the grant scope, role and impact on all role holders and affected projects. project_id remains required for admission and receipt scoping, including all-project writes. Requires organization administration, explicit confirmation, expected version and a stable idempotency key. Returns a historical committed receipt and a fresh exact-grant check, not effective workload access. Removing this grant does not revoke other project-specific or broader grants. Both agent and owner need explicit inference permission. Configure direct agent inference grants in the dashboard agent access controls, or assign suitable roles through dashboard access controls; this tool only edits custom role grants. Existing MCP-only assignment tools cannot assign this inference role. Does not exchange workload tokens, expose credentials, or configure managed assistants. If verification fails after commit, retry identical inputs and key.",
+      "description": "Add or remove only the selected inference:execute grant for one explicit project, or every project when all_projects is true, on a selected custom role, preserving all other grants and assignments. First read list_access_roles for its reference and version; confirm the grant scope, role and impact on all role holders and affected projects. project_slug remains required for admission and receipt scoping, including all-project writes. Requires organization administration, explicit confirmation, expected version and a stable idempotency key. Returns a historical committed receipt and a fresh exact-grant check, not effective workload access. Removing this grant does not revoke other project-specific or broader grants. Both agent and owner need explicit inference permission. Configure direct agent inference grants in the dashboard agent access controls, or assign suitable roles through dashboard access controls; this tool only edits custom role grants. Existing MCP-only assignment tools cannot assign this inference role. Does not exchange workload tokens, expose credentials, or configure managed assistants. If verification fails after commit, retry identical inputs and key.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID for admission and receipt scope; grant scope is controlled by all_projects"
+            "description": "the project's slug, as list_projects returns it"
           },
           "all_projects": {
             "type": "boolean",
-            "description": "true targets the all-project inference grant; confirm impact across every project and role holder; false targets only project_id"
+            "description": "true targets the all-project inference grant; confirm impact across every project and role holder; false targets only the project project_slug names"
           },
           "role_reference": {
             "type": "string",
@@ -8433,7 +8370,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "role_reference",
           "expected_version",
           "enabled",
@@ -8456,9 +8393,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "explicit project ID whose team memory the grant covers"
+            "description": "the project's slug, as list_projects returns it"
           },
           "scope": {
             "type": "string",
@@ -8486,7 +8423,7 @@
           }
         },
         "required": [
-          "project_id",
+          "project_slug",
           "scope",
           "role_reference",
           "expected_version",
@@ -8672,14 +8609,9 @@
             "minimum": 1,
             "maximum": 50
           },
-          "project_id": {
-            "type": "string",
-            "description": "Optional exact project ID. Omit both project selectors to use the literal default project.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Optional exact project slug. Omit both project selectors to use the literal default project.",
+            "description": "The project's slug, as list_projects returns it. Omit it to use the organization's Default project.",
             "minLength": 1,
             "maxLength": 128
           },
@@ -8706,10 +8638,7 @@
             "enum": ["1h", "24h", "7d", "30d"]
           }
         },
-        "additionalProperties": false,
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "additionalProperties": false
       },
       "read_only": true,
       "annotations": {
@@ -8772,14 +8701,9 @@
             "minLength": 1,
             "maxLength": 128
           },
-          "project_id": {
-            "type": "string",
-            "description": "Exact project ID. Provide exactly one project selector.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Exact project slug. Provide exactly one project selector.",
+            "description": "The project's slug, as list_projects returns it.",
             "minLength": 1,
             "maxLength": 128
           },
@@ -8806,22 +8730,11 @@
             "maxLength": 64
           }
         },
-        "required": ["from", "to"],
+        "required": ["project_slug", "from", "to"],
         "dependentRequired": {
           "participant_provider": ["participant_id"]
         },
-        "additionalProperties": false,
-        "anyOf": [
-          {
-            "required": ["project_id"]
-          },
-          {
-            "required": ["project_slug"]
-          }
-        ],
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "additionalProperties": false
       },
       "read_only": true,
       "annotations": {
@@ -8853,31 +8766,15 @@
             "description": "Optional exact message ID to centre on; omit for the latest message.",
             "format": "uuid"
           },
-          "project_id": {
-            "type": "string",
-            "description": "Exact project ID. Provide exactly one project selector.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Exact project slug. Provide exactly one project selector.",
+            "description": "The project's slug, as list_projects returns it.",
             "minLength": 1,
             "maxLength": 128
           }
         },
-        "required": ["chat_id"],
-        "additionalProperties": false,
-        "anyOf": [
-          {
-            "required": ["project_id"]
-          },
-          {
-            "required": ["project_slug"]
-          }
-        ],
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "required": ["project_slug", "chat_id"],
+        "additionalProperties": false
       },
       "read_only": true,
       "annotations": {
@@ -8915,14 +8812,9 @@
             "minimum": 1,
             "maximum": 20
           },
-          "project_id": {
-            "type": "string",
-            "description": "Exact project ID. Provide exactly one project selector.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Exact project slug. Provide exactly one project selector.",
+            "description": "The project's slug, as list_projects returns it.",
             "minLength": 1,
             "maxLength": 128
           },
@@ -8939,19 +8831,8 @@
             "maxLength": 64
           }
         },
-        "required": ["query"],
-        "additionalProperties": false,
-        "oneOf": [
-          {
-            "required": ["project_id"]
-          },
-          {
-            "required": ["project_slug"]
-          }
-        ],
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "required": ["project_slug", "query"],
+        "additionalProperties": false
       },
       "read_only": true,
       "annotations": {
@@ -8978,31 +8859,15 @@
             "minLength": 1,
             "maxLength": 4000
           },
-          "project_id": {
-            "type": "string",
-            "description": "Exact project ID. Provide exactly one project selector.",
-            "format": "uuid"
-          },
           "project_slug": {
             "type": "string",
-            "description": "Exact project slug. Provide exactly one project selector.",
+            "description": "The project's slug, as list_projects returns it.",
             "minLength": 1,
             "maxLength": 128
           }
         },
-        "required": ["content"],
-        "additionalProperties": false,
-        "oneOf": [
-          {
-            "required": ["project_id"]
-          },
-          {
-            "required": ["project_slug"]
-          }
-        ],
-        "not": {
-          "required": ["project_id", "project_slug"]
-        }
+        "required": ["project_slug", "content"],
+        "additionalProperties": false
       },
       "read_only": false,
       "annotations": {
@@ -9020,7 +8885,7 @@
         "properties": {
           "project_slug": {
             "type": "string",
-            "description": "Exact slug of a project in your organization; required, with no default project fallback"
+            "description": "the project's slug, as list_projects returns it"
           }
         },
         "required": ["project_slug"],
@@ -9160,19 +9025,16 @@
     },
     {
       "name": "get_my_channels_access",
-      "description": "Get the Channels endpoint for one explicit project and which Channels permissions you personally hold in that project. Channels is project-scoped messaging between dashboard users and agent instances. Supply exactly one of project_id or project_slug; there is no default project fallback. Requires live project:read access to the selected project. Returns the endpoint URL to add to an MCP client, whether you may connect an instance, administer Channels, and read every conversation in that project, plus the next action. It returns no messages, no conversations, no presence, no other member's permissions, and no credential: authorize against the returned endpoint to use Channels. Channels must be enabled for your organization; otherwise this tool returns channels_not_enabled without an endpoint.",
+      "description": "Get the Channels endpoint for one explicit project and which Channels permissions you personally hold in that project. Channels is project-scoped messaging between dashboard users and agent instances. Name the project by its slug, as list_projects returns it; there is no default project fallback. Requires live project:read access to the selected project. Returns the endpoint URL to add to an MCP client, whether you may connect an instance, administer Channels, and read every conversation in that project, plus the next action. It returns no messages, no conversations, no presence, no other member's permissions, and no credential: authorize against the returned endpoint to use Channels. Channels must be enabled for your organization; otherwise this tool returns channels_not_enabled without an endpoint.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "type": "string",
-            "description": "exact project ID; supply exactly one project selector"
-          },
           "project_slug": {
             "type": "string",
-            "description": "exact project slug; supply exactly one project selector, with no default project fallback"
+            "description": "the project's slug, as list_projects returns it"
           }
         },
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,

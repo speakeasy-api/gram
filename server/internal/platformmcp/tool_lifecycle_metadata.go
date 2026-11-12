@@ -8,7 +8,7 @@ import (
 )
 
 type UpdateMCPMetadataToolInput struct {
-	ProjectSlug     string `json:"project_slug" jsonschema:"explicit project slug that owns the Platform-managed MCP"`
+	ProjectSlug     string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	MCPID           string `json:"mcp_id" jsonschema:"MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"`
 	Name            string `json:"name" jsonschema:"new project-local MCP display name; 1-256 bytes after trimming and no line breaks"`
 	ExpectedVersion string `json:"expected_version" jsonschema:"opaque version returned by find_mcp, get_mcp, or a previous update_mcp_metadata result"`

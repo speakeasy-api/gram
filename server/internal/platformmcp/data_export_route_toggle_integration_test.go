@@ -324,6 +324,7 @@ func TestDataExportToggleUnavailableManifestMatchesLive(t *testing.T) {
 	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_toggle_manifest")
 	describe := func(service *DataExportRouteToggleService) map[string]Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "data-export-toggle", Version: "0.0.1"}, nil))
+		registrar.withProjects(&RegistrationStore{db: f.conn, icons: nil})
 		registerDataExportRouteToggleTools(registrar, service)
 		out := map[string]Descriptor{}
 		for _, descriptor := range registrar.Descriptors() {
@@ -350,13 +351,13 @@ func TestDataExportToggleUnavailableManifestMatchesLive(t *testing.T) {
 		require.Contains(t, descriptor.Description, "confirmed: true", "%s", name)
 
 		arguments := map[string]any{
-			"project_id": f.project.ID.String(), "route_id": uuid.NewString(), "idempotency_key": "stub", "confirmed": true,
+			"project_slug": f.project.Slug, "route_id": uuid.NewString(), "idempotency_key": "stub", "confirmed": true,
 		}
 		if name == resumeDataExportToolName {
 			arguments["expected_data_source"] = "product_telemetry"
 			arguments["expected_destination_id"] = uuid.NewString()
 		}
-		refusal := invokeUnavailable(t, descriptor, arguments)
+		refusal := invokeUnavailable(t, ContextWithPrincipal(ctx, f.principal), descriptor, arguments)
 		require.Contains(t, refusal, `"feature":"data_export_pause"`)
 	}
 	resume := unavailable[resumeDataExportToolName].Description

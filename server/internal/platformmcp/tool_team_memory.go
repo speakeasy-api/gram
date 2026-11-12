@@ -19,13 +19,13 @@ var (
 
 func registerTeamMemoryTools(reg *Registrar, service *TeamMemoryService) {
 	rememberMeta := ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMemoryWrite}
-	rememberSchema := teamMemoryProjectSchema(map[string]*jsonschema.Schema{
+	rememberSchema := explicitProjectSchema(map[string]*jsonschema.Schema{
 		"content": stringSchema("The fact to remember, in one or two sentences: a decision and its reason, a convention, or a gotcha. Detected secrets are masked before it is stored. Up to 4000 characters.", 1, memoMaxRunes),
 		"chat_id": uuidSchema("Optional exact ID of the chat the fact came from, in the same project."),
 	}, []string{"content"})
 	remember := &mcp.Tool{Meta: nil, OutputSchema: nil, Icons: nil, Name: rememberToolName, Title: "Save to Organizational Memory", Description: "Save a fact to one project's Organizational Memory so later sessions can find it with search_team_memory. Use it for decisions, conventions and gotchas worth keeping, not for raw output. The memo is attributed to you and shared with everyone who can read the project's Organizational Memory. Requires an explicit memory:write grant; the write is audited.", Annotations: writeAnnotations(false, false, false), InputSchema: rememberSchema}
 	searchMeta := ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMemoryRead}
-	searchSchema := teamMemoryProjectSchema(map[string]*jsonschema.Schema{
+	searchSchema := explicitProjectSchema(map[string]*jsonschema.Schema{
 		"query": stringSchema(`Required full-text query, up to 256 characters. Words match their stems; use "quoted phrases", OR, and -word to exclude.`, 1, teamMemoryQueryMaxRunes),
 		"from":  stringSchema("Optional inclusive start, RFC3339 timestamp. Defaults to 90 days before to.", 1, 64),
 		"to":    stringSchema("Optional exclusive end, RFC3339 timestamp, at most 366 days after from. Defaults to now.", 1, 64),
@@ -40,16 +40,6 @@ func registerTeamMemoryTools(reg *Registrar, service *TeamMemoryService) {
 	}
 	addTool(reg, search, searchMeta, teamMemoryHandler(service.Search))
 	addTool(reg, remember, rememberMeta, teamMemoryHandler(service.Remember))
-}
-
-// teamMemoryProjectSchema requires exactly one project selector; oneOf
-// rejects a call naming both before it reaches the service.
-func teamMemoryProjectSchema(properties map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
-	schema := projectSelectorSchema(properties, required)
-	schema.Properties["project_id"].Description = "Exact project ID. Provide exactly one project selector."
-	schema.Properties["project_slug"].Description = "Exact project slug. Provide exactly one project selector."
-	schema.OneOf = []*jsonschema.Schema{{Required: []string{"project_id"}}, {Required: []string{"project_slug"}}}
-	return schema
 }
 
 func teamMemoryHandler[In, Out any](call func(context.Context, Principal, In) (Out, error)) mcp.ToolHandlerFor[In, Out] {

@@ -29,7 +29,9 @@ const (
 )
 
 type listDashboardsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 }
 
 type listDashboardsOutput struct {
@@ -52,7 +54,9 @@ type dashboardSummary struct {
 }
 
 type getDashboardInput struct {
-	ProjectID   string `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
 	DashboardID string `json:"dashboard_id" jsonschema:"a project dashboard id, or a Speakeasy-built dashboard slug, as list_dashboards returns them"`
 }
 
@@ -112,7 +116,9 @@ type dashboardConfirmation struct {
 }
 
 type saveDashboardInput struct {
-	ProjectID   string  `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string  `json:"-"`
 	DashboardID string  `json:"dashboard_id,omitempty" jsonschema:"the project dashboard to rename or re-describe; omit to create a new empty dashboard"`
 	Name        string  `json:"name" jsonschema:"display name, at most 200 characters"`
 	Description *string `json:"description,omitempty" jsonschema:"what the dashboard is for, at most 2000 characters; omit or leave empty for none"`
@@ -120,19 +126,25 @@ type saveDashboardInput struct {
 }
 
 type duplicateDashboardInput struct {
-	ProjectID   string `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
 	DashboardID string `json:"dashboard_id" jsonschema:"the project dashboard id or Speakeasy-built dashboard slug to copy"`
 	dashboardConfirmation
 }
 
 type deleteDashboardInput struct {
-	ProjectID   string `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
 	DashboardID string `json:"dashboard_id" jsonschema:"the project dashboard to delete"`
 	dashboardConfirmation
 }
 
 type editDashboardLayoutInput struct {
-	ProjectID   string                     `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string                     `json:"-"`
 	DashboardID string                     `json:"dashboard_id" jsonschema:"the project dashboard whose cards change"`
 	Operations  []dashboardLayoutOperation `json:"operations" jsonschema:"one to 100 card changes, applied in order and checked as one final layout"`
 	dashboardConfirmation
@@ -151,7 +163,9 @@ type dashboardLayoutOperation struct {
 }
 
 type saveDashboardFiltersInput struct {
-	ProjectID   string           `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string           `json:"-"`
 	DashboardID string           `json:"dashboard_id" jsonschema:"the project dashboard whose saved filters change"`
 	Filters     dashboardFilters `json:"filters" jsonschema:"the complete filters the dashboard opens on for everyone; empty clears them"`
 	dashboardConfirmation

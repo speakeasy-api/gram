@@ -12,7 +12,9 @@ import (
 const operationConfigureMemoryAccessRole = "configure_memory_access_role"
 
 type ConfigureMemoryAccessRoleInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"explicit project ID whose team memory the grant covers"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string `json:"-"`
 	Scope           string `json:"scope" jsonschema:"memory:read to search the project's team memory, or memory:write to also save memos; memory:write includes memory:read"`
 	RoleReference   string `json:"role_reference" jsonschema:"fresh opaque custom role reference from list_access_roles"`
 	ExpectedVersion string `json:"expected_version" jsonschema:"version from the fresh role read"`

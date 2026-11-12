@@ -11,7 +11,7 @@ Use authenticated Speakeasy AI Control Plane tools to answer a bounded question
 about captured activity. First successfully call `list_projects` through this
 client's own connection and select the exact project requested by the user.
 
-1. Call `describe_analytics_catalog` with that project ID. `signal_metrics`
+1. Call `describe_analytics_catalog` with that project's slug. `signal_metrics`
    describes the entitled signal-measurement contract and supplies current sensor
    names, modes, ordered signal membership and signal names. Availability requires
    Signals Intelligence and project read access; Explore's rollout is independent.

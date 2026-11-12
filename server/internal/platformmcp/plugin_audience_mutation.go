@@ -42,7 +42,9 @@ func (e *PluginAssignmentMutationError) Error() string { return e.Message }
 func (e *PluginAssignmentMutationError) Unwrap() error { return e.Cause }
 
 type SetPluginAssignmentsInput struct {
-	ProjectID                 string            `json:"project_id" jsonschema:"explicit project ID that owns the plugin"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID                 string            `json:"-"`
 	Plugin                    string            `json:"plugin" jsonschema:"exact plugin ID, slug, or name returned by list_plugins"`
 	AssignmentReferences      []string          `json:"assignment_references" jsonschema:"complete desired set of opaque references returned by list_plugin_assignments or get_plugin; an empty set removes every assignment"`
 	ExpectedAssignmentVersion string            `json:"expected_assignment_version" jsonschema:"assignment version returned by get_plugin immediately before this write"`

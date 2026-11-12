@@ -88,7 +88,9 @@ type CreateProjectInput struct {
 }
 
 type RenameProjectInput struct {
-	ProjectID      string `json:"project_id" jsonschema:"ID of the project to rename, from list_projects"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID      string `json:"-"`
 	Name           string `json:"name" jsonschema:"new display name, 1 to 40 characters after trimming"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-chosen key, at most 128 characters, that makes a retry of this exact rename safe"`
 	Confirmed      bool   `json:"confirmed" jsonschema:"true only after the user confirmed this exact project and new name"`
@@ -369,7 +371,7 @@ func (s *ProjectLifecycleService) RenameProject(ctx context.Context, principal P
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
 	if err != nil {
-		return ProjectMutationOutput{}, projectLifecycleInvalid("Provide the exact project ID from list_projects.")
+		return ProjectMutationOutput{}, projectLifecycleInvalid("Provide the project's slug, as list_projects returns it.")
 	}
 	name, err := projects.ProjectRenameName(input.Name)
 	if err != nil {

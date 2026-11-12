@@ -11,12 +11,12 @@ import (
 )
 
 type GetMCPClientAdmissionToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	MCPID       string `json:"mcp_id" jsonschema:"MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"`
 }
 
 type SetMCPClientAdmissionToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	MCPID       string `json:"mcp_id" jsonschema:"MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"`
 	Mode        string `json:"mode" jsonschema:"which MCP clients that identify themselves with a client ID metadata document may sign in; one of presets, open, or disabled"`
 	Confirmed   bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms this exact setting for this exact MCP server; it takes effect for every app that connects to it"`

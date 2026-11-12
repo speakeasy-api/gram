@@ -16,6 +16,7 @@ func chatMetadataRegistrar(t *testing.T, reader chatMetadataReader) (*Registrar,
 
 	service, _ := newChatMetadataService(t, reader, allowBudget())
 	registrar := newRegistrar(newTestMCPServer())
+	registrar.withProjects(slugProjects{})
 	registerChatMetadataTools(registrar, service)
 	return registrar, service
 }
@@ -36,13 +37,13 @@ func TestListChatsToolDeclaresBothAudiencesAndMemberAuthorization(t *testing.T) 
 	require.Contains(t, descriptor.Description, "chat:read on the project widens this")
 	require.Contains(t, descriptor.Description, "no titles, messages, prompts, tool inputs or outputs, or raw identities")
 
-	// The schema is closed and carries the project selectors the assistant
-	// policy injects, so the model is never asked to choose a project.
+	// The schema is closed and carries the project slug the assistant policy
+	// injects, so the model is never asked to choose a project.
 	var schema map[string]any
 	require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
 	properties, ok := schema["properties"].(map[string]any)
 	require.True(t, ok)
-	require.ElementsMatch(t, []string{"project_id", "project_slug", "window", "risk", "source", "assistant_id", "agent_id", "user_reference", "limit", "cursor"}, keysOf(properties))
+	require.ElementsMatch(t, []string{"project_slug", "window", "risk", "source", "assistant_id", "agent_id", "user_reference", "limit", "cursor"}, keysOf(properties))
 }
 
 func TestListChatsToolServesAPage(t *testing.T) {
@@ -77,7 +78,7 @@ func TestListChatsToolRefusesOutsideTheSchema(t *testing.T) {
 		"limit over cap":   `{"limit":51}`,
 		"limit under one":  `{"limit":0}`,
 		"unknown property": `{"search":"password"}`,
-		"both selectors":   `{"project_id":"` + uuid.NewString() + `","project_slug":"default"}`,
+		"project id":       `{"project_id":"` + uuid.NewString() + `"}`,
 	} {
 		_, err := descriptorByName(t, registrar, listChatsToolName).Invoke(ctx, json.RawMessage(arguments))
 		require.ErrorContains(t, err, "arguments do not match the tool schema", name)
@@ -105,7 +106,7 @@ func TestListChatsToolMapsRefusals(t *testing.T) {
 	projects, ok := service.projects.(*findingProjects)
 	require.True(t, ok)
 	projects.err = ErrRiskReadNotFound
-	_, err = descriptor.Invoke(ctx, json.RawMessage(`{"project_id":"`+uuid.NewString()+`"}`))
+	_, err = descriptor.Invoke(ctx, json.RawMessage(`{"project_slug":"no-such-project"}`))
 	require.ErrorAs(t, err, &refusal)
 	require.JSONEq(t, `{"code":"not_found","message":"That project is not one this organization holds. Choose one returned by list_projects."}`, refusal.Payload)
 	projects.err = nil

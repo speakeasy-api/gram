@@ -25,12 +25,16 @@ type WorkloadAssertionReuseManagement interface {
 }
 
 type GetWorkloadAssertionReuseInput struct {
-	ProjectID string `json:"project_id" jsonschema:"exact project UUID establishing organization context; the policy applies organization-wide, not just to this project"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	IssuerID  string `json:"issuer_id" jsonschema:"exact organization-tier workload issuer UUID; never a name or URL"`
 }
 
 type SetWorkloadAssertionReuseInput struct {
-	ProjectID           string `json:"project_id" jsonschema:"exact project UUID establishing organization context; this does not limit the issuer-wide change to one project"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID           string `json:"-"`
 	IssuerID            string `json:"issuer_id" jsonschema:"exact organization-tier workload issuer UUID"`
 	AllowAssertionReuse bool   `json:"allow_assertion_reuse" jsonschema:"desired absolute policy value; true permits reuse of valid jti or uti assertions until expiry; false restores replay protection"`
 	Confirmed           bool   `json:"confirmed" jsonschema:"true only after the user confirms this exact issuer, desired policy, and impact on every workload trusting this issuer across the organization"`

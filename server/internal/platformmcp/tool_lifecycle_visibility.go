@@ -8,7 +8,7 @@ import (
 )
 
 type UpdateMCPVisibilityToolInput struct {
-	ProjectSlug     string `json:"project_slug" jsonschema:"explicit project slug that owns the Platform-managed MCP"`
+	ProjectSlug     string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	MCPID           string `json:"mcp_id" jsonschema:"MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"`
 	ExpectedVersion string `json:"expected_version" jsonschema:"opaque version returned by find_mcp, get_mcp, or a previous lifecycle update"`
 	IdempotencyKey  string `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry this exact visibility update"`

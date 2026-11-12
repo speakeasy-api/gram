@@ -23,7 +23,9 @@ type assistantExecutionProfileManagement interface {
 }
 
 type ChooseAssistantUpstreamCredentialInput struct {
-	ProjectID         string `json:"project_id" jsonschema:"exact project UUID; never inferred"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID         string `json:"-"`
 	AssistantID       string `json:"assistant_id" jsonschema:"exact assistant UUID"`
 	TriggerInstanceID string `json:"trigger_instance_id,omitempty" jsonschema:"root trigger UUID from a preview; required with confirmed:true"`
 	ExecutionContext  string `json:"execution_context,omitempty" jsonschema:"user_backed for turns acting for a person, userless for turns acting for nobody; required with confirmed:true"`

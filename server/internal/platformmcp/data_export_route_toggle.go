@@ -59,7 +59,9 @@ func (e *DataExportToggleError) Error() string { return e.Message }
 func (e *DataExportToggleError) Unwrap() error { return e.Cause }
 
 type ToggleDataExportRouteInput struct {
-	ProjectID      string `json:"project_id" jsonschema:"project ID that owns the route, from list_data_exports"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID      string `json:"-"`
 	RouteID        string `json:"route_id" jsonschema:"exact route ID from list_data_exports"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-chosen key that makes a retry of this exact change safe"`
 	Confirmed      bool   `json:"confirmed" jsonschema:"true only after the user confirmed this exact project and route"`
@@ -70,7 +72,9 @@ type ToggleDataExportRouteInput struct {
 // what was confirmed: if the route was repointed or re-sourced after it was
 // read, the resume is refused instead of exporting somewhere nobody saw.
 type ResumeDataExportRouteInput struct {
-	ProjectID             string `json:"project_id" jsonschema:"project ID that owns the route, from list_data_exports"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID             string `json:"-"`
 	RouteID               string `json:"route_id" jsonschema:"exact route ID from list_data_exports"`
 	ExpectedDataSource    string `json:"expected_data_source" jsonschema:"the route's data_source exactly as list_data_exports returned it and the user confirmed"`
 	ExpectedDestinationID string `json:"expected_destination_id" jsonschema:"the route's destination_id exactly as list_data_exports returned it and the user confirmed; empty only when the list showed no destination"`
@@ -155,7 +159,7 @@ func (s *DataExportRouteToggleService) Pause(ctx context.Context, principal Prin
 }
 
 func (s *DataExportRouteToggleService) Resume(ctx context.Context, principal Principal, input ResumeDataExportRouteInput) (ToggleDataExportRouteOutput, error) {
-	common := ToggleDataExportRouteInput{ProjectID: input.ProjectID, RouteID: input.RouteID, IdempotencyKey: input.IdempotencyKey, Confirmed: input.Confirmed}
+	common := ToggleDataExportRouteInput{ProjectSlug: "", ProjectID: input.ProjectID, RouteID: input.RouteID, IdempotencyKey: input.IdempotencyKey, Confirmed: input.Confirmed}
 	expect, err := validateResumeExpectation(input)
 	if err != nil {
 		return ToggleDataExportRouteOutput{}, s.boundaryError(ctx, operationResumeDataExport, err)
@@ -402,7 +406,7 @@ func validateDataExportToggle(input ToggleDataExportRouteInput) (uuid.UUID, uuid
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
 	if err != nil {
-		return uuid.Nil, uuid.Nil, "", dataExportToggleInvalid("Provide the explicit project ID that owns the route.")
+		return uuid.Nil, uuid.Nil, "", dataExportToggleInvalid("Provide the slug of the project that owns the route.")
 	}
 	routeID, err := uuid.Parse(strings.TrimSpace(input.RouteID))
 	if err != nil {
@@ -460,7 +464,7 @@ func dataExportToggleInvalid(message string) error {
 func dataExportToggleMissing() error {
 	return &DataExportToggleError{
 		Code:    "not_found",
-		Message: "No data export route with that ID exists in that project. Read the current data exports and use a route ID and project ID from that list.",
+		Message: "No data export route with that ID exists in that project. Read the current data exports and use a route ID and project slug from that list.",
 		Cause:   ErrDataExportToggleMissing,
 	}
 }

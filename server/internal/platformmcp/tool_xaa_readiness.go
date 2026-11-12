@@ -195,7 +195,9 @@ func speakeasyReadinessView(order remotesessions.EMAProviderOrder, federated boo
 }
 
 type GetXAAReadinessInput struct {
-	ProjectID   string `json:"project_id" jsonschema:"exact project ID that owns the MCP server"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
 	MCPServerID string `json:"mcp_server_id" jsonschema:"exact MCP server ID, not a Platform MCP registration or legacy toolset ID"`
 }
 
@@ -288,11 +290,11 @@ func registerXAAReadinessTool(reg *Registrar, service *xaaReadinessService) {
 		}
 		projectID, err := uuid.Parse(input.ProjectID)
 		if err != nil || projectID == uuid.Nil {
-			return xaaReadinessRefusal("invalid_request", "Provide an exact project ID and MCP server ID.")
+			return xaaReadinessRefusal("invalid_request", "Provide the project's slug and an exact MCP server ID.")
 		}
 		serverID, err := uuid.Parse(input.MCPServerID)
 		if err != nil || serverID == uuid.Nil {
-			return xaaReadinessRefusal("invalid_request", "Provide an exact project ID and MCP server ID.")
+			return xaaReadinessRefusal("invalid_request", "Provide the project's slug and an exact MCP server ID.")
 		}
 		if service == nil {
 			return xaaReadinessRefusal(unavailableCode, "XAA readiness is unavailable on this server.")

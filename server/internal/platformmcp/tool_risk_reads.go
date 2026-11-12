@@ -234,7 +234,7 @@ const (
 // accepts a free-text reason.
 func riskFindingsFalsePositiveSchema(withReason bool) *jsonschema.Schema {
 	properties := map[string]*jsonschema.Schema{
-		"project_slug":    stringSchema("Exact project slug; writes never default a project.", 1, 128),
+		"project_slug":    stringSchema(projectSlugDescription, 1, 128),
 		"finding_ids":     boundedArraySchema(uuidSchema("Exact finding id as returned by the dashboard or finding listings."), 1, maxRiskFindingFalsePositiveBatch, true),
 		"confirmed":       {Type: "boolean", Description: "Set true only after the user confirms the exact project and the exact findings to dismiss or restore."},
 		"idempotency_key": stringSchema("Caller key retained for 24-hour replay safety.", 1, 128),
@@ -444,7 +444,7 @@ func updateRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	}, nil)
 	patch.MinProperties = new(1)
 	return closedObject(map[string]*jsonschema.Schema{
-		"project_slug": stringSchema("Exact project slug; writes never default a project.", 1, 0), "policy_id": uuidSchema("Exact policy ID."),
+		"project_slug": stringSchema(projectSlugDescription, 1, 0), "policy_id": uuidSchema("Exact policy ID."),
 		"expected_version": stringSchema("Opaque version returned by get_risk_policy.", 1, 0), "idempotency_key": stringSchema("Caller replay key.", 1, 128), "patch": patch,
 	}, []string{"project_slug", "policy_id", "expected_version", "idempotency_key", "patch"})
 }
@@ -465,7 +465,7 @@ func createRiskExclusionSchema(catalog policycatalog.Catalog) *jsonschema.Schema
 	}
 	matchValue += "."
 	return closedObject(map[string]*jsonschema.Schema{
-		"project_slug": stringSchema("Exact project slug; writes never default a project.", 1, 0), "policy_id": uuidSchema("Optional policy binding."),
+		"project_slug": stringSchema(projectSlugDescription, 1, 0), "policy_id": uuidSchema("Optional policy binding."),
 		"match_type":  matchType,
 		"match_value": stringSchema(matchValue, 1, 256),
 		"enabled":     {Type: "boolean"}, "idempotency_key": stringSchema("Caller replay key.", 1, 128),
@@ -475,7 +475,7 @@ func createRiskExclusionSchema(catalog policycatalog.Catalog) *jsonschema.Schema
 
 func updateRiskExclusionSchema() *jsonschema.Schema {
 	return closedObject(map[string]*jsonschema.Schema{
-		"project_slug": stringSchema("Exact project slug; writes never default a project.", 1, 0), "exclusion_id": uuidSchema("Exact exclusion ID."),
+		"project_slug": stringSchema(projectSlugDescription, 1, 0), "exclusion_id": uuidSchema("Exact exclusion ID."),
 		"enabled": {Type: "boolean"}, "expected_version": stringSchema("Opaque version returned by list_risk_exclusions.", 1, 0),
 		"idempotency_key": stringSchema("Caller replay key.", 1, 128),
 	}, []string{"project_slug", "exclusion_id", "enabled", "expected_version", "idempotency_key"})
@@ -483,7 +483,7 @@ func updateRiskExclusionSchema() *jsonschema.Schema {
 
 func riskPolicyCreateCommonProperties(catalog policycatalog.Catalog) map[string]*jsonschema.Schema {
 	return map[string]*jsonschema.Schema{
-		"project_slug":    stringSchema("Exact project slug; writes never default a project.", 1, 0),
+		"project_slug":    stringSchema(projectSlugDescription, 1, 0),
 		"name":            stringSchema("Policy name.", 1, 100),
 		"enabled":         {Type: "boolean"},
 		"action":          riskPolicyActionSchema(catalog),
@@ -563,14 +563,21 @@ func describedEnumSchema(values []string, lead string, describe func(string) str
 	return schema
 }
 
+// projectSelectorSchema is a closed object schema whose optional project_slug
+// selects the project, defaulting to the organization's Default project.
 func projectSelectorSchema(common map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
-	properties := make(map[string]*jsonschema.Schema, len(common)+2)
+	properties := make(map[string]*jsonschema.Schema, len(common)+1)
 	maps.Copy(properties, common)
-	properties["project_id"] = uuidSchema("Optional exact project ID. Omit both project selectors to use the literal default project.")
-	properties["project_slug"] = stringSchema("Optional exact project slug. Omit both project selectors to use the literal default project.", 1, 128)
-	schema := closedObject(properties, required)
-	schema.Not = &jsonschema.Schema{Required: []string{"project_id", "project_slug"}}
-	return schema
+	properties["project_slug"] = stringSchema(defaultableProjectSlugDescription, 1, 128)
+	return closedObject(properties, required)
+}
+
+// explicitProjectSchema is a closed object schema that requires project_slug.
+func explicitProjectSchema(common map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
+	properties := make(map[string]*jsonschema.Schema, len(common)+1)
+	maps.Copy(properties, common)
+	properties["project_slug"] = stringSchema(projectSlugDescription, 1, 128)
+	return closedObject(properties, append([]string{"project_slug"}, required...))
 }
 
 func closedObject(properties map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {

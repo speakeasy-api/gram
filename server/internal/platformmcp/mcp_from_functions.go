@@ -41,7 +41,9 @@ const (
 // CreateMCPFromFunctionsInput authors a new hosted MCP server whose tools are
 // tools a project's functions already produced.
 type CreateMCPFromFunctionsInput struct {
-	ProjectID      string   `json:"project_id" jsonschema:"project ID the new MCP server belongs to"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID      string   `json:"-"`
 	Name           string   `json:"name" jsonschema:"display name for the new MCP server; at most 60 characters"`
 	ToolURNs       []string `json:"tool_urns" jsonschema:"exact function tool URNs from list_project_tools; at most 50"`
 	IdempotencyKey string   `json:"idempotency_key" jsonschema:"caller-chosen key that makes a retry of this exact creation safe"`
@@ -379,7 +381,7 @@ func validateMCPFromFunctions(input CreateMCPFromFunctionsInput) (uuid.UUID, str
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
 	if err != nil {
-		return uuid.Nil, "", nil, mcpFromFunctionsInvalid("Provide an explicit project ID.")
+		return uuid.Nil, "", nil, mcpFromFunctionsInvalid("Provide the project's slug, as list_projects returns it.")
 	}
 	name := strings.TrimSpace(input.Name)
 	if name == "" || utf8.RuneCountInString(name) > maxMCPNameLength || conv.ToSlug(name) == "" {

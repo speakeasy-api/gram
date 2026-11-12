@@ -18,7 +18,9 @@ import (
 )
 
 type RemovePluginServerInput struct {
-	ProjectID    string `json:"project_id" jsonschema:"explicit project ID owning the plugin"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID    string `json:"-"`
 	PluginID     string `json:"plugin_id" jsonschema:"exact plugin ID; no default or name fallback"`
 	MembershipID string `json:"membership_id" jsonschema:"exact plugin server membership ID, not the backing MCP server ID; obtain from a fresh plugin read"`
 	Confirmed    bool   `json:"confirmed" jsonschema:"true only after the user confirms removal of this exact membership"`
@@ -58,7 +60,7 @@ func registerRemovePluginServerTool(reg *Registrar, plugins *PluginsService) {
 			}
 			projectID, err := uuid.Parse(input.ProjectID)
 			if err != nil {
-				return RemovePluginServerOutput{}, &PluginAssignmentMutationError{Code: "invalid_request", Message: "An exact project ID is required."}
+				return RemovePluginServerOutput{}, &PluginAssignmentMutationError{Code: "invalid_request", Message: "The project's slug is required."}
 			}
 			// Membership IDs identify immutable attachment rows. A replay cannot remove
 			// a later re-addition, which has a different ID; a missing row is not_found.

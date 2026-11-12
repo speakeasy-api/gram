@@ -44,6 +44,7 @@ func TestWorkloadAssertionReuseToolContracts(t *testing.T) {
 	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
 	registerWorkloadAssertionReuseTools(live, &WorkloadAssertionReuseService{})
 	registerWorkloadAssertionReuseTools(unavailable, nil)
+	unavailable.withProjects(slugProjects{"workload-project": uuid.New()})
 	require.Empty(t, live.For(AudienceAssistant), "org-wide trust policy requires a live external user")
 	for _, name := range []string{"get_workload_assertion_reuse", "set_workload_assertion_reuse"} {
 		a, b := descriptorByName(t, live, name), descriptorByName(t, unavailable, name)
@@ -58,7 +59,7 @@ func TestWorkloadAssertionReuseToolContracts(t *testing.T) {
 			Required []string `json:"required"`
 		}
 		require.NoError(t, json.Unmarshal(a.InputSchema, &schema))
-		for _, field := range []string{"project_id", "issuer_id"} {
+		for _, field := range []string{"project_slug", "issuer_id"} {
 			require.Contains(t, schema.Required, field)
 		}
 		if name == "set_workload_assertion_reuse" {
@@ -76,7 +77,7 @@ func TestWorkloadAssertionReuseToolContracts(t *testing.T) {
 			require.True(t, a.Annotations.ReadOnlyHint)
 		}
 		ctx := contextWithPrincipal(t.Context(), Principal{OrganizationID: "test-org", UserID: "test-user"})
-		arguments := map[string]any{"project_id": uuid.NewString(), "issuer_id": uuid.NewString()}
+		arguments := map[string]any{"project_slug": "workload-project", "issuer_id": uuid.NewString()}
 		if name == "set_workload_assertion_reuse" {
 			arguments["confirmed"] = true
 			arguments["allow_assertion_reuse"] = false
@@ -322,7 +323,7 @@ func TestWorkloadAssertionReuseSchemaRejectsMissingOrUntypedPolicy(t *testing.T)
 	registerWorkloadAssertionReuseTools(reg, nil)
 	descriptor := descriptorByName(t, reg, "set_workload_assertion_reuse")
 	for _, value := range []any{nil, "true", 1} {
-		input := map[string]any{"project_id": uuid.NewString(), "issuer_id": uuid.NewString(), "confirmed": true}
+		input := map[string]any{"project_slug": "workload-project", "issuer_id": uuid.NewString(), "confirmed": true}
 		if value != nil {
 			input["allow_assertion_reuse"] = value
 		}
