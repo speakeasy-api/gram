@@ -2,15 +2,15 @@ lockVersion: 2.0.0
 id: 28456435-1d04-45f4-ad18-f45f4724a5a5
 management:
   docVersion: 0.0.1
-  speakeasyVersion: 1.803.0
-  generationVersion: 2.950.2
+  speakeasyVersion: 1.808.1
+  generationVersion: 2.960.8
   releaseVersion: 0.33.8
 features:
   typescript:
     additionalDependencies: 0.1.0
     bigint: 0.0.3
     constsAndDefaults: 0.1.14
-    core: 3.31.6
+    core: 3.31.11
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
