@@ -570,6 +570,58 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 	return true, nil
 }
 
+// Can reports whether the caller satisfies every check, without recording a
+// challenge: a false result is a branch, not a denial. It is Evaluate under
+// the name the typed API uses, and it also accepts a single AnyOf check.
+func (e *Engine) Can(ctx context.Context, checks ...Check) (bool, error) {
+	if alternatives, ok := singleAnyOf(checks); ok {
+		return e.canAnyOf(ctx, alternatives)
+	}
+	return e.Evaluate(ctx, checks...)
+}
+
+func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, error) {
+	if len(alternatives) == 0 {
+		return false, e.mapError(ctx, ErrNoChecks)
+	}
+	if err := validateShape(alternatives, true); err != nil {
+		return false, e.mapError(ctx, err)
+	}
+	enforce, err := e.ShouldEnforce(ctx)
+	if err != nil {
+		return false, err
+	}
+	if !enforce {
+		return slices.ContainsFunc(alternatives, unenforcedAllows), nil
+	}
+	authorization, ok := grantAuthorizationFromContext(ctx)
+	if !ok {
+		return false, e.mapError(ctx, ErrMissingGrants)
+	}
+	for _, check := range alternatives {
+		if err := validateInput(check); err != nil {
+			return false, e.mapError(ctx, err)
+		}
+	}
+	blocked, err := firstUnoverriddenExclusion(authorization, alternatives)
+	if err != nil {
+		return false, e.mapError(ctx, err)
+	}
+	if blocked != nil {
+		return false, nil
+	}
+	for _, check := range alternatives {
+		evaluation, err := authorization.evaluate(check)
+		if err != nil {
+			return false, e.mapError(ctx, err)
+		}
+		if !evaluation.Denied && evaluation.Grant != nil {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // Filter evaluates each check and returns the resource IDs of those the caller
 // is authorized for. When RBAC is not enforced all resource IDs are returned
 // except those of auth-client checks, which are omitted.
@@ -862,6 +914,36 @@ func validateInput(c Check) error {
 		}
 		return validateAuthClientCheck(c)
 	}
+}
+
+// validateRequireInput is validateInput for the Require family, which also
+// refuses a probe.
+func validateRequireInput(c Check) error {
+	if c.probe {
+		return InvalidCheck(c.Scope, c.ResourceID)
+	}
+	return validateInput(c)
+}
+
+// validateShape refuses request shapes the API never accepts, before the
+// unenforced short-circuit, so a misuse fails whether or not RBAC is enforced:
+// an AnyOf nested where a single check is expected, or a probe where only a
+// concrete check can be required.
+func validateShape(checks []Check, allowProbe bool) error {
+	for _, c := range checks {
+		if c.anyOf != nil || (c.probe && !allowProbe) {
+			return InvalidCheck(c.Scope, c.ResourceID)
+		}
+	}
+	return nil
+}
+
+// singleAnyOf returns the alternatives when checks is one AnyOf check.
+func singleAnyOf(checks []Check) ([]Check, bool) {
+	if len(checks) != 1 || checks[0].anyOf == nil {
+		return nil, false
+	}
+	return checks[0].anyOf, true
 }
 
 func (e *Engine) mapError(ctx context.Context, err error) error {

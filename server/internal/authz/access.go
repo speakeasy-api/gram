@@ -46,6 +46,40 @@ func (c Check) WithStrictSelectorMatch() Check {
 	return c
 }
 
+// Probe marks the check as a discovery question: could the caller act on
+// some resource matching it. A dimension the check leaves out matches any
+// value a grant names. Can and Filter accept a probe; Require refuses one,
+// because gating an action needs the concrete resource.
+func (c Check) Probe() Check {
+	c.probe = true
+	return c
+}
+
+// AnyOf requests any one of the alternatives, the way RequireAnyUnblocked
+// does: a block matching any alternative refuses the request, unless a
+// direct grant on the concrete resource outranks it, and otherwise one
+// alternative must be allowed. Use it when a project-wide grant and a grant
+// on the resource both authorize the operation, so a broad allow cannot
+// bypass a block on the actual resource.
+//
+// Only Require and Can accept the result, and only as their single check.
+func AnyOf(alternatives ...Check) Check {
+	var first Check
+	if len(alternatives) > 0 {
+		first = alternatives[0]
+	}
+	return Check{
+		Scope:           first.Scope,
+		ResourceKind:    first.ResourceKind,
+		ResourceID:      first.ResourceID,
+		Dimensions:      nil,
+		selectorMatch:   selectorMatchNormal,
+		representedUser: "",
+		probe:           false,
+		anyOf:           append([]Check{}, alternatives...),
+	}
+}
+
 func (c Check) matchesAllowSelector(selector Selector) bool {
 	if c.selectorMatch == selectorMatchBlock {
 		return selector.blockMatches(c.selector(), c.representedUser)
