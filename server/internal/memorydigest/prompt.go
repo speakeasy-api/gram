@@ -109,8 +109,8 @@ func (l Level) Prompt(start time.Time, inputs []Input) (system, user string, use
 	total := 0
 	// Walk newest first so an over-long period keeps its latest material,
 	// then restore chronological order for the model.
-	for i := len(ordered) - 1; i >= 0; i-- {
-		block := formatInput(ordered[i])
+	for i, o := range slices.Backward(ordered) {
+		block := formatInput(o)
 		n := EstimateTokens(block)
 		if len(blocks) > 0 {
 			n += EstimateTokens(inputSeparator)

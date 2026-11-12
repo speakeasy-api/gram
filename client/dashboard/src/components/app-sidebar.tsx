@@ -99,7 +99,6 @@ export function AppSidebar({
     for (const entry of allNavRoutes) map.set(entry.route.url, entry);
     return map;
   }, [allNavRoutes]);
-  const isChannelsEnabled = navAccess.has(routes.channels.url);
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
   const isExploreEnabled = navAccess.has(routes.explore.url);
@@ -175,9 +174,6 @@ export function AppSidebar({
       icon: "hammer",
       items: [
         { item: routes.mcp, ...accessFor(routes.mcp) },
-        ...(isChannelsEnabled
-          ? [{ item: routes.channels, ...accessFor(routes.channels) }]
-          : []),
         ...(isAssistantsEnabled
           ? [{ item: routes.assistants, ...accessFor(routes.assistants) }]
           : []),

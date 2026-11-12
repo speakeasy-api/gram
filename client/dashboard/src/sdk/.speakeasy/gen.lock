@@ -2,14 +2,14 @@ lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
   docVersion: 0.0.1
-  speakeasyVersion: 1.803.0
-  generationVersion: 2.950.2
+  speakeasyVersion: 1.808.1
+  generationVersion: 2.960.8
   releaseVersion: 0.33.8
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.14
-    core: 3.31.6
+    core: 3.31.11
     defaultEnabledRetries: 0.1.0
     deprecations: 2.81.1
     devContainers: 2.90.1
@@ -151,6 +151,7 @@ trackedFiles:
   src/funcs/aiIntegrationsDeleteConfig.ts: {}
   src/funcs/aiIntegrationsGetAnthropicInferenceConfig.ts: {}
   src/funcs/aiIntegrationsGetConfig.ts: {}
+  src/funcs/aiIntegrationsListOrgUnits.ts: {}
   src/funcs/aiIntegrationsListSchedules.ts: {}
   src/funcs/aiIntegrationsRetrySchedule.ts: {}
   src/funcs/aiIntegrationsSetScheduleEnabled.ts: {}
@@ -983,6 +984,7 @@ trackedFiles:
   src/models/components/aidetection.ts: {}
   src/models/components/aidetectionuser.ts: {}
   src/models/components/aiintegrationconfig.ts: {}
+  src/models/components/aiintegrationorgunit.ts: {}
   src/models/components/aiintegrationschedulestate.ts: {}
   src/models/components/aiscanmatch.ts: {}
   src/models/components/aiscantarget.ts: {}
@@ -1472,6 +1474,7 @@ trackedFiles:
   src/models/components/listagentsresult.ts: {}
   src/models/components/listaidetectionsresult.ts: {}
   src/models/components/listaidetectionusersresult.ts: {}
+  src/models/components/listaiintegrationorgunitsresult.ts: {}
   src/models/components/listaiintegrationschedulesresult.ts: {}
   src/models/components/listaiscantargetsresult.ts: {}
   src/models/components/listallowedoriginsresult.ts: {}
@@ -2719,6 +2722,7 @@ trackedFiles:
   src/models/operations/listagentsessions.ts: {}
   src/models/operations/listaidetections.ts: {}
   src/models/operations/listaidetectionusers.ts: {}
+  src/models/operations/listaiintegrationorgunits.ts: {}
   src/models/operations/listaiintegrationschedules.ts: {}
   src/models/operations/listaiscantargets.ts: {}
   src/models/operations/listallowedorigins.ts: {}
@@ -3224,6 +3228,8 @@ trackedFiles:
   src/react-query/aiDetections.ts: {}
   src/react-query/aiIntegrationConfig.core.ts: {}
   src/react-query/aiIntegrationConfig.ts: {}
+  src/react-query/aiIntegrationOrgUnits.core.ts: {}
+  src/react-query/aiIntegrationOrgUnits.ts: {}
   src/react-query/aiIntegrationSchedules.core.ts: {}
   src/react-query/aiIntegrationSchedules.ts: {}
   src/react-query/aiScanTargets.core.ts: {}
@@ -9621,6 +9627,18 @@ examples:
       responses:
         "200":
           application/json: {"detections": [{"access": {"decision": "approved", "enforceable": false, "state": "unreviewed"}, "category": "local_model", "device_count": 819801, "display_name": "Vincenzo_Goldner", "first_seen": "2026-07-26T16:06:54.315Z", "last_seen": "2026-11-06T14:12:23.988Z", "signals": [], "target_id": "<id>", "user_count": 392569, "versions": ["<value 1>", "<value 2>"]}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listAIIntegrationOrgUnits:
+    speakeasy-default-list-AI-integration-org-units:
+      parameters:
+        query:
+          provider: "<value>"
+      responses:
+        "200":
+          application/json: {"org_units": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

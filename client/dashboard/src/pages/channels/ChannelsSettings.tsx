@@ -5,7 +5,6 @@ import {
 } from "@/components/ui/Collapsible";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
-import { CopyButton } from "@/components/ui/CopyButton";
 import { Icon } from "@/components/ui/Icon";
 import {
   Select,
@@ -22,18 +21,10 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Switch } from "@/components/ui/Switch";
-import { useOrganization, useProject } from "@/contexts/Auth";
 import { useState } from "react";
-import {
-  channelsMcpEndpoint,
-  DEFAULT_LIMITS,
-  type ChannelsSnapshot,
-} from "./api";
+import { DEFAULT_LIMITS, type ChannelsSnapshot } from "./api";
 import type { ResolveOwner } from "./model";
 import { HISTORY_PAGE_SIZE, POLL_INTERVAL_MS } from "./useChannels";
-
-/** The resource an agent subscribes to in order to hear about new messages. */
-const MESSAGES_RESOURCE = "channels://messages";
 
 export interface SettingsMember {
   id: string;
@@ -42,7 +33,8 @@ export interface SettingsMember {
 
 /**
  * Everything a person only needs occasionally: whether Channels is on, who may
- * take part, how an agent connects, and the technical facts about this session.
+ * take part, and the technical facts about this session. How an agent connects
+ * lives on Home, where people look for it first.
  */
 export function ChannelsSettings({
   open,
@@ -71,12 +63,6 @@ export function ChannelsSettings({
   const [subjectId, setSubjectId] = useState("");
   const [canConnect, setCanConnect] = useState(true);
   const [canReadAll, setCanReadAll] = useState(false);
-  const organization = useOrganization();
-  const project = useProject();
-  const endpoint = channelsMcpEndpoint({
-    organizationSlug: organization.slug,
-    projectSlug: project.slug,
-  });
   const grants = Object.entries(snapshot.grants ?? {});
   const limits = { ...DEFAULT_LIMITS, ...snapshot.limits };
 
@@ -119,67 +105,6 @@ export function ChannelsSettings({
                 Only project admins can change this.
               </p>
             )}
-          </section>
-
-          <section className="space-y-3">
-            <h3 className="text-eyebrow">Connect an agent</h3>
-            <p className="text-muted-foreground text-sm">
-              Sign in with your account and authorize the client for this
-              organization and project. Its instance speaks under your identity,
-              not as a new member. To receive new messages, it must also follow
-              threads and subscribe.
-            </p>
-            <ol className="space-y-3 text-sm">
-              <li className="space-y-1.5">
-                <p>
-                  <span className="text-muted-foreground mr-1.5">1.</span>
-                  Add this address to the agent as an MCP server.
-                </p>
-                <div className="flex items-center gap-2 border px-3 py-2">
-                  <code className="min-w-0 flex-1 truncate text-xs">
-                    {endpoint}
-                  </code>
-                  <CopyButton
-                    text={endpoint}
-                    size="xs"
-                    tooltip="Copy endpoint"
-                  />
-                </div>
-              </li>
-              <li>
-                <p>
-                  <span className="text-muted-foreground mr-1.5">2.</span>
-                  Have it <strong>follow</strong> each conversation it should
-                  hear about. Following is a durable choice the agent makes with{" "}
-                  <code className="text-xs">channels_follow</code>, or that you
-                  make for your own sessions with the Follow button.
-                </p>
-              </li>
-              <li className="space-y-1.5">
-                <p>
-                  <span className="text-muted-foreground mr-1.5">3.</span>
-                  Have it <strong>subscribe</strong> to this resource and keep
-                  the stream open. Following without subscribing delivers
-                  nothing, and subscribing without following delivers nothing
-                  from public threads.
-                </p>
-                <div className="flex items-center gap-2 border px-3 py-2">
-                  <code className="min-w-0 flex-1 truncate text-xs">
-                    {MESSAGES_RESOURCE}
-                  </code>
-                  <CopyButton
-                    text={MESSAGES_RESOURCE}
-                    size="xs"
-                    tooltip="Copy resource URI"
-                  />
-                </div>
-              </li>
-            </ol>
-            <p className="text-muted-foreground text-xs">
-              Notifications say only that something changed. The agent reads the
-              messages themselves, from the cursor it last saw, so a dropped
-              connection loses nothing.
-            </p>
           </section>
 
           {canAdmin ? (

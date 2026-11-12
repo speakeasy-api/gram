@@ -3025,7 +3025,9 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	// key policies once every client is recorded. The auth-permission-defaults
 	// backfill grants the rest.
 	AuthPermissionGrantsWritten *int64 `form:"auth_permission_grants_written,omitempty" json:"auth_permission_grants_written,omitempty" xml:"auth_permission_grants_written,omitempty"`
-	// Why recording typed auth clients failed, when it did. The upstream OAuth
+	// Why recording typed auth clients failed, when it did. For an organization
+	// enforcing upstream auth, the run recorded no credential choices, since those
+	// are decided from the typed auth clients. Otherwise the upstream OAuth
 	// migration itself is unaffected.
 	AuthClientsError *string `form:"auth_clients_error,omitempty" json:"auth_clients_error,omitempty" xml:"auth_clients_error,omitempty"`
 	// The organization's status after the run.

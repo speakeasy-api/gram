@@ -1327,29 +1327,6 @@ describe("useProjectCandidates", () => {
 });
 
 describe("useActionCandidates", () => {
-  it("offers the generic Channels page without registering named conversations", () => {
-    const onSelect = vi.fn();
-    mocks.actions = [
-      { id: "nav-page-channels", label: "Channels", group: "Pages", onSelect },
-    ];
-    const { result } = renderCandidates();
-    const channels = result.current.find(
-      (candidate) => candidate.id === "action:nav-page-channels",
-    );
-    expect(channels?.title).toBe("Channels");
-    expect(mocks.channelsRequest).not.toHaveBeenCalled();
-    expect(channels?.verbs).toEqual(["open"]);
-    expect(
-      result.current.filter(
-        (candidate) =>
-          candidate.id.startsWith("channel:") ||
-          candidate.id.startsWith("conversation:"),
-      ),
-    ).toEqual([]);
-    void channels?.run("open");
-    expect(onSelect).toHaveBeenCalledOnce();
-  });
-
   it("maps the action group to the detail string", () => {
     const onSelect = vi.fn();
     mocks.actions = [

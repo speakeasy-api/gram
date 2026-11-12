@@ -133,6 +133,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformchangelog "github.com/speakeasy-api/gram/server/internal/platformtools/changelog"
 	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
@@ -2254,6 +2255,7 @@ func newStartCommand() *cli.Command {
 						Connections:                    connectionRecorder,
 						FleetHealthCache:               admin.NewHookClientsCache(logger, cache.NewRedisCacheAdapter(redisClient), tm.NewHookClients(chDB), deviceagentversions.NewStore(redisClient)),
 						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL), productFeatures, tm.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
+						MemoryEvals:                    evalrun.NewRunner(logger, db, chatClient),
 						CatalogPromotionDeliveryPaused: c.Bool("catalog-promotion-delivery-paused"),
 						GuardianPolicy:                 guardianPolicy,
 						TunnelHTTPClient:               tunnelHTTPClient,

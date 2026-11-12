@@ -2720,6 +2720,8 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   dns_routing_method TEXT,
   dns_configuration_status TEXT,
   dns_checked_at timestamptz,
+  dns_authorization_verified_at timestamptz,
+  dns_authorization_checked_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2749,7 +2751,11 @@ COMMENT ON COLUMN custom_domains.dns_target_token IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.dns_routing_method IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.dns_configuration_status IS 'Advisory DNS configuration observation, independent of ownership and infrastructure health.
 @access: confidential';
-COMMENT ON COLUMN custom_domains.dns_checked_at IS 'Time of the DNS observation; matches health_checked_at only when both observations came from the same check.
+COMMENT ON COLUMN custom_domains.dns_checked_at IS 'Time of the routing DNS observation; matches health_checked_at only when both observations came from the same check.
+@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_authorization_verified_at IS 'Start of the current run of successful checks of the domain''s Certificate Manager DNS authorization record. NULL until a check succeeds; a failed check clears it. Reflects our own DNS lookup, not certificate issuance.
+@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_authorization_checked_at IS 'Time of the last check of the domain''s Certificate Manager DNS authorization record, whatever its result. NULL when it has never been checked.
 @access: confidential';
 COMMENT ON COLUMN custom_domains.created_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.updated_at IS '@access: confidential';
@@ -9446,6 +9452,11 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
   billing_mode TEXT,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  -- Non-secret, admin-visible provider settings, kept apart from
+  -- api_key_encrypted so the dashboard can redisplay and edit them without
+  -- resubmitting the key (e.g. gemini_compliance's delegated Workspace admin
+  -- and selected organizational unit). Validated in application code.
+  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
 
   CONSTRAINT ai_integration_configs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
@@ -9462,6 +9473,8 @@ COMMENT ON COLUMN ai_integration_configs.enabled IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.billing_mode IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.id IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.deleted IS '@access: confidential';
+COMMENT ON COLUMN ai_integration_configs.settings IS 'Provider settings JSON; holds admin emails and customer directory structure.
+@access: opaque-restricted';
 
 CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_configs_org_provider_key
   ON ai_integration_configs (organization_id, provider)

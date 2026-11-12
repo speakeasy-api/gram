@@ -54,7 +54,7 @@ func SyncEMARegistrations(ctx context.Context, tx pgx.Tx, organizationID string,
 	if err != nil {
 		return err
 	}
-	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0}
+	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: false}
 	report, want, plan := newReport(true), newExpected(), newEMAPlan()
 	if err := decideEMABindings(ctx, tx, q, opts, &report, want, plan, bindings); err != nil {
 		return err

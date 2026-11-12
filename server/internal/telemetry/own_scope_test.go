@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"testing"
 	"time"
 
@@ -111,9 +112,7 @@ func chatCompletionAttrs(identity map[string]any) map[string]any {
 		"gen_ai.response.id":    uuid.NewString(),
 		"gen_ai.response.model": "test-model",
 	}
-	for k, v := range identity {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, identity)
 	return attrs
 }
 
@@ -123,9 +122,7 @@ func chatToolCallAttrs(agentID uuid.UUID) map[string]any {
 		"gram.tool.name":            "agent_tool",
 		"http.response.status_code": 200,
 	}
-	for k, v := range agentActorAttrs(agentID) {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, agentActorAttrs(agentID))
 	return attrs
 }
 
