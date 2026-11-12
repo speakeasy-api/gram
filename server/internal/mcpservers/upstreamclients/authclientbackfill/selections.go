@@ -2,10 +2,14 @@ package authclientbackfill
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
 // CredentialClass is the kind of inbound credential a choice belongs to, as
@@ -221,14 +225,11 @@ func runSelections(ctx context.Context, q *Queries, opts Options, size int32, wr
 	if err != nil {
 		return err
 	}
-	cursor := uuid.Nil
-	for {
-		rows, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: opts.OrganizationID, Cursor: cursor, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PageSize: size})
-		if err != nil {
-			return fmt.Errorf("list selections: %w", err)
-		}
+	return visitSelectionMappings(ctx, q, ListSelectionMappingsParams{
+		OrganizationID: opts.OrganizationID, PageSize: size, OnlyUnmapped: false, ScopeMcpServerIds: nil,
+		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	}, func(rows []ListSelectionMappingsRow) error {
 		for _, row := range rows {
-			cursor = row.ID
 			credential, live := credentials[row.CredentialID]
 			if !live {
 				continue
@@ -237,7 +238,26 @@ func runSelections(ctx context.Context, q *Queries, opts Options, size int32, wr
 				return err
 			}
 		}
-		if len(rows) < int(size) {
+		return nil
+	})
+}
+
+// visitSelectionMappings advances past every row, even if its callback skips or
+// maps it out of the result set. Scoped lifecycle writes and backfill reporting
+// therefore use the same cursor and page termination rules.
+func visitSelectionMappings(ctx context.Context, q *Queries, params ListSelectionMappingsParams, visit func([]ListSelectionMappingsRow) error) error {
+	for {
+		rows, err := q.ListSelectionMappings(ctx, params)
+		if err != nil {
+			return fmt.Errorf("list selection mappings: %w", err)
+		}
+		if len(rows) > 0 {
+			params.Cursor = rows[len(rows)-1].ID
+			if err := visit(rows); err != nil {
+				return err
+			}
+		}
+		if len(rows) < int(params.PageSize) {
 			return nil
 		}
 	}
@@ -250,7 +270,7 @@ func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write boo
 	if outcome == SelectionMap {
 		report.PendingSelectionMappings++
 		if write {
-			written, final, err := mapSelection(ctx, q, opts, credential, row, clientID)
+			written, final, err := mapSelection(ctx, q, opts.OrganizationID, credential.issuer, opts.TypedOnly, row, clientID)
 			if err != nil {
 				return err
 			}
@@ -282,7 +302,7 @@ func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write boo
 // header changed concurrently either commits before the read or waits for
 // this phase to commit. It returns whether it wrote and the choice's outcome.
 // The locks are held until the phase commits.
-func mapSelection(ctx context.Context, q *Queries, opts Options, credential liveCredential, row ListSelectionMappingsRow, clientID uuid.UUID) (bool, SelectionOutcome, error) {
+func mapSelection(ctx context.Context, q *Queries, organizationID string, issuerID uuid.UUID, typedOnly bool, row ListSelectionMappingsRow, clientID uuid.UUID) (bool, SelectionOutcome, error) {
 	if err := q.LockSelectionRemoteSource(ctx, row.McpServerID); err != nil {
 		return false, "", fmt.Errorf("lock source of selection %s: %w", row.ID, err)
 	}
@@ -292,22 +312,22 @@ func mapSelection(ctx context.Context, q *Queries, opts Options, credential live
 	if err := q.LockSelectionServer(ctx, row.McpServerID); err != nil {
 		return false, "", fmt.Errorf("lock server of selection %s: %w", row.ID, err)
 	}
-	if err := q.LockSelectionServerAuthClients(ctx, LockSelectionServerAuthClientsParams{McpServerID: row.McpServerID, OrganizationID: opts.OrganizationID}); err != nil {
+	if err := q.LockSelectionServerAuthClients(ctx, LockSelectionServerAuthClientsParams{McpServerID: row.McpServerID, OrganizationID: organizationID}); err != nil {
 		return false, "", fmt.Errorf("lock auth clients of selection %s: %w", row.ID, err)
 	}
 	if row.RemoteSessionClientID.Valid {
-		if err := q.LockSelectionIssuerBinding(ctx, LockSelectionIssuerBindingParams{RemoteSessionClientID: row.RemoteSessionClientID.UUID, UserSessionIssuerID: credential.issuer}); err != nil {
+		if err := q.LockSelectionIssuerBinding(ctx, LockSelectionIssuerBindingParams{RemoteSessionClientID: row.RemoteSessionClientID.UUID, UserSessionIssuerID: issuerID}); err != nil {
 			return false, "", fmt.Errorf("lock issuer binding of selection %s: %w", row.ID, err)
 		}
 	}
-	fresh, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: opts.OrganizationID, Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: row.ID, Valid: true}, PageSize: 1})
+	fresh, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: organizationID, Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: row.ID, Valid: true}, PageSize: 1, OnlyUnmapped: false, ScopeMcpServerIds: nil, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	if err != nil {
 		return false, "", fmt.Errorf("reread selection %s: %w", row.ID, err)
 	}
 	if len(fresh) == 0 {
 		return false, SelectionSkippedRace, nil
 	}
-	outcome, decided := decideSelection(fresh[0], credential.issuer, opts.TypedOnly)
+	outcome, decided := decideSelection(fresh[0], issuerID, typedOnly)
 	switch {
 	case outcome != SelectionMap:
 		return false, outcome, nil
@@ -316,7 +336,7 @@ func mapSelection(ctx context.Context, q *Queries, opts Options, credential live
 	}
 	n, err := q.MapSelectionToAuthClient(ctx, MapSelectionToAuthClientParams{
 		ID:                    row.ID,
-		OrganizationID:        opts.OrganizationID,
+		OrganizationID:        organizationID,
 		NoAuth:                fresh[0].NoAuth,
 		RemoteSessionClientID: fresh[0].RemoteSessionClientID,
 		AuthClientID:          clientID,
@@ -328,4 +348,106 @@ func mapSelection(ctx context.Context, q *Queries, opts Options, credential live
 		return false, SelectionSkippedRace, nil
 	}
 	return true, SelectionMap, nil
+}
+
+// ReconcileUserSessionSelectionsInLockedTransaction names uniquely decided typed
+// clients on existing unmapped choices of one issuer's live credentials. It uses
+// the backfill's decision and guarded mapping writer, never replaces a named
+// client, and grants nothing. The caller must hold the EMA writer scope for
+// every reachable or recorded server and preflight its OAuth registration gates
+// before its first mutation. Newly missing choices are recorded separately by
+// the shared issuance writer.
+func ReconcileUserSessionSelectionsInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID) error {
+	_, err := ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, nil)
+	return err
+}
+
+// ReconcileUserSessionSelectionsForServersInLockedTransaction independently
+// scopes mapping to servers: nil keeps full reach, while an empty array maps
+// nothing. It reports guarded bulk rows skipped because their evidence changed.
+func ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs []uuid.UUID) (int64, error) {
+	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
+		return 0, errors.New("reconcile user session selections: no transaction or tenant scope")
+	}
+	// Read the feature repository directly to avoid a dependency cycle through
+	// the product feature service, which invokes this backfill.
+	typedOnly, err := productfeaturesrepo.New(tx).IsFeatureEnabled(ctx, productfeaturesrepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID, FeatureName: "upstream_auth_enforced",
+	})
+	if err != nil {
+		return 0, err
+	}
+	q := New(tx)
+	confirmed := make(map[selectionMappingGroup]bool)
+	var skipped int64
+	err = visitSelectionMappings(ctx, q, ListSelectionMappingsParams{
+		OrganizationID: organizationID, PageSize: defaultPageSize, OnlyUnmapped: true, ScopeMcpServerIds: serverIDs,
+		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+	}, func(rows []ListSelectionMappingsRow) error {
+		groups := make(map[selectionMappingGroup][]ListSelectionMappingsRow)
+		var ordered []selectionMappingGroup
+		for _, row := range rows {
+			outcome, clientID := decideSelection(row, issuerID, typedOnly)
+			if outcome != SelectionMap {
+				continue
+			}
+			key := selectionMappingGroup{serverID: row.McpServerID, registration: row.RemoteSessionClientID, noAuth: row.NoAuth, clientID: clientID}
+			if _, exists := groups[key]; !exists {
+				ordered = append(ordered, key)
+			}
+			groups[key] = append(groups[key], row)
+		}
+		for _, key := range ordered {
+			group := groups[key]
+			if !confirmed[key] {
+				// A row-specific race must not suppress the rest of the group.
+				// Try another representative until the unchanged policy is locked
+				// and a guarded write succeeds; only then cache across pages.
+				for len(group) > 0 {
+					representative := group[0]
+					group = group[1:]
+					written, outcome, err := mapSelection(ctx, q, organizationID, issuerID, typedOnly, representative, key.clientID)
+					if err != nil {
+						return err
+					}
+					if written && outcome == SelectionMap {
+						confirmed[key] = true
+						break
+					}
+				}
+			}
+			if !confirmed[key] || len(group) == 0 {
+				continue
+			}
+			ids := make([]uuid.UUID, 0, len(group))
+			for _, row := range group {
+				ids = append(ids, row.ID)
+			}
+			n, err := q.MapSelectionGroupToAuthClient(ctx, MapSelectionGroupToAuthClientParams{
+				OrganizationID: organizationID, Ids: ids, McpServerID: key.serverID,
+				NoAuth: key.noAuth, RemoteSessionClientID: key.registration, AuthClientID: key.clientID,
+			})
+			if err != nil {
+				return fmt.Errorf("map selection group for server %s: %w", key.serverID, err)
+			}
+			skipped += int64(len(ids)) - n
+		}
+		return nil
+	})
+	return skipped, err
+}
+
+// For one issuer, the mapping policy for unmapped choices depends only on the
+// server, legacy registration and no-auth state. Source headers, offered clients,
+// gateway ownership and issuer bindings are configuration of that server and
+// registration, not of an individual credential. Include the decided client in
+// the key too: a changed candidate must establish its own locked decision.
+// Successful mapSelection retains source/server/client/binding locks until the
+// transaction commits, so later pages can reuse that policy. Bulk writes still
+// guard every row against concurrent explicit choices or changed legacy state.
+type selectionMappingGroup struct {
+	serverID     uuid.UUID
+	registration uuid.NullUUID
+	noAuth       bool
+	clientID     uuid.UUID
 }

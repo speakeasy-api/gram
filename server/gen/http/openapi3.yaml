@@ -562,6 +562,509 @@ paths:
             x-speakeasy-name-override: listCustomDomains
             x-speakeasy-react-hook:
                 name: AdminListCustomDomains
+    /admin/externalCredentials.createGcpIam:
+        post:
+            description: Create a platform GCP IAM external credential. Set the wif_* triple for Workload Identity Federation, impersonate_service_account alone for direct impersonation, or neither for Speakeasy's ambient attached identity.
+            operationId: adminCreateGcpIamPlatformCredential
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePlatformGcpIamCredentialForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpIamCredential'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: createGcpIamPlatformCredential admin
+            tags:
+                - admin
+            x-speakeasy-name-override: createGcpIamPlatformCredential
+    /admin/externalCredentials.deleteGcpIam:
+        post:
+            description: Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.
+            operationId: adminDeleteGcpIamPlatformCredential
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: deleteGcpIamPlatformCredential admin
+            tags:
+                - admin
+            x-speakeasy-name-override: deleteGcpIamPlatformCredential
+    /admin/externalCredentials.getGcpIam:
+        get:
+            description: Get a platform GCP IAM external credential by ID.
+            operationId: adminGetGcpIamPlatformCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the credential to get.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the credential to get.
+                    format: uuid
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpIamCredential'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getGcpIamPlatformCredential admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getGcpIamPlatformCredential
+    /admin/externalCredentials.list:
+        get:
+            description: List the platform external credentials (organization_id NULL, project_id NULL) that Speakeasy authenticates into a cloud provider with. Optionally filter by provider.
+            operationId: adminListPlatformExternalCredentials
+            parameters:
+                - allowEmptyValue: true
+                  description: Only return credentials for this provider.
+                  in: query
+                  name: provider
+                  schema:
+                    description: Only return credentials for this provider.
+                    enum:
+                        - aws_iam
+                        - gcp_iam
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListExternalCredentialsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listPlatformExternalCredentials admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listPlatformExternalCredentials
+    /admin/externalCredentials.updateGcpIam:
+        post:
+            description: Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.
+            operationId: adminUpdateGcpIamPlatformCredential
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateGcpIamPlatformCredentialRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GcpIamCredential'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: updateGcpIamPlatformCredential admin
+            tags:
+                - admin
+            x-speakeasy-name-override: updateGcpIamPlatformCredential
+    /admin/externalCredentials.verifyGcpIam:
+        post:
+            description: Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Nothing is persisted.
+            operationId: adminVerifyGcpIamPlatformCredential
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VerifyPlatformCredentialResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: verifyGcpIamPlatformCredential admin
+            tags:
+                - admin
+            x-speakeasy-name-override: verifyGcpIamPlatformCredential
     /admin/hookClients.get:
         get:
             description: 'Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization''s new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.'
@@ -43721,101 +44224,6 @@ paths:
             x-speakeasy-name-override: previewOverlaps
             x-speakeasy-react-hook:
                 name: PreviewKillswitchOverlaps
-    /rpc/launcher.judge:
-        post:
-            description: Judge which of the supplied command palette candidates the typed query refers to, what kind of action it asks for, and whether the intent is settled enough to act on Enter. Returns probability distributions rather than text. When no intent service is configured the response carries disabled=true and the palette falls back to fuzzy ordering.
-            operationId: launcherJudge
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/JudgeRequestBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/LauncherJudgment'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: judge launcher
-            tags:
-                - launcher
-            x-speakeasy-name-override: judge
-            x-speakeasy-react-hook:
-                name: LauncherJudge
     /rpc/litellm.createInstance:
         post:
             description: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
@@ -71157,6 +71565,95 @@ paths:
                 - risk
             x-speakeasy-group: risk.policies
             x-speakeasy-name-override: get
+    /rpc/risk.getPolicyBypassRequestTarget:
+        post:
+            description: Fetch what a request access link asks for (the blocked server and tool) WITHOUT filing the request. Powers the request access page.
+            operationId: getRiskPolicyBypassRequestTarget
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetRiskPolicyBypassRequestTargetRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetRiskPolicyBypassRequestTargetResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getRiskPolicyBypassRequestTarget risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.policyBypassRequests
+            x-speakeasy-name-override: getTarget
+            x-speakeasy-react-hook:
+                name: RiskGetPolicyBypassRequestTarget
+                type: mutation
     /rpc/risk.getPolicyChallenge:
         post:
             description: Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
@@ -112902,6 +113399,35 @@ components:
                 - organization_id
                 - project_id
                 - mcp_server_id
+        GetRiskPolicyBypassRequestTargetRequestBody:
+            type: object
+            properties:
+                request_token:
+                    type: string
+                    description: Signed request token generated when a risk policy blocks an action.
+            required:
+                - request_token
+        GetRiskPolicyBypassRequestTargetResponseBody:
+            type: object
+            properties:
+                expires_at:
+                    type: string
+                    description: When the request link expires.
+                    format: date-time
+                server_identifier:
+                    type: string
+                    description: 'How the agent identified the blocked server when it has no URL: its configured name for Claude Code and Codex, or its launch command for Cursor.'
+                server_name:
+                    type: string
+                    description: Display name of the blocked server, when known.
+                server_url:
+                    type: string
+                    description: URL of the blocked server without credentials, query, or fragment, when it was reached over HTTP.
+                tool_name:
+                    type: string
+                    description: The tool the agent tried to call, when known.
+            required:
+                - expires_at
         GetRiskPolicyChallengeResponseBody:
             type: object
             properties:
@@ -115316,24 +115842,6 @@ components:
             required:
                 - client_count
                 - client_ids
-        JudgeRequestBody:
-            type: object
-            properties:
-                candidates:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/LauncherCandidate'
-                    description: Fuzzy-prefiltered candidates to rank.
-                    maxItems: 32
-                context:
-                    $ref: '#/components/schemas/LauncherContext'
-                query:
-                    type: string
-                    description: Text typed into the command palette so far.
-                    maxLength: 200
-            required:
-                - query
-                - candidates
         Key:
             type: object
             properties:
@@ -115875,74 +116383,6 @@ components:
             required:
                 - client_name
                 - activity_count
-        LauncherCandidate:
-            type: object
-            properties:
-                detail:
-                    type: string
-                    description: Short state description, such as 'MCP server · disabled'.
-                    maxLength: 160
-                id:
-                    type: string
-                    description: Caller-chosen stable identifier echoed back in the judgment.
-                    maxLength: 200
-                kind:
-                    type: string
-                    description: The candidate kind, such as page, mcp_server, plugin or marketplace.
-                    maxLength: 64
-                title:
-                    type: string
-                    description: Display title of the candidate.
-                    maxLength: 120
-                verbs:
-                    type: array
-                    items:
-                        type: string
-                        maxLength: 32
-                    description: Verbs the caller may run on this candidate, such as open, enable, disable or publish.
-                    maxItems: 8
-            description: One item the palette could open or act on.
-            required:
-                - id
-                - kind
-                - title
-        LauncherContext:
-            type: object
-            properties:
-                route:
-                    type: string
-                    description: The current dashboard route path.
-                    maxLength: 512
-            description: The dashboard location the palette was opened from.
-        LauncherJudgment:
-            type: object
-            properties:
-                action:
-                    type: object
-                    description: Probability that the query asks for each of open, enable, disable, publish or unclear.
-                    additionalProperties:
-                        type: number
-                        format: double
-                disabled:
-                    type: boolean
-                    description: True when no intent service is configured; the other fields are then absent. When false, target, action, ready and latency_ms are always present.
-                latency_ms:
-                    type: integer
-                    description: Round trip time to the intent service in milliseconds.
-                    format: int64
-                ready:
-                    type: number
-                    description: Probability that the query is unambiguous enough to act on the best candidate on Enter.
-                    format: double
-                target:
-                    type: object
-                    description: Probability that each candidate id, or 'none', is the item the user means.
-                    additionalProperties:
-                        type: number
-                        format: double
-            description: Probability distributions over the supplied candidates and verbs.
-            required:
-                - disabled
         LinkSkillRequestBody:
             type: object
             properties:
@@ -116727,7 +117167,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ExternalCredentialSummary'
-                    description: The organization's external credentials.
+                    description: The external credentials.
             required:
                 - credentials
         ListExternalKeysResult:
@@ -117552,6 +117992,9 @@ components:
                         - org:blocked_admin
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
                         - project:read
                         - project:blocked_read
                         - project:write
@@ -117583,6 +118026,8 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - memory:read
+                        - memory:write
                         - inference:execute
                         - log:read
                         - agent:read
@@ -117609,6 +118054,9 @@ components:
                             - org:blocked_admin
                             - org:device_agent_sync
                             - org:hooks_ingest
+                            - channels:connect
+                            - channels:admin
+                            - channels:read_all
                             - project:read
                             - project:blocked_read
                             - project:write
@@ -117640,6 +118088,8 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
+                            - memory:read
+                            - memory:write
                             - inference:execute
                             - log:read
                             - agent:read
@@ -117806,14 +118256,20 @@ components:
                 next_cursor:
                     type: string
                     description: Cursor for next page
+                scoped:
+                    type: boolean
+                    description: True when sessions were withheld because the caller lacks chat:read on one or more projects. The totals still cover every matching session.
                 sessions:
                     type: array
                     items:
                         $ref: '#/components/schemas/SessionSummary'
-                    description: List of chat session summaries
+                    description: List of chat session summaries. Only sessions from projects the caller holds chat:read on are listed.
+                totals:
+                    $ref: '#/components/schemas/SessionTotals'
             description: Result of listing org-scoped chat sessions
             required:
                 - sessions
+                - scoped
         ListSetupTasksResult:
             type: object
             properties:
@@ -125311,6 +125767,9 @@ components:
                         - workload:write
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
             description: Form for requesting access to a scope.
             required:
                 - scope
@@ -127569,6 +128028,9 @@ components:
                         - org:blocked_admin
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
                         - project:read
                         - project:blocked_read
                         - project:write
@@ -127600,6 +128062,8 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - memory:read
+                        - memory:write
                         - inference:execute
                         - log:read
                         - agent:read
@@ -128018,6 +128482,9 @@ components:
                         - org:blocked_admin
                         - org:device_agent_sync
                         - org:hooks_ingest
+                        - channels:connect
+                        - channels:admin
+                        - channels:read_all
                         - project:read
                         - project:blocked_read
                         - project:write
@@ -128049,6 +128516,8 @@ components:
                         - risk_policy:block
                         - chat:read
                         - chat:write
+                        - memory:read
+                        - memory:write
                         - inference:execute
                         - log:read
                         - agent:read
@@ -128098,6 +128567,9 @@ components:
                             - org:blocked_admin
                             - org:device_agent_sync
                             - org:hooks_ingest
+                            - channels:connect
+                            - channels:admin
+                            - channels:read_all
                             - project:read
                             - project:blocked_read
                             - project:write
@@ -128129,6 +128601,8 @@ components:
                             - risk_policy:block
                             - chat:read
                             - chat:write
+                            - memory:read
+                            - memory:write
                             - inference:execute
                             - log:read
                             - agent:read
@@ -129342,6 +129816,46 @@ components:
                 - total_tokens
                 - total_cost
                 - status
+        SessionTotals:
+            type: object
+            properties:
+                message_count:
+                    type: integer
+                    description: Number of LLM completion messages across the sessions
+                    format: int64
+                session_count:
+                    type: integer
+                    description: Number of matching chat sessions
+                    format: int64
+                tool_call_count:
+                    type: integer
+                    description: Number of tool calls across the sessions
+                    format: int64
+                total_cost:
+                    type: number
+                    description: Total cost in USD
+                    format: double
+                total_input_tokens:
+                    type: integer
+                    description: Total input tokens used
+                    format: int64
+                total_output_tokens:
+                    type: integer
+                    description: Total output tokens used
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: Total tokens used
+                    format: int64
+            description: Aggregate usage over a set of chat sessions
+            required:
+                - session_count
+                - message_count
+                - tool_call_count
+                - total_input_tokens
+                - total_output_tokens
+                - total_tokens
+                - total_cost
         SetAIToolDecisionRequestBody:
             type: object
             properties:
@@ -140529,8 +141043,6 @@ tags:
       description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
     - name: keys
       description: Managing system api keys.
-    - name: launcher
-      description: Rank command palette candidates by the intent behind the text the user typed.
     - name: litellm
       description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
     - name: mcpApproval

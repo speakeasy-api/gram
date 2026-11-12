@@ -168,7 +168,7 @@ func (p *Provisioner) ensureConfig(ctx context.Context, logger *slog.Logger, org
 		return repo.OrganizationEncryptionConfig{}, fmt.Errorf("load organization encryption config: %w", err)
 	}
 
-	platformCredentialID, err := p.resolvePlatformCredential(ctx, logger)
+	platform, err := p.resolvePlatformCredential(ctx, logger)
 	if err != nil {
 		return repo.OrganizationEncryptionConfig{}, err
 	}
@@ -184,7 +184,7 @@ func (p *Provisioner) ensureConfig(ctx context.Context, logger *slog.Logger, org
 		return repo.OrganizationEncryptionConfig{}, err
 	}
 
-	config, created, err := p.recordManagedConfig(ctx, organizationID, platformCredentialID, keyName, actor)
+	config, created, err := p.recordManagedConfig(ctx, organizationID, platform, keyName, actor)
 	var commitErr *commitError
 	switch {
 	case errors.As(err, &commitErr):
@@ -234,7 +234,7 @@ func (e *commitError) Unwrap() error { return e.err }
 
 // recordManagedConfig writes the managed KEK and the configuration naming it.
 // It reports created=false when a concurrent request already wrote one.
-func (p *Provisioner) recordManagedConfig(ctx context.Context, organizationID string, credentialID uuid.UUID, keyName string, actor Actor) (repo.OrganizationEncryptionConfig, bool, error) {
+func (p *Provisioner) recordManagedConfig(ctx context.Context, organizationID string, platform platformCredential, keyName string, actor Actor) (repo.OrganizationEncryptionConfig, bool, error) {
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
 		return repo.OrganizationEncryptionConfig{}, false, fmt.Errorf("begin organization encryption transaction: %w", err)
@@ -256,12 +256,15 @@ func (p *Provisioner) recordManagedConfig(ctx context.Context, organizationID st
 
 	key, err := q.CreateEncryptionExternalKey(ctx, repo.CreateEncryptionExternalKeyParams{
 		OrganizationID:       conv.ToPGText(organizationID),
-		ExternalCredentialID: credentialID,
+		ExternalCredentialID: platform.id,
 		Algorithm:            gcpkms.SymmetricAlgorithm,
 		Name:                 managedKeyName,
 	})
 	if err != nil {
 		return repo.OrganizationEncryptionConfig{}, false, fmt.Errorf("record managed encryption key: %w", err)
+	}
+	if err := requirePlatformCredentialUnchanged(ctx, q, platform); err != nil {
+		return repo.OrganizationEncryptionConfig{}, false, err
 	}
 	if _, err := q.CreateEncryptionGcpKmsKey(ctx, repo.CreateEncryptionGcpKmsKeyParams{ResourceName: keyName, ExternalKeyID: key.ID, OrganizationID: organizationID}); err != nil {
 		return repo.OrganizationEncryptionConfig{}, false, fmt.Errorf("record managed encryption key resource: %w", err)
@@ -789,19 +792,57 @@ func (p *Provisioner) transition(
 	return nil
 }
 
+// platformCredential is the platform credential as screened for use.
+type platformCredential struct {
+	// id is the credential managed KEKs are recorded against.
+	id uuid.UUID
+
+	// identity is the stored identity that was screened, compared again inside
+	// the write transaction.
+	identity repo.GcpIamCredential
+}
+
+// requirePlatformCredentialUnchanged re-reads the platform credential inside
+// the write transaction, after the managed key insert's foreign key check took
+// FOR KEY SHARE on it. A platform mutation holding the row FOR UPDATE has then
+// either committed, and shows up here, or waits until this transaction ends.
+// Without the re-read a key could be recorded against a credential that was
+// deleted or repointed after it was screened, since a soft-deleted row still
+// satisfies the foreign key.
+func requirePlatformCredentialUnchanged(ctx context.Context, q *repo.Queries, platform platformCredential) error {
+	row, err := q.GetPlatformGcpIamCredential(ctx, platform.id)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("%w: platform credential was deleted during provisioning", ErrPlatformCredentialUnusable)
+	case err != nil:
+		return fmt.Errorf("re-read platform encryption credential: %w", err)
+	}
+
+	stored, screened := row.GcpIamCredential, platform.identity
+	if stored.ImpersonateServiceAccount != screened.ImpersonateServiceAccount ||
+		stored.WifPoolID != screened.WifPoolID ||
+		stored.WifProviderID != screened.WifProviderID ||
+		stored.WifProjectNumber != screened.WifProjectNumber ||
+		stored.SkipProjectVerification != screened.SkipProjectVerification {
+		return fmt.Errorf("%w: platform credential changed during provisioning", ErrPlatformCredentialUnusable)
+	}
+
+	return nil
+}
+
 // resolvePlatformCredential loads and screens the platform credential managed
 // KEKs are recorded against, and proves Speakeasy can assume it.
-func (p *Provisioner) resolvePlatformCredential(ctx context.Context, logger *slog.Logger) (uuid.UUID, error) {
+func (p *Provisioner) resolvePlatformCredential(ctx context.Context, logger *slog.Logger) (platformCredential, error) {
 	row, err := repo.New(p.db).GetPlatformGcpIamCredential(ctx, p.cfg.Keys.PlatformCredentialID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return uuid.Nil, fmt.Errorf("%w: platform credential not found", ErrPlatformCredentialUnusable)
+		return platformCredential{}, fmt.Errorf("%w: platform credential not found", ErrPlatformCredentialUnusable)
 	case err != nil:
-		return uuid.Nil, fmt.Errorf("load platform encryption credential: %w", err)
+		return platformCredential{}, fmt.Errorf("load platform encryption credential: %w", err)
 	}
 
 	if got := strings.TrimSpace(row.GcpIamCredential.ImpersonateServiceAccount.String); !strings.EqualFold(got, p.cfg.Keys.PlatformServiceAccount) {
-		return uuid.Nil, fmt.Errorf("%w: credential impersonates %q, configured service account is %q", ErrPlatformCredentialUnusable, got, p.cfg.Keys.PlatformServiceAccount)
+		return platformCredential{}, fmt.Errorf("%w: credential impersonates %q, configured service account is %q", ErrPlatformCredentialUnusable, got, p.cfg.Keys.PlatformServiceAccount)
 	}
 
 	credential, problem, detail, err := p.identity.ScreenStoredCredential(ctx, logger, gcpauth.StoredCredential{
@@ -811,16 +852,16 @@ func (p *Provisioner) resolvePlatformCredential(ctx context.Context, logger *slo
 		SkipProjectVerification:   row.GcpIamCredential.SkipProjectVerification,
 	})
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("screen platform encryption credential: %w", err)
+		return platformCredential{}, fmt.Errorf("screen platform encryption credential: %w", err)
 	}
 	if problem != "" {
-		return uuid.Nil, fmt.Errorf("%w: %s", ErrPlatformCredentialUnusable, detail)
+		return platformCredential{}, fmt.Errorf("%w: %s", ErrPlatformCredentialUnusable, detail)
 	}
 	if _, err := p.identity.ResolvePrincipal(ctx, credential); err != nil {
-		return uuid.Nil, fmt.Errorf("%w: cannot assume the platform service account: %w", ErrPlatformCredentialUnusable, err)
+		return platformCredential{}, fmt.Errorf("%w: cannot assume the platform service account: %w", ErrPlatformCredentialUnusable, err)
 	}
 
-	return row.ExternalCredential.ID, nil
+	return platformCredential{id: row.ExternalCredential.ID, identity: row.GcpIamCredential}, nil
 }
 
 // openProvisioningClient builds a KMS client under Speakeasy's own identity,

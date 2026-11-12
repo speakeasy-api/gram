@@ -108,21 +108,26 @@ const listLiveUserSessionCredentials = `-- name: ListLiveUserSessionCredentials 
 SELECT DISTINCT ON (COALESCE(s.credential_id, s.id))
        COALESCE(s.credential_id, s.id)::uuid AS credential_id,
        s.user_session_issuer_id,
-       COALESCE(usi.organization_id, p.organization_id, '')::text AS organization_id
+       COALESCE(CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END, '')::text AS organization_id
 FROM user_sessions AS s
 JOIN user_session_issuers AS usi
   ON usi.id = s.user_session_issuer_id
 LEFT JOIN projects AS p
   ON p.id = usi.project_id
-WHERE s.deleted IS FALSE
+WHERE usi.deleted IS FALSE
+  AND (usi.project_id IS NULL OR p.deleted IS FALSE)
+  AND (s.organization_id IS NULL OR s.organization_id = CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END)
+  AND s.deleted IS FALSE
   AND s.refresh_expires_at > clock_timestamp()
-  AND COALESCE(s.credential_id, s.id) > $1::uuid
-  AND ($2::text = '' OR COALESCE(usi.organization_id, p.organization_id) = $2::text)
+  AND ($1::uuid IS NULL OR s.user_session_issuer_id = $1::uuid)
+  AND COALESCE(s.credential_id, s.id) > $2::uuid
+  AND ($3::text = '' OR CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END = $3::text)
 ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
-LIMIT $3::int
+LIMIT $4::int
 `
 
 type ListLiveUserSessionCredentialsParams struct {
+	IssuerID       uuid.NullUUID
 	Cursor         uuid.UUID
 	OrganizationID string
 	PageSize       int32
@@ -140,7 +145,12 @@ type ListLiveUserSessionCredentialsRow struct {
 // Its organization is its issuer's, which a project issuer takes from its
 // project.
 func (q *Queries) ListLiveUserSessionCredentials(ctx context.Context, arg ListLiveUserSessionCredentialsParams) ([]ListLiveUserSessionCredentialsRow, error) {
-	rows, err := q.db.Query(ctx, listLiveUserSessionCredentials, arg.Cursor, arg.OrganizationID, arg.PageSize)
+	rows, err := q.db.Query(ctx, listLiveUserSessionCredentials,
+		arg.IssuerID,
+		arg.Cursor,
+		arg.OrganizationID,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -207,11 +217,12 @@ const listUpstreamClientSelectionCoverage = `-- name: ListUpstreamClientSelectio
 WITH session_issuer AS (
     SELECT usi.id,
            usi.project_id,
-           COALESCE(usi.organization_id, p.organization_id) AS organization_id
+           CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END AS organization_id
     FROM user_session_issuers AS usi
     LEFT JOIN projects AS p ON p.id = usi.project_id
     WHERE usi.id = $4
       AND usi.deleted IS FALSE
+      AND (usi.project_id IS NULL OR p.deleted IS FALSE)
 ),
 reachable AS (
     SELECT s.id, s.project_id
@@ -409,7 +420,7 @@ type ListUpstreamClientSelectionCoverageRow struct {
 }
 
 // Every server one credential can reach, with its recorded choice and the
-// evidence RecordUpstreamClientSelections decides from. The reach and the
+// evidence RecordUpstreamClientSelectionsForCredentials decides from. The reach and the
 // evidence must stay identical to that statement's, so a prediction made here
 // is what the write records. typed_only means what it does there: the evidence
 // is the auth clients a server offers, not its upstream OAuth client
@@ -868,6 +879,15 @@ func (q *Queries) SeedUserSessionIssuerFixture(ctx context.Context, arg SeedUser
 		arg.OrganizationID,
 		arg.Slug,
 	)
+	return err
+}
+
+const softDeleteUserSessionIssuerFixture = `-- name: SoftDeleteUserSessionIssuerFixture :exec
+UPDATE user_session_issuers SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteUserSessionIssuerFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteUserSessionIssuerFixture, id)
 	return err
 }
 

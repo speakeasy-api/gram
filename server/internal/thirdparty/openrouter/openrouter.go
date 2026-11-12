@@ -23,6 +23,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -337,7 +338,7 @@ func ResolveDefaultCreditLimit(
 const trialCreditLimit = 50
 
 var specialLimitOrgs = []string{
-	"5a25158b-24dc-4d49-b03d-e85acfbea59c", // speakeasy-team
+	constants.SpeakeasyTeamOrganizationID,
 }
 
 // IsSpecialLimitOrg reports whether the org bypasses standard credit limits.

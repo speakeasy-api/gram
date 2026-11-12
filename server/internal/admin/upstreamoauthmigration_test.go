@@ -140,6 +140,32 @@ func TestUpstreamOAuthMigration_MigratesAnOrganizationIdempotently(t *testing.T)
 	require.True(t, again.Status.Migrated)
 }
 
+// Under enforcement a client an issuer binds is not inferred onto the issuer's
+// only server, so it must not keep the organization reported as unmigrated.
+func TestUpstreamOAuthMigration_EnforcedOrganizationHasNoPendingInferredAssociations(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+
+	org := newMigrationOrg(t, ctx, db, "migrate-enforced")
+	issuer := org.issuer()
+	org.client(issuer)
+	org.server(issuer)
+
+	before, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), before.PendingAssociations)
+
+	_, err = productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: org.id, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+
+	enforced, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.Zero(t, enforced.PendingAssociations)
+	require.Empty(t, enforced.UnresolvedServers)
+	require.True(t, enforced.Migrated)
+}
+
 func TestUpstreamOAuthMigration_ReportsServersNeedingConfiguration(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)

@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -68,6 +69,9 @@ var (
 	AppOtherMetadataURL = App{"other_metadata_url", ""}
 )
 
+// appKinds are the app_key values that name a kind of app rather than an app.
+var appKinds = []string{AppDCR.key, AppFirstParty.key, AppUnverified.key, AppWorkload.key, AppCodeMode.key, AppRecoveryLink.key, AppBackground.key, AppOtherMetadataURL.key}
+
 // ClientIDCheck says whether Speakeasy resolved and admitted a client_id. It is about client_id
 // admission only, not the request's final outcome.
 type ClientIDCheck bool
@@ -97,9 +101,8 @@ func AppOf(clientID string, check ClientIDCheck) App {
 		return AppOtherMetadataURL
 	}
 	host := NormalizeProviderHost(clientID)
-	switch host {
-	case "", AppDCR.key, AppFirstParty.key, AppUnverified.key, AppWorkload.key, AppCodeMode.key, AppRecoveryLink.key, AppBackground.key, AppOtherMetadataURL.key:
-		// A host spelled like a kind must not count as that kind.
+	// A host spelled like a kind must not count as that kind.
+	if host == "" || slices.Contains(appKinds, host) {
 		return AppUnverified
 	}
 	if check != ClientIDAdmitted {
