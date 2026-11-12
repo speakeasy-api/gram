@@ -60,6 +60,25 @@ func TestTemplateIDs_ValidateRegisteredRejectsMissingAndUnknownKeys(t *testing.T
 	require.ErrorIs(t, ids.ValidateRegistered(), ErrUnknownTemplateKey)
 }
 
+// A mapping generated before a template was retired still carries its key.
+// Startup must not fail on it.
+func TestTemplateIDs_ValidateRegisteredIgnoresRetiredKeys(t *testing.T) {
+	t.Parallel()
+
+	ids := make(TemplateIDs, len(RegisteredTemplates)+1)
+	for _, tmpl := range RegisteredTemplates {
+		ids[tmpl.Key()] = TransactionalID("id-" + string(tmpl.Key()))
+	}
+	ids["trial_ending_soon"] = "id-trial-ending-soon"
+	require.NoError(t, ids.ValidateRegistered())
+
+	for key := range retiredTemplateKeys {
+		for _, tmpl := range RegisteredTemplates {
+			require.NotEqual(t, key, tmpl.Key(), "a retired key must not also be registered")
+		}
+	}
+}
+
 func TestTeamInvite_MetadataAndVariables(t *testing.T) {
 	t.Parallel()
 

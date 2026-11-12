@@ -74,8 +74,18 @@ func ParseTemplateIDs(raw string) (TemplateIDs, error) {
 	return NewTemplateIDs(values), nil
 }
 
+// retiredTemplateKeys are templates the application no longer sends. A
+// deployment's ID mapping can lag the release that retired one, for example a
+// mapping kept from an earlier release or GRAM_EMAIL_TEMPLATE_IDS in a local
+// mise.local.toml, so ValidateRegistered ignores these keys instead of failing
+// startup.
+var retiredTemplateKeys = map[TemplateKey]struct{}{
+	"trial_ending_soon": {},
+}
+
 // ValidateRegistered requires one non-empty ID for every registered template
-// and rejects unknown keys. Production processes call this when Loops is on.
+// and rejects unknown keys other than retired ones. Production processes call
+// this when Loops is on.
 func (ids TemplateIDs) ValidateRegistered() error {
 	if len(ids) == 0 {
 		return ErrEmptyTemplateIDs
@@ -91,6 +101,9 @@ func (ids TemplateIDs) ValidateRegistered() error {
 	}
 
 	for key := range ids {
+		if _, retired := retiredTemplateKeys[key]; retired {
+			continue
+		}
 		if _, ok := registered[key]; !ok {
 			return fmt.Errorf("%w: %q", ErrUnknownTemplateKey, key)
 		}
