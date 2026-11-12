@@ -24,7 +24,7 @@ Speakeasy's management API is the internal HTTP-RPC surface that the dashboard, 
 
 **Security scheme.** The authentication mechanism a method accepts. Speakeasy's management endpoints use three schemes: **Session** (browser cookie), **ByKey** (API key header), and **ProjectSlug** (project-selector header). Additional schemes exist for non-management surfaces and are out of scope here.
 
-**Model views (`mv`).** Stateless functions that convert database row types into API response types. Keep database types out of the API boundary — handlers always return a view, never a `repo` struct.
+**Model views (`mv`).** Functions that convert database row types into API response types. Most are stateless; `Describe<Subject>` functions also load the rows they convert, and `orgaccount.Describe` reconciles the organization's stored billing tier. Keep database types out of the API boundary — handlers always return a view, never a `repo` struct.
 
 **Handler.** One method implementation on the `Service` struct.
 
