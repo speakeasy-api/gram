@@ -21,7 +21,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(7), "organization read access"),
 					Dimensions:  nil,
@@ -34,7 +34,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "admin",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read", "device_agent_sync", "hooks_ingest"},
 					Exclusions:  Blocked(SafeSince(7), "organization admin access"),
 					Dimensions:  nil,
@@ -47,7 +47,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "device_agent_sync",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -59,10 +59,10 @@ var Model = Registry{
 					Agent:       SafeSince(2),
 				},
 				{
-					Action:     "hooks_ingest",
-					Scope:      "",
-					Implies:    nil,
-					Exclusions: nil,
+					Action:      "hooks_ingest",
+					LegacyScope: "",
+					Implies:     nil,
+					Exclusions:  nil,
 					// R6 (parked): the one org permission checked per project.
 					Dimensions:  []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
 					Source:      GrantSourceRoles,
@@ -83,7 +83,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "project read access"),
 					Dimensions:  nil,
@@ -96,7 +96,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "project write access"),
 					Dimensions:  nil,
@@ -110,7 +110,7 @@ var Model = Registry{
 				{
 					// R1 (parked): stored as plugin:write, checked on a project.
 					Action:      "plugin_write",
-					Scope:       ScopePluginWrite,
+					LegacyScope: ScopePluginWrite,
 					Implies:     nil,
 					Exclusions:  Blocked(AgentUnsafe(), "plugin write access"),
 					Dimensions:  nil,
@@ -125,7 +125,7 @@ var Model = Registry{
 					// R1 (parked): stored as log:read, checked on a project.
 					// Neither project:* nor org:admin implies it.
 					Action:      "log_read",
-					Scope:       ScopeLogRead,
+					LegacyScope: ScopeLogRead,
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -153,7 +153,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "MCP read access"),
 					Dimensions:  nil,
@@ -166,7 +166,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "MCP write access"),
 					Dimensions:  nil,
@@ -181,7 +181,7 @@ var Model = Registry{
 					// Standalone: viewing or managing a server is not
 					// permission to call its tools.
 					Action:      "connect",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "MCP connect access"),
 					Dimensions:  nil,
@@ -211,7 +211,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "auth",
-					Scope:       ScopeMCPAuth,
+					LegacyScope: ScopeMCPAuth,
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(5), "auth client use"),
 					Dimensions:  nil,
@@ -235,7 +235,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "environment read access"),
 					Dimensions:  nil,
@@ -248,7 +248,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "environment write access"),
 					Dimensions:  nil,
@@ -270,7 +270,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "skill read access"),
 					Dimensions:  nil,
@@ -283,7 +283,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "skill write access"),
 					Dimensions:  nil,
@@ -305,7 +305,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "assistant read access"),
 					Dimensions:  nil,
@@ -318,7 +318,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "assistant write access"),
 					Dimensions:  nil,
@@ -342,9 +342,9 @@ var Model = Registry{
 			},
 			Permissions: []Permission{
 				{
-					Action:  "evaluate",
-					Scope:   "",
-					Implies: nil,
+					Action:      "evaluate",
+					LegacyScope: "",
+					Implies:     nil,
 					// An exemption, not a block: direct grants never cancel a
 					// bypass.
 					Exclusions:  []Exclusion{{Kind: ExclusionExemption, Action: "bypass", Agent: AgentUnsafe(), Subject: ""}},
@@ -358,7 +358,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "bypass",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -371,7 +371,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "block",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -395,7 +395,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -408,7 +408,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read"},
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -430,7 +430,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "execute",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -452,7 +452,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -465,7 +465,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -478,7 +478,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "authorize",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -491,7 +491,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "transfer",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -516,7 +516,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(AgentUnsafe(), "workload read access"),
 					Dimensions:  nil,
@@ -529,7 +529,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(AgentUnsafe(), "workload write access"),
 					Dimensions:  nil,

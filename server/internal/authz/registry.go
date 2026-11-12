@@ -15,7 +15,7 @@ package authz
 //   - A Scope is the stored string a grant carries, kind:action by default
 //     ("mcp:write"). A few permissions keep a historical string whose prefix is
 //     not their kind (plugin:write and log:read are checked against a project,
-//     mcp:auth against an auth client); they set Permission.Scope.
+//     mcp:auth against an auth client); they set Permission.LegacyScope.
 //   - An Exclusion is a grant that subtracts from a permission. A Block
 //     (mcp:blocked_write) takes access away and is generated from the
 //     permission; an Exemption (risk_policy:bypass) exempts its holder from a
@@ -112,12 +112,18 @@ type Dimension struct {
 	Required bool
 }
 
+// legacyScopes are the only stored strings a permission may keep through
+// LegacyScope. They predate the registry and are stored in grants, API key
+// and agent policies, and the public scope enum. They go, with the field,
+// when R1 renames the scopes.
+var legacyScopes = []Scope{"plugin:write", "log:read", "mcp:auth"}
+
 // Permission defines one action on a resource type.
 type Permission struct {
 	Action Action
-	// Scope is the stored string, kind:action unless set. Set it only to keep
-	// a historical string; new permissions use the default.
-	Scope Scope
+	// LegacyScope keeps a stored string that is not kind:action. Only the
+	// scopes in legacyScopes may use it; new permissions take the default.
+	LegacyScope Scope
 	// Implies lists actions on the same resource type a grant of this one
 	// also satisfies. The closure is computed; list direct implications only.
 	Implies []Action
