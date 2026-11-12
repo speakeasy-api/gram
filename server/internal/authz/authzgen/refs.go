@@ -7,22 +7,23 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authz/internal/registry"
 )
 
 // refNames names the generated ref of each resource kind. A kind missing here
 // is named after itself (agent becomes Agent).
-var refNames = map[authz.Kind]string{"mcp": "MCPServer"}
+var refNames = map[registry.Kind]string{"mcp": "MCPServer"}
 
 // handWrittenRefs are the kinds whose requests carry dimensions a generic ref
 // cannot fill in. Their constructors stay hand-written in authz.
-var handWrittenRefs = map[authz.Kind]string{
+var handWrittenRefs = map[registry.Kind]string{
 	"mcp_auth_client": "MCPAuthClientCheck: client type, connection owner and upstream client come from the client row",
 	"risk_policy":     "RiskPolicyApplies: evaluation pairs the policy with its bypass exemption",
 	"inference":       "InferenceExecuteCheck: the project is both the resource and its parent",
 }
 
 // RefName is the Go name of a kind's ref constructor.
-func RefName(kind authz.Kind) string {
+func RefName(kind registry.Kind) string {
 	if name, ok := refNames[kind]; ok {
 		return name
 	}
@@ -31,13 +32,13 @@ func RefName(kind authz.Kind) string {
 
 // CollectionName is the Go name of the function that names every
 // resource of a kind in one project: environment becomes Environments.
-func CollectionName(kind authz.Kind) string {
+func CollectionName(kind registry.Kind) string {
 	return RefName(kind) + "s"
 }
 
 // hasCollection reports whether a kind gets a generated collection: its
 // resources sit in a project and its ref takes that project and nothing else.
-func hasCollection(r authz.Registry, t authz.ResourceType) bool {
+func hasCollection(r registry.Registry, t registry.ResourceType) bool {
 	if _, ok := handWrittenRefs[t.Kind]; ok || t.Parent != "project" {
 		return false
 	}
@@ -55,7 +56,7 @@ func hasCollection(r authz.Registry, t authz.ResourceType) bool {
 // with the project id as the resource, which is how checks without a single
 // resource (listing, creating, a slug that did not resolve) have always been
 // stored, so existing grants keep matching.
-func renderCollections(b *strings.Builder, r authz.Registry) {
+func renderCollections(b *strings.Builder, r registry.Registry) {
 	b.WriteString("// Collections name every resource of one kind inside a project, for requests\n")
 	b.WriteString("// with no single resource: listing, creating, or a lookup that found nothing.\n")
 	b.WriteString("// Each is the kind's permission with the project id as the resource.\n\n")
@@ -69,7 +70,7 @@ func renderCollections(b *strings.Builder, r authz.Registry) {
 		fmt.Fprintf(b, "// %s names every %s resource of project.\n", plural, t.Kind)
 		fmt.Fprintf(b, "func %s[P ID](project P) %sCollection {\n\treturn %sCollection{project: idString(project)}\n}\n\n", plural, name, name)
 		for _, p := range t.Permissions {
-			if slices.ContainsFunc(p.Dimensions, func(d authz.Dimension) bool { return refDimension(r, d) }) {
+			if slices.ContainsFunc(p.Dimensions, func(d registry.Dimension) bool { return refDimension(r, d) }) {
 				continue
 			}
 			method := ActionMethodName(p.Action)
@@ -81,7 +82,7 @@ func renderCollections(b *strings.Builder, r authz.Registry) {
 
 // ActionMethodName is the Go name of the ref method for action:
 // plugin_write becomes PluginWrite.
-func ActionMethodName(action authz.Action) string {
+func ActionMethodName(action registry.Action) string {
 	return camel(string(action))
 }
 
@@ -113,9 +114,9 @@ func paramName(key string) string {
 
 // paramType is the Go type of a dimension parameter: an id type for a key
 // naming a kind (project_id is a ProjectID), otherwise a string.
-func paramType(r authz.Registry, key string) string {
-	if kind, ok := strings.CutSuffix(key, "_id"); ok && slices.ContainsFunc(r.Types, func(t authz.ResourceType) bool { return string(t.Kind) == kind }) {
-		return RefName(authz.Kind(kind)) + "ID"
+func paramType(r registry.Registry, key string) string {
+	if kind, ok := strings.CutSuffix(key, "_id"); ok && slices.ContainsFunc(r.Types, func(t registry.ResourceType) bool { return string(t.Kind) == kind }) {
+		return RefName(registry.Kind(kind)) + "ID"
 	}
 	return "string"
 }
@@ -124,11 +125,11 @@ func paramType(r authz.Registry, key string) string {
 // naming another kind, such as project_id. Free-text and closed-set
 // dimensions (tool, disposition) describe one use rather than the resource,
 // so refs never take them.
-func refDimension(r authz.Registry, d authz.Dimension) bool {
+func refDimension(r registry.Registry, d registry.Dimension) bool {
 	return paramType(r, d.Key) != "string"
 }
 
-func renderRefs(r authz.Registry) ([]byte, error) {
+func renderRefs(r registry.Registry) ([]byte, error) {
 	var b strings.Builder
 	b.WriteString(header)
 	b.WriteString("package authz\n\n")
@@ -141,7 +142,7 @@ func renderRefs(r authz.Registry) ([]byte, error) {
 			continue
 		}
 		name := RefName(t.Kind)
-		var dims []authz.Dimension
+		var dims []registry.Dimension
 		for _, d := range t.Dimensions {
 			if refDimension(r, d) {
 				dims = append(dims, d)
@@ -190,7 +191,7 @@ func renderRefs(r authz.Registry) ([]byte, error) {
 		}
 		for _, p := range t.Permissions {
 			method := ActionMethodName(p.Action)
-			var extra []authz.Dimension
+			var extra []registry.Dimension
 			for _, d := range p.Dimensions {
 				if refDimension(r, d) {
 					extra = append(extra, d)
@@ -223,7 +224,7 @@ func renderRefs(r authz.Registry) ([]byte, error) {
 	slices.Sort(kinds)
 	b.WriteString("// Kinds without a generated ref, and the hand-written constructor each uses:\n//\n")
 	for _, kind := range kinds {
-		fmt.Fprintf(&b, "//   - %s: %s\n", kind, handWrittenRefs[authz.Kind(kind)])
+		fmt.Fprintf(&b, "//   - %s: %s\n", kind, handWrittenRefs[registry.Kind(kind)])
 	}
 
 	formatted, err := format.Source([]byte(b.String()))
