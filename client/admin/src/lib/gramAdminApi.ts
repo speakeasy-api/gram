@@ -659,6 +659,8 @@ export type AdminMcpServer = {
   // row with no endpoint.
   url?: string;
   visibility: "disabled" | "private" | "public";
+  // Remote MCP server upstream address; omitted for other server types.
+  upstream_url?: string;
   source: AdminMcpServerSource;
   created_at: string;
 };

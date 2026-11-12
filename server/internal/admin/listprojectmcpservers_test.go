@@ -14,7 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotemcpRepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 )
 
 func seedMCPEndpoint(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, serverID uuid.UUID, customDomainID uuid.NullUUID, slug string) uuid.UUID {
@@ -259,4 +261,50 @@ func TestListProjectMcpServers_IgnoresDeletedServers(t *testing.T) {
 	deleteMCPServer(t, ctx, conn, projectID, serverID)
 
 	require.Empty(t, listMCPServers(t, ctx, svc, "org_one", projectID))
+}
+
+func TestListProjectMcpServers_UpstreamURL(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestMCPServersService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
+	projectID := seedProject(t, ctx, conn, "org_one", "upstream")
+	backing := seedToolset(t, ctx, conn, "org_one", projectID, "backing", false)
+	seedMCPServer(t, ctx, conn, projectID, backing, "toolset")
+	remoteID, serverID := uuid.New(), uuid.New()
+	const upstream = "https://upstream.example.test/mcp"
+	_, err := remotemcpRepo.New(conn).CreateServer(ctx, remotemcpRepo.CreateServerParams{
+		ID:            remoteID,
+		ProjectID:     projectID,
+		Name:          pgtype.Text{String: "remote", Valid: true},
+		Slug:          pgtype.Text{String: "remote", Valid: true},
+		TransportType: "streamable-http",
+		Url:           upstream,
+	})
+	require.NoError(t, err)
+	_, err = mcpserversRepo.New(conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+		ID:                    serverID,
+		ProjectID:             projectID,
+		Name:                  pgtype.Text{String: "remote", Valid: true},
+		Slug:                  pgtype.Text{String: "remote", Valid: true},
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: remoteID, Valid: true},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            "private",
+		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	got := listMCPServers(t, ctx, svc, "org_one", projectID)
+	require.Len(t, got, 2)
+	for _, server := range got {
+		if server.Source == "remote" {
+			require.NotNil(t, server.UpstreamURL)
+			require.Equal(t, upstream, *server.UpstreamURL)
+		} else {
+			require.Nil(t, server.UpstreamURL)
+		}
+	}
 }

@@ -99128,6 +99128,9 @@ components:
                         - tunneled
                         - unproxied
                         - toolset_only
+                upstream_url:
+                    type: string
+                    description: The upstream URL for a remote MCP server. Omitted for other server types.
                 url:
                     type: string
                     description: The URL clients connect to. Omitted when the server has no routable address.

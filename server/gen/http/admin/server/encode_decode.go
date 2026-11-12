@@ -25610,12 +25610,13 @@ func marshalAdminAdminProjectToAdminProjectResponseBody(v *admin.AdminProject) *
 // type *AdminMcpServerResponseBody from a value of type *admin.AdminMcpServer.
 func marshalAdminAdminMcpServerToAdminMcpServerResponseBody(v *admin.AdminMcpServer) *AdminMcpServerResponseBody {
 	res := &AdminMcpServerResponseBody{
-		ID:         v.ID,
-		Name:       v.Name,
-		URL:        v.URL,
-		Visibility: v.Visibility,
-		Source:     v.Source,
-		CreatedAt:  v.CreatedAt,
+		ID:          v.ID,
+		Name:        v.Name,
+		URL:         v.URL,
+		UpstreamURL: v.UpstreamURL,
+		Visibility:  v.Visibility,
+		Source:      v.Source,
+		CreatedAt:   v.CreatedAt,
 	}
 
 	return res

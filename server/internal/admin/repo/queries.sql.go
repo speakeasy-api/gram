@@ -1866,6 +1866,7 @@ SELECT
     m.name,
     m.slug,
     t.name AS toolset_name,
+    r.url AS upstream_url,
     m.visibility,
     m.toolset_id,
     m.remote_mcp_server_id,
@@ -1880,6 +1881,7 @@ SELECT
 FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id
 LEFT JOIN toolsets t ON t.id = m.toolset_id
+LEFT JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND r.deleted IS FALSE
 LEFT JOIN mcp_endpoints e ON e.mcp_server_id = m.id AND e.deleted IS FALSE
 LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.deleted IS FALSE
     AND d.organization_id = p.organization_id
@@ -1894,6 +1896,7 @@ type AdminListProjectMcpServerRowsRow struct {
 	Name                   pgtype.Text
 	Slug                   pgtype.Text
 	ToolsetName            pgtype.Text
+	UpstreamUrl            pgtype.Text
 	Visibility             string
 	ToolsetID              uuid.NullUUID
 	RemoteMcpServerID      uuid.NullUUID
@@ -1924,6 +1927,7 @@ func (q *Queries) AdminListProjectMcpServerRows(ctx context.Context, projectID u
 			&i.Name,
 			&i.Slug,
 			&i.ToolsetName,
+			&i.UpstreamUrl,
 			&i.Visibility,
 			&i.ToolsetID,
 			&i.RemoteMcpServerID,

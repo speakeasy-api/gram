@@ -54,7 +54,7 @@ function serverColumns(idOrSlug: string, project: string) {
   return serverColumn.columns([
     serverColumn.accessor("name", {
       header: "Name",
-      // A floor, because the URL column takes the rest of the width and would
+      // A floor, because the URL columns share the remaining width and would
       // otherwise fold a two-word name onto three lines.
       meta: { cellClassName: "min-w-48 whitespace-normal" },
       // The link, not the row, carries the keyboard path and the accessible
@@ -72,14 +72,26 @@ function serverColumns(idOrSlug: string, project: string) {
     }),
     serverColumn.accessor("url", {
       header: "Server URL",
-      // `max-w-0 w-full` gives the column whatever the others leave, and lets a
-      // long URL truncate there rather than push them out of the border.
-      meta: { cellClassName: "max-w-0 w-full" },
+      // Share remaining width between URLs and truncate long addresses.
+      meta: { cellClassName: "max-w-0 w-1/2" },
       cell: ({ row }) =>
         row.original.url ? (
           <CopyValue
             label={`${row.original.name} server URL`}
             value={row.original.url}
+          />
+        ) : (
+          <span className="text-muted-foreground text-sm">-</span>
+        ),
+    }),
+    serverColumn.accessor("upstream_url", {
+      header: "Source",
+      meta: { cellClassName: "max-w-0 w-1/2" },
+      cell: ({ row }) =>
+        row.original.upstream_url ? (
+          <CopyValue
+            label={`${row.original.name} source URL`}
+            value={row.original.upstream_url}
           />
         ) : (
           <span className="text-muted-foreground text-sm">-</span>
@@ -99,7 +111,7 @@ function serverColumns(idOrSlug: string, project: string) {
       ),
     }),
     serverColumn.accessor("source", {
-      header: "Source",
+      header: "Type",
       cell: ({ row }) => (
         <span className="text-muted-foreground text-sm">
           {SOURCE_LABELS[row.original.source] ?? row.original.source}

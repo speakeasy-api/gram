@@ -935,6 +935,8 @@ type AdminMcpServer struct {
 	Name string
 	// The URL clients connect to. Omitted when the server has no routable address.
 	URL *string
+	// The upstream URL for a remote MCP server. Omitted for other server types.
+	UpstreamURL *string
 	// The visibility of the server.
 	Visibility string
 	// What backs the server. toolset_only is a toolset with no mcp_servers row.
