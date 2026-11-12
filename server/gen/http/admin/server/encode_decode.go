@@ -26040,12 +26040,13 @@ func marshalAdminAdminProjectToAdminProjectResponseBody(v *admin.AdminProject) *
 // type *AdminMcpServerResponseBody from a value of type *admin.AdminMcpServer.
 func marshalAdminAdminMcpServerToAdminMcpServerResponseBody(v *admin.AdminMcpServer) *AdminMcpServerResponseBody {
 	res := &AdminMcpServerResponseBody{
-		ID:         v.ID,
-		Name:       v.Name,
-		URL:        v.URL,
-		Visibility: v.Visibility,
-		Source:     v.Source,
-		CreatedAt:  v.CreatedAt,
+		ID:          v.ID,
+		Name:        v.Name,
+		URL:         v.URL,
+		UpstreamURL: v.UpstreamURL,
+		Visibility:  v.Visibility,
+		Source:      v.Source,
+		CreatedAt:   v.CreatedAt,
 	}
 
 	return res
@@ -28012,9 +28013,10 @@ func marshalAdminAdminUpstreamOAuthMigrationExecutionProfilesToAdminUpstreamOAut
 		return nil
 	}
 	res := &AdminUpstreamOAuthMigrationExecutionProfilesResponseBody{
-		Complete:        v.Complete,
-		Targets:         v.Targets,
-		PendingVersions: v.PendingVersions,
+		Complete:            v.Complete,
+		Targets:             v.Targets,
+		PendingVersions:     v.PendingVersions,
+		UnexercisedVersions: v.UnexercisedVersions,
 	}
 	if v.Gaps != nil {
 		res.Gaps = make([]*AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody, len(v.Gaps))
@@ -28074,13 +28076,14 @@ func marshalAdminAdminUpstreamAuthEnforcementToAdminUpstreamAuthEnforcementRespo
 // value of type *admin.AdminUpstreamOAuthMigrationStatus.
 func marshalAdminAdminUpstreamOAuthMigrationStatusToAdminUpstreamOAuthMigrationStatusResponseBody(v *admin.AdminUpstreamOAuthMigrationStatus) *AdminUpstreamOAuthMigrationStatusResponseBody {
 	res := &AdminUpstreamOAuthMigrationStatusResponseBody{
-		OrganizationID:       v.OrganizationID,
-		Migrated:             v.Migrated,
-		Servers:              v.Servers,
-		PendingAssociations:  v.PendingAssociations,
-		Credentials:          v.Credentials,
-		PendingSelections:    v.PendingSelections,
-		ReconnectCredentials: v.ReconnectCredentials,
+		OrganizationID:          v.OrganizationID,
+		Migrated:                v.Migrated,
+		Servers:                 v.Servers,
+		PendingAssociations:     v.PendingAssociations,
+		Credentials:             v.Credentials,
+		PendingSelections:       v.PendingSelections,
+		ConsentScopedSelections: v.ConsentScopedSelections,
+		ReconnectCredentials:    v.ReconnectCredentials,
 	}
 	if v.UnresolvedServers != nil {
 		res.UnresolvedServers = make([]*AdminUpstreamOAuthMigrationServerResponseBody, len(v.UnresolvedServers))
