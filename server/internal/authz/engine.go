@@ -209,7 +209,15 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	return GrantsToContext(ctx, grants), nil
 }
 
+// Require refuses the request unless the caller satisfies every check. A
+// single AnyOf check is evaluated as RequireAnyUnblocked. A probe is refused.
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {
+	if alternatives, ok := singleAnyOf(checks); ok {
+		if checks[0].probe {
+			return e.mapError(ctx, InvalidCheck(checks[0].Scope, checks[0].ResourceID))
+		}
+		return e.RequireAnyUnblocked(ctx, alternatives...)
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err
@@ -265,7 +273,7 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 
 	matches := make([]grantMatch, 0, len(checks))
 	for _, check := range checks {
-		if err := validateInput(check); err != nil {
+		if err := validateRequireInput(check); err != nil {
 			challengeLogger{
 				Operation:            authzrepo.OperationRequire,
 				Outcome:              authzrepo.OutcomeError,
@@ -357,7 +365,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	}
 
 	for _, check := range checks {
-		if err := validateInput(check); err != nil {
+		if err := validateRequireInput(check); err != nil {
 			challengeLogger{
 				Operation:            authzrepo.OperationRequireAny,
 				Outcome:              authzrepo.OutcomeError,
@@ -819,6 +827,9 @@ func all(checks []Check, ok func(Check) bool) bool {
 }
 
 func validateInput(c Check) error {
+	if c.anyOf != nil {
+		return InvalidCheck(c.Scope, c.ResourceID)
+	}
 	switch c.ResourceID {
 	case "":
 		return InvalidCheck(c.Scope, c.ResourceID)

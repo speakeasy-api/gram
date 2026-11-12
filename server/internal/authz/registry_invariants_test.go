@@ -32,7 +32,7 @@ func invariantCheck(t ResourceType, scope Scope, resourceID, project string) Che
 			dimensions[d.Key] = project
 		}
 	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
 }
 
 func invariantAuthorizes(t *testing.T, grants []Grant, check Check) bool {

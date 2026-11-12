@@ -23,7 +23,7 @@ func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
 	if dims.ProjectID != "" {
 		dimensions[SelectorKeyProjectID] = dims.ProjectID
 	}
-	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
 }
 
 func valueOrUnknown(value string) string {
@@ -43,7 +43,7 @@ func MCPCheck(scope Scope, resourceID, projectID string) Check {
 	if projectID != "" {
 		dimensions = map[string]string{SelectorKeyProjectID: projectID}
 	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
 }
 
 // AssistantCheck builds a Check for an assistant scope. resourceID is the
@@ -53,7 +53,7 @@ func MCPCheck(scope Scope, resourceID, projectID string) Check {
 // covers every assistant in P, while a grant naming one assistant
 // ({"resource_id":A}) covers only that assistant.
 func AssistantCheck(scope Scope, resourceID, projectID string) Check {
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
 }
 
 // EnvironmentCheck builds a Check for an environment scope. resourceID is the
@@ -63,14 +63,14 @@ func AssistantCheck(scope Scope, resourceID, projectID string) Check {
 // project-wide grant ({"resource_id":"*","project_id":P}) covers every
 // environment in P, while a grant naming one environment covers only that one.
 func EnvironmentCheck(scope Scope, resourceID, projectID string) Check {
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
 }
 
 // HooksIngestCheck builds the org:hooks_ingest check for projectID. It always
 // carries the project, because matching skips grant keys a check omits, which
 // would let a project-bounded grant through for any project.
 func HooksIngestCheck(organizationID, projectID string) Check {
-	return Check{Scope: ScopeOrgHooksIngest, ResourceKind: "", ResourceID: organizationID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: ScopeOrgHooksIngest, ResourceKind: "", ResourceID: organizationID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
 }
 
 // MCPAuthClientDimensions carries the trusted attributes of one use of an auth
@@ -101,7 +101,7 @@ func MCPAuthClientCheck(clientID string, dims MCPAuthClientDimensions) Check {
 	if dims.UpstreamClient != "" {
 		dimensions[SelectorKeyUpstreamClient] = dims.UpstreamClient
 	}
-	return Check{Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: clientID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: ""}
+	return Check{Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: clientID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: "", probe: false, anyOf: nil}
 }
 
 // requiredCheckDimensions lists, per resource kind, the dimensions every check
@@ -233,7 +233,7 @@ type RiskPolicyDimensions struct {
 }
 
 func RiskPolicyEvaluateCheck(policyID string) Check {
-	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
 }
 
 // RiskPolicyApplies builds the runtime authorization rule for applying a risk
@@ -265,7 +265,7 @@ func RiskPolicyApplies(policyID string, bypassDims RiskPolicyDimensions) GrantEx
 // every chat grant wildcards resource_id — so any concrete value (the chat or
 // project id) works.
 func ChatReadCheck(resourceID string) Check {
-	return Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
 }
 
 // ChatWriteCheck builds a Check authorizing destructive mutation of agent chat
@@ -275,7 +275,7 @@ func ChatReadCheck(resourceID string) Check {
 // destroy one. Owner-matching in the chat handlers still lets anyone mutate
 // their own sessions without a grant.
 func ChatWriteCheck(resourceID string) Check {
-	return Check{Scope: ScopeChatWrite, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: ScopeChatWrite, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
 }
 
 func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
@@ -290,11 +290,11 @@ func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
 		}
 		dimensions[SelectorKeyServerIdentity] = dims.ServerIdentity
 	}
-	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: ""}
+	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: "", probe: false, anyOf: nil}
 }
 
 // InferenceExecuteCheck authorizes inference in one project, not chat mutation.
 // Always include project_id so project-bounded grants cannot match by omission.
 func InferenceExecuteCheck(projectID string) Check {
-	return Check{Scope: ScopeInferenceExecute, ResourceKind: "", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: ScopeInferenceExecute, ResourceKind: "", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
 }
