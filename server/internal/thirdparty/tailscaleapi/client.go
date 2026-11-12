@@ -260,14 +260,31 @@ func (c *HTTPClient) UpsertService(ctx context.Context, creds Credentials, svc S
 	if !strings.HasPrefix(svc.Name, "svc:") || len(svc.Ports) == 0 {
 		return errors.New("service definition requires a svc: name and at least one port")
 	}
-	//nolint:exhaustruct // DisplayName, Addrs and Annotations are managed by Tailscale.
-	err = api.Services().CreateOrUpdate(ctx, tailscale.Service{
+	// Tailscale assigns a service its addresses on creation and rejects an
+	// update that omits them, so an existing service keeps its addresses, and
+	// the display name and annotations an admin may have set.
+	existing, err := api.Services().Get(ctx, svc.Name)
+	if err != nil {
+		err = mapError("read service", err)
+		if !errors.Is(err, ErrNotFound) {
+			return err
+		}
+		existing = nil
+	}
+
+	//nolint:exhaustruct // a new service gets its addresses from Tailscale.
+	next := tailscale.Service{
 		Name:    svc.Name,
 		Ports:   svc.Ports,
 		Tags:    svc.Tags,
 		Comment: svc.Comment,
-	})
-	if err != nil {
+	}
+	if existing != nil {
+		next.Addrs = existing.Addrs
+		next.DisplayName = existing.DisplayName
+		next.Annotations = existing.Annotations
+	}
+	if err := api.Services().CreateOrUpdate(ctx, next); err != nil {
 		return mapError("upsert service", err)
 	}
 	return nil

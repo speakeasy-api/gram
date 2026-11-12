@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -31,6 +32,10 @@ type stubAPI struct {
 	status        int
 	response      any
 	token         string
+
+	// services answers GETs of a Tailscale Service by name; a name missing
+	// from it is not found.
+	services map[string]any
 }
 
 func (s *stubAPI) handler() http.Handler {
@@ -74,6 +79,12 @@ func (s *stubAPI) handler() http.Handler {
 		s.mu.Lock()
 		s.requests = append(s.requests, recordedRequest{method: r.Method, path: r.URL.Path, body: body})
 		status, response := s.status, s.response
+		if name, ok := strings.CutPrefix(r.URL.Path, "/api/v2/tailnet/-/vip-services/"); ok && r.Method == http.MethodGet {
+			status, response = http.StatusNotFound, map[string]any{"message": "not found"}
+			if svc, found := s.services[name]; found {
+				status, response = http.StatusOK, svc
+			}
+		}
 		s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
@@ -225,14 +236,38 @@ func TestUpsertServiceBody(t *testing.T) {
 		Name: "svc:speakeasy", Ports: []string{"tcp:443"}, Tags: []string{"tag:speakeasy"}, Comment: "Speakeasy private MCP ingress",
 	}))
 	requests := stub.recorded()
-	require.Len(t, requests, 1)
-	require.Equal(t, http.MethodPut, requests[0].method)
-	require.Equal(t, "/api/v2/tailnet/-/vip-services/svc:speakeasy", requests[0].path)
-	require.Equal(t, "svc:speakeasy", requests[0].body["name"])
-	require.Equal(t, []any{"tcp:443"}, requests[0].body["ports"])
-	require.Equal(t, []any{"tag:speakeasy"}, requests[0].body["tags"])
+	require.Len(t, requests, 2)
+	require.Equal(t, http.MethodGet, requests[0].method, "the service is read first")
+	require.Equal(t, http.MethodPut, requests[1].method)
+	require.Equal(t, "/api/v2/tailnet/-/vip-services/svc:speakeasy", requests[1].path)
+	require.Equal(t, "svc:speakeasy", requests[1].body["name"])
+	require.Equal(t, []any{"tcp:443"}, requests[1].body["ports"])
+	require.Equal(t, []any{"tag:speakeasy"}, requests[1].body["tags"])
+	require.NotContains(t, requests[1].body, "addrs", "a new service gets its addresses from Tailscale")
 
 	require.Error(t, client.UpsertService(t.Context(), creds, tailscaleapi.Service{Name: "speakeasy", Ports: []string{"tcp:443"}, Tags: nil, Comment: ""}))
+}
+
+func TestUpsertServiceKeepsTailscaleManagedFields(t *testing.T) {
+	t.Parallel()
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, tokenStatus: 0, status: http.StatusOK, token: "tok", response: nil, services: map[string]any{
+		"svc:speakeasy": map[string]any{
+			"name": "svc:speakeasy", "addrs": []string{"100.100.1.1", "fd7a:115c:a1e0::1"}, "displayName": "Private MCP",
+			"annotations": map[string]string{"owner": "platform"}, "ports": []string{"tcp:443"}, "tags": []string{"tag:old"},
+		},
+	}}
+	client := newClient(t, stub)
+
+	require.NoError(t, client.UpsertService(t.Context(), creds, tailscaleapi.Service{
+		Name: "svc:speakeasy", Ports: []string{"tcp:443"}, Tags: []string{"tag:speakeasy"}, Comment: "Speakeasy private MCP ingress",
+	}))
+	requests := stub.recorded()
+	require.Len(t, requests, 2)
+	update := requests[1].body
+	require.Equal(t, []any{"100.100.1.1", "fd7a:115c:a1e0::1"}, update["addrs"], "Tailscale rejects an update without the service's addresses")
+	require.Equal(t, "Private MCP", update["displayName"])
+	require.Equal(t, map[string]any{"owner": "platform"}, update["annotations"])
+	require.Equal(t, []any{"tag:speakeasy"}, update["tags"], "the fields Speakeasy manages are replaced")
 }
 
 func TestDeleteMissingResourcesSucceed(t *testing.T) {
@@ -261,7 +296,7 @@ func TestClientReusesTokensPerCredential(t *testing.T) {
 	require.NoError(t, client.UpsertService(t.Context(), creds, svc))
 	require.NoError(t, client.UpsertService(t.Context(), creds, svc))
 	require.Equal(t, 1, stub.tokenExchanges(), "the same OAuth client reuses its access token")
-	require.Len(t, stub.recorded(), 2)
+	require.Len(t, stub.recorded(), 4, "each upsert reads, then writes, the service")
 
 	// Credentials are rotated: the same client id with a new secret is a
 	// different client and exchanges a token of its own.
