@@ -49,7 +49,7 @@ export type TestDataExportRouteSignalResult = {
   /**
    * What happened, in plain language.
    */
-  message?: string | undefined;
+  message: string;
   /**
    * accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection, or an address Speakeasy may not send to. error: any other answer.
    */
@@ -81,7 +81,7 @@ export const TestDataExportRouteSignalResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    message: z.optional(z.string()),
+    message: z.string(),
     outcome: TestDataExportRouteSignalResultOutcome$inboundSchema,
     signal: TestDataExportRouteSignalResultSignal$inboundSchema,
     status_code: z.optional(z.int()),

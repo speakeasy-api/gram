@@ -99,15 +99,16 @@ export function SendTestEventSection({
             ) : (
               <Text muted className="text-sm">
                 {sendsEverySignal
-                  ? "Sends one test log, trace and metric to check the endpoint and API key."
-                  : "Sends one test event to check the endpoint and API key."}{" "}
-                Test events are marked{" "}
+                  ? "Sends one test log, trace and metric to check the endpoint and API key. Each is marked "
+                  : "Sends one test event to check the endpoint and API key. Test events are marked "}
                 <code className="font-mono text-xs">
                   speakeasy.test_event=true
-                </code>{" "}
-                and their message starts with &ldquo;Speakeasy test
-                event&rdquo;, so you can filter them out of dashboards and
-                monitors.
+                </code>
+                {sendsEverySignal
+                  ? ", and the test log's message starts with "
+                  : " and test log messages start with "}
+                &ldquo;Speakeasy test event&rdquo;, so you can filter them out
+                of dashboards and monitors.
               </Text>
             )}
           </div>
@@ -137,9 +138,14 @@ export function SendTestEventSection({
           <Alert
             variant={alertVariantForOutcome[result.outcome] ?? "warning"}
             title={
-              result.signals.length > 1 && result.outcome !== "accepted"
+              result.signals.some((signal) => signal.outcome !== result.outcome)
                 ? "Not every test event was accepted"
-                : outcomeTitle(result.outcome, result.signals[0]?.signal)
+                : outcomeTitle(
+                    result.outcome,
+                    result.signals.length === 1
+                      ? result.signals[0]?.signal
+                      : undefined,
+                  )
             }
           >
             {result.message}
@@ -164,7 +170,9 @@ export function SendTestEventSection({
         !sendTest.isError ? (
           <div className="flex items-center gap-2">
             <Text muted className="text-sm">
-              Find it in your destination:
+              {sendsEverySignal
+                ? "Find the test log and trace in your destination:"
+                : "Find it in your destination:"}
             </Text>
             <code className="font-mono text-xs break-all">
               speakeasy.test_event.id={result.testEventId}

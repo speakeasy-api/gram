@@ -19,7 +19,7 @@ type SignalResult = {
   signal: string;
   outcome: string;
   statusCode?: number;
-  message?: string;
+  message: string;
 };
 
 const mutate = vi.fn();
@@ -123,12 +123,12 @@ describe("SendTestEventSection", () => {
     expect(screen.getByText("speakeasy.test_event=true")).toBeTruthy();
     expect(
       screen.getByText(
-        /Sends one test event to check the endpoint and API key/,
+        /Sends one test event to check the endpoint and API key\. Test events are marked/,
       ),
     ).toBeTruthy();
     expect(
       screen.getByText(
-        /their message starts with “Speakeasy test event”, so you can filter them out of dashboards and monitors/,
+        /and test log messages start with “Speakeasy test event”, so you can filter them out of dashboards and monitors/,
       ),
     ).toBeTruthy();
   });
@@ -138,6 +138,11 @@ describe("SendTestEventSection", () => {
 
     expect(
       screen.getByText(/Sends one test log, trace and metric to check/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /and the test log's message starts with “Speakeasy test event”/,
+      ),
     ).toBeTruthy();
     expect(screen.getByText("speakeasy.test_event=true")).toBeTruthy();
   });
@@ -220,6 +225,26 @@ describe("SendTestEventSection", () => {
       "Traces: Test event accepted. The destination accepted the test event.",
       "Metrics: Test event accepted. The destination accepted the test event.",
     ]);
+  });
+
+  it("uses the single-signal title when every signal failed alike", () => {
+    mutation.data = {
+      outcome: "unreachable",
+      message: "Speakeasy could not reach the destination.",
+      signals: ["logs", "traces", "metrics"].map((signal) => ({
+        signal,
+        outcome: "unreachable",
+        message: "Speakeasy could not reach the destination.",
+      })),
+      testEventId,
+    };
+    renderSection(false, true);
+
+    expect(screen.getByText("Destination not reachable")).toBeTruthy();
+    expect(screen.queryByText("Not every test event was accepted")).toBeNull();
+    expect(
+      screen.getByText("Find the test log and trace in your destination:"),
+    ).toBeTruthy();
   });
 
   it("shows which signal failed when only some were accepted", () => {
