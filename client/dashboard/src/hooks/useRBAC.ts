@@ -1,35 +1,30 @@
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
+import { scopeExclusions, scopeResourceKinds } from "@/lib/authz.gen";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 // Open SDK enums accept future values, but only understood scopes may authorize.
 const knownScopes: ReadonlySet<string> = new Set(Object.values(Scope));
 
+const declaredResourceKinds: ReadonlySet<string> = new Set(
+  Object.values(scopeResourceKinds),
+);
+
 /**
- * Derive the resource kind from a scope's family prefix.
- * Mirrors the server-side ResourceKindForScope in authz/selector.go.
- * mcp:auth is not checkable client-side: the server binds the connection owner.
+ * The resource kind a scope's checks and grant selectors name, from the
+ * registry (lib/authz.gen.ts). Scopes outside it keep the server's legacy
+ * answer (legacyResourceKindForScope in authz/selector.go). mcp:auth is not
+ * checkable client-side: the server binds the connection owner.
  */
 export function resourceKindForScope(scope: string): string {
-  if (scope === "mcp:auth" || scope === "mcp:blocked_auth")
-    return "mcp_auth_client";
-  if (
-    scope.startsWith("project:") ||
-    scope.startsWith("plugin:") ||
-    scope.startsWith("log:")
-  )
-    return "project";
-  if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
-  if (scope.startsWith("org:")) return "org";
-  if (scope.startsWith("environment:")) return "environment";
-  if (scope.startsWith("skill:")) return "skill";
-  if (scope.startsWith("inference:")) return "inference";
-  if (scope.startsWith("assistant:")) return "assistant";
-  if (scope.startsWith("risk_policy:")) return "risk_policy";
-  if (scope.startsWith("chat:")) return "chat";
-  if (scope.startsWith("agent:")) return "agent";
-  if (scope.startsWith("workload:")) return "workload";
+  const kind = scopeResourceKinds[scope];
+  if (kind !== undefined) return kind;
+  const prefix = scope.split(":")[0] ?? "";
+  if (prefix === "plugin" || prefix === "log") return "project";
+  if (prefix === "remote-mcp") return "mcp";
+  if (declaredResourceKinds.has(prefix) && prefix !== "mcp_auth_client")
+    return prefix;
   return "*";
 }
 
@@ -67,37 +62,13 @@ export function selectorMatchesStrict(
   return true;
 }
 
-/** Direct exclusion scope plus its one-step server scope expansions. */
-const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
-  "org:read": ["org:blocked_read"],
-  "org:admin": ["org:blocked_admin", "org:blocked_read"],
-  "project:read": ["project:blocked_read"],
-  "project:write": ["project:blocked_write", "project:blocked_read"],
-  // Blocks follow the implication graph in reverse, as in every other
-  // family: a block on read also takes write away. mcp:connect is implied by
-  // neither, so its block stays on its own. Mirrors scopeExpansions in
-  // server/internal/authz/scopes.go.
-  "mcp:read": ["mcp:blocked_read"],
-  "mcp:write": ["mcp:blocked_write", "mcp:blocked_read"],
-  "mcp:connect": ["mcp:blocked_connect"],
-  "mcp:auth": ["mcp:blocked_auth"],
-  "environment:read": ["environment:blocked_read"],
-  "environment:write": [
-    "environment:blocked_write",
-    "environment:blocked_read",
-  ],
-  "plugin:write": ["plugin:blocked_write"],
-  "skill:read": ["skill:blocked_read"],
-  "skill:write": ["skill:blocked_write", "skill:blocked_read"],
-  "assistant:read": ["assistant:blocked_read"],
-  "assistant:write": ["assistant:blocked_write", "assistant:blocked_read"],
-  "risk_policy:evaluate": ["risk_policy:bypass"],
-  "workload:read": ["workload:blocked_read"],
-  "workload:write": ["workload:blocked_write", "workload:blocked_read"],
-};
-
+/**
+ * The exclusion scopes a check of scope must clear, from the registry
+ * (lib/authz.gen.ts): its own exclusion, then the broader blocks that also
+ * cover it.
+ */
 export function exclusionScopesForScope(scope: Scope): readonly string[] {
-  return exclusionScopesByScope[scope] ?? [];
+  return scopeExclusions[scope] ?? [];
 }
 
 interface EffectiveGrant {
