@@ -1,6 +1,6 @@
 ---
 name: gram-rbac
-description: Use when a task touches authorization in Speakeasy — gating a handler or list endpoint, `authz.Require` / `RequireAny` / `RequireAnyUnblocked` / `Can` / `Evaluate` / `Filter`, typed refs like `authz.MCPServer(id, project).Write()` or `authz.Project(p).Environments().Create()`, `authz.Check{...}` literals, `authz.EnvironmentCheck` / `MCPCheck` / `MCPToolCallCheck`, adding or changing a scope, permission, resource type, block or dimension in `authz.Model` (`registry_resources.go`), system role defaults, agent-safe scopes (`SafeSince`, `AgentUnsafe`), `mise run gen:authz`, `refs_gen.go`, `scopes_gen.go`, `registry_tables.golden.yaml`, the `norawauthzchecks` lint, "invalid authz check", `ErrInvalidCheck`, `CodeForbidden` from authz, or RBAC state in the dashboard (`useRBAC`, `RequireScope`, access pages).
+description: Use when a task touches authorization in Speakeasy — gating a handler or list endpoint, `authz.Require` / `RequireAny` / `RequireAnyUnblocked` / `Can` / `Evaluate` / `Filter`, typed refs like `authz.MCPServer(id, project).Write()` or `authz.Project(p).Environments().Create()`, `authz.Check{...}` literals, `authz.EnvironmentCheck` / `MCPCheck` / `MCPToolCallCheck`, adding or changing a scope, permission, resource type, block or dimension in `registry.Definitions` (`authz/internal/registry/definitions.go`), system role defaults, agent-safe scopes (`SafeSince`, `AgentUnsafe`), `mise run gen:authz`, `refs_gen.go`, `scopes_gen.go`, `tables_gen.go`, the `norawauthzchecks` lint, "invalid authz check", `ErrInvalidCheck`, `CodeForbidden` from authz, or RBAC state in the dashboard (`useRBAC`, `RequireScope`, access pages).
 metadata:
   relevant_files:
     - "server/internal/authz/**/*.go"
@@ -16,7 +16,7 @@ metadata:
 
 # Speakeasy RBAC
 
-The whole permission model is one Go value, `authz.Model` in `server/internal/authz/registry_resources.go`. The scope constants (`scopes_gen.go`), the typed request refs (`refs_gen.go`; the project collections and `ToolCall` are hand-written in `refs.go`), the expansion and block tables, the selector key allowlists, the scope catalogue, the scope enum in the Goa design and the `docs/rbac.md` scope table are all derived from it. One server-side evaluator, `authz.Engine`, is canonical. Two list queries still mirror most of its matching and precedence in SQL (`ListAccessibleMCPServersForUser`, `ListAccessibleSkillsForUser`); a change to matching or blocks must update them too, until the SQL prefilter replaces them. They are not exact mirrors: the skill list leaves out a skill whose only grant is `skill:write` blocked by `skill:blocked_write`, although the engine still allows `skill:read` on it (kept on purpose; see the query's comment). **Change the model, regenerate, and let the tests tell you what else moved.** Never hand-edit a derived table.
+The whole permission model is one Go value, `registry.Definitions` in `server/internal/authz/internal/registry/definitions.go`. It is build-time input only: `mise run gen:authz` validates it and writes the scope constants (`scopes_gen.go`), the typed request refs (`refs_gen.go`; the project collections and `ToolCall` are hand-written in `refs.go`) and every derived table (`tables_gen.go`: expansions and blocks, selector key allowlists, the scope catalogue, system role scopes, agent eligibility) into package `authz`, which never imports the registry. Being under `authz/internal/`, the registry cannot be imported from outside `authz`. The scope enum in the Goa design and the `docs/rbac.md` scope table come from the generated values. One server-side evaluator, `authz.Engine`, is canonical. Two list queries still mirror most of its matching and precedence in SQL (`ListAccessibleMCPServersForUser`, `ListAccessibleSkillsForUser`); a change to matching or blocks must update them too, until the SQL prefilter replaces them. They are not exact mirrors: the skill list leaves out a skill whose only grant is `skill:write` blocked by `skill:blocked_write`, although the engine still allows `skill:read` on it (kept on purpose; see the query's comment). **Change the model, regenerate, and let the tests tell you what else moved.** Never hand-edit a derived table.
 
 ## Mental model
 
@@ -84,10 +84,9 @@ In the handler's test, add one case without the grant that asserts `oops.CodeFor
 
 ## Adding or changing a permission
 
-1. Edit `authz.Model` in `registry_resources.go`: a `Permission` on the right type (with `Label`, `Description`, `Implies`, `Exclusions`, `Agent`), or a new `ResourceType`. Add it to `SystemRoles[SystemRoleAdmin]` too, and to member only if every user should have it. `Model.Validate` runs when the package loads, so a bad edit fails every test. A new permission's scope is `<kind>:<action>`, so leave `LegacyScope` empty. Only the three permissions that predate the registry (`plugin:write`, `log:read`, `mcp:auth`) set it, and they keep it until those scopes are deliberately renamed; validation rejects it anywhere else.
-2. `mise run gen:authz`. This rewrites `scopes_gen.go` and `refs_gen.go`, and `TestGeneratedFilesAreCurrent` fails until you run it.
+1. Edit `registry.Definitions` in `authz/internal/registry/definitions.go`: a `Permission` on the right type (with `Label`, `Description`, `Implies`, `Exclusions`, `Agent`, `Source`), or a new `ResourceType`. Add it to `SystemRoles[authz.SystemRoleAdmin]` too, and to member only if every user should have it. The generator refuses an invalid registry, and `TestDefinitions_IsValid` fails on one. A new permission's scope is `<kind>:<action>`, so leave `LegacyScope` empty. Only the three permissions that predate the registry (`plugin:write`, `log:read`, `mcp:auth`) set it, and they keep it until those scopes are deliberately renamed; validation rejects it anywhere else.
+2. `mise run gen:authz`. This rewrites `scopes_gen.go`, `refs_gen.go` and `tables_gen.go`, and `TestGeneratedFilesAreCurrent` fails until you run it. The diff of `tables_gen.go` is the review surface: it shows exactly which scopes now satisfy, block or are managed by what.
 3. Update the snapshots from `server/`, then review their diffs, because they are the change:
-   - `go test ./internal/authz -run TestModel_DerivedTablesGolden -args -update` (writes `testdata/registry_tables.golden.yaml`)
    - `go test ./internal/authz -run DocTable -args -update-docs` (writes `docs/rbac.md`)
    - `go test ./internal/access -run TestListScopes_DashboardFixture -args -update` (writes the dashboard's `listScopes.fixture.json`)
 4. `mise run gen:goa-server`, then `mise run gen:sdk`. The design's scope enum reads `authz.ScopeNames()`.
@@ -95,7 +94,7 @@ In the handler's test, add one case without the grant that asserts `oops.CodeFor
 6. Assess Platform MCP (`maintaining-platform-mcp`) and Command K (`maintaining-command-palette`) if the permission gates a user-facing capability.
 7. `mise run lint:server` and `mise run test:server ./internal/authz/... ./internal/access/...`.
 
-The invariant suite (`registry_invariants_test.go`) checks every permission automatically: implications hold, nothing else is satisfied, blocks win, and unknown values fail closed. Do not add per-scope tests for those properties.
+The invariant suite (`authz/internal/registry/invariants_test.go`) checks every permission automatically: implications hold, nothing else is satisfied, blocks win, and unknown values fail closed. Do not add per-scope tests for those properties.
 
 ## Agents
 
@@ -112,7 +111,7 @@ The flag refuses to overwrite a fixture. Never regenerate an existing one, becau
 - **Never build a raw `authz.Check{...}`, or call `authz.EnvironmentCheck` / `MCPCheck` / `MCPToolCallCheck` / `AssistantCheck` / `HooksIngestCheck` / `ChatReadCheck` / `ChatWriteCheck`, in a migrated package.** The `norawauthzchecks` glint rule reports it. Once no raw constructor or `authz.Check{}` literal remains anywhere in a package, add it to `noRawAuthzChecksPackages` in `glint/no_raw_authz_checks.go`. A partial migration leaves the list alone.
 - **Never pass a probe to `Require`, or `AnyOf` anywhere but as the single check of `Require` or `Can`.** Both are invalid checks, which map to an unexpected error rather than a 403.
 - **Never build a ref with an empty project.** An empty dimension is an invalid check. Take the project from the row you loaded, not from the request, when they can differ.
-- **Never hand-edit `scopes_gen.go`, `refs_gen.go`, the golden YAML, or the derived maps in `scopes.go`.** Change the model.
+- **Never hand-edit `scopes_gen.go`, `refs_gen.go` or `tables_gen.go`.** Change `registry.Definitions` and regenerate.
 - **Never evaluate grants outside `authz`.** The two SQL list queries in `access/queries.sql` (`ListAccessibleMCPServersForUser`, `ListAccessibleSkillsForUser`) mirror the matcher and precedence. If you change either, change both.
 - **Never read a `principal_grants` row for authorization without `(expires_at IS NULL OR expires_at > clock_timestamp())`.** Temporary grants expire in place.
 

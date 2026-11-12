@@ -82,13 +82,11 @@ func TestRefs_CoverEveryPermission(t *testing.T) {
 		reached[check.Scope] = true
 	}
 	handWritten := map[string]bool{ResourceKindMCPAuthClient: true, ResourceKindRiskPolicy: true, ResourceKindInference: true}
-	for _, typ := range Model.Types {
-		if handWritten[string(typ.Kind)] {
+	for _, entry := range scopeCatalog {
+		if handWritten[entry.ResourceType] || scopeVisibilityByScope[entry.Scope] != scopeVisibilityUserVisible {
 			continue
 		}
-		for _, p := range typ.Permissions {
-			require.True(t, reached[typ.ScopeFor(p)], "%s has no ref method in this test; add it", typ.ScopeFor(p))
-		}
+		require.True(t, reached[entry.Scope], "%s has no ref method in this test; add it", entry.Scope)
 	}
 }
 

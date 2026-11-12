@@ -77,8 +77,8 @@ func GrantsAuthorize(grants []Grant, check Check) (bool, error) {
 // roles. These are seeded when an organization is provisioned. Existing grants
 // for a built-in role are preserved, and custom roles are never touched.
 var SystemRoleGrants = map[string][]*RoleGrant{
-	SystemRoleAdmin:  roleGrantsForScopes(Model.deriveSystemRoleScopes(SystemRoleAdmin)),
-	SystemRoleMember: roleGrantsForScopes(Model.deriveSystemRoleScopes(SystemRoleMember)),
+	SystemRoleAdmin:  roleGrantsForScopes(systemRoleScopes[SystemRoleAdmin]),
+	SystemRoleMember: roleGrantsForScopes(systemRoleScopes[SystemRoleMember]),
 }
 
 // SystemRoleAssistantGrants returns the assistant-kind grants from a built-in

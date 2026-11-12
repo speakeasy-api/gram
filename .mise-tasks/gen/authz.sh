@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#MISE description="Regenerate the files derived from the authz model (scope constants and typed refs)"
+#MISE description="Regenerate the files derived from the authz registry (scope constants, typed refs and tables)"
 #MISE dir="{{ config_root }}/server"
 
 set -euo pipefail

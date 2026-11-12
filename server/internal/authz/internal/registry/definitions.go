@@ -1,26 +1,29 @@
-package authz
+package registry
 
-// Model is the authorization model: every resource type, its permissions, and
-// the built-in roles. Add a permission here and the rest follows from it (see
-// model.go for the vocabulary). Model is validated when the package loads; an
-// invalid edit panics at startup and fails every test.
+import "github.com/speakeasy-api/gram/server/internal/authz"
+
+// Definitions is the authorization model: every resource type, its
+// permissions, and the built-in roles. Add a permission here, run
+// `mise run gen:authz`, and the rest follows from it (see registry.go for the
+// vocabulary). The generator validates Definitions before it writes anything,
+// and TestDefinitions_IsValid fails on an invalid edit.
 //
 // Scopes are written as strings, not Scope* constants: the constants are
-// generated from this literal (scopes_gen.go), so the model must compile
+// generated from this literal (scopes_gen.go), so the definitions must compile
 // without them. Validate rejects any string that names no declared scope.
 //
 // Scope strings are today's. R1 and R6 of the RBAC foundations plan (renaming
 // plugin:write and log:read, moving org:hooks_ingest's project dimension) are
 // parked until scopes are redefined, so those permissions keep the historical
 // Scope and Dimensions they are stored and checked with.
-var Model = Registry{
+var Definitions = Registry{
 	Root: RootPermission{Scope: "root", Agent: AgentUnsafe()},
 	Types: []ResourceType{
 		{
 			Kind:       "org",
 			Parent:     "",
-			Category:   ScopeCategoryOrg,
-			Match:      MatchLoose,
+			Category:   authz.ScopeCategoryOrg,
+			Match:      authz.MatchLoose,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -29,11 +32,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(7), "organization read access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "View organization",
 					Description: "View organization settings and members.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(7),
 				},
 				{
@@ -42,11 +45,11 @@ var Model = Registry{
 					Implies:     []Action{"read", "device_agent_sync", "hooks_ingest"},
 					Exclusions:  Blocked(SafeSince(7), "organization admin access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Manage organization",
 					Description: "Manage organization settings, members, roles and access. Includes removing members and changing what every role can do.",
-					Sensitivity: SensitivityDestructiveAdmin,
+					Sensitivity: authz.SensitivityDestructiveAdmin,
 					Agent:       AgentUnsafe(),
 				},
 				{
@@ -55,11 +58,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Sync device agent plugins",
 					Description: "Let an agent's device agent sync the plugins assigned to it.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(2),
 				},
 				{
@@ -68,12 +71,12 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  nil,
 					// R6 (parked): the one org permission checked per project.
-					Dimensions:  []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
-					Source:      GrantSourceRoles,
+					Dimensions:  []Dimension{{Key: authz.SelectorKeyProjectID, Values: nil, Required: false}},
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Send hook events",
 					Description: "Let an agent send AI-tool hook events and telemetry.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(2),
 				},
 			},
@@ -81,8 +84,8 @@ var Model = Registry{
 		{
 			Kind:       "project",
 			Parent:     "org",
-			Category:   ScopeCategoryProject,
-			Match:      MatchLoose,
+			Category:   authz.ScopeCategoryProject,
+			Match:      authz.MatchLoose,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -91,11 +94,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "project read access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "View projects",
 					Description: "View projects and project-related resources.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(1),
 				},
 				{
@@ -104,11 +107,11 @@ var Model = Registry{
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "project write access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Manage projects",
 					Description: "Create and modify projects and project-related resources.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(1),
 				},
 				{
@@ -118,11 +121,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  Blocked(AgentUnsafe(), "plugin write access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
-					Category:    ScopeCategoryPlugin,
+					Source:      authz.GrantSourceRoles,
+					Category:    authz.ScopeCategoryPlugin,
 					Label:       "Publish plugins",
 					Description: "Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       AgentUnsafe(),
 				},
 				{
@@ -133,11 +136,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
-					Category:    ScopeCategoryLog,
+					Source:      authz.GrantSourceRoles,
+					Category:    authz.ScopeCategoryLog,
 					Label:       "View tool logs",
 					Description: "View the project's tool-call logs and traces, including tool arguments, results, and prompt text from every member. Not implied by project or organization admin access.",
-					Sensitivity: SensitivityToolLogs,
+					Sensitivity: authz.SensitivityToolLogs,
 					Agent:       AgentUnsafe(),
 				},
 			},
@@ -149,14 +152,14 @@ var Model = Registry{
 			// like every other type's.
 			Kind:     "mcp",
 			Parent:   "project",
-			Category: ScopeCategoryMCP,
-			Match:    MatchLoose,
+			Category: authz.ScopeCategoryMCP,
+			Match:    authz.MatchLoose,
 			Dimensions: []Dimension{
-				{Key: SelectorKeyTool, Values: nil, Required: false},
-				{Key: SelectorKeyDisposition, Values: []string{DispositionReadOnly, DispositionDestructive, DispositionIdempotent, DispositionOpenWorld}, Required: false},
+				{Key: authz.SelectorKeyTool, Values: nil, Required: false},
+				{Key: authz.SelectorKeyDisposition, Values: []string{authz.DispositionReadOnly, authz.DispositionDestructive, authz.DispositionIdempotent, authz.DispositionOpenWorld}, Required: false},
 				// Required since the hotfix: a project-bounded grant must
 				// never match a check that does not name its project.
-				{Key: SelectorKeyProjectID, Values: nil, Required: true},
+				{Key: authz.SelectorKeyProjectID, Values: nil, Required: true},
 			},
 			Permissions: []Permission{
 				{
@@ -165,11 +168,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "MCP read access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "View MCP servers",
 					Description: "View MCP servers and their configuration.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(1),
 				},
 				{
@@ -178,11 +181,11 @@ var Model = Registry{
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "MCP write access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Manage MCP servers",
 					Description: "Create, change and delete MCP servers and their configuration.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(1),
 				},
 				{
@@ -193,11 +196,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "MCP connect access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Connect to MCP servers",
 					Description: "Connect to MCP servers and call their tools.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(1),
 				},
 			},
@@ -208,13 +211,13 @@ var Model = Registry{
 			// sharing it. Nothing implies it.
 			Kind:     "mcp_auth_client",
 			Parent:   "project",
-			Category: ScopeCategoryMCPAuthClient,
-			Match:    MatchStrict,
+			Category: authz.ScopeCategoryMCPAuthClient,
+			Match:    authz.MatchStrict,
 			Dimensions: []Dimension{
-				{Key: SelectorKeyClientType, Values: []string{AuthClientTypeRemoteSession, AuthClientTypeServiceAccount, AuthClientTypeStaticCredential, AuthClientTypePassThrough, AuthClientTypeEMA}, Required: false},
-				{Key: SelectorKeyProjectID, Values: nil, Required: false},
-				{Key: SelectorKeyConnectionOwner, Values: nil, Required: false},
-				{Key: SelectorKeyUpstreamClient, Values: nil, Required: false},
+				{Key: authz.SelectorKeyClientType, Values: []string{authz.AuthClientTypeRemoteSession, authz.AuthClientTypeServiceAccount, authz.AuthClientTypeStaticCredential, authz.AuthClientTypePassThrough, authz.AuthClientTypeEMA}, Required: false},
+				{Key: authz.SelectorKeyProjectID, Values: nil, Required: false},
+				{Key: authz.SelectorKeyConnectionOwner, Values: nil, Required: false},
+				{Key: authz.SelectorKeyUpstreamClient, Values: nil, Required: false},
 			},
 			Permissions: []Permission{
 				{
@@ -223,11 +226,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(5), "auth client use"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Use shared auth clients",
 					Description: "Use an upstream auth client to reach MCP servers. Applies on every server that shares the client.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(5),
 				},
 			},
@@ -240,9 +243,9 @@ var Model = Registry{
 			// environments hold environment:read or environment:write.
 			Kind:       "environment",
 			Parent:     "project",
-			Category:   ScopeCategoryEnvironment,
-			Match:      MatchLoose,
-			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
+			Category:   authz.ScopeCategoryEnvironment,
+			Match:      authz.MatchLoose,
+			Dimensions: []Dimension{{Key: authz.SelectorKeyProjectID, Values: nil, Required: false}},
 			Permissions: []Permission{
 				{
 					Action:      "read",
@@ -250,11 +253,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "environment read access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "View environments",
 					Description: "View environments and their entries within the project, including secret values.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(1),
 				},
 				{
@@ -263,11 +266,11 @@ var Model = Registry{
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "environment write access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Manage environments",
 					Description: "Add, edit, clone, and remove environments within the project.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(1),
 				},
 			},
@@ -275,8 +278,8 @@ var Model = Registry{
 		{
 			Kind:       "skill",
 			Parent:     "project",
-			Category:   ScopeCategorySkill,
-			Match:      MatchLoose,
+			Category:   authz.ScopeCategorySkill,
+			Match:      authz.MatchLoose,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -285,11 +288,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "skill read access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "View skills",
 					Description: "View skills within the project.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(1),
 				},
 				{
@@ -298,11 +301,11 @@ var Model = Registry{
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "skill write access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Manage skills",
 					Description: "Create and modify skills within the project.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(1),
 				},
 			},
@@ -310,9 +313,9 @@ var Model = Registry{
 		{
 			Kind:       "assistant",
 			Parent:     "project",
-			Category:   ScopeCategoryAssistant,
-			Match:      MatchLoose,
-			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
+			Category:   authz.ScopeCategoryAssistant,
+			Match:      authz.MatchLoose,
+			Dimensions: []Dimension{{Key: authz.SelectorKeyProjectID, Values: nil, Required: false}},
 			Permissions: []Permission{
 				{
 					Action:      "read",
@@ -320,11 +323,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "assistant read access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "View assistants",
 					Description: "View and interact with assistants within the project.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(3),
 				},
 				{
@@ -333,11 +336,11 @@ var Model = Registry{
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "assistant write access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Manage assistants",
 					Description: "Create and modify assistants within the project.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(3),
 				},
 			},
@@ -345,11 +348,11 @@ var Model = Registry{
 		{
 			Kind:     "risk_policy",
 			Parent:   "org",
-			Category: ScopeCategoryRiskPolicy,
-			Match:    MatchLoose,
+			Category: authz.ScopeCategoryRiskPolicy,
+			Match:    authz.MatchLoose,
 			Dimensions: []Dimension{
-				{Key: SelectorKeyServerURL, Values: nil, Required: false},
-				{Key: SelectorKeyServerIdentity, Values: nil, Required: false},
+				{Key: authz.SelectorKeyServerURL, Values: nil, Required: false},
+				{Key: authz.SelectorKeyServerIdentity, Values: nil, Required: false},
 			},
 			Permissions: []Permission{
 				{
@@ -360,11 +363,11 @@ var Model = Registry{
 					// bypass.
 					Exclusions:  []Exclusion{{Kind: ExclusionExemption, Action: "bypass", Agent: AgentUnsafe(), Subject: ""}},
 					Dimensions:  nil,
-					Source:      GrantSourceRiskPolicy,
+					Source:      authz.GrantSourceRiskPolicy,
 					Category:    "",
 					Label:       "Evaluate risk policies",
 					Description: "Put the holder in the named risk policy's audience, so the policy is evaluated against their requests unless a bypass grant for the same policy exempts the request.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(1),
 				},
 				{
@@ -373,11 +376,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
-					Source:      GrantSourceRiskPolicy,
+					Source:      authz.GrantSourceRiskPolicy,
 					Category:    "",
 					Label:       "Bypass risk policies",
 					Description: "Exempt the holder from the named risk policy for the exact server the grant names, by URL or identity. It only subtracts from a matching evaluate grant and never puts anyone in a policy's audience.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       AgentUnsafe(),
 				},
 				{
@@ -386,11 +389,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
-					Source:      GrantSourceRiskPolicy,
+					Source:      authz.GrantSourceRiskPolicy,
 					Category:    "",
 					Label:       "Block shadow MCP servers",
 					Description: "Block specific shadow MCP servers under allow-by-default risk policies.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       AgentUnsafe(),
 				},
 			},
@@ -400,8 +403,8 @@ var Model = Registry{
 			// their own sessions through owner matching in the chat handlers.
 			Kind:       "chat",
 			Parent:     "project",
-			Category:   ScopeCategorySession,
-			Match:      MatchLoose,
+			Category:   authz.ScopeCategorySession,
+			Match:      authz.MatchLoose,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -410,11 +413,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "View agent sessions",
 					Description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.",
-					Sensitivity: SensitivityConversations,
+					Sensitivity: authz.SensitivityConversations,
 					Agent:       AgentUnsafe(),
 				},
 				{
@@ -423,11 +426,11 @@ var Model = Registry{
 					Implies:     []Action{"read"},
 					Exclusions:  nil,
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Manage agent sessions",
 					Description: "Rename, delete, and give feedback on other members' agent sessions, and read their transcripts. Everyone keeps their own.",
-					Sensitivity: SensitivityConversations,
+					Sensitivity: authz.SensitivityConversations,
 					Agent:       AgentUnsafe(),
 				},
 			},
@@ -435,9 +438,9 @@ var Model = Registry{
 		{
 			Kind:       "inference",
 			Parent:     "project",
-			Category:   ScopeCategoryInference,
-			Match:      MatchLoose,
-			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
+			Category:   authz.ScopeCategoryInference,
+			Match:      authz.MatchLoose,
+			Dimensions: []Dimension{{Key: authz.SelectorKeyProjectID, Values: nil, Required: false}},
 			Permissions: []Permission{
 				{
 					Action:      "execute",
@@ -445,11 +448,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Run inference",
 					Description: "Run model inference without accessing chat transcripts.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       SafeSince(6),
 				},
 			},
@@ -457,8 +460,8 @@ var Model = Registry{
 		{
 			Kind:       "agent",
 			Parent:     "org",
-			Category:   ScopeCategoryAgent,
-			Match:      MatchLoose,
+			Category:   authz.ScopeCategoryAgent,
+			Match:      authz.MatchLoose,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -467,11 +470,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "View agents",
 					Description: "View agents and their settings.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       AgentUnsafe(),
 				},
 				{
@@ -480,11 +483,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Manage agents",
 					Description: "Create, configure, and manage agents.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       AgentUnsafe(),
 				},
 				{
@@ -493,11 +496,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Authorize agent credentials",
 					Description: "Authorize agents and manage their credentials.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       AgentUnsafe(),
 				},
 				{
@@ -506,11 +509,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Transfer agent ownership",
 					Description: "Hand an agent to another owner. The previous owner loses control of it.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       AgentUnsafe(),
 				},
 			},
@@ -521,8 +524,8 @@ var Model = Registry{
 			// would let a machine admit further machines.
 			Kind:       "workload",
 			Parent:     "org",
-			Category:   ScopeCategoryWorkload,
-			Match:      MatchLoose,
+			Category:   authz.ScopeCategoryWorkload,
+			Match:      authz.MatchLoose,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -531,11 +534,11 @@ var Model = Registry{
 					Implies:     nil,
 					Exclusions:  Blocked(AgentUnsafe(), "workload read access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "View workload identities",
 					Description: "View workload identity trust policy: issuers, admitted subjects, and assigned agents.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       AgentUnsafe(),
 				},
 				{
@@ -544,18 +547,18 @@ var Model = Registry{
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(AgentUnsafe(), "workload write access"),
 					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					Source:      authz.GrantSourceRoles,
 					Category:    "",
 					Label:       "Manage workload identities",
 					Description: "Register workload issuers, admit and withdraw subjects, and assign agents to workloads.",
-					Sensitivity: SensitivityNone,
+					Sensitivity: authz.SensitivityNone,
 					Agent:       AgentUnsafe(),
 				},
 			},
 		},
 	},
-	SystemRoles: map[string][]Scope{
-		SystemRoleAdmin: {
+	SystemRoles: map[string][]authz.Scope{
+		authz.SystemRoleAdmin: {
 			"org:read",
 			"org:admin",
 			"project:read",
@@ -580,7 +583,7 @@ var Model = Registry{
 			// chat:* and log:read are deliberately not defaults for any role:
 			// transcripts and raw tool logs must be granted explicitly.
 		},
-		SystemRoleMember: {
+		authz.SystemRoleMember: {
 			"org:read",
 			"project:read",
 			"mcp:read",
@@ -593,5 +596,5 @@ var Model = Registry{
 			// include secrets.
 		},
 	},
-	Retired: []Scope{"mcp_approval:read", "mcp_approval:decide"},
+	Retired: []authz.Scope{"mcp_approval:read", "mcp_approval:decide"},
 }

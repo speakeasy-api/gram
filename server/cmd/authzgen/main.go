@@ -7,12 +7,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authz/authzgen"
 )
 
 func main() {
-	files, err := authzgen.Render(authz.Model)
+	files, err := authzgen.Files()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "authzgen: %v\n", err)
 		os.Exit(1)

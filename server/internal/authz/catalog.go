@@ -66,7 +66,7 @@ var ScopeCategories = []ScopeCategory{
 
 // ScopeEntry is what a person needs to know about one scope before granting
 // it: a short name, what it allows, where it sits in the dashboard, and
-// whether it deserves a warning. Entries are derived from Model, which also
+// whether it deserves a warning. Entries are generated from the registry, which also
 // holds the authorization semantics the catalogue only describes.
 type ScopeEntry struct {
 	Scope Scope
@@ -100,12 +100,6 @@ func (e ScopeEntry) Sensitive() bool {
 func (e ScopeEntry) SubScopes() []string {
 	return CalculateSubScopes(e.Scope)
 }
-
-// scopeCatalog lists every scope a role can hold, in the order the catalogue
-// presents them: by category, then as declared in Model, each block after its
-// permission. ScopeRoot is deliberately absent: it is the engine's own bypass,
-// never a grant a person reads about.
-var scopeCatalog = Model.deriveCatalog()
 
 var scopeCatalogByScope = func() map[Scope]ScopeEntry {
 	out := make(map[Scope]ScopeEntry, len(scopeCatalog))
