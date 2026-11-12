@@ -339,7 +339,17 @@ func TestDownloadEscaping(t *testing.T) {
 	for _, file := range []File{{}, {BucketName: "bucket", ObjectName: "x", Size: 1025}, {BucketName: "bucket", ObjectName: "x", Size: -1}, {BucketName: "bucket", ObjectName: ".."}} {
 		_, err = client.Download(t.Context(), file)
 		require.Error(t, err)
+		require.Equal(t, file.Size == 1025, errors.Is(err, ErrTooLarge), "only the size bound is ErrTooLarge")
 	}
+}
+
+func TestDownloadOverLimitWithoutReportedSizeIsTooLarge(t *testing.T) {
+	t.Parallel()
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, strings.Repeat("x", 1025))
+	})
+	_, err := client.Download(t.Context(), File{BucketName: "bucket", ObjectName: "x", Size: 0})
+	require.ErrorIs(t, err, ErrTooLarge)
 }
 
 func TestRequestSafety(t *testing.T) {

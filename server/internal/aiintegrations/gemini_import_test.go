@@ -29,10 +29,15 @@ type geminiFakeClient struct {
 	start, end  time.Time
 	name        string
 	findNames   []string
+	// findOnce returns find for the first recorded lookup only.
+	findOnce bool
 }
 
 func (c *geminiFakeClient) FindExport(_ context.Context, name string) (*vault.Export, error) {
 	c.findNames = append(c.findNames, name)
+	if c.findOnce && len(c.findNames) > 1 {
+		return nil, nil
+	}
 	return c.find, nil
 }
 func (c *geminiFakeClient) CreateExport(_ context.Context, name string, start, end time.Time) (*vault.Export, error) {
@@ -371,13 +376,77 @@ func TestGeminiSyncRetryUsesSameExportName(t *testing.T) {
 	svc := geminiTestImporter(client, nil)
 	_, err := svc.SyncGemini(t.Context(), cfg, saved)
 	require.NoError(t, err)
-	name, start := client.name, client.start
-	// The cursor was not saved, so the retry starts from the same progress.
-	_, err = svc.SyncGemini(t.Context(), cfg, saved.Add(2*time.Hour))
+	name, start, end := client.name, client.start, client.end
+	// The create response was lost and the cursor was not saved, so the retry
+	// starts from the same progress and must find the job instead of creating one.
+	client.find = &vault.Export{ID: "pending", Status: "IN_PROGRESS", Start: start, End: end}
+	result, err := svc.SyncGemini(t.Context(), cfg, saved.Add(2*time.Hour))
 	require.NoError(t, err)
-	require.Equal(t, name, client.name)
-	require.Equal(t, start, client.start)
+	require.Equal(t, 1, client.creates)
 	require.Equal(t, []string{name, name}, client.findNames)
+	cursor := decodeGeminiTestCursor(t, result.Cursor)
+	require.Equal(t, "pending", cursor.ExportID)
+	require.Equal(t, start, cursor.Start)
+	require.Equal(t, end, cursor.End, "the retry keeps the window of the job it found")
+}
+
+func TestGeminiSyncReplacesFoundJobWithoutTimeWindow(t *testing.T) {
+	t.Parallel()
+	saved := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
+	now := saved.Add(2 * time.Hour)
+	cfg := geminiTestConfig()
+	cfg.UpdatedAt = saved
+	client := &geminiFakeClient{find: &vault.Export{ID: "unbounded", Status: "IN_PROGRESS"}, created: &vault.Export{ID: "replacement", Status: "IN_PROGRESS"}}
+	svc := geminiTestImporter(client, nil)
+	// The fake finds the unbounded job under every name. A second unbounded
+	// job stops the sync instead of looping.
+	_, err := svc.SyncGemini(t.Context(), cfg, now)
+	require.ErrorContains(t, err, "does not report its time window")
+	require.Equal(t, 1, client.deletes)
+	require.Zero(t, client.creates)
+
+	client.deletes, client.findNames = 0, nil
+	client.findOnce = true
+	result, err := svc.SyncGemini(t.Context(), cfg, now)
+	require.NoError(t, err)
+	require.Equal(t, 1, client.deletes, "the job with no window is removed")
+	require.Equal(t, 1, client.creates)
+	require.Len(t, client.findNames, 2)
+	require.NotEqual(t, client.findNames[0], client.findNames[1], "the replacement uses the next name")
+	require.Equal(t, client.findNames[1], client.name)
+	require.Equal(t, now, client.end)
+	cursor := decodeGeminiTestCursor(t, result.Cursor)
+	require.Equal(t, "replacement", cursor.ExportID)
+	require.Equal(t, uint64(2), cursor.Sequence)
+}
+
+func TestGeminiSyncSplitsWhenDownloadIsOverLimit(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 12, 20, 0, 0, 0, time.UTC)
+	cfg := geminiTestConfig()
+	start := now.Add(-geminiInitialLookback)
+	pending := geminiExportCursor{Version: geminiCursorVersion, Through: start, Sequence: 1, ExportID: "big", Start: start, End: now.Add(-10 * time.Minute), Live: true}
+	cfg.LastCursor = geminiTestCursor(t, pending)
+	client := &geminiFakeClient{export: completedGeminiExport("big"), downloadErr: fmt.Errorf("download: %w", vault.ErrTooLarge), created: &vault.Export{ID: "half", Status: "IN_PROGRESS"}}
+	result, err := geminiTestImporter(client, nil).SyncGemini(t.Context(), cfg, now)
+	require.NoError(t, err)
+	require.True(t, result.Pending)
+	require.Equal(t, 1, client.downloads, "stop at the first file over the bound")
+	require.Equal(t, 1, client.deletes)
+	require.Equal(t, start, client.start)
+	require.True(t, client.end.Before(pending.End))
+	require.Equal(t, "half", decodeGeminiTestCursor(t, result.Cursor).ExportID)
+}
+
+func TestGeminiShrinkNeverGoesBelowMinimumWindow(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
+	cursor := geminiExportCursor{Version: geminiCursorVersion, Through: start, Sequence: 1, ExportID: "big", Start: start, End: start.Add(90 * time.Minute)}
+	next, ok := cursor.shrink()
+	require.True(t, ok)
+	require.Equal(t, start.Add(geminiMinExportWindow), next.End, "a 90-minute window splits to one hour, not 45 minutes")
+	_, ok = next.shrink()
+	require.False(t, ok, "a one-hour window that is still too large stops splitting")
 }
 
 func TestGeminiSyncFailedOrIncompleteExportNeverAdvances(t *testing.T) {

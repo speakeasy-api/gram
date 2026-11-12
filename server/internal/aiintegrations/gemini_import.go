@@ -155,16 +155,16 @@ func (s *GeminiImportService) SyncGemini(ctx context.Context, cfg Config, endTim
 			return encodeGeminiResult(cursor, false)
 		}
 		cursor = next
-		export, err = startGeminiExport(ctx, client, cfg.ID, &cursor)
+		export, err = s.startExport(ctx, client, cfg.ID, &cursor)
 	case cursor.ExportID == "":
-		export, err = startGeminiExport(ctx, client, cfg.ID, &cursor)
+		export, err = s.startExport(ctx, client, cfg.ID, &cursor)
 	default:
 		export, err = client.GetExport(ctx, cursor.ExportID)
 		var httpErr *vault.HTTPError
 		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
 			// Expired/deleted exports are recreated for the SAME window, not skipped.
 			cursor.ExportID = ""
-			export, err = startGeminiExport(ctx, client, cfg.ID, &cursor)
+			export, err = s.startExport(ctx, client, cfg.ID, &cursor)
 		} else if err != nil {
 			err = fmt.Errorf("read Gemini Vault export: %w", err)
 		}
@@ -207,6 +207,10 @@ func (s *GeminiImportService) SyncGemini(ctx context.Context, cfg Config, endTim
 	for i, file := range export.Files {
 		s.beat(ctx, "download", i)
 		body, err := client.Download(ctx, file)
+		if errors.Is(err, vault.ErrTooLarge) {
+			// Vault reported no size, or a wrong one, for a file over the bound.
+			return s.splitExport(ctx, client, cfg, cursor, result)
+		}
 		if err != nil {
 			return result, fmt.Errorf("download Gemini Vault export artifact: %w", err)
 		}
@@ -263,30 +267,52 @@ func (s *GeminiImportService) splitExport(ctx context.Context, client geminiVaul
 // must not be lost. If Vault refuses, the window is saved without an export
 // and the next run starts it again, and reports the error if it repeats.
 func (s *GeminiImportService) startNextExport(ctx context.Context, client geminiVaultClient, cfg Config, cursor geminiExportCursor) (GeminiSyncResult, error) {
-	if _, err := startGeminiExport(ctx, client, cfg.ID, &cursor); err != nil {
+	if _, err := s.startExport(ctx, client, cfg.ID, &cursor); err != nil {
 		s.warn(ctx, "start next Gemini Vault export", err)
 		cursor.ExportID = ""
 	}
 	return encodeGeminiResult(cursor, true)
 }
 
-// startGeminiExport finds or creates the export for the cursor's window and
-// records its ID. The name depends only on saved progress, so a retry after a
-// lost create response finds the job and takes the window Vault exported.
-func startGeminiExport(ctx context.Context, client geminiVaultClient, configID uuid.UUID, cursor *geminiExportCursor) (*vault.Export, error) {
-	name := geminiExportName(configID, *cursor)
-	export, err := client.FindExport(ctx, name)
-	if err != nil {
-		return nil, fmt.Errorf("find Gemini Vault export: %w", err)
-	}
-	if export == nil {
-		export, err = client.CreateExport(ctx, name, cursor.Start, cursor.End)
+// startExport finds or creates the export for the cursor's window and records
+// its ID. The name depends only on saved progress, so a retry after a lost
+// create response finds the job and takes the window Vault exported.
+//
+// A found job is used only when Vault reports its window: without the window,
+// the import cannot say where the export ends, and could skip the time between
+// the job's end and the retry. Such a job is replaced by one under the next
+// name, whose window is the one this call asks for.
+func (s *GeminiImportService) startExport(ctx context.Context, client geminiVaultClient, configID uuid.UUID, cursor *geminiExportCursor) (*vault.Export, error) {
+	for replaced := false; ; replaced = true {
+		name := geminiExportName(configID, *cursor)
+		export, err := client.FindExport(ctx, name)
 		if err != nil {
-			return nil, fmt.Errorf("create Gemini Vault export: %w", err)
+			return nil, fmt.Errorf("find Gemini Vault export: %w", err)
 		}
-	} else if export.Start.Equal(cursor.Start) && export.End.After(cursor.Through) {
-		cursor.End = export.End.UTC()
+		if export == nil {
+			export, err = client.CreateExport(ctx, name, cursor.Start, cursor.End)
+			if err != nil {
+				return nil, fmt.Errorf("create Gemini Vault export: %w", err)
+			}
+			return recordGeminiExport(cursor, export)
+		}
+		if export.Start.Equal(cursor.Start) && export.End.After(cursor.Through) {
+			cursor.End = export.End.UTC()
+			return recordGeminiExport(cursor, export)
+		}
+		if replaced {
+			return nil, errors.New("gemini Vault export does not report its time window")
+		}
+		if export.ID != "" {
+			if err := client.DeleteExport(ctx, export.ID); err != nil {
+				s.warn(ctx, "remove Gemini Vault export without a time window", err)
+			}
+		}
+		cursor.Sequence++
 	}
+}
+
+func recordGeminiExport(cursor *geminiExportCursor, export *vault.Export) (*vault.Export, error) {
 	if export == nil || export.ID == "" {
 		return nil, errors.New("gemini Vault returned an export without an ID")
 	}
@@ -295,8 +321,10 @@ func startGeminiExport(ctx context.Context, client geminiVaultClient, configID u
 }
 
 // nextWindow chooses the window after Through. Every new window ends at the
-// poll time. It returns false when there is no time left to export.
+// poll time, in whole seconds, so the window Vault reports back compares equal.
+// It returns false when there is no time left to export.
 func (c geminiExportCursor) nextWindow(now time.Time) (geminiExportCursor, bool) {
+	now = now.UTC().Truncate(time.Second)
 	start := c.Through
 	if c.Overlap {
 		start = start.Add(-geminiExportOverlap)
@@ -311,8 +339,9 @@ func (c geminiExportCursor) nextWindow(now time.Time) (geminiExportCursor, bool)
 }
 
 // shrink narrows a window whose export is too large. It first drops the
-// overlap re-check, then halves the window. The rest of the range follows in
-// catch-up windows. It returns false when the window cannot get shorter.
+// overlap re-check, then halves the window, never below geminiMinExportWindow.
+// The rest of the range follows in catch-up windows. It returns false when the
+// window cannot get shorter.
 func (c geminiExportCursor) shrink() (geminiExportCursor, bool) {
 	if c.Start.Before(c.Through) {
 		c.Start = c.Through
@@ -321,7 +350,7 @@ func (c geminiExportCursor) shrink() (geminiExportCursor, bool) {
 		if span <= geminiMinExportWindow {
 			return c, false
 		}
-		c.End = c.Start.Add((span / 2).Truncate(time.Second))
+		c.End = c.Start.Add(max((span / 2).Truncate(time.Second), geminiMinExportWindow))
 		c.Live = false
 	}
 	c.Version = geminiCursorVersion
@@ -341,7 +370,7 @@ func geminiInitialThrough(cfg Config, now time.Time) time.Time {
 	if anchor.IsZero() {
 		anchor = now
 	}
-	return anchor.UTC().Add(-geminiInitialLookback)
+	return anchor.UTC().Truncate(time.Second).Add(-geminiInitialLookback)
 }
 
 // geminiExportBytes is the export size Vault reports, or the sum of its file

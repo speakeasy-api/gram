@@ -198,6 +198,10 @@ func (c *Client) matterPath() string { return c.baseURL + "/matters/" + url.Path
 // errNoMatter guards matter-scoped calls on a client built for setup only.
 var errNoMatter = errors.New("vault matter ID is not configured")
 
+// ErrTooLarge marks a response or export file over the client's size bound.
+// A Gemini export over the bound can fit when its time window is shorter.
+var ErrTooLarge = errors.New("vault response exceeds size limit")
+
 // EnsureMatter returns the ID of an open matter with this name that the
 // delegated admin can see, creating one when none exists. Reusing by name keeps
 // reconnects and retried saves on one matter. Concurrent creates can leave
@@ -481,8 +485,11 @@ func parseExport(data []byte) (*Export, error) {
 // Download reads a bounded GCS object on a fixed host. No upstream-supplied URL
 // is followed, and slash-containing object names are escaped as one path segment.
 func (c *Client) Download(ctx context.Context, file File) ([]byte, error) {
-	if file.BucketName == "" || file.ObjectName == "" || file.BucketName == "." || file.BucketName == ".." || file.ObjectName == "." || file.ObjectName == ".." || file.Size < 0 || file.Size > c.maxDownloadBytes {
-		return nil, errors.New("invalid or oversized Vault export file")
+	if file.BucketName == "" || file.ObjectName == "" || file.BucketName == "." || file.BucketName == ".." || file.ObjectName == "." || file.ObjectName == ".." || file.Size < 0 {
+		return nil, errors.New("invalid Vault export file")
+	}
+	if file.Size > c.maxDownloadBytes {
+		return nil, fmt.Errorf("oversized Vault export file: %w", ErrTooLarge)
 	}
 	data, err := c.request(ctx, http.MethodGet, c.storageURL+"/b/"+url.PathEscape(file.BucketName)+"/o/"+url.PathEscape(file.ObjectName)+"?alt=media", nil, c.maxDownloadBytes)
 	if err != nil {
@@ -578,14 +585,14 @@ func (c *Client) requestWith(ctx context.Context, client *guardian.HTTPClient, m
 		return nil, &HTTPError{StatusCode: resp.StatusCode, TokenExchange: false}
 	}
 	if resp.ContentLength > limit {
-		return nil, errors.New("vault response exceeds size limit")
+		return nil, ErrTooLarge
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, errors.New("read Vault response")
 	}
 	if int64(len(data)) > limit {
-		return nil, errors.New("vault response exceeds size limit")
+		return nil, ErrTooLarge
 	}
 	return data, nil
 }
