@@ -2,6 +2,7 @@ import { supportsAudienceReading } from "./manageAccessState";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import {
+  blockCoversTool,
   coversTool,
   isUnnarrowed,
   narrowingLabel,
@@ -189,7 +190,7 @@ function blockCovers(
   block: ResourceAudienceEntry,
   tool: ToolSelectionTool,
 ): boolean {
-  if (!coversTool(block, tool)) return false;
+  if (!blockCoversTool(block, tool)) return false;
   if (!isInherited(cell, block)) return true;
   return !cell.direct.some((grant) => coversTool(grant, tool));
 }
@@ -303,7 +304,7 @@ function keepsThroughOwnRules(
   return catalog.some(
     (tool) =>
       cell.direct.some((grant) => coversTool(grant, tool)) &&
-      !ownBlocks.some((block) => coversTool(block, tool)),
+      !ownBlocks.some((block) => blockCoversTool(block, tool)),
   );
 }
 
@@ -484,7 +485,7 @@ function closedByOwnBlocks(
   );
   return (
     granted.length > 0 &&
-    granted.every((tool) => own.some((block) => coversTool(block, tool)))
+    granted.every((tool) => own.some((block) => blockCoversTool(block, tool)))
   );
 }
 

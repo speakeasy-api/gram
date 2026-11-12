@@ -1101,7 +1101,9 @@ describe("narrowed direct grants past inherited blocks", () => {
   });
 });
 
-it("keeps unannotated tools when an existing direct grant already overrides the role block", () => {
+it("narrows to read-only tools past a role block, leaving out unannotated tools", () => {
+  // Narrowing writes a block on every other disposition. A tool with no
+  // annotations has an unknown disposition, which such a block covers.
   const user = "user:1";
   const { direct, rows } = state([
     role({ level: "blocked", appliesTo: "resource", memberIds: ["1"] }),
@@ -1130,7 +1132,7 @@ it("keeps unannotated tools when an existing direct grant already overrides the 
       ...catalog,
       { name: "unannotated", annotations: [] },
     ]),
-  ).toEqual(["search", "fetch", "unannotated"]);
+  ).toEqual(["search", "fetch"]);
 });
 
 it("refuses narrowing that would discard an unknown stored block", () => {

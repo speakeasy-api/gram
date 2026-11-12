@@ -153,7 +153,11 @@ func TestToolsCallCatalog_RecordedToolDoesNotListUpstream(t *testing.T) {
 		return nil, nil
 	})
 
-	require.NoError(t, newAuthzInterceptor(t, store, catalog).InterceptToolsCallRequest(blockDestructiveContext(t), newCatalogCall(t, "ping")))
+	// With no behavior class the tool's disposition is unknown, so the block
+	// on destructive tools applies to it, and the call is refused without a
+	// listing.
+	err := newAuthzInterceptor(t, store, catalog).InterceptToolsCallRequest(blockDestructiveContext(t), newCatalogCall(t, "ping"))
+	require.ErrorContains(t, err, "authorize remote MCP tool call")
 }
 
 func TestToolsCallCatalog_ToolMissingFromUpstreamIsRefused(t *testing.T) {

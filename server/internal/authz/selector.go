@@ -42,6 +42,13 @@ const (
 // request acts for. The engine binds it; checks never carry it.
 const SelectorValueRepresentedUser = "$represented_user"
 
+// SelectorValueUnknown is the check value of a dimension the request has but
+// cannot determine, such as the disposition of a tool with no annotations. An
+// allow grant constrained on the dimension never matches it, and a block
+// constrained on it always does, so an undeterminable value fails closed in
+// both directions. Grants never carry it.
+const SelectorValueUnknown = "$unknown"
+
 // Auth client types an mcp:auth check can name. Only remote_session clients
 // are personal: their checks carry the connection owner.
 const (
@@ -118,6 +125,25 @@ func (s Selector) strictMatches(check Selector, representedUser string) bool {
 		checkVal, ok := check[k]
 		if !ok {
 			return false
+		}
+		if !selectorValueMatches(k, grantVal, checkVal, representedUser) {
+			return false
+		}
+	}
+	return true
+}
+
+// blockMatches is how a block grant matches a check: strictly, except that a
+// block constrained on a dimension the check could not determine matches it.
+// The value might be the one the block names, so the block applies.
+func (s Selector) blockMatches(check Selector, representedUser string) bool {
+	for k, grantVal := range s {
+		checkVal, ok := check[k]
+		if !ok {
+			return false
+		}
+		if checkVal == SelectorValueUnknown {
+			continue
 		}
 		if !selectorValueMatches(k, grantVal, checkVal, representedUser) {
 			return false
@@ -244,6 +270,9 @@ func ValidateSelector(scope Scope, sel Selector) error {
 
 	allowed := allowedSelectorKeys[expectedKind]
 	for k, v := range sel {
+		if v == SelectorValueUnknown {
+			return fmt.Errorf("selector value %q is only allowed in checks", SelectorValueUnknown)
+		}
 		if v == SelectorValueRepresentedUser && k != SelectorKeyConnectionOwner {
 			return fmt.Errorf("selector value %q is only allowed for %q", SelectorValueRepresentedUser, SelectorKeyConnectionOwner)
 		}

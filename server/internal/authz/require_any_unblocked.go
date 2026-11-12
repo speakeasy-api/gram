@@ -43,8 +43,7 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		if !ok {
 			continue
 		}
-		exclusion := check.WithStrictSelectorMatch()
-		exclusion.Scope = exclusionScope
+		exclusion := check.exclusionCheck(exclusionScope)
 		// Preserve the base resource kind, including explicit overrides.
 		if exclusion.ResourceKind == "" {
 			exclusion.ResourceKind = ResourceKindForScope(check.Scope)

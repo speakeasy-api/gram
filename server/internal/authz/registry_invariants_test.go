@@ -172,3 +172,43 @@ func TestModelInvariant_MemberIsASubsetOfAdmin(t *testing.T) {
 		require.Contains(t, admin, scope, "member is seeded with %s, which admin is not", scope)
 	}
 }
+
+// A grant constrained on a dimension never allows a request that could not
+// determine it, and a block constrained on it always applies to one. Checked
+// for every dimension a check may carry as unknown.
+func TestModelInvariant_UnknownValuesFailClosed(t *testing.T) {
+	t.Parallel()
+
+	for _, typ := range Model.Types {
+		for _, p := range typ.Permissions {
+			scope := typ.ScopeFor(p)
+			for key := range unknownableDimensions[scope] {
+				value := "value-1"
+				if values := Model.deriveDimensionValues(typ.Kind, key); len(values) > 0 {
+					for v := range values {
+						value = v
+						break
+					}
+				}
+				check := invariantCheck(typ, scope, "resource-1", "project-1")
+				dimensions := map[string]string{key: SelectorValueUnknown}
+				for k, v := range check.Dimensions {
+					dimensions[k] = v
+				}
+				check.Dimensions = dimensions
+
+				constrained := NewSelector(scope, WildcardResource)
+				constrained[key] = value
+				require.False(t, invariantAuthorizes(t, []Grant{NewGrantWithSelector(scope, constrained)}, check), "%s constrained on %s must not allow an unknown %s", invariantName(typ, p), key, key)
+
+				if !p.HasBlock() {
+					continue
+				}
+				block := NewSelector(typ.BlockScopeFor(p), WildcardResource)
+				block[key] = value
+				grants := []Grant{NewGrant(scope, WildcardResource), NewGrantWithSelector(typ.BlockScopeFor(p), block)}
+				require.False(t, invariantAuthorizes(t, grants, check), "%s constrained on %s must apply to an unknown %s", typ.BlockScopeFor(p), key, key)
+			}
+		}
+	}
+}

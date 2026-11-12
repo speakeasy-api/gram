@@ -36,6 +36,7 @@ func TestModel_DerivedTablesGolden(t *testing.T) {
 		SelectorKeys       map[string][]string       `json:"selector_keys"`
 		ScopeSelectorKeys  map[Scope][]string        `json:"scope_selector_keys"`
 		RequiredDimensions map[string][]string       `json:"required_dimensions"`
+		UnknownDimensions  map[Scope][]string        `json:"unknown_dimensions"`
 		DimensionValues    map[string][]string       `json:"dimension_values"`
 		SystemRoles        map[string][]Scope        `json:"system_roles"`
 		Agent              map[Scope]agentEntry      `json:"agent"`
@@ -55,6 +56,7 @@ func TestModel_DerivedTablesGolden(t *testing.T) {
 		SelectorKeys:       make(map[string][]string),
 		ScopeSelectorKeys:  make(map[Scope][]string),
 		RequiredDimensions: requiredCheckDimensions,
+		UnknownDimensions:  make(map[Scope][]string),
 		DimensionValues: map[string][]string{
 			"mcp." + SelectorKeyDisposition:            keys(validDispositions),
 			"mcp_auth_client." + SelectorKeyClientType: keys(validAuthClientTypes),
@@ -80,6 +82,9 @@ func TestModel_DerivedTablesGolden(t *testing.T) {
 	}
 	for scope, allowed := range scopeSelectorKeys {
 		snap.ScopeSelectorKeys[scope] = keys(allowed)
+	}
+	for scope, allowed := range unknownableDimensions {
+		snap.UnknownDimensions[scope] = keys(allowed)
 	}
 	for role, grants := range SystemRoleGrants {
 		for _, grant := range grants {
