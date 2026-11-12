@@ -2,14 +2,14 @@ lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
   docVersion: 0.0.1
-  speakeasyVersion: 1.803.0
-  generationVersion: 2.950.2
+  speakeasyVersion: 1.808.1
+  generationVersion: 2.960.8
   releaseVersion: 0.33.8
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.14
-    core: 3.31.6
+    core: 3.31.11
     defaultEnabledRetries: 0.1.0
     deprecations: 2.81.1
     devContainers: 2.90.1
@@ -83,12 +83,6 @@ trackedFiles:
   src/funcs/adminChatAnalysisTriggerAnalysis.ts: {}
   src/funcs/adminChatAnalysisUpsertBusinessMemorySettings.ts: {}
   src/funcs/adminChatAnalysisUpsertWorkUnitsSettings.ts: {}
-  src/funcs/adminExternalCredentialsCreateGcpIam.ts: {}
-  src/funcs/adminExternalCredentialsDeleteGcpIam.ts: {}
-  src/funcs/adminExternalCredentialsGetGcpIam.ts: {}
-  src/funcs/adminExternalCredentialsList.ts: {}
-  src/funcs/adminExternalCredentialsUpdateGcpIam.ts: {}
-  src/funcs/adminExternalCredentialsVerifyGcpIam.ts: {}
   src/funcs/adminOpenRouterKeysDisableKey.ts: {}
   src/funcs/adminOpenRouterKeysEnableKey.ts: {}
   src/funcs/adminOpenRouterKeysGetKeyUsage.ts: {}
@@ -151,6 +145,7 @@ trackedFiles:
   src/funcs/aiIntegrationsDeleteConfig.ts: {}
   src/funcs/aiIntegrationsGetAnthropicInferenceConfig.ts: {}
   src/funcs/aiIntegrationsGetConfig.ts: {}
+  src/funcs/aiIntegrationsListOrgUnits.ts: {}
   src/funcs/aiIntegrationsListSchedules.ts: {}
   src/funcs/aiIntegrationsRetrySchedule.ts: {}
   src/funcs/aiIntegrationsSetScheduleEnabled.ts: {}
@@ -983,6 +978,7 @@ trackedFiles:
   src/models/components/aidetection.ts: {}
   src/models/components/aidetectionuser.ts: {}
   src/models/components/aiintegrationconfig.ts: {}
+  src/models/components/aiintegrationorgunit.ts: {}
   src/models/components/aiintegrationschedulestate.ts: {}
   src/models/components/aiscanmatch.ts: {}
   src/models/components/aiscantarget.ts: {}
@@ -1143,7 +1139,6 @@ trackedFiles:
   src/models/components/createoteldestinationinput.ts: {}
   src/models/components/createpackageform.ts: {}
   src/models/components/createpackageresult.ts: {}
-  src/models/components/createplatformgcpiamcredentialform.ts: {}
   src/models/components/createpluginform.ts: {}
   src/models/components/createportalsessionresult.ts: {}
   src/models/components/createprojectrequestbody.ts: {}
@@ -1472,6 +1467,7 @@ trackedFiles:
   src/models/components/listagentsresult.ts: {}
   src/models/components/listaidetectionsresult.ts: {}
   src/models/components/listaidetectionusersresult.ts: {}
+  src/models/components/listaiintegrationorgunitsresult.ts: {}
   src/models/components/listaiintegrationschedulesresult.ts: {}
   src/models/components/listaiscantargetsresult.ts: {}
   src/models/components/listallowedoriginsresult.ts: {}
@@ -2178,7 +2174,6 @@ trackedFiles:
   src/models/components/updateenvironmentrequestbody.ts: {}
   src/models/components/updateexternaloauthserverrequestbody.ts: {}
   src/models/components/updategcpiamcredentialrequestbody.ts: {}
-  src/models/components/updategcpiamplatformcredentialrequestbody.ts: {}
   src/models/components/updategcpkmskeyrequestbody.ts: {}
   src/models/components/updateglobalremotesessionclientform.ts: {}
   src/models/components/updateingressrequestbody.ts: {}
@@ -2268,7 +2263,6 @@ trackedFiles:
   src/models/components/verifykmskeyresult.ts: {}
   src/models/components/verifyonboardinghookssetupresult.ts: {}
   src/models/components/verifyorgencryptionkeyresult.ts: {}
-  src/models/components/verifyplatformcredentialresult.ts: {}
   src/models/components/verifyurlform.ts: {}
   src/models/components/verifyurlrequestbody.ts: {}
   src/models/components/verifyurlresult.ts: {}
@@ -2374,7 +2368,6 @@ trackedFiles:
   src/models/operations/createdeployment.ts: {}
   src/models/operations/createenvironment.ts: {}
   src/models/operations/creategcpiamcredential.ts: {}
-  src/models/operations/creategcpiamplatformcredential.ts: {}
   src/models/operations/creategcpkmskey.ts: {}
   src/models/operations/createglobalremotesessionclient.ts: {}
   src/models/operations/createglobalremotesessionissuer.ts: {}
@@ -2445,7 +2438,6 @@ trackedFiles:
   src/models/operations/deletedomain.ts: {}
   src/models/operations/deleteenvironment.ts: {}
   src/models/operations/deletegcpiamcredential.ts: {}
-  src/models/operations/deletegcpiamplatformcredential.ts: {}
   src/models/operations/deletegcpkmskey.ts: {}
   src/models/operations/deleteglobalremotesessionclient.ts: {}
   src/models/operations/deleteglobalremotesessionissuer.ts: {}
@@ -2564,7 +2556,6 @@ trackedFiles:
   src/models/operations/geteventvolume.ts: {}
   src/models/operations/getfleetcoverage.ts: {}
   src/models/operations/getgcpiamcredential.ts: {}
-  src/models/operations/getgcpiamplatformcredential.ts: {}
   src/models/operations/getgcpkmskey.ts: {}
   src/models/operations/getgcpsetupinfo.ts: {}
   src/models/operations/getglobalremotesessionclient.ts: {}
@@ -2719,6 +2710,7 @@ trackedFiles:
   src/models/operations/listagentsessions.ts: {}
   src/models/operations/listaidetections.ts: {}
   src/models/operations/listaidetectionusers.ts: {}
+  src/models/operations/listaiintegrationorgunits.ts: {}
   src/models/operations/listaiintegrationschedules.ts: {}
   src/models/operations/listaiscantargets.ts: {}
   src/models/operations/listallowedorigins.ts: {}
@@ -2814,7 +2806,6 @@ trackedFiles:
   src/models/operations/listorganizationusersessionissuers.ts: {}
   src/models/operations/listorgencryptionkeys.ts: {}
   src/models/operations/listpackages.ts: {}
-  src/models/operations/listplatformexternalcredentials.ts: {}
   src/models/operations/listplugins.ts: {}
   src/models/operations/listprojects.ts: {}
   src/models/operations/listremotemcpserverheaders.ts: {}
@@ -3103,7 +3094,6 @@ trackedFiles:
   src/models/operations/updateenvironment.ts: {}
   src/models/operations/updateexternaloauthserver.ts: {}
   src/models/operations/updategcpiamcredential.ts: {}
-  src/models/operations/updategcpiamplatformcredential.ts: {}
   src/models/operations/updategcpkmskey.ts: {}
   src/models/operations/updateglobalremotesessionclient.ts: {}
   src/models/operations/updateglobalremotesessionissuer.ts: {}
@@ -3168,7 +3158,6 @@ trackedFiles:
   src/models/operations/upsertskillefficacysettings.ts: {}
   src/models/operations/validateapikey.ts: {}
   src/models/operations/verifygcpiamcredential.ts: {}
-  src/models/operations/verifygcpiamplatformcredential.ts: {}
   src/models/operations/verifygcpkmskey.ts: {}
   src/models/operations/verifyidentityproviderconnection.ts: {}
   src/models/operations/verifyonboardinghookssetup.ts: {}
@@ -3224,6 +3213,8 @@ trackedFiles:
   src/react-query/aiDetections.ts: {}
   src/react-query/aiIntegrationConfig.core.ts: {}
   src/react-query/aiIntegrationConfig.ts: {}
+  src/react-query/aiIntegrationOrgUnits.core.ts: {}
+  src/react-query/aiIntegrationOrgUnits.ts: {}
   src/react-query/aiIntegrationSchedules.core.ts: {}
   src/react-query/aiIntegrationSchedules.ts: {}
   src/react-query/aiScanTargets.core.ts: {}
@@ -3325,7 +3316,6 @@ trackedFiles:
   src/react-query/createDeployment.ts: {}
   src/react-query/createEnvironment.ts: {}
   src/react-query/createGcpIamCredential.ts: {}
-  src/react-query/createGcpIamPlatformCredential.ts: {}
   src/react-query/createGcpKmsKey.ts: {}
   src/react-query/createGlobalRemoteSessionClient.ts: {}
   src/react-query/createGlobalRemoteSessionIssuer.ts: {}
@@ -3393,7 +3383,6 @@ trackedFiles:
   src/react-query/deleteDomain.ts: {}
   src/react-query/deleteEnvironment.ts: {}
   src/react-query/deleteGcpIamCredential.ts: {}
-  src/react-query/deleteGcpIamPlatformCredential.ts: {}
   src/react-query/deleteGcpKmsKey.ts: {}
   src/react-query/deleteGlobalRemoteSessionClient.ts: {}
   src/react-query/deleteGlobalRemoteSessionIssuer.ts: {}
@@ -3528,8 +3517,6 @@ trackedFiles:
   src/react-query/getEventVolume.ts: {}
   src/react-query/getGcpIamCredential.core.ts: {}
   src/react-query/getGcpIamCredential.ts: {}
-  src/react-query/getGcpIamPlatformCredential.core.ts: {}
-  src/react-query/getGcpIamPlatformCredential.ts: {}
   src/react-query/getGcpKmsKey.core.ts: {}
   src/react-query/getGcpKmsKey.ts: {}
   src/react-query/getHooksStatus.core.ts: {}
@@ -3781,8 +3768,6 @@ trackedFiles:
   src/react-query/listOrganizationUsers.ts: {}
   src/react-query/listPackages.core.ts: {}
   src/react-query/listPackages.ts: {}
-  src/react-query/listPlatformExternalCredentials.core.ts: {}
-  src/react-query/listPlatformExternalCredentials.ts: {}
   src/react-query/listProjects.core.ts: {}
   src/react-query/listProjects.ts: {}
   src/react-query/listResources.core.ts: {}
@@ -4328,7 +4313,6 @@ trackedFiles:
   src/react-query/updateEnvironment.ts: {}
   src/react-query/updateExternalOAuthServer.ts: {}
   src/react-query/updateGcpIamCredential.ts: {}
-  src/react-query/updateGcpIamPlatformCredential.ts: {}
   src/react-query/updateGcpKmsKey.ts: {}
   src/react-query/updateGlobalRemoteSessionClient.ts: {}
   src/react-query/updateGlobalRemoteSessionIssuer.ts: {}
@@ -4408,7 +4392,6 @@ trackedFiles:
   src/react-query/validateAPIKey.core.ts: {}
   src/react-query/validateAPIKey.ts: {}
   src/react-query/verifyGcpIamCredential.ts: {}
-  src/react-query/verifyGcpIamPlatformCredential.ts: {}
   src/react-query/verifyGcpKmsKey.ts: {}
   src/react-query/verifyIdentityProviderConnection.ts: {}
   src/react-query/verifyOnboardingHooksSetup.core.ts: {}
@@ -4437,7 +4420,6 @@ trackedFiles:
   src/sdk/actorattributes.ts: {}
   src/sdk/adminassets.ts: {}
   src/sdk/adminchatanalysis.ts: {}
-  src/sdk/adminexternalcredentials.ts: {}
   src/sdk/adminopenrouterkeys.ts: {}
   src/sdk/adminremotesessions.ts: {}
   src/sdk/agent.ts: {}
@@ -9621,6 +9603,18 @@ examples:
       responses:
         "200":
           application/json: {"detections": [{"access": {"decision": "approved", "enforceable": false, "state": "unreviewed"}, "category": "local_model", "device_count": 819801, "display_name": "Vincenzo_Goldner", "first_seen": "2026-07-26T16:06:54.315Z", "last_seen": "2026-11-06T14:12:23.988Z", "signals": [], "target_id": "<id>", "user_count": 392569, "versions": ["<value 1>", "<value 2>"]}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listAIIntegrationOrgUnits:
+    speakeasy-default-list-AI-integration-org-units:
+      parameters:
+        query:
+          provider: "<value>"
+      responses:
+        "200":
+          application/json: {"org_units": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

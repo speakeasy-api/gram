@@ -3,6 +3,7 @@ package assistants
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -62,13 +64,16 @@ func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistan
 		credential.AuthorizerUserID = identity.UserID
 		execCtx = executionprofiles.ContextUserBacked
 	}
-	credential.SelectionProfileVersionID = s.bindExecutionProfile(ctx, executionprofiles.Target{
+	credential.SelectionProfileVersionID, err = s.bindExecutionProfile(ctx, executionprofiles.Target{
 		OrganizationID: assistant.OrganizationID,
 		ProjectID:      assistant.ProjectID,
 		AssistantID:    assistant.ID,
 		TriggerID:      trigger,
 		Context:        execCtx,
 	})
+	if err != nil {
+		return "", err
+	}
 	token, err := s.assistantTokens.MintTurnCredential(ctx, credential, assistanttokens.RuntimeBinding{
 		OrganizationID: assistant.OrganizationID, ProjectID: assistant.ProjectID,
 		AssistantID: assistant.ID, ThreadID: thread.ID, ChatID: thread.ChatID,
@@ -80,15 +85,25 @@ func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistan
 }
 
 // bindExecutionProfile returns the execution-selection profile version a turn
-// under target binds. While the upstream client choice stays authoritative a
-// turn does not depend on it, so a failure is logged and the turn runs
-// unbound, as turns did before profiles existed.
-func (s *ServiceCore) bindExecutionProfile(ctx context.Context, target executionprofiles.Target) uuid.NullUUID {
+// under target binds. An organization enforcing upstream auth serves every
+// proxied server from that version's choices, so a turn that cannot bind one
+// fails. Elsewhere the upstream client choice stays authoritative and a turn
+// does not depend on the version, so a failure is logged and the turn runs
+// unbound.
+func (s *ServiceCore) bindExecutionProfile(ctx context.Context, target executionprofiles.Target) (uuid.NullUUID, error) {
+	unbound := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	logger := s.logger.With(attr.SlogOrganizationID(target.OrganizationID), attr.SlogAssistantID(target.AssistantID.String()))
 	binding, err := executionprofiles.Bind(ctx, s.db, target, executionprofiles.SourceIssuance)
 	if err != nil {
 		logger.ErrorContext(ctx, "bind execution selection profile", attr.SlogError(err))
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		enforced, readErr := authenforcement.ReadEnforced(ctx, s.db, target.OrganizationID)
+		if readErr != nil {
+			return unbound, fmt.Errorf("bind execution selection profile: %w", errors.Join(err, readErr))
+		}
+		if enforced {
+			return unbound, fmt.Errorf("bind execution selection profile: %w", err)
+		}
+		return unbound, nil
 	}
 	if len(binding.Gaps) > 0 {
 		logger.InfoContext(ctx, "execution selection profile has servers without a choice",
@@ -96,5 +111,5 @@ func (s *ServiceCore) bindExecutionProfile(ctx context.Context, target execution
 			attr.SlogExecutionProfileGaps(len(binding.Gaps)),
 		)
 	}
-	return uuid.NullUUID{UUID: binding.VersionID, Valid: true}
+	return uuid.NullUUID{UUID: binding.VersionID, Valid: true}, nil
 }

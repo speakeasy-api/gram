@@ -148,7 +148,7 @@ func SyncServerAssociations(ctx context.Context, tx pgx.Tx, organizationID strin
 	if err := q.LockServerOAuthClientsForSync(ctx, LockServerOAuthClientsForSyncParams{OrganizationID: organizationID, McpServerIds: servers, RegistrationIds: registrations}); err != nil {
 		return fmt.Errorf("lock OAuth clients for synchronization: %w", err)
 	}
-	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0}
+	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: false}
 	// The report is the decision log the backfill keeps for its operator; a
 	// sync writes the same records and discards the account of them.
 	report := newReport(true)

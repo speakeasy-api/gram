@@ -18,6 +18,8 @@ import (
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/protobuf/proto"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -83,6 +85,8 @@ type relayDestination struct {
 	httpClient           *guardian.HTTPClient
 	signalName           string
 	includeSensitiveData bool
+	// minSeverity drops log records below it. Unspecified keeps every record.
+	minSeverity otelv1.LogRecord_SeverityNumber
 }
 
 type relayExportError struct {
@@ -168,9 +172,10 @@ func relayRouteLoadKey(key relayRouteKey) string {
 
 func (r *signalRelay) loadDestination(ctx context.Context, key relayRouteKey) (*relayDestination, error) {
 	config, err := dataexportsrepo.New(r.db).GetActiveOtelRouteDestination(ctx, dataexportsrepo.GetActiveOtelRouteDestinationParams{
-		OrganizationID: key.organizationID,
-		ProjectID:      key.projectID,
-		DataSource:     r.dataSource,
+		DefaultMinSeverity: dataexports.DefaultMCPConnectionLogMinSeverity,
+		OrganizationID:     key.organizationID,
+		ProjectID:          key.projectID,
+		DataSource:         r.dataSource,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -190,7 +195,27 @@ func (r *signalRelay) loadDestination(ctx context.Context, key relayRouteKey) (*
 		}
 	}
 
-	return r.newDestination(key, config.EndpointUrl, headers, config.IncludeSensitiveData)
+	destination, err := r.newDestination(key, config.EndpointUrl, headers, config.IncludeSensitiveData)
+	if err != nil {
+		return nil, err
+	}
+	if r.dataSource == dataexports.DataSourceMCPConnectionLogs {
+		destination.minSeverity = connectionLogMinSeverity(config.MinSeverity)
+	}
+	return destination, nil
+}
+
+// connectionLogMinSeverity maps a route's level to the lowest severity it receives.
+// An unknown level gets the most restrictive one.
+func connectionLogMinSeverity(level string) otelv1.LogRecord_SeverityNumber {
+	switch level {
+	case dataexports.MinSeverityInfo:
+		return otelv1.LogRecord_SEVERITY_NUMBER_INFO
+	case dataexports.MinSeverityWarn:
+		return otelv1.LogRecord_SEVERITY_NUMBER_WARN
+	default:
+		return otelv1.LogRecord_SEVERITY_NUMBER_ERROR
+	}
 }
 
 func (r *signalRelay) newDestination(
@@ -243,6 +268,7 @@ func (r *signalRelay) newDestination(
 		httpClient:           httpClient,
 		signalName:           r.signalName,
 		includeSensitiveData: includeSensitiveData,
+		minSeverity:          otelv1.LogRecord_SEVERITY_NUMBER_UNSPECIFIED,
 	}, nil
 }
 
