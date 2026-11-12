@@ -96,7 +96,8 @@ const (
 	// decided client, or one whose evidence names several clients but whose
 	// explicit configuration settles it: at least one outbound client is
 	// associated with it, and every candidate with grants for its upstream
-	// is already associated or was explicitly detached from it.
+	// is already associated with it, was explicitly detached from it, or is
+	// associated with another server on the same upstream.
 	GatewayOutcomeConfigured GatewayOutcome = "configured"
 
 	// GatewayOutcomeDetached is a server whose decided client was explicitly
@@ -576,19 +577,22 @@ func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 
 // settledByConfiguration marks an ambiguous or conflicting pair configured
 // when at least one outbound client is already associated with the server and
-// every grant-bearing candidate is associated or explicitly detached. Multiple
-// outbound registrations can share an authorization server, so a derived match
-// does not distinguish them or outweigh existing associations. Inbound issuer
-// bindings alone do not justify adding outbound clients. A detached client stays
-// detached; a grant for a client never associated still needs configuration.
-// This decides nothing new and writes nothing.
+// every grant-bearing candidate is associated, explicitly detached, or
+// associated with another server on the same upstream. Multiple outbound
+// registrations can share an authorization server, so a derived match does not
+// distinguish them or outweigh existing associations. Inbound issuer bindings
+// alone do not justify adding outbound clients. A detached client stays
+// detached. Grants name an upstream, not a server, so those of a client another
+// server on that upstream is associated with are that server's; a grant for a
+// client associated with no such server still needs configuration. This
+// decides nothing new and writes nothing.
 func settledByConfiguration(result GatewayResult, rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 	associated := false
 	for _, row := range rows {
 		switch {
 		case row.PairLive:
 			associated = true
-		case row.GrantMatch && !row.PairRecorded:
+		case row.GrantMatch && !row.PairRecorded && !row.ClaimedBySibling:
 			return result
 		}
 	}

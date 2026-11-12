@@ -494,7 +494,28 @@ SELECT f.issuer_id::uuid AS issuer_id,
          FROM mcp_server_remote_session_clients AS recorded
          WHERE recorded.mcp_server_id = s.id
            AND recorded.remote_session_client_id = c.id
-       )::boolean AS pair_recorded
+       )::boolean AS pair_recorded,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_remote_session_clients AS claimed
+         JOIN mcp_servers AS sibling
+           ON sibling.id = claimed.mcp_server_id
+          AND sibling.project_id = claimed.project_id
+          AND sibling.deleted IS FALSE
+         JOIN projects AS sibling_project
+           ON sibling_project.id = sibling.project_id
+          AND sibling_project.organization_id = p.organization_id
+          AND sibling_project.deleted IS FALSE
+         JOIN remote_mcp_servers AS sibling_remote
+           ON sibling_remote.id = sibling.remote_mcp_server_id
+          AND sibling_remote.project_id = sibling.project_id
+          AND sibling_remote.deleted IS FALSE
+         WHERE claimed.remote_session_client_id = c.id
+           AND claimed.deleted IS FALSE
+           AND sibling.id <> s.id
+           AND r.url IS NOT NULL
+           AND rtrim(sibling_remote.url, '/') = rtrim(r.url, '/')
+       )::boolean AS claimed_by_sibling
 FROM fronted AS f
 JOIN mcp_servers AS s
   ON s.id = f.server_id
@@ -533,6 +554,7 @@ type ListGatewayAssociationCandidatesRow struct {
 	DerivedMatch          bool
 	PairLive              bool
 	PairRecorded          bool
+	ClaimedBySibling      bool
 }
 
 // One row per proxied MCP server a gateway issuer fronts and each live client
@@ -552,6 +574,10 @@ type ListGatewayAssociationCandidatesRow struct {
 // client: request routing matches tunnels by derived issuer alone, and so
 // does this. derived_match reports that the client's authorization server is
 // the one derived for the server, the comparison consent claimed members by.
+// claimed_by_sibling reports that the client is associated with another live
+// server of the organization on the same remote upstream URL. A grant's
+// resource is that URL, so the client's grants are that server's and prove
+// nothing about this one.
 // offers_own_oauth_client reports that the server offers an OAuth-backed auth
 // client an administrator or a server-only identity commit configured for it.
 func (q *Queries) ListGatewayAssociationCandidates(ctx context.Context, organizationID string) ([]ListGatewayAssociationCandidatesRow, error) {
@@ -575,6 +601,7 @@ func (q *Queries) ListGatewayAssociationCandidates(ctx context.Context, organiza
 			&i.DerivedMatch,
 			&i.PairLive,
 			&i.PairRecorded,
+			&i.ClaimedBySibling,
 		); err != nil {
 			return nil, err
 		}
