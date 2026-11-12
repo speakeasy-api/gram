@@ -94,7 +94,7 @@ from Stop, which backfills that prompt and the assistant text no hook reports.
 Session start, inventory, notification and config events stay local in the VM.
 
 Both paths can describe the same prompt or tool call. Envelopes from the VM
-carry `session.transcript_capture: true`, and both paths then key those rows by
+carry `session.surface: "cowork"`, and both paths then key those rows by
 the ids Claude reports to both: `claude-prompt:<prompt_id>` (the transcript's
 `promptId`), `claude-tool-call:<tool_use_id>` and
 `claude-tool-result:<tool_use_id>`. The `(chat_id, external_message_id)` unique
@@ -122,8 +122,8 @@ Each entry's uuid keys its rows (`external_message_id` prefixed
 A warn on a typed prompt challenges it: the prompt is blocked, and in Claude
 Code the block text carries an acknowledgement link the person opens before
 retrying. Cowork shows a hook's block text cut off after two lines with no way
-to expand it, so that link never shows. For transcript-capture (Cowork)
-sessions the challenge instead tells the person to send the same message
+to expand it, so that link never shows. For events with
+`session.surface: "cowork"` the challenge instead tells the person to send the same message
 again, and an identical resend within 10 minutes is the confirmation: the
 pending challenge for that prompt's call fingerprint becomes a two-minute
 acknowledgement, recorded in the audit log. Only a person submits prompts, so

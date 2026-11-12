@@ -150,11 +150,11 @@ func TestClaudeTranscriptSkipsPromptsAHookStored(t *testing.T) {
 	h := ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveTranscript))
 
 	sessionID := uuid.NewString()
-	captured := true
+	surface := surfaceCowork
 	promptID := "prompt-hooked"
 	text := "row: SENSITIVE_TEST_CONTENT"
 	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
-	payload.Session.TranscriptCapture = &captured
+	payload.Session.Surface = &surface
 	payload.Session.TurnID = &promptID
 	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &text}}
 	_, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)

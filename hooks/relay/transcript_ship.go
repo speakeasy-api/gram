@@ -253,6 +253,9 @@ func coworkTranscriptMode(base *agenthooks.Event) bool {
 // VM. Anything else, including entrypoints not seen yet, keeps per-event hooks.
 const coworkVMEntrypoint = "remote_cowork"
 
+// coworkSurface is session.surface on events sent from inside the Cowork VM.
+const coworkSurface = "cowork"
+
 // transcriptUploadSettled reports whether the server has answered a chunk for
 // good, so the offset may move past it. A definitive 4xx would be rejected
 // identically on every retry; credentials and throttling can recover, so

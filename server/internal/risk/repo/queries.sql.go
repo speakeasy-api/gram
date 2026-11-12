@@ -353,7 +353,7 @@ func (q *Queries) CleanupExpiredMCPFindingEvidenceBatch(ctx context.Context, bat
 	return result.RowsAffected(), nil
 }
 
-const confirmRiskPolicyChallengeByResend = `-- name: ConfirmRiskPolicyChallengeByResend :one
+const confirmPendingRiskPolicyChallenge = `-- name: ConfirmPendingRiskPolicyChallenge :one
 UPDATE risk_policy_challenges
 SET status = 'acknowledged'
   , acknowledged_at = clock_timestamp()
@@ -370,7 +370,7 @@ WHERE project_id = $2
 RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
-type ConfirmRiskPolicyChallengeByResendParams struct {
+type ConfirmPendingRiskPolicyChallengeParams struct {
 	GraceSeconds    float64
 	ProjectID       uuid.UUID
 	UserID          string
@@ -380,12 +380,13 @@ type ConfirmRiskPolicyChallengeByResendParams struct {
 	WindowSeconds   float64
 }
 
-// Claude Cowork resend-to-confirm: a person who sends the exact prompt a warn
-// just challenged has seen the warning and chosen to go ahead, so the pending
-// challenge becomes a short-lived acknowledgement for that same prompt. Only a
-// recent, still-pending challenge for the identical call qualifies.
-func (q *Queries) ConfirmRiskPolicyChallengeByResend(ctx context.Context, arg ConfirmRiskPolicyChallengeByResendParams) (RiskPolicyChallenge, error) {
-	row := q.db.QueryRow(ctx, confirmRiskPolicyChallengeByResend,
+// Claude Cowork confirmations: a person who sends a challenged prompt again,
+// or allows a challenged tool call in Cowork's permission prompt, has seen the
+// warning and chosen to go ahead. The pending challenge becomes a short-lived
+// acknowledgement for that same call. Only a recent, still-pending challenge
+// for the identical call qualifies.
+func (q *Queries) ConfirmPendingRiskPolicyChallenge(ctx context.Context, arg ConfirmPendingRiskPolicyChallengeParams) (RiskPolicyChallenge, error) {
+	row := q.db.QueryRow(ctx, confirmPendingRiskPolicyChallenge,
 		arg.GraceSeconds,
 		arg.ProjectID,
 		arg.UserID,

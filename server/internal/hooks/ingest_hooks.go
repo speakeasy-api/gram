@@ -312,6 +312,11 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
+	// A tool call that ran after Cowork's permission prompt was allowed by the
+	// person, which confirms the warning that asked for it.
+	if fromCowork(payload) && strings.TrimSpace(payload.Event.Type) == "tool.completed" && !s.isHookDuplicate(ctx) {
+		s.confirmCoworkToolAsk(context.WithoutCancel(ctx), payload, canonicalHookEvent(payload, authCtx, actor, timestamp))
+	}
 	skillCapture, observed, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)
 	if observationErr != nil {
 		logger.WarnContext(ctx, "failed to record skill activation",
@@ -362,6 +367,12 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// cache write failed transiently (the retry arrives already marked
 	// duplicate).
 	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
+	if blockReason != "" && blockEffects.ask {
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAskResult(userReason), skillCapture),
+			Actor:  ResolvedActor(actor),
+		}, nil
+	}
 	if blockReason != "" {
 		return &AuthenticatedIngestResult{
 			Result: withBlockEffect(blockEffects, s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture)),
@@ -717,7 +728,9 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
 				}
-				if coworkResendConfirms(payload) {
+				// Cowork cannot show the acknowledgement link, so there the
+				// person confirms by sending the same prompt again.
+				if fromCowork(payload) {
 					// A transport retry of the challenged send reuses its
 					// idempotency key. It must get the same challenge, never
 					// count as the person sending the prompt again.
@@ -783,6 +796,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 					if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
 						return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, toolInput)
 					}
+					if fromCowork(payload) {
+						if auditReason, userReason, ok := s.askCoworkToolWarn(ctx, payload, ev.Event, scanResult, toolName); ok {
+							return auditReason, userReason
+						}
+					}
 					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
 						auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 						return auditReason, userReason
@@ -807,6 +825,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			if scanResult.IsWarnChallenge() {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
 					return "", ""
+				}
+				if fromCowork(payload) {
+					if auditReason, userReason, ok := s.askCoworkToolWarn(ctx, payload, ev.Event, scanResult, toolName); ok {
+						return auditReason, userReason
+					}
 				}
 				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
 					auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
@@ -1184,10 +1207,10 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 		}
 	}
 	s.teeCanonicalHookToEventFeed(ctx, payload, authCtx, &metadata, hookSource, blockReason, teeRows)
-	// A client that also ships the session transcript (Claude Cowork) keys
-	// its rows by the ids the transcript shares, so the two paths store each
-	// prompt and tool call once. See claude_cowork_rows.go.
-	if transcriptCaptured(payload) {
+	// Cowork also ships the session transcript, so its rows are keyed by the
+	// ids the transcript shares and the two paths store each prompt and tool
+	// call once. See claude_cowork_rows.go.
+	if fromCowork(payload) {
 		s.persistCoworkEventRow(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 		s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, timestamp)
 		return
@@ -2256,6 +2279,16 @@ func canonicalAllowResult() *gen.IngestHookResult {
 	}
 }
 
+func canonicalAskResult(message string) *gen.IngestHookResult {
+	reason := "policy_warn_ask"
+	return &gen.IngestHookResult{
+		Decision: "ask",
+		Reason:   &reason,
+		Message:  &message,
+		Effects:  nil,
+	}
+}
+
 func canonicalDenyResult(message string) *gen.IngestHookResult {
 	if strings.TrimSpace(message) == "" {
 		message = "Request denied by Speakeasy policy."
@@ -2642,13 +2675,21 @@ func jsonString(v any) string {
 	}
 }
 
-// transcriptCaptured reports whether the client also ships this session's
-// transcript, so the event's row must use the key the transcript shares.
-func transcriptCaptured(payload *gen.IngestPayload) bool {
-	return payload != nil && payload.Session != nil && conv.PtrValOr(payload.Session.TranscriptCapture, false)
+// surfaceCowork is session.surface on events sent from inside Claude Cowork.
+// It is the same name the server stores for Cowork sessions.
+const surfaceCowork = agentVariantCowork
+
+// fromCowork reports whether the event came from inside Claude Cowork. Two
+// things differ there. The Stop hook also ships the session transcript, so
+// event rows use the keys the transcript shares (claude_cowork_rows.go).
+// Cowork cannot show the acknowledgement link, so a warned prompt is
+// confirmed by sending it again (cowork_warn_confirm.go).
+func fromCowork(payload *gen.IngestPayload) bool {
+	return payload != nil && payload.Session != nil &&
+		strings.EqualFold(strings.TrimSpace(conv.PtrValOr(payload.Session.Surface, "")), surfaceCowork)
 }
 
-// persistCoworkEventRow stores a transcript-capture session's event under the
+// persistCoworkEventRow stores a Cowork event under the
 // key its transcript entry shares. Events without a shared id are left to the
 // transcript.
 func (s *Service) persistCoworkEventRow(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) {

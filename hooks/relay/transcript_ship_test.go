@@ -450,7 +450,7 @@ func TestCoworkKeepsChunkWithoutAcknowledgement(t *testing.T) {
 
 // TestCoworkRelaysGatedEvents: inside the Cowork VM, prompt, tool and
 // permission events reach the server as in Claude Code, so policy is enforced
-// in real time. Their envelopes carry transcript_capture so the server keys
+// in real time. Their envelopes carry session.surface "cowork" so the server keys
 // their rows by the ids the shipped transcript shares; the observe-only events
 // stay local.
 func TestCoworkRelaysGatedEvents(t *testing.T) {
@@ -486,8 +486,38 @@ func TestCoworkRelaysGatedEvents(t *testing.T) {
 	defer fs.mu.Unlock()
 	for _, req := range fs.requests {
 		require.NotNil(t, req.Session)
-		require.Equal(t, true, *req.Session.TranscriptCapture, "Cowork events share their row keys with the transcript")
+		require.NotNil(t, req.Session.Surface)
+		require.Equal(t, coworkSurface, *req.Session.Surface, "Cowork events say where they come from")
 	}
+}
+
+// TestCoworkAskShowsPermissionPrompt: the server answers a warned Cowork tool
+// call with "ask", which Claude Code shows as its own Allow / Deny prompt.
+// "ask" on any other event is a deny.
+func TestCoworkAskShowsPermissionPrompt(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ask := decision{Decision: "ask", Reason: "", Message: "Speakeasy warning. EXAMPLE-MATCH looks like sensitive information."}
+	fs := newFakeServer(t, func(p components.IngestRequestBody) (int, decision) {
+		if p.Event.Type == components.TypeToolRequested {
+			return http.StatusOK, ask
+		}
+		if p.Data != nil && p.Data.Prompt != nil && p.Data.Prompt.Text != nil && *p.Data.Prompt.Text == "ask me" {
+			return http.StatusOK, ask
+		}
+		return http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
+	})
+	cfg := coworkConfig(t, fs.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, transcriptUser)
+
+	res := invokeClaude(t, cfg, map[string]any{"session_id": "sess-cowork-ask", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": "echo EXAMPLE-MATCH"}, "tool_use_id": "toolu_ask"})
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"ask"`)
+	require.Contains(t, string(res.Stdout), "EXAMPLE-MATCH looks like sensitive information.")
+
+	res = invokeClaude(t, cfg, map[string]any{"session_id": "sess-cowork-ask", "transcript_path": transcript, "cwd": "/work/repo", "hook_event_name": "UserPromptSubmit", "prompt": "ask me"})
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.Contains(t, string(res.Stdout), `"decision":"block"`, "a prompt cannot be asked, so it is blocked")
 }
 
 func TestClaudeCodeEventsKeepCapture(t *testing.T) {
@@ -499,7 +529,7 @@ func TestClaudeCodeEventsKeepCapture(t *testing.T) {
 	res := invokeClaude(t, cfg, map[string]any{"session_id": "sess-cli-1", "cwd": "/work/repo", "hook_event_name": "UserPromptSubmit", "prompt": "list the files"})
 	require.Equal(t, 0, res.ExitCode, res.Stderr)
 	require.Equal(t, 1, fs.count())
-	require.Nil(t, fs.last().Session.TranscriptCapture, "outside Cowork the event is the capture path")
+	require.Nil(t, fs.last().Session.Surface, "outside Cowork the event is the capture path")
 }
 
 func TestTranscriptUploadSettled(t *testing.T) {

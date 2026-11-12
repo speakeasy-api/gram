@@ -22,9 +22,9 @@ export type HookIngestSession = {
    */
   model?: string | undefined;
   /**
-   * True when the client also ships this session's transcript to the transcript endpoint (Claude Cowork). The server keys the event's conversation row by the id the transcript shares (the prompt id in turn_id, or the tool call id), so the event and the transcript store each prompt and tool call once.
+   * Product surface that sent the event, set when it changes how the server handles the event. "cowork" is Claude Cowork. Its Stop hook also ships the session transcript, so the server keys the event's conversation row by the id the transcript shares (the prompt id in turn_id, or the tool call id) and each prompt and tool call is stored once. Cowork cannot show the acknowledgement link, so a warned prompt there is confirmed by sending the same message again. Unknown values are ignored.
    */
-  transcriptCapture?: boolean | undefined;
+  surface?: string | undefined;
   /**
    * Generation, request, or turn identifier.
    */
@@ -36,7 +36,7 @@ export type HookIngestSession$Outbound = {
   cwd?: string | undefined;
   id?: string | undefined;
   model?: string | undefined;
-  transcript_capture?: boolean | undefined;
+  surface?: string | undefined;
   turn_id?: string | undefined;
 };
 
@@ -49,12 +49,11 @@ export const HookIngestSession$outboundSchema: z.ZodMiniType<
     cwd: z.optional(z.string()),
     id: z.optional(z.string()),
     model: z.optional(z.string()),
-    transcriptCapture: z.optional(z.boolean()),
+    surface: z.optional(z.string()),
     turnId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      transcriptCapture: "transcript_capture",
       turnId: "turn_id",
     });
   }),

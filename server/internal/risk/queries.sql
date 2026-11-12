@@ -558,11 +558,12 @@ SET status = 'declined'
   , updated_at = clock_timestamp()
 RETURNING *;
 
--- name: ConfirmRiskPolicyChallengeByResend :one
--- Claude Cowork resend-to-confirm: a person who sends the exact prompt a warn
--- just challenged has seen the warning and chosen to go ahead, so the pending
--- challenge becomes a short-lived acknowledgement for that same prompt. Only a
--- recent, still-pending challenge for the identical call qualifies.
+-- name: ConfirmPendingRiskPolicyChallenge :one
+-- Claude Cowork confirmations: a person who sends a challenged prompt again,
+-- or allows a challenged tool call in Cowork's permission prompt, has seen the
+-- warning and chosen to go ahead. The pending challenge becomes a short-lived
+-- acknowledgement for that same call. Only a recent, still-pending challenge
+-- for the identical call qualifies.
 UPDATE risk_policy_challenges
 SET status = 'acknowledged'
   , acknowledged_at = clock_timestamp()

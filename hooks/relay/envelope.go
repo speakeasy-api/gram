@@ -375,19 +375,19 @@ func sessionOf(base *agenthooks.Event) *components.HookIngestSession {
 		turnID = agentTurnPrefix + adapterSlug(base.Provider) + ":" + turnID
 	}
 	s := &components.HookIngestSession{
-		ID:                optStr(base.Session.ID),
-		TurnID:            optStr(turnID),
-		Cwd:               optStr(base.Session.CWD),
-		Model:             optStr(base.Session.Model),
-		TranscriptCapture: nil,
+		ID:      optStr(base.Session.ID),
+		TurnID:  optStr(turnID),
+		Cwd:     optStr(base.Session.CWD),
+		Model:   optStr(base.Session.Model),
+		Surface: nil,
 	}
-	// Inside the Cowork VM the Stop hook also ships the session transcript.
-	// The flag tells the server to key this event's row by the id the
-	// transcript shares, so the two never store a message twice.
+	// The server handles Cowork events differently: their rows share keys
+	// with the transcript the Stop hook ships, and a warned prompt is
+	// confirmed by sending it again because Cowork cannot show the link.
 	if coworkTranscriptMode(base) {
-		s.TranscriptCapture = new(true)
+		s.Surface = new(coworkSurface)
 	}
-	if s.ID == nil && s.TurnID == nil && s.Cwd == nil && s.Model == nil && s.TranscriptCapture == nil {
+	if s.ID == nil && s.TurnID == nil && s.Cwd == nil && s.Model == nil && s.Surface == nil {
 		return nil
 	}
 	return s

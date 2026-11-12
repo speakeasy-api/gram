@@ -261,7 +261,9 @@ type CodexResponseBody struct {
 // IngestResponseBody is the type of the "hooks" service "ingest" endpoint HTTP
 // response body.
 type IngestResponseBody struct {
-	// Whether the local hook should allow or deny the action.
+	// Whether the local hook should allow or deny the action. "ask" (tool calls
+	// from Claude Cowork only) asks the person to allow the call in the agent's
+	// own permission prompt; a client that does not support it must deny.
 	Decision string `form:"decision" json:"decision" xml:"decision"`
 	// Machine-readable decision reason.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -1935,11 +1937,14 @@ type HookIngestSessionRequestBody struct {
 	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
 	// Model identifier reported by the local agent.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
-	// True when the client also ships this session's transcript to the transcript
-	// endpoint (Claude Cowork). The server keys the event's conversation row by
-	// the id the transcript shares (the prompt id in turn_id, or the tool call
-	// id), so the event and the transcript store each prompt and tool call once.
-	TranscriptCapture *bool `form:"transcript_capture,omitempty" json:"transcript_capture,omitempty" xml:"transcript_capture,omitempty"`
+	// Product surface that sent the event, set when it changes how the server
+	// handles the event. "cowork" is Claude Cowork. Its Stop hook also ships the
+	// session transcript, so the server keys the event's conversation row by the
+	// id the transcript shares (the prompt id in turn_id, or the tool call id) and
+	// each prompt and tool call is stored once. Cowork cannot show the
+	// acknowledgement link, so a warned prompt there is confirmed by sending the
+	// same message again. Unknown values are ignored.
+	Surface *string `form:"surface,omitempty" json:"surface,omitempty" xml:"surface,omitempty"`
 }
 
 // HookIngestEventRequestBody is used to define fields on request body types.

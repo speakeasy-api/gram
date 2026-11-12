@@ -20,7 +20,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -40,13 +39,6 @@ const (
 	coworkResendGrace = 2 * time.Minute
 )
 
-// coworkResendConfirms reports whether prompt warns in this session are
-// confirmed by resending the prompt. The transcript-capture flag marks Claude
-// Cowork sessions, the surface that cannot show the acknowledgement link.
-func coworkResendConfirms(payload *gen.IngestPayload) bool {
-	return transcriptCaptured(payload)
-}
-
 // confirmWarnByResend turns a recent pending challenge for this exact prompt
 // into an acknowledgement and records it in the audit log. false means this is
 // the first sighting (or the window passed), so the caller challenges it.
@@ -54,38 +46,60 @@ func (s *Service) confirmWarnByResend(ctx context.Context, ev hookevents.Event, 
 	ctx, span := s.tracer.Start(ctx, "hooks.confirmWarnByResend")
 	defer span.End()
 
-	if s.db == nil || scanResult == nil || ev.Context.User.ID == "" || scanResult.CallFingerprint == "" {
+	if scanResult == nil {
 		return false
 	}
 	policyID, err := uuid.Parse(scanResult.PolicyID)
 	if err != nil {
 		return false
 	}
+	return s.acknowledgePendingChallenge(ctx, ev, pendingChallenge{
+		PolicyID:        policyID,
+		ToolName:        "",
+		CallFingerprint: scanResult.CallFingerprint,
+	}, coworkResendWindow, "hooks_cowork_warn_resend_confirmed")
+}
+
+// pendingChallenge names one challenged call: a prompt (no tool name) or a
+// tool call, under one policy.
+type pendingChallenge struct {
+	PolicyID        uuid.UUID `json:"policy_id"`
+	ToolName        string    `json:"tool_name"`
+	CallFingerprint string    `json:"call_fingerprint"`
+}
+
+// acknowledgePendingChallenge turns a pending challenge raised within window
+// into a short-lived acknowledgement and records it in the audit log, in one
+// transaction. false means there was no such challenge.
+func (s *Service) acknowledgePendingChallenge(ctx context.Context, ev hookevents.Event, pending pendingChallenge, window time.Duration, event string) bool {
+	if s.db == nil || ev.Context.User.ID == "" || pending.CallFingerprint == "" {
+		return false
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		s.logger.WarnContext(ctx, "begin warn resend confirmation", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "begin warn confirmation", attr.SlogError(err))
 		return false
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	row, err := riskrepo.New(dbtx).ConfirmRiskPolicyChallengeByResend(ctx, riskrepo.ConfirmRiskPolicyChallengeByResendParams{
+	row, err := riskrepo.New(dbtx).ConfirmPendingRiskPolicyChallenge(ctx, riskrepo.ConfirmPendingRiskPolicyChallengeParams{
 		GraceSeconds:    coworkResendGrace.Seconds(),
 		ProjectID:       ev.Context.ProjectID,
 		UserID:          ev.Context.User.ID,
-		RiskPolicyID:    policyID,
-		ToolName:        pgtype.Text{String: "", Valid: false},
-		CallFingerprint: pgtype.Text{String: scanResult.CallFingerprint, Valid: true},
-		WindowSeconds:   coworkResendWindow.Seconds(),
+		RiskPolicyID:    pending.PolicyID,
+		ToolName:        conv.ToPGTextEmpty(pending.ToolName),
+		CallFingerprint: pgtype.Text{String: pending.CallFingerprint, Valid: true},
+		WindowSeconds:   window.Seconds(),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// No pending challenge: the common first-send case.
 		return false
 	}
 	if err != nil {
-		s.logger.WarnContext(ctx, "confirm warn by resend failed; challenging again",
+		s.logger.WarnContext(ctx, "confirm warn failed",
 			attr.SlogError(err),
-			attr.SlogRiskPolicyID(policyID.String()),
+			attr.SlogRiskPolicyID(pending.PolicyID.String()),
 		)
 		return false
 	}
@@ -96,20 +110,20 @@ func (s *Service) confirmWarnByResend(ctx context.Context, ev hookevents.Event, 
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ev.Context.User.ID),
 		ActorDisplayName: conv.PtrEmpty(ev.Context.User.Email),
 		ActorSlug:        nil,
-		RiskPolicyID:     policyID,
+		RiskPolicyID:     pending.PolicyID,
 		RiskPolicyName:   row.PolicyName.String,
 	}); err != nil {
-		s.logger.WarnContext(ctx, "audit warn resend confirmation", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "audit warn confirmation", attr.SlogError(err))
 		return false
 	}
 	if err := dbtx.Commit(ctx); err != nil {
-		s.logger.WarnContext(ctx, "commit warn resend confirmation", attr.SlogError(err))
+		s.logger.WarnContext(ctx, "commit warn confirmation", attr.SlogError(err))
 		return false
 	}
 
-	s.logger.InfoContext(ctx, "warn confirmed by resending the prompt",
-		attr.SlogEvent("hooks_cowork_warn_resend_confirmed"),
-		attr.SlogRiskPolicyID(policyID.String()),
+	s.logger.InfoContext(ctx, "warn confirmed in Cowork",
+		attr.SlogEvent(event),
+		attr.SlogRiskPolicyID(pending.PolicyID.String()),
 	)
 	return true
 }

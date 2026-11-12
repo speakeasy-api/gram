@@ -45,7 +45,7 @@ func claudeSharedRowKey(row claudeTranscriptRow, promptID string) string {
 	}
 }
 
-// coworkEventRow maps a per-event hook from a transcript-capture session to
+// coworkEventRow maps a per-event hook from a Cowork session to
 // the row the transcript would store for the same message, under the shared
 // key. ok is false for events that carry no shared id, or that the transcript
 // alone records (assistant turns): writing those here could only duplicate a

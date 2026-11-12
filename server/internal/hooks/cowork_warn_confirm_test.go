@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -43,25 +44,25 @@ func (s *dbChallengeScanner) ScanForEnforcement(_ context.Context, req risk.Real
 	}, nil
 }
 
-func (s *dbChallengeScanner) HasAcknowledgedChallenge(ctx context.Context, projectID uuid.UUID, userID, _, _, callFingerprint string) bool {
+func (s *dbChallengeScanner) HasAcknowledgedChallenge(ctx context.Context, projectID uuid.UUID, userID, _, toolName, callFingerprint string) bool {
 	_, err := s.repo.GetActiveRiskPolicyAck(ctx, riskRepo.GetActiveRiskPolicyAckParams{
 		ProjectID:       projectID,
 		UserID:          userID,
 		RiskPolicyID:    s.policyID,
-		ToolName:        pgtype.Text{String: "", Valid: false},
+		ToolName:        conv.ToPGTextEmpty(toolName),
 		CallFingerprint: pgtype.Text{String: callFingerprint, Valid: true},
 	})
 	return err == nil
 }
 
-func (s *dbChallengeScanner) RecordPolicyChallenge(ctx context.Context, organizationID string, projectID uuid.UUID, userID, _, _, policyName, entity, _, callFingerprint string) {
+func (s *dbChallengeScanner) RecordPolicyChallenge(ctx context.Context, organizationID string, projectID uuid.UUID, userID, _, toolName, policyName, entity, _, callFingerprint string) {
 	_, _ = s.repo.UpsertRiskPolicyChallenge(ctx, riskRepo.UpsertRiskPolicyChallengeParams{
 		ID:              uuid.New(),
 		OrganizationID:  organizationID,
 		ProjectID:       projectID,
 		RiskPolicyID:    s.policyID,
 		UserID:          userID,
-		ToolName:        pgtype.Text{String: "", Valid: false},
+		ToolName:        conv.ToPGTextEmpty(toolName),
 		CallFingerprint: pgtype.Text{String: callFingerprint, Valid: true},
 		PolicyName:      pgtype.Text{String: policyName, Valid: true},
 		Entity:          pgtype.Text{String: entity, Valid: true},
@@ -72,8 +73,10 @@ func (s *dbChallengeScanner) RecordPolicyChallenge(ctx context.Context, organiza
 // TestIngest_CoworkPromptWarnConfirmedByResend: Cowork cannot show the
 // acknowledgement link, so the first send of a warned prompt is challenged
 // with a "send it again" instruction and the identical resend goes through.
-func TestIngest_CoworkPromptWarnConfirmedByResend(t *testing.T) {
-	t.Parallel()
+// newCoworkWarnTest returns a hooks service whose scanner warns on every scan
+// and keeps challenges in the real table.
+func newCoworkWarnTest(t *testing.T) (context.Context, *testInstance, *contextvalues.AuthContext) {
+	t.Helper()
 
 	ctx, ti := newTestHooksService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -96,14 +99,21 @@ func TestIngest_CoworkPromptWarnConfirmedByResend(t *testing.T) {
 	})
 	require.NoError(t, err)
 	ti.service.riskScanner = &dbChallengeScanner{stubResultScanner: stubResultScanner{}, repo: riskRepo.New(ti.conn), policyID: policyID}
+	return ctx, ti, authCtx
+}
+
+func TestIngest_CoworkPromptWarnConfirmedByResend(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, authCtx := newCoworkWarnTest(t)
 
 	sessionID := uuid.NewString()
-	captured := true
+	surface := surfaceCowork
 	sendKeyed := func(text, idempotencyKey string) *gen.IngestHookResult {
 		t.Helper()
 		payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
 		payload.IdempotencyKey = &idempotencyKey
-		payload.Session.TranscriptCapture = &captured
+		payload.Session.Surface = &surface
 		promptID := uuid.NewString()
 		payload.Session.TurnID = &promptID
 		payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &text}}
@@ -149,4 +159,55 @@ func TestIngest_CoworkPromptWarnConfirmedByResend(t *testing.T) {
 	audited, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyChallengeAcknowledge)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, audited, "each confirmation is audited once")
+}
+
+// TestIngest_CoworkToolWarnAsksAndConfirms: in Cowork a warned tool call is
+// answered with "ask", so Cowork shows its own Allow / Deny prompt. The call
+// only runs if the person allows it, so its result confirms the warning, and
+// that confirmation is audited once.
+func TestIngest_CoworkToolWarnAsksAndConfirms(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, authCtx := newCoworkWarnTest(t)
+
+	sessionID := uuid.NewString()
+	surface := surfaceCowork
+	toolEvent := func(eventType, toolID, command string) *gen.IngestPayload {
+		t.Helper()
+		payload := canonicalIngestPayload("claude", eventType, sessionID)
+		payload.Session.Surface = &surface
+		name := "Bash"
+		payload.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{ID: &toolID, Name: &name, Input: map[string]any{"command": command}}}
+		return payload
+	}
+	send := func(payload *gen.IngestPayload) *gen.IngestHookResult {
+		t.Helper()
+		res, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
+		require.NoError(t, err)
+		return res
+	}
+	audited := func() int64 {
+		t.Helper()
+		n, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyChallengeAcknowledge)
+		require.NoError(t, err)
+		return n
+	}
+
+	command := "echo 618-27-4093 >> notes.txt"
+	asked := send(toolEvent("tool.requested", "toolu_1", command))
+	require.Equal(t, "ask", asked.Decision, "Cowork asks the person instead of showing a link it would cut off")
+	require.NotNil(t, asked.Message)
+	require.Contains(t, *asked.Message, "Speakeasy warning. 618-27-4093 looks like sensitive information.")
+	require.NotContains(t, *asked.Message, "ack_token=")
+	require.Zero(t, audited(), "asking is not a confirmation")
+
+	send(toolEvent("tool.completed", "toolu_1", command))
+	require.EqualValues(t, 1, audited(), "the call ran, so the person allowed it")
+	send(toolEvent("tool.completed", "toolu_1", command))
+	require.EqualValues(t, 1, audited(), "a second result for the same call confirms nothing new")
+	send(toolEvent("tool.completed", "toolu_9", "ls"))
+	require.EqualValues(t, 1, audited(), "a call that was never asked confirms nothing")
+
+	require.Equal(t, "allow", send(toolEvent("tool.requested", "toolu_2", command)).Decision, "the confirmation holds for an immediate repeat")
+	require.Equal(t, "ask", send(toolEvent("tool.requested", "toolu_3", "echo 472-81-3365")).Decision, "a different call is asked on its own")
 }

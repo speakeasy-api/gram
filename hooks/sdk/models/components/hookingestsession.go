@@ -10,8 +10,8 @@ type HookIngestSession struct {
 	ID *string `json:"id,omitzero"`
 	// Model identifier reported by the local agent.
 	Model *string `json:"model,omitzero"`
-	// True when the client also ships this session's transcript to the transcript endpoint (Claude Cowork). The server keys the event's conversation row by the id the transcript shares (the prompt id in turn_id, or the tool call id), so the event and the transcript store each prompt and tool call once.
-	TranscriptCapture *bool `json:"transcript_capture,omitzero"`
+	// Product surface that sent the event, set when it changes how the server handles the event. "cowork" is Claude Cowork. Its Stop hook also ships the session transcript, so the server keys the event's conversation row by the id the transcript shares (the prompt id in turn_id, or the tool call id) and each prompt and tool call is stored once. Cowork cannot show the acknowledgement link, so a warned prompt there is confirmed by sending the same message again. Unknown values are ignored.
+	Surface *string `json:"surface,omitzero"`
 	// Generation, request, or turn identifier.
 	TurnID *string `json:"turn_id,omitzero"`
 }
@@ -37,11 +37,11 @@ func (h *HookIngestSession) GetModel() *string {
 	return h.Model
 }
 
-func (h *HookIngestSession) GetTranscriptCapture() *bool {
+func (h *HookIngestSession) GetSurface() *string {
 	if h == nil {
 		return nil
 	}
-	return h.TranscriptCapture
+	return h.Surface
 }
 
 func (h *HookIngestSession) GetTurnID() *string {

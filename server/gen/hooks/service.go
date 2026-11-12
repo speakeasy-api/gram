@@ -397,11 +397,14 @@ type HookIngestSession struct {
 	Cwd *string
 	// Model identifier reported by the local agent.
 	Model *string
-	// True when the client also ships this session's transcript to the transcript
-	// endpoint (Claude Cowork). The server keys the event's conversation row by
-	// the id the transcript shares (the prompt id in turn_id, or the tool call
-	// id), so the event and the transcript store each prompt and tool call once.
-	TranscriptCapture *bool
+	// Product surface that sent the event, set when it changes how the server
+	// handles the event. "cowork" is Claude Cowork. Its Stop hook also ships the
+	// session transcript, so the server keys the event's conversation row by the
+	// id the transcript shares (the prompt id in turn_id, or the tool call id) and
+	// each prompt and tool call is stored once. Cowork cannot show the
+	// acknowledgement link, so a warned prompt there is confirmed by sending the
+	// same message again. Unknown values are ignored.
+	Surface *string
 }
 
 // Metadata about the local hook adapter that translated a provider event into
@@ -571,7 +574,9 @@ type HooksStatus struct {
 
 // IngestHookResult is the result type of the hooks service ingest method.
 type IngestHookResult struct {
-	// Whether the local hook should allow or deny the action.
+	// Whether the local hook should allow or deny the action. "ask" (tool calls
+	// from Claude Cowork only) asks the person to allow the call in the agent's
+	// own permission prompt; a client that does not support it must deny.
 	Decision string
 	// Machine-readable decision reason.
 	Reason *string

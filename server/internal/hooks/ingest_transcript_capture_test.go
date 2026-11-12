@@ -47,10 +47,10 @@ func TestIngest_CoworkHooksAndTranscriptStoreEachMessageOnce(t *testing.T) {
 	transcriptHandler := ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveTranscript))
 
 	sessionID := uuid.NewString()
-	captured := true
+	surface := surfaceCowork
 	event := func(eventType, promptID string) *gen.IngestPayload {
 		payload := canonicalIngestPayload("claude", eventType, sessionID)
-		payload.Session.TranscriptCapture = &captured
+		payload.Session.Surface = &surface
 		payload.Session.TurnID = &promptID
 		return payload
 	}
@@ -126,8 +126,8 @@ func TestIngest_CoworkHooksAndTranscriptStoreEachMessageOnce(t *testing.T) {
 	require.Contains(t, keys, "claude-tool-call:toolu_1")
 }
 
-// Without transcript_capture the event is the capture path, as before.
-func TestIngest_EventWithoutTranscriptCaptureStoresRow(t *testing.T) {
+// An event from outside Cowork is the capture path, as before.
+func TestIngest_NonCoworkEventStoresRow(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -159,11 +159,11 @@ func TestIngest_CoworkEventRowRespectsSessionCapture(t *testing.T) {
 	ti.service.productFeatures = staticFeatures{failOpen: false}
 
 	sessionID := uuid.NewString()
-	captured := true
+	surface := surfaceCowork
 	promptID := "prompt-1"
 	prompt := "list the files"
 	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
-	payload.Session.TranscriptCapture = &captured
+	payload.Session.Surface = &surface
 	payload.Session.TurnID = &promptID
 	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
 	_, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
