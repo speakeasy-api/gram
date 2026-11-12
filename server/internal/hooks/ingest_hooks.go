@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -726,6 +727,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
 			}
 			if scanResult.IsWarnChallenge() && opts.AllowWarnAcknowledgement {
+				if fromCowork(payload) && scanResult.CallFingerprint != "" {
+					// Cowork names the minute a message was sent in the prompt,
+					// so a retry a minute later must still match its challenge.
+					scanResult.CallFingerprint = risk.CoworkPromptCallFingerprint(ev.Prompt)
+				}
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
 				}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -26,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/claudetag"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
@@ -189,17 +189,17 @@ func callFingerprint(text string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// PromptCallFingerprint is callFingerprint for a typed prompt: leading
-// harness framing (<system-reminder>, <session-context>) is skipped, because
-// Claude's apps add a reminder that names the minute the message was sent, so
-// the same prompt sent again a minute later must still match its challenge.
-// A prompt that is only framing keeps its whole text.
-func PromptCallFingerprint(prompt string) string {
-	body, _ := claudetag.Envelope(prompt)
-	if strings.TrimSpace(body) == "" {
-		return callFingerprint(prompt)
-	}
-	return callFingerprint(body)
+// coworkSendTime matches the sentence Claude's apps add to a prompt's
+// reminder naming the minute the message was sent.
+var coworkSendTime = regexp.MustCompile(`Message sent at [^<\n]*? local time\.`)
+
+// CoworkPromptCallFingerprint is callFingerprint for a prompt typed in Claude
+// Cowork. Cowork puts the minute the message was sent in a reminder before
+// the prompt, so that one sentence is masked: the same prompt sent again a
+// minute later must still match its challenge. Everything else, reminders
+// included, still counts.
+func CoworkPromptCallFingerprint(prompt string) string {
+	return callFingerprint(coworkSendTime.ReplaceAllString(prompt, "Message sent at <time>."))
 }
 
 const (

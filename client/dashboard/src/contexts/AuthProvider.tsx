@@ -304,8 +304,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   }
 
   // Skip all slug-based redirect logic for exempt paths
-  const isSlugExempt = SLUG_EXEMPT_PATHS.some((p) =>
-    location.pathname.startsWith(p),
+  // Match whole path segments, so an org slug that only starts with an
+  // exempt path (e.g. /ackermann for /ack) still gets slug handling.
+  const isSlugExempt = SLUG_EXEMPT_PATHS.some(
+    (p) => location.pathname === p || location.pathname.startsWith(`${p}/`),
   );
 
   const pathParts = location.pathname.split("/").filter(Boolean);

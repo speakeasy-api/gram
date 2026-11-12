@@ -41,14 +41,7 @@ func (s *Service) scanUserPromptForEnforcement(ctx context.Context, ev *hookeven
 	if ev == nil {
 		return nil
 	}
-	scanResult := s.scanHookEventForEnforcement(ctx, ev.Event, ev.Prompt, message.User, "")
-	if scanResult != nil && scanResult.CallFingerprint != "" {
-		// Claude's apps put a per-minute "Message sent at" reminder in front of
-		// each prompt, so the whole text of a resent prompt differs from the
-		// first send. Key the challenge on what the person typed.
-		scanResult.CallFingerprint = risk.PromptCallFingerprint(ev.Prompt)
-	}
-	return scanResult
+	return s.scanHookEventForEnforcement(ctx, ev.Event, ev.Prompt, message.User, "")
 }
 
 func (s *Service) scanToolRequestForEnforcement(ctx context.Context, ev *hookevents.BeforeToolUse) *risk.ScanResult {

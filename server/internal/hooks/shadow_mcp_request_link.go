@@ -45,11 +45,7 @@ type shadowMCPRequestLink struct {
 }
 
 func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params shadowMCPRequestLinkParams) string {
-	// A local server's identity can be its launch command, which may carry
-	// credentials, so it is redacted before it can reach %{match}.
-	evidence := shadowmcp.NormalizeAccessEvidence(params.Evidence)
-	evidence.ServerIdentity = identity.RedactCommand(evidence.ServerIdentity)
-	server := conv.PtrValOr(shadowmcp.ObservedName(evidence, params.ToolName), "")
+	server := conv.PtrValOr(redactedObservedName(params.Evidence, params.ToolName), "")
 	message := renderPolicyUserMessage(params.UserMessage, params.AuditReason, params.PolicyName, server)
 	link, ok := s.shadowMCPApprovalRequestURL(ctx, params)
 	if !ok {
@@ -94,7 +90,7 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		OrganizationID:         params.OrganizationID,
 		ProjectID:              params.ProjectID,
 		RequesterUserID:        params.RequesterUserID,
-		ObservedName:           shadowmcp.ObservedName(evidence, params.ToolName),
+		ObservedName:           redactedObservedName(params.Evidence, params.ToolName),
 		ObservedFullURL:        stringPtrOrNil(evidence.FullURL),
 		ObservedURLHost:        stringPtrOrNil(evidence.URLHost),
 		ObservedServerIdentity: stringPtrOrNil(evidence.ServerIdentity),
@@ -117,9 +113,20 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		URL:        requestURL,
 		Token:      token,
 		ExpiresAt:  expiry,
-		ServerName: conv.PtrValOr(shadowmcp.ObservedName(evidence, params.ToolName), ""),
+		ServerName: conv.PtrValOr(redactedObservedName(params.Evidence, params.ToolName), ""),
 		ServerURL:  redactedServerURL(evidence.FullURL),
 	}, true
+}
+
+// redactedObservedName names the observed server for people and for the
+// machine-readable block effect. A local server's identity can be its launch
+// command, which may carry credentials, so it is redacted first. The raw
+// identity still keys the request server side, where approvers see it
+// redacted (policyBypassRequestTargetView).
+func redactedObservedName(evidence shadowmcp.AccessEvidence, toolName string) *string {
+	redacted := shadowmcp.NormalizeAccessEvidence(evidence)
+	redacted.ServerIdentity = identity.RedactCommand(redacted.ServerIdentity)
+	return shadowmcp.ObservedName(redacted, toolName)
 }
 
 // redactedServerURL reduces an observed server URL to the inventory
