@@ -63,7 +63,7 @@
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-virtual": "^3.14.24",
     "@xstate/react": "^6.1.0",
-    "@xyflow/react": "^12.11.1",
+    "@xyflow/react": "^12.12.1",
     "ai": "catalog:",
     "assistant-stream": "^0.3.55",
     "canvas-confetti": "^1.9.4",
