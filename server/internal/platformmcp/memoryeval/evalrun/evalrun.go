@@ -224,10 +224,15 @@ func (r *Runner) target(ctx context.Context, organizationID string) (bench.Targe
 	}, nil
 }
 
+// seedSpecs are the seed tenants that can hold the eval corpus.
+func seedSpecs() []demoseed.Spec {
+	return []demoseed.Spec{demoseed.DefaultSpec(), demoseed.LocalSpec()}
+}
+
 // seededSpec is the seed tenant for an organization: the shared demo org in
 // deployed environments, the local org in development.
 func seededSpec(organizationID string) (demoseed.Spec, bool) {
-	for _, spec := range []demoseed.Spec{demoseed.DefaultSpec(), demoseed.LocalSpec()} {
+	for _, spec := range seedSpecs() {
 		if spec.OrgID == organizationID {
 			return spec, true
 		}

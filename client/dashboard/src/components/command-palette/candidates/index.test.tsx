@@ -1327,29 +1327,6 @@ describe("useProjectCandidates", () => {
 });
 
 describe("useActionCandidates", () => {
-  it("offers the generic Channels page without registering named conversations", () => {
-    const onSelect = vi.fn();
-    mocks.actions = [
-      { id: "nav-page-channels", label: "Channels", group: "Pages", onSelect },
-    ];
-    const { result } = renderCandidates();
-    const channels = result.current.find(
-      (candidate) => candidate.id === "action:nav-page-channels",
-    );
-    expect(channels?.title).toBe("Channels");
-    expect(mocks.channelsRequest).not.toHaveBeenCalled();
-    expect(channels?.verbs).toEqual(["open"]);
-    expect(
-      result.current.filter(
-        (candidate) =>
-          candidate.id.startsWith("channel:") ||
-          candidate.id.startsWith("conversation:"),
-      ),
-    ).toEqual([]);
-    void channels?.run("open");
-    expect(onSelect).toHaveBeenCalledOnce();
-  });
-
   it("maps the action group to the detail string", () => {
     const onSelect = vi.fn();
     mocks.actions = [
@@ -1385,7 +1362,7 @@ describe("useActionCandidates", () => {
 });
 
 describe("useRecentCandidates", () => {
-  it("keeps persisted Channels conversations as local search candidates", () => {
+  it("does not offer stored Channels visits while Channels is hidden", () => {
     mocks.recents = [
       {
         label: "Private agent session",
@@ -1394,9 +1371,7 @@ describe("useRecentCandidates", () => {
       },
     ];
     const { result } = renderCandidates();
-    const recent = byKind(result.current, "recent")[0];
-    expect(recent?.title).toBe("Private agent session");
-    expect(recent?.verbs).toEqual(["open"]);
+    expect(byKind(result.current, "recent")).toHaveLength(0);
   });
 
   // The stored entries are keyed per user, and until the session resolves

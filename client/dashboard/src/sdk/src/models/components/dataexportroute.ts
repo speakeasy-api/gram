@@ -27,6 +27,21 @@ export type DataExportRouteDataSource = OpenEnum<
 >;
 
 /**
+ * Lowest level this route sends. Set only on mcp_connection_logs routes, where it defaults to error.
+ */
+export const DataExportRouteMinSeverity = {
+  Info: "info",
+  Warn: "warn",
+  Error: "error",
+} as const;
+/**
+ * Lowest level this route sends. Set only on mcp_connection_logs routes, where it defaults to error.
+ */
+export type DataExportRouteMinSeverity = OpenEnum<
+  typeof DataExportRouteMinSeverity
+>;
+
+/**
  * The export configuration for one class of project data. A route may contain one destination of each supported type.
  */
 export type DataExportRoute = {
@@ -46,6 +61,10 @@ export type DataExportRoute = {
    * Route ID.
    */
   id: string;
+  /**
+   * Lowest level this route sends. Set only on mcp_connection_logs routes, where it defaults to error.
+   */
+  minSeverity?: DataExportRouteMinSeverity | undefined;
   /**
    * OTEL destination configured on this route. Omitted when no OTEL destination is selected.
    */
@@ -67,6 +86,12 @@ export const DataExportRouteDataSource$inboundSchema: z.ZodMiniType<
 > = openEnums.inboundSchema(DataExportRouteDataSource);
 
 /** @internal */
+export const DataExportRouteMinSeverity$inboundSchema: z.ZodMiniType<
+  DataExportRouteMinSeverity,
+  unknown
+> = openEnums.inboundSchema(DataExportRouteMinSeverity);
+
+/** @internal */
 export const DataExportRoute$inboundSchema: z.ZodMiniType<
   DataExportRoute,
   unknown
@@ -79,6 +104,7 @@ export const DataExportRoute$inboundSchema: z.ZodMiniType<
     data_source: DataExportRouteDataSource$inboundSchema,
     enabled: z.boolean(),
     id: z.string(),
+    min_severity: z.optional(DataExportRouteMinSeverity$inboundSchema),
     otel_destination_id: z.optional(z.string()),
     project_id: z.string(),
     updated_at: z.pipe(
@@ -90,6 +116,7 @@ export const DataExportRoute$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "created_at": "createdAt",
       "data_source": "dataSource",
+      "min_severity": "minSeverity",
       "otel_destination_id": "otelDestinationId",
       "project_id": "projectId",
       "updated_at": "updatedAt",

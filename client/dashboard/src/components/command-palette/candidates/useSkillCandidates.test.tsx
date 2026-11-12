@@ -71,6 +71,7 @@ describe("useSkillCandidates", () => {
     });
     expect(mocks.calls.at(-1)?.[2]).toMatchObject({
       enabled: false,
+      staleTime: 30_000,
       retry: false,
       throwOnError: false,
     });
@@ -183,5 +184,33 @@ describe("useSkillCandidates", () => {
     ]);
     expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(1);
     expect(mocks.calls.at(-1)?.[2]).toMatchObject({ throwOnError: false });
+
+    act(() => rerender());
+    expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a failed page exactly once on the next open", async () => {
+    mocks.query.data = {
+      pages: [{ result: { skills: [skill("first", "First Page")] } }],
+    };
+    mocks.query.hasNextPage = true;
+    const { rerender } = baseRenderHook(
+      ({ enabled }) => useSkillCandidates({ enabled }),
+      { initialProps: { enabled: true }, wrapper: MemoryRouter },
+    );
+    await waitFor(() =>
+      expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(1),
+    );
+
+    act(() => {
+      mocks.query.isFetchNextPageError = true;
+      rerender({ enabled: true });
+    });
+    expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(1);
+    act(() => rerender({ enabled: false }));
+    act(() => rerender({ enabled: true }));
+    expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(2);
+    act(() => rerender({ enabled: true }));
+    expect(mocks.query.fetchNextPage).toHaveBeenCalledTimes(2);
   });
 });

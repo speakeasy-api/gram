@@ -211,7 +211,7 @@ func (s *Service) UpsertAnthropicInferenceConfig(ctx context.Context, payload *g
 	if exists {
 		row, err = queries.UpdateAnthropicInferenceConfig(ctx, repo.UpdateAnthropicInferenceConfigParams{ID: before.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, ApiKeyEncrypted: ciphertext, Enabled: enabled})
 	} else {
-		row, err = queries.InsertConfig(ctx, repo.InsertConfigParams{OrganizationID: authCtx.ActiveOrganizationID, Provider: ProviderAnthropicInference, ProjectID: projectID, ExternalOrganizationID: pgtype.Text{String: "", Valid: false}, ApiKeyEncrypted: ciphertext, Enabled: enabled, BillingMode: pgtype.Text{String: "", Valid: false}})
+		row, err = queries.InsertConfig(ctx, repo.InsertConfigParams{OrganizationID: authCtx.ActiveOrganizationID, Provider: ProviderAnthropicInference, ProjectID: projectID, ExternalOrganizationID: pgtype.Text{String: "", Valid: false}, ApiKeyEncrypted: ciphertext, Enabled: enabled, BillingMode: pgtype.Text{String: "", Valid: false}, Settings: []byte("{}")})
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save inference integration")

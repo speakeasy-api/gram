@@ -298,6 +298,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe("Channels", () => {
@@ -365,7 +366,8 @@ describe("Channels", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_000);
     });
-    expect(screen.getAllByText("avery on dashboard").length).toBeGreaterThan(0);
+    // A browser session is a person reading along, not an agent in the rail.
+    expect(screen.getAllByText("Reading along: You").length).toBeGreaterThan(0);
     fireEvent.change(composer(), { target: { value: "Second message" } });
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
     await act(async () => {
@@ -378,8 +380,9 @@ describe("Channels", () => {
     ).toHaveLength(1);
   });
 
-  it("opens the newest conversation when the window shows both panes", async () => {
+  it("opens on Home with what arrived, not on a conversation nobody chose", async () => {
     vi.useFakeTimers();
+    // A wide window, where Home sits beside the list.
     vi.stubGlobal(
       "matchMedia",
       (query: string) =>
@@ -398,10 +401,18 @@ describe("Channels", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
     });
+    expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: /^Home/ })
+        .getAttribute("aria-current"),
+    ).toBe("page");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Implementation" }),
+    );
     expect(
       screen.getByRole("heading", { name: /Implementation/ }),
     ).toBeDefined();
-    vi.unstubAllGlobals();
   });
 
   it("shows an administrator whose own access is withheld only what they can change", async () => {
@@ -472,6 +483,12 @@ describe("Channels", () => {
         hidden: true,
       }),
     ).toBeNull();
+    const list = within(
+      screen.getByRole("navigation", { name: "Conversations", hidden: true }),
+    );
+    fireEvent.click(
+      list.getByRole("button", { name: /Planning/, hidden: true }),
+    );
     expect(
       screen.getByRole("textbox", { name: "Message", hidden: true }),
     ).toHaveProperty("disabled", false);
@@ -869,7 +886,7 @@ describe("Channels", () => {
     });
     expect(screen.getByText("Beta").closest("header")).not.toBeNull();
     expect(
-      screen.getByText(/Channels lets people and agents collaborate/),
+      screen.getByText(/Where your agents talk to each other/),
     ).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Turn on Channels" }));
     await waitFor(() =>
@@ -1349,16 +1366,19 @@ describe("Channels", () => {
     expect(pane.scrollTop).toBe(1000);
   });
 
-  it("tells a person what their agent has to do to hear about a conversation", async () => {
-    mount();
-    // The control is only live once the page knows Channels is available.
-    await screen.findByRole("heading", { name: /Planning/ });
-    fireEvent.click(screen.getByRole("button", { name: "Channels settings" }));
-    const sheet = within(await screen.findByRole("dialog"));
-    expect(sheet.getByText(/channels:\/\/messages/)).toBeDefined();
-    expect(sheet.getByText(/channels_follow/)).toBeDefined();
+  it("tells a person on Home what their agent has to do to hear about a conversation", async () => {
+    mount(null);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "How an agent hears about new messages",
+      }),
+    );
+    expect(screen.getByText(/channels:\/\/messages/)).toBeDefined();
+    expect(screen.getByText(/channels_follow/)).toBeDefined();
     expect(
-      sheet.getByText(/Following without subscribing delivers nothing/),
+      screen.getByText(
+        /subscribing without following delivers nothing from threads/,
+      ),
     ).toBeDefined();
   });
 
@@ -1491,11 +1511,9 @@ describe("selected project", () => {
       await act(async () => resolve(snapshot));
       await waitFor(() => expect(composer()).toBeTruthy());
       expect(composer().value).toBe("");
-      fireEvent.click(
-        screen.getByRole("button", { name: "Channels settings" }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: /^Home/ }));
       expect(
-        screen.getByText((text) =>
+        await screen.findByText((text) =>
           text.endsWith(
             `/channels/${selected.orgSlug}/${selected.projectSlug}/mcp`,
           ),

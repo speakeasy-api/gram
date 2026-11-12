@@ -136,6 +136,10 @@ type Server struct {
 	UpdateGcpIamPlatformCredential          http.Handler
 	VerifyGcpIamPlatformCredential          http.Handler
 	DeleteGcpIamPlatformCredential          http.Handler
+	GetMemoryEvalOptions                    http.Handler
+	ListMemoryEvalRuns                      http.Handler
+	GetMemoryEvalRun                        http.Handler
+	StartMemoryEvalRun                      http.Handler
 	ListOrganizationAssistants              http.Handler
 	MigrateOrganizationAssistantIdentities  http.Handler
 }
@@ -282,6 +286,10 @@ func New(
 			{"UpdateGcpIamPlatformCredential", "POST", "/admin/externalCredentials.updateGcpIam"},
 			{"VerifyGcpIamPlatformCredential", "POST", "/admin/externalCredentials.verifyGcpIam"},
 			{"DeleteGcpIamPlatformCredential", "POST", "/admin/externalCredentials.deleteGcpIam"},
+			{"GetMemoryEvalOptions", "GET", "/admin/memoryEval.options"},
+			{"ListMemoryEvalRuns", "GET", "/admin/memoryEval.runs"},
+			{"GetMemoryEvalRun", "GET", "/admin/memoryEval.run"},
+			{"StartMemoryEvalRun", "POST", "/admin/memoryEval.start"},
 			{"ListOrganizationAssistants", "GET", "/admin/organization.assistants"},
 			{"MigrateOrganizationAssistantIdentities", "POST", "/admin/organization.migrateAssistantIdentities"},
 		},
@@ -400,6 +408,10 @@ func New(
 		UpdateGcpIamPlatformCredential:          NewUpdateGcpIamPlatformCredentialHandler(e.UpdateGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
 		VerifyGcpIamPlatformCredential:          NewVerifyGcpIamPlatformCredentialHandler(e.VerifyGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
 		DeleteGcpIamPlatformCredential:          NewDeleteGcpIamPlatformCredentialHandler(e.DeleteGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
+		GetMemoryEvalOptions:                    NewGetMemoryEvalOptionsHandler(e.GetMemoryEvalOptions, mux, decoder, encoder, errhandler, formatter),
+		ListMemoryEvalRuns:                      NewListMemoryEvalRunsHandler(e.ListMemoryEvalRuns, mux, decoder, encoder, errhandler, formatter),
+		GetMemoryEvalRun:                        NewGetMemoryEvalRunHandler(e.GetMemoryEvalRun, mux, decoder, encoder, errhandler, formatter),
+		StartMemoryEvalRun:                      NewStartMemoryEvalRunHandler(e.StartMemoryEvalRun, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationAssistants:              NewListOrganizationAssistantsHandler(e.ListOrganizationAssistants, mux, decoder, encoder, errhandler, formatter),
 		MigrateOrganizationAssistantIdentities:  NewMigrateOrganizationAssistantIdentitiesHandler(e.MigrateOrganizationAssistantIdentities, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -525,6 +537,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateGcpIamPlatformCredential = m(s.UpdateGcpIamPlatformCredential)
 	s.VerifyGcpIamPlatformCredential = m(s.VerifyGcpIamPlatformCredential)
 	s.DeleteGcpIamPlatformCredential = m(s.DeleteGcpIamPlatformCredential)
+	s.GetMemoryEvalOptions = m(s.GetMemoryEvalOptions)
+	s.ListMemoryEvalRuns = m(s.ListMemoryEvalRuns)
+	s.GetMemoryEvalRun = m(s.GetMemoryEvalRun)
+	s.StartMemoryEvalRun = m(s.StartMemoryEvalRun)
 	s.ListOrganizationAssistants = m(s.ListOrganizationAssistants)
 	s.MigrateOrganizationAssistantIdentities = m(s.MigrateOrganizationAssistantIdentities)
 }
@@ -649,6 +665,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateGcpIamPlatformCredentialHandler(mux, h.UpdateGcpIamPlatformCredential)
 	MountVerifyGcpIamPlatformCredentialHandler(mux, h.VerifyGcpIamPlatformCredential)
 	MountDeleteGcpIamPlatformCredentialHandler(mux, h.DeleteGcpIamPlatformCredential)
+	MountGetMemoryEvalOptionsHandler(mux, h.GetMemoryEvalOptions)
+	MountListMemoryEvalRunsHandler(mux, h.ListMemoryEvalRuns)
+	MountGetMemoryEvalRunHandler(mux, h.GetMemoryEvalRun)
+	MountStartMemoryEvalRunHandler(mux, h.StartMemoryEvalRun)
 	MountListOrganizationAssistantsHandler(mux, h.ListOrganizationAssistants)
 	MountMigrateOrganizationAssistantIdentitiesHandler(mux, h.MigrateOrganizationAssistantIdentities)
 }
@@ -6824,6 +6844,218 @@ func NewDeleteGcpIamPlatformCredentialHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteGcpIamPlatformCredential")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetMemoryEvalOptionsHandler configures the mux to serve the "admin"
+// service "getMemoryEvalOptions" endpoint.
+func MountGetMemoryEvalOptionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/memoryEval.options", f)
+}
+
+// NewGetMemoryEvalOptionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getMemoryEvalOptions" endpoint.
+func NewGetMemoryEvalOptionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetMemoryEvalOptionsRequest(mux, decoder)
+		encodeResponse = EncodeGetMemoryEvalOptionsResponse(encoder)
+		encodeError    = EncodeGetMemoryEvalOptionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getMemoryEvalOptions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListMemoryEvalRunsHandler configures the mux to serve the "admin"
+// service "listMemoryEvalRuns" endpoint.
+func MountListMemoryEvalRunsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/memoryEval.runs", f)
+}
+
+// NewListMemoryEvalRunsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listMemoryEvalRuns" endpoint.
+func NewListMemoryEvalRunsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListMemoryEvalRunsRequest(mux, decoder)
+		encodeResponse = EncodeListMemoryEvalRunsResponse(encoder)
+		encodeError    = EncodeListMemoryEvalRunsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listMemoryEvalRuns")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetMemoryEvalRunHandler configures the mux to serve the "admin" service
+// "getMemoryEvalRun" endpoint.
+func MountGetMemoryEvalRunHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/memoryEval.run", f)
+}
+
+// NewGetMemoryEvalRunHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getMemoryEvalRun" endpoint.
+func NewGetMemoryEvalRunHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetMemoryEvalRunRequest(mux, decoder)
+		encodeResponse = EncodeGetMemoryEvalRunResponse(encoder)
+		encodeError    = EncodeGetMemoryEvalRunError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getMemoryEvalRun")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountStartMemoryEvalRunHandler configures the mux to serve the "admin"
+// service "startMemoryEvalRun" endpoint.
+func MountStartMemoryEvalRunHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/memoryEval.start", f)
+}
+
+// NewStartMemoryEvalRunHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "startMemoryEvalRun" endpoint.
+func NewStartMemoryEvalRunHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeStartMemoryEvalRunRequest(mux, decoder)
+		encodeResponse = EncodeStartMemoryEvalRunResponse(encoder)
+		encodeError    = EncodeStartMemoryEvalRunError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "startMemoryEvalRun")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

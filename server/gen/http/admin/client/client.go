@@ -476,6 +476,22 @@ type Client struct {
 	// to the deleteGcpIamPlatformCredential endpoint.
 	DeleteGcpIamPlatformCredentialDoer goahttp.Doer
 
+	// GetMemoryEvalOptions Doer is the HTTP client used to make requests to the
+	// getMemoryEvalOptions endpoint.
+	GetMemoryEvalOptionsDoer goahttp.Doer
+
+	// ListMemoryEvalRuns Doer is the HTTP client used to make requests to the
+	// listMemoryEvalRuns endpoint.
+	ListMemoryEvalRunsDoer goahttp.Doer
+
+	// GetMemoryEvalRun Doer is the HTTP client used to make requests to the
+	// getMemoryEvalRun endpoint.
+	GetMemoryEvalRunDoer goahttp.Doer
+
+	// StartMemoryEvalRun Doer is the HTTP client used to make requests to the
+	// startMemoryEvalRun endpoint.
+	StartMemoryEvalRunDoer goahttp.Doer
+
 	// ListOrganizationAssistants Doer is the HTTP client used to make requests to
 	// the listOrganizationAssistants endpoint.
 	ListOrganizationAssistantsDoer goahttp.Doer
@@ -619,6 +635,10 @@ func NewClient(
 		UpdateGcpIamPlatformCredentialDoer:          doer,
 		VerifyGcpIamPlatformCredentialDoer:          doer,
 		DeleteGcpIamPlatformCredentialDoer:          doer,
+		GetMemoryEvalOptionsDoer:                    doer,
+		ListMemoryEvalRunsDoer:                      doer,
+		GetMemoryEvalRunDoer:                        doer,
+		StartMemoryEvalRunDoer:                      doer,
 		ListOrganizationAssistantsDoer:              doer,
 		MigrateOrganizationAssistantIdentitiesDoer:  doer,
 		RestoreResponseBody:                         restoreBody,
@@ -3389,6 +3409,102 @@ func (c *Client) DeleteGcpIamPlatformCredential() goa.Endpoint {
 		resp, err := c.DeleteGcpIamPlatformCredentialDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "deleteGcpIamPlatformCredential", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMemoryEvalOptions returns an endpoint that makes HTTP requests to the
+// admin service getMemoryEvalOptions server.
+func (c *Client) GetMemoryEvalOptions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMemoryEvalOptionsRequest(c.encoder)
+		decodeResponse = DecodeGetMemoryEvalOptionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMemoryEvalOptionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMemoryEvalOptionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getMemoryEvalOptions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListMemoryEvalRuns returns an endpoint that makes HTTP requests to the admin
+// service listMemoryEvalRuns server.
+func (c *Client) ListMemoryEvalRuns() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMemoryEvalRunsRequest(c.encoder)
+		decodeResponse = DecodeListMemoryEvalRunsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMemoryEvalRunsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMemoryEvalRunsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listMemoryEvalRuns", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMemoryEvalRun returns an endpoint that makes HTTP requests to the admin
+// service getMemoryEvalRun server.
+func (c *Client) GetMemoryEvalRun() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMemoryEvalRunRequest(c.encoder)
+		decodeResponse = DecodeGetMemoryEvalRunResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMemoryEvalRunRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMemoryEvalRunDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getMemoryEvalRun", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// StartMemoryEvalRun returns an endpoint that makes HTTP requests to the admin
+// service startMemoryEvalRun server.
+func (c *Client) StartMemoryEvalRun() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeStartMemoryEvalRunRequest(c.encoder)
+		decodeResponse = DecodeStartMemoryEvalRunResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildStartMemoryEvalRunRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.StartMemoryEvalRunDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "startMemoryEvalRun", err)
 		}
 		return decodeResponse(resp)
 	}
