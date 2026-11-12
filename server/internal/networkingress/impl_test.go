@@ -288,3 +288,10 @@ func TestLocalNamerPrefixesCreatedAndRenamedHostnames(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "local-ab12-tools", kept.Hostname, "an already qualified hostname is not prefixed twice")
 }
+
+func TestCreateRefusesHostnamesReservedForLocalDevelopment(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	_, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: new("local-ab12-tools"), OauthClientID: "client", OauthClientSecret: "secret"})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}

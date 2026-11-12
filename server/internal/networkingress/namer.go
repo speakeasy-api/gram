@@ -37,7 +37,7 @@ type Namer interface {
 	// AuthKeyDescription describes the auth key minted for one slot of a
 	// connection, as the admin console lists it. Tailscale rejects
 	// descriptions with punctuation, so it uses only letters, digits and
-	// spaces, within maxAuthKeyDescriptionLength.
+	// spaces, within the 50 characters it accepts.
 	AuthKeyDescription(ctx context.Context, ingressID uuid.UUID, slot int32) (string, error)
 }
 
@@ -49,10 +49,6 @@ const (
 	// productionServiceComment is shown next to production services.
 	productionServiceComment = "Speakeasy private MCP ingress"
 
-	// maxAuthKeyDescriptionLength keeps auth key descriptions within the 50
-	// characters Tailscale's admin console accepts.
-	maxAuthKeyDescriptionLength = 50
-
 	// shortIngressIDLength is how much of a connection id an auth key
 	// description shows: enough to find the connection, short enough to fit.
 	shortIngressIDLength = 8
@@ -63,18 +59,32 @@ func shortIngressID(ingressID uuid.UUID) string {
 	return ingressID.String()[:shortIngressIDLength]
 }
 
+// localHostnamePrefix starts every hostname a local development stack
+// creates. Production reserves it, so a production connection can never
+// manage a service a local stack on the same tailnet also manages.
+const localHostnamePrefix = "local-"
+
+// ErrReservedHostname rejects a requested hostname reserved for local
+// development stacks.
+var ErrReservedHostname = errors.New(`hostnames starting with "local-" are reserved`)
+
 // ProductionNamer names artifacts as customers see them: hostnames as
 // requested, services svc:<hostname>, machines speakeasy-gw-<slot>. It owns
-// every hostname.
+// every hostname except the local- ones it reserves for local development.
 type ProductionNamer struct{}
 
 var _ Namer = ProductionNamer{}
 
 func (ProductionNamer) Hostname(_ context.Context, requested string) (string, error) {
+	if strings.HasPrefix(requested, localHostnamePrefix) {
+		return "", ErrReservedHostname
+	}
 	return requested, nil
 }
 
-func (ProductionNamer) OwnsHostname(context.Context, string) (bool, error) { return true, nil }
+func (ProductionNamer) OwnsHostname(_ context.Context, hostname string) (bool, error) {
+	return !strings.HasPrefix(hostname, localHostnamePrefix), nil
+}
 
 func (ProductionNamer) ServiceName(_ context.Context, hostname string) (string, error) {
 	return "svc:" + hostname, nil
@@ -115,7 +125,7 @@ func NewLocalNamer(devID string) (LocalNamer, error) {
 	if !devIDPattern.MatchString(devID) {
 		return LocalNamer{qualifier: ""}, fmt.Errorf("invalid network ingress development id %q: use up to 8 lowercase letters or digits", devID)
 	}
-	return LocalNamer{qualifier: "local-" + devID}, nil
+	return LocalNamer{qualifier: localHostnamePrefix + devID}, nil
 }
 
 // Hostname prefixes requested with local-<id>- unless it already carries it.
