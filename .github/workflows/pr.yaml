@@ -1389,11 +1389,13 @@ jobs:
   # lint and codegen checks. ci-gate still requires server-checks.
   server-build:
     name: server-build
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    # Compilation is mostly served from the Go build cache, so the job spends
+    # more time on setup and the artifact upload than on building.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
-      GOMAXPROCS: 16
+      GOMAXPROCS: 8
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -1439,11 +1441,11 @@ jobs:
 
   server-checks:
     name: server-checks
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
     env:
-      GOMAXPROCS: 16
+      GOMAXPROCS: 8
     services:
       postgres:
         image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
@@ -1481,15 +1483,26 @@ jobs:
       # content, in this directory. The lint action's own cache is saved once
       # a week under a fixed key, so it is stale for nearly every run and the
       # whole server is analysed from scratch. Restore the newest entry
-      # instead (this branch's, else main's) and save a new one whenever the
-      # restored one was stale enough to make the run slow.
+      # instead (this branch's, else the one golangci-lint-cache saved for
+      # main) and save a new one whenever the restored one was stale enough
+      # to make the run slow.
+      #
+      # The key names the Go toolchain, the glint plugin and the lint
+      # configuration: golangci-lint's own invalidation does not see analyzer
+      # changes in glint's subdirectories (see .mise-tasks/lint/server.sh).
+      - name: Compute golangci-lint cache key
+        id: lint-cache-key
+        env:
+          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'go.sum', 'glint/**') }}
+        run: echo "inputs=$(go env GOVERSION)-${FILES_HASH}" >> "$GITHUB_OUTPUT"
+
       - name: Restore golangci-lint cache
         id: lint-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/golangci-lint
-          key: golangci-lint-server-blacksmith-v1-${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'go.sum', 'glint/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: golangci-lint-server-blacksmith-v1-${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'go.sum', 'glint/**') }}-
+          key: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-
 
       - name: Start lint timer
         run: echo "LINT_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
@@ -1503,6 +1516,13 @@ jobs:
           working-directory: server
           # Cached by the steps around this one.
           skip-cache: true
+        env:
+          # A run that has to analyse most of the server keeps about 10 GiB
+          # live, and with the default GOGC the heap grows to more than twice
+          # that before a collection. The soft limit keeps the footprint near
+          # the live set and makes such a run faster (same value and reasoning
+          # as .mise-tasks/lint/server.sh).
+          GOMEMLIMIT: 4GiB
 
       - name: Decide whether to save the golangci-lint cache
         id: lint-cache-save
@@ -1547,6 +1567,69 @@ jobs:
         run: |
           mise run db:migrate --dry
           mise run git:porcelain
+
+  # server-checks is skipped on pushes to main, and a cache saved by a pull
+  # request or merge queue run is only visible to that ref, so without this
+  # job no golangci-lint cache would exist for a new pull request to start
+  # from. It lints main with the previous main cache and saves the result.
+  # Lint findings are the merge queue's business: this job never gates
+  # anything and no job depends on it.
+  golangci-lint-cache:
+    name: Publish main golangci-lint cache
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    needs: changes
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.server == 'true'
+    timeout-minutes: 15
+    continue-on-error: true
+    env:
+      GOMAXPROCS: 8
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      # Keep the key in step with server-checks.
+      - name: Compute golangci-lint cache key
+        id: lint-cache-key
+        env:
+          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'go.sum', 'glint/**') }}
+        run: echo "inputs=$(go env GOVERSION)-${FILES_HASH}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore golangci-lint cache
+        id: lint-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/golangci-lint
+          key: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-
+
+      - name: Lint with golangci-lint
+        continue-on-error: true
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          install-mode: none
+          verify: false
+          working-directory: server
+          skip-cache: true
+        env:
+          GOMEMLIMIT: 4GiB
+
+      - name: Save golangci-lint cache
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/golangci-lint
+          key: ${{ steps.lint-cache.outputs.cache-primary-key }}
 
   infra-build-lint:
     name: Lint and generate infra
@@ -2341,13 +2424,49 @@ jobs:
           key: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}
           restore-keys: ${{ steps.vitest-cache-key.outputs.prefix }}
 
+      # A pull request run only executes the test files whose module graph
+      # reaches a file the pull request changed (vitest --changed). The whole
+      # suite still runs when anything outside the two apps' sources changed
+      # that the tests could depend on (dependencies, configuration, shared
+      # test setup, this workflow), with the ci:full label, and always in the
+      # merge queue. A fixture a test reads from disk without importing it is
+      # invisible to the module graph; the merge queue is what catches that.
+      - name: Select tests
+        id: select
+        env:
+          SELECTIVE: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+        run: |
+          set -euo pipefail
+          if [[ "$SELECTIVE" != "true" ]]; then
+            echo "Running every test file."
+            exit 0
+          fi
+          # HEAD is the pull request merge commit; its first parent is the base.
+          git fetch --quiet --depth=2 origin "$GITHUB_SHA"
+          watched='^(\.github/|client/|e2e/|sdks/typescript/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig\.json$)'
+          sources='^client/(dashboard|admin)/src/'
+          shared='^client/(dashboard|admin)/src/test/'
+          forcing=$(git diff --name-only HEAD^1 HEAD | grep -E "$watched" | grep -Ev "$sources" || true)
+          forcing+=$(git diff --name-only HEAD^1 HEAD | grep -E "$shared" || true)
+          if [[ -n "$forcing" ]]; then
+            echo "Running every test file because these changed:"
+            head -20 <<< "$forcing"
+            exit 0
+          fi
+          echo "Running only the test files affected by this pull request."
+          echo "args=--changed HEAD^1 --passWithNoTests" >> "$GITHUB_OUTPUT"
+
       - name: Test
-        run: aube run test
+        run: aube exec vitest -- run ${VITEST_ARGS}
         working-directory: client/dashboard
+        env:
+          VITEST_ARGS: ${{ steps.select.outputs.args }}
 
       - name: Test admin
-        run: aube run test
+        run: aube exec vitest -- run ${VITEST_ARGS}
         working-directory: client/admin
+        env:
+          VITEST_ARGS: ${{ steps.select.outputs.args }}
 
       - name: Test registry editor in Chrome
         working-directory: e2e
