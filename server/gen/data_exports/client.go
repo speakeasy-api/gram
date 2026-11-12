@@ -239,6 +239,7 @@ func (c *Client) DeleteRoute(ctx context.Context, p *DeleteRoutePayload) (err er
 
 // TestRoute calls the "testRoute" endpoint of the "dataExports" service.
 // TestRoute may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): rate limit exceeded
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

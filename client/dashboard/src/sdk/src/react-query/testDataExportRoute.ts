@@ -54,7 +54,7 @@ export type TestDataExportRouteMutationError =
  * testRoute dataExports
  *
  * @remarks
- * Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today.
+ * Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today. Rate limited per route and per organization.
  */
 export function useTestDataExportRouteMutation(
   options?: MutationHookOptions<

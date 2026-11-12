@@ -1849,6 +1849,25 @@ type DeleteRouteGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// TestRouteRateLimitExceededResponseBody is the type of the "dataExports"
+// service "testRoute" endpoint HTTP response body for the
+// "rate_limit_exceeded" error.
+type TestRouteRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // TestRouteUnauthorizedResponseBody is the type of the "dataExports" service
 // "testRoute" endpoint HTTP response body for the "unauthorized" error.
 type TestRouteUnauthorizedResponseBody struct {
@@ -3543,6 +3562,20 @@ func NewDeleteRouteUnexpectedResponseBody(res *goa.ServiceError) *DeleteRouteUne
 // the result of the "deleteRoute" endpoint of the "dataExports" service.
 func NewDeleteRouteGatewayErrorResponseBody(res *goa.ServiceError) *DeleteRouteGatewayErrorResponseBody {
 	body := &DeleteRouteGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestRouteRateLimitExceededResponseBody builds the HTTP response body from
+// the result of the "testRoute" endpoint of the "dataExports" service.
+func NewTestRouteRateLimitExceededResponseBody(res *goa.ServiceError) *TestRouteRateLimitExceededResponseBody {
+	body := &TestRouteRateLimitExceededResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

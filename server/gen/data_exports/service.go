@@ -35,7 +35,8 @@ type Service interface {
 	// Delete a data source's export route configuration.
 	DeleteRoute(context.Context, *DeleteRoutePayload) (err error)
 	// Send one test event straight to a route's destination and report what it
-	// answered. Only MCP connection logs routes support this today.
+	// answered. Only MCP connection logs routes support this today. Rate limited
+	// per route and per organization.
 	TestRoute(context.Context, *TestRoutePayload) (res *TestDataExportRouteResult, err error)
 }
 
@@ -357,4 +358,9 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeRateLimitExceeded builds a goa.ServiceError from an error.
+func MakeRateLimitExceeded(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "rate_limit_exceeded", false, false, false)
 }

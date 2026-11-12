@@ -2201,6 +2201,7 @@ func EncodeTestRouteRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 // dataExports testRoute endpoint. restoreBody controls whether the response
 // body should be restored after having been read.
 // DecodeTestRouteResponse may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -2242,6 +2243,20 @@ func DecodeTestRouteResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			}
 			res := NewTestRouteTestDataExportRouteResultOK(&body)
 			return res, nil
+		case http.StatusTooManyRequests:
+			var (
+				body TestRouteRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dataExports", "testRoute", err)
+			}
+			err = ValidateTestRouteRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dataExports", "testRoute", err)
+			}
+			return nil, NewTestRouteRateLimitExceeded(&body)
 		case http.StatusUnauthorized:
 			var (
 				body TestRouteUnauthorizedResponseBody

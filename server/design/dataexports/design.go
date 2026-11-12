@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var _ = Service("dataExports", func() {
@@ -207,7 +208,11 @@ var _ = Service("dataExports", func() {
 	})
 
 	Method("testRoute", func() {
-		Description("Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today.")
+		Description("Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today. Rate limited per route and per organization.")
+
+		// Declared here, not in the shared set, so only this method gets a typed 429.
+		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
+
 		Payload(func() {
 			Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
 			security.SessionPayload()
@@ -223,6 +228,9 @@ var _ = Service("dataExports", func() {
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
 		})
 		Meta("openapi:operationId", "testDataExportRoute")
 		Meta("openapi:extension:x-speakeasy-name-override", "testRoute")

@@ -31321,7 +31321,7 @@ paths:
                 name: DataExportRoutes
     /rpc/dataExports.testRoute:
         post:
-            description: Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today.
+            description: Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today. Rate limited per route and per organization.
             operationId: testDataExportRoute
             parameters:
                 - allowEmptyValue: true
@@ -31403,6 +31403,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'invalid: request contains one or more invalidation fields'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'rate_limit_exceeded: rate limit exceeded'
                 "500":
                     content:
                         application/json:
