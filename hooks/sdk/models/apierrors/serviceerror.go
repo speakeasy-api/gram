@@ -28,6 +28,10 @@ type ServiceError struct {
 var _ error = &ServiceError{}
 
 func (e *ServiceError) Error() string {
+	if e != nil {
+		return e.Message
+	}
+
 	data, _ := json.Marshal(e)
 	return string(data)
 }
