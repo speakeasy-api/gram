@@ -169,6 +169,64 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			}(),
 			want: `thing: dimension "mode" lists "*" as a value`,
 		},
+		{
+			name:  "scope with more than one separator",
+			model: validTestRegistry(validTestType("thing", withScope(validTestPermission("read"), "thing:read:extra"))),
+			want:  `thing.read: scope "thing:read:extra" is not resource:action`,
+		},
+		{
+			name: "permission declares a dimension twice",
+			model: func() Registry {
+				p := validTestPermission("read")
+				p.Dimensions = []Dimension{{Key: "mode", Values: nil, Required: false}, {Key: "mode", Values: nil, Required: false}}
+				return validTestRegistry(validTestType("thing", p))
+			}(),
+			want: `thing.read: dimension "mode" is declared twice`,
+		},
+		{
+			name: "unknown type category",
+			model: func() Registry {
+				typ := validTestType("thing", validTestPermission("read"))
+				typ.Category = "nowhere"
+				return validTestRegistry(typ)
+			}(),
+			want: `thing: unknown category "nowhere"`,
+		},
+		{
+			name: "permission exempts itself",
+			model: validTestRegistry(validTestType("thing",
+				withExclusions(validTestPermission("evaluate"), Exclusion{Kind: ExclusionExemption, Action: "evaluate", Agent: AgentUnsafe(), Subject: ""}),
+			)),
+			want: `thing.evaluate: a permission cannot exempt itself`,
+		},
+		{
+			name: "exemption with another grant source",
+			model: func() Registry {
+				bypass := validTestPermission("bypass")
+				bypass.Source = GrantSourceRiskPolicy
+				return validTestRegistry(validTestType("thing",
+					withExclusions(validTestPermission("evaluate"), Exclusion{Kind: ExclusionExemption, Action: "bypass", Agent: AgentUnsafe(), Subject: ""}),
+					bypass,
+				))
+			}(),
+			want: `thing.evaluate: exemption "bypass" has a different grant source`,
+		},
+		{
+			name: "two blocks on one permission",
+			model: validTestRegistry(validTestType("thing",
+				withExclusions(validTestPermission("read"), append(Blocked(AgentUnsafe(), "thing read access"), Blocked(AgentUnsafe(), "thing read access")...)...),
+			)),
+			want: `thing.read: at most one block per permission`,
+		},
+		{
+			name: "system role names a scope twice",
+			model: func() Registry {
+				r := validTestRegistry(validTestType("thing", validTestPermission("read")))
+				r.SystemRoles = map[string][]Scope{"admin": {"thing:read", "thing:read"}}
+				return r
+			}(),
+			want: `system role "admin" names "thing:read" twice`,
+		},
 	}
 
 	for _, tc := range cases {
@@ -179,6 +237,23 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			require.Contains(t, err.Error(), tc.want)
 		})
 	}
+}
+
+// Source has no default: a permission that leaves it unset is rejected.
+func TestRegistryValidate_RequiresSource(t *testing.T) {
+	t.Parallel()
+
+	read := validTestPermission("read")
+	read.Source = ""
+	err := validTestRegistry(validTestType("thing", read)).Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `thing.read: Source must be GrantSourceRoles or GrantSourceRiskPolicy, got ""`)
+}
+
+func TestSafeSince_RejectsVersionsBelowOne(t *testing.T) {
+	t.Parallel()
+	require.Panics(t, func() { SafeSince(0) })
+	require.Panics(t, func() { SafeSince(-1) })
 }
 
 func TestResourceType_Scopes(t *testing.T) {

@@ -3,7 +3,8 @@ package authz
 // This file holds the types of the authorization model. The model itself, one
 // Go literal describing every resource type and its permissions, is Model in
 // registry_resources.go. Every hand-kept table elsewhere in this package is meant
-// to be derived from it; until each one is, a parity test holds the two equal.
+// to be derived from it. Later changes add parity tests that hold each table
+// equal to the model until it is derived.
 //
 // Vocabulary:
 //
@@ -61,6 +62,9 @@ type AgentEligibility struct {
 // SafeSince marks a scope agent-runtime-safe from registry version onwards.
 // Policies stored at an older version keep reading it as unsafe.
 func SafeSince(version int) AgentEligibility {
+	if version < 1 {
+		panic("authz.SafeSince: version must be at least 1; use AgentUnsafe for a scope that is never agent-safe")
+	}
 	return AgentEligibility{safeSince: version}
 }
 
@@ -103,7 +107,8 @@ type Dimension struct {
 	// text. A wildcard is always accepted where the key allows one.
 	Values []string
 	// Required marks a key every check of the type must carry with a concrete
-	// value. Without it, matching skips a grant constrained on the key.
+	// value. Without it, a loosely matched check that omits the key still
+	// matches a grant constrained on it.
 	Required bool
 }
 
