@@ -267,7 +267,7 @@ func TestExportRequests(t *testing.T) {
 			assert.Equal(t, map[string]any{"name": "deterministic-name", "query": map[string]any{"corpus": "GEMINI", "dataScope": "ALL_DATA", "searchMethod": "ORG_UNIT", "orgUnitInfo": map[string]any{"orgUnitId": "root-ou"}, "startTime": start.Format(time.RFC3339Nano), "endTime": start.Add(time.Hour).Format(time.RFC3339Nano)}, "exportOptions": map[string]any{"geminiOptions": map[string]any{"exportFormat": "XML"}}}, body)
 			_, _ = fmt.Fprint(w, `{"id":"export-id","status":"IN_PROGRESS"}`)
 		case "GET /v1/matters/matter/exports/export-id":
-			_, _ = fmt.Fprint(w, `{"id":"export-id","status":"COMPLETED","stats":{"exportedArtifactCount":"2","totalArtifactCount":"2"},"cloudStorageSink":{"files":[{"bucketName":"bucket","objectName":"folder/file.zip","size":"12","md5Hash":"digest"}]}}`)
+			_, _ = fmt.Fprintf(w, `{"id":"export-id","status":"COMPLETED","query":{"startTime":%q,"endTime":%q},"stats":{"exportedArtifactCount":"2","totalArtifactCount":"2","sizeInBytes":"12"},"cloudStorageSink":{"files":[{"bucketName":"bucket","objectName":"folder/file.zip","size":"12","md5Hash":"digest"}]}}`, start.Format(time.RFC3339Nano), start.Add(time.Hour).Format(time.RFC3339Nano))
 		default:
 			t.Errorf("unexpected request %s %s", r.Method, r.URL)
 			w.WriteHeader(404)
@@ -277,10 +277,14 @@ func TestExportRequests(t *testing.T) {
 	job, err := client.CreateExport(t.Context(), "deterministic-name", start, start.Add(time.Hour))
 	require.NoError(t, err)
 	require.Equal(t, "IN_PROGRESS", job.Status)
+	require.True(t, job.Start.IsZero(), "a response without a query window leaves it unset")
 	job, err = client.GetExport(t.Context(), "export-id")
 	require.NoError(t, err)
 	require.Equal(t, int64(2), job.ExportedArtifactCount)
 	require.Equal(t, int64(2), job.TotalArtifactCount)
+	require.Equal(t, int64(12), job.SizeBytes)
+	require.Equal(t, start, job.Start)
+	require.Equal(t, start.Add(time.Hour), job.End)
 	require.Equal(t, int64(12), job.Files[0].Size)
 	client.orgUnitID = ""
 	_, err = client.CreateExport(t.Context(), "name", start, start.Add(time.Hour))

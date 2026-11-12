@@ -178,6 +178,12 @@ type Export struct {
 	Files                 []File `json:"-"`
 	ExportedArtifactCount int64  `json:"-"`
 	TotalArtifactCount    int64  `json:"-"`
+	// SizeBytes is the export size Vault reports, or zero when it is absent.
+	SizeBytes int64 `json:"-"`
+	// Start and End are the export's query window, or zero when Vault does
+	// not report a valid one.
+	Start time.Time `json:"-"`
+	End   time.Time `json:"-"`
 }
 
 type File struct {
@@ -448,15 +454,28 @@ func parseExport(data []byte) (*Export, error) {
 		Stats  struct {
 			Exported int64 `json:"exportedArtifactCount,string"`
 			Total    int64 `json:"totalArtifactCount,string"`
+			Size     int64 `json:"sizeInBytes,string"`
 		} `json:"stats"`
 		Sink struct {
 			Files []File `json:"files"`
 		} `json:"cloudStorageSink"`
+		Query struct {
+			StartTime string `json:"startTime"`
+			EndTime   string `json:"endTime"`
+		} `json:"query"`
 	}
 	if err := json.Unmarshal(data, &wire); err != nil || wire.ID == "" || wire.Status == "" {
 		return nil, errors.New("invalid Vault export response")
 	}
-	return &Export{ID: wire.ID, Status: wire.Status, Files: wire.Sink.Files, ExportedArtifactCount: wire.Stats.Exported, TotalArtifactCount: wire.Stats.Total}, nil
+	export := &Export{ID: wire.ID, Status: wire.Status, Files: wire.Sink.Files, ExportedArtifactCount: wire.Stats.Exported, TotalArtifactCount: wire.Stats.Total, SizeBytes: wire.Stats.Size, Start: time.Time{}, End: time.Time{}}
+	// The window is informational. A missing or unreadable one leaves both
+	// times zero instead of rejecting an otherwise valid job.
+	start, startErr := time.Parse(time.RFC3339Nano, wire.Query.StartTime)
+	end, endErr := time.Parse(time.RFC3339Nano, wire.Query.EndTime)
+	if startErr == nil && endErr == nil && end.After(start) {
+		export.Start, export.End = start.UTC(), end.UTC()
+	}
+	return export, nil
 }
 
 // Download reads a bounded GCS object on a fixed host. No upstream-supplied URL

@@ -3,6 +3,7 @@ package aiintegrations
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -13,7 +14,10 @@ import (
 )
 
 type geminiFakeClient struct {
+	// export is what GetExport returns, and what CreateExport returns unless
+	// created is set.
 	export      *vault.Export
+	created     *vault.Export
 	find        *vault.Export
 	getErr      error
 	downloadErr error
@@ -24,9 +28,11 @@ type geminiFakeClient struct {
 	deletes     int
 	start, end  time.Time
 	name        string
+	findNames   []string
 }
 
-func (c *geminiFakeClient) FindExport(context.Context, string) (*vault.Export, error) {
+func (c *geminiFakeClient) FindExport(_ context.Context, name string) (*vault.Export, error) {
+	c.findNames = append(c.findNames, name)
 	return c.find, nil
 }
 func (c *geminiFakeClient) CreateExport(_ context.Context, name string, start, end time.Time) (*vault.Export, error) {
@@ -34,7 +40,13 @@ func (c *geminiFakeClient) CreateExport(_ context.Context, name string, start, e
 	c.name = name
 	c.start = start
 	c.end = end
-	return c.export, c.createErr
+	if c.createErr != nil {
+		return nil, c.createErr
+	}
+	if c.created != nil {
+		return c.created, nil
+	}
+	return c.export, nil
 }
 func (c *geminiFakeClient) GetExport(context.Context, string) (*vault.Export, error) {
 	c.gets++
@@ -54,10 +66,31 @@ func geminiTestImporter(client *geminiFakeClient, write func(context.Context, Co
 	return &GeminiImportService{newClient: func(Config) (geminiVaultClient, error) { return client, nil }, importFiles: write}
 }
 
-func TestGeminiSyncPersistsPendingExportWithoutAdvancingWatermark(t *testing.T) {
+func geminiTestCursor(t *testing.T, cursor geminiExportCursor) string {
+	t.Helper()
+	encoded, err := encodeGeminiResult(cursor, false)
+	require.NoError(t, err)
+	return encoded.Cursor
+}
+
+func decodeGeminiTestCursor(t *testing.T, raw string) geminiExportCursor {
+	t.Helper()
+	cursor, err := decodeGeminiCursor(raw, time.Time{})
+	require.NoError(t, err)
+	return cursor
+}
+
+func completedGeminiExport(id string) *vault.Export {
+	return &vault.Export{ID: id, Status: "COMPLETED", Files: []vault.File{{ObjectName: "owner.zip"}, {ObjectName: "counts.csv"}, {ObjectName: "errors.xml"}}}
+}
+
+func TestGeminiFirstSyncExportsLookbackThroughNowInOneExport(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, 10, 20, 15, 30, 0, 0, time.UTC)
+	saved := time.Date(2026, 11, 12, 17, 6, 0, 0, time.UTC)
+	now := saved.Add(9 * time.Minute)
 	cfg := geminiTestConfig()
+	cfg.CreatedAt = saved.Add(-time.Hour)
+	cfg.UpdatedAt = saved
 	client := &geminiFakeClient{export: &vault.Export{ID: "export-1", Status: "IN_PROGRESS"}}
 	svc := geminiTestImporter(client, func(context.Context, Config, []geminiExportFile) error {
 		t.Fatal("must not import pending export")
@@ -65,31 +98,55 @@ func TestGeminiSyncPersistsPendingExportWithoutAdvancingWatermark(t *testing.T) 
 	})
 	result, err := svc.SyncGemini(t.Context(), cfg, now)
 	require.NoError(t, err)
-	cursor, err := decodeGeminiCursor(result.Cursor, now)
-	require.NoError(t, err)
-	require.Equal(t, "export-1", cursor.ExportID)
-	require.Equal(t, now.UTC().Truncate(24*time.Hour).Add(-geminiInitialLookback), result.Watermark)
-	require.Equal(t, cursor.Through.Add(-geminiExportOverlap), client.start)
-	require.Equal(t, cursor.Through.Add(24*time.Hour), client.end)
+	require.True(t, result.Pending)
 	require.Equal(t, 1, client.creates)
+	require.Equal(t, saved.Add(-geminiInitialLookback), client.start, "30 days before the save that started the sync")
+	require.Equal(t, now, client.end, "one export reaches the poll time")
+	require.Equal(t, client.start, result.Watermark, "a pending export must not advance the watermark")
+	cursor := decodeGeminiTestCursor(t, result.Cursor)
+	require.Equal(t, "export-1", cursor.ExportID)
+	require.True(t, cursor.Live)
 
 	cfg.LastCursor = result.Cursor
-	result2, err := svc.SyncGemini(t.Context(), cfg, now.Add(time.Hour))
+	again, err := svc.SyncGemini(t.Context(), cfg, now.Add(geminiPendingRecheck))
 	require.NoError(t, err)
-	require.Equal(t, result, result2)
+	require.Equal(t, result, again)
 	require.Equal(t, 1, client.gets)
 	require.Equal(t, 1, client.creates, "resume must not create another job")
 }
 
-func TestGeminiSyncAdvancesOnlyAfterAllArtifactsAreImported(t *testing.T) {
+func TestGeminiSyncLookbackStartsFromLatestSave(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
+	created := time.Date(2026, 6, 1, 9, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name    string
+		updated time.Time
+		anchor  time.Time
+	}{
+		{"key or unit changed long after connecting", created.Add(90 * 24 * time.Hour), created.Add(90 * 24 * time.Hour)},
+		{"no update time", time.Time{}, created},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := geminiTestConfig()
+			cfg.CreatedAt = created
+			cfg.UpdatedAt = tc.updated
+			client := &geminiFakeClient{export: &vault.Export{ID: "export-1", Status: "IN_PROGRESS"}}
+			_, err := geminiTestImporter(client, nil).SyncGemini(t.Context(), cfg, tc.anchor.Add(time.Minute))
+			require.NoError(t, err)
+			require.Equal(t, tc.anchor.Add(-geminiInitialLookback), client.start)
+		})
+	}
+}
+
+func TestGeminiSyncImportsCompletedExportAndStopsWhenCaughtUp(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 12, 18, 0, 0, 0, time.UTC)
 	cfg := geminiTestConfig()
-	pending := geminiExportCursor{Version: 1, Through: now.Truncate(24 * time.Hour).Add(-24 * time.Hour), Sequence: 2, ExportID: "export-1", Start: now.Truncate(24 * time.Hour).Add(-3 * 24 * time.Hour), End: now.Truncate(24 * time.Hour)}
-	checkpoint, err := encodeGeminiResult(pending)
-	require.NoError(t, err)
-	cfg.LastCursor = checkpoint.Cursor
-	client := &geminiFakeClient{export: &vault.Export{ID: "export-1", Status: "COMPLETED", Files: []vault.File{{ObjectName: "owner.zip"}, {ObjectName: "counts.csv"}, {ObjectName: "errors.xml"}}}}
+	start := now.Add(-geminiInitialLookback)
+	pending := geminiExportCursor{Version: geminiCursorVersion, Through: start, Sequence: 1, ExportID: "export-1", Start: start, End: now.Add(-5 * time.Minute), Live: true}
+	cfg.LastCursor = geminiTestCursor(t, pending)
+	client := &geminiFakeClient{export: completedGeminiExport("export-1")}
 	imported := false
 	svc := geminiTestImporter(client, func(_ context.Context, _ Config, files []geminiExportFile) error {
 		require.Equal(t, 3, client.downloads)
@@ -100,70 +157,227 @@ func TestGeminiSyncAdvancesOnlyAfterAllArtifactsAreImported(t *testing.T) {
 	result, err := svc.SyncGemini(t.Context(), cfg, now)
 	require.NoError(t, err)
 	require.True(t, imported)
+	require.False(t, result.Pending, "a caught-up sync waits for the hourly poll")
 	require.Equal(t, pending.End, result.Watermark)
-	done, err := decodeGeminiCursor(result.Cursor, now)
-	require.NoError(t, err)
+	done := decodeGeminiTestCursor(t, result.Cursor)
 	require.Empty(t, done.ExportID)
-	require.Equal(t, uint64(3), done.Sequence)
+	require.True(t, done.End.IsZero())
+	require.True(t, done.Overlap, "the next export re-checks late-indexed conversations")
+	require.Equal(t, uint64(1), done.Sequence)
+	require.Zero(t, client.creates)
 	require.Zero(t, client.deletes, "retain successful artifacts until durable checkpoint")
 
-	imported = false
 	svc.importFiles = func(context.Context, Config, []geminiExportFile) error { return errors.New("write failed") }
 	result, err = svc.SyncGemini(t.Context(), cfg, now)
 	require.ErrorContains(t, err, "write failed")
-	require.Equal(t, checkpoint, result)
+	require.Equal(t, GeminiSyncResult{Cursor: cfg.LastCursor, Watermark: pending.Through, Pending: false}, result)
+}
+
+func TestGeminiSyncNextExportOverlapsAndEndsNow(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 12, 19, 5, 0, 0, time.UTC)
+	cfg := geminiTestConfig()
+	done := geminiExportCursor{Version: geminiCursorVersion, Through: now.Add(-time.Hour), Sequence: 4, Overlap: true}
+	cfg.LastCursor = geminiTestCursor(t, done)
+	client := &geminiFakeClient{export: &vault.Export{ID: "refresh", Status: "IN_PROGRESS"}}
+	result, err := geminiTestImporter(client, nil).SyncGemini(t.Context(), cfg, now)
+	require.NoError(t, err)
+	require.True(t, result.Pending)
+	require.Equal(t, done.Through.Add(-geminiExportOverlap), client.start)
+	require.Equal(t, now, client.end)
+	require.Equal(t, done.Through, result.Watermark)
+	cursor := decodeGeminiTestCursor(t, result.Cursor)
+	require.Equal(t, uint64(5), cursor.Sequence)
+	previous := done
+	previous.Start = client.start
+	require.NotEqual(t, geminiExportName(cfg.ID, previous), client.name, "each export gets a new name")
+}
+
+func TestGeminiSyncDropsOverlapBeforeSplittingWindow(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 12, 20, 0, 0, 0, time.UTC)
+	cfg := geminiTestConfig()
+	through := now.Add(-2 * time.Hour)
+	pending := geminiExportCursor{Version: geminiCursorVersion, Through: through, Sequence: 5, Overlap: true, ExportID: "big", Start: through.Add(-geminiExportOverlap), End: now.Add(-time.Minute), Live: true}
+	cfg.LastCursor = geminiTestCursor(t, pending)
+	big := completedGeminiExport("big")
+	big.SizeBytes = geminiMaxExportBytes + 1
+	client := &geminiFakeClient{export: big, created: &vault.Export{ID: "narrower", Status: "IN_PROGRESS"}}
+	result, err := geminiTestImporter(client, nil).SyncGemini(t.Context(), cfg, now)
+	require.NoError(t, err)
+	require.True(t, result.Pending)
+	require.Zero(t, client.downloads, "the reported size is checked before download")
+	require.Equal(t, 1, client.deletes)
+	require.Equal(t, through, client.start, "the overlap re-check goes first")
+	require.Equal(t, pending.End, client.end)
+	require.Equal(t, through, result.Watermark)
+	cursor := decodeGeminiTestCursor(t, result.Cursor)
+	require.Equal(t, "narrower", cursor.ExportID)
+	require.True(t, cursor.Live)
+}
+
+func TestGeminiSyncHalvesTooLargeWindowThenCatchesUp(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 12, 20, 0, 0, 0, time.UTC)
+	cfg := geminiTestConfig()
+	start := now.Add(-geminiInitialLookback)
+	pending := geminiExportCursor{Version: geminiCursorVersion, Through: start, Sequence: 1, ExportID: "big", Start: start, End: now.Add(-10 * time.Minute), Live: true}
+	cfg.LastCursor = geminiTestCursor(t, pending)
+	client := &geminiFakeClient{export: completedGeminiExport("big"), created: &vault.Export{ID: "half", Status: "IN_PROGRESS"}}
+	svc := geminiTestImporter(client, func(context.Context, Config, []geminiExportFile) error {
+		return fmt.Errorf("parse: %w", errGeminiExportTooLarge)
+	})
+	result, err := svc.SyncGemini(t.Context(), cfg, now)
+	require.NoError(t, err)
+	require.True(t, result.Pending)
+	require.Equal(t, 1, client.deletes)
+	half := start.Add((pending.End.Sub(start) / 2).Truncate(time.Second))
+	require.Equal(t, start, client.start)
+	require.Equal(t, half, client.end)
+	cursor := decodeGeminiTestCursor(t, result.Cursor)
+	require.Equal(t, "half", cursor.ExportID)
+	require.False(t, cursor.Live)
+	require.Equal(t, start, result.Watermark)
+
+	// The first half imports, and the rest starts at once without overlap.
+	later := now.Add(geminiPendingRecheck)
+	cfg.LastCursor = result.Cursor
+	client.export = completedGeminiExport("half")
+	client.created = &vault.Export{ID: "rest", Status: "IN_PROGRESS"}
+	svc.importFiles = func(context.Context, Config, []geminiExportFile) error { return nil }
+	result, err = svc.SyncGemini(t.Context(), cfg, later)
+	require.NoError(t, err)
+	require.True(t, result.Pending)
+	require.Equal(t, half, result.Watermark)
+	require.Equal(t, half, client.start)
+	require.Equal(t, later, client.end)
+	cursor = decodeGeminiTestCursor(t, result.Cursor)
+	require.Equal(t, "rest", cursor.ExportID)
+	require.False(t, cursor.Overlap)
+	require.True(t, cursor.Live)
+}
+
+func TestGeminiSyncFailsWhenOneHourWindowIsTooLarge(t *testing.T) {
+	t.Parallel()
+	through := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
+	cfg := geminiTestConfig()
+	pending := geminiExportCursor{Version: geminiCursorVersion, Through: through, Sequence: 3, ExportID: "big", Start: through, End: through.Add(geminiMinExportWindow)}
+	cfg.LastCursor = geminiTestCursor(t, pending)
+	big := completedGeminiExport("big")
+	big.SizeBytes = geminiMaxExportBytes + 1
+	client := &geminiFakeClient{export: big}
+	result, err := geminiTestImporter(client, nil).SyncGemini(t.Context(), cfg, through.Add(2*time.Hour))
+	require.ErrorContains(t, err, "even for one hour")
+	require.Equal(t, GeminiSyncResult{Cursor: cfg.LastCursor, Watermark: through, Pending: false}, result)
+	require.Zero(t, client.creates)
+}
+
+func TestGeminiSyncKeepsProgressWhenNextExportCannotStart(t *testing.T) {
+	t.Parallel()
+	through := time.Date(2026, 10, 13, 17, 0, 0, 0, time.UTC)
+	now := through.Add(30 * 24 * time.Hour)
+	cfg := geminiTestConfig()
+	pending := geminiExportCursor{Version: geminiCursorVersion, Through: through, Sequence: 2, ExportID: "half", Start: through, End: through.Add(15 * 24 * time.Hour)}
+	cfg.LastCursor = geminiTestCursor(t, pending)
+	client := &geminiFakeClient{export: completedGeminiExport("half"), createErr: errors.New("vault unavailable")}
+	svc := geminiTestImporter(client, func(context.Context, Config, []geminiExportFile) error { return nil })
+	result, err := svc.SyncGemini(t.Context(), cfg, now)
+	require.NoError(t, err, "the import is kept; the next run starts the export")
+	require.True(t, result.Pending)
+	require.Equal(t, pending.End, result.Watermark)
+	cursor := decodeGeminiTestCursor(t, result.Cursor)
+	require.Empty(t, cursor.ExportID)
+	require.Equal(t, pending.End, cursor.Start)
+	require.Equal(t, now, cursor.End)
+
+	cfg.LastCursor = result.Cursor
+	client.createErr = nil
+	client.created = &vault.Export{ID: "rest", Status: "IN_PROGRESS"}
+	result, err = svc.SyncGemini(t.Context(), cfg, now.Add(geminiPendingRecheck))
+	require.NoError(t, err)
+	require.Equal(t, pending.End, client.start)
+	require.Equal(t, now, client.end, "the saved window is started as chosen")
+	require.Equal(t, "rest", decodeGeminiTestCursor(t, result.Cursor).ExportID)
+}
+
+func TestGeminiSyncContinuesVersionOneDailyCursorThroughNow(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 12, 20, 0, 0, 0, time.UTC)
+	day := now.Truncate(24 * time.Hour).Add(-28 * 24 * time.Hour)
+	t.Run("pending daily export", func(t *testing.T) {
+		t.Parallel()
+		cfg := geminiTestConfig()
+		cfg.LastCursor = geminiTestCursor(t, geminiExportCursor{Version: 1, Through: day.Add(-24 * time.Hour), Sequence: 1, ExportID: "daily", Start: day.Add(-72 * time.Hour), End: day})
+		client := &geminiFakeClient{export: completedGeminiExport("daily"), created: &vault.Export{ID: "catch-up", Status: "IN_PROGRESS"}}
+		result, err := geminiTestImporter(client, func(context.Context, Config, []geminiExportFile) error { return nil }).SyncGemini(t.Context(), cfg, now)
+		require.NoError(t, err)
+		require.True(t, result.Pending)
+		require.Equal(t, day, result.Watermark)
+		require.Equal(t, day, client.start)
+		require.Equal(t, now, client.end)
+		cursor := decodeGeminiTestCursor(t, result.Cursor)
+		require.Equal(t, geminiCursorVersion, cursor.Version)
+		require.Equal(t, "catch-up", cursor.ExportID)
+	})
+	t.Run("between daily exports", func(t *testing.T) {
+		t.Parallel()
+		cfg := geminiTestConfig()
+		cfg.LastCursor = geminiTestCursor(t, geminiExportCursor{Version: 1, Through: day, Sequence: 3})
+		client := &geminiFakeClient{export: &vault.Export{ID: "catch-up", Status: "IN_PROGRESS"}}
+		_, err := geminiTestImporter(client, nil).SyncGemini(t.Context(), cfg, now)
+		require.NoError(t, err)
+		require.Equal(t, day, client.start)
+		require.Equal(t, now, client.end)
+	})
 }
 
 func TestGeminiSyncRecoversExpiredExportForSameWindow(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
 	cfg := geminiTestConfig()
-	pending := geminiExportCursor{Version: 1, Through: now.Truncate(24 * time.Hour).Add(-24 * time.Hour), Sequence: 2, ExportID: "expired", Start: now.Truncate(24 * time.Hour).Add(-3 * 24 * time.Hour), End: now.Truncate(24 * time.Hour)}
-	checkpoint, err := encodeGeminiResult(pending)
-	require.NoError(t, err)
-	cfg.LastCursor = checkpoint.Cursor
+	pending := geminiExportCursor{Version: geminiCursorVersion, Through: now.Add(-24 * time.Hour), Sequence: 2, Overlap: true, ExportID: "expired", Start: now.Add(-72 * time.Hour), End: now.Add(-23 * time.Hour), Live: true}
+	cfg.LastCursor = geminiTestCursor(t, pending)
 	client := &geminiFakeClient{export: &vault.Export{ID: "replacement", Status: "IN_PROGRESS"}, getErr: &vault.HTTPError{StatusCode: http.StatusNotFound}}
-	svc := geminiTestImporter(client, nil)
-	result, err := svc.SyncGemini(t.Context(), cfg, now.Add(48*time.Hour))
+	result, err := geminiTestImporter(client, nil).SyncGemini(t.Context(), cfg, now.Add(48*time.Hour))
 	require.NoError(t, err)
 	require.Equal(t, pending.Start, client.start)
 	require.Equal(t, pending.End, client.end)
 	require.Equal(t, pending.Through, result.Watermark)
 	require.Equal(t, 1, client.creates)
+	require.Equal(t, "replacement", decodeGeminiTestCursor(t, result.Cursor).ExportID)
 }
 
 func TestGeminiSyncFindsJobAfterLostCreateResponse(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
+	saved := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
 	cfg := geminiTestConfig()
-	client := &geminiFakeClient{find: &vault.Export{ID: "existing", Status: "IN_PROGRESS"}}
-	svc := geminiTestImporter(client, nil)
-	result, err := svc.SyncGemini(t.Context(), cfg, now)
+	cfg.UpdatedAt = saved
+	firstEnd := saved.Add(5 * time.Minute)
+	client := &geminiFakeClient{find: &vault.Export{ID: "existing", Status: "IN_PROGRESS", Start: saved.Add(-geminiInitialLookback), End: firstEnd}}
+	result, err := geminiTestImporter(client, nil).SyncGemini(t.Context(), cfg, saved.Add(2*time.Hour))
 	require.NoError(t, err)
 	require.Zero(t, client.creates)
-	cursor, err := decodeGeminiCursor(result.Cursor, now)
-	require.NoError(t, err)
+	cursor := decodeGeminiTestCursor(t, result.Cursor)
 	require.Equal(t, "existing", cursor.ExportID)
+	require.Equal(t, firstEnd, cursor.End, "use the window Vault exported, not the retry time")
 }
 
-func TestGeminiSyncCaughtUpRechecksHaveDistinctDeterministicNames(t *testing.T) {
+func TestGeminiSyncRetryUsesSameExportName(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
+	saved := time.Date(2026, 10, 20, 23, 59, 0, 0, time.UTC)
 	cfg := geminiTestConfig()
-	done := geminiExportCursor{Version: 1, Through: now.Truncate(24 * time.Hour), Sequence: 9}
-	checkpoint, err := encodeGeminiResult(done)
-	require.NoError(t, err)
-	cfg.LastCursor = checkpoint.Cursor
-	client := &geminiFakeClient{export: &vault.Export{ID: "refresh", Status: "IN_PROGRESS"}}
+	cfg.UpdatedAt = saved
+	client := &geminiFakeClient{export: &vault.Export{ID: "pending", Status: "IN_PROGRESS"}}
 	svc := geminiTestImporter(client, nil)
-	result, err := svc.SyncGemini(t.Context(), cfg, now)
+	_, err := svc.SyncGemini(t.Context(), cfg, saved)
 	require.NoError(t, err)
-	require.Equal(t, done.Through.Add(-geminiExportOverlap), client.start)
-	require.Equal(t, done.Through, client.end)
-	require.Equal(t, done.Through, result.Watermark)
-	next := done
-	next.Sequence++
-	require.NotEqual(t, geminiExportName(cfg.ID, done), geminiExportName(cfg.ID, next))
+	name, start := client.name, client.start
+	// The cursor was not saved, so the retry starts from the same progress.
+	_, err = svc.SyncGemini(t.Context(), cfg, saved.Add(2*time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, name, client.name)
+	require.Equal(t, start, client.start)
+	require.Equal(t, []string{name, name}, client.findNames)
 }
 
 func TestGeminiSyncFailedOrIncompleteExportNeverAdvances(t *testing.T) {
@@ -173,15 +387,12 @@ func TestGeminiSyncFailedOrIncompleteExportNeverAdvances(t *testing.T) {
 		t.Run(status, func(t *testing.T) {
 			t.Parallel()
 			cfg := geminiTestConfig()
-			cursor := geminiExportCursor{Version: 1, Through: now.Truncate(24 * time.Hour).Add(-24 * time.Hour), Sequence: 2, ExportID: "failed", Start: now.Truncate(24 * time.Hour).Add(-3 * 24 * time.Hour), End: now.Truncate(24 * time.Hour)}
-			checkpoint, err := encodeGeminiResult(cursor)
-			require.NoError(t, err)
-			cfg.LastCursor = checkpoint.Cursor
+			cursor := geminiExportCursor{Version: geminiCursorVersion, Through: now.Add(-24 * time.Hour), Sequence: 2, ExportID: "failed", Start: now.Add(-24 * time.Hour), End: now.Add(-time.Hour), Live: true}
+			cfg.LastCursor = geminiTestCursor(t, cursor)
 			client := &geminiFakeClient{export: &vault.Export{ID: "failed", Status: status}}
-			svc := geminiTestImporter(client, nil)
-			result, err := svc.SyncGemini(t.Context(), cfg, now)
+			result, err := geminiTestImporter(client, nil).SyncGemini(t.Context(), cfg, now)
 			require.Error(t, err)
-			require.Equal(t, checkpoint, result)
+			require.Equal(t, GeminiSyncResult{Cursor: cfg.LastCursor, Watermark: cursor.Through, Pending: false}, result)
 			if status == "FAILED" {
 				require.Equal(t, 1, client.deletes)
 			}
@@ -189,13 +400,60 @@ func TestGeminiSyncFailedOrIncompleteExportNeverAdvances(t *testing.T) {
 	}
 }
 
+func TestGeminiSyncPartialSourceExportIsRecreatedButLocalFailureIsRetained(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name    string
+		failure error
+		deletes int
+	}{{"source partial", errGeminiPartialExport, 1}, {"local writer", errors.New("local failure"), 0}} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := geminiTestConfig()
+			cursor := geminiExportCursor{Version: geminiCursorVersion, Through: now.Add(-24 * time.Hour), Sequence: 2, ExportID: "partial", Start: now.Add(-24 * time.Hour), End: now.Add(-time.Hour), Live: true}
+			cfg.LastCursor = geminiTestCursor(t, cursor)
+			client := &geminiFakeClient{export: &vault.Export{ID: "partial", Status: "COMPLETED", Files: []vault.File{{ObjectName: "export.zip"}}}}
+			svc := geminiTestImporter(client, func(context.Context, Config, []geminiExportFile) error { return tc.failure })
+			result, err := svc.SyncGemini(t.Context(), cfg, now)
+			require.ErrorIs(t, err, tc.failure)
+			require.Equal(t, GeminiSyncResult{Cursor: cfg.LastCursor, Watermark: cursor.Through, Pending: false}, result)
+			require.Equal(t, tc.deletes, client.deletes)
+		})
+	}
+}
+
+func TestGeminiSyncRejectsCursorAheadOfNow(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
+	cfg := geminiTestConfig()
+	cfg.LastCursor = geminiTestCursor(t, geminiExportCursor{Version: geminiCursorVersion, Through: now.Add(time.Hour), Sequence: 1})
+	client := &geminiFakeClient{}
+	_, err := geminiTestImporter(client, nil).SyncGemini(t.Context(), cfg, now)
+	require.ErrorContains(t, err, "ahead of the current time")
+	require.Zero(t, client.creates)
+}
+
 func TestGeminiCursorRejectsMalformedOrUnboundedWindows(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)
-	for _, raw := range []string{`not json`, `{"version":2,"through":"2026-10-19T00:00:00Z"}`, `{"version":1,"through":"2026-10-19T12:00:00Z"}`, `{"version":1,"through":"2026-10-19T00:00:00Z","export_id":"pending"}`, `{"version":1,"through":"2026-10-19T00:00:00Z","export_id":"pending","start":"2020-01-01T00:00:00Z","end":"2026-10-20T00:00:00Z"}`} {
+	for _, raw := range []string{
+		`not json`,
+		`{"version":3,"through":"2026-10-19T00:00:00Z"}`,
+		`{"version":2}`,
+		`{"version":1,"through":"2026-10-19T12:00:00Z"}`,
+		`{"version":1,"through":"2026-10-19T00:00:00Z","export_id":"pending"}`,
+		`{"version":1,"through":"2026-10-19T00:00:00Z","export_id":"pending","start":"2020-01-01T00:00:00Z","end":"2026-10-20T00:00:00Z"}`,
+		`{"version":2,"through":"2026-10-19T12:00:00Z","export_id":"pending"}`,
+		`{"version":2,"through":"2026-10-19T12:00:00Z","start":"2020-01-01T00:00:00Z","end":"2026-10-20T00:00:00Z"}`,
+		`{"version":2,"through":"2026-10-19T12:00:00Z","start":"2026-10-19T12:00:00Z","end":"2026-10-19T12:00:00Z"}`,
+	} {
 		_, err := decodeGeminiCursor(raw, now)
-		require.Error(t, err)
+		require.Error(t, err, raw)
 	}
+	cursor, err := decodeGeminiCursor(`{"version":2,"through":"2026-10-19T12:34:56Z","sequence":4,"overlap":true}`, now)
+	require.NoError(t, err)
+	require.Equal(t, time.Date(2026, 10, 19, 12, 34, 56, 0, time.UTC), cursor.Through, "version 2 progress is not tied to UTC midnight")
 }
 
 func TestGeminiMessageRowsPreserveRoleModelAndIdempotentIdentity(t *testing.T) {
@@ -217,46 +475,4 @@ func TestGeminiMessageRowsPreserveRoleModelAndIdempotentIdentity(t *testing.T) {
 	require.Equal(t, "google", rows[1].Provider)
 	require.NotEqual(t, geminiExternalChatID("matter", "one@example.com", "same"), geminiExternalChatID("matter", "two@example.com", "same"))
 	require.NotEqual(t, geminiExternalChatID("matter1", "one@example.com", "same"), geminiExternalChatID("matter2", "one@example.com", "same"))
-}
-
-func TestGeminiSyncPartialSourceExportIsRecreatedButLocalFailureIsRetained(t *testing.T) {
-	t.Parallel()
-	now := time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
-	for _, tc := range []struct {
-		name    string
-		failure error
-		deletes int
-	}{{"source partial", errGeminiPartialExport, 1}, {"local writer", errors.New("local failure"), 0}} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			cfg := geminiTestConfig()
-			cursor := geminiExportCursor{Version: 1, Through: now.Truncate(24 * time.Hour).Add(-24 * time.Hour), Sequence: 2, ExportID: "partial", Start: now.Truncate(24 * time.Hour).Add(-3 * 24 * time.Hour), End: now.Truncate(24 * time.Hour)}
-			checkpoint, err := encodeGeminiResult(cursor)
-			require.NoError(t, err)
-			cfg.LastCursor = checkpoint.Cursor
-			client := &geminiFakeClient{export: &vault.Export{ID: "partial", Status: "COMPLETED", Files: []vault.File{{ObjectName: "export.zip"}}}}
-			svc := geminiTestImporter(client, func(context.Context, Config, []geminiExportFile) error { return tc.failure })
-			result, err := svc.SyncGemini(t.Context(), cfg, now)
-			require.ErrorIs(t, err, tc.failure)
-			require.Equal(t, checkpoint, result)
-			require.Equal(t, tc.deletes, client.deletes)
-		})
-	}
-}
-
-func TestGeminiSyncInitialWindowAnchoredAcrossMidnightRetry(t *testing.T) {
-	t.Parallel()
-	connectedAt := time.Date(2026, 10, 20, 23, 59, 0, 0, time.UTC)
-	cfg := geminiTestConfig()
-	cfg.CreatedAt = connectedAt
-	client := &geminiFakeClient{export: &vault.Export{ID: "pending", Status: "IN_PROGRESS"}}
-	svc := geminiTestImporter(client, nil)
-	_, err := svc.SyncGemini(t.Context(), cfg, connectedAt)
-	require.NoError(t, err)
-	name, start, end := client.name, client.start, client.end
-	_, err = svc.SyncGemini(t.Context(), cfg, connectedAt.Add(2*time.Hour))
-	require.NoError(t, err)
-	require.Equal(t, name, client.name)
-	require.Equal(t, start, client.start)
-	require.Equal(t, end, client.end)
 }

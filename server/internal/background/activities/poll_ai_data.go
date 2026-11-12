@@ -264,7 +264,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		if err != nil {
 			return fmt.Errorf("sync Gemini conversation data: %w", err)
 		}
-		if err := p.integrations.RecordGeminiPollSuccess(ctx, cfg.SyncID, result.Watermark, result.Cursor, endTime); err != nil {
+		if err := p.integrations.RecordGeminiPollSuccess(ctx, cfg.SyncID, result.Watermark, result.Cursor, endTime, result.Pending); err != nil {
 			return fmt.Errorf("record Gemini compliance schedule success: %w", err)
 		}
 	case aiintegrations.ScheduleChatGPTCompliance:

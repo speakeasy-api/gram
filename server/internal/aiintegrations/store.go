@@ -832,13 +832,18 @@ func (s *Store) RecordUsagePollSuccess(ctx context.Context, syncID uuid.UUID, sc
 	return nil
 }
 
-// RecordGeminiPollSuccess checkpoints the last fully imported date independently
-// of the wall clock used to schedule the next Vault export status check.
-func (s *Store) RecordGeminiPollSuccess(ctx context.Context, syncID uuid.UUID, watermark time.Time, lastCursor string, pollTime time.Time) error {
+// RecordGeminiPollSuccess checkpoints the last fully imported time independently
+// of the wall clock used to schedule the next Vault export status check. A
+// pending export is checked again in minutes; a caught-up sync waits an hour.
+func (s *Store) RecordGeminiPollSuccess(ctx context.Context, syncID uuid.UUID, watermark time.Time, lastCursor string, pollTime time.Time, pending bool) error {
+	interval := pollIntervalForSchedule(ScheduleGeminiCompliance)
+	if pending {
+		interval = geminiPendingRecheck
+	}
 	if err := s.repo.RecordUsagePollSuccess(ctx, repo.RecordUsagePollSuccessParams{
 		SyncID:          syncID,
 		PollWatermarkAt: conv.ToPGTimestamptz(watermark),
-		NextPollAfter:   conv.ToPGTimestamptz(pollTime.UTC().Add(pollIntervalForSchedule(ScheduleGeminiCompliance))),
+		NextPollAfter:   conv.ToPGTimestamptz(pollTime.UTC().Add(interval)),
 		LastCursorID:    conv.ToPGTextEmpty(lastCursor),
 	}); err != nil {
 		return fmt.Errorf("record Gemini poll success: %w", err)

@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -27,10 +28,21 @@ import (
 
 const (
 	geminiInitialLookback = 30 * 24 * time.Hour
-	geminiExportOverlap   = 48 * time.Hour
+	// geminiExportOverlap re-exports this much time before the previous
+	// export's end, to pick up conversations Vault indexed late.
+	geminiExportOverlap = 48 * time.Hour
+	// geminiMinExportWindow is the shortest window a too-large export is split
+	// to. A window this short that is still too large fails the sync.
+	geminiMinExportWindow = time.Hour
+	// geminiPendingRecheck is how soon the scheduler looks at an unfinished
+	// Vault export again. It is just under the 5-minute coordinator interval,
+	// so the next coordinator run picks the sync up, not the one after it.
+	geminiPendingRecheck = 4 * time.Minute
 	// Bound total memory even when Google splits a large export into many files.
 	geminiMaxExportBytes   = 128 << 20
 	geminiMessageBatchSize = 100
+	geminiCursorVersion    = 2
+	geminiExportNameTime   = "20060102T150405Z"
 )
 
 type geminiVaultClient interface {
@@ -47,21 +59,41 @@ type geminiVaultClient interface {
 type GeminiSyncResult struct {
 	Cursor    string
 	Watermark time.Time
+	// Pending means a Vault export is still running or still has to be
+	// started, so the scheduler checks again in geminiPendingRecheck.
+	Pending bool
 }
 
+// geminiExportCursor is the sync progress saved in last_cursor_id.
+//
+// Version 1 cursors imported one completed UTC day per export, so Through was
+// always a UTC midnight. Version 2 exports from Through to the poll time in
+// one export. Both decode; the sync writes version 2.
 type geminiExportCursor struct {
-	Version  int       `json:"version"`
-	Through  time.Time `json:"through"`
-	Sequence uint64    `json:"sequence"`
+	Version int `json:"version"`
+	// Through is the exclusive end of the last imported window.
+	Through time.Time `json:"through"`
+	// Sequence counts the exports started. It keeps export names unique.
+	Sequence uint64 `json:"sequence"`
+	// Overlap: the next window starts geminiExportOverlap before Through. It
+	// is set after a window that ended at its poll time. The first window and
+	// catch-up windows continue at Through.
+	Overlap bool `json:"overlap,omitempty"`
+	// ExportID, Start and End are the pending window. End is zero when no
+	// window is pending; ExportID is empty until its export is started.
 	ExportID string    `json:"export_id,omitempty"`
 	Start    time.Time `json:"start"`
 	End      time.Time `json:"end"`
+	// Live: the pending window ends at the poll time that started it, so the
+	// sync is caught up once it is imported.
+	Live bool `json:"live,omitempty"`
 }
 
 // GeminiImportService imports managed Gemini app text transcripts from Vault.
-// One invocation starts or resumes one daily export; no workflow or timer is
-// created per conversation. Export identifiers live in the sync cursor so
-// activity retries and worker restarts resume the same remote job.
+// One invocation starts or resumes one export that runs from the saved
+// progress to the poll time; no workflow or timer is created per conversation.
+// Export identifiers live in the sync cursor so activity retries and worker
+// restarts resume the same remote job.
 type GeminiImportService struct {
 	logger      *slog.Logger
 	db          *pgxpool.Pool
@@ -101,66 +133,48 @@ func (s *GeminiImportService) SyncGemini(ctx context.Context, cfg Config, endTim
 	if cfg.Provider != ProviderGeminiCompliance {
 		return GeminiSyncResult{}, errors.New("gemini import requires a Gemini compliance config")
 	}
-	// Anchor the first window to durable connection time, not retry time.
-	initialAt := cfg.CreatedAt
-	if initialAt.IsZero() {
-		initialAt = endTime
-	}
-	cursor, err := decodeGeminiCursor(cfg.LastCursor, initialAt)
+	now := endTime.UTC()
+	cursor, err := decodeGeminiCursor(cfg.LastCursor, geminiInitialThrough(cfg, now))
 	if err != nil {
 		return GeminiSyncResult{}, err
 	}
-	result := GeminiSyncResult{Cursor: cfg.LastCursor, Watermark: cursor.Through}
+	result := GeminiSyncResult{Cursor: cfg.LastCursor, Watermark: cursor.Through, Pending: false}
+	if cursor.Through.After(now) {
+		return result, errors.New("gemini sync cursor is ahead of the current time")
+	}
 	client, err := s.newClient(cfg)
 	if err != nil {
 		return result, fmt.Errorf("configure Gemini Vault client: %w", err)
 	}
 	s.beat(ctx, "export", 0)
 	var export *vault.Export
-	if cursor.ExportID != "" {
+	switch {
+	case cursor.End.IsZero():
+		next, ok := cursor.nextWindow(now)
+		if !ok {
+			return encodeGeminiResult(cursor, false)
+		}
+		cursor = next
+		export, err = startGeminiExport(ctx, client, cfg.ID, &cursor)
+	case cursor.ExportID == "":
+		export, err = startGeminiExport(ctx, client, cfg.ID, &cursor)
+	default:
 		export, err = client.GetExport(ctx, cursor.ExportID)
 		var httpErr *vault.HTTPError
-		if err != nil && (!errors.As(err, &httpErr) || httpErr.StatusCode != http.StatusNotFound) {
-			return result, fmt.Errorf("read Gemini Vault export: %w", err)
-		}
-		// Expired/deleted exports are recreated for the SAME window, not skipped.
-		if err != nil {
-			export = nil
-		}
-	}
-	if export == nil {
-		if cursor.ExportID == "" {
-			upper := endTime.UTC().Truncate(24 * time.Hour)
-			if cursor.Through.After(upper) {
-				return result, errors.New("gemini sync cursor is ahead of the current UTC date")
-			}
-			cursor.Start = cursor.Through.Add(-geminiExportOverlap)
-			cursor.End = cursor.Through.Add(24 * time.Hour)
-			if cursor.End.After(upper) {
-				cursor.End = upper
-			}
-		}
-		// Include the sequence so caught-up rechecks produce a fresh export, but
-		// a retried create with a lost response finds the original job by name.
-		name := geminiExportName(cfg.ID, cursor)
-		export, err = client.FindExport(ctx, name)
-		if err != nil {
-			return result, fmt.Errorf("find Gemini Vault export: %w", err)
-		}
-		if export == nil {
-			export, err = client.CreateExport(ctx, name, cursor.Start, cursor.End)
-			if err != nil {
-				return result, fmt.Errorf("create Gemini Vault export: %w", err)
-			}
+		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+			// Expired/deleted exports are recreated for the SAME window, not skipped.
+			cursor.ExportID = ""
+			export, err = startGeminiExport(ctx, client, cfg.ID, &cursor)
+		} else if err != nil {
+			err = fmt.Errorf("read Gemini Vault export: %w", err)
 		}
 	}
-	if export == nil || export.ID == "" {
-		return result, errors.New("gemini Vault returned an export without an ID")
+	if err != nil {
+		return result, err
 	}
-	cursor.ExportID = export.ID
 	switch export.Status {
 	case "IN_PROGRESS":
-		return encodeGeminiResult(cursor)
+		return encodeGeminiResult(cursor, true)
 	case "COMPLETED":
 		// Validate every artifact and error/count report before advancing progress.
 	case "FAILED":
@@ -185,6 +199,9 @@ func (s *GeminiImportService) SyncGemini(ctx context.Context, cfg Config, endTim
 	if len(export.Files) == 0 {
 		return result, errors.New("completed gemini Vault export has no downloadable artifacts")
 	}
+	if geminiExportBytes(export) > geminiMaxExportBytes {
+		return s.splitExport(ctx, client, cfg, cursor, result)
+	}
 	files := make([]geminiExportFile, 0, len(export.Files))
 	total := 0
 	for i, file := range export.Files {
@@ -195,11 +212,14 @@ func (s *GeminiImportService) SyncGemini(ctx context.Context, cfg Config, endTim
 		}
 		total += len(body)
 		if total > geminiMaxExportBytes {
-			return result, errors.New("gemini Vault export exceeds the import size limit; narrow the export scope")
+			return s.splitExport(ctx, client, cfg, cursor, result)
 		}
 		files = append(files, geminiExportFile{Name: path.Base(file.ObjectName), Content: body})
 	}
 	if err := s.importFiles(ctx, cfg, files); err != nil {
+		if errors.Is(err, errGeminiExportTooLarge) {
+			return s.splitExport(ctx, client, cfg, cursor, result)
+		}
 		if errors.Is(err, errGeminiPartialExport) {
 			// An immutable partial source export cannot improve on retry.
 			// Recreate this exact window next time; retain artifacts on local
@@ -211,11 +231,130 @@ func (s *GeminiImportService) SyncGemini(ctx context.Context, cfg Config, endTim
 		return result, fmt.Errorf("import Gemini Vault transcripts: %w", err)
 	}
 	cursor.Through = cursor.End
-	cursor.Sequence++
-	cursor.ExportID = ""
-	cursor.Start = time.Time{}
-	cursor.End = time.Time{}
-	return encodeGeminiResult(cursor)
+	cursor.Overlap = cursor.Live
+	cursor.ExportID, cursor.Start, cursor.End, cursor.Live = "", time.Time{}, time.Time{}, false
+	if cursor.Overlap {
+		return encodeGeminiResult(cursor, false)
+	}
+	// The window ended before its poll time: it was split, or it is a
+	// version 1 daily window. Export the rest now, not at the next hourly poll.
+	next, ok := cursor.nextWindow(now)
+	if !ok {
+		return encodeGeminiResult(cursor, false)
+	}
+	return s.startNextExport(ctx, client, cfg, next)
+}
+
+// splitExport replaces a completed export that is too large to import with a
+// shorter window. Conversations it already wrote stay; imports are idempotent.
+func (s *GeminiImportService) splitExport(ctx context.Context, client geminiVaultClient, cfg Config, cursor geminiExportCursor, result GeminiSyncResult) (GeminiSyncResult, error) {
+	next, ok := cursor.shrink()
+	if !ok {
+		return result, errors.New("gemini Vault export exceeds the import size limit even for one hour; narrow the export scope")
+	}
+	// The next window has a new name, so this job is only clean-up.
+	if err := client.DeleteExport(ctx, cursor.ExportID); err != nil {
+		s.warn(ctx, "remove oversized Gemini Vault export", err)
+	}
+	return s.startNextExport(ctx, client, cfg, next)
+}
+
+// startNextExport starts the export for a window chosen after progress that
+// must not be lost. If Vault refuses, the window is saved without an export
+// and the next run starts it again, and reports the error if it repeats.
+func (s *GeminiImportService) startNextExport(ctx context.Context, client geminiVaultClient, cfg Config, cursor geminiExportCursor) (GeminiSyncResult, error) {
+	if _, err := startGeminiExport(ctx, client, cfg.ID, &cursor); err != nil {
+		s.warn(ctx, "start next Gemini Vault export", err)
+		cursor.ExportID = ""
+	}
+	return encodeGeminiResult(cursor, true)
+}
+
+// startGeminiExport finds or creates the export for the cursor's window and
+// records its ID. The name depends only on saved progress, so a retry after a
+// lost create response finds the job and takes the window Vault exported.
+func startGeminiExport(ctx context.Context, client geminiVaultClient, configID uuid.UUID, cursor *geminiExportCursor) (*vault.Export, error) {
+	name := geminiExportName(configID, *cursor)
+	export, err := client.FindExport(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("find Gemini Vault export: %w", err)
+	}
+	if export == nil {
+		export, err = client.CreateExport(ctx, name, cursor.Start, cursor.End)
+		if err != nil {
+			return nil, fmt.Errorf("create Gemini Vault export: %w", err)
+		}
+	} else if export.Start.Equal(cursor.Start) && export.End.After(cursor.Through) {
+		cursor.End = export.End.UTC()
+	}
+	if export == nil || export.ID == "" {
+		return nil, errors.New("gemini Vault returned an export without an ID")
+	}
+	cursor.ExportID = export.ID
+	return export, nil
+}
+
+// nextWindow chooses the window after Through. Every new window ends at the
+// poll time. It returns false when there is no time left to export.
+func (c geminiExportCursor) nextWindow(now time.Time) (geminiExportCursor, bool) {
+	start := c.Through
+	if c.Overlap {
+		start = start.Add(-geminiExportOverlap)
+	}
+	if !now.After(c.Through) {
+		return c, false
+	}
+	c.Version = geminiCursorVersion
+	c.Sequence++
+	c.ExportID, c.Start, c.End, c.Live = "", start, now, true
+	return c, true
+}
+
+// shrink narrows a window whose export is too large. It first drops the
+// overlap re-check, then halves the window. The rest of the range follows in
+// catch-up windows. It returns false when the window cannot get shorter.
+func (c geminiExportCursor) shrink() (geminiExportCursor, bool) {
+	if c.Start.Before(c.Through) {
+		c.Start = c.Through
+	} else {
+		span := c.End.Sub(c.Start)
+		if span <= geminiMinExportWindow {
+			return c, false
+		}
+		c.End = c.Start.Add((span / 2).Truncate(time.Second))
+		c.Live = false
+	}
+	c.Version = geminiCursorVersion
+	c.Sequence++
+	c.ExportID = ""
+	return c, true
+}
+
+// geminiInitialThrough is where an empty cursor starts: 30 days before the
+// save that connected Gemini or last changed its key or organizational unit.
+// Saves write updated_at and clear the cursor; retries reuse the same window.
+func geminiInitialThrough(cfg Config, now time.Time) time.Time {
+	anchor := cfg.UpdatedAt
+	if anchor.IsZero() {
+		anchor = cfg.CreatedAt
+	}
+	if anchor.IsZero() {
+		anchor = now
+	}
+	return anchor.UTC().Add(-geminiInitialLookback)
+}
+
+// geminiExportBytes is the export size Vault reports, or the sum of its file
+// sizes when Vault does not report one.
+func geminiExportBytes(export *vault.Export) int64 {
+	if export.SizeBytes > 0 {
+		return export.SizeBytes
+	}
+	var total int64
+	for _, file := range export.Files {
+		total += file.Size
+	}
+	return total
 }
 
 func (s *GeminiImportService) beat(ctx context.Context, phase string, page int) {
@@ -224,33 +363,61 @@ func (s *GeminiImportService) beat(ctx context.Context, phase string, page int) 
 	}
 }
 
-func decodeGeminiCursor(raw string, now time.Time) (geminiExportCursor, error) {
+func (s *GeminiImportService) warn(ctx context.Context, msg string, err error) {
+	if s.logger != nil {
+		s.logger.WarnContext(ctx, msg, attr.SlogError(err))
+	}
+}
+
+func decodeGeminiCursor(raw string, initialThrough time.Time) (geminiExportCursor, error) {
 	if raw == "" {
-		return geminiExportCursor{Version: 1, Through: now.UTC().Truncate(24 * time.Hour).Add(-geminiInitialLookback), Sequence: 0, ExportID: "", Start: time.Time{}, End: time.Time{}}, nil
+		return geminiExportCursor{Version: geminiCursorVersion, Through: initialThrough.UTC(), Sequence: 0, Overlap: false, ExportID: "", Start: time.Time{}, End: time.Time{}, Live: false}, nil
 	}
 	var cursor geminiExportCursor
-	if len(raw) > 4096 || json.Unmarshal([]byte(raw), &cursor) != nil || cursor.Version != 1 || cursor.Through.IsZero() {
+	if len(raw) > 4096 || json.Unmarshal([]byte(raw), &cursor) != nil || cursor.Through.IsZero() {
 		return cursor, errors.New("invalid gemini export sync cursor")
 	}
-	if !cursor.Through.Equal(cursor.Through.UTC().Truncate(24 * time.Hour)) {
-		return cursor, errors.New("invalid gemini cursor date boundary")
-	}
-	if cursor.ExportID != "" && (cursor.Start.IsZero() || cursor.End.IsZero() || !cursor.Start.Before(cursor.End) || cursor.End.Before(cursor.Through) || cursor.End.Sub(cursor.Through) > 24*time.Hour || cursor.Through.Sub(cursor.Start) > geminiExportOverlap) {
-		return cursor, errors.New("invalid pending Gemini export window")
+	switch cursor.Version {
+	case 1:
+		if !cursor.Through.Equal(cursor.Through.UTC().Truncate(24 * time.Hour)) {
+			return cursor, errors.New("invalid gemini cursor date boundary")
+		}
+		if cursor.ExportID != "" && (cursor.Start.IsZero() || cursor.End.IsZero() || !cursor.Start.Before(cursor.End) || cursor.End.Before(cursor.Through) || cursor.End.Sub(cursor.Through) > 24*time.Hour || cursor.Through.Sub(cursor.Start) > geminiExportOverlap) {
+			return cursor, errors.New("invalid pending Gemini export window")
+		}
+		if cursor.ExportID == "" {
+			cursor.Start, cursor.End = time.Time{}, time.Time{}
+		}
+		// A daily window ends before its poll time, so it is never live.
+		cursor.Overlap, cursor.Live = false, false
+	case geminiCursorVersion:
+		if cursor.End.IsZero() {
+			if cursor.ExportID != "" || !cursor.Start.IsZero() {
+				return cursor, errors.New("invalid pending Gemini export window")
+			}
+			break
+		}
+		if cursor.Start.IsZero() || cursor.Start.After(cursor.Through) || cursor.Through.Sub(cursor.Start) > geminiExportOverlap || !cursor.End.After(cursor.Through) {
+			return cursor, errors.New("invalid pending Gemini export window")
+		}
+	default:
+		return cursor, errors.New("invalid gemini export sync cursor")
 	}
 	return cursor, nil
 }
 
-func encodeGeminiResult(cursor geminiExportCursor) (GeminiSyncResult, error) {
+func encodeGeminiResult(cursor geminiExportCursor, pending bool) (GeminiSyncResult, error) {
 	raw, err := json.Marshal(cursor)
 	if err != nil {
 		return GeminiSyncResult{}, fmt.Errorf("encode Gemini export cursor: %w", err)
 	}
-	return GeminiSyncResult{Cursor: string(raw), Watermark: cursor.Through}, nil
+	return GeminiSyncResult{Cursor: string(raw), Watermark: cursor.Through, Pending: pending}, nil
 }
 
+// geminiExportName depends on the window start and the export count, never on
+// the poll time, so a retried create finds the job it already started.
 func geminiExportName(configID uuid.UUID, cursor geminiExportCursor) string {
-	return fmt.Sprintf("speakeasy-gemini-%s-%s-%d", configID, cursor.End.Format("20060102"), cursor.Sequence)
+	return fmt.Sprintf("speakeasy-gemini-%s-%s-%d", configID, cursor.Start.UTC().Format(geminiExportNameTime), cursor.Sequence)
 }
 
 func geminiExternalChatID(matterID, owner, conversation string) string {
