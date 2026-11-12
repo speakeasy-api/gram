@@ -103,7 +103,7 @@ function Section({ id, title }: { id?: string; title: string }): JSX.Element {
 }
 
 describe("SettingsLayout index", () => {
-  it("lists the section titles that render, under area eyebrows only where an area holds several", () => {
+  it("lists the section titles that render as one flat list, with no area labels", () => {
     render(
       <MemoryRouter>
         <SettingsLayout
@@ -140,8 +140,9 @@ describe("SettingsLayout index", () => {
       ["Visibility", "#settings-access"],
       ["Empty", "#settings-empty"],
     ]);
-    expect(index.textContent).toContain("General");
+    expect(index.textContent).not.toContain("General");
     expect(index.textContent).not.toContain("Access");
+    expect(index.querySelectorAll("ul ul")).toHaveLength(0);
     // A lone section's heading names its area, so the eyebrow hides on wide screens.
     expect(
       document.getElementById("settings-access-title")?.className,

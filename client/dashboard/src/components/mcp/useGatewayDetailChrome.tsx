@@ -302,8 +302,8 @@ function memberAccessChecks(
     if (state.kind === "unavailable" && state.needsGatewaySignIn) {
       checks.push({
         key: `member-unavailable-${slug}`,
-        label: `Set up sign-in for ${name}`,
-        description: `${name}'s sign-in isn't set up on this gateway. Add its authorization server here.`,
+        label: `Link ${name}'s sign-in`,
+        description: `People can't use ${name} through this gateway until its sign-in is linked. Use Link sign-in on its row.`,
         ready: false,
         broken: true,
         href: gatewaySignInHref,

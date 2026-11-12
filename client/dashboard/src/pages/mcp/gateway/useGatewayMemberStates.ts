@@ -3,7 +3,12 @@ import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { mcpConnectionUrl } from "@/lib/utils";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import type { MemberRow } from "./memberRows";
@@ -131,6 +136,43 @@ export function useGatewayMemberSignIn(
   };
 }
 
+/**
+ * Reads every member's state again, the way a new connection would. The
+ * gateway fixes which upstream connection a session uses when the session is
+ * minted, so a settings change only shows once the dashboard mints again: the
+ * session token goes too, not just the status call.
+ */
+export function refreshGatewayMemberStates(
+  queryClient: QueryClient,
+): Promise<unknown> {
+  return Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: ["userSessionToken", "metaMcpServer"],
+    }),
+    queryClient.invalidateQueries({ queryKey: ["gatewayConnectionStatus"] }),
+    queryClient.invalidateQueries({ queryKey: ["gatewayMemberCheck"] }),
+  ]);
+}
+
+/**
+ * Any change saved anywhere in the app can fix or break a member: a linked
+ * sign-in, a shared credential, a member added. So every successful write
+ * reads the states again, and the header and rows never show a fixed issue.
+ * Minting a session is itself a write and is left out, or it would loop.
+ */
+function useRefreshOnSavedChanges(enabled: boolean): void {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!enabled) return;
+    return queryClient.getMutationCache().subscribe((event) => {
+      if (event.type !== "updated" || event.action.type !== "success") return;
+      const key = JSON.stringify(event.mutation.options.mutationKey ?? []);
+      if (/mint/i.test(key)) return;
+      void refreshGatewayMemberStates(queryClient);
+    });
+  }, [enabled, queryClient]);
+}
+
 export interface GatewayMemberStates {
   stateFor: (row: MemberRow) => MemberViewerState | undefined;
   /** Opens the gateway's connect page for the viewer. */
@@ -249,6 +291,8 @@ export function useGatewayMemberStates(
     onConnected: options.onConnected,
   });
   const fetchChecks = (options.checkTools ?? "fetch") === "fetch";
+  // One subscriber is enough; the header is on every gateway tab.
+  useRefreshOnSavedChanges(options.checkTools === "cache" && live);
 
   const slugOf = (row: MemberRow) =>
     row.server?.slug ?? row.member.mcpServerSlug;

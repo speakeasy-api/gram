@@ -189,19 +189,10 @@ export function SettingsLayout({
           // Sticks inside the tab's scroll container, level with its top padding.
           className="sticky top-8 hidden self-start lg:block"
         >
+          {/* One flat list of section links: area names live on the page,
+              not in the index, so nothing here is a heading or a gap. */}
           <ul className="border-border space-y-px border-l">
-            {areas.map((area) =>
-              area.links.length > 1 ? (
-                <li key={area.group.id} className="py-1.5 first:pt-0">
-                  <span className="text-eyebrow block pb-1 pl-4">
-                    {area.group.title}
-                  </span>
-                  <ul className="space-y-px">{area.links.map(renderLink)}</ul>
-                </li>
-              ) : (
-                renderLink(area.links[0]!)
-              ),
-            )}
+            {links.map(renderLink)}
           </ul>
         </nav>
 

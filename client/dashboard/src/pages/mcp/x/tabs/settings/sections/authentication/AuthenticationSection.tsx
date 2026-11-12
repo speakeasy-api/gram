@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/Badge";
+import { GatewayAuthorizationServersField } from "@/pages/mcp/gateway/GatewayMemberSignInField";
 import {
   Field,
   FieldDescription,
@@ -167,6 +168,12 @@ function StandardAuthenticationSectionBody({
     { enabled: issuerConfigured },
   );
 
+  const gatewayId = target.attachImpactTarget.metaMcpServerId;
+  const linkedClientIds = useMemo(
+    () => new Set(allClients.map((client) => client.id)),
+    [allClients],
+  );
+
   const attachedIssuerIds = useMemo(
     () => [
       ...new Set(allClients.map((client) => client.remoteSessionIssuerId)),
@@ -227,17 +234,34 @@ function StandardAuthenticationSectionBody({
           userSessionIssuer={userSessionIssuer}
           mcpUrl={target.mcpUrl}
         />
-        <RemoteIdentityProvidersField
-          associatedIssuers={associatedIssuers}
-          allowAdditionalProviders={!!target.multipleProviders}
-          projectId={target.projectId}
-          isLoading={isLoadingClients || isLoadingAssociatedIssuers}
-          isError={isClientsError || isAssociatedIssuersError}
-          onAdd={() => setSheetOpen(true)}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          readOnly={userSessionIssuer.projectId === ""}
-        />
+        {gatewayId ? (
+          <GatewayAuthorizationServersField
+            metaMcpServerId={gatewayId}
+            userSessionIssuerId={userSessionIssuer.id}
+            linkedClientIds={linkedClientIds}
+            associatedIssuers={associatedIssuers}
+            allowAdditionalProviders={!!target.multipleProviders}
+            projectId={target.projectId}
+            isLoading={isLoadingClients || isLoadingAssociatedIssuers}
+            isError={isClientsError || isAssociatedIssuersError}
+            onAdd={() => setSheetOpen(true)}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            readOnly={userSessionIssuer.projectId === ""}
+          />
+        ) : (
+          <RemoteIdentityProvidersField
+            associatedIssuers={associatedIssuers}
+            allowAdditionalProviders={!!target.multipleProviders}
+            projectId={target.projectId}
+            isLoading={isLoadingClients || isLoadingAssociatedIssuers}
+            isError={isClientsError || isAssociatedIssuersError}
+            onAdd={() => setSheetOpen(true)}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            readOnly={userSessionIssuer.projectId === ""}
+          />
+        )}
         {/* Last: its footer Save closes the panel. */}
         <UserIdentitySessionControls userSessionIssuer={userSessionIssuer} />
       </>

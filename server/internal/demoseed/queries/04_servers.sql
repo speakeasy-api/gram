@@ -228,14 +228,16 @@ INSERT INTO remote_session_issuers
    name, scope_override)
 VALUES
   (@id::uuid, @project_id::uuid, @org_id::text,
-   'example-workspace-identity', 'https://identity.example.com',
-   'https://identity.example.com/oauth/authorize',
-   'https://identity.example.com/oauth/token',
-   'https://identity.example.com/.well-known/jwks.json',
+   -- Linear's real authorization server, as its MCP server advertises it, so
+   -- the demo reads like production.
+   'linear', 'https://mcp.linear.app',
+   'https://mcp.linear.app/authorize',
+   'https://mcp.linear.app/token',
+   NULL,
    ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
    ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
    -- An issuer-wide scope override, shown on the provider's page.
-   'Example Workspace Identity', ARRAY['read']);
+   'Linear', ARRAY['read']);
 
 -- name: ServersInsertLinearRemoteSessionClient :exec
 INSERT INTO remote_session_clients
@@ -306,7 +308,7 @@ VALUES
   (@id::uuid, @project_id::uuid, @org_id::text,
    'https://mcp.linear.app/mcp',
    'https://mcp.linear.app/.well-known/oauth-protected-resource/mcp',
-   ARRAY['https://identity.example.com'], ARRAY['read', 'write'],
+   ARRAY['https://mcp.linear.app'], ARRAY['read', 'write'],
    ARRAY['read'], now() - interval '2 hours')
 ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
 SET metadata_url = EXCLUDED.metadata_url,
