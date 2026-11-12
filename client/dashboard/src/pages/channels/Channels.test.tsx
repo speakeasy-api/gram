@@ -510,7 +510,7 @@ describe("Channels", () => {
     });
     expect(
       screen.getByRole("heading", {
-        name: "Channels is off for this project",
+        name: "Bring people and agents into one conversation",
         hidden: true,
       }),
     ).toBeDefined();
@@ -864,9 +864,14 @@ describe("Channels", () => {
     snapshot.grants = {};
     snapshot.viewer.canAdmin = true;
     mount();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Turn on Channels" }),
-    );
+    await screen.findByRole("heading", {
+      name: "Bring people and agents into one conversation",
+    });
+    expect(screen.getByText("Beta").closest("header")).not.toBeNull();
+    expect(
+      screen.getByText(/Channels lets people and agents collaborate/),
+    ).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Turn on Channels" }));
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith(target, "channels_admin", {
         enabled: true,
