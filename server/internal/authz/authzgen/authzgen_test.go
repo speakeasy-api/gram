@@ -57,3 +57,23 @@ func TestRender_RejectsNameCollisions(t *testing.T) {
 	_, err := Render(model)
 	require.ErrorContains(t, err, "both render as ScopeOrgReadX")
 }
+
+func TestRender_RejectsScopesThatAreNotIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	model := authz.Model
+	model.Types = append([]authz.ResourceType{}, authz.Model.Types...)
+	model.Types = append(model.Types, authz.ResourceType{
+		Kind:       "thing",
+		Parent:     "",
+		Category:   authz.ScopeCategoryOrg,
+		Match:      authz.MatchLoose,
+		Dimensions: nil,
+		Permissions: []authz.Permission{{
+			Action: "read-only", LegacyScope: "", Implies: nil, Exclusions: nil, Dimensions: nil, Source: authz.GrantSourceRoles,
+			Category: "", Label: "L", Description: "D.", Sensitivity: authz.SensitivityNone, Agent: authz.AgentUnsafe(),
+		}},
+	})
+	_, err := Render(model)
+	require.ErrorContains(t, err, `scope "thing:read-only" renders as "ScopeThingRead-only", which is not a Go identifier`)
+}

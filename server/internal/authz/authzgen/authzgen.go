@@ -6,6 +6,7 @@ package authzgen
 import (
 	"fmt"
 	"go/format"
+	"go/token"
 	"regexp"
 	"strings"
 
@@ -66,6 +67,9 @@ func renderScopeConstants(r authz.Registry) ([]byte, error) {
 	var dup error
 	line := func(scope authz.Scope, doc string) {
 		name := ScopeConstantName(scope)
+		if !token.IsIdentifier(name) && dup == nil {
+			dup = fmt.Errorf("scope %q renders as %q, which is not a Go identifier", scope, name)
+		}
 		if previous, ok := seen[name]; ok && dup == nil {
 			dup = fmt.Errorf("scopes %q and %q both render as %s", previous, scope, name)
 		}
