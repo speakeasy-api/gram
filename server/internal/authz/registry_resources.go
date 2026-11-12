@@ -21,7 +21,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(7), "organization read access"),
 					Dimensions:  nil,
@@ -34,7 +34,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "admin",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read", "device_agent_sync", "hooks_ingest"},
 					Exclusions:  Blocked(SafeSince(7), "organization admin access"),
 					Dimensions:  nil,
@@ -47,7 +47,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "device_agent_sync",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -59,10 +59,10 @@ var Model = Registry{
 					Agent:       SafeSince(2),
 				},
 				{
-					Action:     "hooks_ingest",
-					Scope:      "",
-					Implies:    nil,
-					Exclusions: nil,
+					Action:      "hooks_ingest",
+					LegacyScope: "",
+					Implies:     nil,
+					Exclusions:  nil,
 					// R6 (parked): the one org permission checked per project.
 					Dimensions:  []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
 					Source:      GrantSourceRoles,
@@ -75,6 +75,47 @@ var Model = Registry{
 			},
 		},
 		{
+			// Declared ahead of project so the Session category lists agent
+			// sessions before team memory, the order the catalogue has always
+			// had.
+			//
+			// No system role holds chat:read or chat:write. Everyone keeps
+			// their own sessions through owner matching in the chat handlers.
+			Kind:       "chat",
+			Parent:     "project",
+			Category:   ScopeCategorySession,
+			Match:      MatchLoose,
+			Dimensions: nil,
+			Permissions: []Permission{
+				{
+					Action:      "read",
+					LegacyScope: "",
+					Implies:     nil,
+					Exclusions:  nil,
+					Dimensions:  nil,
+					Source:      GrantSourceRoles,
+					Category:    "",
+					Label:       "View agent sessions",
+					Description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions and those of agents they own or edit.",
+					Sensitivity: SensitivityConversations,
+					Agent:       AgentUnsafe(),
+				},
+				{
+					Action:      "write",
+					LegacyScope: "",
+					Implies:     []Action{"read"},
+					Exclusions:  nil,
+					Dimensions:  nil,
+					Source:      GrantSourceRoles,
+					Category:    "",
+					Label:       "Manage agent sessions",
+					Description: "Rename, delete, and give feedback on other members' agent sessions, and read their transcripts. Everyone keeps their own sessions and those of agents they own or edit.",
+					Sensitivity: SensitivityConversations,
+					Agent:       AgentUnsafe(),
+				},
+			},
+		},
+		{
 			Kind:       "project",
 			Parent:     "org",
 			Category:   ScopeCategoryProject,
@@ -82,94 +123,11 @@ var Model = Registry{
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
-					Action:      "read",
-					Scope:       "",
-					Implies:     nil,
-					Exclusions:  Blocked(SafeSince(4), "project read access"),
-					Dimensions:  nil,
-					Source:      GrantSourceRoles,
-					Category:    "",
-					Label:       "View projects",
-					Description: "View projects and project-related resources.",
-					Sensitivity: SensitivityNone,
-					Agent:       SafeSince(1),
-				},
-				{
-					Action:      "write",
-					Scope:       "",
-					Implies:     []Action{"read"},
-					Exclusions:  Blocked(SafeSince(4), "project write access"),
-					Dimensions:  nil,
-					Source:      GrantSourceRoles,
-					Category:    "",
-					Label:       "Manage projects",
-					Description: "Create and modify projects and project-related resources.",
-					Sensitivity: SensitivityNone,
-					Agent:       SafeSince(1),
-				},
-				{
-					// R1 (parked): stored as plugin:write, checked on a project.
-					Action:      "plugin_write",
-					Scope:       ScopePluginWrite,
-					Implies:     nil,
-					Exclusions:  Blocked(AgentUnsafe(), "plugin write access"),
-					Dimensions:  nil,
-					Source:      GrantSourceRoles,
-					Category:    ScopeCategoryPlugin,
-					Label:       "Publish plugins",
-					Description: "Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.",
-					Sensitivity: SensitivityNone,
-					Agent:       AgentUnsafe(),
-				},
-				{
-					// R1 (parked): stored as log:read, checked on a project.
-					// Neither project:* nor org:admin implies it.
-					Action:      "log_read",
-					Scope:       ScopeLogRead,
-					Implies:     nil,
-					Exclusions:  nil,
-					Dimensions:  nil,
-					Source:      GrantSourceRoles,
-					Category:    ScopeCategoryLog,
-					Label:       "View tool logs",
-					Description: "View every member's tool-call logs and traces in the project, including tool arguments, results, and prompt text. Everyone keeps the logs of their own sessions and of agents they own. Not implied by project or organization admin access.",
-					Sensitivity: SensitivityToolLogs,
-					Agent:       AgentUnsafe(),
-				},
-				{
-					// R1 (parked): stored as memory:read, checked on a project.
-					Action:      "memory_read",
-					Scope:       ScopeMemoryRead,
-					Implies:     nil,
-					Exclusions:  nil,
-					Dimensions:  nil,
-					Source:      GrantSourceRoles,
-					Category:    ScopeCategorySession,
-					Label:       "Team memory",
-					Description: "Search and recall the project's team memory: masked session summaries, memos and digests from every member. The built-in Admin role holds it by default; other roles need an explicit grant.",
-					Sensitivity: SensitivityNone,
-					Agent:       AgentUnsafe(),
-				},
-				{
-					// R1 (parked): stored as memory:write, checked on a project.
-					Action:      "memory_write",
-					Scope:       ScopeMemoryWrite,
-					Implies:     []Action{"memory_read"},
-					Exclusions:  nil,
-					Dimensions:  nil,
-					Source:      GrantSourceRoles,
-					Category:    ScopeCategorySession,
-					Label:       "Team memos",
-					Description: "Save memos to the project's team memory, attributed to you.",
-					Sensitivity: SensitivityNone,
-					Agent:       AgentUnsafe(),
-				},
-				{
 					// R1 (parked): stored as channels:connect, checked on a project.
 					// The three Channels permissions are independent of each other and
 					// of every MCP permission.
 					Action:      "channels_connect",
-					Scope:       ScopeChannelsConnect,
+					LegacyScope: ScopeChannelsConnect,
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -183,7 +141,7 @@ var Model = Registry{
 				{
 					// R1 (parked): stored as channels:admin, checked on a project.
 					Action:      "channels_admin",
-					Scope:       ScopeChannelsAdmin,
+					LegacyScope: ScopeChannelsAdmin,
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -199,7 +157,7 @@ var Model = Registry{
 					// Not an Admin default: it discloses other members' private
 					// conversations and is granted explicitly.
 					Action:      "channels_read_all",
-					Scope:       ScopeChannelsReadAll,
+					LegacyScope: ScopeChannelsReadAll,
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -208,6 +166,89 @@ var Model = Registry{
 					Label:       "Read all Channels messages",
 					Description: "Read other members' private Channels conversations in the project.",
 					Sensitivity: SensitivityConversations,
+					Agent:       AgentUnsafe(),
+				},
+				{
+					Action:      "read",
+					LegacyScope: "",
+					Implies:     nil,
+					Exclusions:  Blocked(SafeSince(4), "project read access"),
+					Dimensions:  nil,
+					Source:      GrantSourceRoles,
+					Category:    "",
+					Label:       "View projects",
+					Description: "View projects and project-related resources.",
+					Sensitivity: SensitivityNone,
+					Agent:       SafeSince(1),
+				},
+				{
+					Action:      "write",
+					LegacyScope: "",
+					Implies:     []Action{"read"},
+					Exclusions:  Blocked(SafeSince(4), "project write access"),
+					Dimensions:  nil,
+					Source:      GrantSourceRoles,
+					Category:    "",
+					Label:       "Manage projects",
+					Description: "Create and modify projects and project-related resources.",
+					Sensitivity: SensitivityNone,
+					Agent:       SafeSince(1),
+				},
+				{
+					// R1 (parked): stored as plugin:write, checked on a project.
+					Action:      "plugin_write",
+					LegacyScope: ScopePluginWrite,
+					Implies:     nil,
+					Exclusions:  Blocked(AgentUnsafe(), "plugin write access"),
+					Dimensions:  nil,
+					Source:      GrantSourceRoles,
+					Category:    ScopeCategoryPlugin,
+					Label:       "Publish plugins",
+					Description: "Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.",
+					Sensitivity: SensitivityNone,
+					Agent:       AgentUnsafe(),
+				},
+				{
+					// R1 (parked): stored as log:read, checked on a project.
+					// Neither project:* nor org:admin implies it.
+					Action:      "log_read",
+					LegacyScope: ScopeLogRead,
+					Implies:     nil,
+					Exclusions:  nil,
+					Dimensions:  nil,
+					Source:      GrantSourceRoles,
+					Category:    ScopeCategoryLog,
+					Label:       "View tool logs",
+					Description: "View every member's tool-call logs and traces in the project, including tool arguments, results, and prompt text. Everyone keeps the logs of their own sessions and of agents they own. Not implied by project or organization admin access.",
+					Sensitivity: SensitivityToolLogs,
+					Agent:       AgentUnsafe(),
+				},
+				{
+					// R1 (parked): stored as memory:read, checked on a project.
+					Action:      "memory_read",
+					LegacyScope: ScopeMemoryRead,
+					Implies:     nil,
+					Exclusions:  nil,
+					Dimensions:  nil,
+					Source:      GrantSourceRoles,
+					Category:    ScopeCategorySession,
+					Label:       "Team memory",
+					Description: "Search and recall the project's team memory: masked session summaries, memos and digests from every member. The built-in Admin role holds it by default; other roles need an explicit grant.",
+					Sensitivity: SensitivityNone,
+					Agent:       AgentUnsafe(),
+				},
+				{
+					// R1 (parked): stored as memory:write, checked on a project.
+					Action:      "memory_write",
+					LegacyScope: ScopeMemoryWrite,
+					Implies:     []Action{"memory_read"},
+					Exclusions:  nil,
+					Dimensions:  nil,
+					Source:      GrantSourceRoles,
+					Category:    ScopeCategorySession,
+					Label:       "Team memos",
+					Description: "Save memos to the project's team memory, attributed to you.",
+					Sensitivity: SensitivityNone,
 					Agent:       AgentUnsafe(),
 				},
 			},
@@ -227,7 +268,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "MCP read access"),
 					Dimensions:  nil,
@@ -240,7 +281,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "MCP write access"),
 					Dimensions:  nil,
@@ -255,7 +296,7 @@ var Model = Registry{
 					// Standalone: viewing or managing a server is not
 					// permission to call its tools.
 					Action:      "connect",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "MCP connect access"),
 					Dimensions:  nil,
@@ -285,7 +326,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "auth",
-					Scope:       ScopeMCPAuth,
+					LegacyScope: ScopeMCPAuth,
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(5), "auth client use"),
 					Dimensions:  nil,
@@ -309,7 +350,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "environment read access"),
 					Dimensions:  nil,
@@ -322,7 +363,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "environment write access"),
 					Dimensions:  nil,
@@ -344,7 +385,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "skill read access"),
 					Dimensions:  nil,
@@ -357,7 +398,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "skill write access"),
 					Dimensions:  nil,
@@ -379,7 +420,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "assistant read access"),
 					Dimensions:  nil,
@@ -392,7 +433,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(SafeSince(4), "assistant write access"),
 					Dimensions:  nil,
@@ -416,9 +457,9 @@ var Model = Registry{
 			},
 			Permissions: []Permission{
 				{
-					Action:  "evaluate",
-					Scope:   "",
-					Implies: nil,
+					Action:      "evaluate",
+					LegacyScope: "",
+					Implies:     nil,
 					// An exemption, not a block: direct grants never cancel a
 					// bypass.
 					Exclusions:  []Exclusion{{Kind: ExclusionExemption, Action: "bypass", Agent: AgentUnsafe(), Subject: ""}},
@@ -432,7 +473,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "bypass",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -445,7 +486,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "block",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -459,43 +500,6 @@ var Model = Registry{
 			},
 		},
 		{
-			// No system role holds chat:read or chat:write. Everyone keeps
-			// their own sessions through owner matching in the chat handlers.
-			Kind:       "chat",
-			Parent:     "project",
-			Category:   ScopeCategorySession,
-			Match:      MatchLoose,
-			Dimensions: nil,
-			Permissions: []Permission{
-				{
-					Action:      "read",
-					Scope:       "",
-					Implies:     nil,
-					Exclusions:  nil,
-					Dimensions:  nil,
-					Source:      GrantSourceRoles,
-					Category:    "",
-					Label:       "View agent sessions",
-					Description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions and those of agents they own or edit.",
-					Sensitivity: SensitivityConversations,
-					Agent:       AgentUnsafe(),
-				},
-				{
-					Action:      "write",
-					Scope:       "",
-					Implies:     []Action{"read"},
-					Exclusions:  nil,
-					Dimensions:  nil,
-					Source:      GrantSourceRoles,
-					Category:    "",
-					Label:       "Manage agent sessions",
-					Description: "Rename, delete, and give feedback on other members' agent sessions, and read their transcripts. Everyone keeps their own sessions and those of agents they own or edit.",
-					Sensitivity: SensitivityConversations,
-					Agent:       AgentUnsafe(),
-				},
-			},
-		},
-		{
 			Kind:       "inference",
 			Parent:     "project",
 			Category:   ScopeCategoryInference,
@@ -504,7 +508,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "execute",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -526,7 +530,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -539,7 +543,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -552,7 +556,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "authorize",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -565,7 +569,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "transfer",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
 					Dimensions:  nil,
@@ -590,7 +594,7 @@ var Model = Registry{
 			Permissions: []Permission{
 				{
 					Action:      "read",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(AgentUnsafe(), "workload read access"),
 					Dimensions:  nil,
@@ -603,7 +607,7 @@ var Model = Registry{
 				},
 				{
 					Action:      "write",
-					Scope:       "",
+					LegacyScope: "",
 					Implies:     []Action{"read"},
 					Exclusions:  Blocked(AgentUnsafe(), "workload write access"),
 					Dimensions:  nil,

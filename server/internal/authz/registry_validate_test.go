@@ -14,7 +14,7 @@ func TestModel_IsValid(t *testing.T) {
 func validTestPermission(action Action) Permission {
 	return Permission{
 		Action:      action,
-		Scope:       "",
+		LegacyScope: "",
 		Implies:     nil,
 		Exclusions:  nil,
 		Dimensions:  nil,
@@ -52,7 +52,7 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 
 	withImplies := func(p Permission, implies ...Action) Permission { p.Implies = implies; return p }
 	withAgent := func(p Permission, a AgentEligibility) Permission { p.Agent = a; return p }
-	withScope := func(p Permission, s Scope) Permission { p.Scope = s; return p }
+	withScope := func(p Permission, s Scope) Permission { p.LegacyScope = s; return p }
 	withExclusions := func(p Permission, x ...Exclusion) Permission { p.Exclusions = x; return p }
 
 	cases := []struct {
@@ -170,6 +170,11 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			want: `thing: dimension "mode" lists "*" as a value`,
 		},
 		{
+			name:  "new permission with a legacy scope",
+			model: validTestRegistry(validTestType("thing", withScope(validTestPermission("read"), "other:read"))),
+			want:  `thing.read: legacy scope "other:read" is not one of the historical scopes`,
+		},
+		{
 			name:  "scope with more than one separator",
 			model: validTestRegistry(validTestType("thing", withScope(validTestPermission("read"), "thing:read:extra"))),
 			want:  `thing.read: scope "thing:read:extra" is not resource:action`,
@@ -270,6 +275,6 @@ func TestResourceType_Scopes(t *testing.T) {
 }
 
 func withTestScope(p Permission, s Scope) Permission {
-	p.Scope = s
+	p.LegacyScope = s
 	return p
 }

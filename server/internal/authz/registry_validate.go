@@ -15,8 +15,8 @@ func init() {
 
 // ScopeFor returns the stored scope of permission p on resource type t.
 func (t ResourceType) ScopeFor(p Permission) Scope {
-	if p.Scope != "" {
-		return p.Scope
+	if p.LegacyScope != "" {
+		return p.LegacyScope
 	}
 	return Scope(string(t.Kind) + ":" + string(p.Action))
 }
@@ -105,6 +105,9 @@ func (r Registry) Validate() error {
 			}
 			if _, dup := actions[p.Action]; dup {
 				fail("%s: action %q is declared twice", t.Kind, p.Action)
+			}
+			if p.LegacyScope != "" && !slices.Contains(legacyScopes, p.LegacyScope) {
+				fail("%s.%s: legacy scope %q is not one of the historical scopes; new permissions use kind:action", t.Kind, p.Action, p.LegacyScope)
 			}
 			actions[p.Action] = p
 		}
