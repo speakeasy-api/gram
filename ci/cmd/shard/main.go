@@ -29,8 +29,10 @@
 // reaches in one step: the packages the listed files belong to and the
 // packages importing one of those directly. The file holds one path per line,
 // relative to the module root. Paths named by -full-on, and files that do not
-// belong to a package, select the whole suite instead. -readers names the
-// packages whose tests read a file they do not import:
+// belong to a package, select the whole suite instead. -scope names the paths
+// the suite can depend on, so that files outside them (a changeset, another
+// product's sources) are ignored rather than counted as unknown. -readers
+// names the packages whose tests read a file they do not import:
 //
 //	git diff --name-only HEAD^1 HEAD > changed.txt
 //	go run ./ci/cmd/shard -i 1/2 -changed changed.txt -full-on go.mod,server/migrations/ ./server
@@ -117,6 +119,7 @@ func run(argv []string, stdout, stderr io.Writer) error {
 	isolateList := fs.String("isolate", "", "comma-separated import paths that each get a shard of their own, taking the last shards")
 	timingsPath := fs.String("timings", "", "timings file to weight packages by (default: the checked-in ci/cmd/shard/timings.txt)")
 	changedPath := fs.String("changed", "", "file listing changed paths relative to the module root; selects only the packages they belong to and those packages' direct importers")
+	scope := fs.String("scope", "", "comma-separated paths (a trailing slash matches a directory tree) the suite can depend on; changed files outside them are ignored (default: every path)")
 	fullOn := fs.String("full-on", "", "comma-separated paths (a trailing slash matches a directory tree) whose change selects every package")
 	readers := fs.String("readers", "", "comma-separated <file>=<package directory> pairs: a change to the file also selects that package")
 
@@ -157,7 +160,7 @@ func run(argv []string, stdout, stderr io.Writer) error {
 
 	measured := weigh(pkgs, timings)
 
-	chosen, err := selectPackages(pkgs, *changedPath, *fullOn, *readers, stderr)
+	chosen, err := selectPackages(pkgs, *changedPath, *scope, *fullOn, *readers, stderr)
 	if err != nil {
 		return err
 	}

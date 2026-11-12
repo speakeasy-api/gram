@@ -44,7 +44,7 @@ func hasGoIn(dirs ...string) func(string) bool {
 func TestAffected_SelectsTouchedPackagesAndDirectImporters(t *testing.T) {
 	t.Parallel()
 
-	got := affected(graphPackages(), testModule, []string{"store/store.go"}, nil, nil, hasGoIn())
+	got := affected(graphPackages(), testModule, []string{"store/store.go"}, nil, nil, nil, hasGoIn())
 
 	require.False(t, got.everything)
 	// api imports store directly. web only reaches it through api, and model
@@ -55,7 +55,7 @@ func TestAffected_SelectsTouchedPackagesAndDirectImporters(t *testing.T) {
 func TestAffected_CountsTestOnlyImports(t *testing.T) {
 	t.Parallel()
 
-	got := affected(graphPackages(), testModule, []string{"model/model_test.go"}, nil, nil, hasGoIn())
+	got := affected(graphPackages(), testModule, []string{"model/model_test.go"}, nil, nil, nil, hasGoIn())
 
 	require.Equal(t, []string{testModule + "/model", testModule + "/store", testModule + "/tools"}, importPaths(got.pkgs))
 }
@@ -66,7 +66,7 @@ func TestAffected_DeletedPackageStillSelectsImporters(t *testing.T) {
 	// "gone" has no test package any more, but api's sources named it.
 	pkgs := append(graphPackages(), pkg{ImportPath: testModule + "/user", Imports: []string{testModule + "/gone"}})
 
-	got := affected(pkgs, testModule, []string{"gone/gone.go"}, nil, nil, hasGoIn())
+	got := affected(pkgs, testModule, []string{"gone/gone.go"}, nil, nil, nil, hasGoIn())
 
 	require.Equal(t, []string{testModule + "/user"}, importPaths(got.pkgs))
 }
@@ -85,7 +85,7 @@ func TestAffected_NonGoFiles(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		got := affected(graphPackages(), testModule, []string{c.file}, nil, nil, hasGoIn("store", "web"))
+		got := affected(graphPackages(), testModule, []string{c.file}, nil, nil, nil, hasGoIn("store", "web"))
 		require.False(t, got.everything, c.name)
 		require.Equal(t, c.want, importPaths(got.pkgs), c.name)
 	}
@@ -105,7 +105,7 @@ func TestAffected_FallsBackToEverything(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		got := affected(graphPackages(), testModule, []string{"store/store.go", c.file}, []string{"go.mod", "db/migrations/"}, nil, hasGoIn("store"))
+		got := affected(graphPackages(), testModule, []string{"store/store.go", c.file}, nil, []string{"go.mod", "db/migrations/"}, nil, hasGoIn("store"))
 		require.True(t, got.everything, c.name)
 		require.ErrorContains(t, errString(got.reason), c.wantReason, c.name)
 		require.Len(t, got.pkgs, len(graphPackages()), c.name)
@@ -119,10 +119,40 @@ func (e errString) Error() string { return string(e) }
 func TestAffected_NothingTouched(t *testing.T) {
 	t.Parallel()
 
-	got := affected(graphPackages(), testModule, nil, nil, nil, hasGoIn())
+	got := affected(graphPackages(), testModule, nil, nil, nil, nil, hasGoIn())
 
 	require.False(t, got.everything)
 	require.Empty(t, got.pkgs)
+}
+
+func TestAffected_IgnoresFilesOutsideScope(t *testing.T) {
+	t.Parallel()
+
+	scope := []string{"go.mod", "store/", "api/", "db/"}
+	fullOn := []string{"go.mod", "db/migrations/"}
+
+	// A changeset and another product's sources say nothing about this suite.
+	// Without a scope they would count as files outside any package and select
+	// everything.
+	changed := []string{".changeset/quiet-owls-sing.md", "client/app/src/page.tsx", "store/store.go"}
+
+	got := affected(graphPackages(), testModule, changed, scope, fullOn, nil, hasGoIn("store"))
+	require.False(t, got.everything)
+	require.Equal(t, []string{testModule + "/store", testModule + "/api"}, importPaths(got.pkgs))
+
+	unscoped := affected(graphPackages(), testModule, changed, nil, fullOn, nil, hasGoIn("store"))
+	require.True(t, unscoped.everything)
+
+	// Only out-of-scope files: nothing to test.
+	got = affected(graphPackages(), testModule, changed[:2], scope, fullOn, nil, hasGoIn("store"))
+	require.False(t, got.everything)
+	require.Empty(t, got.pkgs)
+
+	// A full-on path selects everything whether or not the scope names it.
+	got = affected(graphPackages(), testModule, []string{"db/migrations/0002.sql"}, scope, fullOn, nil, hasGoIn())
+	require.True(t, got.everything)
+	got = affected(graphPackages(), testModule, []string{"tools.toml"}, scope, []string{"tools.toml"}, nil, hasGoIn())
+	require.True(t, got.everything)
 }
 
 func TestAffected_Readers(t *testing.T) {
@@ -131,7 +161,7 @@ func TestAffected_Readers(t *testing.T) {
 	readers, err := parseReaders("spec/api.yaml=web,spec/api.yaml=lone")
 	require.NoError(t, err)
 
-	got := affected(graphPackages(), testModule, []string{"spec/api.yaml"}, nil, readers, hasGoIn("spec"))
+	got := affected(graphPackages(), testModule, []string{"spec/api.yaml"}, nil, nil, readers, hasGoIn("spec"))
 
 	require.False(t, got.everything)
 	require.Equal(t, []string{testModule + "/web", testModule + "/lone"}, importPaths(got.pkgs))

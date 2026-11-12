@@ -116,17 +116,26 @@ func packageDir(file string, hasGo func(dir string) bool) (dir string, ok bool) 
 // are left out on purpose, which is what makes the selection small; a run
 // that needs certainty tests everything instead.
 //
+// scope lists the paths the suite can depend on at all; a changed file outside
+// it (another product's sources, a changeset, documentation) is ignored. An
+// empty scope covers everything.
+//
 // Tests can depend on a file without importing anything. fullOn lists the
 // files every package may read that way, such as a database schema: a change
 // to one selects the whole suite, as does a file that cannot be pinned to a
 // package. readers maps a file to the directories of the few packages whose
 // tests read it, which then count as touched.
-func affected(pkgs []pkg, mod string, changed []string, fullOn []string, readers map[string][]string, hasGo func(dir string) bool) selection {
+func affected(pkgs []pkg, mod string, changed []string, scope []string, fullOn []string, readers map[string][]string, hasGo func(dir string) bool) selection {
 	touched := map[string]bool{}
 
 	for _, file := range changed {
+		// Checked before the scope: a path listed here matters wherever it is.
 		if matchesAny(file, fullOn) {
 			return selection{pkgs: pkgs, everything: true, reason: file + " affects every package"}
+		}
+
+		if len(scope) > 0 && !matchesAny(file, scope) {
+			continue
 		}
 
 		for _, dir := range readers[file] {
@@ -169,7 +178,7 @@ func dirHasGo(root string) func(dir string) bool {
 
 // selectPackages applies the -changed and -full-on flags to pkgs. Without a
 // changed files list every package is selected.
-func selectPackages(pkgs []pkg, changedPath string, fullOn string, readersSpec string, stderr io.Writer) (selection, error) {
+func selectPackages(pkgs []pkg, changedPath string, scope string, fullOn string, readersSpec string, stderr io.Writer) (selection, error) {
 	if changedPath == "" {
 		return selection{pkgs: pkgs, everything: true, reason: "no changed files list was given"}, nil
 	}
@@ -189,12 +198,17 @@ func selectPackages(pkgs []pkg, changedPath string, fullOn string, readersSpec s
 		entries = strings.Split(fullOn, ",")
 	}
 
+	var scoped []string
+	if scope != "" {
+		scoped = strings.Split(scope, ",")
+	}
+
 	readers, err := parseReaders(readersSpec)
 	if err != nil {
 		return selection{}, err
 	}
 
-	return affected(pkgs, mod.Path, changed, entries, readers, dirHasGo(mod.Dir)), nil
+	return affected(pkgs, mod.Path, changed, scoped, entries, readers, dirHasGo(mod.Dir)), nil
 }
 
 // parseReaders reads a -readers value: comma-separated <file>=<package
@@ -267,6 +281,7 @@ func runPlan(argv []string, stdout, stderr io.Writer) error {
 	tags := fs.String("tags", "", "comma-separated build tags to pass to 'go list'")
 	timingsPath := fs.String("timings", "", "timings file to weight packages by (default: the checked-in ci/cmd/shard/timings.txt)")
 	changedPath := fs.String("changed", "", "file listing changed paths relative to the module root; selects only the packages they belong to and those packages' direct importers")
+	scope := fs.String("scope", "", "comma-separated paths (a trailing slash matches a directory tree) the suite can depend on; changed files outside them are ignored (default: every path)")
 	fullOn := fs.String("full-on", "", "comma-separated paths (a trailing slash matches a directory tree) whose change selects every package")
 	readers := fs.String("readers", "", "comma-separated <file>=<package directory> pairs: a change to the file also selects that package")
 
@@ -306,7 +321,7 @@ func runPlan(argv []string, stdout, stderr io.Writer) error {
 
 	weigh(pkgs, timings)
 
-	chosen, err := selectPackages(pkgs, *changedPath, *fullOn, *readers, stderr)
+	chosen, err := selectPackages(pkgs, *changedPath, *scope, *fullOn, *readers, stderr)
 	if err != nil {
 		return err
 	}

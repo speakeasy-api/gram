@@ -1961,8 +1961,10 @@ jobs:
         run: |
           set -euo pipefail
           # HEAD is the pull request merge commit; its first parent is the base.
+          # --no-renames lists a moved file under both paths, so the package
+          # it left is selected too.
           git fetch --quiet --depth=2 origin "$GITHUB_SHA"
-          git diff --name-only HEAD^1 HEAD > "${RUNNER_TEMP}/changed-files.txt"
+          git diff --name-only --no-renames HEAD^1 HEAD > "${RUNNER_TEMP}/changed-files.txt"
           echo "arg=--shard-changed=${RUNNER_TEMP}/changed-files.txt" >> "$GITHUB_OUTPUT"
 
       - name: Plan
@@ -2020,7 +2022,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --quiet --depth=2 origin "$GITHUB_SHA"
-          git diff --name-only HEAD^1 HEAD > "${RUNNER_TEMP}/changed-files.txt"
+          git diff --name-only --no-renames HEAD^1 HEAD > "${RUNNER_TEMP}/changed-files.txt"
           echo "arg=--shard-changed=${RUNNER_TEMP}/changed-files.txt" >> "$GITHUB_OUTPUT"
 
       - name: Install discovery wire-test dependencies on its shard

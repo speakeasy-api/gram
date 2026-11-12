@@ -103,8 +103,18 @@ selection_readers=(
 
 selection=()
 if [ -n "$shard_changed" ]; then
+  # The paths CI runs this suite for (.github/filters.yaml). A changed file
+  # outside them, such as a changeset or dashboard source, is ignored instead
+  # of counting as a file no package owns. "dir/**" becomes "dir/".
+  selection_scope=$(yq -r '.server[]' ../.github/filters.yaml | sed 's|/\*\*$|/|' | paste -sd, -)
+  if [ -z "$selection_scope" ]; then
+    echo "No server paths found in .github/filters.yaml" >&2
+    exit 1
+  fi
+
   selection=(
     -changed "$shard_changed"
+    -scope "$selection_scope"
     -full-on "$(IFS=,; echo "${selection_full_on[*]}")"
     -readers "$(IFS=,; echo "${selection_readers[*]}")"
   )
