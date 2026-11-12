@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -168,7 +169,7 @@ func (r *Runner) execute(ctx context.Context, client openrouter.CompletionClient
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid run config: %w", err)
 	}
-	target, err := r.target(ctx, run.OrganizationID)
+	target, stamp, err := r.target(ctx, run.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -190,38 +191,84 @@ func (r *Runner) execute(ctx context.Context, client openrouter.CompletionClient
 		return nil, fmt.Errorf("score arms: %w", err)
 	}
 	report.Preparation = &prep
+	if err := r.checkSeedUnchanged(ctx, run.OrganizationID, stamp); err != nil {
+		return nil, err
+	}
 	return report, nil
 }
 
-// target finds the corpus the demo seed wrote into the organization: the
-// seed's two eval projects, and the corpus rebuilt at the seed's anchor so
-// answer keys and chat IDs match what is stored.
-func (r *Runner) target(ctx context.Context, organizationID string) (bench.Target, error) {
+// errReseeded fails a run that overlapped a demo reseed.
+var errReseeded = errors.New("the demo org was reseeded while the run was in progress, which removed the memory it prepared; start it again")
+
+// seedStamp is when the demo seed wrote each eval project. The seed deletes
+// and re-creates the projects under the same IDs with a new created_at, and
+// the summaries and digests a run prepared are deleted with them.
+type seedStamp map[memoryeval.ProjectKey]time.Time
+
+// checkSeedUnchanged fails a run whose eval projects were re-created or
+// removed since it loaded them, so a run that overlapped a reseed is never
+// stored as succeeded with its memory arm scored against memory that is gone.
+func (r *Runner) checkSeedUnchanged(ctx context.Context, organizationID string, stamp seedStamp) error {
 	spec, ok := seededSpec(organizationID)
 	if !ok {
-		return bench.Target{}, fmt.Errorf("organization %s has no seeded memory eval corpus", organizationID)
+		return fmt.Errorf("organization %s has no seeded memory eval corpus", organizationID)
 	}
-	projects := make(map[memoryeval.ProjectKey]bench.Project, 2)
-	var anchorProject projectsrepo.Project
+	projects, err := r.loadProjects(ctx, spec, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return errReseeded
+	case err != nil:
+		return err
+	}
+	for key, project := range projects {
+		if !project.CreatedAt.Time.Equal(stamp[key]) {
+			return errReseeded
+		}
+	}
+	return nil
+}
+
+// loadProjects reads the seed's two eval projects.
+func (r *Runner) loadProjects(ctx context.Context, spec demoseed.Spec, organizationID string) (map[memoryeval.ProjectKey]projectsrepo.Project, error) {
+	projects := make(map[memoryeval.ProjectKey]projectsrepo.Project, 2)
 	for _, key := range []memoryeval.ProjectKey{memoryeval.ProjectMain, memoryeval.ProjectOther} {
 		id, _ := demoseed.MemoryEvalProjectID(spec, key)
 		project, err := projectsrepo.New(r.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: id, OrganizationID: organizationID})
 		if err != nil {
-			return bench.Target{}, fmt.Errorf("load memory eval project %s (reseed the demo org if it is missing): %w", key, err)
+			return nil, fmt.Errorf("load memory eval project %s (reseed the demo org if it is missing): %w", key, err)
 		}
-		projects[key] = bench.Project{ID: project.ID, Slug: project.Slug}
-		if key == memoryeval.ProjectMain {
-			anchorProject = project
-		}
+		projects[key] = project
 	}
-	corpus := demoseed.MemoryEvalCorpus(spec, demoseed.MemoryEvalAnchor(anchorProject.CreatedAt.Time))
+	return projects, nil
+}
+
+// target finds the corpus the demo seed wrote into the organization: the
+// seed's two eval projects, and the corpus rebuilt at the seed's anchor so
+// answer keys and chat IDs match what is stored. The stamp lets the run check
+// before it stores its report that no reseed replaced those projects.
+func (r *Runner) target(ctx context.Context, organizationID string) (bench.Target, seedStamp, error) {
+	spec, ok := seededSpec(organizationID)
+	if !ok {
+		return bench.Target{}, nil, fmt.Errorf("organization %s has no seeded memory eval corpus", organizationID)
+	}
+	loaded, err := r.loadProjects(ctx, spec, organizationID)
+	if err != nil {
+		return bench.Target{}, nil, err
+	}
+	projects := make(map[memoryeval.ProjectKey]bench.Project, len(loaded))
+	stamp := make(seedStamp, len(loaded))
+	for key, project := range loaded {
+		projects[key] = bench.Project{ID: project.ID, Slug: project.Slug}
+		stamp[key] = project.CreatedAt.Time
+	}
+	corpus := demoseed.MemoryEvalCorpus(spec, demoseed.MemoryEvalAnchor(loaded[memoryeval.ProjectMain].CreatedAt.Time))
 	return bench.Target{
 		DB:             r.db,
 		Corpus:         corpus,
 		OrganizationID: organizationID,
 		Projects:       projects,
 		UserID:         func(handle string) string { return spec.UserPrefix + handle },
-	}, nil
+	}, stamp, nil
 }
 
 // seedSpecs are the seed tenants that can hold the eval corpus.
