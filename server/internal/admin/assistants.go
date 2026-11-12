@@ -254,7 +254,7 @@ func (s *Service) MigrateOrganizationAssistantsToKit(ctx context.Context, p *gen
 }
 
 // MigrateAssistantsToKitTx moves the selected assistants of organizationID, or
-// all of its live assistants when assistantIDs is empty, to the Kit runtime
+// all of its live assistants when assistantIDs is nil, to the Kit runtime
 // inside tx. Each assistant runs under its own savepoint, so one that fails is
 // reported and rolled back without the others. Assistant runtime locks are held
 // until tx ends. The admin app and Admin MCP share it.
@@ -269,7 +269,7 @@ func MigrateAssistantsToKitTx(ctx context.Context, tx pgx.Tx, logger *slog.Logge
 		return nil, err
 	}
 	selected := live
-	if len(assistantIDs) > 0 {
+	if assistantIDs != nil {
 		byID := make(map[string]*gen.AdminOrganizationAssistant, len(live))
 		for _, assistant := range live {
 			byID[assistant.ID] = assistant

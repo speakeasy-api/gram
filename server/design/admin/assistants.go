@@ -145,7 +145,7 @@ func assistantMethods() {
 			Required("organization_id")
 
 			Attribute("organization_id", String, "The organization ID.")
-			Attribute("assistant_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Assistants to move. Omit to move every live assistant of the organization.")
+			Attribute("assistant_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Assistants to move. Omit to move every live assistant of the organization; an empty list moves none.")
 
 			// Goa's OpenAPI emitter deduplicates request bodies by shape.
 			Meta("openapi:typename", "MigrateOrganizationAssistantsToKitRequestBody")

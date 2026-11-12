@@ -228,6 +228,7 @@ export function Assistants({ org }: { org: AdminOrganization }): JSX.Element {
   const [confirm, confirmDialog] = useConfirmDialog();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const kitButtonRef = useRef<HTMLButtonElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
   const [lastRun, setLastRun] =
     useState<AdminAssistantIdentityMigrationRun | null>(null);
   const migrate = useMutation({
@@ -293,6 +294,8 @@ export function Assistants({ org }: { org: AdminOrganization }): JSX.Element {
       toast.success("Kit runtime migration ran", {
         description: `${result.switched} moved to Kit`,
       });
+      // The run can remove the focused row button or disable the bulk one.
+      tableRef.current?.focus();
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -383,7 +386,12 @@ export function Assistants({ org }: { org: AdminOrganization }): JSX.Element {
       {lastKitRun?.organization_id === org.id && (
         <KitMigrationSummary run={lastKitRun} />
       )}
-      <div className="overflow-clip rounded-lg border">
+      <div
+        ref={tableRef}
+        tabIndex={-1}
+        aria-label="Assistants"
+        className="overflow-clip rounded-lg border focus-visible:outline-none"
+      >
         <Table cellPadding="condensed">
           <Table.Header table={table} />
           <Table.Body>

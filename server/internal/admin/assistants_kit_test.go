@@ -26,6 +26,7 @@ func (o *assistantMigrationOrg) identifiedAssistant(identities *assistantidentit
 	id := o.legacyAssistant(name, owner)
 	tx, err := o.db.Begin(o.t.Context()) //nolint:glint // notestingrawsql: transaction boundary only; provisioning uses generated SQLc methods.
 	require.NoError(o.t, err)
+	defer func() { _ = tx.Rollback(o.t.Context()) }()
 	require.NoError(o.t, identities.Provision(o.t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: o.id, ProjectID: o.project, AssistantID: id, ActorUserID: owner, Staff: nil}))
 	require.NoError(o.t, tx.Commit(o.t.Context()))
 	return id
@@ -97,7 +98,7 @@ func TestMigrateOrganizationAssistantsToKit(t *testing.T) {
 	t.Parallel()
 	svc, db := newAssistantMigrationService(t)
 	ctx := contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{SessionID: "staff-session", OIDCSubject: "staff-subject", Email: "staff@example.invalid", Name: "Staff Member", HD: testAdminHD})
-	past, future := time.Now().Add(-time.Hour), time.Now().Add(time.Hour)
+	past, recent, future := time.Now().Add(-time.Hour), time.Now().Add(-time.Minute), time.Now().Add(time.Hour)
 
 	org := newAssistantMigrationOrg(t, db, "assistant-kit-migration")
 	org.sharedIssuer()
@@ -108,6 +109,8 @@ func TestMigrateOrganizationAssistantsToKit(t *testing.T) {
 	fresh := org.identifiedAssistant(svc.assistantIdentities, "Fresh", owner)
 	warm := org.identifiedAssistant(svc.assistantIdentities, "Warm", owner)
 	warmRuntime := org.runtime(warm, "active", future)
+	expiring := org.identifiedAssistant(svc.assistantIdentities, "Expiring", owner)
+	org.runtime(expiring, "active", recent)
 	working := org.identifiedAssistant(svc.assistantIdentities, "Working", owner)
 	org.pendingEvent(working)
 	legacy := org.legacyAssistant("Legacy", owner)
@@ -119,14 +122,15 @@ func TestMigrateOrganizationAssistantsToKit(t *testing.T) {
 	first, err := svc.MigrateOrganizationAssistantsToKit(ctx, &gen.MigrateOrganizationAssistantsToKitPayload{OrganizationID: org.id})
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{
-		idle.String():    string(assistants.KitSwitchSwitched),
-		fresh.String():   string(assistants.KitSwitchSwitched),
-		warm.String():    string(assistants.KitSwitchBusy),
-		working.String(): string(assistants.KitSwitchBusy),
-		legacy.String():  string(assistants.KitSwitchNeedsIdentity),
+		idle.String():     string(assistants.KitSwitchSwitched),
+		fresh.String():    string(assistants.KitSwitchSwitched),
+		warm.String():     string(assistants.KitSwitchBusy),
+		expiring.String(): string(assistants.KitSwitchBusy),
+		working.String():  string(assistants.KitSwitchBusy),
+		legacy.String():   string(assistants.KitSwitchNeedsIdentity),
 	}, kitOutcomes(first))
 	require.Equal(t, int64(2), first.Switched)
-	require.Equal(t, int64(2), first.Busy)
+	require.Equal(t, int64(3), first.Busy)
 	require.Equal(t, int64(1), first.NeedsIdentity)
 	require.Zero(t, first.Failed)
 
@@ -157,6 +161,11 @@ func TestMigrateOrganizationAssistantsToKit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{idle.String(): string(assistants.KitSwitchAlreadyKit), fresh.String(): string(assistants.KitSwitchAlreadyKit)}, kitOutcomes(again))
 	require.Equal(t, int64(2), again.AlreadyKit)
+
+	none, err := svc.MigrateOrganizationAssistantsToKit(ctx, &gen.MigrateOrganizationAssistantsToKitPayload{OrganizationID: org.id, AssistantIds: []string{}})
+	require.NoError(t, err)
+	require.Empty(t, none.Results, "an empty selection moves nothing")
+	require.Equal(t, int16(2), org.runtimeVersion(warm))
 
 	require.Equal(t, int16(2), other.runtimeVersion(untouched), "another organization is untouched")
 

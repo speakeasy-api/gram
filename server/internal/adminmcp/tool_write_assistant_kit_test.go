@@ -24,6 +24,7 @@ func seedKitReadyAssistant(t *testing.T, f writeFixture, organizationID string) 
 	require.NoError(t, err)
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: transaction boundary only; provisioning uses generated SQLc methods.
 	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(t.Context()) }()
 	require.NoError(t, assistantidentity.New("https://platform.example.invalid", audit.NewLogger()).Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: project, AssistantID: assistant, ActorUserID: row.CreatedByUserID.String, Staff: nil}))
 	require.NoError(t, tx.Commit(t.Context()))
 	_, err = usersessionsrepo.New(f.db).CreateUserSessionIssuer(t.Context(), usersessionsrepo.CreateUserSessionIssuerParams{
@@ -43,7 +44,10 @@ func TestAssistantKitMigrationApplies(t *testing.T) {
 	project, assistant := seedKitReadyAssistant(t, f, f.orgA)
 	foreignProject, foreign := seedKitReadyAssistant(t, f, f.orgB)
 
-	receipt, err := writer.apply(ctx, MigrateAssistantsToKitInput{OrganizationID: f.orgA, AssistantIDs: nil})
+	_, err := writer.apply(ctx, MigrateAssistantsToKitInput{OrganizationID: f.orgA, AssistantIDs: nil})
+	require.ErrorContains(t, err, "assistant_ids must name at least one assistant")
+
+	receipt, err := writer.apply(ctx, MigrateAssistantsToKitInput{OrganizationID: f.orgA, AssistantIDs: []string{assistant.String()}})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), receipt.Switched)
 	require.Equal(t, []assistantKitMigrationResult{{AssistantID: assistant.String(), ProjectID: project.String(), Outcome: "switched"}}, receipt.Results)
@@ -66,6 +70,6 @@ func TestAssistantKitMigrationApplies(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int16(2), foreignRow.RuntimeVersion)
 
-	_, err = writer.apply(ctx, MigrateAssistantsToKitInput{OrganizationID: "org_missing_" + uuid.NewString(), AssistantIDs: nil})
+	_, err = writer.apply(ctx, MigrateAssistantsToKitInput{OrganizationID: "org_missing_" + uuid.NewString(), AssistantIDs: []string{assistant.String()}})
 	require.ErrorContains(t, err, "no organization with that ID")
 }

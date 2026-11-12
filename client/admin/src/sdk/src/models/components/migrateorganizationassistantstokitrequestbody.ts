@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type MigrateOrganizationAssistantsToKitRequestBody = {
   /**
-   * Assistants to move. Omit to move every live assistant of the organization.
+   * Assistants to move. Omit to move every live assistant of the organization; an empty list moves none.
    */
   assistantIds?: Array<string> | undefined;
   /**

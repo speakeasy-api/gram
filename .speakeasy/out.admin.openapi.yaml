@@ -14045,7 +14045,7 @@ components:
           items:
             type: string
             format: uuid
-          description: Assistants to move. Omit to move every live assistant of the organization.
+          description: Assistants to move. Omit to move every live assistant of the organization; an empty list moves none.
         organization_id:
           type: string
           description: The organization ID.

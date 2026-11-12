@@ -38,7 +38,8 @@ const (
 // StaffSwitchToKit selects the Kit runtime for one assistant inside tx without
 // contacting any runtime backend. It switches only an assistant whose previous
 // runtimes cannot be mid-turn: each live runtime is stopped, failed, or active
-// past its warm window. The switch marks those runtimes switch_retiring, and the
+// past its warm window by more than the grace its thread workflow has to expire
+// it. The switch marks those runtimes switch_retiring, and the
 // runtime janitor stops their resources. The caller commits tx and audits a
 // KitSwitchSwitched outcome.
 func StaffSwitchToKit(ctx context.Context, tx pgx.Tx, organizationID string, projectID, assistantID uuid.UUID, now time.Time) (KitSwitchOutcome, error) {
@@ -96,10 +97,11 @@ func StaffSwitchToKit(ctx context.Context, tx pgx.Tx, organizationID string, pro
 		return "", fmt.Errorf("load runtimes for switching: %w", err)
 	}
 	for _, runtime := range runtimes {
-		// Without a backend to ask, only an expired warm window shows that an
-		// active legacy runtime has finished turn-end persistence and compaction.
+		// Without a backend to ask, only a warm window that expired before the
+		// idle sweep grace shows that an active legacy runtime has finished
+		// turn-end persistence and compaction and is not being expired.
 		idle := runtime.State == runtimeStateStopped || runtime.State == runtimeStateFailed ||
-			(runtime.State == runtimeStateActive && runtime.WarmUntil.Valid && runtime.WarmUntil.Time.Before(now))
+			(runtime.State == runtimeStateActive && runtime.WarmUntil.Valid && runtime.WarmUntil.Time.Before(now.Add(-runtimeIdleSweepGrace)))
 		if runtime.RuntimeVersion == 3 || !idle {
 			return KitSwitchBusy, nil
 		}

@@ -3440,7 +3440,8 @@ type MigrateOrganizationAssistantsToKitPayload struct {
 	AdminSessionToken *string
 	// The organization ID.
 	OrganizationID string
-	// Assistants to move. Omit to move every live assistant of the organization.
+	// Assistants to move. Omit to move every live assistant of the organization;
+	// an empty list moves none.
 	AssistantIds []string
 }
 

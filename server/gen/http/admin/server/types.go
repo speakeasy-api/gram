@@ -735,7 +735,8 @@ type MigrateOrganizationAssistantIdentitiesRequestBody struct {
 type MigrateOrganizationAssistantsToKitRequestBody struct {
 	// The organization ID.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// Assistants to move. Omit to move every live assistant of the organization.
+	// Assistants to move. Omit to move every live assistant of the organization;
+	// an empty list moves none.
 	AssistantIds []string `form:"assistant_ids,omitempty" json:"assistant_ids,omitempty" xml:"assistant_ids,omitempty"`
 }
 

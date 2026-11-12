@@ -17,12 +17,13 @@ import (
 
 const assistantKitMigrationSideEffects = "Each switched assistant runs its next turns on the Kit runtime, and its previous runtimes are retired and stopped by the runtime janitor within the hour. Only an assistant with a usable dedicated agent, a shared user-session issuer in its project, no work in flight, and no runtime inside its warm window is switched; the others are left unchanged and reported as needs_identity, ineligible, or busy. The customer's audit log shows each switch as made by the Speakeasy team. Safe to run again."
 
-// MigrateAssistantsToKitInput selects one exact organization and, optionally,
-// some of its assistants.
+// MigrateAssistantsToKitInput selects exact assistants of one exact
+// organization. The selection is explicit, so a write never reaches assistants
+// the listing did not show.
 type MigrateAssistantsToKitInput struct {
 	// OrganizationID is a canonical ID, never a name or slug.
 	OrganizationID string   `json:"organization_id" jsonschema:"Exact canonical organization ID from find_organizations, not a slug"`
-	AssistantIDs   []string `json:"assistant_ids,omitempty" jsonschema:"Exact assistant IDs from list_organization_assistants. Omit to move every live assistant of the organization"`
+	AssistantIDs   []string `json:"assistant_ids" jsonschema:"Exact assistant IDs from list_organization_assistants that the user reviewed"`
 }
 
 type assistantKitMigrationResult struct {
@@ -61,6 +62,9 @@ func (w *assistantKitMigrationWriter) apply(ctx context.Context, input MigrateAs
 	if err := checkWriteTarget(input.OrganizationID); err != nil {
 		return assistantKitMigrationReceipt{}, err
 	}
+	if len(input.AssistantIDs) == 0 {
+		return assistantKitMigrationReceipt{}, errors.New("assistant_ids must name at least one assistant from list_organization_assistants")
+	}
 	return runWrite(ctx, w.runner, authority, writeTarget{OrganizationID: input.OrganizationID}, func(ctx context.Context, tx pgx.Tx) (assistantKitMigrationReceipt, error) {
 		ctx, actor, displayName := staffMutation(ctx, authority)
 		run, err := admin.MigrateAssistantsToKitTx(ctx, tx, w.runner.logger, w.audit, input.OrganizationID, input.AssistantIDs, &assistantidentity.StaffActor{Principal: actor, DisplayName: displayName}, w.now())
@@ -84,5 +88,5 @@ func (w *assistantKitMigrationWriter) apply(ctx context.Context, input MigrateAs
 }
 
 func (w *assistantKitMigrationWriter) register(server *mcp.Server) {
-	addWriteTool(server, &mcp.Tool{Name: string(OperationMigrateAssistantsToKit), Title: "Migrate Organization Assistants to Kit Runtime", Description: "Move assistants of one exact canonical organization ID from the default runtime to the Kit runtime. " + assistantKitMigrationSideEffects + " Read list_organization_assistants first and show the user which assistants would change."}, w.apply)
+	addWriteTool(server, &mcp.Tool{Name: string(OperationMigrateAssistantsToKit), Title: "Migrate Organization Assistants to Kit Runtime", Description: "Move the listed assistants of one exact canonical organization ID from the default runtime to the Kit runtime. " + assistantKitMigrationSideEffects + " Read list_organization_assistants first and show the user which assistants would change."}, w.apply)
 }
