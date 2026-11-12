@@ -26,7 +26,6 @@ func testDeviceScope(t *testing.T, ctx context.Context) deviceMCPListScope {
 		ProjectID: authCtx.ProjectID.String(),
 		UserID:    authCtx.UserID,
 		DeviceID:  "device-" + uuid.NewString(),
-		Hostname:  "host-" + uuid.NewString(),
 		Adapter:   "claude",
 		Cwd:       "/work/app",
 	}
@@ -65,12 +64,10 @@ func TestDeviceMCPList_ExpiresAfterADay(t *testing.T) {
 
 	ti.service.cacheDeviceMCPList(ctx, scope, []MCPServerEntry{testMCPEntry("linear")})
 
-	for _, identity := range scope.identities() {
-		ttl, err := ti.redisClient.TTL(ctx, deviceMCPListCacheKey(scope, identity)).Result()
-		require.NoError(t, err)
-		require.LessOrEqual(t, ttl, deviceMCPListTTL)
-		require.Greater(t, ttl, deviceMCPListTTL-time.Minute)
-	}
+	ttl, err := ti.redisClient.TTL(ctx, deviceMCPListCacheKey(scope)).Result()
+	require.NoError(t, err)
+	require.LessOrEqual(t, ttl, deviceMCPListTTL)
+	require.Greater(t, ttl, deviceMCPListTTL-time.Minute)
 	require.Equal(t, 24*time.Hour, deviceMCPListTTL)
 }
 
@@ -96,16 +93,14 @@ func TestDeviceMCPList_ExpiredCopyIsNotRead(t *testing.T) {
 	_, found := ti.service.getDeviceMCPList(ctx, scope)
 	require.True(t, found, "the copy is readable before it expires")
 
-	// Expire every key the copy was stored under, as its TTL would.
-	for _, identity := range scope.identities() {
-		key := deviceMCPListCacheKey(scope, identity)
-		require.NoError(t, ti.redisClient.PExpire(ctx, key, time.Millisecond).Err())
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			exists, err := ti.redisClient.Exists(ctx, key).Result()
-			assert.NoError(c, err)
-			assert.Zero(c, exists)
-		}, 5*time.Second, 10*time.Millisecond)
-	}
+	// Expire the copy, as its TTL would.
+	key := deviceMCPListCacheKey(scope)
+	require.NoError(t, ti.redisClient.PExpire(ctx, key, time.Millisecond).Err())
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		exists, err := ti.redisClient.Exists(ctx, key).Result()
+		assert.NoError(c, err)
+		assert.Zero(c, exists)
+	}, 5*time.Second, 10*time.Millisecond)
 
 	_, found = ti.service.getDeviceMCPList(ctx, scope)
 	require.False(t, found)
@@ -141,19 +136,17 @@ func TestClaudeMCPListSnapshot_DeviceCopyNeedsStoredSnapshot(t *testing.T) {
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
 			require.NotNil(t, authCtx.Email)
+			sessionID := uuid.NewString()
+			seedSessionDeviceID(t, ctx, ti, sessionID, "device-"+uuid.NewString())
 			if sessionWriteFails {
 				ti.service.cache = sessionMCPListSetFailingCache{Cache: ti.service.cache}
 			}
-
-			sessionID := uuid.NewString()
 			userEmail := *authCtx.Email
-			hostname := "dev-host-" + uuid.NewString()
 			cwd := "/work/app"
 			payload := &gen.ClaudePayload{
 				HookEventName: "SessionStart",
 				SessionID:     &sessionID,
 				UserEmail:     &userEmail,
-				HookHostname:  &hostname,
 				Cwd:           &cwd,
 				AdditionalData: map[string]any{
 					"mcp_inventory_claude_code": "linear: npx linear-mcp - connected",
@@ -164,29 +157,25 @@ func TestClaudeMCPListSnapshot_DeviceCopyNeedsStoredSnapshot(t *testing.T) {
 			metadata, err := ti.service.resolveClaudeSessionMetadata(ctx, sessionID, userEmail)
 			require.NoError(t, err)
 			require.NotEmpty(t, metadata.UserID)
+			require.NotEmpty(t, metadata.DeviceID)
 			_, found := ti.service.getDeviceMCPList(ctx, claudeDeviceMCPListScope(metadata, payload))
 			require.Equal(t, !sessionWriteFails, found)
 		})
 	}
 }
 
-// A new session's first hook arrives before its OTEL stream, so a copy written
-// with a device id must still be found by hostname alone, and the reverse.
-func TestDeviceMCPList_FoundByEitherDeviceIdentity(t *testing.T) {
+// Without a device id there is no copy to read: the hostname is not a device
+// identity, so a session whose OTEL stream has not reported one yet misses.
+func TestDeviceMCPList_NeedsDeviceID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	scope := testDeviceScope(t, ctx)
 	ti.service.cacheDeviceMCPList(ctx, scope, []MCPServerEntry{testMCPEntry("linear")})
 
-	byHost := scope
-	byHost.DeviceID = ""
-	_, ok := ti.service.getDeviceMCPList(ctx, byHost)
-	require.True(t, ok)
-
-	byDevice := scope
-	byDevice.Hostname = ""
-	_, ok = ti.service.getDeviceMCPList(ctx, byDevice)
-	require.True(t, ok)
+	withoutDevice := scope
+	withoutDevice.DeviceID = ""
+	_, ok := ti.service.getDeviceMCPList(ctx, withoutDevice)
+	require.False(t, ok)
 }
 
 func TestDeviceMCPList_Isolation(t *testing.T) {
@@ -197,7 +186,7 @@ func TestDeviceMCPList_Isolation(t *testing.T) {
 		mutate func(*deviceMCPListScope)
 	}{
 		{name: "another user", mutate: func(s *deviceMCPListScope) { s.UserID = uuid.NewString() }},
-		{name: "another device", mutate: func(s *deviceMCPListScope) { s.DeviceID, s.Hostname = "device-other", "host-other" }},
+		{name: "another device", mutate: func(s *deviceMCPListScope) { s.DeviceID = "device-other" }},
 		{name: "another adapter", mutate: func(s *deviceMCPListScope) { s.Adapter = "codex" }},
 		{name: "another working directory", mutate: func(s *deviceMCPListScope) { s.Cwd = "/work/other" }},
 		{name: "another project", mutate: func(s *deviceMCPListScope) { s.ProjectID = uuid.NewString() }},
@@ -223,10 +212,8 @@ func TestDeviceMCPList_RejectsCopyOfAnotherUser(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	scope := testDeviceScope(t, ctx)
-	scope.Hostname = ""
 
-	identity := scope.identities()[0]
-	require.NoError(t, ti.service.cache.Set(ctx, deviceMCPListCacheKey(scope, identity), deviceMCPList{
+	require.NoError(t, ti.service.cache.Set(ctx, deviceMCPListCacheKey(scope), deviceMCPList{
 		Owner:   mcpListOwner{Actor: ""},
 		UserID:  uuid.NewString(),
 		Entries: []MCPServerEntry{testMCPEntry("intruder")},
@@ -273,7 +260,7 @@ func TestDeviceMCPList_UnusableScopes(t *testing.T) {
 		mutate func(*deviceMCPListScope)
 	}{
 		{name: "no user", mutate: func(s *deviceMCPListScope) { s.UserID = "" }},
-		{name: "no device identity", mutate: func(s *deviceMCPListScope) { s.DeviceID, s.Hostname = "", "" }},
+		{name: "no device id", mutate: func(s *deviceMCPListScope) { s.DeviceID = "" }},
 		{name: "no adapter", mutate: func(s *deviceMCPListScope) { s.Adapter = "" }},
 	}
 	for _, tc := range tests {
@@ -293,12 +280,13 @@ func TestIngest_CompleteInventoryRefreshesDeviceCopy(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
-	hostname := "dev-host-" + uuid.NewString()
+	deviceID := "device-" + uuid.NewString()
 	cwd := "/work/app"
 	server := "linear"
 	command := "npx linear-mcp"
-	inventory := canonicalIngestPayload("claude", "session.started", uuid.NewString())
-	inventory.Source.Hostname = &hostname
+	firstSession := uuid.NewString()
+	seedSessionDeviceID(t, ctx, ti, firstSession, deviceID)
+	inventory := canonicalIngestPayload("claude", "session.started", firstSession)
 	inventory.Session.Cwd = &cwd
 	inventory.Data = &gen.HookIngestData{
 		McpInventory:          []*gen.HookMCPData{{ServerName: &server, ServerIdentity: &server, Command: &command}},
@@ -309,8 +297,9 @@ func TestIngest_CompleteInventoryRefreshesDeviceCopy(t *testing.T) {
 
 	toolName := "mcp__linear__list_issues"
 	callID := "call-1"
-	next := canonicalIngestPayload("claude", "tool.requested", uuid.NewString())
-	next.Source.Hostname = &hostname
+	nextSession := uuid.NewString()
+	seedSessionDeviceID(t, ctx, ti, nextSession, deviceID)
+	next := canonicalIngestPayload("claude", "tool.requested", nextSession)
 	next.Session.Cwd = &cwd
 	next.Data = &gen.HookIngestData{
 		ToolCall: &gen.HookToolCallData{ID: &callID, Name: &toolName, Input: map[string]any{}},
@@ -319,30 +308,4 @@ func TestIngest_CompleteInventoryRefreshesDeviceCopy(t *testing.T) {
 	result, err := ti.service.Ingest(ctx, next)
 	require.NoError(t, err)
 	require.Equal(t, "deny", result.Decision)
-}
-
-// An incomplete inventory proves nothing and never becomes the device copy.
-func TestIngest_IncompleteInventoryLeavesDeviceCopy(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestHooksService(t)
-
-	hostname := "dev-host-" + uuid.NewString()
-	cwd := "/work/app"
-	server := "linear"
-	command := "npx linear-mcp"
-	payload := canonicalIngestPayload("claude", "session.started", uuid.NewString())
-	payload.Source.Hostname = &hostname
-	payload.Session.Cwd = &cwd
-	payload.Data = &gen.HookIngestData{
-		McpInventory:          []*gen.HookMCPData{{ServerName: &server, ServerIdentity: &server, Command: &command}},
-		McpInventoryCollected: new(false),
-	}
-	_, err := ti.service.Ingest(ctx, payload)
-	require.NoError(t, err)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	actor := ti.service.resolveCanonicalActor(ctx, payload, authCtx)
-	_, found := ti.service.getDeviceMCPList(ctx, ti.service.canonicalDeviceMCPListScope(ctx, authCtx, actor.UserID, payload))
-	require.False(t, found)
 }

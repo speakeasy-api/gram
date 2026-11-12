@@ -563,7 +563,6 @@ func claudeDeviceMCPListScope(metadata SessionMetadata, payload *gen.ClaudePaylo
 		ProjectID: metadata.ProjectID,
 		UserID:    metadata.UserID,
 		DeviceID:  metadata.DeviceID,
-		Hostname:  conv.Default(strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")), metadata.Hostname),
 		Adapter:   "claude",
 		Cwd:       conv.Default(strings.TrimSpace(conv.PtrValOr(payload.Cwd, "")), metadata.Cwd),
 	}
@@ -752,6 +751,9 @@ func (s *Service) refreshMCPListTTL(ctx context.Context, projectID, sessionID st
 	}
 	if err := s.cache.Expire(ctx, mcpListOwnerCacheKey(projectID, sessionID), sessionMCPListTTL); err != nil {
 		s.logger.DebugContext(ctx, "failed to refresh MCP list owner TTL", attr.SlogError(err))
+	}
+	if err := s.cache.Expire(ctx, sessionPartialMCPListCacheKey(projectID, sessionID), sessionMCPListTTL); err != nil {
+		s.logger.DebugContext(ctx, "failed to refresh partial MCP list TTL", attr.SlogError(err))
 	}
 	if err := s.cache.Expire(ctx, sessionAgentVariantCacheKey(projectID, sessionID), sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to refresh session agent variant TTL",
@@ -1298,17 +1300,23 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// script replays the SessionStart inventory file on every PreToolUse, so
 	// this normally comes straight from the request payload and is immune to
 	// the SessionStart-snapshot race (DNO-286); it falls back to the cached
-	// snapshot only when the payload carried none, and to the device's copy
-	// of its last complete inventory when the session has none yet.
+	// snapshot only when the payload carried none. When the session has no
+	// snapshot yet, its partial list and the device's copy of its last
+	// complete inventory stand in, the partial list only as install evidence.
 	deviceScope := claudeDeviceMCPListScope(metadata, payload)
-	inventory := shadowMCPInventory{entries: nil, loaded: false}
+	inventory := shadowMCPInventory{entries: nil, loaded: false, partial: nil}
 	entries, inventoryErr := s.resolveMCPListForEnforcement(ctx, payload, sessionID, deviceScope)
 	if inventoryErr == nil {
-		inventory = shadowMCPInventory{entries: entries, loaded: true}
+		inventory.entries = entries
+		inventory.loaded = true
 	}
 	if !inventory.loaded {
+		if partial, err := s.getCachedPartialMCPList(ctx, sessionID); err == nil {
+			inventory.partial = partial
+		}
 		if deviceEntries, ok := s.getDeviceMCPList(ctx, deviceScope); ok {
-			inventory = shadowMCPInventory{entries: deviceEntries, loaded: true}
+			inventory.entries = deviceEntries
+			inventory.loaded = true
 		}
 	}
 
@@ -1316,19 +1324,21 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	// tools) never appear in `claude mcp list`. A server with no URL, no
 	// launch command and no inventory entry is one of them, listed or not, so
 	// it is allowed even when no inventory could be loaded.
-	if shadowmcp.ClassifyServer(inventoryShadowMCPFacts(serverPrefix, inventory)).IsBuiltin() {
+	if shadowmcp.ClassifyServer(inventoryShadowMCPFacts(serverPrefix, rawToolName, inventory)).IsBuiltin() {
 		if output != nil {
 			output.PermissionDecision = &allow
 		}
 		return result, nil
 	}
 
-	// Only a server that cannot be a built-in reaches here without an
-	// inventory: a connector named by its UUID, or a claude.ai connector or
-	// plugin server named by its prefix. Its URL is unknown until the
-	// inventory loads and may be Speakeasy-hosted, so deny with a
-	// retry-or-restart message rather than calling it Shadow MCP outright.
-	if !inventory.loaded {
+	// Only a server that cannot be a built-in reaches here without a complete
+	// inventory or a partial list entry for it: a connector named by its UUID,
+	// or a claude.ai connector or plugin server named by its prefix. Its URL
+	// is unknown until the inventory loads and may be Speakeasy-hosted, so
+	// deny with a retry-or-restart message rather than calling it Shadow MCP
+	// outright. A partial list entry is judged like any other entry below.
+	matched, _ := inventory.find(serverPrefix, rawToolName)
+	if !inventory.loaded && matched == nil {
 		auditReason := "missing MCP list snapshot for session"
 		userReason := "Speakeasy blocked this tool call: MCP server configuration is not available yet. Please retry in a moment, or restart Claude Code if the issue persists."
 		s.logger.With(
@@ -1347,9 +1357,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 		return constructBlockResponse(payload.HookEventName, userReason), nil
 	}
-	entries = inventory.entries
 
-	matched := matchCachedMCPEntry(entries, serverPrefix)
 	var detail string
 	if policy.IsAllowAll() {
 		// Permit-by-default: only a blocked-list URL match denies. Servers

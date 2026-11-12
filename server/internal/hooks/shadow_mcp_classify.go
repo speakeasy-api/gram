@@ -17,22 +17,42 @@ import (
 const cursorAdapter = "cursor"
 
 // shadowMCPInventory is the MCP inventory a Shadow MCP classification
-// consults: the session's own snapshot, or the device copy when the session
-// has none yet.
+// consults. A complete list is the session's own snapshot or, while the
+// session has none yet, the device copy. A partial list is what the sender
+// could read before its complete list was ready; it only ever adds install
+// evidence and never proves a server absent.
 type shadowMCPInventory struct {
-	// entries is the inventory, empty when none could be loaded.
+	// entries is the complete inventory, empty when none could be loaded.
 	entries []MCPServerEntry
 
 	// loaded reports whether a complete inventory was found.
 	loaded bool
+
+	// partial is the session's partial inventory, consulted before a device
+	// copy and never when the session's own snapshot loaded.
+	partial []MCPServerEntry
 }
 
-// inventoryServerFacts reports what a loaded MCP inventory says about the
-// server a tool call names: whether it lists the server, and the URL or launch
-// command of the entry that does. Several entries that disagree on transport
-// count as listed with none, so the server is Shadow MCP without a URL that
-// could clear it.
-func inventoryServerFacts(entries []MCPServerEntry, serverName string) (string, string, bool) {
+// find returns the inventory entry that names the server a tool call targets
+// and whether any entry does. A partial list entry counts exactly like a
+// complete list entry; a server missing from both is reported unlisted.
+func (inventory shadowMCPInventory) find(serverName, rawToolName string) (*MCPServerEntry, bool) {
+	if matched, listed := findInventoryServer(inventory.partial, serverName, rawToolName); listed {
+		return matched, true
+	}
+	if !inventory.loaded {
+		return nil, false
+	}
+	return findInventoryServer(inventory.entries, serverName, rawToolName)
+}
+
+// findInventoryServer returns the inventory entry that names the server a
+// tool call targets and whether any entry does. Several entries that disagree
+// on transport count as listed with no entry, so the server is Shadow MCP
+// without a URL that could clear it. A Codex tool prefix can itself contain
+// "__", which truncates the server segment of the tool name, so the longest
+// configured prefix that starts the tool name also names the server.
+func findInventoryServer(entries []MCPServerEntry, serverName, rawToolName string) (*MCPServerEntry, bool) {
 	var matched *MCPServerEntry
 	conflicting := false
 	for i := range entries {
@@ -47,13 +67,16 @@ func inventoryServerFacts(entries []MCPServerEntry, serverName string) (string, 
 			conflicting = true
 		}
 	}
-	if matched == nil {
-		return "", "", false
-	}
 	if conflicting {
-		return "", "", true
+		return nil, true
 	}
-	return strings.TrimSpace(matched.URL), strings.TrimSpace(matched.Command), true
+	if matched != nil {
+		return matched, true
+	}
+	if byPrefix := matchCodexCachedMCPEntry(entries, rawToolName); byPrefix != nil && byPrefix.ToolPrefix != "" {
+		return byPrefix, true
+	}
+	return nil, false
 }
 
 // inventoryEntryNamesServer reports whether an inventory entry is the server a
@@ -100,7 +123,7 @@ func looseMCPServerKey(name string) string {
 
 // inventoryShadowMCPFacts builds the classification facts for a server from an
 // inventory alone, for senders whose payload states no URL or command.
-func inventoryShadowMCPFacts(serverName string, inventory shadowMCPInventory) shadowmcp.ServerFacts {
+func inventoryShadowMCPFacts(serverName, rawToolName string, inventory shadowMCPInventory) shadowmcp.ServerFacts {
 	facts := shadowmcp.ServerFacts{
 		Name:                   serverName,
 		URL:                    "",
@@ -109,8 +132,11 @@ func inventoryShadowMCPFacts(serverName string, inventory shadowMCPInventory) sh
 		InventoryLoaded:        inventory.loaded,
 		CursorServerIdentifier: "",
 	}
-	if inventory.loaded {
-		facts.URL, facts.Command, facts.Installed = inventoryServerFacts(inventory.entries, serverName)
+	matched, listed := inventory.find(serverName, rawToolName)
+	facts.Installed = listed
+	if matched != nil {
+		facts.URL = strings.TrimSpace(matched.URL)
+		facts.Command = strings.TrimSpace(matched.Command)
 	}
 	return facts
 }
@@ -157,45 +183,48 @@ func (s *Service) classifyCanonicalShadowMCP(ctx context.Context, payload *gen.I
 
 	if facts.URL == "" && facts.Command == "" && serverName != "" {
 		inventory := s.loadShadowMCPInventory(ctx, canonicalSessionID(payload), deviceScope)
-		if inventory.loaded {
-			facts.InventoryLoaded = true
-			facts.URL, facts.Command, facts.Installed = inventoryServerFacts(inventory.entries, serverName)
-			// A Codex tool prefix can itself contain "__", which truncates
-			// the server segment of the tool name; the longest configured
-			// prefix that starts the tool name still names the server.
-			if matched := matchCodexCachedMCPEntry(inventory.entries, rawToolName); !facts.Installed && matched != nil && matched.ToolPrefix != "" {
-				facts.URL, facts.Command, facts.Installed = strings.TrimSpace(matched.URL), strings.TrimSpace(matched.Command), true
-			}
-			target.inventoryURL = facts.URL
-			target.inventoryCommand = facts.Command
-			if facts.URL != "" {
-				target.evidence.FullURL = facts.URL
-			}
-			if facts.Command != "" {
-				// Pin stdio identity to the launch command, as the inventory
-				// resolution of the legacy endpoints does, so a bypass grant
-				// cannot follow a renamed config alias.
-				target.evidence.ServerIdentity = facts.Command
-			}
+		inventoryFacts := inventoryShadowMCPFacts(serverName, rawToolName, inventory)
+		facts.URL = inventoryFacts.URL
+		facts.Command = inventoryFacts.Command
+		facts.Installed = inventoryFacts.Installed
+		facts.InventoryLoaded = inventoryFacts.InventoryLoaded
+		target.inventoryURL = facts.URL
+		target.inventoryCommand = facts.Command
+		if facts.URL != "" {
+			target.evidence.FullURL = facts.URL
+		}
+		if facts.Command != "" {
+			// Pin stdio identity to the launch command, as the inventory
+			// resolution of the legacy endpoints does, so a bypass grant
+			// cannot follow a renamed config alias.
+			target.evidence.ServerIdentity = facts.Command
 		}
 	}
 	target.classification = shadowmcp.ClassifyServer(facts)
 	return target
 }
 
-// loadShadowMCPInventory returns the session's MCP inventory snapshot, falling
-// back to the device copy for the scope deviceScope builds when the session
-// has none.
+// loadShadowMCPInventory returns the MCP inventory to classify a session's
+// tool call against. The session's own snapshot wins outright. Without one,
+// the session's partial list and the device copy for the scope deviceScope
+// builds are both consulted, the partial list first.
 func (s *Service) loadShadowMCPInventory(ctx context.Context, sessionID string, deviceScope func() deviceMCPListScope) shadowMCPInventory {
+	inventory := shadowMCPInventory{entries: nil, loaded: false, partial: nil}
 	if sessionID != "" {
 		if entries, err := s.getCachedMCPList(ctx, sessionID); err == nil {
-			return shadowMCPInventory{entries: entries, loaded: true}
+			inventory.entries = entries
+			inventory.loaded = true
+			return inventory
+		}
+		if partial, err := s.getCachedPartialMCPList(ctx, sessionID); err == nil {
+			inventory.partial = partial
 		}
 	}
 	if entries, ok := s.getDeviceMCPList(ctx, deviceScope()); ok {
-		return shadowMCPInventory{entries: entries, loaded: true}
+		inventory.entries = entries
+		inventory.loaded = true
 	}
-	return shadowMCPInventory{entries: nil, loaded: false}
+	return inventory
 }
 
 // canonicalShadowMCPServerName is the server a canonical MCP tool call
@@ -268,13 +297,12 @@ func canonicalPayloadServerFacts(payload *gen.IngestPayload, serverName string, 
 
 // canonicalDeviceMCPListScope is the device MCP inventory scope of a canonical
 // hook event. The device id comes from the session's cached metadata, which
-// the OTEL stream fills in; the hostname rides on every event.
+// the OTEL stream fills in.
 func (s *Service) canonicalDeviceMCPListScope(ctx context.Context, authCtx *contextvalues.AuthContext, userID string, payload *gen.IngestPayload) deviceMCPListScope {
 	scope := deviceMCPListScope{
 		ProjectID: "",
 		UserID:    strings.TrimSpace(userID),
 		DeviceID:  "",
-		Hostname:  "",
 		Adapter:   "",
 		Cwd:       canonicalCwd(payload),
 	}
@@ -282,7 +310,6 @@ func (s *Service) canonicalDeviceMCPListScope(ctx context.Context, authCtx *cont
 		return scope
 	}
 	scope.ProjectID = authCtx.ProjectID.String()
-	scope.Hostname = strings.TrimSpace(conv.PtrValOr(payload.Source.Hostname, ""))
 	scope.Adapter = strings.TrimSpace(payload.Source.Adapter)
 
 	sessionID := canonicalSessionID(payload)

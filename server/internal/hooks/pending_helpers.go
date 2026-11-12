@@ -267,14 +267,13 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		inventory := s.loadShadowMCPInventory(ctx, *payload.SessionID, func() deviceMCPListScope {
 			return claudeDeviceMCPListScope(*metadata, payload)
 		})
-		if inventory.loaded {
-			matched := matchCachedMCPEntry(inventory.entries, parsed.Server)
+		if matched, _ := inventory.find(parsed.Server, toolName); inventory.loaded || matched != nil {
 			if v := resolvedMCPMatch(matched, parsed.Server); v != "" {
 				attrs[attr.MCPMatchKey] = v
 			}
 			applyMCPInventoryAttrs(attrs, matched)
 		}
-		if classification := shadowmcp.ClassifyServer(inventoryShadowMCPFacts(parsed.Server, inventory)); classification.IsBuiltin() {
+		if classification := shadowmcp.ClassifyServer(inventoryShadowMCPFacts(parsed.Server, toolName, inventory)); classification.IsBuiltin() {
 			attrs[attr.MCPBuiltinEvidenceKey] = string(classification.Evidence)
 		}
 	}

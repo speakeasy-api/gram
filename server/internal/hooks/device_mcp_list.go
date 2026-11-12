@@ -21,22 +21,6 @@ import (
 // too likely to miss servers the user has since installed or removed.
 const deviceMCPListTTL = 24 * time.Hour
 
-// deviceMCPListIdentityKind says which device identity a device MCP inventory
-// copy is stored under.
-type deviceMCPListIdentityKind string
-
-const (
-	// deviceMCPListIdentityDevice keys a copy by the per-device id (Claude
-	// user.id), learned from the session's OTEL stream.
-	deviceMCPListIdentityDevice deviceMCPListIdentityKind = "device"
-
-	// deviceMCPListIdentityHost keys a copy by the hostname the hook sender
-	// reports on every event. A new session's first hook arrives before its
-	// OTEL stream, so the device id is often not known yet when the copy is
-	// needed.
-	deviceMCPListIdentityHost deviceMCPListIdentityKind = "host"
-)
-
 // deviceMCPListScope identifies whose and which device MCP inventory copy a
 // read or write addresses. Every field is part of the cache key, so a copy is
 // only ever read back by the same user, on the same device, through the same
@@ -48,11 +32,10 @@ type deviceMCPListScope struct {
 	// UserID is the Speakeasy user the session is attributed to.
 	UserID string
 
-	// DeviceID is the per-device id, empty when not known yet.
+	// DeviceID is the per-device id (Claude user.id), learned from the
+	// session's OTEL stream. Empty when not known yet, which leaves the
+	// scope without a copy: no weaker identity stands in for it.
 	DeviceID string
-
-	// Hostname is the hook sender's reported hostname, empty when not known.
-	Hostname string
 
 	// Adapter is the hook adapter or source that reported the inventory.
 	Adapter string
@@ -74,47 +57,28 @@ type deviceMCPList struct {
 	Entries []MCPServerEntry `json:"entries"`
 }
 
-// identities lists the device identities the scope can be keyed by, the
-// device id first because it is the stronger identity.
-func (scope deviceMCPListScope) identities() []deviceMCPListIdentity {
-	var identities []deviceMCPListIdentity
-	if deviceID := strings.TrimSpace(scope.DeviceID); deviceID != "" {
-		identities = append(identities, deviceMCPListIdentity{kind: deviceMCPListIdentityDevice, value: deviceID})
-	}
-	if hostname := strings.TrimSpace(scope.Hostname); hostname != "" {
-		identities = append(identities, deviceMCPListIdentity{kind: deviceMCPListIdentityHost, value: hostname})
-	}
-	return identities
-}
-
 func (scope deviceMCPListScope) usable() bool {
 	return strings.TrimSpace(scope.ProjectID) != "" &&
 		strings.TrimSpace(scope.UserID) != "" &&
-		strings.TrimSpace(scope.Adapter) != "" &&
-		len(scope.identities()) > 0
-}
-
-type deviceMCPListIdentity struct {
-	kind  deviceMCPListIdentityKind
-	value string
+		strings.TrimSpace(scope.DeviceID) != "" &&
+		strings.TrimSpace(scope.Adapter) != ""
 }
 
 // deviceMCPListCacheKey returns the Redis key of a device MCP inventory copy.
-// The user, device identity, adapter and working directory are hashed so a
-// client-reported hostname or path cannot change the key's shape.
-func deviceMCPListCacheKey(scope deviceMCPListScope, identity deviceMCPListIdentity) string {
+// The user, device id, adapter and working directory are hashed so a
+// client-reported id or path cannot change the key's shape.
+func deviceMCPListCacheKey(scope deviceMCPListScope) string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		strings.TrimSpace(scope.UserID),
-		string(identity.kind),
-		identity.value,
+		strings.TrimSpace(scope.DeviceID),
 		strings.ToLower(strings.TrimSpace(scope.Adapter)),
 		strings.TrimSpace(scope.Cwd),
 	}, "\x00")))
-	return fmt.Sprintf("device:mcp-list:v1:%s:%x", strings.TrimSpace(scope.ProjectID), digest)
+	return fmt.Sprintf("device:mcp-list:v2:%s:%x", strings.TrimSpace(scope.ProjectID), digest)
 }
 
 // cacheDeviceMCPList stores a complete MCP inventory as the device copy for
-// scope, under every device identity the scope has. Only a human sender
+// scope. Only a human sender
 // authenticated to the scope's project writes a copy: agents have no device
 // identity, and an unauthenticated hook proves only a session id. Best-effort.
 func (s *Service) cacheDeviceMCPList(ctx context.Context, scope deviceMCPListScope, entries []MCPServerEntry) {
@@ -134,13 +98,11 @@ func (s *Service) cacheDeviceMCPList(ctx context.Context, scope deviceMCPListSco
 		UserID:  strings.TrimSpace(scope.UserID),
 		Entries: entries,
 	}
-	for _, identity := range scope.identities() {
-		if err := s.cache.Set(ctx, deviceMCPListCacheKey(scope, identity), value, deviceMCPListTTL); err != nil {
-			s.logger.WarnContext(ctx, "failed to cache device MCP list",
-				attr.SlogEvent("hook_device_mcp_list_cache_set_failed"),
-				attr.SlogError(err),
-			)
-		}
+	if err := s.cache.Set(ctx, deviceMCPListCacheKey(scope), value, deviceMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache device MCP list",
+			attr.SlogEvent("hook_device_mcp_list_cache_set_failed"),
+			attr.SlogError(err),
+		)
 	}
 }
 
@@ -152,23 +114,18 @@ func (s *Service) getDeviceMCPList(ctx context.Context, scope deviceMCPListScope
 	if !scope.usable() || isAgentActor(ctx) {
 		return nil, false
 	}
-	reader := mcpListOwnerFromContext(ctx)
-	for _, identity := range scope.identities() {
-		var stored deviceMCPList
-		err := s.cache.Get(ctx, deviceMCPListCacheKey(scope, identity), &stored)
-		if err != nil {
-			if !errors.Is(err, redisCache.ErrCacheMiss) {
-				s.logger.WarnContext(ctx, "failed to read device MCP list",
-					attr.SlogEvent("hook_device_mcp_list_cache_get_failed"),
-					attr.SlogError(err),
-				)
-			}
-			continue
+	var stored deviceMCPList
+	if err := s.cache.Get(ctx, deviceMCPListCacheKey(scope), &stored); err != nil {
+		if !errors.Is(err, redisCache.ErrCacheMiss) {
+			s.logger.WarnContext(ctx, "failed to read device MCP list",
+				attr.SlogEvent("hook_device_mcp_list_cache_get_failed"),
+				attr.SlogError(err),
+			)
 		}
-		if stored.UserID != strings.TrimSpace(scope.UserID) || !stored.Owner.shares(reader) {
-			continue
-		}
-		return stored.Entries, true
+		return nil, false
 	}
-	return nil, false
+	if stored.UserID != strings.TrimSpace(scope.UserID) || !stored.Owner.shares(mcpListOwnerFromContext(ctx)) {
+		return nil, false
+	}
+	return stored.Entries, true
 }

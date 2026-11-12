@@ -990,14 +990,20 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 	}
 
 	// Only a successful inventory read is authoritative, even when the
-	// inventory is empty or omitted. Partial reads only refresh an existing
-	// snapshot so they cannot downgrade complete evidence.
+	// inventory is empty or omitted. A partial read is kept apart as install
+	// evidence for the servers it names, so it can never downgrade complete
+	// evidence.
+	if !inventoryRead {
+		s.cachePartialMCPList(ctx, projectID, sessionID, entries)
+		return false
+	}
+
 	// Write the entries before the read status. The status is what licenses the
 	// guard to treat an empty inventory as proof no servers exist, so recording
 	// it while the entries write failed would leave the session claiming a read
 	// it cannot back up — and under block_all every later meta-tool call denies
 	// for the rest of the session.
-	if !inventoryRead || !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
+	if !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
 		return false
 	}
 	if err := s.cache.Set(ctx, sessionMCPListCacheKey(projectID, sessionID), entries, sessionMCPListTTL); err != nil {
@@ -1019,6 +1025,30 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 		)
 	}
 	return true
+}
+
+// cachePartialMCPList stores the servers a partial inventory names as the
+// session's latest partial list, under the snapshot's owner binding and TTL.
+// A partial list carries no proof of absence, so an empty one is not stored,
+// and none is stored once the session holds a complete snapshot, which always
+// wins. Best-effort.
+func (s *Service) cachePartialMCPList(ctx context.Context, projectID, sessionID string, entries []MCPServerEntry) {
+	if len(entries) == 0 {
+		return
+	}
+	if _, err := s.getCachedMCPList(ctx, sessionID); err == nil {
+		return
+	}
+	if !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
+		return
+	}
+	if err := s.cache.Set(ctx, sessionPartialMCPListCacheKey(projectID, sessionID), entries, sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache partial MCP list",
+			attr.SlogEvent("hook_partial_mcp_list_cache_set_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
+	}
 }
 
 // canonicalCodexMetaTool reports whether this event is one of Codex's built-in
