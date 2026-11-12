@@ -42,6 +42,14 @@ func seedMemoryEvalCorpusProject(t *testing.T, db *pgxpool.Pool) {
 	require.NoError(t, demoseedrepo.New(db).MemoryEvalInsertProject(t.Context(), demoseedrepo.MemoryEvalInsertProjectParams{ProjectID: id, Name: "Team memory eval", Slug: "team-memory-eval", OrgID: spec.OrgID, CreatedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}}))
 }
 
+// withMemoryEvalOperator signs ctx in as a staff member, whose email a start
+// records as requested_by.
+func withMemoryEvalOperator(ctx context.Context) context.Context {
+	return contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{
+		SessionID: "session-eval", Email: "operator@example.com", OIDCSubject: "oidc-subject-eval", Name: "Test Operator", HD: "example.com",
+	})
+}
+
 func memoryEvalPayloadConfig() *gen.AdminMemoryEvalRunConfig {
 	return memoryEvalConfigView(evalrun.DefaultConfig())
 }
@@ -49,6 +57,7 @@ func memoryEvalPayloadConfig() *gen.AdminMemoryEvalRunConfig {
 func TestStartMemoryEvalRun_QueuesAndStartsTheWorkflow(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
+	ctx = withMemoryEvalOperator(ctx)
 	seedMemoryEvalCorpusProject(t, db)
 	starter := &recordingMemoryEvalStarter{}
 	svc.SetMemoryEvalRunStarter(starter)
@@ -56,6 +65,9 @@ func TestStartMemoryEvalRun_QueuesAndStartsTheWorkflow(t *testing.T) {
 	run, err := svc.StartMemoryEvalRun(ctx, &gen.StartMemoryEvalRunPayload{Config: memoryEvalPayloadConfig()})
 	require.NoError(t, err)
 	require.Equal(t, "queued", run.Status)
+	row, err := evalrunrepo.New(db).GetRun(ctx, uuid.MustParse(run.ID))
+	require.NoError(t, err)
+	require.Equal(t, "operator@example.com", row.RequestedBy)
 	require.Equal(t, []uuid.UUID{uuid.MustParse(run.ID)}, starter.started)
 	require.Equal(t, evalrun.DefaultConfig().AnswerModels, run.Config.AnswerModels)
 
@@ -75,6 +87,7 @@ func TestStartMemoryEvalRun_QueuesAndStartsTheWorkflow(t *testing.T) {
 func TestStartMemoryEvalRun_FailsTheRowWhenTheWorkflowCannotStart(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
+	ctx = withMemoryEvalOperator(ctx)
 	seedMemoryEvalCorpusProject(t, db)
 	starter := &recordingMemoryEvalStarter{err: errors.New("temporal unavailable")}
 	svc.SetMemoryEvalRunStarter(starter)
@@ -86,14 +99,32 @@ func TestStartMemoryEvalRun_FailsTheRowWhenTheWorkflowCannotStart(t *testing.T) 
 	row, err := evalrunrepo.New(db).GetRun(ctx, starter.started[0])
 	require.NoError(t, err)
 	require.Equal(t, "failed", row.Status, "an unstarted run must not block the next one")
+
+	opts, err := svc.GetMemoryEvalOptions(ctx, &gen.GetMemoryEvalOptionsPayload{})
+	require.NoError(t, err)
+	require.Equal(t, 0, opts.RunsToday, "a run no workflow claimed spent nothing, so it must not use up the daily limit")
 }
 
 func TestStartMemoryEvalRun_Unconfigured(t *testing.T) {
 	t.Parallel()
-	ctx, svc, _ := newTestAdminService(t)
+	ctx, svc, db := newTestAdminService(t)
+	ctx = withMemoryEvalOperator(ctx)
+	seedMemoryEvalCorpusProject(t, db)
 
 	_, err := svc.StartMemoryEvalRun(ctx, &gen.StartMemoryEvalRunPayload{Config: memoryEvalPayloadConfig()})
-	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeUnavailable)
+}
+
+func TestStartMemoryEvalRun_RequiresAStaffEmail(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	seedMemoryEvalCorpusProject(t, db)
+	starter := &recordingMemoryEvalStarter{}
+	svc.SetMemoryEvalRunStarter(starter)
+
+	_, err := svc.StartMemoryEvalRun(ctx, &gen.StartMemoryEvalRunPayload{Config: memoryEvalPayloadConfig()})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	require.Empty(t, starter.started, "no run is queued without a staff email to record")
 }
 
 func TestListAndGetMemoryEvalRuns(t *testing.T) {
@@ -102,9 +133,7 @@ func TestListAndGetMemoryEvalRuns(t *testing.T) {
 	seedMemoryEvalCorpusProject(t, db)
 	svc.SetMemoryEvalRunStarter(&recordingMemoryEvalStarter{})
 	q := evalrunrepo.New(db)
-	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{
-		SessionID: "session-eval", Email: "operator@example.com", OIDCSubject: "oidc-subject-eval", Name: "Test Operator", HD: "example.com",
-	})
+	ctx = withMemoryEvalOperator(ctx)
 
 	var ids []string
 	for range 3 {

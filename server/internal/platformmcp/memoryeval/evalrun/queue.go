@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/demoseed"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
@@ -18,9 +19,32 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
-// DailyRunLimit bounds runs per rolling 24 hours across all staff. Failed
-// runs count: they spent before failing.
+// DailyRunLimit bounds runs per RunWindow across all staff. Failed runs
+// count, since they spent before failing, unless no workflow ever claimed them.
 const DailyRunLimit = 10
+
+// RunWindow is the rolling window DailyRunLimit applies to.
+const RunWindow = 24 * time.Hour
+
+// staleRunAge is how old an unresolved run must be before a start fails it.
+// It outlives the workflow's run timeout, so a run still inside a live
+// workflow is never failed under it.
+const staleRunAge = background.MemoryEvalRunWorkflowRunTimeout + 10*time.Minute
+
+// staleRunError is stored on runs a start failed because they outlived any
+// workflow that could still resolve them.
+const staleRunError = "the run stopped without finishing and was failed so a new run could start"
+
+// RunsInWindow counts the runs that use up DailyRunLimit right now. Queue
+// calls it on the transaction holding the start lock; the admin options read
+// calls it on the pool.
+func RunsInWindow(ctx context.Context, db repo.DBTX) (int64, error) {
+	n, err := repo.New(db).CountRunsSince(ctx, pgtype.Timestamptz{Time: time.Now().Add(-RunWindow), InfinityModifier: pgtype.Finite, Valid: true})
+	if err != nil {
+		return 0, fmt.Errorf("count memory eval runs in window: %w", err)
+	}
+	return n, nil
+}
 
 var (
 	// ErrNoCorpus means no organization in this database holds the corpus
@@ -29,16 +53,16 @@ var (
 	// ErrRunActive means another run is queued or running. Runs share the
 	// eval projects' summaries and digests, so they go one at a time.
 	ErrRunActive = errors.New("another memory eval run is queued or running")
-	// ErrDailyLimit means DailyRunLimit runs started in the last 24 hours.
+	// ErrDailyLimit means DailyRunLimit runs started within RunWindow.
 	ErrDailyLimit = errors.New("daily memory eval run limit reached")
 )
 
-// CorpusOrganization is the organization holding the seeded corpus: the
+// corpusOrganization is the organization holding the seeded corpus: the
 // shared demo organization in deployed environments, the local one in
 // development.
-func CorpusOrganization(ctx context.Context, db *pgxpool.Pool) (string, error) {
+func corpusOrganization(ctx context.Context, db *pgxpool.Pool) (string, error) {
 	projects := projectsrepo.New(db)
-	for _, spec := range []demoseed.Spec{demoseed.DefaultSpec(), demoseed.LocalSpec()} {
+	for _, spec := range seedSpecs() {
 		id, ok := demoseed.MemoryEvalProjectID(spec, memoryeval.ProjectMain)
 		if !ok {
 			continue
@@ -61,7 +85,7 @@ func Queue(ctx context.Context, db *pgxpool.Pool, cfg Config, requestedBy string
 	if err := cfg.Validate(); err != nil {
 		return none, err
 	}
-	organizationID, err := CorpusOrganization(ctx, db)
+	organizationID, err := corpusOrganization(ctx, db)
 	if err != nil {
 		return none, err
 	}
@@ -80,6 +104,12 @@ func Queue(ctx context.Context, db *pgxpool.Pool, cfg Config, requestedBy string
 	if err := q.LockRunStarts(ctx); err != nil {
 		return none, fmt.Errorf("lock run starts: %w", err)
 	}
+	if _, err := q.FailStaleActiveRuns(ctx, repo.FailStaleActiveRunsParams{
+		Error:         pgtype.Text{String: staleRunError, Valid: true},
+		CreatedBefore: pgtype.Timestamptz{Time: time.Now().Add(-staleRunAge), InfinityModifier: pgtype.Finite, Valid: true},
+	}); err != nil {
+		return none, fmt.Errorf("fail stale runs: %w", err)
+	}
 	active, err := q.CountActiveRuns(ctx)
 	if err != nil {
 		return none, fmt.Errorf("count active runs: %w", err)
@@ -87,11 +117,11 @@ func Queue(ctx context.Context, db *pgxpool.Pool, cfg Config, requestedBy string
 	if active > 0 {
 		return none, ErrRunActive
 	}
-	today, err := q.CountRunsSince(ctx, pgtype.Timestamptz{Time: time.Now().Add(-24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true})
+	inWindow, err := RunsInWindow(ctx, tx)
 	if err != nil {
-		return none, fmt.Errorf("count runs today: %w", err)
+		return none, err
 	}
-	if today >= DailyRunLimit {
+	if inWindow >= DailyRunLimit {
 		return none, ErrDailyLimit
 	}
 	run, err := q.CreateRun(ctx, repo.CreateRunParams{OrganizationID: organizationID, Config: encoded, RequestedBy: requestedBy})

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -22,11 +23,26 @@ import (
 // summary carries its masked transcript and a digest carries its inputs. It
 // reports a fixed cost per call so spend accounting can be checked.
 type echoModel struct {
-	calls atomic.Int64
+	calls  atomic.Int64
+	mu     sync.Mutex
+	models map[string]int
+}
+
+// callsWith returns how many completions asked for the given model.
+func (m *echoModel) callsWith(model string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.models[model]
 }
 
 func (m *echoModel) GetCompletion(_ context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 	m.calls.Add(1)
+	m.mu.Lock()
+	if m.models == nil {
+		m.models = map[string]int{}
+	}
+	m.models[request.Model]++
+	m.mu.Unlock()
 	encoded, err := json.Marshal(request.Messages[len(request.Messages)-1])
 	if err != nil {
 		return nil, fmt.Errorf("encode message: %w", err)
@@ -90,9 +106,11 @@ func TestPrepareWritesSummariesAndDigests(t *testing.T) {
 
 	// Rebuilding with another digest model replaces the digests rather than
 	// adding to them.
-	again, err := bench.Prepare(t.Context(), testenv.NewLogger(t), model, loaded.target(), bench.MemoryModels{Summary: models.Summary, Digest: "anthropic/claude-sonnet-5"}, 8)
+	const rebuildModel = "anthropic/claude-sonnet-5"
+	again, err := bench.Prepare(t.Context(), testenv.NewLogger(t), model, loaded.target(), bench.MemoryModels{Summary: models.Summary, Digest: rebuildModel}, 8)
 	require.NoError(t, err)
 	require.Equal(t, prep.Digests, again.Digests)
+	require.Equal(t, again.Digests, model.callsWith(rebuildModel), "every rebuilt digest is written by the new digest model")
 
 	memoryArm, err := bench.SearchTeamMemoryArm(testenv.NewLogger(t), loaded.target())
 	require.NoError(t, err)
