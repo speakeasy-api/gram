@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ConfigureExportSheet,
@@ -11,6 +11,28 @@ vi.mock("@/components/project-menu", () => ({
 
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock("@/components/ui/Combobox", () => ({
+  Combobox: ({
+    items,
+    onSelectionChange,
+  }: {
+    items: { value: string; label: string }[];
+    onSelectionChange: (item: { value: string; label: string }) => void;
+  }) => (
+    <div>
+      {items.map((item) => (
+        <button
+          key={item.value}
+          type="button"
+          onClick={() => onSelectionChange(item)}
+        >
+          Choose {item.label}
+        </button>
+      ))}
+    </div>
+  ),
 }));
 
 vi.mock("@gram/client/react-query/testDataExportRoute.js", () => ({
@@ -45,6 +67,12 @@ const destination = {
   otel: { endpointUrl: "https://otlp.example.com", headers: [] },
   updatedAt: timestamp,
 } as OtelDataExportDestination;
+const otherDestination = {
+  ...destination,
+  id: "destination-2",
+  name: "Honeycomb",
+  otel: { endpointUrl: "https://otlp.other.example.com", headers: [] },
+} as OtelDataExportDestination;
 
 function renderSheet(dataSource: string, otelDestinationId?: string) {
   render(
@@ -63,7 +91,7 @@ function renderSheet(dataSource: string, otelDestinationId?: string) {
           description: "",
         },
       ]}
-      destinations={[destination]}
+      destinations={[destination, otherDestination]}
       route={{
         createdAt: timestamp,
         id: "route-1",
@@ -89,6 +117,27 @@ describe("ConfigureExportSheet test event", () => {
     renderSheet("mcp_connection_logs", destination.id);
     expect(
       screen.getByRole("button", { name: "Send test event" }),
+    ).toBeTruthy();
+  });
+
+  it("disables the test event after the destination changes", () => {
+    renderSheet("mcp_connection_logs", destination.id);
+    const button = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Send test event",
+    });
+    expect(button.disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose Honeycomb" }));
+
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", {
+        name: "Send test event",
+      }).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText(
+        "Save your changes to send a test event to this destination.",
+      ),
     ).toBeTruthy();
   });
 

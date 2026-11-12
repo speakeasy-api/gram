@@ -25,7 +25,10 @@ const alertTitleForOutcome: Record<string, string> = {
 
 function failureMessage(error: unknown): string {
   if (error instanceof GramError && error.statusCode === 429) {
-    return "Too many test events for this export. Try again in a minute.";
+    return "Too many test events were sent just now. Try again in a minute.";
+  }
+  if (error instanceof GramError && error.statusCode === 503) {
+    return "Speakeasy can't send test events right now. Try again shortly.";
   }
   return "Speakeasy could not send the test event. Try again.";
 }
@@ -43,7 +46,8 @@ export function SendTestEventSection({
   routeId: string;
   unsavedChanges: boolean;
 }): JSX.Element {
-  const sendTest = useTestDataExportRouteMutation();
+  // The section shows its own error, so skip the app-wide error toast.
+  const sendTest = useTestDataExportRouteMutation({ onError: () => {} });
   const result = sendTest.data;
 
   return (
@@ -72,12 +76,15 @@ export function SendTestEventSection({
             {sendTest.isPending ? "Sending" : "Send test event"}
           </Button>
         </div>
-        {sendTest.isError ? (
+        {sendTest.isError && !unsavedChanges ? (
           <Alert variant="error" title="Test event not sent">
             {failureMessage(sendTest.error)}
           </Alert>
         ) : null}
-        {result && !sendTest.isPending && !sendTest.isError ? (
+        {result &&
+        !unsavedChanges &&
+        !sendTest.isPending &&
+        !sendTest.isError ? (
           <Alert
             variant={alertVariantForOutcome[result.outcome] ?? "warning"}
             title={
