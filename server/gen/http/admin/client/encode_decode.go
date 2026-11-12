@@ -29043,6 +29043,243 @@ func DecodeMigrateOrganizationAssistantIdentitiesResponse(decoder func(*http.Res
 	}
 }
 
+// BuildMigrateOrganizationAssistantsToKitRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "migrateOrganizationAssistantsToKit" endpoint
+func (c *Client) BuildMigrateOrganizationAssistantsToKitRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MigrateOrganizationAssistantsToKitAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "migrateOrganizationAssistantsToKit", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMigrateOrganizationAssistantsToKitRequest returns an encoder for
+// requests sent to the admin migrateOrganizationAssistantsToKit server.
+func EncodeMigrateOrganizationAssistantsToKitRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.MigrateOrganizationAssistantsToKitPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "migrateOrganizationAssistantsToKit", "*admin.MigrateOrganizationAssistantsToKitPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewMigrateOrganizationAssistantsToKitRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "migrateOrganizationAssistantsToKit", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMigrateOrganizationAssistantsToKitResponse returns a decoder for
+// responses returned by the admin migrateOrganizationAssistantsToKit endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeMigrateOrganizationAssistantsToKitResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMigrateOrganizationAssistantsToKitResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body MigrateOrganizationAssistantsToKitResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			res := NewMigrateOrganizationAssistantsToKitAdminAssistantKitMigrationRunOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body MigrateOrganizationAssistantsToKitUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MigrateOrganizationAssistantsToKitForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MigrateOrganizationAssistantsToKitBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MigrateOrganizationAssistantsToKitNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MigrateOrganizationAssistantsToKitConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MigrateOrganizationAssistantsToKitUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MigrateOrganizationAssistantsToKitInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MigrateOrganizationAssistantsToKitInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+				}
+				err = ValidateMigrateOrganizationAssistantsToKitInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+				}
+				return nil, NewMigrateOrganizationAssistantsToKitInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MigrateOrganizationAssistantsToKitUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+				}
+				err = ValidateMigrateOrganizationAssistantsToKitUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+				}
+				return nil, NewMigrateOrganizationAssistantsToKitUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "migrateOrganizationAssistantsToKit", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MigrateOrganizationAssistantsToKitGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			err = ValidateMigrateOrganizationAssistantsToKitGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantsToKit", err)
+			}
+			return nil, NewMigrateOrganizationAssistantsToKitGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "migrateOrganizationAssistantsToKit", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -31213,6 +31450,20 @@ func unmarshalAdminOrganizationAssistantResponseBodyToAdminAdminOrganizationAssi
 // value of type *AdminAssistantIdentityMigrationResultResponseBody.
 func unmarshalAdminAssistantIdentityMigrationResultResponseBodyToAdminAdminAssistantIdentityMigrationResult(v *AdminAssistantIdentityMigrationResultResponseBody) *admin.AdminAssistantIdentityMigrationResult {
 	res := &admin.AdminAssistantIdentityMigrationResult{
+		AssistantID: *v.AssistantID,
+		ProjectID:   *v.ProjectID,
+		Name:        *v.Name,
+		Outcome:     *v.Outcome,
+	}
+
+	return res
+}
+
+// unmarshalAdminAssistantKitMigrationResultResponseBodyToAdminAdminAssistantKitMigrationResult
+// builds a value of type *admin.AdminAssistantKitMigrationResult from a value
+// of type *AdminAssistantKitMigrationResultResponseBody.
+func unmarshalAdminAssistantKitMigrationResultResponseBodyToAdminAdminAssistantKitMigrationResult(v *AdminAssistantKitMigrationResultResponseBody) *admin.AdminAssistantKitMigrationResult {
+	res := &admin.AdminAssistantKitMigrationResult{
 		AssistantID: *v.AssistantID,
 		ProjectID:   *v.ProjectID,
 		Name:        *v.Name,

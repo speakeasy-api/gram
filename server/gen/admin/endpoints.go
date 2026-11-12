@@ -138,6 +138,7 @@ type Endpoints struct {
 	StartMemoryEvalRun                      goa.Endpoint
 	ListOrganizationAssistants              goa.Endpoint
 	MigrateOrganizationAssistantIdentities  goa.Endpoint
+	MigrateOrganizationAssistantsToKit      goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -284,6 +285,7 @@ func NewEndpoints(s Service) *Endpoints {
 		StartMemoryEvalRun:                      NewStartMemoryEvalRunEndpoint(s, a.APIKeyAuth),
 		ListOrganizationAssistants:              NewListOrganizationAssistantsEndpoint(s, a.APIKeyAuth),
 		MigrateOrganizationAssistantIdentities:  NewMigrateOrganizationAssistantIdentitiesEndpoint(s, a.APIKeyAuth),
+		MigrateOrganizationAssistantsToKit:      NewMigrateOrganizationAssistantsToKitEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -410,6 +412,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.StartMemoryEvalRun = m(e.StartMemoryEvalRun)
 	e.ListOrganizationAssistants = m(e.ListOrganizationAssistants)
 	e.MigrateOrganizationAssistantIdentities = m(e.MigrateOrganizationAssistantIdentities)
+	e.MigrateOrganizationAssistantsToKit = m(e.MigrateOrganizationAssistantsToKit)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -3161,5 +3164,29 @@ func NewMigrateOrganizationAssistantIdentitiesEndpoint(s Service, authAPIKeyFn s
 			return nil, err
 		}
 		return s.MigrateOrganizationAssistantIdentities(ctx, p)
+	}
+}
+
+// NewMigrateOrganizationAssistantsToKitEndpoint returns an endpoint function
+// that calls the method "migrateOrganizationAssistantsToKit" of service
+// "admin".
+func NewMigrateOrganizationAssistantsToKitEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MigrateOrganizationAssistantsToKitPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.MigrateOrganizationAssistantsToKit(ctx, p)
 	}
 }

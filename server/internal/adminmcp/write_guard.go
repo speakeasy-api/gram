@@ -36,6 +36,7 @@ const (
 	OperationUploadPlatformImage                  WriteOperation = "upload_platform_image"
 	OperationRedeployProject                      WriteOperation = "redeploy_project"
 	OperationMigrateAssistantIdentities           WriteOperation = "migrate_organization_assistant_identities"
+	OperationMigrateAssistantsToKit               WriteOperation = "migrate_organization_assistants_to_kit"
 )
 
 // AllWriteOperations lists every write operation, in a stable order.
@@ -56,6 +57,7 @@ var AllWriteOperations = []WriteOperation{
 	OperationUploadPlatformImage,
 	OperationRedeployProject,
 	OperationMigrateAssistantIdentities,
+	OperationMigrateAssistantsToKit,
 }
 
 func (op WriteOperation) known() bool {

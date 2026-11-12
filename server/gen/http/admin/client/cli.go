@@ -4078,3 +4078,40 @@ func BuildMigrateOrganizationAssistantIdentitiesPayload(adminMigrateOrganization
 
 	return v, nil
 }
+
+// BuildMigrateOrganizationAssistantsToKitPayload builds the payload for the
+// admin migrateOrganizationAssistantsToKit endpoint from CLI flags.
+func BuildMigrateOrganizationAssistantsToKitPayload(adminMigrateOrganizationAssistantsToKitBody string, adminMigrateOrganizationAssistantsToKitAdminSessionToken string) (*admin.MigrateOrganizationAssistantsToKitPayload, error) {
+	var err error
+	var body MigrateOrganizationAssistantsToKitRequestBody
+	{
+		err = json.Unmarshal([]byte(adminMigrateOrganizationAssistantsToKitBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assistant_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+		for _, e := range body.AssistantIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_ids[*]", e, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminMigrateOrganizationAssistantsToKitAdminSessionToken != "" {
+			adminSessionToken = &adminMigrateOrganizationAssistantsToKitAdminSessionToken
+		}
+	}
+	v := &admin.MigrateOrganizationAssistantsToKitPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	if body.AssistantIds != nil {
+		v.AssistantIds = make([]string, len(body.AssistantIds))
+		for i, val := range body.AssistantIds {
+			v.AssistantIds[i] = val
+		}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

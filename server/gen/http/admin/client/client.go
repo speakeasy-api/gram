@@ -500,6 +500,10 @@ type Client struct {
 	// requests to the migrateOrganizationAssistantIdentities endpoint.
 	MigrateOrganizationAssistantIdentitiesDoer goahttp.Doer
 
+	// MigrateOrganizationAssistantsToKit Doer is the HTTP client used to make
+	// requests to the migrateOrganizationAssistantsToKit endpoint.
+	MigrateOrganizationAssistantsToKitDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -641,6 +645,7 @@ func NewClient(
 		StartMemoryEvalRunDoer:                      doer,
 		ListOrganizationAssistantsDoer:              doer,
 		MigrateOrganizationAssistantIdentitiesDoer:  doer,
+		MigrateOrganizationAssistantsToKitDoer:      doer,
 		RestoreResponseBody:                         restoreBody,
 		scheme:                                      scheme,
 		host:                                        host,
@@ -3553,6 +3558,30 @@ func (c *Client) MigrateOrganizationAssistantIdentities() goa.Endpoint {
 		resp, err := c.MigrateOrganizationAssistantIdentitiesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "migrateOrganizationAssistantIdentities", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MigrateOrganizationAssistantsToKit returns an endpoint that makes HTTP
+// requests to the admin service migrateOrganizationAssistantsToKit server.
+func (c *Client) MigrateOrganizationAssistantsToKit() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMigrateOrganizationAssistantsToKitRequest(c.encoder)
+		decodeResponse = DecodeMigrateOrganizationAssistantsToKitResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMigrateOrganizationAssistantsToKitRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MigrateOrganizationAssistantsToKitDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "migrateOrganizationAssistantsToKit", err)
 		}
 		return decodeResponse(resp)
 	}

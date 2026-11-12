@@ -611,3 +611,8 @@ func ListOrganizationAssistantsAdminPath() string {
 func MigrateOrganizationAssistantIdentitiesAdminPath() string {
 	return "/admin/organization.migrateAssistantIdentities"
 }
+
+// MigrateOrganizationAssistantsToKitAdminPath returns the URL path to the admin service migrateOrganizationAssistantsToKit HTTP endpoint.
+func MigrateOrganizationAssistantsToKitAdminPath() string {
+	return "/admin/organization.migrateAssistantsToKit"
+}
