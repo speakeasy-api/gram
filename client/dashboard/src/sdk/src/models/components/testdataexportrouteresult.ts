@@ -9,9 +9,13 @@ import * as openEnums from "../../types/enums.js";
 import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  TestDataExportRouteSignalResult,
+  TestDataExportRouteSignalResult$inboundSchema,
+} from "./testdataexportroutesignalresult.js";
 
 /**
- * accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection, or an address Speakeasy may not send to. error: any other answer.
+ * accepted when every signal was accepted. Otherwise the worst signal's outcome, in this order: unreachable, refused, not_found, error.
  */
 export const TestDataExportRouteResultOutcome = {
   Accepted: "accepted",
@@ -21,14 +25,14 @@ export const TestDataExportRouteResultOutcome = {
   Error: "error",
 } as const;
 /**
- * accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection, or an address Speakeasy may not send to. error: any other answer.
+ * accepted when every signal was accepted. Otherwise the worst signal's outcome, in this order: unreachable, refused, not_found, error.
  */
 export type TestDataExportRouteResultOutcome = OpenEnum<
   typeof TestDataExportRouteResultOutcome
 >;
 
 /**
- * What the destination answered to one test event. Header values and the response body are never returned.
+ * What the destination answered to a route's test events. Header values and the response body are never returned.
  */
 export type TestDataExportRouteResult = {
   /**
@@ -36,11 +40,15 @@ export type TestDataExportRouteResult = {
    */
   message: string;
   /**
-   * accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection, or an address Speakeasy may not send to. error: any other answer.
+   * accepted when every signal was accepted. Otherwise the worst signal's outcome, in this order: unreachable, refused, not_found, error.
    */
   outcome: TestDataExportRouteResultOutcome;
   /**
-   * HTTP status the destination answered with. Omitted when it did not answer.
+   * One result for each signal the route's data source exports.
+   */
+  signals: Array<TestDataExportRouteSignalResult>;
+  /**
+   * HTTP status of the signal that set the outcome. Omitted when it did not answer.
    */
   statusCode?: number | undefined;
 };
@@ -59,6 +67,7 @@ export const TestDataExportRouteResult$inboundSchema: z.ZodMiniType<
   z.object({
     message: z.string(),
     outcome: TestDataExportRouteResultOutcome$inboundSchema,
+    signals: z.array(TestDataExportRouteSignalResult$inboundSchema),
     status_code: z.optional(z.int()),
   }),
   z.transform((v) => {

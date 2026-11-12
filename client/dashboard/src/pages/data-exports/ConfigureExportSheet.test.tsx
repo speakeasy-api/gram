@@ -113,10 +113,22 @@ function renderSheet(dataSource: string, otelDestinationId?: string) {
 }
 
 describe("ConfigureExportSheet test event", () => {
-  it("offers a test event for a saved MCP connection logs export", () => {
-    renderSheet("mcp_connection_logs", destination.id);
+  it.each([
+    "mcp_connection_logs",
+    "tool_call_logs",
+    "risk_findings",
+    "product_telemetry",
+  ])("offers a test event for a saved %s export", (dataSource) => {
+    renderSheet(dataSource, destination.id);
     expect(
       screen.getByRole("button", { name: "Send test event" }),
+    ).toBeTruthy();
+  });
+
+  it("says product telemetry sends a log, a trace and a metric", () => {
+    renderSheet("product_telemetry", destination.id);
+    expect(
+      screen.getByText(/Send one test log, trace and metric to check/),
     ).toBeTruthy();
   });
 
@@ -139,13 +151,6 @@ describe("ConfigureExportSheet test event", () => {
         "Save your changes to send a test event to this destination.",
       ),
     ).toBeTruthy();
-  });
-
-  it("does not offer one for other data", () => {
-    renderSheet("product_telemetry", destination.id);
-    expect(
-      screen.queryByRole("button", { name: "Send test event" }),
-    ).toBeNull();
   });
 
   it("does not offer one without a destination", () => {

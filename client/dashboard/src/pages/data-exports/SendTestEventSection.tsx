@@ -18,10 +18,23 @@ const alertVariantForOutcome: Record<string, "success" | "error" | "warning"> =
 const alertTitleForOutcome: Record<string, string> = {
   accepted: "Test event accepted",
   refused: "Test event refused",
-  not_found: "Logs endpoint not found",
+  not_found: "Endpoint not found",
   unreachable: "Destination not reachable",
   error: "Destination returned an error",
 };
+
+const signalLabel: Record<string, string> = {
+  logs: "Logs",
+  traces: "Traces",
+  metrics: "Metrics",
+};
+
+function outcomeTitle(outcome: string, signal?: string): string {
+  if (outcome === "not_found" && signal) {
+    return `${signalLabel[signal] ?? signal} endpoint not found`;
+  }
+  return alertTitleForOutcome[outcome] ?? "Destination returned an error";
+}
 
 // Only a 4xx is a refusal before sending; anything else may come after the event went out.
 function failure(error: unknown): { title: string; message: string } {
@@ -53,16 +66,19 @@ function failure(error: unknown): { title: string; message: string } {
 }
 
 /**
- * Sends one test event to a saved MCP connection logs export's destination and
- * shows what it answered. Org admins only.
+ * Sends a saved export's test events to its destination and shows what it
+ * answered for each signal. Org admins only.
  */
 export function SendTestEventSection({
   projectSlug,
   routeId,
+  sendsEverySignal,
   unsavedChanges,
 }: {
   projectSlug: string;
   routeId: string;
+  /** The export sends logs, traces and metrics, so the test does too. */
+  sendsEverySignal: boolean;
   unsavedChanges: boolean;
 }): JSX.Element {
   // The section shows its own error, so skip the app-wide error toast.
@@ -81,9 +97,11 @@ export function SendTestEventSection({
               </Text>
             ) : (
               <Text muted className="text-sm">
-                Send one event to check the endpoint and API key. It carries{" "}
+                {sendsEverySignal
+                  ? "Send one test log, trace and metric to check the endpoint and API key. Each carries "
+                  : "Send one test event to check the endpoint and API key. It carries "}
                 <code className="font-mono text-xs">
-                  speakeasy.mcp_connection.test=true
+                  speakeasy.test_event=true
                 </code>
                 , so you can filter it out of dashboards and monitors.
               </Text>
@@ -115,11 +133,25 @@ export function SendTestEventSection({
           <Alert
             variant={alertVariantForOutcome[result.outcome] ?? "warning"}
             title={
-              alertTitleForOutcome[result.outcome] ??
-              "Destination returned an error"
+              result.signals.length > 1 && result.outcome !== "accepted"
+                ? "Not every test event was accepted"
+                : outcomeTitle(result.outcome, result.signals[0]?.signal)
             }
           >
             {result.message}
+            {result.signals.length > 1 ? (
+              <ul className="mt-2 space-y-1">
+                {result.signals.map((signal) => (
+                  <li key={signal.signal}>
+                    <span className="font-medium">
+                      {signalLabel[signal.signal] ?? signal.signal}:{" "}
+                      {outcomeTitle(signal.outcome)}.
+                    </span>{" "}
+                    {signal.message}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </Alert>
         ) : null}
       </div>

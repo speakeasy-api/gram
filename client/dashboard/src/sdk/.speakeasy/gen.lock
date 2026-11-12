@@ -2077,6 +2077,7 @@ trackedFiles:
   src/models/components/telemetrywindowpayload.ts: {}
   src/models/components/temporarygrant.ts: {}
   src/models/components/testdataexportrouteresult.ts: {}
+  src/models/components/testdataexportroutesignalresult.ts: {}
   src/models/components/testdetectionrulematch.ts: {}
   src/models/components/testdetectionrulerequestbody.ts: {}
   src/models/components/testdetectionruleresult.ts: {}
@@ -13815,7 +13816,7 @@ examples:
           id: "6ecef0d6-e426-4c4c-bafe-7b477e1a37d3"
       responses:
         "200":
-          application/json: {"message": "<value>", "outcome": "unreachable"}
+          application/json: {"message": "<value>", "outcome": "unreachable", "signals": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

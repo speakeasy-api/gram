@@ -313,8 +313,7 @@ export function ConfigureExportSheet({
               }}
             </form.Field>
 
-            {route?.dataSource === DataSource.McpConnectionLogs &&
-            route.otelDestinationId ? (
+            {route?.otelDestinationId ? (
               <form.Subscribe
                 selector={(state) =>
                   state.values.dataSource !== route.dataSource ||
@@ -325,6 +324,9 @@ export function ConfigureExportSheet({
                   <SendTestEventSection
                     projectSlug={project.slug}
                     routeId={route.id}
+                    sendsEverySignal={
+                      route.dataSource === DataSource.ProductTelemetry
+                    }
                     unsavedChanges={unsavedChanges}
                   />
                 )}

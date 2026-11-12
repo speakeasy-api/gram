@@ -199,7 +199,7 @@ export class DataExports extends ClientSDK {
    * testRoute dataExports
    *
    * @remarks
-   * Send one test event straight to a route's destination and report what it answered. Only MCP connection logs routes support this today. Rate limited per route and per organization.
+   * Send a test event straight to a route's destination, one for each signal its data source exports, and report what the destination answered to each. Rate limited per route and per organization.
    */
   async testRoute(
     request: TestDataExportRouteRequest,
