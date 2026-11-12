@@ -531,7 +531,11 @@ func (s *Service) metaInstructionMembers(ctx context.Context, logger *slog.Logge
 	selected := catalogSelectedMembers(gate, members)
 	labels := make([]metamcp.MemberLabel, 0, len(selected))
 	for _, member := range selected {
-		labels = append(labels, metamcp.MemberLabel{Slug: member.slug, Name: member.name})
+		description := ""
+		if gate.catalog != nil {
+			description = gate.catalog.Members[member.slug].Description
+		}
+		labels = append(labels, metamcp.MemberLabel{Slug: member.slug, Name: member.name, Description: description})
 	}
 	return labels
 }
