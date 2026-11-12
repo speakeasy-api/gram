@@ -524,7 +524,10 @@ func TestNetworkIngressExecutorRecordsUnusableEncryptionKey(t *testing.T) {
 		Queue: "test-network-ingress", AttestorRequired: false, CanApply: func(context.Context) error { return nil },
 	})
 
-	_, _ = executor.Reconcile(ctx, ti.orgID, id)
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	var failure *networkingress.ReconcileError
+	require.ErrorAs(t, err, &failure, "the caller learns the apply failed")
+	require.Equal(t, k8s.NetworkIngressErrorEncryptionKeyUnavailable, failure.Code, "with the specific code, not provider_error")
 	row, err := repo.New(ti.conn).GetNetworkIngressForReconcile(ctx, repo.GetNetworkIngressForReconcileParams{ID: id, OrganizationID: ti.orgID})
 	require.NoError(t, err)
 	require.Equal(t, "error", row.Status)

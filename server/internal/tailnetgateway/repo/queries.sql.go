@@ -12,6 +12,41 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimNetworkIngressCertificateIssuance = `-- name: ClaimNetworkIngressCertificateIssuance :execrows
+INSERT INTO network_ingress_certificate_states (network_ingress_id, organization_id, state_key, value_encrypted)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (network_ingress_id, state_key) DO UPDATE
+SET value_encrypted = EXCLUDED.value_encrypted,
+    updated_at = clock_timestamp()
+WHERE network_ingress_certificate_states.updated_at < clock_timestamp() - make_interval(secs => $5::float8)
+`
+
+type ClaimNetworkIngressCertificateIssuanceParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+	StateKey         string
+	ValueEncrypted   string
+	LeaseSeconds     float64
+}
+
+// A lease, not a lock: claiming it holds no connection while the certificate
+// is requested. One row is affected when this caller now holds the lease
+// (none was held, or the holder's lease lapsed), none when another slot holds
+// a live one.
+func (q *Queries) ClaimNetworkIngressCertificateIssuance(ctx context.Context, arg ClaimNetworkIngressCertificateIssuanceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, claimNetworkIngressCertificateIssuance,
+		arg.NetworkIngressID,
+		arg.OrganizationID,
+		arg.StateKey,
+		arg.ValueEncrypted,
+		arg.LeaseSeconds,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearNetworkIngressNodeAuthKey = `-- name: ClearNetworkIngressNodeAuthKey :exec
 UPDATE network_ingress_nodes
 SET auth_key_encrypted = NULL,
@@ -566,18 +601,6 @@ func (q *Queries) ListNetworkIngressNodes(ctx context.Context, arg ListNetworkIn
 	return items, nil
 }
 
-const lockNetworkIngressCertificate = `-- name: LockNetworkIngressCertificate :exec
-SELECT pg_advisory_lock(hashtextextended('network_ingress_certificate:' || $1::text, 0))
-`
-
-// Session lock serializing certificate issuance across a connection's slots:
-// a slot that waits for it finds the certificate the holder stored and does
-// not request another.
-func (q *Queries) LockNetworkIngressCertificate(ctx context.Context, networkIngressID string) error {
-	_, err := q.db.Exec(ctx, lockNetworkIngressCertificate, networkIngressID)
-	return err
-}
-
 const markNetworkIngressRuntime = `-- name: MarkNetworkIngressRuntime :execrows
 UPDATE network_ingresses
 SET runtime = $1
@@ -600,6 +623,24 @@ func (q *Queries) MarkNetworkIngressRuntime(ctx context.Context, arg MarkNetwork
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const releaseNetworkIngressCertificateIssuance = `-- name: ReleaseNetworkIngressCertificateIssuance :exec
+DELETE FROM network_ingress_certificate_states
+WHERE network_ingress_id = $1
+  AND organization_id = $2
+  AND state_key = $3
+`
+
+type ReleaseNetworkIngressCertificateIssuanceParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+	StateKey         string
+}
+
+func (q *Queries) ReleaseNetworkIngressCertificateIssuance(ctx context.Context, arg ReleaseNetworkIngressCertificateIssuanceParams) error {
+	_, err := q.db.Exec(ctx, releaseNetworkIngressCertificateIssuance, arg.NetworkIngressID, arg.OrganizationID, arg.StateKey)
+	return err
 }
 
 const retireNetworkIngressNodes = `-- name: RetireNetworkIngressNodes :exec
@@ -669,15 +710,6 @@ func (q *Queries) SetNetworkIngressNodeAuthKey(ctx context.Context, arg SetNetwo
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const unlockNetworkIngressCertificate = `-- name: UnlockNetworkIngressCertificate :exec
-SELECT pg_advisory_unlock(hashtextextended('network_ingress_certificate:' || $1::text, 0))
-`
-
-func (q *Queries) UnlockNetworkIngressCertificate(ctx context.Context, networkIngressID string) error {
-	_, err := q.db.Exec(ctx, unlockNetworkIngressCertificate, networkIngressID)
-	return err
 }
 
 const upsertNetworkIngressCertificateState = `-- name: UpsertNetworkIngressCertificateState :exec

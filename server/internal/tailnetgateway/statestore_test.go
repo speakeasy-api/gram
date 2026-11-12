@@ -1,10 +1,8 @@
 package tailnetgateway_test
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -224,24 +222,28 @@ func TestPostgresStateStoreTreatsAnIncompleteCertificateAsMissing(t *testing.T) 
 	require.ErrorIs(t, err, ipn.ErrStateNotExist)
 }
 
-func TestPostgresStateStoreSerializesCertificateIssuance(t *testing.T) {
+func TestPostgresStateStoreLeasesCertificateIssuance(t *testing.T) {
 	t.Parallel()
-	db, err := infra.CloneTestDatabase(t, "tailnetstatecertlock")
+	db, err := infra.CloneTestDatabase(t, "tailnetstatecertlease")
 	require.NoError(t, err)
-	ingressID, orgID := seedIngress(t, db, "state-cert-lock")
+	ingressID, orgID := seedIngress(t, db, "state-cert-lease")
 	slot0 := newStateStore(t, db, ingressID, orgID, 0)
 	slot1 := newStateStore(t, db, ingressID, orgID, 1)
 
-	unlock, err := slot0.LockCertificate(t.Context())
+	release, claimed, err := slot0.ClaimCertificateIssuance(t.Context())
 	require.NoError(t, err)
+	require.True(t, claimed)
 
-	waitCtx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
-	defer cancel()
-	_, err = slot1.LockCertificate(waitCtx)
-	require.Error(t, err, "another slot waits while one is obtaining the certificate")
+	_, claimed, err = slot1.ClaimCertificateIssuance(t.Context())
+	require.NoError(t, err)
+	require.False(t, claimed, "another slot waits while one is obtaining the certificate, holding no connection")
 
-	unlock()
-	unlockOther, err := slot1.LockCertificate(t.Context())
-	require.NoError(t, err, "the lock is free once the holder releases it")
-	unlockOther()
+	release()
+	releaseOther, claimed, err := slot1.ClaimCertificateIssuance(t.Context())
+	require.NoError(t, err)
+	require.True(t, claimed, "the lease is free once the holder releases it")
+	releaseOther()
+
+	_, _, err = slot1.ReadTLSCertAndKey("issuance-lease")
+	require.ErrorIs(t, err, ipn.ErrStateNotExist, "the lease is never mistaken for a certificate")
 }
