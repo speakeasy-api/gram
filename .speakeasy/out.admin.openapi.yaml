@@ -2540,6 +2540,86 @@ paths:
           nextCursor: $.next_cursor
         type: cursor
       x-speakeasy-name-override: listOrganizationActivity
+  /admin/organization.assistants:
+    get:
+      description: Lists every live assistant of one organization with its identity state, runtime, and whether its creator is still a member.
+      operationId: adminListOrganizationAssistants
+      parameters:
+        - allowEmptyValue: true
+          description: The organization ID.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: The organization ID.
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationAssistants'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listOrganizationAssistants admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listOrganizationAssistants
+      x-speakeasy-react-hook:
+        name: AdminListOrganizationAssistants
   /admin/organization.cancelStripeSubscription:
     post:
       tags:
@@ -3532,6 +3612,166 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: listOrganizationMembers
+  /admin/organization.migrateAssistantIdentities:
+    post:
+      description: Gives every assistant of one organization that has no dedicated agent its own agent, owned by the assistant's creator, and binds its triggers to workload identities. The agent starts with access to every MCP server and skill in the assistant's project, administration of the assistant, and project inference only when the creator has it. Assistants whose creator is no longer a member are skipped and reported. Idempotent, so it is safe to run again.
+      operationId: adminMigrateOrganizationAssistantIdentities
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrateOrganizationAssistantIdentitiesRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAssistantIdentityMigrationRun'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: migrateOrganizationAssistantIdentities admin
+      tags:
+        - admin
+      x-speakeasy-name-override: migrateOrganizationAssistantIdentities
+      x-speakeasy-react-hook:
+        name: AdminMigrateOrganizationAssistantIdentities
+  /admin/organization.migrateAssistantsToKit:
+    post:
+      description: Moves assistants of one organization from the default runtime to Kit. Only an assistant with a usable dedicated agent, a shared user-session issuer in its project, no work in flight, and no runtime still inside its warm window is switched; its previous runtimes are retired and stopped by the runtime janitor. Every other assistant is left unchanged and reported. Idempotent, so it is safe to run again.
+      operationId: adminMigrateOrganizationAssistantsToKit
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrateOrganizationAssistantsToKitRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAssistantKitMigrationRun'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: migrateOrganizationAssistantsToKit admin
+      tags:
+        - admin
+      x-speakeasy-name-override: migrateOrganizationAssistantsToKit
+      x-speakeasy-react-hook:
+        name: AdminMigrateOrganizationAssistantsToKit
   /admin/organization.onboardingPlaybook:
     get:
       description: Read the playbook assigned to an organization and how each of its steps fares against the recorded stack.
@@ -9758,6 +9998,144 @@ paths:
       x-speakeasy-name-override: listUserOrganizations
 components:
   schemas:
+    AdminAssistantIdentityMigrationResult:
+      type: object
+      properties:
+        assistant_id:
+          type: string
+          description: The assistant ID.
+          format: uuid
+        name:
+          type: string
+          description: The assistant name.
+        outcome:
+          type: string
+          description: migrated when the run gave the assistant a dedicated agent, already_migrated when it already had one, needs_owner when its creator is no longer an active organization member, and failed when provisioning failed.
+          enum:
+            - migrated
+            - already_migrated
+            - needs_owner
+            - failed
+        project_id:
+          type: string
+          description: The assistant's project ID.
+          format: uuid
+      description: What the identity migration did to one assistant.
+      required:
+        - assistant_id
+        - project_id
+        - name
+        - outcome
+    AdminAssistantIdentityMigrationRun:
+      type: object
+      properties:
+        already_migrated:
+          type: integer
+          description: Assistants that already had a dedicated agent.
+          format: int64
+        failed:
+          type: integer
+          description: Assistants whose provisioning failed. Running again retries them.
+          format: int64
+        migrated:
+          type: integer
+          description: Assistants the run gave a dedicated agent.
+          format: int64
+        needs_owner:
+          type: integer
+          description: Assistants left unmigrated because their creator is no longer an active member.
+          format: int64
+        organization_id:
+          type: string
+          description: The organization ID.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAssistantIdentityMigrationResult'
+          description: One result per live assistant.
+      description: The result of migrating one organization's assistants to agent identity.
+      required:
+        - organization_id
+        - migrated
+        - already_migrated
+        - needs_owner
+        - failed
+        - results
+    AdminAssistantKitMigrationResult:
+      type: object
+      properties:
+        assistant_id:
+          type: string
+          description: The assistant ID.
+          format: uuid
+        name:
+          type: string
+          description: The assistant name.
+        outcome:
+          type: string
+          description: switched when the run moved the assistant to Kit, already_kit when it already ran on Kit, needs_identity when it has no usable dedicated agent, ineligible when its project has no shared user-session issuer, busy when it has work in flight or a runtime that may still be finishing a turn, and failed when the switch failed. Running again retries busy and failed assistants.
+          enum:
+            - switched
+            - already_kit
+            - needs_identity
+            - ineligible
+            - busy
+            - failed
+        project_id:
+          type: string
+          description: The assistant's project ID.
+          format: uuid
+      description: What the Kit runtime migration did to one assistant.
+      required:
+        - assistant_id
+        - project_id
+        - name
+        - outcome
+    AdminAssistantKitMigrationRun:
+      type: object
+      properties:
+        already_kit:
+          type: integer
+          description: Assistants that already ran on Kit.
+          format: int64
+        busy:
+          type: integer
+          description: Assistants left on their runtime because they may still be working.
+          format: int64
+        failed:
+          type: integer
+          description: Assistants whose switch failed.
+          format: int64
+        ineligible:
+          type: integer
+          description: Assistants left on their runtime because their project has no shared user-session issuer.
+          format: int64
+        needs_identity:
+          type: integer
+          description: Assistants left on their runtime because they have no usable dedicated agent.
+          format: int64
+        organization_id:
+          type: string
+          description: The organization ID.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAssistantKitMigrationResult'
+          description: One result per selected assistant.
+        switched:
+          type: integer
+          description: Assistants the run moved to Kit.
+          format: int64
+      description: The result of moving assistants of one organization to the Kit runtime.
+      required:
+        - organization_id
+        - switched
+        - already_kit
+        - needs_identity
+        - ineligible
+        - busy
+        - failed
+        - results
     AdminAuditLog:
       type: object
       properties:
@@ -10638,6 +11016,9 @@ components:
             - tunneled
             - unproxied
             - toolset_only
+        upstream_url:
+          type: string
+          description: The upstream URL for a remote MCP server. Omitted for other server types.
         url:
           type: string
           description: The URL clients connect to. Omitted when the server has no routable address.
@@ -11765,6 +12146,83 @@ components:
         - member_count
         - created_at
         - updated_at
+    AdminOrganizationAssistant:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The dedicated agent, when the assistant has one.
+          format: uuid
+        created_at:
+          type: string
+          description: When the assistant was created.
+          format: date-time
+        created_by_user_email:
+          type: string
+          description: The creator's email, when known.
+        created_by_user_id:
+          type: string
+          description: The user who created the assistant, when known.
+        creator_active:
+          type: boolean
+          description: Whether the creator is still an active member of the organization. Migration gives the creator ownership of the new agent, so an assistant whose creator left cannot be migrated.
+        id:
+          type: string
+          description: The assistant ID.
+          format: uuid
+        identity_state:
+          type: string
+          description: NEVER_CONFIGURED when the assistant has no dedicated agent and still runs as its owner, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted.
+          enum:
+            - NEVER_CONFIGURED
+            - ACTIVE
+            - UNAVAILABLE
+        name:
+          type: string
+          description: The assistant name.
+        project_id:
+          type: string
+          description: The assistant's project ID.
+          format: uuid
+        project_name:
+          type: string
+          description: The assistant's project name.
+        project_slug:
+          type: string
+          description: The assistant's project slug.
+        runtime_version:
+          type: integer
+          description: 'The assistant''s selected runtime: 2 for the default runtime, 3 for Kit.'
+          format: int64
+        status:
+          type: string
+          description: The assistant status.
+      description: One live assistant of an organization, with where it stands in the move to agent identity.
+      required:
+        - id
+        - name
+        - project_id
+        - project_slug
+        - project_name
+        - status
+        - identity_state
+        - runtime_version
+        - creator_active
+        - created_at
+    AdminOrganizationAssistants:
+      type: object
+      properties:
+        assistants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOrganizationAssistant'
+          description: Every live assistant of the organization, by project and name.
+        organization_id:
+          type: string
+          description: The organization ID.
+      required:
+        - organization_id
+        - assistants
     AdminOrganizationMember:
       type: object
       properties:
@@ -12778,7 +13236,7 @@ components:
       properties:
         complete:
           type: boolean
-          description: Whether every profile is recorded and holds a choice for every server its assistant reaches.
+          description: Whether every profile that is pending is recorded and each holds a choice for every server its assistant reaches.
         gaps:
           type: array
           items:
@@ -12791,6 +13249,10 @@ components:
         targets:
           type: integer
           description: Assistant and trigger pairs, each with a profile per execution context.
+          format: int64
+        unexercised_versions:
+          type: integer
+          description: 'Profiles with no version recorded yet, in an organization enforcing upstream auth. They are not pending: a turn records its own profile when its credential is issued. Zero until enforcement is on, since a run records every profile before then. Absent when the serving replica predates the field, which is not a reported zero.'
           format: int64
       description: Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.
       required:
@@ -12982,6 +13444,10 @@ components:
       properties:
         auth_clients:
           $ref: '#/components/schemas/AdminUpstreamOAuthMigrationAuthClients'
+        consent_scoped_selections:
+          type: integer
+          description: Credential and server pairs without a choice that are not pending, because the credential was issued for the servers approved at consent and is refused anywhere else. Absent when the serving replica predates the field, which is not a reported zero.
+          format: int64
         credentials:
           type: integer
           description: Live user session credentials scanned.
@@ -14014,6 +14480,28 @@ components:
       required:
         - from
         - to
+    MigrateOrganizationAssistantIdentitiesRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: The organization ID.
+      required:
+        - organization_id
+    MigrateOrganizationAssistantsToKitRequestBody:
+      type: object
+      properties:
+        assistant_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Assistants to move. Omit to move every live assistant of the organization; an empty list moves none.
+        organization_id:
+          type: string
+          description: The organization ID.
+      required:
+        - organization_id
     MigrateRemoteSessionIssuerRequestBody:
       type: object
       properties:

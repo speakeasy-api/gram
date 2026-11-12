@@ -19,6 +19,9 @@ import (
 
 var infra *testenv.Environment
 
+// testAssistantIssuerURL stands in for the deployment's signing issuer origin.
+const testAssistantIssuerURL = "https://issuer.demoseed.test"
+
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{
 		Postgres:   true,

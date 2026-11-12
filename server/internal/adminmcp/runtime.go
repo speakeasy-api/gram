@@ -135,6 +135,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	providerHealthReader, _ := reader.(ProviderHealthReader)
 	hookFleetReader, _ := reader.(HookFleetReader)
 	customDomainReader, _ := reader.(CustomDomainReader)
+	assistantReader, _ := reader.(AssistantReader)
 	memoryEvalReader, _ := reader.(MemoryEvalReader)
 	var promotions *catalogpromotion.Service
 	if provider, ok := reader.(interface {
@@ -143,7 +144,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 		promotions = provider.CatalogPromotionService()
 	}
 	runtime := &Runtime{catalogPromotions: promotions, authenticator: authenticator, server: server, resourceURL: resourceURL}
-	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, reader != nil && filteredActivityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, projectReader != nil && serverHealthReader != nil, providerHealthReader != nil, hookFleetReader != nil, customDomainReader != nil, memoryEvalReader != nil, runtime)
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, reader != nil && filteredActivityReader != nil, usageReader != nil, coverageReader != nil, issuerReader != nil, matrixReader != nil, onboardingReader != nil, projectMCPReader != nil, billingDiagnosticsReader != nil, organizationStatsReader != nil, organizationMemberReader != nil, billingDetailReader != nil, registryReader != nil, projectReader != nil && serverHealthReader != nil, providerHealthReader != nil, hookFleetReader != nil, customDomainReader != nil, reader != nil && assistantReader != nil, memoryEvalReader != nil, runtime)
 	registerOrganizationTools(server, reader)
 	registerUserTools(server, userReader)
 	registerProjectTools(server, reader, projectReader)
@@ -172,6 +173,7 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	registerProviderHealthTools(server, providerHealthReader)
 	registerHookFleetTools(server, reader, hookFleetReader)
 	registerCustomDomainTools(server, reader, customDomainReader)
+	registerAssistantTools(server, reader, assistantReader)
 	registerMemoryEvalTools(server, memoryEvalReader)
 	return runtime
 }

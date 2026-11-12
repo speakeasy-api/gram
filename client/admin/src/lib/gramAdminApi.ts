@@ -644,6 +644,120 @@ export function redeployProject(
   );
 }
 
+export type AdminAssistantIdentityState =
+  | "NEVER_CONFIGURED"
+  | "ACTIVE"
+  | "UNAVAILABLE";
+
+export type AdminOrganizationAssistant = {
+  id: string;
+  name: string;
+  project_id: string;
+  project_slug: string;
+  project_name: string;
+  status: string;
+  identity_state: AdminAssistantIdentityState;
+  agent_id?: string;
+  // 2 is the default runtime, 3 is Kit.
+  runtime_version: number;
+  created_by_user_id?: string;
+  created_by_user_email?: string;
+  // The migration makes the creator the new agent's owner, so an assistant
+  // whose creator left the organization is skipped.
+  creator_active: boolean;
+  created_at: string;
+};
+
+export type AdminOrganizationAssistants = {
+  organization_id: string;
+  assistants: AdminOrganizationAssistant[];
+};
+
+export function listOrganizationAssistants(
+  organizationID: string,
+): Promise<AdminOrganizationAssistants> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationAssistants>(
+    `/admin/organization.assistants?${qs}`,
+  );
+}
+
+export type AdminAssistantIdentityMigrationOutcome =
+  | "migrated"
+  | "already_migrated"
+  | "needs_owner"
+  | "failed";
+
+export type AdminAssistantIdentityMigrationRun = {
+  organization_id: string;
+  migrated: number;
+  already_migrated: number;
+  needs_owner: number;
+  failed: number;
+  results: {
+    assistant_id: string;
+    project_id: string;
+    name: string;
+    outcome: AdminAssistantIdentityMigrationOutcome;
+  }[];
+};
+
+export function migrateOrganizationAssistantIdentities(
+  organizationID: string,
+): Promise<AdminAssistantIdentityMigrationRun> {
+  return gramAdminMutation<AdminAssistantIdentityMigrationRun>(
+    "/admin/organization.migrateAssistantIdentities",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: organizationID }),
+    },
+  );
+}
+
+export type AdminAssistantKitMigrationOutcome =
+  | "switched"
+  | "already_kit"
+  | "needs_identity"
+  | "ineligible"
+  | "busy"
+  | "failed";
+
+export type AdminAssistantKitMigrationRun = {
+  organization_id: string;
+  switched: number;
+  already_kit: number;
+  needs_identity: number;
+  ineligible: number;
+  busy: number;
+  failed: number;
+  results: {
+    assistant_id: string;
+    project_id: string;
+    name: string;
+    outcome: AdminAssistantKitMigrationOutcome;
+  }[];
+};
+
+// Moves the given assistants, or every live assistant of the organization when
+// none are given, to the Kit runtime.
+export function migrateOrganizationAssistantsToKit(
+  organizationID: string,
+  assistantIDs?: string[],
+): Promise<AdminAssistantKitMigrationRun> {
+  return gramAdminMutation<AdminAssistantKitMigrationRun>(
+    "/admin/organization.migrateAssistantsToKit",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: organizationID,
+        assistant_ids: assistantIDs,
+      }),
+    },
+  );
+}
+
 export type AdminMcpServerSource =
   | "toolset"
   | "remote"
@@ -659,6 +773,8 @@ export type AdminMcpServer = {
   // row with no endpoint.
   url?: string;
   visibility: "disabled" | "private" | "public";
+  // Remote MCP server upstream address; omitted for other server types.
+  upstream_url?: string;
   source: AdminMcpServerSource;
   created_at: string;
 };

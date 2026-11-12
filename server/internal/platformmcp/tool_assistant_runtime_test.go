@@ -16,7 +16,6 @@ import (
 )
 
 type assistantRuntimeManagementStub struct {
-	assistantIdentityManagementFunc
 	update func(context.Context, *genassistants.UpdateAssistantPayload) (*types.Assistant, error)
 }
 

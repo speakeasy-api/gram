@@ -4,18 +4,21 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  Assistant,
-  Assistant$inboundSchema,
-} from "../models/components/assistant.js";
+  AdminAssistantKitMigrationRun,
+  AdminAssistantKitMigrationRun$inboundSchema,
+} from "../models/components/adminassistantkitmigrationrun.js";
+import {
+  MigrateOrganizationAssistantsToKitRequestBody,
+  MigrateOrganizationAssistantsToKitRequestBody$outboundSchema,
+} from "../models/components/migrateorganizationassistantstokitrequestbody.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -30,28 +33,22 @@ import {
   ServiceError,
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
-import {
-  UpgradeAssistantIdentityRequest,
-  UpgradeAssistantIdentityRequest$outboundSchema,
-  UpgradeAssistantIdentitySecurity,
-} from "../models/operations/upgradeassistantidentity.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * upgradeAssistantIdentity assistants
+ * migrateOrganizationAssistantsToKit admin
  *
  * @remarks
- * Give an existing assistant an agent and per-trigger workload identities. By default a new agent is created with access to every MCP server and skill in the project and to administering this assistant. Passing agent_id points the assistant at an existing agent of the project instead; that agent keeps its policy and gains administration of this assistant. Either way the agent is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.
+ * Moves assistants of one organization from the default runtime to Kit. Only an assistant with a usable dedicated agent, a shared user-session issuer in its project, no work in flight, and no runtime still inside its warm window is switched; its previous runtimes are retired and stopped by the runtime janitor. Every other assistant is left unchanged and reported. Idempotent, so it is safe to run again.
  */
-export function assistantsUpgradeIdentity(
+export function adminMigrateOrganizationAssistantsToKit(
   client: GramCore,
-  request: UpgradeAssistantIdentityRequest,
-  security?: UpgradeAssistantIdentitySecurity | undefined,
+  request: MigrateOrganizationAssistantsToKitRequestBody,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    Assistant,
+    AdminAssistantKitMigrationRun,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -66,20 +63,18 @@ export function assistantsUpgradeIdentity(
   return new APIPromise($do(
     client,
     request,
-    security,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  request: UpgradeAssistantIdentityRequest,
-  security?: UpgradeAssistantIdentitySecurity | undefined,
+  request: MigrateOrganizationAssistantsToKitRequestBody,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      Assistant,
+      AdminAssistantKitMigrationRun,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,56 +90,35 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(UpgradeAssistantIdentityRequest$outboundSchema, value),
+    (value) =>
+      z.parse(
+        MigrateOrganizationAssistantsToKitRequestBody$outboundSchema,
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.UpgradeAssistantIdentityRequestBody, {
-    explode: true,
-  });
+  const body = encodeJSON("body", payload, { explode: true });
 
-  const path = pathToFunc("/rpc/assistants.upgradeIdentity")();
+  const path = pathToFunc("/admin/organization.migrateAssistantsToKit")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
-      explode: false,
-      charEncoding: "none",
-    }),
   }));
-
-  const requestSecurity = resolveSecurity(
-    [
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.projectSlugHeaderGramProject,
-      },
-      {
-        fieldName: "Gram-Session",
-        type: "apiKey:header",
-        value: security?.sessionHeaderGramSession,
-      },
-    ],
-  );
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "upgradeAssistantIdentity",
+    operationID: "adminMigrateOrganizationAssistantsToKit",
     oAuth2Scopes: null,
 
-    resolvedSecurity: requestSecurity,
+    resolvedSecurity: null,
 
-    securitySource: security,
+    securitySource: null,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },
@@ -152,7 +126,6 @@ async function $do(
   };
 
   const requestRes = client._createRequest(context, {
-    security: requestSecurity,
     method: "POST",
     baseURL: options?.serverURL,
     path: path,
@@ -183,7 +156,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    Assistant,
+    AdminAssistantKitMigrationRun,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -194,7 +167,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, Assistant$inboundSchema),
+    M.json(200, AdminAssistantKitMigrationRun$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
