@@ -52,7 +52,7 @@ export function PresenceRail({
                       {entry.instance.note}
                     </p>
                   ) : null}
-                  <p className="text-muted-foreground/70 truncate text-xs">
+                  <p className="text-muted-foreground truncate text-xs">
                     {entry.isYours ? "Yours" : entry.owner}
                   </p>
                 </div>

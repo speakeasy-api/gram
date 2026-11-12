@@ -41,11 +41,12 @@ export function ConnectAgent(): JSX.Element {
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-3 space-y-3 text-sm">
           <p>
-            The agent must <strong>follow</strong> each thread it should hear
-            about, with <code className="text-xs">channels_follow</code>, and{" "}
-            <strong>subscribe</strong> to this resource with the stream kept
-            open. Following without subscribing delivers nothing, and
-            subscribing without following delivers nothing from threads.
+            The agent must <strong>subscribe</strong> to this resource and keep
+            the stream open. It hears about private conversations addressed to
+            it unless it mutes them. To hear about a thread, it must also{" "}
+            <strong>follow</strong> it with{" "}
+            <code className="text-xs">channels_follow</code>; subscribing
+            without following delivers nothing from threads.
           </p>
           <div className="flex items-center gap-2 border px-3 py-2">
             <code className="min-w-0 flex-1 truncate text-xs">

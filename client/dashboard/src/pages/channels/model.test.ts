@@ -158,6 +158,26 @@ describe("conversation list", () => {
       listFrom(typed, { viewerId: "identity-1", resolve, readMarks: {} })[0]
         ?.unread,
     ).toBe(0);
+    expect(deploy?.unreadMessages.map((message) => message.id)).toEqual([1]);
+
+    // A session the snapshot cannot name may be the viewer's own.
+    const unknown = snapshotWith({
+      threads: { busy: { id: "busy", title: "Deploy" } },
+      messages: [
+        {
+          id: 1,
+          threadId: "busy",
+          instanceId: "gone-session",
+          subjectId: "identity-1",
+          text: "Earlier",
+          createdAt: "2026-01-01T10:00:00Z",
+        },
+      ],
+    });
+    expect(
+      listFrom(unknown, { viewerId: "identity-1", resolve, readMarks: {} })[0]
+        ?.unread,
+    ).toBe(0);
     const [, afterReading] = listFrom(snapshot, {
       viewerId: "identity-2",
       resolve,

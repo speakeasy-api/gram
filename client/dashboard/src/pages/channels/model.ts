@@ -29,6 +29,8 @@ export interface Conversation {
   lastMessage?: ChannelMessage;
   lastActivity: number;
   unread: number;
+  /** The loaded messages counted in `unread`, oldest first. */
+  unreadMessages: ChannelMessage[];
 }
 
 export interface Speaker {
@@ -42,7 +44,7 @@ export interface Speaker {
   isYou: boolean;
 }
 
-export interface PresenceEntry {
+interface PresenceEntry {
   instance: ChannelInstance;
   /** The name the agent chose for itself when it connected. */
   name: string;
@@ -204,7 +206,7 @@ export function conversationsFrom(
         messages,
         lastMessage,
         lastActivity: lastMessage ? Date.parse(lastMessage.createdAt) : 0,
-        unread: unreadCount(messages, lastMessage, mark, (message) =>
+        ...unreadOf(messages, lastMessage, mark, (message) =>
           typedByViewer(message, snapshot, options.viewerId),
         ),
       };
@@ -237,10 +239,11 @@ function typedByViewer(
   snapshot: ChannelsSnapshot,
   viewerId: string,
 ): boolean {
-  return (
-    message.subjectId === viewerId &&
-    !isAgent(participantOf(snapshot, message.instanceId))
-  );
+  if (message.subjectId !== viewerId) return false;
+  // A session the snapshot cannot name could be the viewer's own; counting
+  // their own words as news is the worse mistake.
+  const participant = participantOf(snapshot, message.instanceId);
+  return participant === undefined || !isAgent(participant);
 }
 
 /**
@@ -248,24 +251,27 @@ function typedByViewer(
  * counted exactly; a summary newer than the loaded pages still has to show
  * that something is waiting, so it counts for one.
  */
-function unreadCount(
+function unreadOf(
   messages: ChannelMessage[],
   newest: ChannelMessage | undefined,
   mark: number,
   isOwn: (message: ChannelMessage) => boolean,
-): number {
-  let unread = 0;
+): { unread: number; unreadMessages: ChannelMessage[] } {
+  const unreadMessages: ChannelMessage[] = [];
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index]!;
     if (message.id <= mark) break;
-    if (!isOwn(message)) unread++;
+    if (!isOwn(message)) unreadMessages.unshift(message);
   }
   const unloaded =
     newest &&
     newest.id > mark &&
     !isOwn(newest) &&
     newest.id > (messages[messages.length - 1]?.id ?? 0);
-  return unread + (unloaded ? 1 : 0);
+  return {
+    unread: unreadMessages.length + (unloaded ? 1 : 0),
+    unreadMessages,
+  };
 }
 
 /**
@@ -309,9 +315,13 @@ export function presenceOf(
   return { agents, readers: people };
 }
 
-/** How far the project is from agents talking to each other. */
+/**
+ * How far the project is from agents talking to each other, as far as the
+ * snapshot shows: live agents and recent speakers. Older activity is not in it,
+ * so a completed setup must be remembered rather than recomputed.
+ */
 export interface SetupProgress {
-  /** Distinct agents that have connected, whether or not they still are. */
+  /** Distinct agents that are connected now or spoke recently. */
   agentsSeen: number;
   /** True once any agent has posted in a thread everyone can read. */
   agentsTalking: boolean;

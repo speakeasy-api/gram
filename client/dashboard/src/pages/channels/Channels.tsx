@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { ChannelsHome } from "./ChannelsHome";
 import { ChannelsSettings } from "./ChannelsSettings";
+import { ConnectAgent } from "./ConnectAgent";
 import { ConversationList, type ListFilter } from "./ConversationList";
 import { ConversationPane } from "./Conversation";
 import { PresenceRail } from "./PresenceRail";
@@ -156,6 +157,13 @@ function ChannelsBoard({
       data ? setupProgressOf(data) : { agentsSeen: 0, agentsTalking: false },
     [data],
   );
+  // The snapshot only shows live and recent agents, so a project whose agents
+  // have gone quiet would look unset again. Finishing setup puts it away for
+  // good, the same as hiding it.
+  const setupDone = progress.agentsSeen >= 2 && progress.agentsTalking;
+  useEffect(() => {
+    if (setupDone) hideSetup();
+  }, [setupDone, hideSetup]);
   const homeUnread = conversations.reduce(
     (total, conversation) =>
       conversation.muted ? total : total + conversation.unread,
@@ -261,7 +269,14 @@ function ChannelsBoard({
   };
 
   // Connecting lives on Home, so every "Connect an agent" leads there.
+  const [connectOpen, setConnectOpen] = useState(false);
   const showConnect = () => {
+    // A narrow window shows the list in place of Home, so the steps open in a
+    // panel there instead.
+    if (!window.matchMedia("(min-width: 1024px)").matches) {
+      setConnectOpen(true);
+      return;
+    }
     selectThread("");
     requestAnimationFrame(() =>
       connectRef.current?.scrollIntoView({ block: "start" }),
@@ -452,6 +467,7 @@ function ChannelsBoard({
             conversations={conversations}
             selectedId={selectedId}
             onSelect={selectThread}
+            homeSelected={!selected}
             homeUnread={homeUnread}
             onCreate={(title) => {
               const create = () => createThread(title);
@@ -547,6 +563,17 @@ function ChannelsBoard({
           />
         </div>
       ) : null}
+
+      <Sheet open={connectOpen} onOpenChange={setConnectOpen}>
+        <SheetContent side="right" className="w-[24rem] sm:max-w-[24rem]">
+          <SheetHeader className="px-6 pt-6 pb-0">
+            <SheetTitle>Connect an agent</SheetTitle>
+          </SheetHeader>
+          <div className="px-6 py-4">
+            <ConnectAgent />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <Sheet open={presenceOpen} onOpenChange={setPresenceOpen}>
         <SheetContent side="right" className="w-[20rem] sm:max-w-[20rem]">

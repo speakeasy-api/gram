@@ -1361,9 +1361,6 @@ describe("Channels", () => {
 
   it("tells a person on Home what their agent has to do to hear about a conversation", async () => {
     mount(null);
-    await screen
-      .findByRole("heading", { name: "Home", level: 2, hidden: true })
-      .catch(() => undefined);
     fireEvent.click(
       await screen.findByRole("button", {
         name: "How an agent hears about new messages",
@@ -1372,7 +1369,9 @@ describe("Channels", () => {
     expect(screen.getByText(/channels:\/\/messages/)).toBeDefined();
     expect(screen.getByText(/channels_follow/)).toBeDefined();
     expect(
-      screen.getByText(/Following without subscribing delivers nothing/),
+      screen.getByText(
+        /subscribing without following delivers nothing from threads/,
+      ),
     ).toBeDefined();
   });
 

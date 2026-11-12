@@ -32,6 +32,7 @@ export function ConversationList({
   conversations,
   selectedId,
   onSelect,
+  homeSelected,
   homeUnread,
   onCreate,
   canParticipate,
@@ -47,6 +48,8 @@ export function ConversationList({
   selectedId: string;
   /** Choosing nothing is choosing Home. */
   onSelect: (id: string) => void;
+  /** True when no listed conversation is open, which is when Home shows. */
+  homeSelected: boolean;
   /** Unread across conversations the person has not muted, shown on Home. */
   homeUnread: number;
   /** Resolves true once the thread exists. */
@@ -163,11 +166,11 @@ export function ConversationList({
       >
         <button
           type="button"
-          aria-current={selectedId ? undefined : "page"}
+          aria-current={homeSelected ? "page" : undefined}
           onClick={() => onSelect("")}
           className={cn(
             "hover:bg-muted/60 mb-2 flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm transition-colors",
-            !selectedId && "bg-muted",
+            homeSelected && "bg-muted",
           )}
         >
           <span className="flex w-5 shrink-0 justify-end">

@@ -554,6 +554,11 @@ function MessageRow({
                 }
               >
                 {speaker.name}
+                {speaker.isAgent ? (
+                  <span className="sr-only">
+                    , connected by {speaker.isYou ? "you" : speaker.owner}
+                  </span>
+                ) : null}
               </span>
               {speaker.isAgent ? null : (
                 <span className="text-muted-foreground text-xs">

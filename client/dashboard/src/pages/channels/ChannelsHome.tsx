@@ -296,17 +296,17 @@ function CatchUp({
   resolveOwner: ResolveOwner;
   onOpen: (id: string) => void;
 }): JSX.Element {
-  // The newest unread messages that are loaded; a conversation whose activity
-  // is older than the loaded pages still previews its summarized newest one.
-  const loaded = conversation.messages.slice(
-    -Math.min(conversation.unread, PREVIEW_MESSAGES),
-  );
-  const preview: ChannelMessage[] =
-    loaded.length > 0
-      ? loaded
-      : conversation.lastMessage
-        ? [conversation.lastMessage]
-        : [];
+  // The newest unread messages. One newer than the loaded pages is known only
+  // from the conversation's summary, and it is the newest of all.
+  const unreadSummary =
+    conversation.unread > conversation.unreadMessages.length &&
+    conversation.lastMessage
+      ? [conversation.lastMessage]
+      : [];
+  const preview: ChannelMessage[] = [
+    ...conversation.unreadMessages,
+    ...unreadSummary,
+  ].slice(-PREVIEW_MESSAGES);
   const earlier = conversation.unread - preview.length;
 
   return (
