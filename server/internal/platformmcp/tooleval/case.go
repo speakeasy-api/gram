@@ -7,9 +7,12 @@
 package tooleval
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"path"
 	"slices"
@@ -40,11 +43,9 @@ type Case struct {
 	// real read returns, so it does not try to score what comes after.
 	Allow []string `yaml:"allow"`
 
-	// Args are values the expected tool's arguments must carry. A string
-	// matches when the argument contains it, ignoring case, or, for an array
-	// argument, when one element does. A list matches an array argument when
-	// each listed string is in some element, in any order. Any other value
-	// must be equal as JSON.
+	// Args are values the expected tool's arguments must carry, matched as
+	// valueMatches describes: strings by case-insensitive substring, objects
+	// by the keys listed, lists by each item matching some element.
 	Args map[string]any `yaml:"args"`
 
 	// File is the case file the case came from.
@@ -95,8 +96,12 @@ func LoadCasesFS(fsys fs.FS) ([]Case, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", name, err)
 		}
+		// Unknown keys are errors: a misspelled expect would otherwise turn a
+		// case negative, and a misspelled args would skip the argument check.
 		var fileCases []Case
-		if err := yaml.Unmarshal(data, &fileCases); err != nil {
+		decoder := yaml.NewDecoder(bytes.NewReader(data))
+		decoder.KnownFields(true)
+		if err := decoder.Decode(&fileCases); err != nil && !errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("parse %s: %w", name, err)
 		}
 		for _, c := range fileCases {
@@ -123,60 +128,52 @@ func argsMatch(expected map[string]any, arguments json.RawMessage) bool {
 	if err := json.Unmarshal(arguments, &got); err != nil {
 		return false
 	}
-	for key, want := range expected {
-		value, ok := got[key]
+	return valueMatches(expected, got)
+}
+
+// valueMatches reports whether got carries want. A string matches a string
+// that contains it, ignoring case, or an array with such an element. An
+// object matches when each listed key matches; keys it does not list are
+// free. A list matches an array when each listed item matches some element,
+// in any order. Any other value must be equal as JSON.
+func valueMatches(want, got any) bool {
+	switch want := want.(type) {
+	case string:
+		switch got := got.(type) {
+		case string:
+			return strings.Contains(strings.ToLower(got), strings.ToLower(want))
+		case []any:
+			return slices.ContainsFunc(got, func(item any) bool { return valueMatches(want, item) })
+		}
+		return false
+	case map[string]any:
+		gotObject, ok := got.(map[string]any)
 		if !ok {
 			return false
 		}
-		if wantString, ok := want.(string); ok {
-			if !containsString(value, wantString) {
+		for key, value := range want {
+			gotValue, ok := gotObject[key]
+			if !ok || !valueMatches(value, gotValue) {
 				return false
 			}
-			continue
 		}
-		if wantList, ok := want.([]any); ok {
-			if gotList, ok := value.([]any); ok && allStrings(wantList) {
-				for _, item := range wantList {
-					if !containsString(gotList, item.(string)) {
-						return false
-					}
-				}
-				continue
-			}
-		}
-		wantJSON, err := json.Marshal(want)
-		if err != nil {
-			return false
-		}
-		gotJSON, err := json.Marshal(value)
-		if err != nil || string(wantJSON) != string(gotJSON) {
-			return false
-		}
-	}
-	return true
-}
-
-// containsString reports whether a string argument, or any string element of
-// an array argument, contains want, ignoring case.
-func containsString(value any, want string) bool {
-	switch got := value.(type) {
-	case string:
-		return strings.Contains(strings.ToLower(got), strings.ToLower(want))
+		return true
 	case []any:
-		for _, item := range got {
-			if text, ok := item.(string); ok && strings.Contains(strings.ToLower(text), strings.ToLower(want)) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func allStrings(items []any) bool {
-	for _, item := range items {
-		if _, ok := item.(string); !ok {
+		gotList, ok := got.([]any)
+		if !ok {
 			return false
 		}
+		for _, item := range want {
+			if !slices.ContainsFunc(gotList, func(element any) bool { return valueMatches(item, element) }) {
+				return false
+			}
+		}
+		return true
 	}
-	return len(items) > 0
+	wantJSON, err := json.Marshal(want)
+	if err != nil {
+		return false
+	}
+	gotJSON, err := json.Marshal(got)
+	return err == nil && string(wantJSON) == string(gotJSON)
 }

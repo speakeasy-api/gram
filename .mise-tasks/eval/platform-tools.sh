@@ -50,6 +50,7 @@ if [ -n "${usage_changed_since:-}" ]; then
   merge_base="$(git merge-base "$usage_changed_since" HEAD)"
   if git cat-file -e "$merge_base:$tooleval_path/catalogue.json" 2>/dev/null; then
     base_dir="$(mktemp -d)"
+    trap 'rm -rf "$base_dir"' EXIT
     git show "$merge_base:$tooleval_path/catalogue.json" >"$base_dir/catalogue.json"
     mkdir "$base_dir/cases"
     # The task runs from server/, and git archive names entries relative to
@@ -78,4 +79,5 @@ if [ -n "${usage_out:-}" ]; then
   export TOOLEVAL_OUT="$(cd "$out_dir" && pwd)/$(basename "$usage_out")"
 fi
 
-exec mise run test:server -tags=tooleval -run "^TestToolEvalJudged\$" -count=1 -timeout=3h -v ./internal/platformmcp/
+# Not exec: the EXIT trap removes the base copy once the run ends.
+mise run test:server -tags=tooleval -run "^TestToolEvalJudged\$" -count=1 -timeout=3h -v ./internal/platformmcp/

@@ -223,7 +223,7 @@
   expect: [get_my_install_instructions]
   allow: [list_plugins, get_plugin]
   args:
-    client_family: claude
+    client_family: claude_code
 
 # Plugin changes: create, rename, assignments, publishing and auto sync.
 - id: plugin-create-finance-tools

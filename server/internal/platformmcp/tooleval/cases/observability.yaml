@@ -25,6 +25,7 @@
   allow: [list_attribute_keys]
   args:
     project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    attributes: [{ key: team, values: [payments] }]
 - id: obs-linear-recent-calls
   prompt: Show me the latest individual requests that hit the Linear server today, I need references to send to their support.
   expect: [query_mcp_traces]
@@ -127,7 +128,7 @@
   expect: [get_dashboard]
   allow: [list_dashboards]
   args:
-    dashboard_id: 6f7a8b00
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
 - id: obs-create-dashboard
   prompt: Make a new empty dashboard in Payments called "Billing health".
   expect: [save_dashboard]
@@ -140,38 +141,42 @@
   expect: [save_dashboard]
   allow: [list_dashboards, get_dashboard]
   args:
-    dashboard_id: 6f7a8b00
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
     name: MCP usage by week
 - id: obs-duplicate-dashboard
   prompt: I'd like a copy of the Weekly MCP usage dashboard in Default that I can change without touching the original.
   expect: [duplicate_dashboard]
   allow: [list_dashboards, get_dashboard]
   args:
-    dashboard_id: 6f7a8b00
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
 - id: obs-delete-dashboard
   prompt: Remove the Weekly MCP usage dashboard from Default. Nobody looks at it.
   expect: [delete_dashboard]
   allow: [list_dashboards, get_dashboard]
   args:
-    dashboard_id: 6f7a8b00
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
 - id: obs-add-card-to-dashboard
   prompt: Put widget 8a1b2c3d-0000-4000-8000-0000000000b1 on the Weekly MCP usage dashboard in Default, full width along the top.
   expect: [edit_dashboard_layout]
   allow: [get_dashboard, list_dashboards, list_widgets, get_widget]
   args:
-    dashboard_id: 6f7a8b00
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
+    operations:
+      [{ op: add_card, widget_id: 8a1b2c3d-0000-4000-8000-0000000000b1 }]
 - id: obs-remove-card-keep-widget
   prompt: Take the widget 8a1b2c3d-0000-4000-8000-0000000000b3 card off the Weekly MCP usage dashboard in Default, but keep the widget itself saved.
   expect: [edit_dashboard_layout]
   allow: [get_dashboard, list_dashboards, list_widgets, get_widget]
   args:
-    dashboard_id: 6f7a8b00
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
+    operations: [{ op: remove_card }]
 - id: obs-dashboard-default-filters
   prompt: When people open the Weekly MCP usage dashboard in Default it should show the last 30 days by default.
   expect: [save_dashboard_filters]
   allow: [get_dashboard, list_dashboards, describe_analytics_catalog]
   args:
-    dashboard_id: 6f7a8b00
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
+    filters: { range: { preset: 30d } }
 
 # Project health first, then one named server's diagnosis.
 - id: obs-project-overview

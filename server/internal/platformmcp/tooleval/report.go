@@ -40,7 +40,8 @@ type Score struct {
 	// ArgsMatch is the share of hits on cases with expected arguments that
 	// carried them.
 	ArgsMatch float64
-	// Negatives counts negative attempts answered without a Platform tool.
+	// Negatives counts graded negative attempts; NegativesRight those that
+	// ended in an answer without a Platform tool.
 	NegativesRight, Negatives int
 	// ConfirmedFirst counts writes confirmed before any preview.
 	ConfirmedFirst int
@@ -62,7 +63,7 @@ func newReport(cfg Config, surfaces []Surface, outcomes []Outcome) *Report {
 }
 
 func scoreOf(model, surface string, outcomes []Outcome) Score {
-	s := Score{Model: model, Surface: surface}
+	s := Score{Model: model, Surface: surface, Attempts: 0, Errors: 0, Selection: 0, ExpectedFirst: 0, SchemaValid: 0, ArgsMatch: 0, NegativesRight: 0, Negatives: 0, ConfirmedFirst: 0, MeanTurns: 0, PromptTokensPerCase: 0, CostUSD: 0, MeanLatencySeconds: 0}
 	var graded, hits, onPath, positives, valid, withArgs, matched, turns, prompt int
 	var latency float64
 	for _, o := range outcomes {
@@ -149,7 +150,7 @@ func (r *Report) Misses() []Miss {
 		k := key{o.Model, o.Surface, o.Case.ID}
 		m, ok := byKey[k]
 		if !ok {
-			m = &Miss{Model: o.Model, Surface: o.Surface, CaseID: o.Case.ID, Expected: o.Case.Expect, Chosen: map[string]int{}}
+			m = &Miss{Model: o.Model, Surface: o.Surface, CaseID: o.Case.ID, Expected: o.Case.Expect, Chosen: map[string]int{}, Wrong: 0, Total: 0}
 			byKey[k] = m
 			order = append(order, k)
 		}
@@ -161,6 +162,8 @@ func (r *Report) Misses() []Miss {
 		switch {
 		case o.Err != nil:
 			m.Chosen["(error)"]++
+		case o.Unfinished:
+			m.Chosen["(unfinished)"]++
 		case o.Selected == nil:
 			m.Chosen["(none)"]++
 		case o.Hit && !o.SchemaValid:
@@ -240,7 +243,7 @@ func (r *Report) writeErrors(b *strings.Builder) {
 		if _, rest, ok := strings.Cut(message, ": "); ok {
 			message = rest
 		}
-		message = o.Surface + ": " + message
+		message = o.Model + " / " + o.Surface + ": " + message
 		message = truncate(message, maxErrorBytes)
 		if counts[message] == 0 {
 			order = append(order, message)
@@ -261,14 +264,18 @@ const maxAnswerBytes = 240
 
 // writeUnexpectedAnswers shows what the agent said when it answered without a
 // tool on a case that expected one, so a refusal, a clarifying question and a
-// skipped preview can be told apart.
+// skipped preview can be told apart. Unfinished attempts are listed too, on
+// any case.
 func (r *Report) writeUnexpectedAnswers(b *strings.Builder) {
 	var lines []string
 	for _, o := range r.Outcomes {
-		if o.Err != nil || o.Selected != nil || o.Case.Negative() {
+		if o.Err != nil || o.Selected != nil || (o.Case.Negative() && !o.Unfinished) {
 			continue
 		}
 		answer := strings.Join(strings.Fields(o.Answer), " ")
+		if o.Unfinished {
+			answer = "(no tool call or answer within the turn or time limit)"
+		}
 		answer = truncate(answer, maxAnswerBytes)
 		lines = append(lines, fmt.Sprintf("- %s / %s / %s: %s", o.Model, o.Surface, o.Case.ID, answer))
 	}
@@ -285,9 +292,10 @@ func truncate(text string, limit int) string {
 	if len(text) <= limit {
 		return text
 	}
-	cut := limit
+	const ellipsis = "…"
+	cut := max(limit-len(ellipsis), 0)
 	for cut > 0 && !utf8.RuneStart(text[cut]) {
 		cut--
 	}
-	return text[:cut] + "…"
+	return text[:cut] + ellipsis
 }

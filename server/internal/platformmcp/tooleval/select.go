@@ -34,7 +34,7 @@ func sharedChanged(base, head Catalogue) string {
 		return "the eval's agent prompt or environment changed"
 	case !maps.Equal(base.Instructions, head.Instructions):
 		return "server instructions changed"
-	case !slices.Equal(base.FirstRun, head.FirstRun) || len(ChangedTools(Catalogue{Tools: base.Discovery}, Catalogue{Tools: head.Discovery})) > 0:
+	case !slices.Equal(base.FirstRun, head.FirstRun) || len(changedTools(base.Discovery, head.Discovery)) > 0:
 		return "the progressive discovery surface changed"
 	}
 	return ""
@@ -42,22 +42,30 @@ func sharedChanged(base, head Catalogue) string {
 
 // Marshal renders the catalogue the way catalogue.json stores it.
 func (c Catalogue) Marshal() ([]byte, error) {
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
+	// Unescaped, so <, > and & in descriptions read as written in the diff.
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(c); err != nil {
 		return nil, fmt.Errorf("encode catalogue: %w", err)
 	}
-	return append(data, '\n'), nil
+	return buf.Bytes(), nil
 }
 
 // ChangedTools lists the tools added, removed, or given a new description,
 // schema or annotations between two catalogues.
 func ChangedTools(base, head Catalogue) []string {
-	before := make(map[string]Tool, len(base.Tools))
-	for _, tool := range base.Tools {
+	return changedTools(base.Tools, head.Tools)
+}
+
+func changedTools(base, head []Tool) []string {
+	before := make(map[string]Tool, len(base))
+	for _, tool := range base {
 		before[tool.Name] = tool
 	}
 	var changed []string
-	for _, tool := range head.Tools {
+	for _, tool := range head {
 		old, ok := before[tool.Name]
 		delete(before, tool.Name)
 		if !ok || old.Description != tool.Description || old.ReadOnly != tool.ReadOnly || !sameJSON(old.InputSchema, tool.InputSchema) || !sameJSON(old.Annotations, tool.Annotations) {

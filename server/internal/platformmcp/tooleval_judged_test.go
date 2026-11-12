@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -58,7 +59,8 @@ func toolEvalEnvInt(t *testing.T, name string, fallback int) int {
 func TestToolEvalJudged(t *testing.T) { //nolint:paralleltest // one long run that fans out internally
 	apiKey := toolEvalEnv("OPENROUTER_DEV_KEY", os.Getenv("OPENROUTER_API_KEY"))
 	if apiKey == "" {
-		t.Skip("set OPENROUTER_DEV_KEY or OPENROUTER_API_KEY to run the Platform MCP tool eval")
+		t.Log("set OPENROUTER_DEV_KEY or OPENROUTER_API_KEY to run the Platform MCP tool eval")
+		return
 	}
 	cfg := tooleval.Config{
 		Models:      strings.Split(toolEvalEnv("TOOLEVAL_MODELS", defaultToolEvalModels), ","),
@@ -98,7 +100,8 @@ func TestToolEvalJudged(t *testing.T) { //nolint:paralleltest // one long run th
 		changed, negatives, reason := tooleval.SelectChanged(base, toolEvalSnapshot(t, registrar), baseCases, cases)
 		t.Log(reason)
 		if len(changed) == 0 {
-			t.Skip(reason)
+			t.Log(reason)
+			return
 		}
 		notes = append(notes, "Compared with the base branch: "+reason+".")
 		cases, filler = changed, negatives
@@ -109,8 +112,15 @@ func TestToolEvalJudged(t *testing.T) { //nolint:paralleltest // one long run th
 	cases = tooleval.CapCases(cases, filler, toolEvalEnvInt(t, "TOOLEVAL_MAX_CASES", 0))
 
 	var surfaces []tooleval.Surface
+	var seen []string
 	for name := range strings.SplitSeq(toolEvalEnv("TOOLEVAL_SURFACES", "direct,progressive"), ",") {
-		switch strings.TrimSpace(name) {
+		name = strings.TrimSpace(name)
+		// A repeated surface would run, and pay for, every case twice.
+		if slices.Contains(seen, name) {
+			continue
+		}
+		seen = append(seen, name)
+		switch name {
 		case "direct":
 			surfaces = append(surfaces, toolEvalDirectSurface(t, registrar))
 		case "progressive":

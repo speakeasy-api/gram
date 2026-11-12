@@ -128,6 +128,9 @@ type Outcome struct {
 	// Answer is the agent's final text when it stopped without a Platform
 	// tool, such as a refusal or a question back to the user.
 	Answer string
+	// Unfinished is an agent that ran out of turns or time without a tool
+	// call or a final answer. It is a miss even on a negative case.
+	Unfinished bool
 
 	// Hit is an expected tool reached first; OnPath is one of the case's
 	// allowed first steps reached first instead.
@@ -201,6 +204,9 @@ func Run(ctx context.Context, client openrouter.CompletionClient, cases []Case, 
 	if err := group.Wait(); err != nil {
 		return nil, fmt.Errorf("run cases: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("run cases: %w", err)
+	}
 	if len(outcomes) > 0 && !slices.ContainsFunc(outcomes, func(o Outcome) bool { return o.Err == nil }) {
 		return nil, fmt.Errorf("every case errored, first: %w", outcomes[0].Err)
 	}
@@ -242,7 +248,7 @@ func attempt(parent context.Context, client openrouter.CompletionClient, model s
 	ctx, cancel := context.WithTimeout(parent, caseTimeout)
 	defer cancel()
 	started := time.Now()
-	outcome := Outcome{Model: model, Surface: surface.Name, Run: run, Case: c}
+	outcome := Outcome{Model: model, Surface: surface.Name, Run: run, Case: c, Selected: nil, Reads: nil, Answer: "", Unfinished: false, Hit: false, OnPath: false, SchemaValid: false, SchemaError: "", ArgsMatch: false, ConfirmedFirst: false, Turns: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Latency: 0, Err: nil}
 
 	listed := make([]openrouter.Tool, 0, len(surface.Tools))
 	for _, tool := range surface.Tools {
@@ -259,7 +265,6 @@ turns:
 			// that runs out of turns: a miss, not an error that drops out of
 			// the rates. A cancelled run is still an error.
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) && parent.Err() == nil {
-				outcome.Answer = fmt.Sprintf("(no tool within %s)", caseTimeout)
 				break
 			}
 			outcome.Err = fmt.Errorf("case %s turn %d: %w", c.ID, turn, err)
@@ -297,6 +302,9 @@ turns:
 			}))
 		}
 	}
+	if outcome.Err == nil && outcome.Selected == nil && outcome.Answer == "" {
+		outcome.Unfinished = true
+	}
 	outcome.Latency = time.Since(started)
 	score(&outcome, tools, validators)
 	return outcome
@@ -308,7 +316,7 @@ func score(o *Outcome, tools map[string]Tool, validators map[string]*jsonschema.
 		return
 	}
 	if o.Selected == nil {
-		o.Hit = o.Case.Negative()
+		o.Hit = o.Case.Negative() && !o.Unfinished
 		return
 	}
 	o.Hit = slices.Contains(o.Case.Expect, o.Selected.Tool)

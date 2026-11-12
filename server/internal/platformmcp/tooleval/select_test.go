@@ -92,6 +92,12 @@ func TestSelectChangedRunsEverythingWhenSharedInputsChange(t *testing.T) {
 	require.Len(t, selected, len(cases))
 	require.Contains(t, reason, "agent prompt")
 
+	discovery := base
+	discovery.Discovery = []Tool{{Name: "search_platform_tools", Description: "Search, reworded.", InputSchema: json.RawMessage(`{"type":"object"}`), ReadOnly: true, Annotations: nil}}
+	selected, _, reason = SelectChanged(base, discovery, cases, cases)
+	require.Len(t, selected, len(cases))
+	require.Contains(t, reason, "discovery surface")
+
 	firstRun := base
 	firstRun.FirstRun = []string{"get_mcp"}
 	selected, _, reason = SelectChanged(base, firstRun, cases, cases)

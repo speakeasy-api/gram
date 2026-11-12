@@ -75,6 +75,7 @@
   args:
     project_id: 0b7c3d1e-0000-4000-8000-000000000001
     mcp_id: 5f1e2a00-0000-4000-8000-000000000011
+    tool_urns: [delete_repository]
 - id: mcp-create-from-functions-invoicing
   prompt: Make a brand new MCP server called Invoicing in Payments, built from the functions we deployed there.
   expect: [create_mcp_from_functions]
@@ -97,6 +98,7 @@
   allow: [find_mcp, get_mcp]
   args:
     gateway_id: 7a9d0c00-0000-4000-8000-000000000031
+    mcp_ids: [5f1e2a00-0000-4000-8000-000000000011]
 - id: mcp-gateway-sessions-org
   prompt: How many people are currently signed in through our gateways across the whole org?
   expect: [list_gateway_sessions]
@@ -107,6 +109,7 @@
   expect: [list_gateway_sessions]
   args:
     search: priya
+    status: all
 - id: mcp-org-gateway-activity
   prompt: How busy was the organization gateway this past week? I want call volume across all projects.
   expect: [get_organization_gateway_activity]

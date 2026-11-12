@@ -24,6 +24,12 @@ func TestArgsMatch(t *testing.T) {
 	require.True(t, argsMatch(map[string]any{"ids": "refund_invoice"}, urns), "a string matches any array element")
 	require.True(t, argsMatch(map[string]any{"ids": []any{"void_invoice", "refund_invoice"}}, urns), "a list matches in any order")
 	require.False(t, argsMatch(map[string]any{"ids": []any{"refund_invoice", "send_invoice"}}, urns), "every listed string must be present")
+
+	nested := json.RawMessage(`{"operations":[{"op":"move_card","placement_id":"p1"},{"op":"add_card","widget_id":"w-1","w":12}],"filters":{"range":{"preset":"30d","label":"Last 30 days"}}}`)
+	require.True(t, argsMatch(map[string]any{"operations": []any{map[string]any{"op": "add_card", "widget_id": "w-1"}}}, nested), "a listed object matches some element on the keys it lists")
+	require.True(t, argsMatch(map[string]any{"filters": map[string]any{"range": map[string]any{"preset": "30d"}}}, nested), "objects match on the keys they list")
+	require.False(t, argsMatch(map[string]any{"operations": []any{map[string]any{"op": "remove_card"}}}, nested))
+	require.False(t, argsMatch(map[string]any{"filters": map[string]any{"range": map[string]any{"preset": "7d"}}}, nested))
 }
 
 func TestCaseSeparatesOrientationFromFirstSteps(t *testing.T) {

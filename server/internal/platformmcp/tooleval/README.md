@@ -11,14 +11,17 @@ request. Every tool the external endpoint serves has at least one case.
   (`expect: []`) pass when the agent calls no Platform tool. Every prompt
   talks about one fictional organization, described in `environment.go`.
 - **Surfaces**: each case runs on two surfaces.
-  - `direct`: the full catalogue and the full server instructions.
+  - `direct`: the full catalogue and the full server instructions, minus
+    the tools whose schema a model provider rejects (see
+    `TestPlatformToolSchemasFitModelProviders`).
   - `progressive`: the search, describe and call tools plus the first-run
     tools, with the small-surface instructions. Search and describe run the
     real discovery code, so ranking is what clients get.
 - **Scoring**: the first Platform tool call ends the case, except for the
   orientation reads (`get_platform_context`, `whoami`, `list_projects`,
   `find_mcp`). Those get a stub answer, because the environment already
-  answers them. Tools never run, so the eval needs no database or seed. A
+  answers them. Tools never run, so the eval needs no seeded organization; it uses the
+  test database only to compose the live catalogue. A
   case's `allow` reads also end the case: a stub cannot return the opaque
   references and versions that a write needs. The report shows, per model and
   surface:
@@ -88,7 +91,7 @@ A reworded tool can also take requests meant for a neighbouring tool. That
 neighbour's cases run only when they name the changed tool in `expect` or
 `allow`; run without `--changed-since` after a broad rewording.
 
-The direct surface sends every tool on every turn: about 350 KB of
+The direct surface sends every tool a provider accepts on every turn: about 350 KB of
 descriptions and schemas, plus the server instructions. Anthropic models
 cache it; other models pay for it on every turn.
 

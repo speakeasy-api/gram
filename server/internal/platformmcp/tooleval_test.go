@@ -231,7 +231,11 @@ func (a scriptedToolAgent) GetCompletion(_ context.Context, request openrouter.C
 		return &openrouter.CompletionResponse{Content: "That is not something the Speakeasy tools do."}, nil
 	}
 	target := current.Expect[0]
-	args, err := json.Marshal(current.Args)
+	arguments := current.Args
+	if arguments == nil {
+		arguments = map[string]any{}
+	}
+	args, err := json.Marshal(arguments)
 	if err != nil {
 		return nil, fmt.Errorf("encode arguments: %w", err)
 	}
