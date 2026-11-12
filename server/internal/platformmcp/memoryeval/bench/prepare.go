@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/memorydigest"
-	digestrepo "github.com/speakeasy-api/gram/server/internal/memorydigest/repo"
 	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	benchrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/bench/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -160,7 +159,7 @@ func (t Target) projectIDs() []uuid.UUID {
 // Summaries need no clearing: Generate overwrites every team chat's summary
 // and private sessions never get one.
 func clearMemory(ctx context.Context, target Target) error {
-	if _, err := digestrepo.New(target.DB).DeleteProjectDigests(ctx, digestrepo.DeleteProjectDigestsParams{OrganizationID: target.OrganizationID, ProjectIds: target.projectIDs()}); err != nil {
+	if _, err := benchrepo.New(target.DB).DeleteProjectDigests(ctx, benchrepo.DeleteProjectDigestsParams{OrganizationID: target.OrganizationID, ProjectIds: target.projectIDs()}); err != nil {
 		return fmt.Errorf("clear digests: %w", err)
 	}
 	return nil
