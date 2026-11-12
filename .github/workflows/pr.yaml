@@ -49,6 +49,7 @@ jobs:
       otel-collector: ${{ steps.gates.outputs.otel-collector }}
       tunnel: ${{ steps.gates.outputs.tunnel }}
       preview-ui: ${{ steps.filter.outputs.preview-ui }}
+      platform-tool-eval: ${{ steps.filter.outputs.platform-tool-eval }}
       preview-retag-components: ${{ steps.preview-retag.outputs.components }}
       preview-tag: ${{ steps.preview-retag.outputs.tag }}
     steps:
@@ -2149,14 +2150,15 @@ jobs:
 
   # Asks a model the Platform MCP tool eval cases that this pull request's
   # tool, instruction or case changes could move, and writes the report to the
-  # job summary. It spends LLM calls, so it is report-only, runs only on pull
+  # job summary. It starts only when catalogue.json or a case file changes,
+  # which every tool or instruction change forces. It spends LLM calls, so it is report-only, runs only on pull
   # requests, and skips when the eval key secret is not available (forks, or
   # before the secret is configured).
   platform-tool-eval:
     name: platform-tool-eval
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.server == 'true'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.platform-tool-eval == 'true'
     env:
       TESTCONTAINERS_RYUK_DISABLED: true
     steps:

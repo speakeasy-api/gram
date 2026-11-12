@@ -86,8 +86,11 @@ cache it; other models pay for it on every turn.
 
 ### In pull requests
 
-The `platform-tool-eval` job runs `--changed-since` against the pull
-request's base, capped at 60 cases. It writes the report to the job summary.
+The `platform-tool-eval` job starts only when a pull request changes
+`catalogue.json` or a case file. Every tool or instruction change regenerates
+`catalogue.json`, so no tool change slips past it. It runs `--changed-since`
+against the base, capped at 60 cases, and writes the report to the job
+summary: open the run from the PR's Checks tab and read its Summary page.
 It is report-only and does not block merging. It needs the
 `OPENROUTER_TOOL_EVAL_KEY` repository secret, and skips without it.
 
