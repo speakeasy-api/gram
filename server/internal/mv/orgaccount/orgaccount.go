@@ -1,4 +1,4 @@
-package mv
+package orgaccount
 
 import (
 	"context"
@@ -12,25 +12,25 @@ import (
 	org_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
-type OrganizationDescription struct {
+type Description struct {
 	org_repo.OrganizationMetadatum
 	HasActiveSubscription bool
 }
 
 // Necessary to properly populate account type
-func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org_repo.Queries, billingRepo billing.Repository, orgID string) (*OrganizationDescription, error) {
+func Describe(ctx context.Context, logger *slog.Logger, orgRepo *org_repo.Queries, billingRepo billing.Repository, orgID string) (*Description, error) {
 	orgMetadata, err := orgRepo.GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata")
 	}
 	previousAccountType := orgMetadata.GramAccountType
 
-	org := OrganizationDescription{
+	org := Description{
 		OrganizationMetadatum: orgMetadata,
 		HasActiveSubscription: false,
 	}
 
-	customerTier, hasActiveSubscription := ResolveOrganizationTier(ctx, logger, billingRepo, orgID, billing.Tier(previousAccountType))
+	customerTier, hasActiveSubscription := ResolveTier(ctx, logger, billingRepo, orgID, billing.Tier(previousAccountType))
 	org.HasActiveSubscription = hasActiveSubscription
 
 	// Reconcile provider-managed tiers without overwriting concurrent updates.
@@ -60,10 +60,10 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 	return &org, nil
 }
 
-// ResolveOrganizationTier resolves the current billing tier without loading or
+// ResolveTier resolves the current billing tier without loading or
 // reconciling organization metadata. Operator-managed tiers are authoritative;
 // unavailable billing state falls back to the persisted tier.
-func ResolveOrganizationTier(ctx context.Context, logger *slog.Logger, billingRepo billing.Repository, orgID string, persistedTier billing.Tier) (billing.Tier, bool) {
+func ResolveTier(ctx context.Context, logger *slog.Logger, billingRepo billing.Repository, orgID string, persistedTier billing.Tier) (billing.Tier, bool) {
 	if isOperatorManagedTier(persistedTier) {
 		return persistedTier, true
 	}
