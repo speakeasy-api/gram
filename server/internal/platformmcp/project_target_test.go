@@ -37,13 +37,7 @@ type projectSlugTargetOutput struct {
 func TestProjectSlugIsTheOnlyProjectSelector(t *testing.T) {
 	t.Parallel()
 
-	// The signals and sensors tools declare their inputs in tool_signals.go,
-	// which moves them to project_slug in its own change.
-	exempt := map[string]bool{"find_signals": true, "find_sensors": true, "get_sensor": true, "preview_sensor_match": true}
 	for _, descriptor := range toolEvalRegistrar(t).Descriptors() {
-		if exempt[descriptor.Name] {
-			continue
-		}
 		var schema struct {
 			Properties map[string]json.RawMessage `json:"properties"`
 		}

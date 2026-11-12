@@ -16,7 +16,9 @@ import (
 )
 
 type findSignalsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"exact project UUID"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Query     string `json:"query,omitempty" jsonschema:"case-insensitive name or slug substring, at most 200 characters"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"next_cursor from the preceding page"`
 	Limit     int    `json:"limit,omitempty" jsonschema:"page size from 1 to 100; defaults to 20"`
@@ -51,12 +53,16 @@ type sensorSummary struct {
 }
 
 type getSensorInput struct {
-	ProjectID string `json:"project_id" jsonschema:"exact project UUID"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	SensorID  string `json:"sensor_id" jsonschema:"exact sensor UUID returned by find_sensors"`
 }
 
 type previewSensorMatchInput struct {
-	ProjectID  string               `json:"project_id" jsonschema:"exact project UUID"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID  string               `json:"-"`
 	Expression string               `json:"match_expression" jsonschema:"boolean CEL expression over message.role; at most 4096 bytes"`
 	Examples   []sensorMatchExample `json:"examples" jsonschema:"up to 20 caller-supplied metadata examples; never fetches transcripts or runs inference"`
 }
@@ -96,7 +102,7 @@ func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
 			})
 		})
 	}
-	addTool(reg, signalManifest("find_signals", "Find Signals", "Find reusable signals by name or slug in an explicit project before creating duplicates. Returns criteria and referencing sensor counts. UUID-ordered bounded pagination; candidates are not automatic selections. Requires signals_intelligence and project:read. Authoring supports at most 1000 active signals and 1000 active sensors per project.", true), readMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input findSignalsInput) (*mcp.CallToolResult, findSignalsOutput, error) {
+	addTool(reg, signalManifest("find_signals", "Find Signals", "Find reusable signals by name or slug in one project, named by project_slug as list_projects returns it, before creating duplicates. Returns criteria and referencing sensor counts. UUID-ordered bounded pagination; candidates are not automatic selections. Requires signals_intelligence and project:read. Authoring supports at most 1000 active signals and 1000 active sensors per project.", true), readMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input findSignalsInput) (*mcp.CallToolResult, findSignalsOutput, error) {
 		return principalToolCall(ctx, signalToolError, func(principal Principal) (findSignalsOutput, error) {
 			var out findSignalsOutput
 

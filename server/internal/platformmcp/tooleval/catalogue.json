@@ -669,13 +669,13 @@
     },
     {
       "name": "find_signals",
-      "description": "Find reusable signals by name or slug in an explicit project before creating duplicates. Returns criteria and referencing sensor counts. UUID-ordered bounded pagination; candidates are not automatic selections. Requires signals_intelligence and project:read. Authoring supports at most 1000 active signals and 1000 active sensors per project.",
+      "description": "Find reusable signals by name or slug in one project, named by project_slug as list_projects returns it, before creating duplicates. Returns criteria and referencing sensor counts. UUID-ordered bounded pagination; candidates are not automatic selections. Requires signals_intelligence and project:read. Authoring supports at most 1000 active signals and 1000 active sensors per project.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID"
+            "description": "the project's slug, as list_projects returns it"
           },
           "query": {
             "type": "string",
@@ -690,7 +690,7 @@
             "description": "page size from 1 to 100; defaults to 20"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -707,9 +707,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID"
+            "description": "the project's slug, as list_projects returns it"
           },
           "query": {
             "type": "string",
@@ -724,7 +724,7 @@
             "description": "page size from 1 to 100; defaults to 20"
           }
         },
-        "required": ["project_id"],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -741,16 +741,16 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID"
+            "description": "the project's slug, as list_projects returns it"
           },
           "sensor_id": {
             "type": "string",
             "description": "exact sensor UUID returned by find_sensors"
           }
         },
-        "required": ["project_id", "sensor_id"],
+        "required": ["project_slug", "sensor_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -767,9 +767,9 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "project_id": {
+          "project_slug": {
             "type": "string",
-            "description": "exact project UUID"
+            "description": "the project's slug, as list_projects returns it"
           },
           "match_expression": {
             "type": "string",
@@ -790,7 +790,7 @@
             "description": "up to 20 caller-supplied metadata examples; never fetches transcripts or runs inference"
           }
         },
-        "required": ["project_id", "match_expression", "examples"],
+        "required": ["project_slug", "match_expression", "examples"],
         "additionalProperties": false
       },
       "read_only": true,

@@ -164,10 +164,11 @@ func TestSignalToolMatchingPreviewAndExactProject(t *testing.T) {
 	t.Parallel()
 	ctx, f := newSignalAuthoringFixture(t)
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "signals", Version: "1"}, nil))
+	reg.withProjects(slugProjects{f.project.Slug: f.project.ID})
 	registerSignalTools(reg, f.service)
 	descriptor := descriptorByName(t, reg, "preview_sensor_match")
 
-	data, err := json.Marshal(previewSensorMatchInput{ProjectID: f.project.ID.String(), Expression: `message.role != "assistant"`, Examples: []sensorMatchExample{{Role: new("user")}, {Role: new("assistant")}, {}}})
+	data, err := json.Marshal(previewSensorMatchInput{ProjectSlug: f.project.Slug, Expression: `message.role != "assistant"`, Examples: []sensorMatchExample{{Role: new("user")}, {Role: new("assistant")}, {}}})
 	require.NoError(t, err)
 
 	result, err := descriptor.Invoke(ctx, data)
@@ -208,7 +209,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	registerSignalTools(reg, f.service)
 	search := descriptorByName(t, reg, "find_signals")
 
-	data, err := json.Marshal(findSignalsInput{ProjectID: f.project.ID.String(), Query: "topic", Limit: 1})
+	data, err := json.Marshal(findSignalsInput{ProjectSlug: f.project.Slug, Query: "topic", Limit: 1})
 	require.NoError(t, err)
 
 	value, err := search.Invoke(ctx, data)
@@ -221,7 +222,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	require.Equal(t, 1, page.Signals[0].SensorCount)
 	require.NotEmpty(t, page.NextCursor)
 
-	data, err = json.Marshal(findSignalsInput{ProjectID: f.project.ID.String(), Query: "topic", Limit: 1, Cursor: page.NextCursor})
+	data, err = json.Marshal(findSignalsInput{ProjectSlug: f.project.Slug, Query: "topic", Limit: 1, Cursor: page.NextCursor})
 	require.NoError(t, err)
 
 	value, err = search.Invoke(ctx, data)
@@ -259,7 +260,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	_, err = mutation.Invoke(ctx, data)
 	require.NoError(t, err)
 
-	data, err = json.Marshal(getSensorInput{ProjectID: f.project.ID.String(), SensorID: sensor.ID})
+	data, err = json.Marshal(getSensorInput{ProjectSlug: f.project.Slug, SensorID: sensor.ID})
 	require.NoError(t, err)
 
 	value, err = descriptorByName(t, reg, "get_sensor").Invoke(ctx, data)
@@ -275,7 +276,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	require.Equal(t, first.ID, live.Sensor.Signals[1].ID)
 	require.True(t, live.Sensor.Ready)
 
-	data, err = json.Marshal(findSignalsInput{ProjectID: f.project.ID.String(), Query: "Topics"})
+	data, err = json.Marshal(findSignalsInput{ProjectSlug: f.project.Slug, Query: "Topics"})
 	require.NoError(t, err)
 
 	value, err = descriptorByName(t, reg, "find_sensors").Invoke(ctx, data)
@@ -310,13 +311,7 @@ func TestSignalToolsUnavailableRefusals(t *testing.T) {
 	defer o11y.NoLogDefer(session.Close)
 
 	for _, descriptor := range reg.For(AudienceExternal) {
-		// find_signals, find_sensors, get_sensor and preview_sensor_match still
-		// name the project by ID; every other signal tool names it by slug.
 		args := map[string]any{"project_slug": "no-such-project"}
-		switch descriptor.Name {
-		case "find_signals", "find_sensors", "get_sensor", "preview_sensor_match":
-			args = map[string]any{"project_id": uuid.NewString()}
-		}
 		switch descriptor.Name {
 		case "create_sensor", "create_signal", "update_sensor", "update_signal":
 			args["proposal"] = map[string]any{"operation": descriptor.Name}

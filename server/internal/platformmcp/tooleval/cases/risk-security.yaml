@@ -273,18 +273,18 @@
   prompt: Before I build a new one, is there already a reusable "frustration" criterion defined in Default?
   expect: [find_signals]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     query: frustrat
 - id: risk-find-sensors
   prompt: List the conversation sensors we have in Default and whether they're ready.
   expect: [find_sensors]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: risk-get-sensor
   prompt: Show me the full definition of sensor 7d6c5b4a-3e2f-4a1b-9c8d-7e6f5a4b3c2d in Default, with its signals in order.
   expect: [get_sensor]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     sensor_id: 7d6c5b4a-3e2f-4a1b-9c8d-7e6f5a4b3c2d
 - id: risk-create-sensor
   prompt: In Default, I want to classify every user message for churn intent, looking at the last 5 messages for context. Set that up.
@@ -314,7 +314,7 @@
   prompt: Before I save it, check whether the expression message.role == "user" would match an assistant message and a user message in Default.
   expect: [preview_sensor_match]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: risk-get-signal-definition
   prompt: This measurement came back with definition hash 3f9a2b7c4d1e8f6a0b5c9d2e7f4a1b8c3d6e9f2a5b8c1d4e7f0a3b6c9d2e5f8a for sensor 7d6c5b4a-3e2f-4a1b-9c8d-7e6f5a4b3c2d in Default. What exact question was it asking at the time?
   expect: [get_signal_definition]
