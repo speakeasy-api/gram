@@ -923,6 +923,9 @@ func validateInput(c Check) error {
 	if c.anyOf != nil {
 		return InvalidCheck(c.Scope, c.ResourceID)
 	}
+	if c.probe {
+		return validateProbe(c)
+	}
 	switch c.ResourceID {
 	case "":
 		return InvalidCheck(c.Scope, c.ResourceID)
@@ -937,6 +940,16 @@ func validateInput(c Check) error {
 		}
 		return validateAuthClientCheck(c)
 	}
+}
+
+// validateProbe checks a probe. It may leave the resource and any dimension
+// open, but what it names must be concrete, and auth-client use is never
+// probed: that check depends on who connects.
+func validateProbe(c Check) error {
+	if c.ResourceID == WildcardResource || c.isAuthClientCheck() {
+		return InvalidCheck(c.Scope, c.ResourceID)
+	}
+	return validateCheckDimensions(c)
 }
 
 // validateRequireInput is validateInput for the Require family, which also

@@ -115,3 +115,98 @@ func shapeTestContexts(t *testing.T, grants []Grant) map[string]context.Context 
 		"skipped":  contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_123", UserID: sessionUserID, AccountType: "enterprise"}),
 	}
 }
+
+// A probe asks whether the caller could act on some resource matching it. A
+// block hides it only when the block covers everything an allow grant reaches.
+func TestProbe_AnswersForSomeResource(t *testing.T) {
+	t.Parallel()
+
+	inProject := func(scope Scope, resourceID, project string) Grant {
+		return NewGrantWithSelector(scope, Selector{
+			SelectorKeyResourceKind: ResourceKindForScope(scope),
+			SelectorKeyResourceID:   resourceID,
+			SelectorKeyProjectID:    project,
+		})
+	}
+	readAny := Check{Scope: ScopeMCPRead, ResourceKind: "", ResourceID: "", Dimensions: nil}.Probe()
+	readInProject := func(project string) Check {
+		return Check{Scope: ScopeMCPRead, ResourceKind: "", ResourceID: "", Dimensions: map[string]string{SelectorKeyProjectID: project}}.Probe()
+	}
+
+	for name, tc := range map[string]struct {
+		grants []Grant
+		probe  Check
+		want   bool
+	}{
+		"no grants": {grants: nil, probe: readAny, want: false},
+		"org-wide grant": {
+			grants: []Grant{NewGrant(ScopeMCPRead, WildcardResource)},
+			probe:  readAny, want: true,
+		},
+		"implied scope": {
+			grants: []Grant{NewGrant(ScopeMCPWrite, WildcardResource)},
+			probe:  readAny, want: true,
+		},
+		"grant on one server": {
+			grants: []Grant{inProject(ScopeMCPRead, "server-1", "project-1")},
+			probe:  readAny, want: true,
+		},
+		"project grant, probe names that project": {
+			grants: []Grant{inProject(ScopeMCPRead, WildcardResource, "project-1")},
+			probe:  readInProject("project-1"), want: true,
+		},
+		"project grant, probe names another project": {
+			grants: []Grant{inProject(ScopeMCPRead, WildcardResource, "project-1")},
+			probe:  readInProject("project-2"), want: false,
+		},
+		"block on one server leaves the rest": {
+			grants: []Grant{
+				inProject(ScopeMCPRead, WildcardResource, "project-1"),
+				inProject(ScopeMCPBlockedRead, "server-1", "project-1"),
+			},
+			probe: readAny, want: true,
+		},
+		"block covering the whole grant": {
+			grants: []Grant{
+				inProject(ScopeMCPRead, WildcardResource, "project-1"),
+				inProject(ScopeMCPBlockedRead, WildcardResource, "project-1"),
+			},
+			probe: readAny, want: false,
+		},
+		"block on the only granted server": {
+			grants: []Grant{
+				inProject(ScopeMCPRead, "server-1", "project-1"),
+				inProject(ScopeMCPBlockedRead, "server-1", "project-1"),
+			},
+			probe: readAny, want: false,
+		},
+		"one grant blocked, another free": {
+			grants: []Grant{
+				inProject(ScopeMCPRead, WildcardResource, "project-1"),
+				inProject(ScopeMCPBlockedRead, WildcardResource, "project-1"),
+				inProject(ScopeMCPRead, WildcardResource, "project-2"),
+			},
+			probe: readAny, want: true,
+		},
+	} {
+		got, err := GrantsAuthorize(tc.grants, tc.probe)
+		require.NoError(t, err, name)
+		require.Equal(t, tc.want, got, name)
+	}
+}
+
+// A probe may leave the resource and dimensions open, but never wildcards
+// them, and auth-client use is never probed.
+func TestProbe_Validation(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrant(ScopeMCPRead, WildcardResource), NewGrant(ScopeMCPAuth, WildcardResource)}
+	for name, probe := range map[string]Check{
+		"wildcard resource":  {Scope: ScopeMCPRead, ResourceKind: "", ResourceID: WildcardResource, Dimensions: nil},
+		"wildcard dimension": {Scope: ScopeMCPRead, ResourceKind: "", ResourceID: "", Dimensions: map[string]string{SelectorKeyProjectID: WildcardResource}},
+		"auth client":        {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: "", Dimensions: nil},
+	} {
+		_, err := GrantsAuthorize(grants, probe.Probe())
+		require.ErrorIs(t, err, ErrInvalidCheck, name)
+	}
+}

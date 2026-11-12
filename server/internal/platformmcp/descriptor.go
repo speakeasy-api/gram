@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"reflect"
 	"slices"
 
@@ -311,39 +310,16 @@ func grantsAuthorizeAnyScope(grants []authz.Grant, organizationID string, scopes
 	return false
 }
 
+// grantsAuthorizeAnyResource reports whether the grants let the caller use
+// scope on some resource, which is all tool discovery needs to know. Org
+// scopes are asked about the caller's own organization.
 func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, scope authz.Scope) bool {
-	for _, grant := range grants {
-		if grant.Scope != authz.ScopeRoot && !slices.Contains(authz.ScopeImplicationClosure(grant.Scope), scope) {
-			continue
-		}
-		resourceID := grant.Selector.ResourceID()
-		if scope.Parts().Resource == "org" {
-			resourceID = organizationID
-		} else if resourceID == "" || resourceID == authz.WildcardResource {
-			resourceID = "platform-mcp-catalogue-probe"
-		}
-		dimensions := maps.Clone(grant.Selector)
-		delete(dimensions, authz.SelectorKeyResourceKind)
-		delete(dimensions, authz.SelectorKeyResourceID)
-		// A check must carry every dimension its resource kind requires. A
-		// grant that leaves one unbounded reaches any value, so probe with a
-		// placeholder.
-		for _, key := range authz.RequiredCheckDimensions(authz.ResourceKindForScope(scope)) {
-			if value := dimensions[key]; value == "" || value == authz.WildcardResource {
-				if dimensions == nil {
-					dimensions = map[string]string{}
-				}
-				dimensions[key] = "platform-mcp-catalogue-probe"
-			}
-		}
-		allowed, err := authz.GrantsAuthorize(grants, authz.Check{
-			Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions,
-		})
-		if err == nil && allowed {
-			return true
-		}
+	probe := authz.Check{Scope: scope, ResourceKind: "", ResourceID: "", Dimensions: nil}
+	if scope.Parts().Resource == "org" {
+		probe.ResourceID = organizationID
 	}
-	return false
+	allowed, err := authz.GrantsAuthorize(grants, probe.Probe())
+	return err == nil && allowed
 }
 
 // ResourceFor returns one admitted resource by URI. An audience that is not
