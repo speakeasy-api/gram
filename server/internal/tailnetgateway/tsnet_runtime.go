@@ -185,7 +185,7 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 		if locker, ok := spec.Store.(certificateLocker); ok {
 			unlock, err := locker.LockCertificate(ctx)
 			if err != nil {
-				return err
+				return fmt.Errorf("wait for tailnet service certificate lock: %w", err)
 			}
 			defer unlock()
 		}
