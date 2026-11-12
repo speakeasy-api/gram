@@ -70,9 +70,6 @@ func (s *dbChallengeScanner) RecordPolicyChallenge(ctx context.Context, organiza
 	})
 }
 
-// TestIngest_CoworkPromptWarnConfirmedByResend: Cowork cannot show the
-// acknowledgement link, so the first send of a warned prompt is challenged
-// with a "send it again" instruction and the identical resend goes through.
 // newCoworkWarnTest returns a hooks service whose scanner warns on every scan
 // and keeps challenges in the real table.
 func newCoworkWarnTest(t *testing.T) (context.Context, *testInstance, *contextvalues.AuthContext) {
@@ -102,6 +99,9 @@ func newCoworkWarnTest(t *testing.T) (context.Context, *testInstance, *contextva
 	return ctx, ti, authCtx
 }
 
+// TestIngest_CoworkPromptWarnConfirmedByResend: Cowork cannot show the
+// acknowledgement link, so the first send of a warned prompt is challenged
+// with a "send it again" instruction and the identical resend goes through.
 func TestIngest_CoworkPromptWarnConfirmedByResend(t *testing.T) {
 	t.Parallel()
 
@@ -210,4 +210,6 @@ func TestIngest_CoworkToolWarnAsksAndConfirms(t *testing.T) {
 
 	require.Equal(t, "allow", send(toolEvent("tool.requested", "toolu_2", command)).Decision, "the confirmation holds for an immediate repeat")
 	require.Equal(t, "ask", send(toolEvent("tool.requested", "toolu_3", "echo 472-81-3365")).Decision, "a different call is asked on its own")
+	send(toolEvent("tool.failed", "toolu_3", "echo 472-81-3365"))
+	require.EqualValues(t, 2, audited(), "a call that ran and then failed was still allowed by the person")
 }

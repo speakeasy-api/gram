@@ -313,8 +313,9 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
 	// A tool call that ran after Cowork's permission prompt was allowed by the
-	// person, which confirms the warning that asked for it.
-	if fromCowork(payload) && strings.TrimSpace(payload.Event.Type) == "tool.completed" && !s.isHookDuplicate(ctx) {
+	// person, which confirms the warning that asked for it. A call that ran
+	// and then failed was allowed too.
+	if fromCowork(payload) && toolRan(payload) && !s.isHookDuplicate(ctx) {
 		s.confirmCoworkToolAsk(context.WithoutCancel(ctx), payload, canonicalHookEvent(payload, authCtx, actor, timestamp))
 	}
 	skillCapture, observed, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)

@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
@@ -85,4 +86,15 @@ func (s *Service) confirmCoworkToolAsk(ctx context.Context, payload *gen.IngestP
 		return
 	}
 	s.acknowledgePendingChallenge(ctx, ev, pending, coworkToolAskWindow, "hooks_cowork_tool_ask_confirmed")
+}
+
+// toolRan reports whether an event says a tool call ran, whether it then
+// succeeded or failed.
+func toolRan(payload *gen.IngestPayload) bool {
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "tool.completed", "tool.failed":
+		return true
+	default:
+		return false
+	}
 }

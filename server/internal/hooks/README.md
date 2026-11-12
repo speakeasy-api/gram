@@ -118,8 +118,9 @@ prompt and the assistant's text).
 Prompts and tool calls are keyed by the ids the hooks also use
 (`claude-prompt:<prompt id>`, `claude-tool-call:<tool_use id>`,
 `claude-tool-result:<tool_use id>`); other entries are keyed by the entry's
-uuid (`claude-transcript:<uuid>`). A line the hooks already stored, or a
-re-sent line, is never stored twice.
+uuid (`claude-transcript:<uuid>`), with `/block:<index>` appended when one
+entry yields more than one row. A line the hooks already stored, or a re-sent
+line, is never stored twice.
 
 ### Warn policies in Cowork
 

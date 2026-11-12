@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/hooks/wire"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -44,7 +45,11 @@ type shadowMCPRequestLink struct {
 }
 
 func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params shadowMCPRequestLinkParams) string {
-	server := conv.PtrValOr(shadowmcp.ObservedName(shadowmcp.NormalizeAccessEvidence(params.Evidence), params.ToolName), "")
+	// A local server's identity can be its launch command, which may carry
+	// credentials, so it is redacted before it can reach %{match}.
+	evidence := shadowmcp.NormalizeAccessEvidence(params.Evidence)
+	evidence.ServerIdentity = identity.RedactCommand(evidence.ServerIdentity)
+	server := conv.PtrValOr(shadowmcp.ObservedName(evidence, params.ToolName), "")
 	message := renderPolicyUserMessage(params.UserMessage, params.AuditReason, params.PolicyName, server)
 	link, ok := s.shadowMCPApprovalRequestURL(ctx, params)
 	if !ok {
