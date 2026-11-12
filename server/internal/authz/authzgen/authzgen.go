@@ -42,7 +42,8 @@ func Files() ([]File, error) {
 	return append(files, File{Path: dashboardCasesPath, Content: cases}), nil
 }
 
-// Render renders every file generated from r.
+// Render renders every file generated from r. Files adds the dashboard's
+// cases, which need the compiled evaluator.
 func Render(r registry.Registry) ([]File, error) {
 	scopes, err := renderScopeConstants(r)
 	if err != nil {
