@@ -278,13 +278,13 @@ func TestLocalNamerPrefixesCreatedAndRenamedHostnames(t *testing.T) {
 
 	created, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: nil, OauthClientID: "client", OauthClientSecret: "secret"})
 	require.NoError(t, err)
-	require.Equal(t, "dev-ab12-speakeasy", created.Hostname, "the default hostname is qualified too")
+	require.Equal(t, "local-ab12-speakeasy", created.Hostname, "the default hostname is qualified too")
 
 	renamed, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Hostname: new("tools")})
 	require.NoError(t, err)
-	require.Equal(t, "dev-ab12-tools", renamed.Hostname)
+	require.Equal(t, "local-ab12-tools", renamed.Hostname)
 
-	kept, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Hostname: new("dev-ab12-tools")})
+	kept, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Hostname: new("local-ab12-tools")})
 	require.NoError(t, err)
-	require.Equal(t, "dev-ab12-tools", kept.Hostname, "an already qualified hostname is not prefixed twice")
+	require.Equal(t, "local-ab12-tools", kept.Hostname, "an already qualified hostname is not prefixed twice")
 }

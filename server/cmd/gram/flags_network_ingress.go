@@ -165,7 +165,7 @@ func networkIngressProviderFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_TAILSCALE_API_URL"},
 		},
 		&cli.StringFlag{
-			Name: networkIngressDevIDFlag, Usage: "Local development only: names this stack's hostnames, services and devices dev-<id>-... so they stay apart from production's on a shared tailnet",
+			Name: networkIngressDevIDFlag, Usage: "Local development only: names this stack's hostnames, services and devices local-<id>-... so they stay apart from production's on a shared tailnet",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_DEV_ID"},
 		},
 		&cli.BoolFlag{

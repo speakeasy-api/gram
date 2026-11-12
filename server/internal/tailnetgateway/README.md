@@ -153,12 +153,12 @@ the first start of the API server, reconciler or gateway run that task.
 Naming lives behind `networkingress.Namer`, one method per artifact.
 `LocalNamer` gives:
 
-| Artifact                                 | Production            | Local                                        |
-| ---------------------------------------- | --------------------- | -------------------------------------------- |
-| Connection hostname                      | as requested          | `dev-<id>-<requested>` (the API prefixes it) |
-| Tailscale Service                        | `svc:<hostname>`      | `svc:dev-<id>-<hostname>`                    |
-| Gateway machine                          | `speakeasy-gw-<slot>` | `speakeasy-gw-dev-<id>-<slot>`               |
-| Service comment and auth key description | Speakeasy             | name `dev-<id>`                              |
+| Artifact                                 | Production            | Local                                          |
+| ---------------------------------------- | --------------------- | ---------------------------------------------- |
+| Connection hostname                      | as requested          | `local-<id>-<requested>` (the API prefixes it) |
+| Tailscale Service                        | `svc:<hostname>`      | `svc:local-<id>-<hostname>`                    |
+| Gateway machine                          | `speakeasy-gw-<slot>` | `speakeasy-gw-local-<id>-<slot>`               |
+| Service comment and auth key description | Speakeasy             | name `local-<id>`                              |
 
 Beyond naming, a local stack never touches a hostname without its prefix. The
 reconciler refuses to define its service and leaves it alone on rename and

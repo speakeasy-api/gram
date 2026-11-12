@@ -321,7 +321,7 @@ func TestLocalGatewayNamesItsMachinesAndServices(t *testing.T) {
 		cfg.Namer = localGatewayNamer(t)
 	})
 	ingressID, orgID := seedIngress(t, f.db, "gateway-local-names")
-	renameIngress(t, f.db, orgID, "dev-ab12-private")
+	renameIngress(t, f.db, orgID, "local-ab12-private")
 	f.seedSlot(t, ingressID, orgID, 1, "tskey-auth-one-shot")
 
 	f.gateway.Poll(ctx)
@@ -329,8 +329,8 @@ func TestLocalGatewayNamesItsMachinesAndServices(t *testing.T) {
 
 	nodes := f.runtime.started()
 	require.Len(t, nodes, 1)
-	require.Equal(t, "speakeasy-gw-dev-ab12-1", nodes[0].spec.Hostname)
-	require.Equal(t, "svc:dev-ab12-private", nodes[0].spec.ServiceName)
+	require.Equal(t, "speakeasy-gw-local-ab12-1", nodes[0].spec.Hostname)
+	require.Equal(t, "svc:local-ab12-private", nodes[0].spec.ServiceName)
 }
 
 func TestLocalGatewayNeverHostsHostnamesItDoesNotOwn(t *testing.T) {
