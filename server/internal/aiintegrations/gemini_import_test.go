@@ -22,6 +22,7 @@ type geminiFakeClient struct {
 	getErr      error
 	downloadErr error
 	createErr   error
+	deleteErr   error
 	downloads   int
 	creates     int
 	gets        int
@@ -61,7 +62,10 @@ func (c *geminiFakeClient) Download(context.Context, vault.File) ([]byte, error)
 	c.downloads++
 	return []byte("test artifact"), c.downloadErr
 }
-func (c *geminiFakeClient) DeleteExport(context.Context, string) error { c.deletes++; return nil }
+func (c *geminiFakeClient) DeleteExport(context.Context, string) error {
+	c.deletes++
+	return c.deleteErr
+}
 
 func geminiTestConfig() Config {
 	return Config{ID: uuid.New(), Provider: ProviderGeminiCompliance, ProjectID: uuid.New(), OrganizationID: "org_test", ExternalOrganizationID: new("00000000-0000-4000-8000-000000000001")}
@@ -219,6 +223,21 @@ func TestGeminiSyncDropsOverlapBeforeSplittingWindow(t *testing.T) {
 	cursor := decodeGeminiTestCursor(t, result.Cursor)
 	require.Equal(t, "narrower", cursor.ExportID)
 	require.True(t, cursor.Live)
+
+	// A failed removal keeps the cursor on the oversized job, so the next run
+	// splits it again instead of leaving it behind.
+	client = &geminiFakeClient{export: big, created: &vault.Export{ID: "narrower", Status: "IN_PROGRESS"}, deleteErr: &vault.HTTPError{StatusCode: http.StatusInternalServerError}}
+	result, err = geminiTestImporter(client, nil).SyncGemini(t.Context(), cfg, now)
+	require.ErrorContains(t, err, "remove oversized Gemini Vault export")
+	require.Equal(t, GeminiSyncResult{Cursor: cfg.LastCursor, Watermark: through, Pending: false}, result)
+	require.Zero(t, client.creates)
+
+	// A job that is already gone counts as removed.
+	client = &geminiFakeClient{export: big, created: &vault.Export{ID: "narrower", Status: "IN_PROGRESS"}, deleteErr: &vault.HTTPError{StatusCode: http.StatusNotFound}}
+	result, err = geminiTestImporter(client, nil).SyncGemini(t.Context(), cfg, now)
+	require.NoError(t, err)
+	require.Equal(t, 1, client.creates)
+	require.Equal(t, "narrower", decodeGeminiTestCursor(t, result.Cursor).ExportID)
 }
 
 func TestGeminiSyncHalvesTooLargeWindowThenCatchesUp(t *testing.T) {
@@ -418,6 +437,16 @@ func TestGeminiSyncReplacesFoundJobWithoutTimeWindow(t *testing.T) {
 	cursor := decodeGeminiTestCursor(t, result.Cursor)
 	require.Equal(t, "replacement", cursor.ExportID)
 	require.Equal(t, uint64(2), cursor.Sequence)
+
+	// If the job cannot be removed, no replacement is created; the retry
+	// removes it first.
+	client.deletes, client.creates, client.findNames = 0, 0, nil
+	client.deleteErr = &vault.HTTPError{StatusCode: http.StatusInternalServerError}
+	_, err = svc.SyncGemini(t.Context(), cfg, now)
+	require.ErrorContains(t, err, "remove Gemini Vault export without a time window")
+	require.Equal(t, 1, client.deletes)
+	require.Zero(t, client.creates)
+	require.Len(t, client.findNames, 1, "the next name is not tried")
 }
 
 func TestGeminiSyncSplitsWhenDownloadIsOverLimit(t *testing.T) {

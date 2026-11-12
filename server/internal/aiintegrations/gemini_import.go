@@ -256,11 +256,27 @@ func (s *GeminiImportService) splitExport(ctx context.Context, client geminiVaul
 	if !ok {
 		return result, errors.New("gemini Vault export exceeds the import size limit even for one hour; narrow the export scope")
 	}
-	// The next window has a new name, so this job is only clean-up.
-	if err := client.DeleteExport(ctx, cursor.ExportID); err != nil {
-		s.warn(ctx, "remove oversized Gemini Vault export", err)
+	// Remove the job before starting a shorter one, so retries cannot leave
+	// oversized exports behind. On failure the saved cursor still points at
+	// this job, and the next run splits it again.
+	if err := deleteGeminiExport(ctx, client, cursor.ExportID); err != nil {
+		return result, fmt.Errorf("remove oversized Gemini Vault export: %w", err)
 	}
 	return s.startNextExport(ctx, client, cfg, next)
+}
+
+// deleteGeminiExport removes a job the sync no longer uses. A job that is
+// already gone counts as removed.
+func deleteGeminiExport(ctx context.Context, client geminiVaultClient, id string) error {
+	err := client.DeleteExport(ctx, id)
+	var httpErr *vault.HTTPError
+	if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("delete Gemini Vault export: %w", err)
+	}
+	return nil
 }
 
 // startNextExport starts the export for a window chosen after progress that
@@ -280,8 +296,9 @@ func (s *GeminiImportService) startNextExport(ctx context.Context, client gemini
 //
 // A found job is used only when Vault reports its window: without the window,
 // the import cannot say where the export ends, and could skip the time between
-// the job's end and the retry. Such a job is replaced by one under the next
-// name, whose window is the one this call asks for.
+// the job's end and the retry. Such a job is removed first, then replaced by
+// one under the next name, whose window is the one this call asks for. If the
+// removal fails, the call fails without a replacement and the retry tries again.
 func (s *GeminiImportService) startExport(ctx context.Context, client geminiVaultClient, configID uuid.UUID, cursor *geminiExportCursor) (*vault.Export, error) {
 	for replaced := false; ; replaced = true {
 		name := geminiExportName(configID, *cursor)
@@ -304,8 +321,8 @@ func (s *GeminiImportService) startExport(ctx context.Context, client geminiVaul
 			return nil, errors.New("gemini Vault export does not report its time window")
 		}
 		if export.ID != "" {
-			if err := client.DeleteExport(ctx, export.ID); err != nil {
-				s.warn(ctx, "remove Gemini Vault export without a time window", err)
+			if err := deleteGeminiExport(ctx, client, export.ID); err != nil {
+				return nil, fmt.Errorf("remove Gemini Vault export without a time window: %w", err)
 			}
 		}
 		cursor.Sequence++
