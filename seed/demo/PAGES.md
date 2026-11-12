@@ -515,3 +515,8 @@ Two real, connectable servers, each with its own `<org>-notion` /
 No agent is granted either one by name; an agent with a project-wide
 `mcp:connect` wildcard (such as the identity-bound assistant's) reaches both.
 Add them to any other agent from its MCP sign-in tab. The organization gateway sign-ins record no-auth choices on both.
+
+Gemini compliance: AI Integrations includes a paused Gemini connection with no
+credentials or polling schedule. Agent Sessions includes **Gemini: release
+readiness review**, a synthetic two-message text conversation under the `gemini`
+source. The demo never authenticates to Google or creates Vault exports.

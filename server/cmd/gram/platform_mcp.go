@@ -890,7 +890,7 @@ func newPlatformMCPDataExportRouteToggle(config platformMCPConfig, authorizer pl
 		config.Logger.WarnContext(context.Background(), "Platform MCP data export pause and resume unavailable", attr.SlogError(err))
 		return nil
 	}
-	return service
+	return service.WithRouteLevel(dataexports.NewRouteLevelCore(config.AuditLogger))
 }
 
 // newPlatformMCPToolExposure composes the reads and the incremental write that

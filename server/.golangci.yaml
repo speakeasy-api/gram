@@ -475,6 +475,17 @@ linters:
               desc: Move helpers that need assets to a per-domain test package.
             - pkg: "github.com/speakeasy-api/gram/server/internal/authz"
               desc: testenv must not depend on authz; tests in package authz import testenv.
+        # mv/orgaccount exists so lightweight callers (auth/sessions and, through
+        # it, testenv) can describe an organization without compiling all of
+        # mv. Importing mv here would restore that dependency without any
+        # compile error.
+        mv-orgaccount-no-mv:
+          list-mode: lax
+          files:
+            - "**/internal/mv/orgaccount/*.go"
+          deny:
+            - pkg: "github.com/speakeasy-api/gram/server/internal/mv$"
+              desc: mv/orgaccount must not import mv; move shared helpers into mv/orgaccount instead.
     importas:
       no-unaliased: true
       alias:
@@ -548,6 +559,7 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/openapi.ToolExtractor).Do("
         - "(*github.com/speakeasy-api/gram/server/internal/functions.ToolExtractor).Do("
         - "github.com/speakeasy-api/gram/server/internal/mv.ToolVariationsGroupName("
+        - "github.com/speakeasy-api/gram/server/internal/mv/orgaccount.Describe("
         - "(*github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api.Client).Call("
         - "(*github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api.Client).CallWithToken("
 

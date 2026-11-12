@@ -342,6 +342,9 @@ type AiIntegrationConfig struct {
 	ID uuid.UUID
 	// @access: confidential
 	Deleted bool
+	// Provider settings JSON; holds admin emails and customer directory structure.
+	// @access: opaque-restricted
+	Settings []byte
 }
 
 type AiIntegrationConfigChat struct {
@@ -1863,9 +1866,15 @@ type CustomDomain struct {
 	// Advisory DNS configuration observation, independent of ownership and infrastructure health.
 	// @access: confidential
 	DnsConfigurationStatus pgtype.Text
-	// Time of the DNS observation; matches health_checked_at only when both observations came from the same check.
+	// Time of the routing DNS observation; matches health_checked_at only when both observations came from the same check.
 	// @access: confidential
 	DnsCheckedAt pgtype.Timestamptz
+	// Start of the current run of successful checks of the domain's Certificate Manager DNS authorization record. NULL until a check succeeds; a failed check clears it. Reflects our own DNS lookup, not certificate issuance.
+	// @access: confidential
+	DnsAuthorizationVerifiedAt pgtype.Timestamptz
+	// Time of the last check of the domain's Certificate Manager DNS authorization record, whatever its result. NULL when it has never been checked.
+	// @access: confidential
+	DnsAuthorizationCheckedAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -3641,6 +3650,24 @@ type McpAuthClientHeader struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type McpConnectionLogRoute struct {
+	// @access: confidential
+	DataExportRouteID uuid.UUID
+	// @access: confidential
+	DataExportRoutesDataSource string
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Lowest log severity this route sends: info, warn or error.
+	// @access: confidential
+	MinSeverity string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type McpEndpoint struct {

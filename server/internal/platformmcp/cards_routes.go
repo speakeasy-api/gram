@@ -140,10 +140,11 @@ var cardTools = map[string]cardSpec{
 	"get_my_organization_gateway": {kind: cardKindDetail, route: "O/gateway", label: "Open gateway"},
 
 	// Data exports.
-	"list_data_exports":  {kind: cardKindList, route: "O/data/exports", label: "Open data exports"},
-	"create_data_export": {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
-	"pause_data_export":  {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
-	"resume_data_export": {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
+	"list_data_exports":            {kind: cardKindList, route: "O/data/exports", label: "Open data exports"},
+	"create_data_export":           {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
+	"pause_data_export":            {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
+	"resume_data_export":           {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
+	"set_data_export_min_severity": {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
 
 	// Dashboards and Explore widgets.
 	"list_dashboards":        {kind: cardKindList, route: "P/dashboards", label: "Open dashboards"},
@@ -251,7 +252,6 @@ var textOnlyTools = map[string]string{
 	"search_users":                         textOnlyPicker,
 	"continue_session":                     textOnlyForModel,
 	"select_assistant_runtime":             textOnlyAssistant,
-	"upgrade_assistant_workload_identity":  textOnlyAssistant,
 	"choose_assistant_upstream_credential": textOnlyAssistant,
 	"get_my_install_instructions":          textOnlyMember,
 	"get_my_mcp_access":                    textOnlyMember,

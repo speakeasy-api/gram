@@ -38,7 +38,7 @@ func TestAssistantInferenceGrantRequiresActorAndOwnerAuthority(t *testing.T) {
 				_, err = accessrepo.New(db).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: "org-test", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, user), Scope: string(grant.Scope), Selectors: selectors})
 				require.NoError(t, err)
 			}
-			record, err := core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID, ActorUserID: "user-2", AgentID: uuid.Nil, AgentName: ""})
+			record, err := core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID, ActorUserID: "user-2", Staff: nil})
 			require.NoError(t, err)
 			require.NotNil(t, record.AgentID)
 			rows, err := agentrepo.New(db).ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: uuid.MustParse(*record.AgentID)})

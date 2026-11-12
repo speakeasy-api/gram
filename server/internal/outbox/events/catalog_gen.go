@@ -20,6 +20,7 @@ var All = []outbox.EventRegistration{
 	AssetV1,
 	AssistantExecutionProfileV1,
 	AssistantIdentityV1,
+	AssistantRuntimeV1,
 	AssistantToolCallV1,
 	AssistantWakeV1,
 	AuditLogCreated,

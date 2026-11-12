@@ -13,9 +13,9 @@ import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { ListExternalKeysResult } from "../models/components/listexternalkeysresult.js";
 import {
-  ListExternalKeysQueryParamProvider,
   ListExternalKeysRequest,
   ListExternalKeysSecurity,
+  QueryParamProvider,
 } from "../models/operations/listexternalkeys.js";
 import { unwrapAsync } from "../types/fp.js";
 export type ListExternalKeysQueryData = ListExternalKeysResult;
@@ -79,7 +79,7 @@ export function buildListExternalKeysQuery(
 
 export function queryKeyListExternalKeys(
   parameters: {
-    provider?: ListExternalKeysQueryParamProvider | undefined;
+    provider?: QueryParamProvider | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {

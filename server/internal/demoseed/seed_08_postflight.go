@@ -137,6 +137,20 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMustEqual(inspectMetadataCount(), fmt.Sprintf("expected %d remote server tool metadata rows, found %%d", inspectMetadataCount())),
 		},
 		{
+			what: "paused Gemini connection without credentials",
+			count: func() (int64, error) {
+				return s.q.ActivityCountSafeGeminiComplianceConfig(ctx, repo.ActivityCountSafeGeminiComplianceConfigParams{OrganizationID: org, ProjectID: proj})
+			},
+			fail: postflightMustEqual(1, "expected 1 paused Gemini connection without credentials, found %d"),
+		},
+		{
+			what: "Gemini text chat messages",
+			count: func() (int64, error) {
+				return s.q.ActivityCountGeminiComplianceMessages(ctx, repo.ActivityCountGeminiComplianceMessagesParams{ProjectID: proj, ChatID: s.det("gemini-compliance-chat")})
+			},
+			fail: postflightMustEqual(2, "expected 2 Gemini text chat messages, found %d"),
+		},
+		{
 			what: "inference hook messages",
 			count: func() (int64, error) {
 				return s.q.PostflightCountInferenceHookMessages(ctx, repo.PostflightCountInferenceHookMessagesParams{
