@@ -31,7 +31,15 @@ if [[ -z "${GRAM_NETWORK_INGRESS_DEV_ID:-}" ]]; then
   export GRAM_NETWORK_INGRESS_DEV_ID
 fi
 
+# Outside Kubernetes, tsnet keeps each node's TLS certificate in its state
+# directory rather than the Postgres state store. The command's default is a
+# new temporary directory per start, so every restart would request a fresh
+# certificate and soon exhaust Let's Encrypt's weekly limit for the tailnet.
+state_dir="${GRAM_TAILNET_GATEWAY_STATE_DIR:-$(dirname "$GRAM_TAILNET_GATEWAY_TOKEN_PATH")/tsnet}"
+mkdir -p "$state_dir"
+
 exec env \
+  GRAM_TAILNET_GATEWAY_STATE_DIR="${state_dir}" \
   GRAM_TAILNET_GATEWAY_UPSTREAM_URL="${upstream_url}" \
   GRAM_TAILNET_GATEWAY_UPSTREAM_CA_FILE="${upstream_ca_file}" \
   GRAM_TAILNET_GATEWAY_ORDINAL="${ordinal}" \
