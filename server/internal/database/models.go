@@ -342,6 +342,9 @@ type AiIntegrationConfig struct {
 	ID uuid.UUID
 	// @access: confidential
 	Deleted bool
+	// Provider settings JSON; holds admin emails and customer directory structure.
+	// @access: opaque-restricted
+	Settings []byte
 }
 
 type AiIntegrationConfigChat struct {
