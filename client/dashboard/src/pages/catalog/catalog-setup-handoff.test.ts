@@ -1,5 +1,8 @@
 import { expect, it } from "vitest";
-import { readCatalogSetupHandoff, writeCatalogSetupHandoff } from "./catalog-setup-handoff";
+import {
+  readCatalogSetupHandoff,
+  writeCatalogSetupHandoff,
+} from "./catalog-setup-handoff";
 import { defaultServerGuardrailState } from "@/pages/security/server-guardrails/server-guardrail-policy";
 it("round-trips only the User Identity handoff and its existing modal choices", () => {
   sessionStorage.clear();

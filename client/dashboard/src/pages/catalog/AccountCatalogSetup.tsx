@@ -101,9 +101,7 @@ export default function AccountCatalogSetup(): JSX.Element {
 
 // Draft setup uses the approved tasks before any account-specific source exists.
 // Only the credentials action creates records; OAuth and verification stay shared.
-export function SnowflakeCatalogFlow(): JSX.Element {
-  return <CatalogProviderFlow provider="snowflake" />;
-}
+
 export function CatalogProviderFlow({
   provider,
 }: {

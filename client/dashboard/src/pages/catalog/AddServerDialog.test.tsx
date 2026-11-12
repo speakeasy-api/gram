@@ -176,6 +176,84 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe("guided setup identity defaults", () => {
+  const entries = [
+    ["github", "https://api.githubcopilot.com/mcp"],
+    ["slack", "https://mcp.slack.com/mcp"],
+    ["com.salesforce/hosted-mcp", salesforceServer.remotes[0]!.url],
+    [
+      "com.snowflake/cortex-mcp",
+      "https://{account_url}/api/v2/databases/{mcp_database}/schemas/{mcp_schema}/mcp-servers/{mcp_server_name}",
+    ],
+    ["com.okta/managed-mcp", "https://{yourOktaDomain}/mcp"],
+  ] as const;
+  function show(
+    registrySpecifier: string,
+    url: string,
+    props: Partial<React.ComponentProps<typeof AddServerDialog>> = {},
+  ) {
+    const entry = {
+      ...server,
+      registrySpecifier,
+      supportsDcr: false,
+      authSetup: "manual" as const,
+      remotes: [{ url, transportType: "streamable-http" as const }],
+    };
+    mockConfigureWorkflow(entry);
+    return render(
+      <TooltipProvider>
+        <AddServerDialog
+          servers={[entry]}
+          open
+          openProviderSetup
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
+          {...props}
+        />
+      </TooltipProvider>,
+    );
+  }
+  it.each(entries)(
+    "defaults %s guided setup to User Identity",
+    async (specifier, url) => {
+      show(specifier, url);
+      await screen.findByRole("radio", { name: /User Identity/ });
+      expect(mocks.workflow.mock.calls.at(-1)![0].initialConfiguration).toEqual(
+        { identityMode: "user" },
+      );
+    },
+  );
+  it("defaults gateway-originated Okta setup to User Identity", async () => {
+    show("com.okta/managed-mcp", "https://{yourOktaDomain}/mcp", {
+      openProviderSetup: false,
+      attachToGatewayId: "gateway-id",
+    });
+    await screen.findByRole("radio", { name: /User Identity/ });
+    expect(mocks.workflow.mock.calls.at(-1)![0].initialConfiguration).toEqual({
+      identityMode: "user",
+    });
+  });
+  it.each(["loading", "disabled"] as const)(
+    "does not override identity while guided setup is %s",
+    async (rollout) => {
+      mocks.providerSetup = rollout;
+      show("com.okta/managed-mcp", "https://{yourOktaDomain}/mcp");
+      await waitFor(() => expect(mocks.workflow).toHaveBeenCalled());
+      expect(
+        mocks.workflow.mock.calls.at(-1)![0].initialConfiguration,
+      ).toBeUndefined();
+    },
+  );
+  it("keeps ordinary manual-auth catalog entries on their existing default", async () => {
+    show("test/server", "https://mcp.example.test/mcp");
+    await screen.findByRole("radio", { name: /User Identity/ });
+    expect(
+      mocks.workflow.mock.calls.at(-1)![0].initialConfiguration,
+    ).toBeUndefined();
+  });
+});
+
 describe("Salesforce catalog Add entry", () => {
   function openSalesforce(
     options: Partial<React.ComponentProps<typeof AddServerDialog>> = {},

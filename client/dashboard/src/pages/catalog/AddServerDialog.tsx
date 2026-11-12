@@ -13,7 +13,10 @@ import {
 } from "./snowflake-install";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
-import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
+import {
+  providerSetupInstallTarget,
+  setupProviderForUrl,
+} from "@/pages/mcp/x/setup/provider-setup";
 import { salesforceSetupInstallServer } from "./provider-setup/salesforce";
 import { useNavigate } from "react-router";
 import { CatalogLogo } from "./CatalogLogo";
@@ -244,29 +247,36 @@ export function AddServerDialog({
     [guidedSalesforce, salesforceEntry, enrichedServers],
   );
   const initialConfiguration = useMemo(() => {
-    if (providerSetupRollout !== "enabled") return undefined;
-    if (salesforceEntry)
-      return salesforceIdentity ?? { identityMode: "user" as const };
     if (
-      (openProviderSetup || attachToGatewayId) &&
-      !bulk &&
-      !headless &&
-      !autoStartInstall &&
-      enrichedServers.length === 1 &&
-      !!accountCatalogProvider(enrichedServers[0]!)
+      providerSetupRollout !== "enabled" ||
+      (!openProviderSetup && !attachToGatewayId) ||
+      bulk ||
+      headless ||
+      autoStartInstall ||
+      enrichedServers.length !== 1
     )
-      return { identityMode: "user" as const };
-    return undefined;
+      return undefined;
+    const server = enrichedServers[0]!;
+    const hasCustomSetup =
+      !!accountCatalogProvider(server) ||
+      server.remotes?.some(
+        (remote) =>
+          remote.transportType === "streamable-http" &&
+          !!setupProviderForUrl(remote.url),
+      );
+    if (!hasCustomSetup) return undefined;
+    if (salesforceEntry && salesforceIdentity) return salesforceIdentity;
+    return { identityMode: "user" as const };
   }, [
     providerSetupRollout,
-    salesforceEntry,
-    salesforceIdentity,
     openProviderSetup,
     attachToGatewayId,
     bulk,
     headless,
     autoStartInstall,
     enrichedServers,
+    salesforceEntry,
+    salesforceIdentity,
   ]);
 
   // Use enriched servers (with remotes) for the workflow. Callers that run

@@ -250,7 +250,8 @@ interface UseRemoteMcpInstallWorkflowOptions {
   /** Fresh catalog admission before any create, never after acceptance. */
   beforeInstall?: () => Promise<boolean>;
   /** Interactive native Snowflake installs start disabled and configure on Setup. */
-  /** Defer an account-specific User Identity install to its guided setup. */
+  snowflakeSetupEnabled?: boolean;
+  /** Defer Okta's account-specific User Identity install to its guided setup. */
   deferSetup?: (
     configs: ServerConfig[],
     options: {
@@ -258,17 +259,6 @@ interface UseRemoteMcpInstallWorkflowOptions {
       customize?: ServerGuardrailState;
     },
   ) => boolean;
-}
-
-/** Key into [ServerConfig.headerValues] for one header of one remote. */
-export function headerValueKey(remoteUrl: string, headerName: string): string {
-  return `${remoteUrl} ${headerName.toLowerCase()}`;
-}
-
-function buildServerConfig(
-  server: CatalogServer,
-  serverNameSuffix = "",
-  snowflakeSetupEnabled?: boolean;
 }
 
 /** Key into [ServerConfig.headerValues] for one header of one remote. */

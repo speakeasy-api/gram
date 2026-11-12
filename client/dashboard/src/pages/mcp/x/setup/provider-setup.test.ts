@@ -215,7 +215,7 @@ describe("Provider setup routing", () => {
     ])
       expect(setupProviderForUrl(url)).toBeNull();
   });
-  it.each(["https://example.okta.com/mcp"])(
+  it.each(["https://example.test/mcp"])(
     "leaves other providers on their existing path: %s",
     (url) => {
       expect(setupProviderForUrl(url)).toBeNull();

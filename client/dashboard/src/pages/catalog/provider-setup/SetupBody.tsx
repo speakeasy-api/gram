@@ -141,7 +141,11 @@ export function SetupBody({
                   asChild
                 >
                   <a
-                    href={s.provider === "okta" ? oktaGuide : "https://www.speakeasy.com/docs/ai-control-plane/guides/snowflake"}
+                    href={
+                      s.provider === "okta"
+                        ? oktaGuide
+                        : "https://www.speakeasy.com/docs/ai-control-plane/guides/snowflake"
+                    }
                     target="_blank"
                     rel="noopener noreferrer"
                   >
