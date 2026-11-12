@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -484,4 +485,41 @@ func TestHostedAttachmentWithoutWrapperRejected(t *testing.T) {
 	require.ErrorIs(t, err, errToolsetNoMCPServer)
 	counts := f.counts(t)
 	require.Zero(t, counts)
+}
+
+// A hosted server with a live custom-domain endpoint is dialed there, as endpointaddr.PrimaryEndpoint picks.
+func TestHostedAttachmentPrefersLiveCustomDomainEndpoint(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_custom_domain_first")
+	ctx := t.Context()
+	domains := customdomainsrepo.New(f.db)
+	domain, err := domains.CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: "org-test", Domain: "assistants.example.com", IngressName: pgtype.Text{String: "ingress", Valid: true},
+		CertSecretName: pgtype.Text{String: "cert", Valid: true}, ProvisionerKind: "ingress", IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	_, err = domains.UpdateCustomDomain(ctx, customdomainsrepo.UpdateCustomDomainParams{
+		ID: domain.ID, Verified: true, Activated: true, IngressName: pgtype.Text{String: "ingress", Valid: true}, CertSecretName: pgtype.Text{String: "cert", Valid: true},
+	})
+	require.NoError(t, err)
+	endpoints := mcpendpointsrepo.New(f.db)
+	endpoint, err := endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: f.projectID, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+		McpServerID: uuid.NullUUID{UUID: f.hosted.ID, Valid: true}, Slug: "billing-domain",
+	})
+	require.NoError(t, err)
+	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
+
+	runtime := f.runtime(t)
+	require.Len(t, runtime, 1)
+	require.Equal(t, "https://assistants.example.com/mcp/billing-domain", runtime[0].URL)
+
+	_, err = endpoints.UpdateMCPEndpointAddress(ctx, mcpendpointsrepo.UpdateMCPEndpointAddressParams{
+		ID: endpoint.ID, ProjectID: f.projectID, CustomDomainID: endpoint.CustomDomainID, Slug: endpoint.Slug,
+		IsDomainRoot: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	runtime = f.runtime(t)
+	require.Len(t, runtime, 1)
+	require.Equal(t, "https://assistants.example.com", runtime[0].URL)
 }

@@ -14,6 +14,8 @@
 //     ASSISTANT_ROLE_GRANTS_BACKFILL.md. It defaults to a dry run.
 //   - audit-kit-runtime-security: PostgreSQL application-data backfill; see
 //     AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md. It defaults to a dry run.
+//   - legacy-alias-endpoints: PostgreSQL application-data backfill; see
+//     LEGACY_ALIAS_ENDPOINTS_BACKFILL.md. It defaults to a dry run.
 //
 // Each guide documents its own connectivity, secret environment variables,
 // invocation modes, output, and recovery procedure. Flags are subcommand-local;
@@ -105,9 +107,11 @@ func run() int {
 		return runAssistantRoleGrants(args, os.Stdout, os.Getenv)
 	case auditKitRuntimeSecurityName:
 		return runAuditKitRuntimeSecurity(args, os.Stdout, os.Getenv)
+	case legacyAliasEndpointsName:
+		return runLegacyAliasEndpoints(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants, audit-kit-runtime-security)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants, audit-kit-runtime-security, legacy-alias-endpoints)")
 		return 2
 	}
 }
