@@ -65,7 +65,8 @@ type localInspectServer struct {
 // seeded project or a custom role's grants, so the next seed run clears it.
 // An empty mockURL leaves the mock-backed servers out.
 func runLocalInspectFixtures(ctx context.Context, logger *slog.Logger, q *repo.Queries, now time.Time, mockURL string) (*seeder, error) {
-	s := &seeder{spec: LocalSpec(), enc: nil, q: q, logger: logger, now: now, signalSequences: nil}
+	// These fixtures mint no assistant identities, so they need no issuer.
+	s := &seeder{spec: LocalSpec(), enc: nil, assistantIssuer: "", q: q, logger: logger, now: now, signalSequences: nil}
 	proj := s.projectID()
 
 	servers := []localInspectServer{{key: "local-unreachable", name: "Unreachable server (local)", url: localUnreachableURL, visibility: "private"}}
