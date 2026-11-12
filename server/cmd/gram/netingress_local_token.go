@@ -9,10 +9,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/netingress"
 )
 
-// defaultLocalTokenTTL is how long a minted local attestation token lasts. A
-// day outlasts a working session, and the local stack re-mints it on every
-// tailnet gateway start, so a developer never has to renew it by hand.
-const defaultLocalTokenTTL = 24 * time.Hour
+// defaultLocalTokenTTL is how long a minted local attestation token lasts.
+// Nothing re-mints it while the local stack runs, only when the tailnet
+// gateway starts, so it must outlast any stack that stays up: idle stacks
+// pause themselves and restart the gateway when woken, and 30 days covers one
+// left running. It only ever authenticates a developer's own local gateway to
+// their own local listener.
+const defaultLocalTokenTTL = 30 * 24 * time.Hour
 
 func newNetingressLocalTokenCommand() *cli.Command {
 	return &cli.Command{
