@@ -159,7 +159,7 @@ func (q *Queries) FailRun(ctx context.Context, arg FailRunParams) (int64, error)
 const failStaleActiveRuns = `-- name: FailStaleActiveRuns :execrows
 UPDATE memory_eval_runs
 SET status = 'failed', error = $1, finished_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE status IN ('queued', 'running') AND created_at < $2
+WHERE status IN ('queued', 'running') AND COALESCE(started_at, created_at) < $2
 `
 
 type FailStaleActiveRunsParams struct {
@@ -167,8 +167,8 @@ type FailStaleActiveRunsParams struct {
 	CreatedBefore pgtype.Timestamptz
 }
 
-// Fails queued or running runs created before a cutoff older than any live
-// workflow. Nothing else resolves a row whose workflow never started or was
+// Fails queued or running runs that started (or, if never claimed, were
+// created) before a cutoff older than any live workflow. Nothing else resolves a row whose workflow never started or was
 // terminated, and an unresolved row blocks every later start.
 func (q *Queries) FailStaleActiveRuns(ctx context.Context, arg FailStaleActiveRunsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, failStaleActiveRuns, arg.Error, arg.CreatedBefore)

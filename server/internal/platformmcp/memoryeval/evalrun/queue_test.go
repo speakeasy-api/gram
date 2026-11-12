@@ -18,16 +18,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun/repo"
 )
 
-// seedCorpusProject creates the local seed tenant's organization and main
-// eval project, which is all corpusOrganization looks for.
+// seedCorpusProject creates the local seed tenant's organization and both
+// eval projects, which is all corpusOrganization looks for.
 func seedCorpusProject(t *testing.T, db *pgxpool.Pool) string {
+	t.Helper()
+	return seedCorpusProjects(t, db, memoryeval.ProjectMain, memoryeval.ProjectOther)
+}
+
+// seedCorpusProjects creates the local seed tenant's organization and the
+// given eval projects.
+func seedCorpusProjects(t *testing.T, db *pgxpool.Pool, keys ...memoryeval.ProjectKey) string {
 	t.Helper()
 	spec := demoseed.LocalSpec()
 	_, err := orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{ID: spec.OrgID, Name: spec.OrgName, Slug: spec.OrgSlug})
 	require.NoError(t, err)
-	id, ok := demoseed.MemoryEvalProjectID(spec, memoryeval.ProjectMain)
-	require.True(t, ok)
-	require.NoError(t, demoseedrepo.New(db).MemoryEvalInsertProject(t.Context(), demoseedrepo.MemoryEvalInsertProjectParams{ProjectID: id, Name: "Team memory eval", Slug: "team-memory-eval", OrgID: spec.OrgID, CreatedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}}))
+	for _, key := range keys {
+		id, ok := demoseed.MemoryEvalProjectID(spec, key)
+		require.True(t, ok)
+		require.NoError(t, demoseedrepo.New(db).MemoryEvalInsertProject(t.Context(), demoseedrepo.MemoryEvalInsertProjectParams{ProjectID: id, Name: "Team memory eval " + string(key), Slug: "team-memory-eval-" + string(key), OrgID: spec.OrgID, CreatedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}}))
+	}
 	return spec.OrgID
 }
 
@@ -36,6 +45,11 @@ func TestQueueNeedsTheSeededCorpus(t *testing.T) {
 
 	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
 	require.NoError(t, err)
+	_, err = evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
+	require.ErrorIs(t, err, evalrun.ErrNoCorpus)
+
+	// A partial corpus would fail the run after it spent a slot.
+	seedCorpusProjects(t, db, memoryeval.ProjectMain)
 	_, err = evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
 	require.ErrorIs(t, err, evalrun.ErrNoCorpus)
 }

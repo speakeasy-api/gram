@@ -59,23 +59,38 @@ var (
 
 // corpusOrganization is the organization holding the seeded corpus: the
 // shared demo organization in deployed environments, the local one in
-// development.
+// development. Both eval projects must exist, or the run would fail after
+// spending a slot of the rolling limit.
 func corpusOrganization(ctx context.Context, db *pgxpool.Pool) (string, error) {
 	projects := projectsrepo.New(db)
 	for _, spec := range seedSpecs() {
-		id, ok := demoseed.MemoryEvalProjectID(spec, memoryeval.ProjectMain)
-		if !ok {
-			continue
+		seeded, err := corpusSeeded(ctx, projects, spec)
+		if err != nil {
+			return "", err
 		}
-		_, err := projects.GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: id, OrganizationID: spec.OrgID})
-		switch {
-		case err == nil:
+		if seeded {
 			return spec.OrgID, nil
-		case !errors.Is(err, pgx.ErrNoRows):
-			return "", fmt.Errorf("look up memory eval project: %w", err)
 		}
 	}
 	return "", ErrNoCorpus
+}
+
+// corpusSeeded reports whether both eval projects exist in spec's organization.
+func corpusSeeded(ctx context.Context, projects *projectsrepo.Queries, spec demoseed.Spec) (bool, error) {
+	for _, key := range []memoryeval.ProjectKey{memoryeval.ProjectMain, memoryeval.ProjectOther} {
+		id, ok := demoseed.MemoryEvalProjectID(spec, key)
+		if !ok {
+			return false, nil
+		}
+		_, err := projects.GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: id, OrganizationID: spec.OrgID})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return false, nil
+		case err != nil:
+			return false, fmt.Errorf("look up memory eval project: %w", err)
+		}
+	}
+	return true, nil
 }
 
 // Queue validates cfg and inserts a queued run for the corpus organization,
