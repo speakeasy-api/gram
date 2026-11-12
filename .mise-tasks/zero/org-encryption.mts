@@ -46,9 +46,10 @@ async function run() {
     await setKey(serviceAccountKey, serviceAccount);
   }
 
-  const databaseURL = process.env["GRAM_DATABASE_URL"];
-  if (!databaseURL) {
-    throw new Error("GRAM_DATABASE_URL is not set");
+  const dbUser = process.env["DB_USER"];
+  const dbName = process.env["DB_NAME"];
+  if (!dbUser || !dbName) {
+    throw new Error("DB_USER and DB_NAME must be set");
   }
 
   // psql substitutes :'name' variables only in scripts read from stdin, and
@@ -64,10 +65,12 @@ ON CONFLICT (external_credential_id) DO UPDATE
 SET impersonate_service_account = EXCLUDED.impersonate_service_account,
     skip_project_verification = TRUE;
 `;
+  // psql runs inside the database container, which ./zero has already
+  // started, so the host needs no Postgres client.
   await $({
     input: sql,
     quiet: true,
-  })`psql ${databaseURL.replace(/&search_path=.*$/, "")} -v ON_ERROR_STOP=1 -v credential_id=${credentialId} -v service_account=${serviceAccount}`;
+  })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -v credential_id=${credentialId} -v service_account=${serviceAccount}`;
   console.log("✅ Local organization encryption credential is in place.");
 }
 
