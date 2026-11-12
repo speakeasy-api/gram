@@ -76,7 +76,9 @@ func TestAccessRoleProjectionSummarizesWithoutSelectors(t *testing.T) {
 	server := uuid.NewString()
 	summary := summarizeMCPConnect([]*accessgen.RoleGrant{
 		{Scope: string(authz.ScopeMCPConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: server, Tool: new("list_tasks")}}},
-		{Scope: string(authz.ScopeMCPRead), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: authz.WildcardResource, ProjectID: &project, Disposition: &readOnly}}},
+		{Scope: string(authz.ScopeMCPConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: authz.WildcardResource, ProjectID: &project, Disposition: &readOnly}}},
+		// mcp:read does not imply connect, so it adds no connect rule.
+		{Scope: string(authz.ScopeMCPRead), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: authz.WildcardResource}}},
 	})
 	require.False(t, summary.AllServers)
 	require.Equal(t, 1, summary.ProjectRules)
@@ -94,6 +96,14 @@ func TestAccessRoleProjectionSummarizesWithoutSelectors(t *testing.T) {
 	summary = summarizeMCPConnect([]*accessgen.RoleGrant{{Scope: string(authz.ScopeMCPBlockedConnect), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: server, ProjectID: &project}}}})
 	require.Equal(t, 1, summary.BlockedProjectRules)
 	require.Equal(t, 1, summary.BlockedServerRules)
+
+	// View and manage blocks never withdraw connect.
+	summary = summarizeMCPConnect([]*accessgen.RoleGrant{
+		{Scope: string(authz.ScopeMCPBlockedRead), Selectors: nil},
+		{Scope: string(authz.ScopeMCPBlockedWrite), Selectors: []*accessgen.Selector{{ResourceKind: "mcp", ResourceID: server}}},
+	})
+	require.False(t, summary.BlockedServers)
+	require.Zero(t, summary.BlockedServerRules)
 }
 
 func TestRoleAuthzGrantsUseEffectiveExclusions(t *testing.T) {

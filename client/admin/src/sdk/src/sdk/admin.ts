@@ -9,6 +9,7 @@ import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
 import { adminCloneOnboardingPlaybook } from "../funcs/adminCloneOnboardingPlaybook.js";
+import { adminCreateGcpIamPlatformCredential } from "../funcs/adminCreateGcpIamPlatformCredential.js";
 import { adminCreateGlobalIssuer } from "../funcs/adminCreateGlobalIssuer.js";
 import { adminCreateOnboardingPlaybook } from "../funcs/adminCreateOnboardingPlaybook.js";
 import { adminCreateOnboardingUseCase } from "../funcs/adminCreateOnboardingUseCase.js";
@@ -16,6 +17,7 @@ import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
 import { adminCreateRegistryEntry } from "../funcs/adminCreateRegistryEntry.js";
 import { adminCreateSignupOffer } from "../funcs/adminCreateSignupOffer.js";
 import { adminCurateRegistryPromotionCandidate } from "../funcs/adminCurateRegistryPromotionCandidate.js";
+import { adminDeleteGcpIamPlatformCredential } from "../funcs/adminDeleteGcpIamPlatformCredential.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
 import { adminDeleteOnboardingPlaybook } from "../funcs/adminDeleteOnboardingPlaybook.js";
 import { adminDeleteOnboardingUseCase } from "../funcs/adminDeleteOnboardingUseCase.js";
@@ -26,6 +28,7 @@ import { adminEnableOrganization } from "../funcs/adminEnableOrganization.js";
 import { adminEnableUpstreamAuthEnforcement } from "../funcs/adminEnableUpstreamAuthEnforcement.js";
 import { adminExtendTrial } from "../funcs/adminExtendTrial.js";
 import { adminFetchGlobalIssuerMetadata } from "../funcs/adminFetchGlobalIssuerMetadata.js";
+import { adminGetGcpIamPlatformCredential } from "../funcs/adminGetGcpIamPlatformCredential.js";
 import { adminGetGlobalIssuer } from "../funcs/adminGetGlobalIssuer.js";
 import { adminGetGlobalIssuerDuplicatePreflight } from "../funcs/adminGetGlobalIssuerDuplicatePreflight.js";
 import { adminGetGlobalIssuerMigratePreflight } from "../funcs/adminGetGlobalIssuerMigratePreflight.js";
@@ -67,6 +70,7 @@ import { adminListOrganizationActivity } from "../funcs/adminListOrganizationAct
 import { adminListOrganizationMembers } from "../funcs/adminListOrganizationMembers.js";
 import { adminListOrganizationProjects } from "../funcs/adminListOrganizationProjects.js";
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
+import { adminListPlatformExternalCredentials } from "../funcs/adminListPlatformExternalCredentials.js";
 import { adminListPlatformMcpFeedback } from "../funcs/adminListPlatformMcpFeedback.js";
 import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
@@ -101,6 +105,7 @@ import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminSetStripeSubscription } from "../funcs/adminSetStripeSubscription.js";
 import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
+import { adminUpdateGcpIamPlatformCredential } from "../funcs/adminUpdateGcpIamPlatformCredential.js";
 import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
 import { adminUpdateOnboardingPlaybook } from "../funcs/adminUpdateOnboardingPlaybook.js";
 import { adminUpdateOnboardingUseCase } from "../funcs/adminUpdateOnboardingUseCase.js";
@@ -108,6 +113,7 @@ import { adminUpdateOrganization } from "../funcs/adminUpdateOrganization.js";
 import { adminUpdateSignupOffer } from "../funcs/adminUpdateSignupOffer.js";
 import { adminUpdateSupportMatrix } from "../funcs/adminUpdateSupportMatrix.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
+import { adminVerifyGcpIamPlatformCredential } from "../funcs/adminVerifyGcpIamPlatformCredential.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AdminBackfillMCPAuthGrantsResult } from "../models/components/adminbackfillmcpauthgrantsresult.js";
 import { AdminBackfillMCPConnectGrantsResult } from "../models/components/adminbackfillmcpconnectgrantsresult.js";
@@ -170,6 +176,7 @@ import { CloneOnboardingPlaybookRequestBody } from "../models/components/cloneon
 import { CreateOnboardingPlaybookRequestBody } from "../models/components/createonboardingplaybookrequestbody.js";
 import { CreateOnboardingUseCaseRequestBody } from "../models/components/createonboardingusecaserequestbody.js";
 import { CreateOrganizationRequestBody } from "../models/components/createorganizationrequestbody.js";
+import { CreatePlatformGcpIamCredentialForm } from "../models/components/createplatformgcpiamcredentialform.js";
 import { CreateRegistryEntryRequestBody } from "../models/components/createregistryentryrequestbody.js";
 import { CreateRemoteSessionIssuerForm } from "../models/components/createremotesessionissuerform.js";
 import { CreateSignupOfferRequestBody } from "../models/components/createsignupofferrequestbody.js";
@@ -182,9 +189,11 @@ import { EnableOrganizationRequestBody } from "../models/components/enableorgani
 import { EnableUpstreamAuthEnforcementRequestBody } from "../models/components/enableupstreamauthenforcementrequestbody.js";
 import { ExtendTrialRequestBody } from "../models/components/extendtrialrequestbody.js";
 import { FetchIssuerMetadataRequestBody } from "../models/components/fetchissuermetadatarequestbody.js";
+import { GcpIamCredential } from "../models/components/gcpiamcredential.js";
 import { GetRegistryPromotionCandidateRequestBody } from "../models/components/getregistrypromotioncandidaterequestbody.js";
 import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
 import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
+import { ListExternalCredentialsResult } from "../models/components/listexternalcredentialsresult.js";
 import { ListPlatformMcpFeedbackResponseBody } from "../models/components/listplatformmcpfeedbackresponsebody.js";
 import { ListSignupOffersResponseBody } from "../models/components/listsignupoffersresponsebody.js";
 import { MarkEnterpriseTrialConvertedRequestBody } from "../models/components/markenterprisetrialconvertedrequestbody.js";
@@ -219,14 +228,17 @@ import { StartTrialRequestBody } from "../models/components/starttrialrequestbod
 import { SupportCoverageResult } from "../models/components/supportcoverageresult.js";
 import { SupportMatrix } from "../models/components/supportmatrix.js";
 import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components/triggerorganizationchatanalysisrequestbody.js";
+import { UpdateGcpIamPlatformCredentialRequestBody } from "../models/components/updategcpiamplatformcredentialrequestbody.js";
 import { UpdateOnboardingPlaybookRequestBody } from "../models/components/updateonboardingplaybookrequestbody.js";
 import { UpdateOnboardingUseCaseRequestBody } from "../models/components/updateonboardingusecaserequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
 import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremotesessionissuerform.js";
 import { UpdateSignupOfferRequestBody } from "../models/components/updatesignupofferrequestbody.js";
 import { UpdateSupportMatrixRequestBody } from "../models/components/updatesupportmatrixrequestbody.js";
+import { VerifyPlatformCredentialResult } from "../models/components/verifyplatformcredentialresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
 import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admindescribemcpserverhealth.js";
+import { AdminGetGcpIamPlatformCredentialRequest } from "../models/operations/admingetgcpiamplatformcredential.js";
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
 import { AdminGetGlobalIssuerDuplicatePreflightRequest } from "../models/operations/admingetglobalissuerduplicatepreflight.js";
 import { AdminGetGlobalIssuerMigratePreflightRequest } from "../models/operations/admingetglobalissuermigratepreflight.js";
@@ -273,6 +285,7 @@ import {
   AdminListOrganizationsRequest,
   AdminListOrganizationsResponse,
 } from "../models/operations/adminlistorganizations.js";
+import { AdminListPlatformExternalCredentialsRequest } from "../models/operations/adminlistplatformexternalcredentials.js";
 import { AdminListPlatformMcpFeedbackRequest } from "../models/operations/adminlistplatformmcpfeedback.js";
 import { AdminListProjectMcpServersRequest } from "../models/operations/adminlistprojectmcpservers.js";
 import { AdminListRegistryEntriesRequest } from "../models/operations/adminlistregistryentries.js";
@@ -344,6 +357,108 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminListCustomDomainsResult> {
     return unwrapAsync(adminListCustomDomains(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * createGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Create a platform GCP IAM external credential. Set the wif_* triple for Workload Identity Federation, impersonate_service_account alone for direct impersonation, or neither for Speakeasy's ambient attached identity.
+   */
+  async createGcpIamPlatformCredential(
+    request: CreatePlatformGcpIamCredentialForm,
+    options?: RequestOptions,
+  ): Promise<GcpIamCredential> {
+    return unwrapAsync(adminCreateGcpIamPlatformCredential(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * deleteGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Soft-delete a platform GCP IAM external credential. Refused while managed signing keys, organization encryption keys or live issuer keys still use it. Deleting a missing credential succeeds.
+   */
+  async deleteGcpIamPlatformCredential(
+    request: RiskIDRequestBody,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(adminDeleteGcpIamPlatformCredential(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Get a platform GCP IAM external credential by ID.
+   */
+  async getGcpIamPlatformCredential(
+    request: AdminGetGcpIamPlatformCredentialRequest,
+    options?: RequestOptions,
+  ): Promise<GcpIamCredential> {
+    return unwrapAsync(adminGetGcpIamPlatformCredential(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listPlatformExternalCredentials admin
+   *
+   * @remarks
+   * List the platform external credentials (organization_id NULL, project_id NULL) that Speakeasy authenticates into a cloud provider with. Optionally filter by provider.
+   */
+  async listPlatformExternalCredentials(
+    request?: AdminListPlatformExternalCredentialsRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<ListExternalCredentialsResult> {
+    return unwrapAsync(adminListPlatformExternalCredentials(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * updateGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Replace a platform GCP IAM external credential's name and configuration. Refused while managed signing keys still sign through it. Changing the impersonated account or wif_* identity is also refused while organization encryption keys or issuer keys still reach KMS through it; renames stay allowed.
+   */
+  async updateGcpIamPlatformCredential(
+    request: UpdateGcpIamPlatformCredentialRequestBody,
+    options?: RequestOptions,
+  ): Promise<GcpIamCredential> {
+    return unwrapAsync(adminUpdateGcpIamPlatformCredential(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * verifyGcpIamPlatformCredential admin
+   *
+   * @remarks
+   * Run a live 'who am I' probe against a platform GCP IAM credential's resolved identity and report the effective principal. Nothing is persisted.
+   */
+  async verifyGcpIamPlatformCredential(
+    request: RiskIDRequestBody,
+    options?: RequestOptions,
+  ): Promise<VerifyPlatformCredentialResult> {
+    return unwrapAsync(adminVerifyGcpIamPlatformCredential(
       this,
       request,
       options,

@@ -92,6 +92,12 @@ func EnqueuePage(ctx context.Context, db *pgxpool.Pool, judges *Judges, projectI
 		SessionIds:  make([]string, 0, len(page)),
 		ObservedAts: make([]pgtype.Timestamptz, 0, len(page)),
 		Judges:      enabled,
+		RearmJudges: make([]string, 0, len(enabled)),
+	}
+	for _, name := range enabled {
+		if judges.rearms(name) {
+			insert.RearmJudges = append(insert.RearmJudges, name)
+		}
 	}
 	for _, candidate := range page {
 		insert.ChatIds = append(insert.ChatIds, candidate.ID)

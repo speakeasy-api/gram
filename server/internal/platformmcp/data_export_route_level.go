@@ -25,8 +25,9 @@ const (
 
 	dataExportOutcomeLevelChanged = "changed"
 
-	// The relays reuse a route lookup, level included, for up to 60 seconds.
-	dataExportLevelTakesEffect = "Within about a minute. The export relays reuse a route lookup for up to 60 seconds, so records can keep going out at the old level briefly."
+	// The relays reuse a route lookup, level included, for up to 60 seconds, except for
+	// destinations that include sensitive fields, which are never cached.
+	dataExportLevelTakesEffect = "Within about a minute. The export relays reuse a route lookup for up to 60 seconds, so records can keep going out at the old level briefly; for a destination that includes sensitive fields it applies on the next batch."
 )
 
 type SetDataExportMinSeverityInput struct {

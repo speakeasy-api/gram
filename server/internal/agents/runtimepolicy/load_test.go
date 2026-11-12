@@ -166,6 +166,7 @@ func TestLoadAgentPolicyPreservesServerRestrictions(t *testing.T) {
 			t.Parallel()
 			fixture := newAgentRoleFixture(t, t.Context())
 			seedGrant(t, t.Context(), fixture.db, fixture.organizationID, fixture.rolePrincipal, authz.ScopeMCPWrite, "*")
+			seedGrant(t, t.Context(), fixture.db, fixture.organizationID, fixture.rolePrincipal, authz.ScopeMCPConnect, "*")
 			principal := fixture.agentPrincipal
 			if restrictedByRole {
 				principal = fixture.rolePrincipal

@@ -8,31 +8,22 @@ import {
   CommandList,
 } from "@/components/ui/Command";
 import { Icon } from "@/components/ui/Icon";
-import { Spinner } from "@/components/ui/Spinner";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
-import { cn } from "@/lib/utils";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
-  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { useLocation } from "react-router";
 import { requestAskAi } from "./askAiBridge";
 import { useLauncherCandidates } from "./candidates";
-import {
-  CONFIRM_VERBS,
-  type LauncherCandidate,
-  type Verb,
-} from "./candidates/types";
-import { isReady, prefilter, rank, type RankedRow } from "./ranker";
+import type { LauncherCandidate } from "./candidates/types";
+import { prefilter, rank } from "./ranker";
 import { useRecentsUserId } from "./recentlyVisited";
-import { useLauncherJudge } from "./useLauncherJudge";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
 // Assistant uses. Rendered as a thin hairline at the top of the palette so the
@@ -43,36 +34,12 @@ const BRAND_GRADIENT =
 const KBD_CLASS =
   "border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 min-w-5 items-center justify-center gap-1 border px-1.5 font-mono text-[10px] font-medium select-none";
 
-const READY_KBD_CLASS =
-  "text-default-success border-success-softest bg-success-softest";
-
 const ASK_AI_VALUE = "__ask_ai__";
 
-const VERB_LABEL: Record<Verb, string> = {
-  open: "Open",
-  enable: "Enable",
-  disable: "Disable",
-  publish: "Publish",
-};
-
-/** A candidate plus the verb Jev (or the fuzzy fallback) resolved for it. */
+/** A candidate displayed by the palette. */
 interface DisplayRow {
   candidate: LauncherCandidate;
-  verb: Verb;
 }
-
-/**
- * The confirm flow (see the design spec, "Mutation confirm flow"):
- * list ─Enter on an irreversible verb─▶ confirm ─Enter─▶ running ─▶ closed,
- * with Esc returning from confirm to list and a rejected run returning from
- * running. Reversible verbs skip it and run from the list, offering an Undo.
- */
-type PaletteMode =
-  | { mode: "list" }
-  | { mode: "confirm"; row: DisplayRow }
-  | { mode: "running"; row: DisplayRow };
-
-const LIST: PaletteMode = { mode: "list" };
 
 // Idle order for page actions: contextual Tool Actions first, then project
 // Pages before Organization pages, then anything else alphabetically.
@@ -95,13 +62,13 @@ function compareGroups(a: string, b: string): number {
 }
 
 function openRow(candidate: LauncherCandidate): DisplayRow {
-  return { candidate, verb: "open" };
+  return { candidate };
 }
 
 /**
  * The zero-state list: recents first, then the organization's projects, then
- * registered page actions by group. No prefilter and no Jev call while the
- * query is empty. Projects are listed only at the org level (see
+ * registered page actions by group. Search ranking only runs while the query
+ * is non-empty. Projects are listed only at the org level (see
  * `CommandPalette`); the hook keeps them in their source order (by slug).
  */
 function idleRows(candidates: LauncherCandidate[]): {
@@ -143,21 +110,11 @@ function groupRows(rows: DisplayRow[]): Array<{
   return groups;
 }
 
-function rowTitle({ candidate, verb }: DisplayRow): string {
-  return verb === "open"
-    ? candidate.title
-    : `${VERB_LABEL[verb]} · ${candidate.title}`;
-}
-
 function PaletteRow({
   row,
-  ready,
-  running,
   onSelect,
 }: {
   row: DisplayRow;
-  ready: boolean;
-  running: boolean;
   onSelect: () => void;
 }): JSX.Element {
   const { candidate } = row;
@@ -172,7 +129,7 @@ function PaletteRow({
       )}
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="flex items-center gap-2">
-          <span className="truncate">{rowTitle(row)}</span>
+          <span className="truncate">{candidate.title}</span>
           {candidate.stage && (
             <ReleaseStageBadge stage={candidate.stage} noTooltip />
           )}
@@ -181,25 +138,15 @@ function PaletteRow({
           {candidate.detail}
         </span>
       </div>
-      {running && <Spinner className="mr-0 size-4 shrink-0" />}
-      {ready && !running && (
-        <kbd aria-label="Ready" className={cn(KBD_CLASS, READY_KBD_CLASS)}>
-          ↵
-        </kbd>
-      )}
     </CommandItem>
   );
 }
 
 function RowGroups({
   rows,
-  readyValue,
-  runningValue,
   onSelect,
 }: {
   rows: DisplayRow[];
-  readyValue: string | null;
-  runningValue: string | null;
   onSelect: (row: DisplayRow) => void;
 }): JSX.Element {
   return (
@@ -210,8 +157,6 @@ function RowGroups({
             <PaletteRow
               key={row.candidate.id}
               row={row}
-              ready={readyValue === row.candidate.id}
-              running={runningValue === row.candidate.id}
               onSelect={() => onSelect(row)}
             />
           ))}
@@ -228,13 +173,9 @@ function RowGroups({
  */
 function RankedRows({
   rows,
-  readyValue,
-  runningValue,
   onSelect,
 }: {
   rows: DisplayRow[];
-  readyValue: string | null;
-  runningValue: string | null;
   onSelect: (row: DisplayRow) => void;
 }): JSX.Element {
   return (
@@ -243,8 +184,6 @@ function RankedRows({
         <PaletteRow
           key={row.candidate.id}
           row={row}
-          ready={readyValue === row.candidate.id}
-          running={runningValue === row.candidate.id}
           onSelect={() => onSelect(row)}
         />
       ))}
@@ -310,62 +249,12 @@ function isNavigationKey(e: ReactKeyboardEvent): boolean {
   }
 }
 
-/**
- * Replaces the input while a mutating verb awaits its second Enter. It holds
- * focus so Enter lands here rather than on cmdk, and swallows it while the
- * run is in flight. Escape is handled by the dialog (see `handleEscape`).
- */
-function ConfirmBar({
-  row,
-  running,
-  onConfirm,
-}: {
-  row: DisplayRow;
-  running: boolean;
-  onConfirm: () => void;
-}): JSX.Element {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    ref.current?.focus();
-  }, []);
-
-  return (
-    <div
-      ref={ref}
-      tabIndex={0}
-      role="group"
-      aria-label="Confirm action"
-      className="flex h-14 items-center gap-3 border-b py-3 pr-12 pl-3 text-sm outline-hidden"
-      onKeyDown={(e) => {
-        if (e.key !== "Enter") return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (!running) onConfirm();
-      }}
-    >
-      <span className="flex-1 truncate font-medium">
-        {VERB_LABEL[row.verb]} {row.candidate.title}?
-      </span>
-      <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-        <kbd className={KBD_CLASS}>↵</kbd>
-        confirm
-        <span aria-hidden>·</span>
-        <kbd className={KBD_CLASS}>esc</kbd>
-        back
-      </span>
-    </div>
-  );
-}
-
 export function CommandPalette(): JSX.Element {
   const { isOpen, close, contextBadge } = useCommandPalette();
   const { orgSlug, projectSlug } = useSlugs();
-  const { pathname } = useLocation();
   const project = useProject();
   const { hasScope } = useRBAC();
   const [query, setQuery] = useState("");
-  const [mode, setMode] = useState<PaletteMode>(LIST);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // Project Assistant and resource search are project-scoped. At the org level
   // (no project in the URL) the palette still works for navigating org pages.
@@ -385,12 +274,6 @@ export function CommandPalette(): JSX.Element {
     orgSlug,
     projectSlug,
   });
-  // The intent service is keyed per organization and project, so the "no
-  // service" latch is too: moving to a tenant that has one asks again.
-  const { state, judge, reset } = useLauncherJudge(
-    `${orgSlug ?? ""}/${projectSlug ?? ""}`,
-  );
-
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
 
@@ -398,38 +281,11 @@ export function CommandPalette(): JSX.Element {
     () => prefilter(trimmedQuery, candidates),
     [trimmedQuery, candidates],
   );
-  const rows = useMemo(() => rank(pre, state.judgment), [pre, state.judgment]);
+  const rows = useMemo(() => rank(pre), [pre]);
   const idle = useMemo(() => idleRows(candidates), [candidates]);
 
-  // Ask Jev on every keystroke while open. The hook aborts the previous
-  // request itself; an empty query clears the judgment without a call.
-  //
-  // Keyed on what would be sent rather than on the array's identity: a
-  // background refetch of any candidate query rebuilds the array with the
-  // same content, and re-asking then would abort a good request in flight.
-  const sendableKey = useMemo(
-    () =>
-      pre.sendable
-        .map((c) => [c.id, c.title, c.detail, c.verbs.join(",")].join("\u0001"))
-        .join("\n"),
-    [pre.sendable],
-  );
-  const sendableRef = useRef(pre.sendable);
-  useEffect(() => {
-    sendableRef.current = pre.sendable;
-  }, [pre.sendable]);
-  useEffect(() => {
-    if (!isOpen || state.disabled) return;
-    judge(trimmedQuery, sendableRef.current, pathname);
-  }, [isOpen, state.disabled, trimmedQuery, sendableKey, pathname, judge]);
-
-  useEffect(() => {
-    if (!isOpen) reset();
-  }, [isOpen, reset]);
-
-  // cmdk only reselects the first item when its search changes, so when a
-  // judgment reorders the rows the highlight would stay on a now-demoted row.
-  // Controlling the value pins it to the top row whenever the DOM order
+  // cmdk only reselects the first item when its search changes. Controlling
+  // the value pins it to the top row whenever the DOM order
   // changes — unless the user had moved off the top, in which case their row
   // keeps the highlight (see `resolveSelection`).
   const [selectedFor, setSelectedFor] = useState<Selection | null>(null);
@@ -445,17 +301,7 @@ export function CommandPalette(): JSX.Element {
     () => (inProject ? [] : idle.projects),
     [inProject, idle.projects],
   );
-  // Jev's verbs are the answer to a question the user asked in words, so they
-  // are set apart under their own heading rather than mixed into the matches.
-  // The DOM order still drives ↑/↓, so `domOrder` follows this partition.
-  const ranked = useMemo(() => {
-    const actions: RankedRow[] = [];
-    const results: RankedRow[] = [];
-    for (const row of rows) (row.verb === "open" ? results : actions).push(row);
-    return { actions, results, ordered: [...actions, ...results] };
-  }, [rows]);
   const domOrder = useMemo((): string[] => {
-    if (mode.mode !== "list") return [mode.row.candidate.id];
     const ask = canAskAssistant ? [ASK_AI_VALUE] : [];
     if (!hasQuery) {
       return [
@@ -465,8 +311,8 @@ export function CommandPalette(): JSX.Element {
         ...idle.actions.map((r) => r.candidate.id),
       ];
     }
-    return [...ranked.ordered.map((r) => r.candidate.id), ...ask];
-  }, [mode, canAskAssistant, hasQuery, idle, idleProjects, ranked]);
+    return [...rows.map((r) => r.candidate.id), ...ask];
+  }, [canAskAssistant, hasQuery, idle, idleProjects, rows]);
   const rowsKey = domOrder.join("\n");
   const selectedValue = resolveSelection(
     selectedFor,
@@ -475,73 +321,20 @@ export function CommandPalette(): JSX.Element {
     domOrder,
   );
 
-  // The green ↵ is purely visual: Enter always runs the highlighted row.
-  const topRow = ranked.ordered[0];
-  const readyValue =
-    mode.mode === "list" &&
-    hasQuery &&
-    topRow &&
-    selectedValue === topRow.candidate.id &&
-    // Only a fresh judgment may light the ↵: a dimmed one belongs to the
-    // previous keystroke and says nothing about the current query.
-    state.fresh &&
-    isReady(ranked.ordered, state.judgment)
-      ? topRow.candidate.id
-      : null;
-
-  // Focus follows the mode: the confirm bar focuses itself on mount, and the
-  // input takes focus back when the bar goes away.
-  useEffect(() => {
-    if (mode.mode === "list") inputRef.current?.focus();
-  }, [mode.mode]);
-
   const closeAndReset = () => {
     setQuery("");
-    setMode(LIST);
     setSelectedFor(null);
     close();
   };
 
   const selectRow = (row: DisplayRow) => {
-    if (mode.mode !== "list") return;
-    if (CONFIRM_VERBS.has(row.verb)) {
-      setMode({ mode: "confirm", row });
-      return;
-    }
-    // `run` toasts its own failure, so the rejection is consumed rather than
-    // surfacing as an unhandled one after the palette has closed.
-    void Promise.resolve(row.candidate.run(row.verb)).catch(() => {});
+    void Promise.resolve(row.candidate.run("open")).catch(() => {});
     closeAndReset();
   };
 
-  // Second Enter. The candidate's `run` toasts on its own and rejects on
-  // failure, so a rejection just returns to the list with the query intact.
-  const runConfirmed = () => {
-    if (mode.mode !== "confirm") return;
-    const { row } = mode;
-    setMode({ mode: "running", row });
-    Promise.resolve()
-      .then(() => row.candidate.run(row.verb))
-      .then(
-        () => closeAndReset(),
-        () => setMode(LIST),
-      );
-  };
-
   // Radix listens for Escape on the document in the capture phase, so this is
-  // the only place that can stop it closing the dialog. Escape steps back one
-  // level at a time: running ignores it, confirm returns to the list with the
-  // query intact, a query is cleared, and only an empty list closes.
+  // the only place that can clear the query before the dialog closes.
   const handleEscape = (e: KeyboardEvent) => {
-    if (mode.mode === "running") {
-      e.preventDefault();
-      return;
-    }
-    if (mode.mode === "confirm") {
-      e.preventDefault();
-      setMode(LIST);
-      return;
-    }
     if (hasQuery) {
       e.preventDefault();
       setQuery("");
@@ -584,11 +377,7 @@ export function CommandPalette(): JSX.Element {
     </CommandGroup>
   ) : null;
 
-  const rowGroupProps = {
-    readyValue,
-    runningValue: mode.mode === "running" ? mode.row.candidate.id : null,
-    onSelect: mode.mode === "list" ? selectRow : runConfirmed,
-  };
+  const rowGroupProps = { onSelect: selectRow };
 
   return (
     <CommandDialog
@@ -622,39 +411,26 @@ export function CommandPalette(): JSX.Element {
           </Badge>
         </div>
       )}
-      {mode.mode === "list" ? (
-        <CommandInput
-          ref={inputRef}
-          placeholder={
-            inProject
-              ? "Ask AI or search resources and pages…"
-              : "Search projects and pages…"
-          }
-          value={query}
-          onValueChange={(value) => {
-            // A keystroke that changes the query starts over: a navigation
-            // key pressed before it must not mark the next selection as
-            // the user's.
-            userInput.current = false;
-            setQuery(value);
-          }}
-          onKeyDownCapture={(e) => {
-            if (isNavigationKey(e)) userInput.current = true;
-          }}
-        />
-      ) : (
-        <ConfirmBar
-          row={mode.row}
-          running={mode.mode === "running"}
-          onConfirm={runConfirmed}
-        />
-      )}
+      <CommandInput
+        placeholder={
+          inProject
+            ? "Ask AI or search resources and pages…"
+            : "Search projects and pages…"
+        }
+        value={query}
+        onValueChange={(value) => {
+          // A keystroke that changes the query starts over: a navigation
+          // key pressed before it must not mark the next selection as
+          // the user's.
+          userInput.current = false;
+          setQuery(value);
+        }}
+        onKeyDownCapture={(e) => {
+          if (isNavigationKey(e)) userInput.current = true;
+        }}
+      />
       <CommandList
-        className={cn(
-          "transition-opacity",
-          // A newer request is in flight: keep the last order, but dimmed.
-          state.judgment && !state.fresh && "opacity-60",
-        )}
+        className="transition-opacity"
         // Capture phase: cmdk selects the row under the pointer from the
         // row's own handler, so the flag must be set before it fires.
         onPointerMoveCapture={(e: ReactPointerEvent<HTMLDivElement>) => {
@@ -663,11 +439,7 @@ export function CommandPalette(): JSX.Element {
           }
         }}
       >
-        {mode.mode !== "list" && (
-          <RankedRows rows={[mode.row]} {...rowGroupProps} />
-        )}
-
-        {mode.mode === "list" && !hasQuery && (
+        {!hasQuery && (
           <>
             {/* Recents are a zero-state affordance only: once the user types
                 they compete on their own merits (AGE-2808). */}
@@ -678,7 +450,7 @@ export function CommandPalette(): JSX.Element {
           </>
         )}
 
-        {mode.mode === "list" && hasQuery && (
+        {hasQuery && (
           <>
             {/* The Ask row is always mounted inside a project, so an unmatched
                 query there is an offer to ask the assistant, not a dead end.
@@ -686,12 +458,7 @@ export function CommandPalette(): JSX.Element {
             {rows.length === 0 && !inProject && (
               <div className="py-6 text-center text-sm">No results found.</div>
             )}
-            {ranked.actions.length > 0 && (
-              <CommandGroup heading="Actions">
-                <RankedRows rows={ranked.actions} {...rowGroupProps} />
-              </CommandGroup>
-            )}
-            <RankedRows rows={ranked.results} {...rowGroupProps} />
+            <RankedRows rows={rows} {...rowGroupProps} />
             {askAiGroup}
           </>
         )}
@@ -712,9 +479,6 @@ export function CommandPalette(): JSX.Element {
           <kbd className={KBD_CLASS}>esc</kbd>
           to close
         </span>
-        {state.fresh && state.latencyMs != null && (
-          <span className="ml-auto tabular-nums">{state.latencyMs} ms</span>
-        )}
       </div>
     </CommandDialog>
   );

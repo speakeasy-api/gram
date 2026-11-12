@@ -31,6 +31,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 // Context is whether a turn runs for a user it identified.
@@ -108,7 +111,12 @@ type decision struct {
 // remote_session, EMA or service_account auth client serves the choice. A server
 // with no associated upstream OAuth client is served by its headers, as a
 // static_credential or pass_through auth client, or by nothing.
-func decide(row ListProfileServersRow, execCtx Context) (decision, *Gap) {
+//
+// For an organization enforcing upstream auth (typedOnly), associations decide
+// nothing and every enabled auth client the server offers is a credential it
+// can be served with, as an administrator's choice reads them: the one the
+// context can use is chosen, and several are left to an administrator.
+func decide(row ListProfileServersRow, execCtx Context, typedOnly bool) (decision, *Gap) {
 	gap := func(reason GapReason) (decision, *Gap) {
 		return decision{serverID: uuid.Nil, authClientID: uuid.Nil}, &Gap{MCPServerID: row.McpServerID, Reason: reason}
 	}
@@ -123,6 +131,29 @@ func decide(row ListProfileServersRow, execCtx Context) (decision, *Gap) {
 			return gap(GapSetupIncomplete)
 		}
 		return choose(uuid.Nil)
+	}
+	if typedOnly {
+		usable, personal := []uuid.UUID{}, false
+		for i, id := range row.AuthClientIds {
+			switch {
+			case authz.IsSharedAuthClientType(row.AuthClientTypes[i]):
+				usable = append(usable, id)
+			case execCtx == ContextUserless:
+				personal = true
+			default:
+				usable = append(usable, id)
+			}
+		}
+		switch {
+		case len(usable) == 1:
+			return choose(usable[0])
+		case len(usable) > 1:
+			return gap(GapSelectionRequired)
+		case personal:
+			return gap(GapPersonalRequiresUser)
+		default:
+			return gap(GapNoClient)
+		}
 	}
 	switch len(row.RegistrationIds) {
 	case 0:
@@ -244,6 +275,12 @@ func (p plan) writes() bool {
 }
 
 func planTx(ctx context.Context, q *Queries, target Target, profileID, versionID uuid.UUID, version int64) (plan, error) {
+	// Read on the bind's transaction, so the choices it records follow the
+	// enforcement state they commit beside.
+	typedOnly, err := authenforcement.ReadEnforced(ctx, q.db, target.OrganizationID)
+	if err != nil {
+		return plan{}, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
 	servers, err := q.ListProfileServers(ctx, ListProfileServersParams{
 		VersionID:      uuid.NullUUID{UUID: versionID, Valid: version > 0},
 		OrganizationID: target.OrganizationID,
@@ -258,7 +295,7 @@ func planTx(ctx context.Context, q *Queries, target Target, profileID, versionID
 		if row.HasChoice {
 			continue
 		}
-		d, gap := decide(row, target.Context)
+		d, gap := decide(row, target.Context, typedOnly)
 		if gap != nil {
 			p.gaps = append(p.gaps, *gap)
 			continue
