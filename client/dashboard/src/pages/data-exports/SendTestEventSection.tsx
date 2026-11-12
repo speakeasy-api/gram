@@ -23,14 +23,32 @@ const alertTitleForOutcome: Record<string, string> = {
   error: "Destination returned an error",
 };
 
-function failureMessage(error: unknown): string {
-  if (error instanceof GramError && error.statusCode === 429) {
-    return "Too many test events were sent just now. Try again in a minute.";
+// Only a 4xx is a refusal before sending; anything else may come after the event went out.
+function failure(error: unknown): { title: string; message: string } {
+  const status = error instanceof GramError ? error.statusCode : undefined;
+  if (status === 429) {
+    return {
+      title: "Test event not sent",
+      message: "Too many test events were sent just now. Try again in a minute.",
+    };
   }
-  if (error instanceof GramError && error.statusCode === 503) {
-    return "Speakeasy can't send test events right now. Try again shortly.";
+  if (status === 503) {
+    return {
+      title: "Test event not sent",
+      message: "Speakeasy can't send test events right now. Try again shortly.",
+    };
   }
-  return "Speakeasy could not send the test event. Try again.";
+  if (status !== undefined && status >= 400 && status < 500) {
+    return {
+      title: "Test event not sent",
+      message: "Speakeasy could not send the test event. Try again.",
+    };
+  }
+  return {
+    title: "Test result unknown",
+    message:
+      "Speakeasy could not confirm the result. The test event may have been sent, so check your destination before trying again.",
+  };
 }
 
 /**
@@ -77,8 +95,8 @@ export function SendTestEventSection({
           </Button>
         </div>
         {sendTest.isError && !unsavedChanges ? (
-          <Alert variant="error" title="Test event not sent">
-            {failureMessage(sendTest.error)}
+          <Alert variant="error" title={failure(sendTest.error).title}>
+            {failure(sendTest.error).message}
           </Alert>
         ) : null}
         {result &&

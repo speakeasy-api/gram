@@ -117,16 +117,33 @@ describe("SendTestEventSection", () => {
     expect(screen.getByText(`Message for ${outcome}.`)).toBeTruthy();
   });
 
-  it("explains a request that could not be sent", () => {
+  it("says the result is unknown when the answer was lost", () => {
     mutation.isError = true;
     mutation.error = new Error("boom");
+    renderSection();
+
+    expect(screen.getByText("Test result unknown")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Speakeasy could not confirm the result. The test event may have been sent, so check your destination before trying again.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("boom")).toBeNull();
+  });
+
+  it("says the event was not sent when the request was refused", () => {
+    mutation.isError = true;
+    mutation.error = new GramError("request failed", {
+      response: new Response("{}", { status: 404 }),
+      request: new Request("https://app.getgram.ai/rpc/example"),
+      body: "{}",
+    });
     renderSection();
 
     expect(screen.getByText("Test event not sent")).toBeTruthy();
     expect(
       screen.getByText("Speakeasy could not send the test event. Try again."),
     ).toBeTruthy();
-    expect(screen.queryByText("boom")).toBeNull();
   });
 
   it("hides an earlier answer once the settings change", () => {
