@@ -375,7 +375,7 @@ func ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx context.Con
 		OrganizationID: organizationID, FeatureName: "upstream_auth_enforced",
 	})
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("read enforcement for selection reconciliation: %w", err)
 	}
 	q := New(tx)
 	confirmed := make(map[selectionMappingGroup]bool)

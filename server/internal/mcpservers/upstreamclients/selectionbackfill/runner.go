@@ -280,7 +280,7 @@ func RecordIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organi
 	}
 	typedOnly, err := authenforcement.ReadEnforced(ctx, tx, organizationID)
 	if err != nil {
-		return err
+		return fmt.Errorf("read enforcement for issuer selection recording: %w", err)
 	}
 	fullReach := make(map[uuid.UUID]bool, len(fullReachCredentialIDs))
 	for _, id := range fullReachCredentialIDs {
