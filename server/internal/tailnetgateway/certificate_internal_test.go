@@ -94,7 +94,10 @@ func TestCertificateTrackerAwaitReturnsOnceTheFirstRequestSettles(t *testing.T) 
 	require.True(t, ready, "a normal start holds the certificate by its first heartbeat")
 
 	failing := &scriptedFetch{mu: sync.Mutex{}, errs: []error{errRateLimited}, calls: 0, called: make(chan struct{}, 4)}
-	refused := newCertificateTracker("private.example.ts.net", failing.fetch, testenv.NewLogger(t), time.Now)
+	// A fixed clock an hour before the refusal's retry time, so the retry
+	// falls after the wait whatever the time of day.
+	before := time.Date(2026, time.November, 12, 21, 53, 0, 0, time.UTC)
+	refused := newCertificateTracker("private.example.ts.net", failing.fetch, testenv.NewLogger(t), func() time.Time { return before })
 	t.Cleanup(refused.Close)
 	started := time.Now()
 	refused.Await(t.Context(), time.Minute)
