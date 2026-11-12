@@ -136,7 +136,7 @@ func registerDataExportLevelTool(reg *Registrar, service *DataExportRouteToggleS
 		Description: "Change which MCP connections an existing mcp_connection_logs export sends, by setting its lowest level: error sends failed connections, warn adds blocked connections, and info adds declined connections. " +
 			"Supply the project ID and the exact route ID from list_data_exports, the new min_severity, an idempotency key, and confirmed: true only after the user confirms the exact project, route, its current level from list_data_exports, and the new level. " +
 			"Only the level changes: the route's data source, destination, and on/off state stay as they are. Other data sources have no level and are refused as invalid_input. A route already at the requested level is reported as unchanged. " +
-			"The result reports the previous level and the route's committed state. The change reaches the export relays within about a minute.",
+			"The result reports the previous level and the route's committed state. The change reaches the export relays within about a minute; for a destination that includes sensitive fields it applies on the next batch.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, handler)
 }
