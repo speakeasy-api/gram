@@ -119,6 +119,9 @@ export function McpDetailFrame({
               )}
               pathname={pathname}
             >
+              {activeTab === "overview" && chrome?.overviewSetup ? (
+                <div className="mb-6">{chrome.overviewSetup}</div>
+              ) : null}
               {activeTab === "overview" && chrome?.overviewBanner ? (
                 <div className="mb-6">{chrome.overviewBanner}</div>
               ) : null}

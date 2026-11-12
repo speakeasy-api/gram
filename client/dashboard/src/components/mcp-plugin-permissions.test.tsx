@@ -139,6 +139,7 @@ vi.mock("@/hooks/usePrivateMcpServerUrls", () => ({
 vi.mock("@/hooks/useToolsetUrl", () => ({
   useResolvedMcpServerUrl: () => ({}),
   useCustomDomains: () => ({ domains: [], isLoading: false }),
+  useMcpEndpointAddresses: () => [],
 }));
 vi.mock("@/pages/mcp/x/MCPServerDetails", () => ({
   MCPServerStatusDropdown: () => null,

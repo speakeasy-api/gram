@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/Button";
 import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
@@ -17,7 +18,10 @@ import {
   useMcpServerReachability,
 } from "./useMcpServerReachability";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
-import { setupProviderForUrl } from "@/pages/mcp/x/setup/provider-setup";
+import {
+  type SetupProvider,
+  setupProviderForUrl,
+} from "@/pages/mcp/x/setup/provider-setup";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
@@ -76,7 +80,7 @@ import {
   type McpServerAuthenticationReadiness,
   useMcpServerAuthenticationReadiness,
 } from "@/hooks/useMcpServerAuthenticationReadiness";
-import { useLocation, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 
 import { McpServerHeaderStatus } from "./McpDetailRows";
 import {
@@ -315,7 +319,20 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
 
   // Fixed order, and each check says when it is still loading, so the chip
   // reads the same however the queries race.
-  const readinessChecks: McpReadinessCheck[] = mcpServer
+  const setupProvider = setupProviderForUrl(upstreamUrl);
+  const showSetup =
+    providerSetupRollout === "enabled" &&
+    !!mcpServer?.remoteMcpServerId &&
+    !!setupProvider &&
+    hasScope("mcp:write", mcpServer.id);
+  // A provider with a guided setup is set up there, not in Settings: until
+  // Speakeasy can sign in to it, the Authentication step and Overview send
+  // the admin to the Setup tab.
+  const needsSetup =
+    showSetup && !authReadiness.loading && !authReadiness.ready;
+  const setupHref = mcpServerTabHref(routes, idOrSlug, "setup");
+  const setupName = setupProvider ? SETUP_PROVIDER_NAME[setupProvider] : "";
+  const checks: McpReadinessCheck[] = mcpServer
     ? [
         // Unproxied servers have no switch: clients reach the vendor directly.
         ...(isUnproxied
@@ -413,11 +430,18 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       ]
     : [];
 
-  const showSetup =
-    providerSetupRollout === "enabled" &&
-    !!mcpServer?.remoteMcpServerId &&
-    !!setupProviderForUrl(upstreamUrl) &&
-    hasScope("mcp:write", mcpServer.id);
+  const readinessChecks = needsSetup
+    ? checks.map((check) =>
+        check.key === "authentication" && check.ready === false
+          ? {
+              ...check,
+              description: `Finish ${setupName} setup so Speakeasy can sign in to it for your team.`,
+              chipLabel: "Finish setup",
+              href: setupHref,
+            }
+          : check,
+      )
+    : checks;
   const items = buildMcpDetailNavItems<TabValue>({
     tabs: [
       showSetup && SETUP_TAB,
@@ -506,11 +530,46 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     aside: pluginRef ? (
       <PluginStatusBanner variant="header" server={pluginRef} />
     ) : undefined,
+    overviewSetup: needsSetup ? (
+      <SetupPrompt name={setupName} href={setupHref} />
+    ) : undefined,
     overviewBanner: pluginRef ? (
       <PluginStatusBanner variant="banner" server={pluginRef} />
     ) : undefined,
     items,
   };
+}
+
+const SETUP_PROVIDER_NAME: Record<SetupProvider, string> = {
+  slack: "Slack",
+  github: "GitHub",
+  salesforce: "Salesforce",
+};
+
+/** Overview's first card while a provider's guided setup is unfinished. */
+function SetupPrompt({
+  name,
+  href,
+}: {
+  name: string;
+  href: string;
+}): JSX.Element {
+  return (
+    <div className="bg-card flex flex-wrap items-center justify-between gap-4 border px-5 py-4">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-sm font-medium">Finish setting up {name}</span>
+        <span className="text-muted-foreground text-sm">
+          A guided setup connects {name} to Speakeasy, so your team&apos;s
+          agents can use it.
+        </span>
+      </div>
+      <Button variant="primary" size="sm" asChild>
+        <Link to={href}>
+          <Button.Text>Continue setup</Button.Text>
+        </Link>
+      </Button>
+    </div>
+  );
 }
 
 // The identity modes' names, as Settings' identity cards call them.
