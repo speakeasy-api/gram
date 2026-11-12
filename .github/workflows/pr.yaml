@@ -87,10 +87,33 @@ jobs:
           check server
           check client
           check pystreams
+      # The changesets release pull request is rebuilt on top of main after
+      # every merge, so it gets a new head commit as often as main does. It
+      # only deletes changesets, bumps "version" fields and appends to
+      # changelogs, none of which the builds, tests or linters below read, and
+      # the merge queue runs the whole workflow before it lands. Anything else
+      # in its diff (or the ci:full label) restores the normal gates.
+      - id: version-pr
+        name: Detect a version-only release pull request
+        if: github.event_name == 'pull_request' && github.head_ref == 'changeset-release/main' && !github.event.pull_request.head.repo.fork
+        run: |
+          set -euo pipefail
+          # HEAD is the pull request merge commit; its first parent is main.
+          git fetch --quiet --depth=2 origin "$GITHUB_SHA"
+          other_files=$(git diff --name-only HEAD^1 HEAD | grep -Ev '^\.changeset/|(^|/)CHANGELOG\.md$|(^|/)package\.json$' || true)
+          other_lines=$(git diff --unified=0 HEAD^1 HEAD -- '*package.json' | grep -E '^[+-]' | grep -Ev '^(\+\+\+|---) |^[+-][[:space:]]*"version": "[^"]+",?$' || true)
+          if [[ -z "$other_files" && -z "$other_lines" ]]; then
+            echo "version-only=true" >> "$GITHUB_OUTPUT"
+            echo "Only version bumps, changelogs and changesets differ from main."
+          else
+            echo "The release pull request carries other changes; running the normal gates."
+            printf '%s\n' "$other_files" "$other_lines"
+          fi
       - id: gates
         name: Set outputs
         env:
           HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+          VERSION_ONLY: ${{ steps.version-pr.outputs.version-only }}
           STACKED_SERVER: ${{ steps.stacked.outputs.server }}
           STACKED_CLIENT: ${{ steps.stacked.outputs.client }}
           STACKED_PYSTREAMS: ${{ steps.stacked.outputs.pystreams }}
@@ -111,6 +134,11 @@ jobs:
           STEPS_FILTER_OUTPUTS_OTEL_COLLECTOR: ${{ steps.filter.outputs.otel-collector }}
           STEPS_FILTER_OUTPUTS_TUNNEL: ${{ steps.filter.outputs.tunnel }}
         run: |
+          if [[ "$VERSION_ONLY" == "true" && "$HAS_FULL_CI_LABEL" != "true" ]]; then
+            echo "Version-only release pull request: path-gated jobs will be skipped. The merge queue runs them all."
+            exit 0
+          fi
+
           if [[ "${STEPS_FILTER_OUTPUTS_SERVER}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_SERVER" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
@@ -231,8 +259,12 @@ jobs:
           PYSTREAMS: ${{ steps.gates.outputs.pystreams }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+          VERSION_ONLY: ${{ steps.version-pr.outputs.version-only }}
         run: |
-          if [[ "$IS_PR" != "true" ]]; then
+          # A version-only release pull request builds no images and has no
+          # main commit with matching paths to alias, so it gets no preview.
+          if [[ "$IS_PR" != "true" || ( "$VERSION_ONLY" == "true" && "$HAS_FULL_CI_LABEL" != "true" ) ]]; then
             echo "components=[]" >> "$GITHUB_OUTPUT"
             echo "tag=" >> "$GITHUB_OUTPUT"
             exit 0
@@ -413,8 +445,8 @@ jobs:
           key: pkl-blacksmith-v1-${{ runner.os }}-${{ hashFiles('hk.pkl') }}
           path: ~/.pkl/cache
 
-      - name: Test cache artifact selection
-        run: node --test .github/scripts/vitest-cache-source.test.mjs
+      - name: Test CI scripts
+        run: node --test .github/scripts/vitest-cache-source.test.mjs .github/scripts/content-mtime.test.mjs
 
       - name: Check formatting
         run: hk check --all
@@ -1445,6 +1477,23 @@ jobs:
       - name: Test CI tooling
         run: mise run test:ci
 
+      # golangci-lint keeps per-package analysis results, keyed on package
+      # content, in this directory. The lint action's own cache is saved once
+      # a week under a fixed key, so it is stale for nearly every run and the
+      # whole server is analysed from scratch. Restore the newest entry
+      # instead (this branch's, else main's) and save a new one whenever the
+      # restored one was stale enough to make the run slow.
+      - name: Restore golangci-lint cache
+        id: lint-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/golangci-lint
+          key: golangci-lint-server-blacksmith-v1-${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'go.sum', 'glint/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: golangci-lint-server-blacksmith-v1-${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'go.sum', 'glint/**') }}-
+
+      - name: Start lint timer
+        run: echo "LINT_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
@@ -1452,6 +1501,25 @@ jobs:
           # Skips a JSONSchema fetch from golangci-lint.run on every run.
           verify: false
           working-directory: server
+          # Cached by the steps around this one.
+          skip-cache: true
+
+      - name: Decide whether to save the golangci-lint cache
+        id: lint-cache-save
+        run: |
+          elapsed=$(( $(date +%s) - LINT_STARTED_AT ))
+          echo "golangci-lint step took ${elapsed}s"
+          if (( elapsed > 45 )); then
+            echo "save=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save golangci-lint cache
+        if: steps.lint-cache-save.outputs.save == 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/golangci-lint
+          key: ${{ steps.lint-cache.outputs.cache-primary-key }}
 
       - name: Install Go tools
         run: go install tool
@@ -1819,6 +1887,13 @@ jobs:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
 
+      # go test keys cached results on the size and modification time of the
+      # files a test reads, and a fresh checkout stamps every file with the
+      # current time. Without this step the packages that read schema.sql,
+      # the OpenAPI document or testdata re-run on every commit.
+      - name: Give tracked files content-derived modification times
+        run: node .github/scripts/content-mtime.mjs
+
       - name: Test
         id: test
         # Each package can launch Postgres, Redis, and ClickHouse concurrently.
@@ -1904,8 +1979,17 @@ jobs:
       - name: Install Go deps
         run: mise run install:go
 
+      # See the same step in server-test.
+      - name: Give tracked files content-derived modification times
+        run: node .github/scripts/content-mtime.mjs
+
+      # The merge queue and main always execute the test (-count=1). A pull
+      # request run may reuse a cached pass when nothing the demoseed package
+      # compiles or reads has changed since.
       - name: Test
-        run: mise run test:server -race -count=1 -tags=demoseed_safety ./internal/demoseed/...
+        run: mise run test:server -race ${COUNT_FLAG:+"$COUNT_FLAG"} -tags=demoseed_safety ./internal/demoseed/...
+        env:
+          COUNT_FLAG: ${{ github.event_name != 'pull_request' && '-count=1' || '' }}
 
   docker-build-client:
     name: docker-build-client
