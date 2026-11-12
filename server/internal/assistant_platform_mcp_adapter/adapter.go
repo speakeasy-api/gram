@@ -28,12 +28,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // TargetPolicy is the scope one call acts in. A managed assistant is
@@ -114,17 +116,22 @@ func (t Tool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Rea
 		return fmt.Errorf("read platform tool arguments: %w", err)
 	}
 
-	principal, err := principalFromContext(ctx)
+	principal, delegated, err := principalFromContext(ctx)
+	if errors.Is(err, errPersonRequired) {
+		if _, writeErr := wr.Write(personRequiredRefusal); writeErr != nil {
+			return fmt.Errorf("write platform tool refusal: %w", writeErr)
+		}
+		return nil
+	}
 	if err != nil {
 		return err
 	}
 	if t.authorizer == nil {
 		return platformmcp.ErrUnavailable
 	}
-	if err := t.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
-		return fmt.Errorf("authorize assistant platform tool %q: %w", t.descriptor.Name, err)
-	}
 
+	// The target policy comes from the assistant's own context, before any
+	// delegated context replaces it below.
 	policy, err := targetPolicyFromContext(ctx)
 	if err != nil {
 		return err
@@ -132,6 +139,25 @@ func (t Tool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Rea
 	arguments, err = t.applyTargetPolicy(policy, arguments)
 	if err != nil {
 		return err
+	}
+
+	// An agent-backed turn acts for the person who vouched for it, such as the
+	// dashboard user who sent the message. Platform tools need organization-wide
+	// authority, which an agent's own policy never holds, so the tool runs
+	// exactly as if that person called it: their auth context and their live
+	// grants, with the agent's admitted policy set aside. The assistant
+	// principal stays on the context, so writes are still attributed to the
+	// Project Assistant surface, and the assistant's tool-call audit entry
+	// records the agent acting for this person.
+	if delegated {
+		ctx, err = t.authorizer.PrepareExternalContext(ctx, principal)
+		if err != nil {
+			return fmt.Errorf("prepare delegated assistant platform tool %q: %w", t.descriptor.Name, err)
+		}
+		ctx = authz.WithoutAdmittedPolicies(ctx)
+	}
+	if err := t.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
+		return fmt.Errorf("authorize assistant platform tool %q: %w", t.descriptor.Name, err)
 	}
 
 	output, err := t.descriptor.Invoke(platformmcp.ContextWithPrincipal(ctx, principal), arguments)
@@ -351,22 +377,56 @@ func targetPolicyFromContext(ctx context.Context) (TargetPolicy, error) {
 	return policy, nil
 }
 
+// errPersonRequired means the turn acts for no person, such as a workload
+// running a scheduled trigger. Platform tools authorize and attribute every call
+// to a person, so these turns cannot use them.
+var errPersonRequired = errors.New("assistant platform tools require a person to act for")
+
+// personRequiredRefusal is returned to the model instead of an error, so the
+// runner does not treat a turn that can never use these tools as a dropped
+// connection and retry.
+var personRequiredRefusal = []byte(`{"code":"person_required","message":"Platform tools act for a person, and this assistant turn does not act for anyone. Ask a person to run this request from the dashboard."}`)
+
 // principalFromContext builds the assistant's identity. The user is the person
 // whose turn it is, so authorization and audit attribute to them; there is no
 // OAuth connection on this path, and the acting surface says so.
-func principalFromContext(ctx context.Context) (platformmcp.Principal, error) {
+//
+// A turn authenticated with an assistant turn credential carries no user on
+// its auth context. When the credential's agent acts for a person, that person
+// is the user and delegated is true; when the credential is a workload's, there
+// is no person and the error is errPersonRequired.
+func principalFromContext(ctx context.Context) (principal platformmcp.Principal, delegated bool, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.UserID == "" {
-		return platformmcp.Principal{}, fmt.Errorf("assistant platform tools require user and organization auth context")
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return platformmcp.Principal{}, false, fmt.Errorf("assistant platform tools require an organization auth context")
 	}
+
+	userID := authCtx.UserID
+	if credential, ok := principalcredential.FromContext(ctx); ok {
+		if credential.Credential.Principal.Type != urn.PrincipalTypeAgent || credential.Credential.AuthorizerUserID == "" {
+			return platformmcp.Principal{}, false, errPersonRequired
+		}
+		if credential.Credential.OrganizationID != authCtx.ActiveOrganizationID {
+			return platformmcp.Principal{}, false, fmt.Errorf("assistant turn credential belongs to another organization")
+		}
+		if _, isAssistant := contextvalues.GetAssistantPrincipal(ctx); !isAssistant {
+			return platformmcp.Principal{}, false, fmt.Errorf("assistant platform tools require an assistant turn")
+		}
+		userID = credential.Credential.AuthorizerUserID
+		delegated = true
+	}
+	if userID == "" {
+		return platformmcp.Principal{}, false, errPersonRequired
+	}
+
 	return platformmcp.Principal{
-		UserID:         authCtx.UserID,
+		UserID:         userID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ConnectionID:   "",
 		Generation:     "",
 		ClientID:       platformmcp.AssistantClientID,
 		Surface:        platformmcp.SurfaceProjectAssistant,
-	}, nil
+	}, delegated, nil
 }
 
 func annotations(source *mcp.ToolAnnotations) *types.ToolAnnotations {

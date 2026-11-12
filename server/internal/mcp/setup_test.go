@@ -115,20 +115,22 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	principalCredentials *principalcredential.Issuer
-	service              *migratedService
-	conn                 *pgxpool.Pool
-	sessionManager       *sessions.Manager
-	serverURL            *url.URL
-	siteURL              *url.URL
-	logger               *slog.Logger
-	tracerProvider       trace.TracerProvider
-	cacheAdapter         cache.Cache
-	chatSessionsManager  *chatsessions.Manager
-	authnChallengeCache  cache.TypedCacheObject[mcp.AuthnChallengeState]
-	enc                  *encryption.Client
-	authzEngine          *authz.Engine
-	audit                *audit.Logger
-	tunnelRoutes         route.Store
+	// assistantTokens mints and authorizes assistant turn credentials.
+	assistantTokens     *assistanttokens.Manager
+	service             *migratedService
+	conn                *pgxpool.Pool
+	sessionManager      *sessions.Manager
+	serverURL           *url.URL
+	siteURL             *url.URL
+	logger              *slog.Logger
+	tracerProvider      trace.TracerProvider
+	cacheAdapter        cache.Cache
+	chatSessionsManager *chatsessions.Manager
+	authnChallengeCache cache.TypedCacheObject[mcp.AuthnChallengeState]
+	enc                 *encryption.Client
+	authzEngine         *authz.Engine
+	audit               *audit.Logger
+	tunnelRoutes        route.Store
 	// features is the injectable flag provider wired into the service; tests
 	// enable flag-gated behavior (e.g. the Platform MCP assistant toolset
 	// variant) with SetFlagVariant.
@@ -734,6 +736,7 @@ func buildTestMCPService(
 
 	return ctx, &testInstance{
 		principalCredentials: principalCredentials,
+		assistantTokens:      assistantTokens,
 		service:              &migratedService{Service: svc, conn: conn, manual: false},
 		conn:                 conn,
 		sessionManager:       sessionManager,
