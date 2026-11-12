@@ -53,7 +53,10 @@ if [ -n "${usage_changed_since:-}" ]; then
     git archive "$merge_base" "$tooleval_path/cases" | tar -x -C "$base_dir/cases" --strip-components=5
     export TOOLEVAL_BASE_DIR="$base_dir"
   else
-    echo "The merge base with $usage_changed_since has no tool eval catalogue, so every case runs" >&2
+    # The first run, where the base has no catalogue yet, is the baseline:
+    # every case, with no cap.
+    echo "The merge base with $usage_changed_since has no tool eval catalogue, so every case runs as the baseline" >&2
+    unset TOOLEVAL_MAX_CASES
   fi
 fi
 if [ -n "${usage_out:-}" ]; then

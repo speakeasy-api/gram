@@ -78,7 +78,9 @@ mise run eval:platform-tools --surfaces progressive --cases '^risk-' --out repor
 catalogue and the current cases. It then runs the new or edited cases, the
 cases that name a changed tool in `expect` or `allow`, and the negative
 cases. When the server instructions change, every case runs. With no change,
-the run skips. `--max-cases` caps the run with a stable sample.
+the run skips. `--max-cases` caps the run with a stable sample, except when
+the base has no `catalogue.json`: that first run is the baseline and runs
+every case.
 
 The direct surface sends every tool on every turn: about 350 KB of
 descriptions and schemas, plus the server instructions. Anthropic models
@@ -89,8 +91,10 @@ cache it; other models pay for it on every turn.
 The `platform-tool-eval` job starts only when a pull request changes
 `catalogue.json` or a case file. Every tool or instruction change regenerates
 `catalogue.json`, so no tool change slips past it. It runs `--changed-since`
-against the base, capped at 60 cases, and writes the report to the job
-summary: open the run from the PR's Checks tab and read its Summary page.
+against the base, capped at 60 cases. The first run, where the base has no
+`catalogue.json` yet, runs every case uncapped as the baseline. The report
+goes to the job summary: open the run from the PR's Checks tab and read its
+Summary page.
 It is report-only and does not block merging. It needs the
 `OPENROUTER_TOOL_EVAL_KEY` repository secret, and skips without it.
 
