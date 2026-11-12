@@ -17,6 +17,10 @@ func TestDecideGatewayExistingOutboundAssociations(t *testing.T) {
 			GrantMatch:            grant, DerivedMatch: derived, PairLive: live, PairRecorded: recorded,
 		}
 	}
+	claimed := func(r ListGatewayAssociationCandidatesRow) ListGatewayAssociationCandidatesRow {
+		r.ClaimedBySibling = true
+		return r
+	}
 	tests := []struct {
 		name    string
 		rows    []ListGatewayAssociationCandidatesRow
@@ -46,6 +50,26 @@ func TestDecideGatewayExistingOutboundAssociations(t *testing.T) {
 			name:    "conflicting unrecorded grant still blocks",
 			rows:    []ListGatewayAssociationCandidatesRow{row(false, true, true, true), row(false, true, true, true), row(true, false, false, false)},
 			outcome: GatewayOutcomeConflict,
+		},
+		{
+			name:    "grant competitor associated with a sibling on the same upstream need not be added",
+			rows:    []ListGatewayAssociationCandidatesRow{row(true, true, true, true), claimed(row(true, true, false, false))},
+			outcome: GatewayOutcomeConfigured,
+		},
+		{
+			name:    "conflicting grant of a sibling's client need not be added",
+			rows:    []ListGatewayAssociationCandidatesRow{row(false, true, true, true), claimed(row(true, false, false, false))},
+			outcome: GatewayOutcomeConfigured,
+		},
+		{
+			name:    "sibling's grant competitor does not excuse an unclaimed one",
+			rows:    []ListGatewayAssociationCandidatesRow{row(true, true, true, true), claimed(row(true, true, false, false)), row(true, true, false, false)},
+			outcome: GatewayOutcomeAmbiguous,
+		},
+		{
+			name:    "sibling's grant competitors alone leave no association to settle by",
+			rows:    []ListGatewayAssociationCandidatesRow{claimed(row(true, true, false, false)), claimed(row(true, true, false, false))},
+			outcome: GatewayOutcomeAmbiguous,
 		},
 		{
 			name:    "derived only unassociated competitor need not be added",

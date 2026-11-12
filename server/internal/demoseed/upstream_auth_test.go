@@ -74,7 +74,9 @@ func expectedSeedAuthGrants() []string {
 		out = append(out, fmt.Sprintf("%s | mcp:auth | * | type=remote_session | owner=%s | upstream=attachment-client | attachment", principal, owner))
 	}
 
-	for _, role := range []string{"analyst", "collaborator", "environment-manager", "read-only-tools", "temporary-escalation"} {
+	// Environment Manager holds mcp:read without mcp:connect, so it reaches no
+	// server and is owed no shared client.
+	for _, role := range []string{"analyst", "collaborator", "read-only-tools", "temporary-escalation"} {
 		shared("role "+role, "shared_client", sharedClients...)
 	}
 	shared("role engineer", "shared_client", "Static credential", "Your own GitHub token", "Acme Wiki", "Acme Tracker")

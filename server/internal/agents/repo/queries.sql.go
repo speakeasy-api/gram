@@ -1291,6 +1291,43 @@ func (q *Queries) ListManagedAgents(ctx context.Context, arg ListManagedAgentsPa
 	return items, nil
 }
 
+const listOwnedAgentIDs = `-- name: ListOwnedAgentIDs :many
+SELECT a.id
+FROM agents a
+WHERE a.organization_id = $1
+  AND a.owner_user_id = $2
+  AND a.owner_reassignment_required_at IS NULL
+  AND a.deleted IS FALSE
+`
+
+type ListOwnedAgentIDsParams struct {
+	OrganizationID string
+	OwnerUserID    string
+}
+
+// The agents whose activity counts as the user's own. Ownership follows the
+// agent-management rule: an owner whose agent is latched for reassignment no
+// longer answers for it, so its sessions and logs stop being theirs.
+func (q *Queries) ListOwnedAgentIDs(ctx context.Context, arg ListOwnedAgentIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOwnedAgentIDs, arg.OrganizationID, arg.OwnerUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockAgentIncludingDeleted = `-- name: LockAgentIncludingDeleted :one
 SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 FROM agents

@@ -27,6 +27,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -642,6 +643,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		UpstreamClientPicks:    nil,
 		AuthClientPicks:        nil,
 		Catalog:                nil,
+		TypedOnly:              false,
 	}
 }
 
@@ -770,9 +772,16 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		return nil, workloadGrantStageUnavailable("agent_admission_unavailable", err)
 	}
 
+	// Read once, before the issuer lock (all database work after it uses
+	// dbtx), so the picks and the choices recorded beside them follow the same
+	// enforcement state.
+	grant.session.TypedOnly, err = authenforcement.ReadEnforced(ctx, s.db, organizationID)
+	if err != nil {
+		return nil, workloadGrantStageUnavailable("upstream_choice_unavailable", err)
+	}
 	if grant.choosesUpstream && grant.endpoint != nil {
 		caller := headlessCaller{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID: uuid.NullUUID{UUID: grant.presented.issuerID, Valid: true}, workloadSubject: grant.presented.subject}
-		upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, grant.endpoint, subject, caller, grant.requestedAuthClients)
+		upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, grant.endpoint, subject, caller, grant.requestedAuthClients, grant.session.TypedOnly)
 		if err != nil {
 			if _, ok := errors.AsType[*oops.OAuthError](err); ok {
 				// The workload was admitted, so naming why its choice failed

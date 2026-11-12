@@ -10460,6 +10460,26 @@ func unmarshalSessionSummaryResponseBodyToTelemetrySessionSummary(v *SessionSumm
 	return res
 }
 
+// unmarshalSessionTotalsResponseBodyToTelemetrySessionTotals builds a value of
+// type *telemetry.SessionTotals from a value of type
+// *SessionTotalsResponseBody.
+func unmarshalSessionTotalsResponseBodyToTelemetrySessionTotals(v *SessionTotalsResponseBody) *telemetry.SessionTotals {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.SessionTotals{
+		SessionCount:      *v.SessionCount,
+		MessageCount:      *v.MessageCount,
+		ToolCallCount:     *v.ToolCallCount,
+		TotalInputTokens:  *v.TotalInputTokens,
+		TotalOutputTokens: *v.TotalOutputTokens,
+		TotalTokens:       *v.TotalTokens,
+		TotalCost:         *v.TotalCost,
+	}
+
+	return res
+}
+
 // unmarshalFilterOptionResponseBodyToTelemetryFilterOption builds a value of
 // type *telemetry.FilterOption from a value of type *FilterOptionResponseBody.
 func unmarshalFilterOptionResponseBodyToTelemetryFilterOption(v *FilterOptionResponseBody) *telemetry.FilterOption {

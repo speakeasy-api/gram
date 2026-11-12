@@ -33,6 +33,9 @@ const (
 	// AuthClientBackfillWrittenKey counts records a typed auth client backfill wrote.
 	AuthClientBackfillWrittenKey = attribute.Key("gram.auth_client_backfill.written")
 
+	// AuthClientBackfillSkippedKey counts guarded selection mappings skipped after their evidence changed.
+	AuthClientBackfillSkippedKey = attribute.Key("gram.auth_client_backfill.skipped")
+
 	// ExecutionProfileVersionKey is the execution-selection profile version an assistant turn binds.
 	ExecutionProfileVersionKey = attribute.Key("gram.execution_profile.version")
 	// ExecutionProfileGapsKey counts MCP servers an execution-selection profile version has no choice for.
@@ -803,6 +806,7 @@ const (
 	OktaAssignmentsRemovedKey       = attribute.Key("gram.okta_applications.assignments_removed")
 	OktaApplicationsTruncatedKey    = attribute.Key("gram.okta_applications.truncated")
 	OktaReconcileRunIDKey           = attribute.Key("gram.okta_applications.run_id")
+	MemoryEvalRunIDKey              = attribute.Key("gram.memory_eval.run_id")
 	GCPImpersonateServiceAccountKey = attribute.Key("gram.gcp.impersonate_service_account")
 	WorkOSDirectoryGroupIDKey       = attribute.Key("gram.workos.directory_group_id")
 	DirectoryMembershipsOpenedKey   = attribute.Key("gram.directory_group.memberships_opened")
@@ -1347,6 +1351,11 @@ func SlogExecutionProfileGaps(v int) slog.Attr {
 // SlogAuthClientBackfillWritten counts records written.
 func SlogAuthClientBackfillWritten(v int) slog.Attr {
 	return slog.Int(string(AuthClientBackfillWrittenKey), v)
+}
+
+// SlogAuthClientBackfillSkipped counts guarded mappings skipped after their evidence changed.
+func SlogAuthClientBackfillSkipped(v int64) slog.Attr {
+	return slog.Int64(string(AuthClientBackfillSkippedKey), v)
 }
 
 // SlogAuthClientBackfillPendingGrants counts default auth permissions not yet granted.
@@ -3077,6 +3086,10 @@ func SlogOktaApplicationsTruncated(v bool) slog.Attr {
 
 func SlogOktaReconcileRunID(v string) slog.Attr {
 	return slog.String(string(OktaReconcileRunIDKey), v)
+}
+
+func SlogMemoryEvalRunID(v string) slog.Attr {
+	return slog.String(string(MemoryEvalRunIDKey), v)
 }
 
 func ExternalCredentialID(v string) attribute.KeyValue { return ExternalCredentialIDKey.String(v) }

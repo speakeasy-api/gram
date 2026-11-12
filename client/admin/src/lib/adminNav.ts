@@ -16,6 +16,7 @@ import {
   BookOpenIcon,
   Grid2X2Icon,
   KeyRoundIcon,
+  ShieldCheckIcon,
   PlugZapIcon,
   ListChecksIcon,
   ChartColumnStackedIcon,
@@ -103,6 +104,13 @@ export const ADMIN_NAV_GROUPS = [
         label: "Upstream OAuth migration",
         keywords: "oauth clients associations credentials backfill migrate",
         icon: KeyRoundIcon,
+      },
+      {
+        to: "/platform-credentials",
+        label: "Platform credentials",
+        keywords:
+          "external credentials gcp iam service account impersonation workload identity federation wif signing kms",
+        icon: ShieldCheckIcon,
       },
       {
         to: "/custom-domains",

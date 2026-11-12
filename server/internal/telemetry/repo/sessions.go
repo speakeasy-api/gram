@@ -417,25 +417,115 @@ const SessionSummaryMinWindow = 48 * time.Hour
 //
 // Wide windows read the pre-aggregated chat_session_summaries table; narrow
 // windows scan raw telemetry_logs (see SessionSummaryMinWindow).
+//
+//nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListSessions(ctx context.Context, arg ListSessionsParams) ([]SessionSummary, error) {
 	if len(arg.ProjectIDs) == 0 {
 		return nil, nil
 	}
-	if arg.UsesSummaryPath() {
-		return q.listSessionsFromSummaries(ctx, arg)
+
+	sb, chatIDColumn, err := sessionRows(arg)
+	if err != nil {
+		return nil, err
 	}
-	return q.listSessionsFromRawLogs(ctx, arg)
+
+	if arg.CursorSortValue != nil && arg.CursorGramChatID != "" {
+		sb = sb.Having("(sort_value, "+chatIDColumn+") < (?, ?)", *arg.CursorSortValue, arg.CursorGramChatID)
+	}
+
+	sb = sb.OrderBy("sort_value DESC", "gram_chat_id DESC").
+		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is validated by the service layer.
+
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list sessions query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return scanSessionSummaries(rows)
 }
 
-// listSessionsFromRawLogs derives session summaries by scanning raw
+// SessionTotals aggregates every session a ListSessions call matches, across
+// all its pages.
+type SessionTotals struct {
+	SessionCount      int64   `ch:"session_count"`
+	MessageCount      int64   `ch:"message_count"`
+	ToolCallCount     int64   `ch:"tool_call_count"`
+	TotalInputTokens  int64   `ch:"total_input_tokens"`
+	TotalOutputTokens int64   `ch:"total_output_tokens"`
+	TotalTokens       int64   `ch:"total_tokens"`
+	TotalCost         float64 `ch:"total_cost"`
+}
+
+// GetSessionTotals sums the sessions ListSessions would return for the same
+// window and filters, ignoring the cursor and limit. It serves callers who
+// may see the slice's size and spend but not its individual sessions.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetSessionTotals(ctx context.Context, arg ListSessionsParams) (SessionTotals, error) {
+	var totals SessionTotals
+	if len(arg.ProjectIDs) == 0 {
+		return totals, nil
+	}
+
+	inner, _, err := sessionRows(arg)
+	if err != nil {
+		return totals, err
+	}
+
+	sb := sq.Select(
+		"toInt64(count()) as session_count",
+		"toInt64(sum(message_count)) as message_count",
+		"toInt64(sum(tool_call_count)) as tool_call_count",
+		"toInt64(sum(total_input_tokens)) as total_input_tokens",
+		"toInt64(sum(total_output_tokens)) as total_output_tokens",
+		"toInt64(sum(total_tokens)) as total_tokens",
+		"toFloat64(sum(total_cost)) as total_cost",
+	).FromSelect(inner, "sessions")
+
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return totals, fmt.Errorf("building session totals query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return totals, err
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		if err := rows.ScanStruct(&totals); err != nil {
+			return totals, fmt.Errorf("scanning session totals: %w", err)
+		}
+	}
+	return totals, rows.Err()
+}
+
+// sessionRows builds the per-chat aggregate for the window, grouped and
+// filtered but not yet paginated. The returned column is the chat id as the
+// HAVING cursor must spell it: the summary path qualifies it with its alias.
+func sessionRows(arg ListSessionsParams) (squirrel.SelectBuilder, string, error) {
+	if arg.UsesSummaryPath() {
+		sb, err := sessionRowsFromSummaries(arg)
+		return sb, "s.chat_id", err
+	}
+	sb, err := sessionRowsFromRawLogs(arg)
+	return sb, "chat_id", err
+}
+
+// sessionRowsFromRawLogs derives session summaries by scanning raw
 // telemetry_logs — exact to the nanosecond, but per-row JSON extraction makes
 // it expensive on wide windows.
-//
-//nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) listSessionsFromRawLogs(ctx context.Context, arg ListSessionsParams) ([]SessionSummary, error) {
+func sessionRowsFromRawLogs(arg ListSessionsParams) (squirrel.SelectBuilder, error) {
 	sortExpr, ok := sessionMeasureSelects[arg.SortBy]
 	if !ok {
-		return nil, fmt.Errorf("unknown sort_by measure %q", arg.SortBy)
+		return sq.Select(), fmt.Errorf("unknown sort_by measure %q", arg.SortBy)
 	}
 
 	sb := sq.Select(
@@ -465,29 +555,10 @@ func (q *Queries) listSessionsFromRawLogs(ctx context.Context, arg ListSessionsP
 
 	sb, err := applySessionFilters(sb, arg.Filters, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
-		return nil, err
+		return sb, err
 	}
 
-	sb = sb.GroupBy("chat_id")
-
-	if arg.CursorSortValue != nil && arg.CursorGramChatID != "" {
-		sb = sb.Having("(sort_value, chat_id) < (?, ?)", *arg.CursorSortValue, arg.CursorGramChatID)
-	}
-
-	sb = sb.OrderBy("sort_value DESC", "gram_chat_id DESC").
-		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is validated by the service layer.
-
-	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
-	query, args, err := sb.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building list sessions query: %w", err)
-	}
-
-	rows, err := q.conn.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	return scanSessionSummaries(rows)
+	return sb.GroupBy("chat_id"), nil
 }
 
 // sessionSummaryMeasureSelects maps the public sort measures onto merged
@@ -514,17 +585,15 @@ var sessionSummaryMeasureSelects = map[string]string{
 	"total_tool_calls": "uniqExactIfMerge(s.tool_call_count)",
 }
 
-// listSessionsFromSummaries serves the session list from the pre-aggregated
+// sessionRowsFromSummaries serves the session list from the pre-aggregated
 // chat_session_summaries table: one row per (project, hour bucket, chat),
 // merged per chat over the buckets inside the window. The window snaps to
 // hour-bucket boundaries (start rounds down), so edges carry up to ~1h of
 // slop relative to the raw path — acceptable on the wide windows routed here.
-//
-//nolint:wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
-func (q *Queries) listSessionsFromSummaries(ctx context.Context, arg ListSessionsParams) ([]SessionSummary, error) {
+func sessionRowsFromSummaries(arg ListSessionsParams) (squirrel.SelectBuilder, error) {
 	sortExpr, ok := sessionSummaryMeasureSelects[arg.SortBy]
 	if !ok {
-		return nil, fmt.Errorf("unknown sort_by measure %q", arg.SortBy)
+		return sq.Select(), fmt.Errorf("unknown sort_by measure %q", arg.SortBy)
 	}
 
 	sb := sq.Select(
@@ -554,7 +623,7 @@ func (q *Queries) listSessionsFromSummaries(ctx context.Context, arg ListSession
 
 	sb, err := applySessionSummaryFilters(sb, arg.Filters, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
-		return nil, err
+		return sb, err
 	}
 
 	sb = sb.GroupBy("s.chat_id")
@@ -564,27 +633,8 @@ func (q *Queries) listSessionsFromSummaries(ctx context.Context, arg ListSession
 	// sessions whose activity falls entirely OUTSIDE the requested window in
 	// a boundary hour. Sessions with genuine in-window activity keep their
 	// (edge-padded) totals.
-	sb = sb.Having("max(s.end_time_unix_nano) >= ?", arg.TimeStart).
-		Having("min(s.start_time_unix_nano) <= ?", arg.TimeEnd)
-
-	if arg.CursorSortValue != nil && arg.CursorGramChatID != "" {
-		sb = sb.Having("(sort_value, s.chat_id) < (?, ?)", *arg.CursorSortValue, arg.CursorGramChatID)
-	}
-
-	sb = sb.OrderBy("sort_value DESC", "gram_chat_id DESC").
-		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is validated by the service layer.
-
-	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
-	query, args, err := sb.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building list sessions summary query: %w", err)
-	}
-
-	rows, err := q.conn.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	return scanSessionSummaries(rows)
+	return sb.Having("max(s.end_time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(s.start_time_unix_nano) <= ?", arg.TimeEnd), nil
 }
 
 // applySessionSummaryFilters translates the per-chat "any row matches" filter
