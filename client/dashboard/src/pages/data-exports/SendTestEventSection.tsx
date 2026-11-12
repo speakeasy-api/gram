@@ -5,6 +5,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import { useTestDataExportRouteMutation } from "@gram/client/react-query/testDataExportRoute.js";
 
 const alertVariantForOutcome: Record<string, "success" | "error" | "warning"> =
@@ -37,6 +38,18 @@ function outcomeTitle(outcome: string, signal?: string): string {
   return alertTitleForOutcome[outcome] ?? "Destination returned an error";
 }
 
+// Names the accepted signals that carry the test event ID; metrics do not.
+function findLabel(signals: { signal: string; outcome: string }[]): string {
+  const found = ["log", "trace"].filter((kind) =>
+    signals.some(
+      (signal) => signal.signal === `${kind}s` && signal.outcome === "accepted",
+    ),
+  );
+  return found.length > 0
+    ? `Find the test ${found.join(" and ")} in your destination:`
+    : "Test event ID:";
+}
+
 // Only a 4xx is a refusal before sending; anything else may come after the event went out.
 function failure(error: unknown): { title: string; message: string } {
   const status = error instanceof GramError ? error.statusCode : undefined;
@@ -52,6 +65,10 @@ function failure(error: unknown): { title: string; message: string } {
       title: "Test event not sent",
       message: "Speakeasy can't send test events right now. Try again shortly.",
     };
+  }
+  // These say why a retry will not help, such as a deleted destination.
+  if ((status === 400 || status === 404) && error instanceof ServiceError) {
+    return { title: "Test event not sent", message: error.message };
   }
   if (status !== undefined && status >= 400 && status < 500) {
     return {
@@ -90,7 +107,7 @@ export function SendTestEventSection({
     <RequireScope scope="org:admin" level="section">
       <div className="space-y-3 border-t py-5">
         <div className="flex items-center justify-between gap-4">
-          <div className="space-y-1">
+          <div className="min-w-0 space-y-1">
             <Label>Test event</Label>
             {unsavedChanges ? (
               <Text muted className="text-sm">
@@ -100,15 +117,16 @@ export function SendTestEventSection({
               <Text muted className="text-sm">
                 {sendsEverySignal
                   ? "Sends one test log, trace and metric to check the endpoint and API key. Each is marked "
-                  : "Sends one test event to check the endpoint and API key. Test events are marked "}
-                <code className="font-mono text-xs">
+                  : "Sends one test event to check the endpoint and API key. It is marked "}
+                <code className="font-mono text-xs wrap-anywhere">
                   speakeasy.test_event=true
                 </code>
                 {sendsEverySignal
                   ? ", and the test log's message starts with "
-                  : " and test log messages start with "}
-                &ldquo;Speakeasy test event&rdquo;, so you can filter them out
-                of dashboards and monitors.
+                  : " and its message starts with "}
+                &ldquo;Speakeasy test event&rdquo;, so you can filter{" "}
+                {sendsEverySignal ? "them" : "it"} out of dashboards and
+                monitors.
               </Text>
             )}
           </div>
@@ -153,11 +171,19 @@ export function SendTestEventSection({
               <ul className="mt-2 space-y-1">
                 {result.signals.map((signal) => (
                   <li key={signal.signal}>
-                    <span className="font-medium">
-                      {signalLabel[signal.signal] ?? signal.signal}:{" "}
-                      {outcomeTitle(signal.outcome)}.
-                    </span>{" "}
-                    {signal.message}
+                    {signal.outcome === "accepted" ? (
+                      <span className="font-medium">
+                        {signalLabel[signal.signal] ?? signal.signal}: accepted
+                      </span>
+                    ) : (
+                      <>
+                        <span className="font-medium">
+                          {signalLabel[signal.signal] ?? signal.signal}:{" "}
+                          {outcomeTitle(signal.outcome)}.
+                        </span>{" "}
+                        {signal.message}
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -168,14 +194,14 @@ export function SendTestEventSection({
         !unsavedChanges &&
         !sendTest.isPending &&
         !sendTest.isError ? (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <Text muted className="text-sm">
-              {sendsEverySignal
-                ? "Find the test log and trace in your destination:"
-                : "Find it in your destination:"}
+              {findLabel(result.signals)}
             </Text>
-            <code className="font-mono text-xs break-all">
-              speakeasy.test_event.id={result.testEventId}
+            <code className="min-w-0 font-mono text-xs">
+              speakeasy.test_event.id=
+              <wbr />
+              <span className="whitespace-nowrap">{result.testEventId}</span>
             </code>
             <CopyButton
               size="xs"

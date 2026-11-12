@@ -1,6 +1,7 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { createQueryClient } from "@/contexts/Sdk";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import { QueryClientProvider, useMutation } from "@tanstack/react-query";
 import {
   cleanup,
@@ -123,12 +124,12 @@ describe("SendTestEventSection", () => {
     expect(screen.getByText("speakeasy.test_event=true")).toBeTruthy();
     expect(
       screen.getByText(
-        /Sends one test event to check the endpoint and API key\. Test events are marked/,
+        /Sends one test event to check the endpoint and API key\. It is marked/,
       ),
     ).toBeTruthy();
     expect(
       screen.getByText(
-        /and test log messages start with “Speakeasy test event”, so you can filter them out of dashboards and monitors/,
+        /and its message starts with “Speakeasy test event”, so you can filter it out of dashboards and monitors/,
       ),
     ).toBeTruthy();
   });
@@ -141,7 +142,7 @@ describe("SendTestEventSection", () => {
     ).toBeTruthy();
     expect(
       screen.getByText(
-        /and the test log's message starts with “Speakeasy test event”/,
+        /and the test log's message starts with “Speakeasy test event”, so you can filter them out of dashboards and monitors/,
       ),
     ).toBeTruthy();
     expect(screen.getByText("speakeasy.test_event=true")).toBeTruthy();
@@ -175,10 +176,25 @@ describe("SendTestEventSection", () => {
     expect(screen.getByText(title)).toBeTruthy();
     expect(screen.getByText(`Message for ${outcome}.`)).toBeTruthy();
     expect(screen.queryByRole("listitem")).toBeNull();
-    expect(screen.getByText("Find it in your destination:")).toBeTruthy();
     expect(
-      screen.getByText(`speakeasy.test_event.id=${testEventId}`),
+      screen.getByText(
+        outcome === "accepted"
+          ? "Find the test log in your destination:"
+          : "Test event ID:",
+      ),
     ).toBeTruthy();
+    expect(screen.getByText(testEventId)).toBeTruthy();
+  });
+
+  it("breaks the ID line only before the ID", () => {
+    mutation.data = logsResult("accepted", "Accepted.");
+    renderSection();
+
+    const id = screen.getByText(testEventId);
+    expect(id.className).toContain("whitespace-nowrap");
+    const code = id.closest("code");
+    expect(code?.textContent).toBe(`speakeasy.test_event.id=${testEventId}`);
+    expect(code?.querySelector("wbr")?.nextSibling).toBe(id);
   });
 
   it("copies the test event ID", () => {
@@ -200,7 +216,8 @@ describe("SendTestEventSection", () => {
   it("shows no test event ID before a result", () => {
     renderSection();
 
-    expect(screen.queryByText("Find it in your destination:")).toBeNull();
+    expect(screen.queryByText(/in your destination:/)).toBeNull();
+    expect(screen.queryByText("Test event ID:")).toBeNull();
   });
 
   it("lists every signal when all were accepted", () => {
@@ -221,10 +238,13 @@ describe("SendTestEventSection", () => {
     expect(screen.getByText("Test event accepted")).toBeTruthy();
     const items = screen.getAllByRole("listitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Logs: Test event accepted. The destination accepted the test event.",
-      "Traces: Test event accepted. The destination accepted the test event.",
-      "Metrics: Test event accepted. The destination accepted the test event.",
+      "Logs: accepted",
+      "Traces: accepted",
+      "Metrics: accepted",
     ]);
+    expect(
+      screen.getByText("Find the test log and trace in your destination:"),
+    ).toBeTruthy();
   });
 
   it("uses the single-signal title when every signal failed alike", () => {
@@ -242,9 +262,8 @@ describe("SendTestEventSection", () => {
 
     expect(screen.getByText("Destination not reachable")).toBeTruthy();
     expect(screen.queryByText("Not every test event was accepted")).toBeNull();
-    expect(
-      screen.getByText("Find the test log and trace in your destination:"),
-    ).toBeTruthy();
+    expect(screen.getByText("Test event ID:")).toBeTruthy();
+    expect(screen.getByText(testEventId)).toBeTruthy();
   });
 
   it("shows which signal failed when only some were accepted", () => {
@@ -266,6 +285,12 @@ describe("SendTestEventSection", () => {
           message:
             "No traces endpoint at this address. Check the URL; Speakeasy adds /v1/traces.",
         },
+        {
+          signal: "metrics",
+          outcome: "accepted",
+          statusCode: 200,
+          message: "The destination accepted the test event.",
+        },
       ],
       testEventId,
     };
@@ -280,9 +305,13 @@ describe("SendTestEventSection", () => {
     expect(
       screen.getAllByRole("listitem").map((item) => item.textContent),
     ).toEqual([
-      "Logs: Test event accepted. The destination accepted the test event.",
+      "Logs: accepted",
       "Traces: Endpoint not found. No traces endpoint at this address. Check the URL; Speakeasy adds /v1/traces.",
+      "Metrics: accepted",
     ]);
+    expect(
+      screen.getByText("Find the test log in your destination:"),
+    ).toBeTruthy();
   });
 
   it("says the result is unknown when the answer was lost", () => {
@@ -311,6 +340,33 @@ describe("SendTestEventSection", () => {
     expect(screen.getByText("Test event not sent")).toBeTruthy();
     expect(
       screen.getByText("Speakeasy could not send the test event. Try again."),
+    ).toBeTruthy();
+  });
+
+  it("shows why a retry will not help when the route cannot be tested", () => {
+    mutation.isError = true;
+    mutation.error = new ServiceError(
+      {
+        name: "invalid",
+        message: "This export has no destination. Choose one and save first.",
+        id: "err-1",
+        temporary: false,
+        timeout: false,
+        fault: false,
+      },
+      {
+        response: new Response("{}", { status: 400 }),
+        request: new Request("https://app.getgram.ai/rpc/example"),
+        body: "{}",
+      },
+    );
+    renderSection();
+
+    expect(screen.getByText("Test event not sent")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "This export has no destination. Choose one and save first.",
+      ),
     ).toBeTruthy();
   });
 
