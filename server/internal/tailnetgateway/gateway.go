@@ -535,10 +535,9 @@ func (g *Gateway) noteFailure(s *slot) {
 // fail records a failed start: the slot moves to error and counts toward the
 // backoff.
 func (g *Gateway) fail(ctx context.Context, s *slot, message string, wake bool) {
-	g.metrics.Lifecycle(ctx, s.ingress.organizationSlug, OperationStart, ResultError)
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	g.metrics.Lifecycle(ctx, s.ingress.organizationSlug, OperationStart, ResultError)
 	g.noteFailure(s)
 	g.move(ctx, s, transition{to: NodeStatusError, message: message, wake: wake})
 }
@@ -607,7 +606,7 @@ func (g *Gateway) start(ctx context.Context, s *slot) {
 		plaintext, err := g.decryptAuthKey(ctx, want.organizationID, row.AuthKeyEncrypted.String)
 		if err != nil {
 			logger.ErrorContext(ctx, "decrypt tailnet auth key", attr.SlogError(err))
-			g.fail(ctx, s, "auth key unreadable", false)
+			g.fail(ctx, s, secretFailure(err, "auth key unreadable"), false)
 			return
 		}
 		authKey = plaintext
@@ -915,8 +914,15 @@ func (g *Gateway) decryptAuthKey(ctx context.Context, organizationID, ciphertext
 // nodeStateFailure is the bounded message recorded when a slot's persisted
 // state cannot be read.
 func nodeStateFailure(err error) string {
+	return secretFailure(err, "node state unreadable")
+}
+
+// secretFailure is the slot message for a secret the gateway could not open:
+// the organization's key being unusable is named, so the customer can see
+// the cause, and anything else is reported as unreadable.
+func secretFailure(err error, unreadable string) string {
 	if encryptionKeyUnavailable(err) {
 		return "organization encryption key unavailable"
 	}
-	return "node state unreadable"
+	return unreadable
 }

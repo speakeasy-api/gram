@@ -25,8 +25,10 @@ type KeyProvisioner interface {
 }
 
 // encryptionKeyUnavailable reports whether err means the organization's key
-// cannot be used right now: its encryption is suspended, or its key is
-// unreachable or revoked. For a customer-managed key the customer fixes it.
+// cannot be used right now: its encryption is suspended, its key is
+// unreachable or revoked, or a customer-managed key was deleted, disabled
+// or is no longer an encryption key. For a customer-managed key the
+// customer fixes it.
 func encryptionKeyUnavailable(err error) bool {
-	return errors.Is(err, orgencryption.ErrSuspended) || errors.Is(err, orgencryption.ErrKeyUnavailable)
+	return errors.Is(err, orgencryption.ErrSuspended) || errors.Is(err, orgencryption.ErrKeyUnavailable) || errors.Is(err, orgencryption.ErrInvalidKey)
 }
