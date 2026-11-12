@@ -242,7 +242,7 @@ it("leaves the viewer's own sign-in out of the gateway's readiness", () => {
   state.rows = [remote("linear", "Linear")];
   state.memberStates = { linear: { kind: "sign_in" } };
   renderReadiness();
-  expect(screen.queryByText(/Sign in to Linear/)).toBeNull();
+  expect(screen.queryByText(/Linear/)).toBeNull();
 });
 
 it("flags a member whose tools couldn't be read as broken", () => {

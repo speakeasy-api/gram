@@ -117,7 +117,7 @@ export function GatewayCodeExecution({
   );
   // Errors are per tool and field, so another tool's field never shows them.
   const errorKey = (fieldName: string) =>
-    `${tool?.name ?? ""}\u0000${fieldName}`;
+    JSON.stringify([tool?.name ?? "", fieldName]);
   const errorFor = (fieldName: string) =>
     Object.hasOwn(fieldErrors, errorKey(fieldName))
       ? fieldErrors[errorKey(fieldName)]

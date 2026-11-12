@@ -342,7 +342,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
           loadingUrl:
             isLoadingEndpoints ||
             isResolvingUrl ||
-            resolvingCustomDomain ||
+            (publicRoutesEnabled && resolvingCustomDomain) ||
             (canReadPrivateUrls && isLoadingPrivateUrls),
           serverUrlReady,
           reachability,

@@ -207,13 +207,20 @@ export function RemoteMcpIdentitySectionBody({
     associationsQuery.isLoading;
   const identityResolved = !loading && !identityQueryError;
   const [selectedMode, setSelectedMode] = useState<IdentityMode>("none");
+  // The last identity that loaded, kept through a later failed lookup so a
+  // choice staged against it still counts as unsaved.
+  const [lastResolvedMode, setLastResolvedMode] = useState<IdentityMode | null>(
+    null,
+  );
   const identityRadioId = useId();
   // Raised by Save when it would remove an existing identity, which is the
   // "after confirmation" AIM-230 asks for.
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
-    if (actualMode) setSelectedMode(actualMode);
+    if (!actualMode) return;
+    setSelectedMode(actualMode);
+    setLastResolvedMode(actualMode);
   }, [actualMode]);
 
   // The header rows are part of this panel's one commit, so their state lives
@@ -641,10 +648,11 @@ export function RemoteMcpIdentitySectionBody({
     (identityCanSave || headerDrafts.isDirty);
   // Leaving the tab with a different identity picked, or edits staged under
   // it, asks first.
-  // Until the current identity has loaded there is nothing to differ from:
-  // a failed or pending lookup is read-only, not an unsaved change.
+  // Until an identity has loaded there is nothing to differ from: a lookup
+  // that never succeeded is read-only, not an unsaved change.
+  const baselineMode = actualMode ?? lastResolvedMode;
   useReportUnsavedChanges(
-    (actualMode !== null && selectedMode !== actualMode) ||
+    (baselineMode !== null && selectedMode !== baselineMode) ||
       identityCanSave ||
       headerDrafts.isDirty,
   );

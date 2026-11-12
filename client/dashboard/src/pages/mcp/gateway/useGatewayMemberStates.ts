@@ -1,5 +1,6 @@
 import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import { isConfigWriteMeta } from "@/lib/config-write";
 import { mcpConnectionUrl } from "@/lib/utils";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
@@ -160,7 +161,30 @@ function refreshGatewayMemberStates(
  * sending a chat writes nothing here, and must not reconnect Inspect.
  */
 const CONFIG_RESOURCES =
-  /^(remoteSessionClients|remoteSessionIssuers|userSessionIssuers|metaMcp|mcpServers|remoteMcp|toolsets|environments|mcpMetadata)/i;
+  /^(remoteSessionClients|remoteSessionIssuers|userSessionIssuers|authClients|metaMcp|mcpServers|remoteMcp|tunneledMcp|toolsets|environments|mcpMetadata)/i;
+
+function isConfigWrite(options: {
+  mutationKey?: readonly unknown[];
+  meta?: unknown;
+}): boolean {
+  if (isConfigWriteMeta(options.meta)) return true;
+  const [source, resource] = options.mutationKey ?? [];
+  return (
+    source === "@gram/client" &&
+    typeof resource === "string" &&
+    CONFIG_RESOURCES.test(resource)
+  );
+}
+
+/**
+ * One mutation-cache listener per query client, however many callers mount:
+ * the header and the open tab both use member states, and one saved change
+ * must read them again once, not once per caller.
+ */
+const savedChangeListeners = new WeakMap<
+  QueryClient,
+  { count: number; unsubscribe: () => void }
+>();
 
 /**
  * A configuration change saved anywhere in the app can fix or break a member: a linked
@@ -171,14 +195,24 @@ function useRefreshOnSavedChanges(enabled: boolean): void {
   const queryClient = useQueryClient();
   useEffect(() => {
     if (!enabled) return;
-    return queryClient.getMutationCache().subscribe((event) => {
-      if (event.type !== "updated" || event.action.type !== "success") return;
-      const [source, resource] = (event.mutation.options.mutationKey ??
-        []) as unknown[];
-      if (source !== "@gram/client" || typeof resource !== "string") return;
-      if (!CONFIG_RESOURCES.test(resource)) return;
-      void refreshGatewayMemberStates(queryClient);
-    });
+    let entry = savedChangeListeners.get(queryClient);
+    if (!entry) {
+      const unsubscribe = queryClient.getMutationCache().subscribe((event) => {
+        if (event.type !== "updated" || event.action.type !== "success") return;
+        if (!isConfigWrite(event.mutation.options)) return;
+        void refreshGatewayMemberStates(queryClient);
+      });
+      entry = { count: 0, unsubscribe };
+      savedChangeListeners.set(queryClient, entry);
+    }
+    entry.count += 1;
+    const owned = entry;
+    return () => {
+      owned.count -= 1;
+      if (owned.count > 0) return;
+      owned.unsubscribe();
+      savedChangeListeners.delete(queryClient);
+    };
   }, [enabled, queryClient]);
 }
 
@@ -258,8 +292,9 @@ const describedServerSchema = z.object({
  *
  * Overview, Inspect and the page header share it: the session and the status
  * call use the same query keys on each, so one status call serves them all.
- * With `checkTools: "cache"` (the header) the tool-name check is only read
- * from what another page already loaded, never fetched.
+ * With `checkTools: "cache"` the tool-name check is only read from what
+ * another page already loaded, never fetched. The header fetches: it is on
+ * every tab, and a cache-only check passes a down member on a cold tab.
  */
 export function useGatewayMemberStates(
   metaMcpServer: MetaMcpServer | undefined,
@@ -300,7 +335,7 @@ export function useGatewayMemberStates(
     onConnected: options.onConnected,
   });
   const fetchChecks = (options.checkTools ?? "fetch") === "fetch";
-  // Every caller subscribes; react-query folds the repeated invalidations.
+  // Callers share one listener; see savedChangeListeners.
   useRefreshOnSavedChanges(live);
 
   const slugOf = (row: MemberRow) =>

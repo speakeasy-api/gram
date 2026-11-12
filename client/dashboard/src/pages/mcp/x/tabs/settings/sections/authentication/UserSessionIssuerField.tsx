@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { AuthRow, RowSave } from "./AuthRow";
 import type { AuthTarget } from "./authTarget";
 import { ChangeIssuerConfirmDialog } from "./ChangeIssuerConfirmDialog";
+import { CONFIG_WRITE_META } from "@/lib/config-write";
 
 export function UserSessionIssuerField({
   target,
@@ -41,6 +42,7 @@ export function UserSessionIssuerField({
   }, [currentIssuerId]);
 
   const update = useMutation({
+    meta: CONFIG_WRITE_META,
     mutationFn: async (userSessionIssuerId: string) => {
       if (!target.linkUserSessionIssuer) {
         throw new Error("This authentication target cannot change issuers");

@@ -71,7 +71,9 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
     isError: membersFailed,
   } = useGatewayMemberRows(id);
   const memberSetup = useGatewayMemberSetup(rows);
-  // One sign-in status call; tool checks only if Overview already ran them.
+  // The header shows on every tab, so it runs the tool checks itself: read
+  // only from cache, a down member would read as ready on any tab Overview
+  // has not loaded yet.
   const memberStates = useGatewayMemberStates(
     metaMcpServer,
     endpoints,

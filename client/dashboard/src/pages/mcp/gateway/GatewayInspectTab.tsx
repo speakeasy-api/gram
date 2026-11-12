@@ -266,11 +266,23 @@ function GatewayInspectConnection({
       mode === "code_mode"
         ? "callable from code"
         : "reached through the gateway";
-    const memberTools = members.flatMap((m) =>
-      m.tools.map((tool) => ({ ...tool, group: `${m.name} · ${via}` })),
+    // A member the viewer still has to connect gives them nothing to run,
+    // even when tools from an earlier session are still cached.
+    const unconnectedSlugs = new Set(
+      rows.flatMap((row) => {
+        const slug = row.server?.slug ?? row.member.mcpServerSlug;
+        return slug && stateFor(row)?.kind === "sign_in" ? [slug] : [];
+      }),
     );
+    const memberTools = members
+      .filter(
+        (m) => !unconnectedSlugs.has(m.slug) && !signIn.needsSignIn(m.slug),
+      )
+      .flatMap((m) =>
+        m.tools.map((tool) => ({ ...tool, group: `${m.name} · ${via}` })),
+      );
     return [...surface, ...memberTools];
-  }, [data, members, mode]);
+  }, [data, members, mode, rows, stateFor, signIn]);
 
   // A rough size of the tool descriptions an agent loads on connect.
   const tokens = data
@@ -411,15 +423,18 @@ function GatewayInspectConnection({
     ) : null;
   // Every member the viewer still has to connect, in any mode: Direct reads
   // no member on its own, so the shared member status supplies them too.
+  // Members can share a slug, so each server is listed once.
   const unconnected = [
     ...failedMembers.filter((m) => signIn.needsSignIn(m.slug)),
     ...rows.flatMap((row) => {
       const slug = row.server?.slug ?? row.member.mcpServerSlug;
       if (!slug || stateFor(row)?.kind !== "sign_in") return [];
-      if (failedMembers.some((m) => m.slug === slug)) return [];
       return [{ slug, name: row.server?.name ?? slug }];
     }),
-  ];
+  ].filter(
+    (member, index, all) =>
+      all.findIndex((other) => other.slug === member.slug) === index,
+  );
   // Tools behind these servers can't be counted, so the summary counts the
   // servers: the ones whose tools couldn't be read, plus any the shared
   // member status says need sign-in or are unavailable.
@@ -489,7 +504,7 @@ function GatewayInspectConnection({
                 </span>
                 {reason.needsGatewaySignIn ? (
                   <Link
-                    to={`${settingsHref}#${AUTHORIZATION_SERVERS_FIELD_ID}`}
+                    to={`${settingsHref}#${metaMcpServer.userSessionIssuerId ? AUTHORIZATION_SERVERS_FIELD_ID : GATEWAY_AUTHENTICATION_SECTION_ID}`}
                     className="text-foreground shrink-0 underline underline-offset-2"
                   >
                     Set up sign-in

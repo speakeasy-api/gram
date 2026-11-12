@@ -87,6 +87,7 @@ import {
   useIssuerDuplicatePreflight,
   type RemoteSessionIssuerDuplicateMatch,
 } from "./useIssuerDuplicatePreflight";
+import { CONFIG_WRITE_META } from "@/lib/config-write";
 
 type Mode = "select" | "new";
 
@@ -315,6 +316,7 @@ export function AttachRemoteIdentityProviderSheet({
     mode === "select" ? !!selectedIssuerId : issuerUrl.trim().length > 0;
 
   const attachMutation = useMutation({
+    meta: CONFIG_WRITE_META,
     mutationFn: async (): Promise<{
       unsupportedDcrAuthMethod: string | null;
     }> => {

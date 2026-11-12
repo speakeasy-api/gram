@@ -116,10 +116,16 @@ export function ReadinessIssueFrame({
   children: ReactNode;
 }): JSX.Element {
   const { tone } = useReadinessIssuesFor(anchorId);
-  if (!tone) return <>{children}</>;
+  // One element tree in every state: swapping it when the tone changes would
+  // remount the children and drop what the user has typed. With no issue the
+  // wrapper is `contents`, so it lays out as if it weren't there.
   return (
-    <div className={cn("space-y-3 border p-4", READINESS_BORDER[tone])}>
-      <ReadinessIssueMarker anchorId={anchorId} />
+    <div
+      className={
+        tone ? cn("space-y-3 border p-4", READINESS_BORDER[tone]) : "contents"
+      }
+    >
+      {tone ? <ReadinessIssueMarker anchorId={anchorId} /> : null}
       {children}
     </div>
   );
