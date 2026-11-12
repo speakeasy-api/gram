@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -476,6 +477,64 @@ func TestRun_ChoicesAreNotMappedAfterAFailedPhase(t *testing.T) { //nolint:paral
 	require.False(t, f.selection(credential, server).AuthClientID.Valid)
 }
 
+// For an organization enforcing upstream auth, an association neither makes a
+// no-auth choice stale nor rejects an unmapped client choice. The issuer binding,
+// the registration's liveness and the auth clients the server offers still
+// decide.
+func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
+	t.Parallel()
+	issuer, candidate := uuid.New(), uuid.New()
+	for name, tc := range map[string]struct {
+		row       ListSelectionMappingsRow
+		typedOnly bool
+		want      SelectionOutcome
+	}{
+		"no-auth beside an association, not enforcing": {
+			row:  ListSelectionMappingsRow{NoAuth: true, ServerHasAssociations: true},
+			want: SelectionStaleNoAuth,
+		},
+		"no-auth beside an association, enforcing": {
+			row:       ListSelectionMappingsRow{NoAuth: true, ServerHasAssociations: true},
+			typedOnly: true,
+			want:      SelectionNoAuth,
+		},
+		"no-auth beside an offered OAuth client, enforcing": {
+			row:       ListSelectionMappingsRow{NoAuth: true, ServerHasOauthClients: true},
+			typedOnly: true,
+			want:      SelectionStaleNoAuth,
+		},
+		"unmapped client without an association, not enforcing": {
+			row:  ListSelectionMappingsRow{RegistrationLive: true, RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
+			want: SelectionUnusable,
+		},
+		"unmapped client without an association, enforcing": {
+			row:       ListSelectionMappingsRow{RegistrationLive: true, RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
+			typedOnly: true,
+			want:      SelectionMap,
+		},
+		"unmapped client whose registration was deleted, enforcing": {
+			row:       ListSelectionMappingsRow{RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
+			typedOnly: true,
+			want:      SelectionUnusable,
+		},
+		"unmapped client the issuer does not bind, enforcing": {
+			row:       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
+			typedOnly: true,
+			want:      SelectionUnusable,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got, mapped := decideSelection(tc.row, issuer, tc.typedOnly)
+			require.Equal(t, tc.want, got)
+			if got == SelectionMap {
+				require.Equal(t, candidate, mapped, "the candidate is the client recorded")
+			} else {
+				require.Equal(t, uuid.Nil, mapped)
+			}
+		})
+	}
+}
 func TestListSelectionMappingsScopedLiveCredentialsRespectTenant(t *testing.T) {
 	t.Parallel()
 	for _, organizationIssuer := range []bool{false, true} {
@@ -853,5 +912,45 @@ func TestReconcileUserSessionSelectionsReportsGuardedBulkSkips(t *testing.T) {
 		choice := f.selection(credential, server)
 		require.Equal(t, uuid.NullUUID{UUID: typed, Valid: true}, choice.AuthClientID)
 		require.Equal(t, "issuance", choice.Source)
+	}
+}
+
+// Both representative and grouped writes use typed-only decisions after enforcement.
+func TestReconcileUserSessionSelectionsTypedOnlyWithoutAssociation(t *testing.T) {
+	t.Parallel()
+	for _, enforced := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enforced_%t", enforced), func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			f := newFixture(t)
+			server, registration := f.server(), f.client("subject")
+			association := f.associate(server, registration)
+			f.run(true)
+			require.NoError(t, f.q.SoftDeleteAssociationFixture(ctx, association))
+			if enforced {
+				_, err := productfeaturesrepo.New(f.pool).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+					OrganizationID: f.orgID, FeatureName: "upstream_auth_enforced",
+				})
+				require.NoError(t, err)
+			}
+			var credentials []uuid.UUID
+			for range 3 {
+				credential := f.interactiveCredential()
+				f.oauthSelection(credential, server, registration)
+				credentials = append(credentials, credential)
+			}
+			tx := testenv.BeginTx(t, ctx, f.pool)
+			require.NoError(t, LockEMAWriterScope(ctx, tx, f.orgID, []uuid.UUID{f.projectID}))
+			require.NoError(t, PreflightServerAssociations(ctx, tx, f.orgID, server))
+			require.NoError(t, ReconcileUserSessionSelectionsInLockedTransaction(ctx, tx, f.orgID, f.sessionIssuer()))
+			require.NoError(t, tx.Commit(ctx))
+			for _, credential := range credentials {
+				choice := f.selection(credential, server)
+				require.Equal(t, enforced, choice.AuthClientID.Valid)
+				if enforced {
+					require.Equal(t, OAuthClientID(f.orgID, registration, TypeRemoteSession), choice.AuthClientID.UUID)
+				}
+			}
+		})
 	}
 }

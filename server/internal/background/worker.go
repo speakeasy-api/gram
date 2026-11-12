@@ -82,6 +82,10 @@ type WorkerOptions struct {
 	// CatalogPromotions runs staff catalogue discovery and durable delivery.
 	CatalogPromotions CatalogPromotionJobs
 
+	// MemoryEvals executes staff-started team memory eval runs. Nil makes a
+	// scheduled run fail with a configuration error.
+	MemoryEvals MemoryEvalRunner
+
 	// CatalogPromotionDeliveryPaused suspends external guide writes without dropping jobs.
 	CatalogPromotionDeliveryPaused bool
 
@@ -218,6 +222,7 @@ func ForDeploymentProcessing(
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
 		FleetHealthCache:               nil,
 		CatalogPromotions:              nil,
+		MemoryEvals:                    nil,
 		CatalogPromotionDeliveryPaused: false,
 		DB:                             db,
 		GuardianPolicy:                 guardianPolicy,
@@ -321,6 +326,7 @@ func NewTemporalWorker(
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
 		FleetHealthCache:               nil,
 		CatalogPromotions:              nil,
+		MemoryEvals:                    nil,
 		CatalogPromotionDeliveryPaused: false,
 		MCPCatalog:                     nil,
 		GuardianPolicy:                 nil,
@@ -383,6 +389,7 @@ func NewTemporalWorker(
 		opts = &WorkerOptions{
 			FleetHealthCache:               conv.Default(o.FleetHealthCache, opts.FleetHealthCache),
 			CatalogPromotions:              conv.Default(o.CatalogPromotions, opts.CatalogPromotions),
+			MemoryEvals:                    conv.Default(o.MemoryEvals, opts.MemoryEvals),
 			CatalogPromotionDeliveryPaused: o.CatalogPromotionDeliveryPaused || opts.CatalogPromotionDeliveryPaused,
 			GuardianPolicy:                 conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
 			TunnelHTTPClient:               conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
@@ -557,6 +564,7 @@ func NewTemporalWorker(
 		opts.StartupSeeds,
 		signInEpochs(opts.RedisClient),
 	)
+	activities.memoryEvalRunner = opts.MemoryEvals
 
 	if opts.FleetHealthCache != nil {
 		temporalWorker.RegisterActivityWithOptions(opts.FleetHealthCache.Refresh, activity.RegisterOptions{Name: fleetHealthCacheActivity})
@@ -610,6 +618,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ListProjectsForToolsetIndexing)
 	temporalWorker.RegisterActivity(activities.ListToolsetsForIndexing)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
+	temporalWorker.RegisterActivity(activities.BuildMemoryDigests)
+	temporalWorker.RegisterActivity(activities.InvalidateMemoryDigests)
 	temporalWorker.RegisterActivity(activities.SyncIdentityMap)
 	temporalWorker.RegisterActivity(activities.SyncTenantDimensions)
 	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)
@@ -655,6 +665,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RecordDueKillswitchExpiries)
 	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
+	temporalWorker.RegisterActivity(activities.CleanupChannelsHistory)
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
 	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
 	temporalWorker.RegisterActivity(activities.SendDirectoryReviewEmails)
@@ -679,6 +690,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
 	temporalWorker.RegisterActivity(activities.RunMcpResearch)
 	temporalWorker.RegisterActivity(activities.MarkMcpResearchInterrupted)
+	temporalWorker.RegisterActivity(activities.RunMemoryEval)
+	temporalWorker.RegisterActivity(activities.MarkMemoryEvalInterrupted)
 	temporalWorker.RegisterActivity(activities.SendTrialLifecycleEmail)
 	temporalWorker.RegisterActivity(activities.ResolveTrialEndingReminder)
 	temporalWorker.RegisterActivity(activities.SendTrialEndingSoonEmail)
@@ -776,6 +789,7 @@ func NewTemporalWorker(
 		temporalWorker.RegisterActivityWithOptions(promotionActivities.dispatch, activity.RegisterOptions{Name: catalogPromotionDispatchActivity})
 	}
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
+	temporalWorker.RegisterWorkflow(MemoryDigestsWorkflow)
 	temporalWorker.RegisterWorkflow(SyncIdentityMapWorkflow)
 	temporalWorker.RegisterWorkflow(SyncTenantDimensionsWorkflow)
 	temporalWorker.RegisterWorkflow(PromoteStagedTelemetryWorkflow)
@@ -817,6 +831,7 @@ func NewTemporalWorker(
 	// Killswitch expiry history and receipt retention
 	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(ChannelsRetentionWorkflow)
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewEmailsWorkflow)
@@ -844,6 +859,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
 	// Chat analysis workflows
 	temporalWorker.RegisterWorkflow(McpResearchWorkflow)
+	temporalWorker.RegisterWorkflow(MemoryEvalRunWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
 	// Pre-emptive remote session refresh workflows
@@ -894,6 +910,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddTrustedDelegationCleanupSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add trusted delegation cleanup schedule", attr.SlogError(err))
+	}
+
+	if err := AddChannelsRetentionSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add channels retention schedule", attr.SlogError(err))
 	}
 
 	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {
@@ -978,6 +998,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add weekly usage summary schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddMemoryDigestsSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add memory digests schedule", attr.SlogError(err))
 	}
 
 	if err := AddAssistantReaperSchedule(ctx, env); err != nil {

@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
@@ -87,7 +89,8 @@ func (o *migrationOrg) server(userIssuerID uuid.UUID) uuid.UUID {
 	return serverID
 }
 
-func (o *migrationOrg) session(userIssuerID uuid.UUID) {
+// session seeds a live user session and returns its credential id.
+func (o *migrationOrg) session(userIssuerID uuid.UUID) uuid.UUID {
 	o.t.Helper()
 	id := uuid.New()
 	require.NoError(o.t, o.q.SeedUserSessionFixture(o.t.Context(), selectionbackfill.SeedUserSessionFixtureParams{
@@ -100,6 +103,7 @@ func (o *migrationOrg) session(userIssuerID uuid.UUID) {
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
 		CredentialID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}))
+	return id
 }
 
 func TestUpstreamOAuthMigration_MigratesAnOrganizationIdempotently(t *testing.T) {
@@ -289,4 +293,114 @@ func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, status.AuthClients.InProgress)
 	require.Empty(t, status.AuthClients.Warnings)
+}
+
+// Under enforcement a no-auth choice on a server whose auth client was detached
+// is what issuance records, whatever association remains, so the migration
+// status does not read it as pending or as a gap.
+func TestUpstreamOAuthMigration_EnforcedNoAuthChoiceBesideAnAssociationIsCovered(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+	org := newMigrationOrg(t, ctx, db, "enforced-detached")
+	issuer := org.issuer()
+	server := org.server(issuer)
+	registration := org.client(issuer)
+	require.NoError(t, org.q.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{ProjectID: org.projectID, OrganizationID: org.id, McpServerID: server, RemoteSessionClientID: registration}))
+
+	_, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	_, err = authclientsrepo.New(db).DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{AuthClientID: authclientbackfill.OAuthClientID(org.id, registration, authclientbackfill.TypeRemoteSession), McpServerID: server, OrganizationID: org.id})
+	require.NoError(t, err)
+	_, err = productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: org.id, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	org.session(issuer)
+
+	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), run.SelectionsWritten)
+	require.Zero(t, run.Status.PendingSelections)
+	require.Zero(t, run.Status.ReconnectCredentials)
+	require.NotNil(t, run.Status.AuthClients)
+	require.Zero(t, *run.Status.AuthClients.SelectionGapCount, run.Status.AuthClients.SelectionGaps)
+	require.Zero(t, *run.Status.AuthClients.PendingSelectionMappings, "the no-auth choice needs no mapping")
+	require.True(t, *run.Status.AuthClients.SelectionsComplete, "the choices read complete, so enforcement is not blocked")
+}
+
+// Under enforcement a choice is recorded from the auth clients a server
+// offers, so a run that has to create a server's OAuth-backed client, as when
+// an earlier run's auth client phase failed, records the choice after it and
+// names that client in one run, rather than an untyped no-auth choice the auth
+// client backfill would then report as stale.
+func TestUpstreamOAuthMigration_EnforcedRunRecordsChoicesAfterTheAuthClients(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+	org := newMigrationOrg(t, ctx, db, "enforced-recovery")
+	issuer := org.issuer()
+	server := org.server(issuer)
+	registration := org.client(issuer)
+	require.NoError(t, org.q.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{ProjectID: org.projectID, OrganizationID: org.id, McpServerID: server, RemoteSessionClientID: registration}))
+	_, err := productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: org.id, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	credential := org.session(issuer)
+
+	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.Nil(t, run.AuthClientsError)
+	require.Equal(t, int64(1), *run.AuthClientsWritten)
+	require.Equal(t, int64(1), run.SelectionsWritten)
+
+	choice, err := org.q.GetSelectionAuthClientFixture(ctx, selectionbackfill.GetSelectionAuthClientFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credential, McpServerID: server})
+	require.NoError(t, err)
+	require.False(t, choice.NoAuth, "the server's OAuth client was recorded before the choice")
+	require.Equal(t, uuid.NullUUID{UUID: authclientbackfill.OAuthClientID(org.id, registration, authclientbackfill.TypeRemoteSession), Valid: true}, choice.AuthClientID)
+
+	require.Zero(t, run.Status.PendingSelections)
+	require.Zero(t, run.Status.ReconnectCredentials)
+	require.NotNil(t, run.Status.AuthClients)
+	require.Zero(t, *run.Status.AuthClients.SelectionGapCount, run.Status.AuthClients.SelectionGaps)
+	require.Zero(t, *run.Status.AuthClients.PendingSelectionMappings)
+	require.True(t, *run.Status.AuthClients.SelectionsComplete)
+}
+
+// Under enforcement a run whose auth client phase failed records no choices,
+// since a choice recorded without the server's auth clients would read as
+// no-auth.
+func TestUpstreamOAuthMigration_EnforcedRunRecordsNoChoicesWhenAuthClientsFail(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+	org := newMigrationOrg(t, ctx, db, "enforced-auth-clients-busy")
+	issuer := org.issuer()
+	server := org.server(issuer)
+	registration := org.client(issuer)
+	require.NoError(t, org.q.SeedAssociationFixture(ctx, selectionbackfill.SeedAssociationFixtureParams{ProjectID: org.projectID, OrganizationID: org.id, McpServerID: server, RemoteSessionClientID: registration}))
+	_, err := productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: org.id, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	credential := org.session(issuer)
+
+	tx, err := db.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary only; the lock uses a generated SQLc method.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	require.NoError(t, authclientbackfill.New(tx).LockOrganizationBackfill(ctx, org.id))
+
+	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.NotNil(t, run.AuthClientsError)
+	require.Contains(t, *run.AuthClientsError, "already in progress")
+	require.Zero(t, run.SelectionsWritten)
+	selections, err := org.q.ListSelectionsFixture(ctx, selectionbackfill.ListSelectionsFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credential})
+	require.NoError(t, err)
+	require.Empty(t, selections)
+	require.NoError(t, tx.Rollback(ctx))
+
+	run, err = svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.Nil(t, run.AuthClientsError)
+	require.Equal(t, int64(1), run.SelectionsWritten)
+	choice, err := org.q.GetSelectionAuthClientFixture(ctx, selectionbackfill.GetSelectionAuthClientFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credential, McpServerID: server})
+	require.NoError(t, err)
+	require.False(t, choice.NoAuth)
+	require.True(t, choice.AuthClientID.Valid)
 }

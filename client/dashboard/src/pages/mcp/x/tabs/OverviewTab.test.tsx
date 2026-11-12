@@ -5,11 +5,8 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { parseFilters } from "@/pages/logs/log-filter-url";
 import { OverviewTab } from "./OverviewTab";
 
-const logs = vi.hoisted(() => ({ canView: true, enabled: true }));
+const logs = vi.hoisted(() => ({ enabled: true }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project" }) }));
-vi.mock("@/components/observe/observeDeepLink", () => ({
-  useCanViewToolLogs: () => logs.canView,
-}));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
@@ -43,7 +40,6 @@ vi.mock("./TunneledMcpConnectionsPanel", () => ({
 }));
 afterEach(() => {
   cleanup();
-  logs.canView = true;
   logs.enabled = true;
 });
 const server = {
@@ -69,11 +65,8 @@ it("places tunnel status above the usage dashboard", () => {
   ]);
 });
 
-it.each([
-  ["the organization does not record logs", { canView: true, enabled: false }],
-  ["the user cannot read logs", { canView: false, enabled: true }],
-])("offers no Tool Logs link when %s", (_, state) => {
-  Object.assign(logs, state);
+it("offers no Tool Logs link when the organization does not record logs", () => {
+  logs.enabled = false;
   render(<OverviewTab mcpServer={server} agentSetupHref="/settings" />, {
     wrapper: MemoryRouter,
   });

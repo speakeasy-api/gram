@@ -1,6 +1,5 @@
 import { useRoutes } from "@/routes";
 import { useProject } from "@/contexts/Auth";
-import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
@@ -33,12 +32,11 @@ export function OverviewTab({
   const routes = useRoutes();
   const client = useGramContext();
   const project = useProject();
-  const canViewToolLogs = useCanViewToolLogs();
   // Tool Logs is empty when the organization does not record logs, so the
   // tunnel view links to it only when it can show something. Tool Logs' own
-  // search answers 404 in that case and is authorized for the same log:read
-  // audience as the link, unlike the organization's feature settings. A
-  // one-minute, one-row search keeps the probe cheap.
+  // search answers 404 in that case and is open to every member, unlike the
+  // organization's feature settings. A one-minute, one-row search keeps the
+  // probe cheap.
   const toolLogsProbe = useQuery({
     queryKey: ["tool-logs-available", project.id],
     queryFn: () => {
@@ -53,12 +51,12 @@ export function OverviewTab({
         }),
       );
     },
-    enabled: canViewToolLogs && !!mcpServer.tunneledMcpServerId,
+    enabled: !!mcpServer.tunneledMcpServerId,
     staleTime: 5 * 60_000,
     retry: false,
     throwOnError: false,
   });
-  const toolLogsAvailable = canViewToolLogs && toolLogsProbe.isSuccess;
+  const toolLogsAvailable = toolLogsProbe.isSuccess;
   if (mcpServer.unproxiedMcpServerId) {
     return (
       <UnproxiedMcpOverviewTab

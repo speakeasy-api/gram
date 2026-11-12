@@ -1,5 +1,4 @@
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
-import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import {
   ObservabilityDisabledState,
   ObservabilitySummaryTiles,
@@ -8,6 +7,7 @@ import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeries
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { encodeGatewayServerFilter } from "@/components/observe/observeTargetFilters";
+import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { useRoutes } from "@/routes";
@@ -162,9 +162,11 @@ export function GatewayActivitySection({
     }
     return `?${params.toString()}`;
   }, [metaMcpServerId, searchParams]);
-  const canViewToolLogs = useCanViewToolLogs();
+  // Tool Logs admits project readers; an MCP-only member gets no link to a
+  // page that would turn them away.
+  const { canOpen: canOpenToolLogs } = useToolLogsAccess();
   const logsHref =
-    canViewToolLogs && gatewayScopedSearch
+    canOpenToolLogs && gatewayScopedSearch
       ? routes.logs.href() + gatewayScopedSearch
       : undefined;
   const insightsHref = gatewayScopedSearch

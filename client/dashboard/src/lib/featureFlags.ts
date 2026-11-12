@@ -2,6 +2,8 @@ export const FEATURE_FLAGS = {
   inferenceWorkloadSetup: "inference-workload-setup",
   // UI-only visibility; saved runtime selection and backend authorization are independent.
   assistantKitRuntime: "assistant-kit-runtime",
+  // UI-only rollout gate; Channels operations enforce organization grants.
+  channels: "channels",
   budgets: "gram-budgets",
   // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
   emaProviders: "ema-providers",

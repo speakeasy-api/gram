@@ -2075,6 +2075,8 @@ type ListTelemetryLogsParams struct {
 	SortOrder              string
 	Cursor                 string
 	Limit                  int
+	// OwnScope, when set, is ANDed with every other filter; see OwnScope.
+	OwnScope *OwnScope
 }
 
 // ListTelemetryLogs retrieves telemetry logs with optional filters and cursor pagination.
@@ -2163,11 +2165,19 @@ func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsPa
 		sb = sb.Where(pred)
 	}
 
+	if arg.OwnScope != nil {
+		sb = sb.Where(arg.OwnScope.telemetryLogsPredicate())
+	}
+
 	sb = withPagination(sb, arg.Cursor, arg.SortOrder)
 
 	sb = withOrdering(sb, arg.SortOrder, "time_unix_nano", "toUUID(id)")
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	if arg.OwnScope != nil {
+		sb = arg.OwnScope.withFoldSettings(sb)
+	}
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -2208,6 +2218,8 @@ type ListToolTracesParams struct {
 	SortOrder        string
 	Cursor           string // trace_id to paginate from
 	Limit            int
+	// OwnScope, when set, is ANDed with every other filter; see OwnScope.
+	OwnScope *OwnScope
 }
 
 // traceWindowScanSlop pads the WHERE pre-filter trace-window reads apply to
@@ -2269,6 +2281,9 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 	if arg.GramFunctionID != "" {
 		sb = sb.Where("gram_function_id = toUUIDOrNull(?)", arg.GramFunctionID)
 	}
+	if arg.OwnScope != nil {
+		sb = sb.Where(arg.OwnScope.traceSummariesPredicate())
+	}
 
 	// Build HAVING clause for tool filtering.
 	// IMPORTANT: We must construct a single HAVING clause with explicit AND logic to ensure
@@ -2324,6 +2339,10 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "")
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	if arg.OwnScope != nil {
+		sb = arg.OwnScope.withFoldSettings(sb)
+	}
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -2952,6 +2971,10 @@ type ListChatsParams struct {
 	CursorStartTimeUnixNano int64
 
 	Limit int
+
+	// OwnScope, when set, keeps only chats with at least one row of the
+	// caller's own; the other filters narrow further. See OwnScope.
+	OwnScope *OwnScope
 }
 
 // ListChats retrieves aggregated chat summaries grouped by gram_chat_id.
@@ -2997,13 +3020,19 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		sb = sb.Where("position(telemetry_logs.gram_urn, ?) > 0", arg.GramURN)
 	}
 	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+		// Qualified: the select aliases user_id to an aggregate, and ClickHouse
+		// resolves a bare user_id in WHERE to that alias and rejects the query.
+		sb = sb.Where(squirrel.Eq{"telemetry_logs.user_id": arg.UserID})
 	}
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
 	}
 
 	sb = sb.GroupBy("gram_chat_id")
+
+	if arg.OwnScope != nil {
+		sb = sb.Having(arg.OwnScope.chatHasOwnRow())
+	}
 
 	// HAVING clause for cursor pagination with tuple comparison for tie-breaking
 	if arg.CursorStartTimeUnixNano != 0 {
@@ -3016,6 +3045,10 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "gram_chat_id")
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	if arg.OwnScope != nil {
+		sb = arg.OwnScope.withFoldSettings(sb)
+	}
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -4294,6 +4327,8 @@ type ListToolUsageTracesParams struct {
 	CursorTimeUnixNano   int64
 	CursorID             string
 	Limit                int
+	// OwnScope, when set, is ANDed with every other filter; see OwnScope.
+	OwnScope *OwnScope
 }
 
 // ToolUsageSummary contains bounded chart-ready tool usage aggregates.
@@ -4949,7 +4984,7 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 	}
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // validated by service layer
-	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(foldOrg(arg.CanonicalIdentityOrg, arg.OwnScope)))
 
 	query, queryArgs, err := sb.ToSql()
 	if err != nil {
@@ -6162,6 +6197,9 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 	if err != nil {
 		return "", nil, err
 	}
+	if arg.OwnScope != nil {
+		groupedSB = groupedSB.Where(arg.OwnScope.traceSummariesPredicate())
+	}
 
 	groupedSQL, groupedArgs, err := groupedSB.ToSql()
 	if err != nil {
@@ -6456,6 +6494,9 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
+	if arg.OwnScope != nil {
+		rawSB = rawSB.Where(arg.OwnScope.telemetryLogsPredicate())
+	}
 
 	sourceCondition := "((startsWith(gram_urn, 'tools:') AND (toolset_slug != '' OR tool_source != '')) OR (event_source = 'hook' AND (" + hookToolNamePredicate("tool_name") + " OR skill_name != '' OR " + toolCallSkillName + " != '')) OR (" + toolUsageRawMCPSkillLoad + "))"
 	includeTriggerRows := arg.Query != ""
@@ -6782,6 +6823,7 @@ normalized_traces_base AS (
 // place to derive that is the only way to keep them agreeing.
 func toolUsageRawNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {
 	traceSQL, traceArgs, err := toolUsageTraceRowsCTE(ListToolUsageTracesParams{
+		OwnScope:           nil,
 		GramProjectID:      arg.GramProjectID,
 		TimeStart:          arg.TimeStart,
 		TimeEnd:            arg.TimeEnd,
@@ -7963,6 +8005,8 @@ type ListHooksTracesParams struct {
 	// CanonicalIdentityOrg, when set, folds email filters through the
 	// identity_map so a drill from a folded bucket matches all linked emails.
 	CanonicalIdentityOrg string
+	// OwnScope, when set, is ANDed with every other filter; see OwnScope.
+	OwnScope *OwnScope
 }
 
 // ListHooksTraces retrieves aggregated hook trace summaries grouped by trace_id.
@@ -7992,6 +8036,9 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		Having("start_time_unix_nano >= ?", arg.TimeStart).
 		Having("start_time_unix_nano <= ?", arg.TimeEnd).
 		Where("trace_id IS NOT NULL AND trace_id != ''")
+	if arg.OwnScope != nil {
+		sb = sb.Where(arg.OwnScope.traceSummariesPredicate())
+	}
 
 	// Apply arbitrary attribute filters
 	for _, filter := range arg.Filters {
@@ -8089,7 +8136,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
 
-	sb = withCanonicalFoldSettings(sb, orgLit)
+	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(foldOrg(arg.CanonicalIdentityOrg, arg.OwnScope)))
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building list hooks traces query: %w", err)
