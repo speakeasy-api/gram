@@ -362,6 +362,14 @@ var testDataDir = sync.OnceValues(func() (string, error) {
 })
 
 func (s *StubClient) ensureDataDir() (string, error) {
+	return StubDataDir()
+}
+
+// StubDataDir returns the directory the stub client keeps its per-organization
+// usage files in, creating it if needed: scratch/ under the working directory
+// for a local server, and a temporary directory under "go test". Tests that
+// seed a usage file write it here.
+func StubDataDir() (string, error) {
 	if testing.Testing() {
 		dir, err := testDataDir()
 		if err != nil {
