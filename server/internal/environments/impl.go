@@ -455,11 +455,13 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 	}
 
 	// Authz: env:write on the source env with project_id as a constraining
-	// dimension. env:write implies env:read via scope expansion, so this single
-	// check covers both reading the source and producing the destination. Future
-	// per-env granularity is additive at the role layer (per-env grants instead
-	// of wildcard).
+	// dimension covers reading it (env:write implies env:read). Cloning also
+	// creates an environment, so it needs the same project-wide env:write as
+	// CreateEnvironment: a grant on the source alone does not allow it.
 	if err := s.authz.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentWrite, sourceEnv.ID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+	if err := s.requireProjectEnvironmentWrite(ctx, *authCtx.ProjectID); err != nil {
 		return nil, err
 	}
 
