@@ -2641,7 +2641,7 @@ func unmarshalTestDataExportRouteSignalResultResponseBodyToDataexportsTestDataEx
 		Signal:     *v.Signal,
 		Outcome:    *v.Outcome,
 		StatusCode: v.StatusCode,
-		Message:    v.Message,
+		Message:    *v.Message,
 	}
 
 	return res

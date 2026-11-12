@@ -6757,6 +6757,9 @@ func ValidateTestDataExportRouteSignalResultResponseBody(body *TestDataExportRou
 	if body.Outcome == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
 	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
 	if body.Signal != nil {
 		if !(*body.Signal == "logs" || *body.Signal == "traces" || *body.Signal == "metrics") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signal", *body.Signal, []any{"logs", "traces", "metrics"}))

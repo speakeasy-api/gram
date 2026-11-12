@@ -69,7 +69,7 @@ func TestConnectionLogExport_PublishesUnderTheRowTenant(t *testing.T) {
 
 func newTestSource(t *testing.T) *otelsink.TestSource {
 	t.Helper()
-	return otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequests(testenv.NewLogger(t), testenv.NewMeterProvider(t)), "gram-server")
+	return otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequestBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t)), "gram-server")
 }
 
 func testEventDestination(includeSensitiveData bool) dataexports.TestDestination {
@@ -114,9 +114,10 @@ func TestTestSource_BuildsOneMarkedRecordAndNothingReal(t *testing.T) {
 		resourceLogs, record := buildTestRecord(t, includeSensitiveData)
 		require.Equal(t, "gram-server", otlpAttributes(resourceLogs.GetResource().GetAttributes())["service.name"].GetStringValue())
 
-		require.Equal(t, "speakeasy.mcp_connection.test", record.GetEventName())
+		require.Equal(t, "speakeasy.test_event", record.GetEventName())
 		require.Equal(t, logsv1.SeverityNumber_SEVERITY_NUMBER_INFO, record.GetSeverityNumber())
-		require.Nil(t, record.GetBody())
+		// The marked test message is kept even where sensitive data is excluded.
+		require.Equal(t, "Speakeasy test event: this is not real data.", record.GetBody().GetStringValue())
 		attrs := otlpAttributes(record.GetAttributes())
 		require.True(t, attrs["speakeasy.test_event"].GetBoolValue())
 		require.Equal(t, "0b1e5f8a-3c2d-4e6f-9a7b-1c2d3e4f5a6b", attrs["speakeasy.test_event.id"].GetStringValue())
@@ -172,6 +173,6 @@ func TestTestSource_SendsThroughTheRouteTester(t *testing.T) {
 	require.True(t, resource["speakeasy.test_event"].GetBoolValue())
 	require.Equal(t, "gram-server", resource["service.name"].GetStringValue())
 	record := request.GetResourceLogs()[0].GetScopeLogs()[0].GetLogRecords()[0]
-	require.Equal(t, "speakeasy.mcp_connection.test", record.GetEventName())
+	require.Equal(t, "speakeasy.test_event", record.GetEventName())
 	require.Equal(t, destination.TestEventID, otlpAttributes(record.GetAttributes())["speakeasy.test_event.id"].GetStringValue())
 }

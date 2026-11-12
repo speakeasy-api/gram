@@ -20,6 +20,7 @@ import (
 	collectortracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	logsv1 "go.opentelemetry.io/proto/otlp/logs/v1"
+	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
@@ -40,7 +41,7 @@ func (s *stubRouteTestSource) DataSource() string { return s.dataSource }
 func (s *stubRouteTestSource) BuildTestRequests(context.Context, dataexports.TestDestination) ([]RouteTestRequest, error) {
 	requests := make([]RouteTestRequest, len(s.signals))
 	for i, signal := range s.signals {
-		requests[i] = RouteTestRequest{Signal: signal, Message: &collectorlogsv1.ExportLogsServiceRequest{ResourceLogs: nil}, MaxBytes: 0}
+		requests[i] = RouteTestRequest{Signal: signal, Message: &collectorlogsv1.ExportLogsServiceRequest{ResourceLogs: nil}}
 	}
 	return requests, nil
 }
@@ -313,18 +314,15 @@ func TestToolCallLogTestSource_UsesTheToolCallEnvelopeAndATestName(t *testing.T)
 
 		require.Equal(t, toolCallLogServiceName, otlpAttributeMap(resourceLogs.GetResource().GetAttributes())["service.name"].GetStringValue())
 		require.Equal(t, toolCallLogScopeName, scopeLogs.GetScope().GetName())
-		require.Equal(t, "gram.tool_call.test", record.GetEventName())
-		require.NotEqual(t, toolCallLogEventName, record.GetEventName())
+		require.Equal(t, "speakeasy.test_event", record.GetEventName())
 		require.Equal(t, logsv1.SeverityNumber_SEVERITY_NUMBER_INFO, record.GetSeverityNumber())
 		requireTestMarks(t, record.GetAttributes())
 		attrs := otlpAttributeMap(record.GetAttributes())
 		require.NotContains(t, attrs, "gen_ai.tool.name")
 		require.NotContains(t, attrs, "gen_ai.tool.call.id")
-		if includeSensitiveData {
-			require.Equal(t, TestEventMessage, record.GetBody().GetStringValue())
-		} else {
-			require.Equal(t, redactedSensitiveDataValue, record.GetBody().GetStringValue())
-		}
+		require.NotContains(t, attrs, "gram.telemetry_log.id", "a test row has no telemetry_logs row")
+		// The test message is kept even where sensitive data is excluded.
+		require.Equal(t, TestEventMessage, record.GetBody().GetStringValue())
 	}
 }
 
@@ -336,9 +334,8 @@ func TestRiskFindingTestSource_UsesTheRiskFindingEnvelopeAndATestName(t *testing
 
 	require.Equal(t, "gram", otlpAttributeMap(resourceLogs.GetResource().GetAttributes())["service.name"].GetStringValue())
 	require.Equal(t, riskFindingScopeName, scopeLogs.GetScope().GetName())
-	require.Equal(t, "gram.risk.finding.test", record.GetEventName())
-	require.NotEqual(t, riskFindingEventName, record.GetEventName())
-	require.False(t, strings.HasPrefix(record.GetEventName(), riskFindingEventName))
+	require.Equal(t, "speakeasy.test_event", record.GetEventName())
+	require.False(t, strings.HasPrefix(record.GetEventName(), "gram.risk.finding"))
 	require.Equal(t, logsv1.SeverityNumber_SEVERITY_NUMBER_INFO, record.GetSeverityNumber())
 	require.Equal(t, TestEventMessage, record.GetBody().GetStringValue())
 	requireTestMarks(t, record.GetAttributes())
@@ -361,11 +358,7 @@ func TestProductTelemetryTestSource_SendsOneMarkedLogSpanAndMetric(t *testing.T)
 		require.Equal(t, "speakeasy.test_event", record.GetEventName())
 		require.Equal(t, logsv1.SeverityNumber_SEVERITY_NUMBER_INFO, record.GetSeverityNumber())
 		requireTestMarks(t, record.GetAttributes())
-		if includeSensitiveData {
-			require.Equal(t, TestEventMessage, record.GetBody().GetStringValue())
-		} else {
-			require.Equal(t, redactedSensitiveDataValue, record.GetBody().GetStringValue())
-		}
+		require.Equal(t, TestEventMessage, record.GetBody().GetStringValue())
 
 		traces, ok := requests[1].Message.(*collectortracev1.ExportTraceServiceRequest)
 		require.True(t, ok)
@@ -385,8 +378,8 @@ func TestProductTelemetryTestSource_SendsOneMarkedLogSpanAndMetric(t *testing.T)
 		require.Equal(t, "speakeasy.test_event", item.GetName())
 		point := requireOne(t, item.GetGauge().GetDataPoints())
 		require.EqualValues(t, 1, point.GetAsInt())
-		require.Len(t, point.GetAttributes(), 2)
-		requireTestMarks(t, point.GetAttributes())
+		require.Len(t, point.GetAttributes(), 1, "no test event ID: it would start a new time series every test")
+		require.True(t, otlpAttributeMap(point.GetAttributes())["speakeasy.test_event"].GetBoolValue())
 	}
 }
 
@@ -409,7 +402,7 @@ func TestRouteTester_MarksEveryRequestOfEverySource(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 
-			_, err := newTestRouteTester(t, unsafeRouteTestPolicy(t)).SendTest(t.Context(), source, routeTestDestination(server.URL, true))
+			_, err := newTestRouteTester(t, unsafeRouteTestPolicy(t)).SendTest(t.Context(), source, routeTestDestination(server.URL, false))
 			require.NoError(t, err)
 
 			registered, ok := dataexports.LookupSource(source)
@@ -441,7 +434,9 @@ func TestRouteTester_MarksEveryRequestOfEverySource(t *testing.T) {
 					resourceMetrics := requireOne(t, request.GetResourceMetrics())
 					require.True(t, otlpAttributeMap(resourceMetrics.GetResource().GetAttributes())["speakeasy.test_event"].GetBoolValue())
 					item := requireOne(t, requireOne(t, resourceMetrics.GetScopeMetrics()).GetMetrics())
-					requireTestMarks(t, requireOne(t, item.GetGauge().GetDataPoints()).GetAttributes())
+					pointAttrs := otlpAttributeMap(requireOne(t, item.GetGauge().GetDataPoints()).GetAttributes())
+					require.True(t, pointAttrs["speakeasy.test_event"].GetBoolValue())
+					require.NotContains(t, pointAttrs, "speakeasy.test_event.id")
 				default:
 					t.Fatalf("unexpected path %s", path)
 				}
@@ -460,7 +455,7 @@ func (s *unmarkedLogSource) DataSource() string { return dataexports.DataSourceM
 func (s *unmarkedLogSource) BuildTestRequests(context.Context, dataexports.TestDestination) ([]RouteTestRequest, error) {
 	return []RouteTestRequest{{Signal: dataexports.SignalLogs, Message: &collectorlogsv1.ExportLogsServiceRequest{ResourceLogs: []*logsv1.ResourceLogs{{
 		ScopeLogs: []*logsv1.ScopeLogs{{LogRecords: []*logsv1.LogRecord{{EventName: "real"}}}},
-	}}}, MaxBytes: 0}}, nil
+	}}}}}, nil
 }
 
 func TestRouteTester_RefusesUnmarkedRecordsAndAMissingID(t *testing.T) {
@@ -482,5 +477,41 @@ func TestRouteTester_RefusesUnmarkedRecordsAndAMissingID(t *testing.T) {
 	destination.TestEventID = ""
 	_, err = tester.SendTest(t.Context(), dataexports.DataSourceRiskFindings, destination)
 	require.ErrorContains(t, err, "test event ID")
+	require.Zero(t, calls.Load())
+}
+
+// partlyUnencodableSource is product telemetry whose metrics request cannot be encoded.
+type partlyUnencodableSource struct{}
+
+var _ RouteTestSource = (*partlyUnencodableSource)(nil)
+
+func (s *partlyUnencodableSource) DataSource() string { return dataexports.DataSourceProductTelemetry }
+
+func (s *partlyUnencodableSource) BuildTestRequests(context.Context, dataexports.TestDestination) ([]RouteTestRequest, error) {
+	return []RouteTestRequest{
+		{Signal: dataexports.SignalLogs, Message: &collectorlogsv1.ExportLogsServiceRequest{}},
+		{Signal: dataexports.SignalTraces, Message: &collectortracev1.ExportTraceServiceRequest{}},
+		{Signal: dataexports.SignalMetrics, Message: &collectormetricsv1.ExportMetricsServiceRequest{ResourceMetrics: []*metricsv1.ResourceMetrics{{
+			ScopeMetrics: []*metricsv1.ScopeMetrics{{Metrics: []*metricsv1.Metric{{Name: "\xff"}}}},
+		}}}},
+	}, nil
+}
+
+func TestRouteTester_SendsNothingWhenARequestCannotBeEncoded(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	sources := []RouteTestSource{newToolCallLogTestSource(), newRiskFindingTestSource(), &partlyUnencodableSource{}, connectionLogStub()}
+	tester, err := NewRouteTester(unsafeRouteTestPolicy(t), sources...)
+	require.NoError(t, err)
+
+	_, err = tester.SendTest(t.Context(), dataexports.DataSourceProductTelemetry, routeTestDestination(server.URL, false))
+	require.ErrorContains(t, err, "encode metrics test")
 	require.Zero(t, calls.Load())
 }

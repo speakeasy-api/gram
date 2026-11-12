@@ -752,7 +752,7 @@ func (s *Service) TestRoute(ctx context.Context, payload *gen.TestRoutePayload) 
 			Signal:     string(signal.Signal),
 			Outcome:    string(signal.Outcome),
 			StatusCode: conv.PtrEmpty(signal.StatusCode),
-			Message:    conv.PtrEmpty(signal.Message),
+			Message:    signal.Message,
 		}
 	}
 	return &gen.TestDataExportRouteResult{

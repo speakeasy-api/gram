@@ -133820,6 +133820,7 @@ components:
             required:
                 - signal
                 - outcome
+                - message
         TestDetectionRuleMatch:
             type: object
             properties:

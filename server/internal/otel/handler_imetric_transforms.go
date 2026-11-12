@@ -59,6 +59,7 @@ func transformInboundMetric(ctx context.Context, instruments *enrich.Instruments
 	if err != nil {
 		return nil, fmt.Errorf("convert inbound metric: %w", err)
 	}
+	stripMetricTestEventMarks(out)
 
 	enrichments, err := enrich.Metric(ctx, instruments, item, enrichers)
 	if err != nil {

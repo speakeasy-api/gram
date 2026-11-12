@@ -109,7 +109,7 @@ func TestTestRouteMapsDestinationAnswers(t *testing.T) {
 			require.Len(t, result.Signals, 1)
 			require.Equal(t, "logs", result.Signals[0].Signal)
 			require.Equal(t, tc.outcome, result.Signals[0].Outcome)
-			require.Equal(t, tc.message, *result.Signals[0].Message)
+			require.Equal(t, tc.message, result.Signals[0].Message)
 			// One request, no retries, even for a retryable 500.
 			require.EqualValues(t, 1, received.Load())
 
@@ -216,7 +216,7 @@ func TestTestRouteSendsEverySignalForProductTelemetry(t *testing.T) {
 		require.Equal(t, "The destination did not accept every test event. See each signal for details.", result.Message)
 		require.Equal(t, "accepted", result.Signals[0].Outcome)
 		require.Equal(t, "not_found", result.Signals[1].Outcome)
-		require.Equal(t, "No traces endpoint at this address. Check the URL; Speakeasy adds /v1/traces.", *result.Signals[1].Message)
+		require.Equal(t, "No traces endpoint at this address. Check the URL; Speakeasy adds /v1/traces.", result.Signals[1].Message)
 		require.Equal(t, "accepted", result.Signals[2].Outcome)
 		require.Equal(t, http.StatusAccepted, *result.Signals[2].StatusCode)
 		require.EqualValues(t, 3, received.Load())
@@ -495,4 +495,23 @@ func TestTestRouteTakesTheWorstSignal(t *testing.T) {
 			require.EqualValues(t, 1, sender.sent.Load())
 		})
 	}
+}
+
+func TestTestRouteUsesTheSingleSignalMessageWhenEverySignalFailsAlike(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	route := createTestableRoute(t, ctx, ti, "https://collector.example.com", dataexports.DataSourceProductTelemetry)
+	sender := &fixedTestSender{status: 0, results: map[dataexports.Signal]dataexports.SignalTestResult{
+		dataexports.SignalLogs:    {Signal: dataexports.SignalLogs, StatusCode: 0, Unreachable: true},
+		dataexports.SignalTraces:  {Signal: dataexports.SignalTraces, StatusCode: 0, Unreachable: true},
+		dataexports.SignalMetrics: {Signal: dataexports.SignalMetrics, StatusCode: 0, Unreachable: true},
+	}}
+	core := dataexports.NewRouteTestCore(testenv.NewLogger(t), ti.conn, audit.NewLogger(), ti.enc, sender, routeTestLimits(t, dataexports.RouteTestsPerMinute, dataexports.RouteTestsPerOrganizationPerMinute))
+	require.NotNil(t, core)
+
+	result, err := core.SendTest(ctx, routeTestParams(t, ctx, route.ID))
+	require.NoError(t, err)
+	require.Equal(t, dataexports.TestOutcomeUnreachable, result.Outcome)
+	require.Equal(t, "Speakeasy could not reach the destination. Check the URL, and that the address accepts connections from the internet.", result.Message)
 }

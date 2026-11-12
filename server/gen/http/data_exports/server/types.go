@@ -2124,7 +2124,7 @@ type TestDataExportRouteSignalResultResponseBody struct {
 	// HTTP status the destination answered with. Omitted when it did not answer.
 	StatusCode *int `form:"status_code,omitempty" json:"status_code,omitempty" xml:"status_code,omitempty"`
 	// What happened, in plain language.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	Message string `form:"message" json:"message" xml:"message"`
 }
 
 // CreateOtelDestinationInputRequestBody is used to define fields on request

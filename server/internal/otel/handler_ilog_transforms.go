@@ -78,6 +78,7 @@ func transformInboundLog(ctx context.Context, instruments *enrich.Instruments, r
 	// before the pipeline writes its own, so the scope rewrite below and
 	// the enrichers after it leave exactly one copy of each key.
 	dropReservedLogAttributes(out)
+	stripLogTestEventMarks(out)
 	if err := rewriteLogInstrumentationScope(out); err != nil {
 		return nil, fmt.Errorf("rewrite instrumentation scope: %w", err)
 	}

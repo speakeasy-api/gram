@@ -53,7 +53,7 @@ func TestSignalRelayDestinationUsesConfiguredSignalEndpoint(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	err = destination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{})
+	_, err = destination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}, 0)
 
 	require.NoError(t, err)
 	require.NoError(t, requestReadErr)
@@ -173,8 +173,10 @@ func TestSignalRelayRoutesSameOrganizationProjectsIndependently(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, first.includeSensitiveData)
 	require.True(t, second.includeSensitiveData)
-	require.NoError(t, first.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}))
-	require.NoError(t, second.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}))
+	_, err = first.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}, 0)
+	require.NoError(t, err)
+	_, err = second.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}, 0)
+	require.NoError(t, err)
 	require.Equal(t, "/v1/logs|first", <-firstRequests)
 	require.Equal(t, "/v1/logs|second", <-secondRequests)
 }
@@ -353,8 +355,10 @@ func TestSignalRelayDestinationDrainsFailedResponses(t *testing.T) {
 	destination, err := relay.newDestination(relayTestRouteKey("organization-id", testLogProjectID), server.URL, nil, false)
 	require.NoError(t, err)
 
-	require.Error(t, destination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}))
-	require.Error(t, destination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}))
+	_, err = destination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}, 0)
+	require.Error(t, err)
+	_, err = destination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}, 0)
+	require.Error(t, err)
 	require.Equal(t, int64(1), newConnections.Load())
 }
 
@@ -381,7 +385,7 @@ func TestSignalRelayDestinationSanitizesResponseDiagnostics(t *testing.T) {
 	permanentDestination, err := permanentRelay.newDestination(relayTestRouteKey("organization-id", testLogProjectID), server.URL, nil, true)
 	require.NoError(t, err)
 
-	err = permanentDestination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{})
+	_, err = permanentDestination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}, 0)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "line one line two ")
 	require.NotContains(t, err.Error(), "\n")
@@ -391,7 +395,7 @@ func TestSignalRelayDestinationSanitizesResponseDiagnostics(t *testing.T) {
 	retryableDestination, err := retryableRelay.newDestination(relayTestRouteKey("organization-id", testLogProjectID), server.URL, nil, true)
 	require.NoError(t, err)
 
-	err = retryableDestination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{})
+	_, err = retryableDestination.export(t.Context(), &collectortracev1.ExportTraceServiceRequest{}, 0)
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "provider-secret-marker")
 }

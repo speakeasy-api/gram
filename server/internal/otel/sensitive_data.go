@@ -6,6 +6,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 )
 
@@ -18,7 +19,9 @@ func redactSensitiveOTLP(message proto.Message) {
 
 	switch value := message.(type) {
 	case *logsv1.LogRecord:
-		redactUnkeyedLogBody(value.GetBody())
+		if !isTestEventLogBody(value) {
+			redactUnkeyedLogBody(value.GetBody())
+		}
 	case *commonv1.KeyValue:
 		if dialect.IsSensitiveDataKey(value.GetKey()) {
 			value.Value = &commonv1.AnyValue{
@@ -77,4 +80,19 @@ func redactUnkeyedLogBody(value *commonv1.AnyValue) {
 	default:
 		value.Value = &commonv1.AnyValue_StringValue{StringValue: redactedSensitiveDataValue}
 	}
+}
+
+// isTestEventLogBody reports a data export test's own message, which carries
+// nothing sensitive. Producers cannot send the marker, so a real record cannot
+// keep its body this way.
+func isTestEventLogBody(record *logsv1.LogRecord) bool {
+	if record.GetBody().GetStringValue() != TestEventMessage {
+		return false
+	}
+	for _, kv := range record.GetAttributes() {
+		if kv.GetKey() == string(attr.TestEventKey) {
+			return kv.GetValue().GetBoolValue()
+		}
+	}
+	return false
 }

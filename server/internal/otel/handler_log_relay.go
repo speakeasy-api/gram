@@ -213,7 +213,7 @@ func (h *LogRelayHandler) deliver(ctx context.Context, relay *signalRelay, messa
 	exportGroup.SetLimit(logRelayExportConcurrency)
 	for _, item := range deliveries {
 		exportGroup.Go(func() error {
-			if _, err := item.destination.exportWithLimit(ctx, item.batch.message, maxLogRelayExportBytes); err != nil {
+			if _, err := item.destination.export(ctx, item.batch.message, maxLogRelayExportBytes); err != nil {
 				reason := relayReasonNetworkError
 				retryable := true
 				if exportErr, ok := errors.AsType[*relayExportError](err); ok && exportErr != nil {

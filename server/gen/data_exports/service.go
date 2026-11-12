@@ -262,7 +262,7 @@ type TestDataExportRouteSignalResult struct {
 	// HTTP status the destination answered with. Omitted when it did not answer.
 	StatusCode *int
 	// What happened, in plain language.
-	Message *string
+	Message string
 }
 
 // TestRoutePayload is the payload type of the dataExports service testRoute

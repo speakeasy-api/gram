@@ -45,12 +45,12 @@ func (s *Sink) Close() { s.logs.Close() }
 // builds real records. It never publishes.
 type TestSource struct {
 	records  *otelpub.RecordBuilder
-	requests *otelsvc.ConnectionLogTestRequests
+	requests *otelsvc.ConnectionLogTestRequestBuilder
 }
 
 var _ otelsvc.RouteTestSource = (*TestSource)(nil)
 
-func NewTestSource(requests *otelsvc.ConnectionLogTestRequests, serviceName string) *TestSource {
+func NewTestSource(requests *otelsvc.ConnectionLogTestRequestBuilder, serviceName string) *TestSource {
 	return &TestSource{records: otelpub.NewRecordBuilder(connectionLogResource(serviceName), dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource)), requests: requests}
 }
 

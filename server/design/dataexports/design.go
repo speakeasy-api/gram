@@ -386,5 +386,5 @@ var TestDataExportRouteSignalResult = Type("TestDataExportRouteSignalResult", fu
 	})
 	Attribute("status_code", Int, "HTTP status the destination answered with. Omitted when it did not answer.")
 	Attribute("message", String, "What happened, in plain language.")
-	Required("signal", "outcome")
+	Required("signal", "outcome", "message")
 })

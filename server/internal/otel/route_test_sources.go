@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	otelattr "go.opentelemetry.io/otel/attribute"
@@ -31,12 +30,6 @@ import (
 )
 
 const (
-	toolCallLogTestEventName = "gram.tool_call.test"
-	riskFindingTestEventName = "gram.risk.finding.test"
-
-	// productTelemetryTestName is the log event, span and metric name of a product telemetry test.
-	productTelemetryTestName = "speakeasy.test_event"
-
 	// toolCallLogServiceName is the service.name telemetry.Logger stamps on tool call rows.
 	toolCallLogServiceName = "gram-server"
 
@@ -54,7 +47,7 @@ func NewRouteTestSources(logger *slog.Logger, meterProvider metric.MeterProvider
 	}
 }
 
-// testMarks are the attributes every test record, span and data point carries.
+// testMarks are the attributes every test log record and span carries.
 func testMarks(testEventID string) []otelattr.KeyValue {
 	return []otelattr.KeyValue{attr.TestEvent(true), attr.TestEventID(testEventID)}
 }
@@ -102,14 +95,14 @@ func (s *toolCallLogTestSource) BuildTestRequests(_ context.Context, destination
 	if err != nil {
 		return nil, fmt.Errorf("encode tool call log test attributes: %w", err)
 	}
-	resourceAttributes, err := json.Marshal(map[string]any{string(attr.ServiceNameKey): toolCallLogServiceName, string(attr.TestEventKey): true})
+	resourceAttributes, err := json.Marshal(map[string]any{string(attr.ServiceNameKey): toolCallLogServiceName})
 	if err != nil {
 		return nil, fmt.Errorf("encode tool call log test resource: %w", err)
 	}
 
 	now := s.now().UTC()
+	// No Id: a test row has no telemetry_logs row to name.
 	row := (&telemetryv1.LogRecord_builder{
-		Id:                     new(uuid.NewString()),
 		TimeUnixNano:           new(now.UnixNano()),
 		ObservedTimeUnixNano:   new(now.UnixNano()),
 		SeverityText:           new("INFO"),
@@ -127,11 +120,11 @@ func (s *toolCallLogTestSource) BuildTestRequests(_ context.Context, destination
 		return nil, errors.New("tool call log test record routes to another project")
 	}
 
-	request, err := buildToolCallLogRelayExport([]toolCallLogRelayMessage{{record: row, fail: nil}}, toolCallLogTestEventName, now, destination.IncludeSensitiveData)
+	request, err := buildToolCallLogRelayExport([]toolCallLogRelayMessage{{record: row, fail: nil}}, TestEventName, now, destination.IncludeSensitiveData)
 	if err != nil {
 		return nil, fmt.Errorf("build tool call log test export: %w", err)
 	}
-	return []RouteTestRequest{{Signal: dataexports.SignalLogs, Message: request, MaxBytes: maxLogRelayExportBytes}}, nil
+	return []RouteTestRequest{{Signal: dataexports.SignalLogs, Message: request}}, nil
 }
 
 // riskFindingTestSource builds a finding-shaped record with no finding in it, in
@@ -165,15 +158,16 @@ func (s *riskFindingTestSource) BuildTestRequests(_ context.Context, destination
 		Flags:                  0,
 		TraceId:                nil,
 		SpanId:                 nil,
-		EventName:              riskFindingTestEventName,
+		EventName:              TestEventName,
 	}
-	return []RouteTestRequest{{Signal: dataexports.SignalLogs, Message: buildRiskFindingRelayExport([]*logsv1.LogRecord{record}), MaxBytes: maxLogRelayExportBytes}}, nil
+	return []RouteTestRequest{{Signal: dataexports.SignalLogs, Message: buildRiskFindingRelayExport([]*logsv1.LogRecord{record})}}, nil
 }
 
 // productTelemetryTestSource sends what a producer would send to the OTLP ingest
 // endpoints: one log, one span and one metric. Each goes through the ingest
 // conversion, the transform with tenancy enrichment only, and its relay's
-// request builder.
+// request builder. The test marks are added after the transform, which strips
+// any a producer sends.
 type productTelemetryTestSource struct {
 	instruments *enrich.Instruments
 	now         func() time.Time
@@ -231,7 +225,7 @@ func (s *productTelemetryTestSource) logRequest(ctx context.Context, destination
 				Flags:                  0,
 				TraceId:                nil,
 				SpanId:                 nil,
-				EventName:              productTelemetryTestName,
+				EventName:              TestEventName,
 			}},
 			SchemaUrl: "",
 		}},
@@ -252,21 +246,12 @@ func (s *productTelemetryTestSource) logRequest(ctx context.Context, destination
 	if err := ValidateInboundLogRecord(inbound[0]); err != nil {
 		return empty, fmt.Errorf("validate product telemetry test log: %w", err)
 	}
-	record, err := transformInboundLog(ctx, s.instruments, inbound[0], []enrich.LogEnricher{enrich.NewLogTenancy()})
-	if err != nil {
-		return empty, fmt.Errorf("transform product telemetry test log: %w", err)
-	}
-	if isConnectionLogRecord(record) || logOriginalScopeName(record) == dialect.GatewayLogScope {
-		return empty, errors.New("product telemetry test log would not reach the product telemetry route")
-	}
-	if err := applyLogEnrichments(record, testMarks(destination.TestEventID)); err != nil {
-		return empty, fmt.Errorf("mark product telemetry test log: %w", err)
-	}
-	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{record}, destination.IncludeSensitiveData)
-	if err != nil {
-		return empty, fmt.Errorf("build product telemetry test log export: %w", err)
-	}
-	return RouteTestRequest{Signal: dataexports.SignalLogs, Message: request, MaxBytes: maxLogRelayExportBytes}, nil
+	return buildTestLogRequest(ctx, s.instruments, inbound[0], destination, func(record *otelv1.LogRecord) error {
+		if isConnectionLogRecord(record) || logOriginalScopeName(record) == dialect.GatewayLogScope {
+			return errors.New("product telemetry test log would not reach the product telemetry route")
+		}
+		return nil
+	})
 }
 
 func (s *productTelemetryTestSource) traceRequest(ctx context.Context, destination dataexports.TestDestination, now time.Time) (RouteTestRequest, error) {
@@ -282,7 +267,7 @@ func (s *productTelemetryTestSource) traceRequest(ctx context.Context, destinati
 			Spans: []*tracev1.Span{{
 				TraceId:           traceID,
 				SpanId:            spanID,
-				Name:              productTelemetryTestName,
+				Name:              TestEventName,
 				Kind:              tracev1.Span_SPAN_KIND_INTERNAL,
 				StartTimeUnixNano: uint64(now.UnixNano()),
 				EndTimeUnixNano:   uint64(now.UnixNano()),
@@ -319,7 +304,7 @@ func (s *productTelemetryTestSource) traceRequest(ctx context.Context, destinati
 	if err != nil {
 		return empty, fmt.Errorf("build product telemetry test span export: %w", err)
 	}
-	return RouteTestRequest{Signal: dataexports.SignalTraces, Message: request, MaxBytes: 0}, nil
+	return RouteTestRequest{Signal: dataexports.SignalTraces, Message: request}, nil
 }
 
 func (s *productTelemetryTestSource) metricRequest(ctx context.Context, destination dataexports.TestDestination, now time.Time) (RouteTestRequest, error) {
@@ -329,9 +314,8 @@ func (s *productTelemetryTestSource) metricRequest(ctx context.Context, destinat
 		ScopeMetrics: []*metricsv1.ScopeMetrics{{
 			Scope: nil,
 			Metrics: []*metricsv1.Metric{{
-				Name: productTelemetryTestName,
+				Name: TestEventName,
 				Data: &metricsv1.Metric_Gauge{Gauge: &metricsv1.Gauge{DataPoints: []*metricsv1.NumberDataPoint{{
-					Attributes:   otlpTestMarks(destination.TestEventID),
 					TimeUnixNano: uint64(now.UnixNano()),
 					Value:        &metricsv1.NumberDataPoint_AsInt{AsInt: 1},
 				}}}},
@@ -361,41 +345,57 @@ func (s *productTelemetryTestSource) metricRequest(ctx context.Context, destinat
 	if err != nil {
 		return empty, fmt.Errorf("build product telemetry test metric export: %w", err)
 	}
-	return RouteTestRequest{Signal: dataexports.SignalMetrics, Message: request, MaxBytes: maxMetricRelayExportBytes}, nil
-}
-
-// ConnectionLogTestRequests turns a connection test record, built by the
-// connection recorder's sink, into what the connection logs route sends.
-type ConnectionLogTestRequests struct {
-	instruments *enrich.Instruments
-	// enrichers is tenancy only: the directory enricher would add a person.
-	enrichers []enrich.LogEnricher
-}
-
-func NewConnectionLogTestRequests(logger *slog.Logger, meterProvider metric.MeterProvider) *ConnectionLogTestRequests {
-	return &ConnectionLogTestRequests{
-		instruments: enrich.NewInstruments(logger, meterProvider),
-		enrichers:   []enrich.LogEnricher{enrich.NewLogTenancy()},
+	// The data point carries only the marker: an ID would make a new time series every test.
+	for _, resourceMetrics := range request.GetResourceMetrics() {
+		for _, scopeMetrics := range resourceMetrics.GetScopeMetrics() {
+			for _, built := range scopeMetrics.GetMetrics() {
+				for _, point := range built.GetGauge().GetDataPoints() {
+					point.Attributes = append(point.Attributes, otlpTestMarker())
+				}
+			}
+		}
 	}
+	return RouteTestRequest{Signal: dataexports.SignalMetrics, Message: request}, nil
 }
 
-// Build transforms the record, adds the test marker, which a producer may not
-// write, and builds the logs request for the destination.
-func (c *ConnectionLogTestRequests) Build(ctx context.Context, inbound *otelv1.InboundLogRecord, destination dataexports.TestDestination) (RouteTestRequest, error) {
+// buildTestLogRequest runs an inbound test log through the log transform with
+// tenancy enrichment only, checks it reaches the expected route, adds the test
+// marks, which a producer may not write, and builds the logs request.
+func buildTestLogRequest(ctx context.Context, instruments *enrich.Instruments, inbound *otelv1.InboundLogRecord, destination dataexports.TestDestination, routeCheck func(*otelv1.LogRecord) error) (RouteTestRequest, error) {
 	var empty RouteTestRequest
-	record, err := transformInboundLog(ctx, c.instruments, inbound, c.enrichers)
+	// Tenancy only: the directory enricher would add a person.
+	record, err := transformInboundLog(ctx, instruments, inbound, []enrich.LogEnricher{enrich.NewLogTenancy()})
 	if err != nil {
-		return empty, fmt.Errorf("transform connection log test record: %w", err)
+		return empty, fmt.Errorf("transform test log: %w", err)
 	}
-	if !isConnectionLogRecord(record) {
-		return empty, errors.New("connection log test record has the wrong provenance source")
+	if err := routeCheck(record); err != nil {
+		return empty, err
 	}
 	if err := applyLogEnrichments(record, testMarks(destination.TestEventID)); err != nil {
-		return empty, fmt.Errorf("mark connection log test record: %w", err)
+		return empty, fmt.Errorf("mark test log: %w", err)
 	}
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{record}, destination.IncludeSensitiveData)
 	if err != nil {
-		return empty, fmt.Errorf("build connection log test export: %w", err)
+		return empty, fmt.Errorf("build test log export: %w", err)
 	}
-	return RouteTestRequest{Signal: dataexports.SignalLogs, Message: request, MaxBytes: maxLogRelayExportBytes}, nil
+	return RouteTestRequest{Signal: dataexports.SignalLogs, Message: request}, nil
+}
+
+// ConnectionLogTestRequestBuilder turns a connection test record, built by the
+// connection recorder's sink, into what the connection logs route sends.
+type ConnectionLogTestRequestBuilder struct {
+	instruments *enrich.Instruments
+}
+
+func NewConnectionLogTestRequestBuilder(logger *slog.Logger, meterProvider metric.MeterProvider) *ConnectionLogTestRequestBuilder {
+	return &ConnectionLogTestRequestBuilder{instruments: enrich.NewInstruments(logger, meterProvider)}
+}
+
+func (c *ConnectionLogTestRequestBuilder) Build(ctx context.Context, inbound *otelv1.InboundLogRecord, destination dataexports.TestDestination) (RouteTestRequest, error) {
+	return buildTestLogRequest(ctx, c.instruments, inbound, destination, func(record *otelv1.LogRecord) error {
+		if !isConnectionLogRecord(record) {
+			return errors.New("connection log test record has the wrong provenance source")
+		}
+		return nil
+	})
 }

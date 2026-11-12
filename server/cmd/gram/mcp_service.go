@@ -83,7 +83,7 @@ func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord]) m
 
 // newDataExportRouteTester composes a test source for every data export source.
 func newDataExportRouteTester(logger *slog.Logger, meterProvider metric.MeterProvider, policy *guardian.Policy) (*otelsvc.RouteTester, error) {
-	sources := append(otelsvc.NewRouteTestSources(logger, meterProvider), otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequests(logger, meterProvider), gatewayRecordsServiceName))
+	sources := append(otelsvc.NewRouteTestSources(logger, meterProvider), otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequestBuilder(logger, meterProvider), gatewayRecordsServiceName))
 	tester, err := otelsvc.NewRouteTester(policy, sources...)
 	if err != nil {
 		return nil, fmt.Errorf("compose data export route tester: %w", err)

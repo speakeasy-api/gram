@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
@@ -16,23 +16,32 @@ import (
 
 const routeTestSignalTimeout = 5 * time.Second
 
-// TestEventMessage is the body or message of every test record. Its prefix
-// is how a person reading a destination tells a test from real data.
-const TestEventMessage = "Speakeasy test event: this is not real data."
+const (
+	// TestEventMessage is the body of every test log. Its prefix is how a
+	// person reading a destination tells a test from real data.
+	TestEventMessage = "Speakeasy test event: this is not real data."
 
-// routeTestSignalPaths is where each signal goes, as the relays send it.
-var routeTestSignalPaths = map[dataexports.Signal]string{
-	dataexports.SignalLogs:    "/v1/logs",
-	dataexports.SignalTraces:  "/v1/traces",
-	dataexports.SignalMetrics: "/v1/metrics",
+	// TestEventName is the event name of every test log, and the span and metric name.
+	TestEventName = "speakeasy.test_event"
+)
+
+// routeTestSignal is where a signal goes and its size limit, as its relay sends it.
+type routeTestSignal struct {
+	path     string
+	maxBytes int
+}
+
+var routeTestSignals = map[dataexports.Signal]routeTestSignal{
+	dataexports.SignalLogs:    {path: "/v1/logs", maxBytes: maxLogRelayExportBytes},
+	dataexports.SignalTraces:  {path: "/v1/traces", maxBytes: 0},
+	dataexports.SignalMetrics: {path: "/v1/metrics", maxBytes: maxMetricRelayExportBytes},
 }
 
 // RouteTestRequest is the OTLP export a test sends for one signal, already
 // redacted for its destination.
 type RouteTestRequest struct {
-	Signal   dataexports.Signal
-	Message  proto.Message
-	MaxBytes int
+	Signal  dataexports.Signal
+	Message proto.Message
 }
 
 // RouteTestSource builds the test event for one data export source. It builds
@@ -61,7 +70,7 @@ func NewRouteTester(policy *guardian.Policy, sources ...RouteTestSource) (*Route
 		return nil, errors.New("route tester needs an outbound policy")
 	}
 	tester := &RouteTester{
-		relays:  make(map[dataexports.Signal]*signalRelay, len(routeTestSignalPaths)),
+		relays:  make(map[dataexports.Signal]*signalRelay, len(routeTestSignals)),
 		sources: make(map[string]RouteTestSource, len(sources)),
 	}
 	for _, source := range sources {
@@ -85,11 +94,11 @@ func NewRouteTester(policy *guardian.Policy, sources ...RouteTestSource) (*Route
 			if _, ok := tester.relays[signal]; ok {
 				continue
 			}
-			path, ok := routeTestSignalPaths[signal]
+			spec, ok := routeTestSignals[signal]
 			if !ok {
 				return nil, fmt.Errorf("data export signal %q has no OTLP path", signal)
 			}
-			relay := newSignalRelay(nil, nil, policy, "", path, string(signal)+" test")
+			relay := newSignalRelay(nil, nil, policy, "", spec.path, string(signal)+" test")
 			relay.maxRetries = 0
 			relay.timeout = routeTestSignalTimeout
 			tester.relays[signal] = relay
@@ -99,8 +108,9 @@ func NewRouteTester(policy *guardian.Policy, sources ...RouteTestSource) (*Route
 }
 
 // SendTest sends one test request per signal the source exports and returns a
-// result for each, in registry order. A destination that answers or cannot be
-// reached is a result; anything else is an error.
+// result for each, in registry order. Everything that can fail before sending
+// is checked first, so once anything is sent every signal gets a status or is
+// unreachable.
 func (t *RouteTester) SendTest(ctx context.Context, sourceName string, destination dataexports.TestDestination) ([]dataexports.SignalTestResult, error) {
 	registered, ok := dataexports.LookupSource(sourceName)
 	source, built := t.sources[sourceName]
@@ -114,11 +124,6 @@ func (t *RouteTester) SendTest(ctx context.Context, sourceName string, destinati
 	if err != nil {
 		return nil, fmt.Errorf("build %s test requests: %w", sourceName, err)
 	}
-	for _, request := range requests {
-		if err := markTestRequest(request.Message, destination.TestEventID); err != nil {
-			return nil, fmt.Errorf("mark %s %s test request: %w", sourceName, request.Signal, err)
-		}
-	}
 	signals := make([]dataexports.Signal, len(requests))
 	for i, request := range requests {
 		signals[i] = request.Signal
@@ -127,46 +132,46 @@ func (t *RouteTester) SendTest(ctx context.Context, sourceName string, destinati
 		return nil, fmt.Errorf("%s test requests are for %v, the registry lists %v", sourceName, signals, registered.Signals)
 	}
 
-	results := make([]dataexports.SignalTestResult, len(requests))
-	errs := make([]error, len(requests))
-	var group errgroup.Group
+	type preparedSend struct {
+		target *relayDestination
+		body   []byte
+	}
+	prepared := make([]preparedSend, len(requests))
 	for i, request := range requests {
-		group.Go(func() error {
-			results[i], errs[i] = t.send(ctx, request, destination)
-			return nil
+		if err := markTestRequest(request.Message, destination.TestEventID); err != nil {
+			return nil, fmt.Errorf("mark %s %s test request: %w", sourceName, request.Signal, err)
+		}
+		relay, ok := t.relays[request.Signal]
+		if !ok {
+			return nil, fmt.Errorf("no relay for %s test", request.Signal)
+		}
+		target, err := relay.newDestination(relayRouteKey{organizationID: destination.OrganizationID, projectID: destination.ProjectID}, destination.EndpointURL, destination.Headers, destination.IncludeSensitiveData)
+		if err != nil {
+			return nil, fmt.Errorf("build %s test destination: %w", request.Signal, err)
+		}
+		defer closeIdleRelayDestination(target)
+		body, err := target.marshalExport(request.Message, routeTestSignals[request.Signal].maxBytes)
+		if err != nil {
+			return nil, fmt.Errorf("encode %s test: %w", request.Signal, err)
+		}
+		prepared[i] = preparedSend{target: target, body: body}
+	}
+
+	results := make([]dataexports.SignalTestResult, len(requests))
+	var wg sync.WaitGroup
+	for i, request := range requests {
+		wg.Go(func() {
+			results[i] = sendTestRequest(ctx, request.Signal, prepared[i].target, prepared[i].body)
 		})
 	}
-	_ = group.Wait()
-	if err := errors.Join(errs...); err != nil {
-		return nil, err
-	}
+	wg.Wait()
 	return results, nil
 }
 
-func (t *RouteTester) send(ctx context.Context, request RouteTestRequest, destination dataexports.TestDestination) (dataexports.SignalTestResult, error) {
-	result := dataexports.SignalTestResult{Signal: request.Signal, StatusCode: 0, Unreachable: false}
-	relay, ok := t.relays[request.Signal]
-	if !ok {
-		return result, fmt.Errorf("no relay for %s test", request.Signal)
-	}
-	target, err := relay.newDestination(relayRouteKey{organizationID: destination.OrganizationID, projectID: destination.ProjectID}, destination.EndpointURL, destination.Headers, destination.IncludeSensitiveData)
-	if err != nil {
-		return result, fmt.Errorf("build %s test destination: %w", request.Signal, err)
-	}
-	defer closeIdleRelayDestination(target)
-
+// sendTestRequest posts one encoded test. Without an answer the destination is unreachable.
+func sendTestRequest(ctx context.Context, signal dataexports.Signal, target *relayDestination, body []byte) dataexports.SignalTestResult {
 	ctx, cancel := context.WithTimeout(ctx, routeTestSignalTimeout)
 	defer cancel()
-	result.StatusCode, err = target.exportWithLimit(ctx, request.Message, request.MaxBytes)
-	if result.StatusCode != 0 {
-		return result, nil
-	}
-	if exportErr, ok := errors.AsType[*relayExportError](err); ok && exportErr.reason == relayReasonNetworkError {
-		result.Unreachable = true
-		return result, nil
-	}
-	if err == nil {
-		return result, fmt.Errorf("%s test got no status and no error", request.Signal)
-	}
-	return result, fmt.Errorf("send %s test: %w", request.Signal, err)
+	statusCode, _ := target.sendExport(ctx, body)
+	return dataexports.SignalTestResult{Signal: signal, StatusCode: statusCode, Unreachable: statusCode == 0}
 }

@@ -16,8 +16,9 @@ import (
 )
 
 // markTestRequest puts the test marker on every resource of a built request,
-// so backends that tag by resource see it, and refuses a request with a
-// record, span or data point that lacks the test marks.
+// so backends that tag by resource see it. It refuses a log record or span
+// without both test marks, and a metric data point without the marker or with
+// an ID, since an ID would start a new time series every test.
 func markTestRequest(message proto.Message, testEventID string) error {
 	switch request := message.(type) {
 	case *collectorlogsv1.ExportLogsServiceRequest:
@@ -48,8 +49,8 @@ func markTestRequest(message proto.Message, testEventID string) error {
 			for _, scopeMetrics := range resourceMetrics.GetScopeMetrics() {
 				for _, item := range scopeMetrics.GetMetrics() {
 					for _, attributes := range metricDataPointAttributes(item) {
-						if !hasTestMarks(attributes, testEventID) {
-							return errors.New("a test metric data point lacks the test marks")
+						if !hasTestMarker(attributes) || hasTestEventID(attributes) {
+							return errors.New("a test metric data point must carry the test marker and no test event ID")
 						}
 					}
 				}
@@ -76,16 +77,33 @@ func markTestResource(resource *resourcev1.Resource) *resourcev1.Resource {
 }
 
 func hasTestMarks(attributes []*commonv1.KeyValue, testEventID string) bool {
-	marked, identified := false, false
+	if !hasTestMarker(attributes) {
+		return false
+	}
 	for _, kv := range attributes {
-		switch kv.GetKey() {
-		case string(attr.TestEventKey):
-			marked = kv.GetValue().GetBoolValue()
-		case string(attr.TestEventIDKey):
-			identified = kv.GetValue().GetStringValue() == testEventID
+		if kv.GetKey() == string(attr.TestEventIDKey) {
+			return kv.GetValue().GetStringValue() == testEventID
 		}
 	}
-	return marked && identified
+	return false
+}
+
+func hasTestMarker(attributes []*commonv1.KeyValue) bool {
+	for _, kv := range attributes {
+		if kv.GetKey() == string(attr.TestEventKey) {
+			return kv.GetValue().GetBoolValue()
+		}
+	}
+	return false
+}
+
+func hasTestEventID(attributes []*commonv1.KeyValue) bool {
+	for _, kv := range attributes {
+		if kv.GetKey() == string(attr.TestEventIDKey) {
+			return true
+		}
+	}
+	return false
 }
 
 // metricDataPointAttributes returns the attributes of every data point in a metric.

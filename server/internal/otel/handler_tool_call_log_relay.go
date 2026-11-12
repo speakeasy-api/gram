@@ -241,7 +241,7 @@ func (h *ToolCallLogRelayHandler) handleGroups(ctx context.Context, groups []too
 	exportGroup.SetLimit(logRelayExportConcurrency)
 	for _, item := range deliveries {
 		exportGroup.Go(func() error {
-			if _, err := item.destination.exportWithLimit(ctx, item.batch.message, maxLogRelayExportBytes); err != nil {
+			if _, err := item.destination.export(ctx, item.batch.message, maxLogRelayExportBytes); err != nil {
 				reason := relayReasonNetworkError
 				retryable := true
 				if exportErr, ok := errors.AsType[*relayExportError](err); ok && exportErr != nil {
@@ -374,7 +374,9 @@ func toolCallLogRecord(record *telemetryv1.LogRecord, eventName string, observed
 	// The ClickHouse row id is the ledger's dedupe key, and this relay is
 	// at-least-once, so it travels with the record for destinations that want
 	// to collapse redeliveries.
-	attributes[string(attr.TelemetryLogIDKey)] = record.GetId()
+	if id := record.GetId(); id != "" {
+		attributes[string(attr.TelemetryLogIDKey)] = id
+	}
 
 	observedTimeUnixNano := record.GetObservedTimeUnixNano()
 	if observedTimeUnixNano <= 0 {

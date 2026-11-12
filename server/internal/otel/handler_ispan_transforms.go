@@ -78,6 +78,7 @@ func transformInboundSpan(ctx context.Context, instruments *enrich.Instruments, 
 	// before the pipeline writes its own, so the scope rewrite below and
 	// the enrichers after it leave exactly one copy of each key.
 	dropReservedSpanAttributes(out)
+	stripSpanTestEventMarks(out)
 	if err := rewriteInstrumentationScope(out); err != nil {
 		return nil, fmt.Errorf("rewrite instrumentation scope: %w", err)
 	}

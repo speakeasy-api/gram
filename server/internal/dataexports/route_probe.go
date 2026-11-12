@@ -287,14 +287,18 @@ func summarizeRouteTest(sent []SignalTestResult) RouteTestResult {
 		DataSource:    "",
 		DestinationID: uuid.Nil,
 	}
+	sameOutcome := !slices.ContainsFunc(signals, func(signal SignalTestOutcome) bool { return signal.Outcome != result.Outcome })
 	if len(signals) > 1 {
-		if result.Outcome == TestOutcomeAccepted {
+		switch {
+		case result.Outcome == TestOutcomeAccepted:
 			names := make([]string, len(signals))
 			for i, signal := range signals {
 				names[i] = string(signal.Signal)
 			}
 			result.Message = fmt.Sprintf("The destination accepted the test events for %s.", joinWithAnd(names))
-		} else {
+		case sameOutcome:
+			// Every signal failed the same way, so the worst signal's message speaks for all.
+		default:
 			result.Message = "The destination did not accept every test event. See each signal for details."
 		}
 	}
