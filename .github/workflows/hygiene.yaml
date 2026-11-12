@@ -264,7 +264,9 @@ jobs:
       # An unticked task list item in the PR description is work still owed
       # before merge, such as cleanup or a manual check. Ticking a box edits
       # the description, which re-runs this job. Items inside fenced code
-      # blocks are ignored. It runs last so the other checks report first.
+      # blocks are ignored. A block closes only on a fence of the same
+      # character that is at least as long as the opening one. It runs last
+      # so the other checks report first.
       - name: Require ticked PR description checklist
         if: ${{ github.event_name == 'pull_request' }}
         shell: bash
@@ -273,8 +275,23 @@ jobs:
         run: |
           set -euo pipefail
           unticked=$(printf '%s\n' "${PR_BODY:-}" | tr -d '\r' | awk '
-            /^[[:space:]]*(```|~~~)/ { fenced = !fenced; next }
-            !fenced && /^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]+\[ \]([[:space:]]|$)/ { print }
+            match($0, /^[[:space:]]*(```+|~~~+)/) {
+              marker = substr($0, 1, RLENGTH)
+              sub(/^[[:space:]]*/, "", marker)
+              char = substr(marker, 1, 1)
+              info = substr($0, RLENGTH + 1)
+              if (fence == "") {
+                if (char == "~" || index(info, "`") == 0) {
+                  fence = char
+                  fence_len = length(marker)
+                  next
+                }
+              } else if (char == fence && length(marker) >= fence_len && info ~ /^[[:space:]]*$/) {
+                fence = ""
+                next
+              }
+            }
+            fence == "" && /^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]+\[ \]([[:space:]]|$)/ { print }
           ')
 
           if [[ -z "$unticked" ]]; then
