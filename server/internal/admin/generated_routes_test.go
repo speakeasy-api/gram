@@ -58,6 +58,7 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 		"DeleteGcpIamPlatformCredential":         "POST /admin/externalCredentials.deleteGcpIam",
 		"ListOrganizationAssistants":             "GET /admin/organization.assistants",
 		"MigrateOrganizationAssistantIdentities": "POST /admin/organization.migrateAssistantIdentities",
+		"MigrateOrganizationAssistantsToKit":     "POST /admin/organization.migrateAssistantsToKit",
 	}
 	got := map[string]string{}
 	for _, mount := range server.Mounts {

@@ -84,6 +84,7 @@ import { adminListUsers } from "../funcs/adminListUsers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
 import { adminMigrateOrganizationAssistantIdentities } from "../funcs/adminMigrateOrganizationAssistantIdentities.js";
+import { adminMigrateOrganizationAssistantsToKit } from "../funcs/adminMigrateOrganizationAssistantsToKit.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
 import { adminPromoteRegistryCandidate } from "../funcs/adminPromoteRegistryCandidate.js";
 import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
@@ -118,6 +119,7 @@ import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { adminVerifyGcpIamPlatformCredential } from "../funcs/adminVerifyGcpIamPlatformCredential.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AdminAssistantIdentityMigrationRun } from "../models/components/adminassistantidentitymigrationrun.js";
+import { AdminAssistantKitMigrationRun } from "../models/components/adminassistantkitmigrationrun.js";
 import { AdminBackfillMCPAuthGrantsResult } from "../models/components/adminbackfillmcpauthgrantsresult.js";
 import { AdminBackfillMCPConnectGrantsResult } from "../models/components/adminbackfillmcpconnectgrantsresult.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
@@ -203,6 +205,7 @@ import { ListSignupOffersResponseBody } from "../models/components/listsignupoff
 import { MarkEnterpriseTrialConvertedRequestBody } from "../models/components/markenterprisetrialconvertedrequestbody.js";
 import { MarkEnterpriseTrialConvertedResult } from "../models/components/markenterprisetrialconvertedresult.js";
 import { MigrateOrganizationAssistantIdentitiesRequestBody } from "../models/components/migrateorganizationassistantidentitiesrequestbody.js";
+import { MigrateOrganizationAssistantsToKitRequestBody } from "../models/components/migrateorganizationassistantstokitrequestbody.js";
 import { MigrateRemoteSessionIssuerRequestBody } from "../models/components/migrateremotesessionissuerrequestbody.js";
 import { MigrateRemoteSessionIssuerResult } from "../models/components/migrateremotesessionissuerresult.js";
 import { ProductFeatures } from "../models/components/productfeatures.js";
@@ -954,6 +957,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminAssistantIdentityMigrationRun> {
     return unwrapAsync(adminMigrateOrganizationAssistantIdentities(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * migrateOrganizationAssistantsToKit admin
+   *
+   * @remarks
+   * Moves assistants of one organization from the default runtime to Kit. Only an assistant with a usable dedicated agent, a shared user-session issuer in its project, no work in flight, and no runtime still inside its warm window is switched; its previous runtimes are retired and stopped by the runtime janitor. Every other assistant is left unchanged and reported. Idempotent, so it is safe to run again.
+   */
+  async migrateOrganizationAssistantsToKit(
+    request: MigrateOrganizationAssistantsToKitRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminAssistantKitMigrationRun> {
+    return unwrapAsync(adminMigrateOrganizationAssistantsToKit(
       this,
       request,
       options,

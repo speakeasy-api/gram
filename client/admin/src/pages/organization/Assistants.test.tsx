@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   listOrganizationProjects: vi.fn(),
   listOrganizationAssistants: vi.fn(),
   migrateOrganizationAssistantIdentities: vi.fn(),
+  migrateOrganizationAssistantsToKit: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -24,6 +25,8 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     listOrganizationAssistants: mocks.listOrganizationAssistants,
     migrateOrganizationAssistantIdentities:
       mocks.migrateOrganizationAssistantIdentities,
+    migrateOrganizationAssistantsToKit:
+      mocks.migrateOrganizationAssistantsToKit,
   };
 });
 
@@ -60,6 +63,16 @@ const CONFIGURED = anAssistant({
   identity_state: "ACTIVE",
   runtime_version: 3,
 });
+const KIT_READY = anAssistant({
+  id: "kit-ready",
+  name: "Kit ready assistant",
+  identity_state: "ACTIVE",
+});
+const KIT_BUSY = anAssistant({
+  id: "kit-busy",
+  name: "Busy assistant",
+  identity_state: "ACTIVE",
+});
 
 beforeEach(() => {
   mocks.getSession.mockReset();
@@ -77,7 +90,7 @@ beforeEach(() => {
       organizationID === ORG.id
         ? Promise.resolve({
             organization_id: ORG.id,
-            assistants: [LEGACY, ORPHANED, CONFIGURED],
+            assistants: [LEGACY, ORPHANED, CONFIGURED, KIT_READY, KIT_BUSY],
           })
         : Promise.reject(new Error(`no organization ${organizationID}`)),
   );
@@ -109,6 +122,30 @@ beforeEach(() => {
       },
     ],
   });
+  mocks.migrateOrganizationAssistantsToKit.mockReset();
+  mocks.migrateOrganizationAssistantsToKit.mockResolvedValue({
+    organization_id: ORG.id,
+    switched: 1,
+    already_kit: 0,
+    needs_identity: 0,
+    ineligible: 0,
+    busy: 1,
+    failed: 0,
+    results: [
+      {
+        assistant_id: "kit-ready",
+        project_id: "project-id",
+        name: KIT_READY.name,
+        outcome: "switched",
+      },
+      {
+        assistant_id: "kit-busy",
+        project_id: "project-id",
+        name: KIT_BUSY.name,
+        outcome: "busy",
+      },
+    ],
+  });
 });
 
 afterEach(cleanup);
@@ -130,7 +167,7 @@ describe("Assistants", () => {
     expect(orphaned?.textContent).toContain("None");
     expect(orphaned?.textContent).toContain("(not a member)");
     expect(
-      screen.getByText("3 assistants, 2 without an agent identity"),
+      screen.getByText("5 assistants, 2 without an agent identity"),
     ).toBeTruthy();
   });
 
@@ -172,6 +209,86 @@ describe("Assistants", () => {
       (
         screen.getByRole("button", {
           name: "Migrate to agent identity",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("offers Kit only to assistants with an agent identity on the default runtime", async () => {
+    await renderAssistants();
+    expect(
+      screen.getByRole("button", { name: `Migrate ${KIT_READY.name} to Kit` }),
+    ).toBeTruthy();
+    for (const assistant of [LEGACY, ORPHANED, CONFIGURED]) {
+      expect(
+        screen.queryByRole("button", {
+          name: `Migrate ${assistant.name} to Kit`,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  it("migrates one assistant to Kit after confirmation", async () => {
+    await renderAssistants();
+    fireEvent.click(
+      screen.getByRole("button", { name: `Migrate ${KIT_READY.name} to Kit` }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain(
+      "1 assistant with an agent identity is on the default runtime",
+    );
+    expect(mocks.migrateOrganizationAssistantsToKit).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Migrate to Kit" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Moved to Kit 1, already on Kit 0, needs identity 0, ineligible 0, busy 1, failed 0",
+      ),
+    ).toBeTruthy();
+    expect(mocks.migrateOrganizationAssistantsToKit).toHaveBeenCalledWith(
+      ORG.id,
+      [KIT_READY.id],
+    );
+  });
+
+  it("migrates every eligible assistant to Kit and reports skipped ones", async () => {
+    await renderAssistants();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Migrate eligible to Kit" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain(
+      "2 assistants with an agent identity are on the default runtime",
+    );
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Migrate to Kit" }),
+    );
+
+    expect(
+      await screen.findByText(
+        `${KIT_BUSY.name}: it may still be working; try again once it has been idle a while`,
+      ),
+    ).toBeTruthy();
+    expect(mocks.migrateOrganizationAssistantsToKit).toHaveBeenCalledWith(
+      ORG.id,
+      [KIT_READY.id, KIT_BUSY.id],
+    );
+  });
+
+  it("disables the Kit migration when no assistant is eligible", async () => {
+    mocks.listOrganizationAssistants.mockResolvedValue({
+      organization_id: ORG.id,
+      assistants: [LEGACY, CONFIGURED],
+    });
+    await renderAssistants();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Migrate eligible to Kit",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);

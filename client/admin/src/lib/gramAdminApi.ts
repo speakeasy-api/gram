@@ -715,6 +715,49 @@ export function migrateOrganizationAssistantIdentities(
   );
 }
 
+export type AdminAssistantKitMigrationOutcome =
+  | "switched"
+  | "already_kit"
+  | "needs_identity"
+  | "ineligible"
+  | "busy"
+  | "failed";
+
+export type AdminAssistantKitMigrationRun = {
+  organization_id: string;
+  switched: number;
+  already_kit: number;
+  needs_identity: number;
+  ineligible: number;
+  busy: number;
+  failed: number;
+  results: {
+    assistant_id: string;
+    project_id: string;
+    name: string;
+    outcome: AdminAssistantKitMigrationOutcome;
+  }[];
+};
+
+// Moves the given assistants, or every live assistant of the organization when
+// none are given, to the Kit runtime.
+export function migrateOrganizationAssistantsToKit(
+  organizationID: string,
+  assistantIDs?: string[],
+): Promise<AdminAssistantKitMigrationRun> {
+  return gramAdminMutation<AdminAssistantKitMigrationRun>(
+    "/admin/organization.migrateAssistantsToKit",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: organizationID,
+        assistant_ids: assistantIDs,
+      }),
+    },
+  );
+}
+
 export type AdminMcpServerSource =
   | "toolset"
   | "remote"

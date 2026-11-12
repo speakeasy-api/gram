@@ -58,6 +58,32 @@ var AdminAssistantIdentityMigrationRun = Type("AdminAssistantIdentityMigrationRu
 	Attribute("results", ArrayOf(AdminAssistantIdentityMigrationResult), "One result per live assistant.")
 })
 
+var AdminAssistantKitMigrationResult = Type("AdminAssistantKitMigrationResult", func() {
+	Description("What the Kit runtime migration did to one assistant.")
+	Required("assistant_id", "project_id", "name", "outcome")
+
+	Attribute("assistant_id", String, "The assistant ID.", func() { Format(FormatUUID) })
+	Attribute("project_id", String, "The assistant's project ID.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The assistant name.")
+	Attribute("outcome", String, "switched when the run moved the assistant to Kit, already_kit when it already ran on Kit, needs_identity when it has no usable dedicated agent, ineligible when its project has no shared user-session issuer, busy when it has work in flight or a runtime that may still be finishing a turn, and failed when the switch failed. Running again retries busy and failed assistants.", func() {
+		Enum("switched", "already_kit", "needs_identity", "ineligible", "busy", "failed")
+	})
+})
+
+var AdminAssistantKitMigrationRun = Type("AdminAssistantKitMigrationRun", func() {
+	Description("The result of moving assistants of one organization to the Kit runtime.")
+	Required("organization_id", "switched", "already_kit", "needs_identity", "ineligible", "busy", "failed", "results")
+
+	Attribute("organization_id", String, "The organization ID.")
+	Attribute("switched", Int64, "Assistants the run moved to Kit.")
+	Attribute("already_kit", Int64, "Assistants that already ran on Kit.")
+	Attribute("needs_identity", Int64, "Assistants left on their runtime because they have no usable dedicated agent.")
+	Attribute("ineligible", Int64, "Assistants left on their runtime because their project has no shared user-session issuer.")
+	Attribute("busy", Int64, "Assistants left on their runtime because they may still be working.")
+	Attribute("failed", Int64, "Assistants whose switch failed.")
+	Attribute("results", ArrayOf(AdminAssistantKitMigrationResult), "One result per selected assistant.")
+})
+
 func assistantMethods() {
 	Method("listOrganizationAssistants", func() {
 		Description("Lists every live assistant of one organization with its identity state, runtime, and whether its creator is still a member.")
@@ -109,5 +135,31 @@ func assistantMethods() {
 		Meta("openapi:operationId", "adminMigrateOrganizationAssistantIdentities")
 		Meta("openapi:extension:x-speakeasy-name-override", "migrateOrganizationAssistantIdentities")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminMigrateOrganizationAssistantIdentities"}`)
+	})
+
+	Method("migrateOrganizationAssistantsToKit", func() {
+		Description("Moves assistants of one organization from the default runtime to Kit. Only an assistant with a usable dedicated agent, a shared user-session issuer in its project, no work in flight, and no runtime still inside its warm window is switched; its previous runtimes are retired and stopped by the runtime janitor. Every other assistant is left unchanged and reported. Idempotent, so it is safe to run again.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+
+			Attribute("organization_id", String, "The organization ID.")
+			Attribute("assistant_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Assistants to move. Omit to move every live assistant of the organization.")
+
+			// Goa's OpenAPI emitter deduplicates request bodies by shape.
+			Meta("openapi:typename", "MigrateOrganizationAssistantsToKitRequestBody")
+		})
+
+		Result(AdminAssistantKitMigrationRun)
+
+		HTTP(func() {
+			POST("/admin/organization.migrateAssistantsToKit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminMigrateOrganizationAssistantsToKit")
+		Meta("openapi:extension:x-speakeasy-name-override", "migrateOrganizationAssistantsToKit")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminMigrateOrganizationAssistantsToKit"}`)
 	})
 }

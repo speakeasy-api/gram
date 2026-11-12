@@ -138,6 +138,7 @@ type Server struct {
 	DeleteGcpIamPlatformCredential          http.Handler
 	ListOrganizationAssistants              http.Handler
 	MigrateOrganizationAssistantIdentities  http.Handler
+	MigrateOrganizationAssistantsToKit      http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -284,6 +285,7 @@ func New(
 			{"DeleteGcpIamPlatformCredential", "POST", "/admin/externalCredentials.deleteGcpIam"},
 			{"ListOrganizationAssistants", "GET", "/admin/organization.assistants"},
 			{"MigrateOrganizationAssistantIdentities", "POST", "/admin/organization.migrateAssistantIdentities"},
+			{"MigrateOrganizationAssistantsToKit", "POST", "/admin/organization.migrateAssistantsToKit"},
 		},
 		Login:                                   NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                                NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -402,6 +404,7 @@ func New(
 		DeleteGcpIamPlatformCredential:          NewDeleteGcpIamPlatformCredentialHandler(e.DeleteGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationAssistants:              NewListOrganizationAssistantsHandler(e.ListOrganizationAssistants, mux, decoder, encoder, errhandler, formatter),
 		MigrateOrganizationAssistantIdentities:  NewMigrateOrganizationAssistantIdentitiesHandler(e.MigrateOrganizationAssistantIdentities, mux, decoder, encoder, errhandler, formatter),
+		MigrateOrganizationAssistantsToKit:      NewMigrateOrganizationAssistantsToKitHandler(e.MigrateOrganizationAssistantsToKit, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -527,6 +530,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DeleteGcpIamPlatformCredential = m(s.DeleteGcpIamPlatformCredential)
 	s.ListOrganizationAssistants = m(s.ListOrganizationAssistants)
 	s.MigrateOrganizationAssistantIdentities = m(s.MigrateOrganizationAssistantIdentities)
+	s.MigrateOrganizationAssistantsToKit = m(s.MigrateOrganizationAssistantsToKit)
 }
 
 // MethodNames returns the methods served.
@@ -651,6 +655,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDeleteGcpIamPlatformCredentialHandler(mux, h.DeleteGcpIamPlatformCredential)
 	MountListOrganizationAssistantsHandler(mux, h.ListOrganizationAssistants)
 	MountMigrateOrganizationAssistantIdentitiesHandler(mux, h.MigrateOrganizationAssistantIdentities)
+	MountMigrateOrganizationAssistantsToKitHandler(mux, h.MigrateOrganizationAssistantsToKit)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -6932,6 +6937,60 @@ func NewMigrateOrganizationAssistantIdentitiesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "migrateOrganizationAssistantIdentities")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountMigrateOrganizationAssistantsToKitHandler configures the mux to serve
+// the "admin" service "migrateOrganizationAssistantsToKit" endpoint.
+func MountMigrateOrganizationAssistantsToKitHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.migrateAssistantsToKit", f)
+}
+
+// NewMigrateOrganizationAssistantsToKitHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "migrateOrganizationAssistantsToKit" endpoint.
+func NewMigrateOrganizationAssistantsToKitHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeMigrateOrganizationAssistantsToKitRequest(mux, decoder)
+		encodeResponse = EncodeMigrateOrganizationAssistantsToKitResponse(encoder)
+		encodeError    = EncodeMigrateOrganizationAssistantsToKitError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "migrateOrganizationAssistantsToKit")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {
