@@ -194,9 +194,9 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	if err := insertChat(geminiChatID, jonas, "Gemini: release readiness review", geminiSource, activityNoAgent, activityHours(3), activityHours(2)); err != nil {
 		return err
 	}
-	if err := insertMessages(geminiChatID, []activityMessage{
-		{"gemini-compliance-prompt", "user", "Draft a release readiness checklist for a staged rollout. Include rollback criteria and an owner for each check.", nil, nil, geminiSource, activityText("gemini"), activityHours(3)},
-		{"gemini-compliance-reply", "assistant", "Before rollout: the release owner confirms tests pass, operations checks dashboards, and support reviews the runbook. Start with a small cohort. Pause the rollout if error rates rise; the release owner approves rollback to the previous stable version.", nil, nil, geminiSource, activityText("gemini"), activityHours(2)},
+	if err := s.activityInsertMessages(ctx, geminiChatID, []activityMessage{
+		{"gemini-compliance-prompt", "user", "Draft a release readiness checklist for a staged rollout. Include rollback criteria and an owner for each check.", nil, nil, geminiSource, activityText("gemini"), activityHours(3), activityNull},
+		{"gemini-compliance-reply", "assistant", "Before rollout: the release owner confirms tests pass, operations checks dashboards, and support reviews the runbook. Start with a small cohort. Pause the rollout if error rates rise; the release owner approves rollback to the previous stable version.", nil, nil, geminiSource, activityText("gemini"), activityHours(2), activityNull},
 	}); err != nil {
 		return err
 	}
