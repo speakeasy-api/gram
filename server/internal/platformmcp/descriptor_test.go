@@ -446,6 +446,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		pauseDataExportToolName,
 		resumeDataExportToolName,
 		sendDataExportTestEventToolName,
+		setDataExportMinSeverityToolName,
 		// Changing which tools a server exposes republishes every plugin that
 		// carries it to everyone holding one, so it stays on the surface an
 		// administrator drives directly, like the other distribution writes.

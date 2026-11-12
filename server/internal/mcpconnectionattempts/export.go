@@ -28,9 +28,8 @@ const (
 	// instead of growing memory while Pub/Sub is slow.
 	exportMaxInFlight = 1024
 
-	// minExportSeverity is the lowest severity published. Blocked and declined rows keep their
-	// severity for when a destination can ask for them; until then publishing them is waste.
-	minExportSeverity = log.SeverityError
+	// minExportSeverity is the lowest severity published. The relay drops what is below each route's level.
+	minExportSeverity = log.SeverityInfo
 
 	// defaultExportDrain is how long outstanding publishes may settle at shutdown.
 	defaultExportDrain = 5 * time.Second
@@ -52,9 +51,11 @@ type notExportedReason string
 const (
 	notExportedNoProject notExportedReason = "no_project"
 	notExportedQueueFull notExportedReason = "export_queue_full"
-	notExportedFailed    notExportedReason = "export_failed"
-	notExportedShutdown  notExportedReason = "shutdown"
-	notExportedPanic     notExportedReason = "panic"
+	// notExportedReserved is a row below ERROR shed while the queue nears full, keeping room for errors.
+	notExportedReserved notExportedReason = "queue_reserved_for_errors"
+	notExportedFailed   notExportedReason = "export_failed"
+	notExportedShutdown notExportedReason = "shutdown"
+	notExportedPanic    notExportedReason = "panic"
 )
 
 // ExportSink publishes connection logs. Publish must not wait for the ack: the writer
@@ -128,8 +129,11 @@ func (r *Recorder) exportRows(rows []Row) {
 	if r.exporter == nil {
 		return
 	}
+	// Rows below ERROR stop at about three quarters of the limit, so errors keep the rest.
+	belowErrorLimit := r.exporter.maxInFlight - r.exporter.maxInFlight/4
 	for _, row := range rows {
-		if severity, _, ok := exportSeverity(row); !ok || severity < minExportSeverity {
+		severity, _, ok := exportSeverity(row)
+		if !ok || severity < minExportSeverity {
 			continue
 		}
 		// otelpub requires a project, and org gateways have none.
@@ -138,8 +142,13 @@ func (r *Recorder) exportRows(rows []Row) {
 			continue
 		}
 		// Only the writer adds, so the check and the add do not race.
-		if r.exporter.inFlight.Load() >= r.exporter.maxInFlight {
+		inFlight := r.exporter.inFlight.Load()
+		if inFlight >= r.exporter.maxInFlight {
 			r.countNotExported(row, notExportedQueueFull, nil)
+			continue
+		}
+		if severity < log.SeverityError && inFlight >= belowErrorLimit {
+			r.countNotExported(row, notExportedReserved, nil)
 			continue
 		}
 		r.exportRow(row)

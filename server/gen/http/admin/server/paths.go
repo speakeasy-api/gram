@@ -581,3 +581,23 @@ func VerifyGcpIamPlatformCredentialAdminPath() string {
 func DeleteGcpIamPlatformCredentialAdminPath() string {
 	return "/admin/externalCredentials.deleteGcpIam"
 }
+
+// GetMemoryEvalOptionsAdminPath returns the URL path to the admin service getMemoryEvalOptions HTTP endpoint.
+func GetMemoryEvalOptionsAdminPath() string {
+	return "/admin/memoryEval.options"
+}
+
+// ListMemoryEvalRunsAdminPath returns the URL path to the admin service listMemoryEvalRuns HTTP endpoint.
+func ListMemoryEvalRunsAdminPath() string {
+	return "/admin/memoryEval.runs"
+}
+
+// GetMemoryEvalRunAdminPath returns the URL path to the admin service getMemoryEvalRun HTTP endpoint.
+func GetMemoryEvalRunAdminPath() string {
+	return "/admin/memoryEval.run"
+}
+
+// StartMemoryEvalRunAdminPath returns the URL path to the admin service startMemoryEvalRun HTTP endpoint.
+func StartMemoryEvalRunAdminPath() string {
+	return "/admin/memoryEval.start"
+}

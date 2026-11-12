@@ -128,6 +128,7 @@ type DataExportRouteToggleService struct {
 	db      *pgxpool.Pool
 	queries *platformrepo.Queries
 	core    *dataexports.RouteEnabledCore
+	level   *dataexports.RouteLevelCore
 	// admin re-checks org:admin live, which is what the dashboard's route
 	// update requires, before anything about the target is read.
 	admin   Authorizer
@@ -139,7 +140,7 @@ func NewDataExportRouteToggleService(logger *slog.Logger, db *pgxpool.Pool, core
 	if logger == nil || db == nil || core == nil || admin == nil || !changes.valid() {
 		return nil, ErrDataExportRequestInvalid
 	}
-	return &DataExportRouteToggleService{logger: logger, db: db, queries: platformrepo.New(db), core: core, admin: admin, changes: changes, now: time.Now}, nil
+	return &DataExportRouteToggleService{logger: logger, db: db, queries: platformrepo.New(db), core: core, level: nil, admin: admin, changes: changes, now: time.Now}, nil
 }
 
 func (s *DataExportRouteToggleService) valid() bool {
@@ -373,17 +374,19 @@ func (s *DataExportRouteToggleService) readRoute(ctx context.Context, principal 
 		return nil
 	}
 	for _, row := range rows {
-		if row.ID != routeID {
+		route := row.DataExportRoute
+		if route.ID != routeID {
 			continue
 		}
 		return &DataExportRoute{
-			ID:            row.ID.String(),
+			ID:            route.ID.String(),
 			ProjectID:     project.ID.String(),
 			ProjectName:   project.Name,
 			ProjectSlug:   project.Slug,
-			DataSource:    row.DataSource,
-			Enabled:       row.Enabled,
-			DestinationID: uuidString(row.OtelDestinationID),
+			DataSource:    route.DataSource,
+			Enabled:       route.Enabled,
+			DestinationID: uuidString(route.OtelDestinationID),
+			MinSeverity:   dataexports.RouteMinSeverity(route.DataSource, row.MinSeverity),
 		}
 	}
 	return nil

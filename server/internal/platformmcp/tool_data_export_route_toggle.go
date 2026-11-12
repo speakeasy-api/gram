@@ -83,17 +83,25 @@ type dataExportRefusal struct {
 }
 
 func dataExportToggleToolResult(err error) (*mcp.CallToolResult, bool) {
+	return dataExportRouteToolResult(err, dataExportToggleFeature, "Pausing or resuming data exports is temporarily unavailable.")
+}
+
+func dataExportLevelToolResult(err error) (*mcp.CallToolResult, bool) {
+	return dataExportRouteToolResult(err, dataExportLevelFeature, dataExportLevelUnavailableMessage)
+}
+
+func dataExportRouteToolResult(err error, feature, unavailableMessage string) (*mcp.CallToolResult, bool) {
 	if refusal, ok := externalAuthorizationToolResult(err); ok {
 		return refusal, true
 	}
-	result := dataExportRefusal{Feature: dataExportToggleFeature}
+	result := dataExportRefusal{Feature: feature}
 	var toggle *DataExportRefusalError
 	switch {
 	case errors.As(err, &toggle):
 		result.Code, result.Message = toggle.Code, toggle.Message
 	case errors.Is(err, ErrUnavailable):
 		result.Code = unavailableCode
-		result.Message = "Pausing or resuming data exports is temporarily unavailable."
+		result.Message = unavailableMessage
 	default:
 		return nil, false
 	}
@@ -102,4 +110,33 @@ func dataExportToggleToolResult(err error) (*mcp.CallToolResult, bool) {
 		return nil, false
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}, IsError: true}, true
+}
+
+const setDataExportMinSeverityToolName = operationSetDataExportMinSeverity
+
+// registerDataExportLevelTool keeps the live and unavailable manifests identical.
+func registerDataExportLevelTool(reg *Registrar, service *DataExportRouteToggleService) {
+	handler := func(_ context.Context, _ *mcp.CallToolRequest, _ SetDataExportMinSeverityInput) (*mcp.CallToolResult, SetDataExportMinSeverityOutput, error) {
+		payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: dataExportLevelFeature, Message: "Changing data export levels is not available on this server."})
+		if err != nil {
+			return nil, SetDataExportMinSeverityOutput{}, fmt.Errorf("encode unavailable data export level result: %w", err)
+		}
+		return nil, SetDataExportMinSeverityOutput{}, &ToolRefusalError{Code: unavailableCode, Payload: string(payload)}
+	}
+	if service.levelValid() {
+		handler = func(ctx context.Context, _ *mcp.CallToolRequest, input SetDataExportMinSeverityInput) (*mcp.CallToolResult, SetDataExportMinSeverityOutput, error) {
+			return principalToolCall(ctx, dataExportLevelToolResult, func(principal Principal) (SetDataExportMinSeverityOutput, error) {
+				return service.SetMinSeverity(ctx, principal, input)
+			})
+		}
+	}
+	addTool(reg, &mcp.Tool{
+		Name:  setDataExportMinSeverityToolName,
+		Title: "Set a Data Export's Level",
+		Description: "Change which MCP connections an existing mcp_connection_logs export sends, by setting its lowest level: error sends failed connections, warn adds blocked connections, and info adds declined connections. " +
+			"Supply the project ID and the exact route ID from list_data_exports, the new min_severity, an idempotency key, and confirmed: true only after the user confirms the exact project, route, its current level from list_data_exports, and the new level. " +
+			"Only the level changes: the route's data source, destination, and on/off state stay as they are. Other data sources have no level and are refused as invalid_input. A route already at the requested level is reported as unchanged. " +
+			"The result reports the previous level and the route's committed state. The change reaches the export relays within about a minute; for a destination that includes sensitive fields it applies on the next batch.",
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, handler)
 }

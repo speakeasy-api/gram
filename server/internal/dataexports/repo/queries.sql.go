@@ -118,20 +118,50 @@ func (q *Queries) CreateOtelDestination(ctx context.Context, arg CreateOtelDesti
 	return i, err
 }
 
+const deleteMCPConnectionLogRouteSettings = `-- name: DeleteMCPConnectionLogRouteSettings :exec
+DELETE FROM mcp_connection_log_routes AS settings
+USING data_export_routes AS route
+WHERE settings.organization_id = $1
+  AND settings.project_id = $2
+  AND settings.data_export_route_id = $3
+  AND route.organization_id = settings.organization_id
+  AND route.project_id = settings.project_id
+  AND route.id = settings.data_export_route_id
+  AND route.deleted IS FALSE
+`
+
+type DeleteMCPConnectionLogRouteSettingsParams struct {
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	DataExportRouteID uuid.UUID
+}
+
+// Remove a live route's MCP connection logs settings before its data source
+// changes, which the settings foreign key would otherwise refuse.
+func (q *Queries) DeleteMCPConnectionLogRouteSettings(ctx context.Context, arg DeleteMCPConnectionLogRouteSettingsParams) error {
+	_, err := q.db.Exec(ctx, deleteMCPConnectionLogRouteSettings, arg.OrganizationID, arg.ProjectID, arg.DataExportRouteID)
+	return err
+}
+
 const getActiveOtelRouteDestination = `-- name: GetActiveOtelRouteDestination :one
 
 SELECT
   destination.endpoint_url,
   destination.headers_encrypted,
-  COALESCE(destination.sensitive_data, 'exclude') = 'include' AS include_sensitive_data
+  COALESCE(destination.sensitive_data, 'exclude') = 'include' AS include_sensitive_data,
+  COALESCE(settings.min_severity, $1::text)::text AS min_severity
 FROM data_export_routes AS route
 JOIN otel_destinations AS destination
   ON destination.organization_id = route.organization_id
  AND destination.project_id = route.project_id
  AND destination.id = route.otel_destination_id
-WHERE route.organization_id = $1
-  AND route.project_id = $2
-  AND route.data_source = $3
+LEFT JOIN mcp_connection_log_routes AS settings
+  ON settings.organization_id = route.organization_id
+ AND settings.project_id = route.project_id
+ AND settings.data_export_route_id = route.id
+WHERE route.organization_id = $2
+  AND route.project_id = $3
+  AND route.data_source = $4
   AND route.enabled IS TRUE
   AND route.deleted IS FALSE
   AND route.otel_destination_id IS NOT NULL
@@ -139,24 +169,36 @@ WHERE route.organization_id = $1
 `
 
 type GetActiveOtelRouteDestinationParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	DataSource     string
+	DefaultMinSeverity string
+	OrganizationID     string
+	ProjectID          uuid.UUID
+	DataSource         string
 }
 
 type GetActiveOtelRouteDestinationRow struct {
 	EndpointUrl          string
 	HeadersEncrypted     pgtype.Text
 	IncludeSensitiveData bool
+	MinSeverity          string
 }
 
 // Every query pins both organization_id and project_id. Resource UUIDs and
 // tenant-pinned foreign keys are integrity controls, not authorization bounds.
 // Resolve the active OTEL destination for one project data source.
 func (q *Queries) GetActiveOtelRouteDestination(ctx context.Context, arg GetActiveOtelRouteDestinationParams) (GetActiveOtelRouteDestinationRow, error) {
-	row := q.db.QueryRow(ctx, getActiveOtelRouteDestination, arg.OrganizationID, arg.ProjectID, arg.DataSource)
+	row := q.db.QueryRow(ctx, getActiveOtelRouteDestination,
+		arg.DefaultMinSeverity,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.DataSource,
+	)
 	var i GetActiveOtelRouteDestinationRow
-	err := row.Scan(&i.EndpointUrl, &i.HeadersEncrypted, &i.IncludeSensitiveData)
+	err := row.Scan(
+		&i.EndpointUrl,
+		&i.HeadersEncrypted,
+		&i.IncludeSensitiveData,
+		&i.MinSeverity,
+	)
 	return i, err
 }
 
@@ -228,6 +270,40 @@ func (q *Queries) GetDataExportRouteForUpdate(ctx context.Context, arg GetDataEx
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getMCPConnectionLogRouteMinSeverity = `-- name: GetMCPConnectionLogRouteMinSeverity :one
+SELECT COALESCE(settings.min_severity, $1::text)::text AS min_severity
+FROM data_export_routes AS route
+LEFT JOIN mcp_connection_log_routes AS settings
+  ON settings.organization_id = route.organization_id
+ AND settings.project_id = route.project_id
+ AND settings.data_export_route_id = route.id
+WHERE route.organization_id = $2
+  AND route.project_id = $3
+  AND route.id = $4
+  AND route.data_source = 'mcp_connection_logs'
+  AND route.deleted IS FALSE
+`
+
+type GetMCPConnectionLogRouteMinSeverityParams struct {
+	DefaultMinSeverity string
+	OrganizationID     string
+	ProjectID          uuid.UUID
+	DataExportRouteID  uuid.UUID
+}
+
+// Minimum level of one live MCP connection logs route.
+func (q *Queries) GetMCPConnectionLogRouteMinSeverity(ctx context.Context, arg GetMCPConnectionLogRouteMinSeverityParams) (string, error) {
+	row := q.db.QueryRow(ctx, getMCPConnectionLogRouteMinSeverity,
+		arg.DefaultMinSeverity,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.DataExportRouteID,
+	)
+	var min_severity string
+	err := row.Scan(&min_severity)
+	return min_severity, err
 }
 
 const getOtelDestinationForRoute = `-- name: GetOtelDestinationForRoute :one
@@ -306,12 +382,16 @@ func (q *Queries) GetOtelDestinationForUpdate(ctx context.Context, arg GetOtelDe
 }
 
 const listDataExportRoutes = `-- name: ListDataExportRoutes :many
-SELECT id, organization_id, project_id, data_source, enabled, otel_destination_id, created_at, updated_at, deleted_at, deleted
-FROM data_export_routes
-WHERE organization_id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
-ORDER BY created_at, id
+SELECT route.id, route.organization_id, route.project_id, route.data_source, route.enabled, route.otel_destination_id, route.created_at, route.updated_at, route.deleted_at, route.deleted, settings.min_severity AS min_severity
+FROM data_export_routes AS route
+LEFT JOIN mcp_connection_log_routes AS settings
+  ON settings.organization_id = route.organization_id
+ AND settings.project_id = route.project_id
+ AND settings.data_export_route_id = route.id
+WHERE route.organization_id = $1
+  AND route.project_id = $2
+  AND route.deleted IS FALSE
+ORDER BY route.created_at, route.id
 `
 
 type ListDataExportRoutesParams struct {
@@ -319,27 +399,34 @@ type ListDataExportRoutesParams struct {
 	ProjectID      uuid.UUID
 }
 
+type ListDataExportRoutesRow struct {
+	DataExportRoute DataExportRoute
+	MinSeverity     pgtype.Text
+}
+
 // List active routes in stable creation order for the management API.
-func (q *Queries) ListDataExportRoutes(ctx context.Context, arg ListDataExportRoutesParams) ([]DataExportRoute, error) {
+// MCP connection logs routes carry their minimum level; NULL means the default.
+func (q *Queries) ListDataExportRoutes(ctx context.Context, arg ListDataExportRoutesParams) ([]ListDataExportRoutesRow, error) {
 	rows, err := q.db.Query(ctx, listDataExportRoutes, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DataExportRoute
+	var items []ListDataExportRoutesRow
 	for rows.Next() {
-		var i DataExportRoute
+		var i ListDataExportRoutesRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.ProjectID,
-			&i.DataSource,
-			&i.Enabled,
-			&i.OtelDestinationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
+			&i.DataExportRoute.ID,
+			&i.DataExportRoute.OrganizationID,
+			&i.DataExportRoute.ProjectID,
+			&i.DataExportRoute.DataSource,
+			&i.DataExportRoute.Enabled,
+			&i.DataExportRoute.OtelDestinationID,
+			&i.DataExportRoute.CreatedAt,
+			&i.DataExportRoute.UpdatedAt,
+			&i.DataExportRoute.DeletedAt,
+			&i.DataExportRoute.Deleted,
+			&i.MinSeverity,
 		); err != nil {
 			return nil, err
 		}
@@ -352,38 +439,48 @@ func (q *Queries) ListDataExportRoutes(ctx context.Context, arg ListDataExportRo
 }
 
 const listDataExportRoutesByOrganizationID = `-- name: ListDataExportRoutesByOrganizationID :many
-SELECT route.id, route.organization_id, route.project_id, route.data_source, route.enabled, route.otel_destination_id, route.created_at, route.updated_at, route.deleted_at, route.deleted
+SELECT route.id, route.organization_id, route.project_id, route.data_source, route.enabled, route.otel_destination_id, route.created_at, route.updated_at, route.deleted_at, route.deleted, settings.min_severity AS min_severity
 FROM data_export_routes AS route
 JOIN projects AS project
   ON project.id = route.project_id
  AND project.organization_id = route.organization_id
+LEFT JOIN mcp_connection_log_routes AS settings
+  ON settings.organization_id = route.organization_id
+ AND settings.project_id = route.project_id
+ AND settings.data_export_route_id = route.id
 WHERE project.organization_id = $1
   AND project.deleted IS FALSE
   AND route.deleted IS FALSE
 ORDER BY route.created_at, route.id
 `
 
+type ListDataExportRoutesByOrganizationIDRow struct {
+	DataExportRoute DataExportRoute
+	MinSeverity     pgtype.Text
+}
+
 // List active routes across live projects in one organization.
-func (q *Queries) ListDataExportRoutesByOrganizationID(ctx context.Context, organizationID string) ([]DataExportRoute, error) {
+func (q *Queries) ListDataExportRoutesByOrganizationID(ctx context.Context, organizationID string) ([]ListDataExportRoutesByOrganizationIDRow, error) {
 	rows, err := q.db.Query(ctx, listDataExportRoutesByOrganizationID, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DataExportRoute
+	var items []ListDataExportRoutesByOrganizationIDRow
 	for rows.Next() {
-		var i DataExportRoute
+		var i ListDataExportRoutesByOrganizationIDRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.ProjectID,
-			&i.DataSource,
-			&i.Enabled,
-			&i.OtelDestinationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
+			&i.DataExportRoute.ID,
+			&i.DataExportRoute.OrganizationID,
+			&i.DataExportRoute.ProjectID,
+			&i.DataExportRoute.DataSource,
+			&i.DataExportRoute.Enabled,
+			&i.DataExportRoute.OtelDestinationID,
+			&i.DataExportRoute.CreatedAt,
+			&i.DataExportRoute.UpdatedAt,
+			&i.DataExportRoute.DeletedAt,
+			&i.DataExportRoute.Deleted,
+			&i.MinSeverity,
 		); err != nil {
 			return nil, err
 		}
@@ -396,11 +493,15 @@ func (q *Queries) ListDataExportRoutesByOrganizationID(ctx context.Context, orga
 }
 
 const listDataExportRoutesWithProjectMetadata = `-- name: ListDataExportRoutesWithProjectMetadata :many
-SELECT route.id, route.organization_id, route.project_id, route.data_source, route.enabled, route.otel_destination_id, route.created_at, route.updated_at, route.deleted_at, route.deleted, project.name AS project_name, project.slug AS project_slug
+SELECT route.id, route.organization_id, route.project_id, route.data_source, route.enabled, route.otel_destination_id, route.created_at, route.updated_at, route.deleted_at, route.deleted, project.name AS project_name, project.slug AS project_slug, settings.min_severity AS min_severity
 FROM data_export_routes AS route
 JOIN projects AS project
   ON project.id = route.project_id
  AND project.organization_id = route.organization_id
+LEFT JOIN mcp_connection_log_routes AS settings
+  ON settings.organization_id = route.organization_id
+ AND settings.project_id = route.project_id
+ AND settings.data_export_route_id = route.id
 WHERE project.organization_id = $1
   AND project.deleted IS FALSE
   AND route.deleted IS FALSE
@@ -428,9 +529,11 @@ type ListDataExportRoutesWithProjectMetadataRow struct {
 	Deleted           bool
 	ProjectName       string
 	ProjectSlug       string
+	MinSeverity       pgtype.Text
 }
 
 // List a bounded route inventory with project metadata in one snapshot.
+// MCP connection logs routes carry their minimum level; NULL means the default.
 func (q *Queries) ListDataExportRoutesWithProjectMetadata(ctx context.Context, arg ListDataExportRoutesWithProjectMetadataParams) ([]ListDataExportRoutesWithProjectMetadataRow, error) {
 	rows, err := q.db.Query(ctx, listDataExportRoutesWithProjectMetadata, arg.OrganizationID, arg.ProjectID, arg.ResultLimit)
 	if err != nil {
@@ -453,6 +556,7 @@ func (q *Queries) ListDataExportRoutesWithProjectMetadata(ctx context.Context, a
 			&i.Deleted,
 			&i.ProjectName,
 			&i.ProjectSlug,
+			&i.MinSeverity,
 		); err != nil {
 			return nil, err
 		}
@@ -869,4 +973,47 @@ func (q *Queries) UpdateOtelDestination(ctx context.Context, arg UpdateOtelDesti
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const upsertMCPConnectionLogRouteSettings = `-- name: UpsertMCPConnectionLogRouteSettings :one
+INSERT INTO mcp_connection_log_routes (
+  data_export_route_id,
+  organization_id,
+  project_id,
+  min_severity
+)
+SELECT route.id, $1, $2, $3
+FROM data_export_routes AS route
+WHERE route.organization_id = $1
+  AND route.project_id = $2
+  AND route.id = $4
+  AND route.data_source = 'mcp_connection_logs'
+  AND route.deleted IS FALSE
+ON CONFLICT (data_export_route_id) DO UPDATE
+SET min_severity = EXCLUDED.min_severity,
+    updated_at = clock_timestamp()
+WHERE mcp_connection_log_routes.organization_id = EXCLUDED.organization_id
+  AND mcp_connection_log_routes.project_id = EXCLUDED.project_id
+RETURNING min_severity
+`
+
+type UpsertMCPConnectionLogRouteSettingsParams struct {
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	MinSeverity       string
+	DataExportRouteID uuid.UUID
+}
+
+// Set a live MCP connection logs route's minimum level. The tenant comes from
+// the caller, never from the route row, and must match the route.
+func (q *Queries) UpsertMCPConnectionLogRouteSettings(ctx context.Context, arg UpsertMCPConnectionLogRouteSettingsParams) (string, error) {
+	row := q.db.QueryRow(ctx, upsertMCPConnectionLogRouteSettings,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.MinSeverity,
+		arg.DataExportRouteID,
+	)
+	var min_severity string
+	err := row.Scan(&min_severity)
+	return min_severity, err
 }

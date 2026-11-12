@@ -49,6 +49,9 @@ type CreateRouteRequestBody struct {
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// OTEL destination configured on this route. Required when enabled.
 	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
+	// Lowest level this route sends. Only for mcp_connection_logs; defaults to
+	// error.
+	MinSeverity *string `form:"min_severity,omitempty" json:"min_severity,omitempty" xml:"min_severity,omitempty"`
 }
 
 // UpdateRouteRequestBody is the type of the "dataExports" service
@@ -60,6 +63,9 @@ type UpdateRouteRequestBody struct {
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// OTEL destination configured on this route. Required when enabled.
 	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
+	// Lowest level this route sends. Only for mcp_connection_logs. Omit to keep
+	// the current level.
+	MinSeverity *string `form:"min_severity,omitempty" json:"min_severity,omitempty" xml:"min_severity,omitempty"`
 }
 
 // ListDestinationsResponseBody is the type of the "dataExports" service
@@ -141,6 +147,9 @@ type CreateRouteResponseBody struct {
 	// OTEL destination configured on this route. Omitted when no OTEL destination
 	// is selected.
 	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
+	// Lowest level this route sends. Set only on mcp_connection_logs routes, where
+	// it defaults to error.
+	MinSeverity *string `form:"min_severity,omitempty" json:"min_severity,omitempty" xml:"min_severity,omitempty"`
 	// Creation timestamp.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Last update timestamp.
@@ -161,6 +170,9 @@ type UpdateRouteResponseBody struct {
 	// OTEL destination configured on this route. Omitted when no OTEL destination
 	// is selected.
 	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
+	// Lowest level this route sends. Set only on mcp_connection_logs routes, where
+	// it defaults to error.
+	MinSeverity *string `form:"min_severity,omitempty" json:"min_severity,omitempty" xml:"min_severity,omitempty"`
 	// Creation timestamp.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Last update timestamp.
@@ -2124,6 +2136,9 @@ type DataExportRouteResponseBody struct {
 	// OTEL destination configured on this route. Omitted when no OTEL destination
 	// is selected.
 	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
+	// Lowest level this route sends. Set only on mcp_connection_logs routes, where
+	// it defaults to error.
+	MinSeverity *string `form:"min_severity,omitempty" json:"min_severity,omitempty" xml:"min_severity,omitempty"`
 	// Creation timestamp.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Last update timestamp.
@@ -2223,6 +2238,7 @@ func NewCreateRouteRequestBody(p *dataexports.CreateRoutePayload) *CreateRouteRe
 		DataSource:        p.DataSource,
 		Enabled:           p.Enabled,
 		OtelDestinationID: p.OtelDestinationID,
+		MinSeverity:       p.MinSeverity,
 	}
 	{
 		var zero bool
@@ -2240,6 +2256,7 @@ func NewUpdateRouteRequestBody(p *dataexports.UpdateRoutePayload) *UpdateRouteRe
 		DataSource:        p.DataSource,
 		Enabled:           p.Enabled,
 		OtelDestinationID: p.OtelDestinationID,
+		MinSeverity:       p.MinSeverity,
 	}
 	return body
 }
@@ -3247,6 +3264,7 @@ func NewCreateRouteDataExportRouteOK(body *CreateRouteResponseBody) *dataexports
 		DataSource:        *body.DataSource,
 		Enabled:           *body.Enabled,
 		OtelDestinationID: body.OtelDestinationID,
+		MinSeverity:       body.MinSeverity,
 		CreatedAt:         *body.CreatedAt,
 		UpdatedAt:         *body.UpdatedAt,
 	}
@@ -3413,6 +3431,7 @@ func NewUpdateRouteDataExportRouteOK(body *UpdateRouteResponseBody) *dataexports
 		DataSource:        *body.DataSource,
 		Enabled:           *body.Enabled,
 		OtelDestinationID: body.OtelDestinationID,
+		MinSeverity:       body.MinSeverity,
 		CreatedAt:         *body.CreatedAt,
 		UpdatedAt:         *body.UpdatedAt,
 	}
@@ -4122,6 +4141,11 @@ func ValidateCreateRouteResponseBody(body *CreateRouteResponseBody) (err error) 
 	if body.OtelDestinationID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.otel_destination_id", *body.OtelDestinationID, goa.FormatUUID))
 	}
+	if body.MinSeverity != nil {
+		if !(*body.MinSeverity == "info" || *body.MinSeverity == "warn" || *body.MinSeverity == "error") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.min_severity", *body.MinSeverity, []any{"info", "warn", "error"}))
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -4165,6 +4189,11 @@ func ValidateUpdateRouteResponseBody(body *UpdateRouteResponseBody) (err error) 
 	}
 	if body.OtelDestinationID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.otel_destination_id", *body.OtelDestinationID, goa.FormatUUID))
+	}
+	if body.MinSeverity != nil {
+		if !(*body.MinSeverity == "info" || *body.MinSeverity == "warn" || *body.MinSeverity == "error") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.min_severity", *body.MinSeverity, []any{"info", "warn", "error"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -6775,6 +6804,11 @@ func ValidateDataExportRouteResponseBody(body *DataExportRouteResponseBody) (err
 	}
 	if body.OtelDestinationID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.otel_destination_id", *body.OtelDestinationID, goa.FormatUUID))
+	}
+	if body.MinSeverity != nil {
+		if !(*body.MinSeverity == "info" || *body.MinSeverity == "warn" || *body.MinSeverity == "error") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.min_severity", *body.MinSeverity, []any{"info", "warn", "error"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

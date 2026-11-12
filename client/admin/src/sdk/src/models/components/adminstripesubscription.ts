@@ -9,7 +9,7 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export const Status = {
+export const AdminStripeSubscriptionStatus = {
   Incomplete: "incomplete",
   IncompleteExpired: "incomplete_expired",
   Trialing: "trialing",
@@ -19,7 +19,9 @@ export const Status = {
   Unpaid: "unpaid",
   Paused: "paused",
 } as const;
-export type Status = ClosedEnum<typeof Status>;
+export type AdminStripeSubscriptionStatus = ClosedEnum<
+  typeof AdminStripeSubscriptionStatus
+>;
 
 export type AdminStripeSubscription = {
   cancelAt?: Date | undefined;
@@ -28,15 +30,15 @@ export type AdminStripeSubscription = {
   currentPeriodEnd: Date;
   currentPeriodStart: Date;
   paymentFailed: boolean;
-  status: Status;
+  status: AdminStripeSubscriptionStatus;
   trialEnd?: Date | undefined;
   trialStart?: Date | undefined;
 };
 
 /** @internal */
-export const Status$inboundSchema: z.ZodMiniEnum<typeof Status> = z.enum(
-  Status,
-);
+export const AdminStripeSubscriptionStatus$inboundSchema: z.ZodMiniEnum<
+  typeof AdminStripeSubscriptionStatus
+> = z.enum(AdminStripeSubscriptionStatus);
 
 /** @internal */
 export const AdminStripeSubscription$inboundSchema: z.ZodMiniType<
@@ -60,7 +62,7 @@ export const AdminStripeSubscription$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     payment_failed: z.boolean(),
-    status: Status$inboundSchema,
+    status: AdminStripeSubscriptionStatus$inboundSchema,
     trial_end: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),

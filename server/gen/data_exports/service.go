@@ -106,6 +106,9 @@ type CreateRoutePayload struct {
 	Enabled bool
 	// OTEL destination configured on this route. Required when enabled.
 	OtelDestinationID *string
+	// Lowest level this route sends. Only for mcp_connection_logs; defaults to
+	// error.
+	MinSeverity *string
 }
 
 // DataExportRoute is the result type of the dataExports service createRoute
@@ -122,6 +125,9 @@ type DataExportRoute struct {
 	// OTEL destination configured on this route. Omitted when no OTEL destination
 	// is selected.
 	OtelDestinationID *string
+	// Lowest level this route sends. Set only on mcp_connection_logs routes, where
+	// it defaults to error.
+	MinSeverity *string
 	// Creation timestamp.
 	CreatedAt string
 	// Last update timestamp.
@@ -327,6 +333,9 @@ type UpdateRoutePayload struct {
 	Enabled bool
 	// OTEL destination configured on this route. Required when enabled.
 	OtelDestinationID *string
+	// Lowest level this route sends. Only for mcp_connection_logs. Omit to keep
+	// the current level.
+	MinSeverity *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -1,40 +1,23 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { DataExportRoute } from "@gram/client/models/components/dataexportroute.js";
+import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 import {
   ConfigureExportSheet,
+  type ConfigureExportValues,
   type OtelDataExportDestination,
 } from "./ConfigureExportSheet";
-
-vi.mock("@/components/project-menu", () => ({
-  ProjectAvatar: () => <span aria-hidden="true" />,
-}));
 
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: React.ReactNode }) => children,
 }));
-
-vi.mock("@/components/ui/Combobox", () => ({
-  Combobox: ({
-    items,
-    onSelectionChange,
-  }: {
-    items: { value: string; label: string }[];
-    onSelectionChange: (item: { value: string; label: string }) => void;
-  }) => (
-    <div>
-      {items.map((item) => (
-        <button
-          key={item.value}
-          type="button"
-          onClick={() => onSelectionChange(item)}
-        >
-          Choose {item.label}
-        </button>
-      ))}
-    </div>
-  ),
-}));
-
+vi.mock("@/components/project-menu", () => ({ ProjectAvatar: () => null }));
 vi.mock("@gram/client/react-query/testDataExportRoute.js", () => ({
   useTestDataExportRouteMutation: () => ({
     mutate: vi.fn(),
@@ -45,118 +28,153 @@ vi.mock("@gram/client/react-query/testDataExportRoute.js", () => ({
   }),
 }));
 
-afterEach(() => {
-  cleanup();
-});
-
-type SheetProps = Parameters<typeof ConfigureExportSheet>[0];
+vi.mock("@/components/ui/Sheet", () => ({
+  Sheet: ({ children }: { children: React.ReactNode }) => children,
+  SheetContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SheetDescription: ({ children }: { children: React.ReactNode }) => (
+    <p>{children}</p>
+  ),
+  SheetFooter: ({ children }: { children: React.ReactNode }) => (
+    <footer>{children}</footer>
+  ),
+  SheetHeader: ({ children }: { children: React.ReactNode }) => (
+    <header>{children}</header>
+  ),
+  SheetTitle: ({ children }: { children: React.ReactNode }) => (
+    <h2>{children}</h2>
+  ),
+}));
 
 const project = {
   id: "project-1",
-  slug: "default",
   name: "Default",
-} as SheetProps["project"];
-const timestamp = new Date(0);
-const destination = {
-  createdAt: timestamp,
-  id: "destination-1",
-  projectId: project.id,
-  destinationType: "otel",
-  name: "Datadog",
-  sensitiveData: "exclude",
-  otel: { endpointUrl: "https://otlp.example.com", headers: [] },
-  updatedAt: timestamp,
-} as OtelDataExportDestination;
-const otherDestination = {
-  ...destination,
-  id: "destination-2",
-  name: "Honeycomb",
-  otel: { endpointUrl: "https://otlp.other.example.com", headers: [] },
-} as OtelDataExportDestination;
+  slug: "default",
+} as ProjectEntry;
 
-function renderSheet(dataSource: string, otelDestinationId?: string) {
-  render(
+const destination = {
+  createdAt: new Date(0),
+  destinationType: "otel",
+  id: "destination-1",
+  name: "Collector",
+  otel: { endpointUrl: "https://collector.example.com", headers: [] },
+  projectId: "project-1",
+  sensitiveData: "exclude",
+  updatedAt: new Date(0),
+} satisfies OtelDataExportDestination;
+
+const sources: Array<{
+  value: ConfigureExportValues["dataSource"];
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "mcp_connection_logs",
+    label: "MCP connection logs",
+    description: "Connections",
+  },
+  {
+    value: "product_telemetry",
+    label: "Product telemetry",
+    description: "Telemetry",
+  },
+];
+
+function route(
+  dataSource: string,
+  minSeverity?: DataExportRoute["minSeverity"],
+): DataExportRoute {
+  return {
+    id: "route-1",
+    projectId: "project-1",
+    dataSource,
+    enabled: true,
+    otelDestinationId: "destination-1",
+    minSeverity,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  } as DataExportRoute;
+}
+
+function renderSheet(
+  exportRoute: DataExportRoute,
+  onSave: (values: ConfigureExportValues) => Promise<void>,
+) {
+  return render(
     <ConfigureExportSheet
       projects={[project]}
       project={project}
-      dataSources={[
-        {
-          value: "mcp_connection_logs",
-          label: "MCP connection logs",
-          description: "",
-        },
-        {
-          value: "product_telemetry",
-          label: "Product telemetry",
-          description: "",
-        },
-      ]}
-      destinations={[destination, otherDestination]}
-      route={{
-        createdAt: timestamp,
-        id: "route-1",
-        projectId: project.id,
-        dataSource: dataSource as NonNullable<
-          SheetProps["route"]
-        >["dataSource"],
-        enabled: true,
-        otelDestinationId,
-        updatedAt: timestamp,
-      }}
+      dataSources={sources}
+      destinations={[destination]}
+      route={exportRoute}
       saving={false}
       loading={false}
       onClose={() => {}}
       onProjectChange={() => {}}
-      onSave={async () => {}}
+      onSave={onSave}
     />,
   );
 }
 
-describe("ConfigureExportSheet test event", () => {
-  it.each([
-    "mcp_connection_logs",
-    "tool_call_logs",
-    "risk_findings",
-    "product_telemetry",
-  ])("offers a test event for a saved %s export", (dataSource) => {
-    renderSheet(dataSource, destination.id);
+describe("ConfigureExportSheet level", () => {
+  afterEach(cleanup);
+
+  it("shows the stored level for MCP connection logs and saves a new one", async () => {
+    const onSave = vi.fn<(values: ConfigureExportValues) => Promise<void>>();
+    onSave.mockResolvedValue(undefined);
+    renderSheet(route("mcp_connection_logs", "warn"), onSave);
+
     expect(
-      screen.getByRole("button", { name: "Send test event" }),
-    ).toBeTruthy();
+      screen
+        .getByRole("radio", { name: /^Warnings and errors/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: /^Info, warnings and errors/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save export" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0]?.[0].minSeverity).toBe("info");
   });
 
-  it("says product telemetry sends a log, a trace and a metric", () => {
-    renderSheet("product_telemetry", destination.id);
+  it("defaults to errors only when the route has no level", () => {
+    renderSheet(route("mcp_connection_logs"), vi.fn());
+
     expect(
-      screen.getByText(/Sends one test log, trace and metric to check/),
-    ).toBeTruthy();
+      screen
+        .getByRole("radio", { name: /Errors only \(recommended\)/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
-  it("disables the test event after the destination changes", () => {
-    renderSheet("mcp_connection_logs", destination.id);
-    const button = screen.getByRole<HTMLButtonElement>("button", {
-      name: "Send test event",
-    });
-    expect(button.disabled).toBe(false);
-
-    fireEvent.click(screen.getByRole("button", { name: "Choose Honeycomb" }));
+  it("blocks saving a level this dashboard does not know", () => {
+    const onSave = vi.fn<(values: ConfigureExportValues) => Promise<void>>();
+    renderSheet(
+      route("mcp_connection_logs", "debug" as DataExportRoute["minSeverity"]),
+      onSave,
+    );
 
     expect(
-      screen.getByRole<HTMLButtonElement>("button", {
-        name: "Send test event",
-      }).disabled,
-    ).toBe(true);
-    expect(
-      screen.getByText(
-        "Save your changes to send a test event to this destination.",
-      ),
+      screen.getByText(/not supported by this version of Speakeasy/),
     ).toBeTruthy();
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio.getAttribute("aria-checked")).toBe("false");
+      expect(radio.hasAttribute("disabled")).toBe(true);
+    }
+    const save = screen.getByRole("button", { name: "Save export" });
+    expect(save.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(save);
+    expect(onSave).not.toHaveBeenCalled();
   });
 
-  it("does not offer one without a destination", () => {
-    renderSheet("mcp_connection_logs");
-    expect(
-      screen.queryByRole("button", { name: "Send test event" }),
-    ).toBeNull();
+  it("has no level for other data sources", () => {
+    renderSheet(route("product_telemetry"), vi.fn());
+
+    expect(screen.queryByRole("radio")).toBeNull();
   });
 });

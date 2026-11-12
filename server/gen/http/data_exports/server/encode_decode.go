@@ -2391,6 +2391,7 @@ func marshalDataexportsDataExportRouteToDataExportRouteResponseBody(v *dataexpor
 		DataSource:        v.DataSource,
 		Enabled:           v.Enabled,
 		OtelDestinationID: v.OtelDestinationID,
+		MinSeverity:       v.MinSeverity,
 		CreatedAt:         v.CreatedAt,
 		UpdatedAt:         v.UpdatedAt,
 	}
