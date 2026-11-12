@@ -72,14 +72,22 @@ export function SendTestEventSection({
   return (
     <RequireScope scope="org:admin" level="section">
       <div className="space-y-3 border-t py-5">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center justify-between gap-4">
           <div className="space-y-1">
             <Label>Test event</Label>
-            <Text muted className="text-sm">
-              {unsavedChanges
-                ? "Save your changes to send a test event to this destination."
-                : "Send one event, marked as a test, to check the endpoint and API key."}
-            </Text>
+            {unsavedChanges ? (
+              <Text muted className="text-sm">
+                Save your changes to send a test event to this destination.
+              </Text>
+            ) : (
+              <Text muted className="text-sm">
+                Send one event to check the endpoint and API key. It carries{" "}
+                <code className="font-mono text-xs">
+                  speakeasy.mcp_connection.test=true
+                </code>
+                , so you can filter it out of dashboards and monitors.
+              </Text>
+            )}
           </div>
           <Button
             type="button"

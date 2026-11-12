@@ -88,6 +88,12 @@ describe("SendTestEventSection", () => {
     });
   });
 
+  it("says how to filter the test event out", () => {
+    renderSection();
+
+    expect(screen.getByText("speakeasy.mcp_connection.test=true")).toBeTruthy();
+  });
+
   it("asks for a save before testing changed settings", () => {
     renderSection(true);
 
