@@ -390,10 +390,10 @@ func TestGatewayMemberRows(t *testing.T) {
 func TestGatewayMemberRefreshOutageNamesTheProviderOnce(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
-	authCtx := requireProjectAuthContext(t, ctx)
 	rec := mcpconnectionattemptstest.New(t)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
 	ti.service.SetConnectionRecorder(rec.Recorder)
+	authCtx := requireProjectAuthContext(t, ctx)
 	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
 
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
@@ -404,7 +404,12 @@ func TestGatewayMemberRefreshOutageNamesTheProviderOnce(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-refresh", "", []uuid.UUID{issuerID})
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
+	remoteIssuer, err := remotesessions_repo.New(ti.conn).GetRemoteSessionIssuerByID(ctx, remotesessions_repo.GetRemoteSessionIssuerByIDParams{
+		ID: remoteIssuerID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, IncludeOrganizational: true, OrganizationID: conv.ToPGText(orgID), IncludeGlobal: true,
+	})
+	require.NoError(t, err)
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(remoteIssuerID), 0)
 	subject := createTestUser(t, ctx, ti, "meta-refresh-user-"+uuid.NewString())
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
 	upsertExpiredRefreshableRemoteSession(t, ctx, ti, issuerID, clientID, subject)
@@ -414,7 +419,10 @@ func TestGatewayMemberRefreshOutageNamesTheProviderOnce(t *testing.T) {
 	require.True(t, isError)
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeRemoteSessionUnavailable)
 	require.NotEmpty(t, row.MemberID)
-	require.Empty(t, row.ProviderHost, "only the refresh service's provider_refresh row names the issuer")
+	require.Empty(t, row.ProviderHost, "the request row names no issuer")
+	refresh := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderServerError)
+	require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(remoteIssuer.Issuer), refresh.ProviderHost)
+	require.Len(t, rec.Rows(), 2, "one outage, named once")
 }
 
 // A busy or broken member must write its row and read true, through the real request path.
