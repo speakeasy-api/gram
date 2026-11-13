@@ -107,9 +107,11 @@ change makes the agent worse:
   cases with the changed cases first.
 - The progressive surface is gated: three runs per case, and the job fails
   when a case that passed in most runs of `baseline.json` now fails in most
-  runs. The direct surface lists the whole catalogue on every turn, about
-  $0.27 a case, so it runs once and only reports. A case that was already failing, a case with no baseline
-  entry, or a one-run flake does not fail it. Errored runs count as neither.
+  runs. A case that was already failing, a case with no baseline entry, or a
+  one-run flake does not fail it. Errored runs count as neither.
+- The direct surface runs once per case and only reports.
+- With prompt caching, a progressive run costs about $0.013 a case and a
+  direct run about $0.016, so a full 60-case push costs about $3.40.
 - The report goes to the job summary. The report and `baseline.json` updated
   with this run's results go to the `platform-tool-eval` artifact.
 - When the branch has no `baseline.json`, the gated run takes every case to
@@ -125,7 +127,9 @@ passed. Update it when a change improves cases or adds new ones, so the gate
 protects them from then on: download `baseline.json` from the pull request's
 `platform-tool-eval` artifact and commit it as `tooleval/baseline.json`.
 Locally, `--baseline-out` writes the same file. A relative path resolves
-against the directory you run mise from, so from the repository root:
+against the directory you run mise from, so from the repository root (for a
+stacked pull request, pass its base branch instead of `origin/main`, as CI
+compares with the pull request base):
 
 ```bash
 mise run eval:platform-tools --changed-since origin/main --surfaces progressive --runs 3 --gate --baseline-out server/internal/platformmcp/tooleval/baseline.json
