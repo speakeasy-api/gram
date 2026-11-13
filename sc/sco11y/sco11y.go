@@ -167,7 +167,7 @@ func effectKind[C any](e sc.Effect[C]) string {
 		return "acquire"
 	case sc.EffectRelease:
 		return "release"
-	case sc.EffectAction, sc.EffectStopInvocation, sc.EffectStartTimer, sc.EffectCancelTimer:
+	case sc.EffectAction, sc.EffectStopInvocation, sc.EffectStartTimer, sc.EffectCancelTimer, sc.EffectSend, sc.EffectEmit:
 		return "action"
 	}
 

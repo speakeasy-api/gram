@@ -20,6 +20,9 @@
 // A transition may have several guards, all of which must hold, and may depend
 // on other active states with [Transition.WhenIn] and [Transition.WhenNotIn].
 // An event that changes nothing is ignored: the snapshot comes back unchanged.
+// [StateBuilder.OnAny] catches the events a state's other transitions do not
+// take. [StateBuilder.Tag] labels states, so a caller can ask a snapshot what
+// kind of state it is in with [Snapshot.HasTag] without naming each one.
 //
 // # Time
 //
@@ -31,7 +34,8 @@
 // the order they started when due together, so their order never depends on
 // a driver. [Machine.Advance] fires them without an event, which is how a read
 // sees an expiry nothing has processed. [StateBuilder.Within] gives the
-// services inside a state one shared deadline.
+// services inside a state one shared deadline. [Transition.RaiseAfter] sends
+// the chart an event after a wait, wherever it is by then.
 //
 // # Actions and services
 //
@@ -41,7 +45,19 @@
 // [Move] it belongs to. Services run while their state is active and report
 // back as [Done] and [Failed] events. Implementations can be given later with
 // [Machine.Bind], so a chart can be declared, exported and explored without the
-// dependencies its services need.
+// dependencies its services need. [Invocation.Retry] runs a failed service
+// again after growing waits, so the chart sees only the failure that is
+// final.
+//
+// # Composing machines
+//
+// [StateBuilder.InvokeMachine] runs another machine as a child while a state
+// is active: the child starts from the parent's context and its last
+// snapshot becomes the service's result. The parent sends it events with
+// [Transition.SendTo], and the child reports back with [Transition.Emit],
+// which the parent handles like any other event. A plain service reads what
+// the chart sends it from [Inbox]. Each machine is explored on its own, the
+// child standing in the parent's exploration as a service with outcomes.
 //
 // A state can hold a live resource, such as a connection, for as long as it
 // is active: [StateBuilder.Holds] acquires it on entry and releases it on

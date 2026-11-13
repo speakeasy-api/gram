@@ -198,6 +198,15 @@ const (
 	// soon as it arrives.
 	EffectRelease EffectKind = "resource.release"
 
+	// EffectSend delivers Event to the running service with the same ID,
+	// which reads it from [Inbox]. A driver that cannot deliver it drops
+	// it.
+	EffectSend EffectKind = "invocation.send"
+
+	// EffectEmit hands Event to whoever runs the machine, through the
+	// function given with [OnEmit].
+	EffectEmit EffectKind = "emit"
+
 	// EffectStartTimer asks for a [TimerFired] event with the effect's ID
 	// once Delay has passed.
 	EffectStartTimer EffectKind = "timer.start"
@@ -362,7 +371,7 @@ func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)
 		}
 
 		return fmt.Errorf("%w: service %q in state %q", ErrUnknownEffect, e.Name, e.State)
-	case EffectStopInvocation, EffectStartTimer, EffectCancelTimer, EffectRelease:
+	case EffectStopInvocation, EffectStartTimer, EffectCancelTimer, EffectRelease, EffectSend, EffectEmit:
 		return fmt.Errorf("%w: %s effects are handled by the driver", errors.ErrUnsupported, e.Kind)
 	default:
 		return fmt.Errorf("%w: kind %q", ErrUnknownEffect, e.Kind)

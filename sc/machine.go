@@ -53,7 +53,16 @@ type Machine[S comparable, C any] struct {
 
 	// boundReleases holds the resource release functions given to Bind.
 	boundReleases map[string]func(context.Context, any, Leave[S])
+
+	// messaging is set when a transition sends to a service or emits.
+	messaging bool
 }
+
+// Messaging reports whether the chart sends events to its services, with
+// [Transition.SendTo], or to whoever runs it, with [Transition.Emit]. A
+// driver that cannot deliver such events checks it before running the
+// chart.
+func (m *Machine[S, C]) Messaging() bool { return m.messaging }
 
 // options holds what the Option values passed to New configure.
 type options struct {
@@ -102,6 +111,10 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 		errs:    nil,
 		actions: map[string]chartAction[S, C]{},
 		kinds:   map[string]bool{},
+		raises:  map[string]bool{},
+		cancels: nil,
+		sends:   nil,
+		emits:   false,
 	}
 	def(&Builder[S, C]{b: b, parent: root})
 
@@ -119,6 +132,7 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 		actions:       b.actions,
 		bound:         map[string]boundService[C]{},
 		boundReleases: map[string]func(context.Context, any, Leave[S]){},
+		messaging:     false,
 	}
 
 	if id == "" {
@@ -126,6 +140,17 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	}
 
 	m.resolve(b)
+	for _, name := range b.cancels {
+		if !b.raises[name] {
+			b.errorf("CancelRaise names %q, which no RaiseAfter declares", name)
+		}
+	}
+	for _, name := range b.sends {
+		if resource, ok := b.kinds[name]; !ok || resource {
+			b.errorf("SendTo names %q, which is not a service of the chart", name)
+		}
+	}
+	m.messaging = len(b.sends) > 0 || b.emits
 	m.registerEvents(b)
 	if len(b.errs) == 0 {
 		m.checkReachable(b)
@@ -366,7 +391,7 @@ func (m *Machine[S, C]) registerEvents(b *build[S, C]) {
 		}
 
 		for _, t := range n.transitions {
-			if t.trigger == triggerEvent {
+			if t.trigger == triggerEvent && !t.wildcard {
 				register(t.eventType, eventTypeName(t.eventType))
 			}
 		}
@@ -463,6 +488,9 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 	if n.budget != 0 {
 		write(" budget=%d", n.budget)
 	}
+	for _, tag := range n.tags {
+		write(" tag=%q", tag)
+	}
 	write("\n")
 
 	for _, a := range n.entry {
@@ -478,13 +506,20 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 		write("exit run %q if=%t\n", name, n.exitConds[k] != nil)
 	}
 	for _, inv := range n.invocations {
-		write("invoke %q %s resource=%t\n", inv.name, inv.doneType, inv.resource != nil)
+		write("invoke %q %s resource=%t", inv.name, inv.doneType, inv.resource != nil)
+		if p := inv.retry; p != nil {
+			write(" retry=%d first=%d cap=%d jitter=%v if=%t", p.Max, p.First, p.Cap, p.Jitter, p.If != nil)
+		}
+		write("\n")
 	}
 
 	for _, t := range n.transitions {
 		write("on %s", t.trigger)
 		if t.eventType != nil {
 			write(" event=%q", m.eventNames[t.eventType])
+		}
+		if t.wildcard {
+			write(" any")
 		}
 		if t.invocation != nil {
 			write(" service=%q", t.invocation.name)
@@ -511,6 +546,12 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 			write(" %s=%q", s.kind, s.name)
 			if t.runConds[k] != nil {
 				write(" if")
+			}
+			if d, ok := t.raiseDelays[k]; ok {
+				write(" after=%d", d)
+			}
+			if to, ok := t.sendTargets[k]; ok {
+				write(" to=%q", to)
 			}
 		}
 		if t.target != nil {

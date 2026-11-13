@@ -36,6 +36,11 @@ type Instance[S comparable, C any] struct {
 	services *semaphore.Weighted
 	now      func() time.Time
 	manual   bool
+	emit     func(context.Context, any)
+
+	// base carries the values of the context the instance was started
+	// with, for the steps a timer starts, which have no sender.
+	base context.Context //nolint:containedctx // only its values are used, as the context of timer wake-ups.
 
 	// turn holds one token, the right to process an event. A channel
 	// rather than a mutex lets a stopped service give up waiting for it.
@@ -98,6 +103,9 @@ type serviceRun struct {
 
 	// done is closed when the goroutine returns.
 	done chan struct{}
+
+	// inbox receives the events the chart sends to the run.
+	inbox *inbox
 }
 
 // settleToken marks, through the context values services inherit, the runs
@@ -131,6 +139,8 @@ func (m *Machine[S, C]) newInstance(ctx context.Context, snap Snapshot[S, C], ef
 		services:  o.services,
 		now:       o.now,
 		manual:    o.manualTimers,
+		emit:      o.emit,
+		base:      context.WithoutCancel(ctx),
 		turn:      make(chan struct{}, 1),
 		res:       nil,
 		runs:      sync.WaitGroup{},
@@ -375,6 +385,18 @@ func (i *Instance[S, C]) apply(ctx context.Context, effects []Effect[C]) error {
 					<-run.done
 				}
 			}
+		case EffectSend:
+			i.mu.Lock()
+			run, ok := i.running[e.ID]
+			i.mu.Unlock()
+
+			if ok {
+				run.inbox.put(e.Event)
+			}
+		case EffectEmit:
+			if i.emit != nil {
+				i.emit(ctx, e.Event)
+			}
 		case EffectStartTimer:
 			i.schedule(e)
 		case EffectCancelTimer:
@@ -394,10 +416,11 @@ func (i *Instance[S, C]) apply(ctx context.Context, effects []Effect[C]) error {
 // processed when the run can take the turn, and dropped once the run has
 // been stopped.
 func (i *Instance[S, C]) startService(ctx context.Context, e Effect[C]) {
-	runCtx, stop := context.WithCancel(context.WithoutCancel(ctx))
+	box := newInbox()
+	runCtx, stop := context.WithCancel(serviceContext(context.WithoutCancel(ctx), box, i.now))
 	execCtx, cancel := context.WithCancel(runCtx)
 	token, _ := ctx.Value(settleToken{}).(uint64)
-	run := serviceRun{stop: stop, cancel: cancel, token: token, done: make(chan struct{})}
+	run := serviceRun{stop: stop, cancel: cancel, token: token, done: make(chan struct{}), inbox: box}
 
 	deliver := func(evCtx context.Context, ev any) {
 		// An acquired value is kept before the chart hears of it. One
@@ -517,7 +540,7 @@ func (i *Instance[S, C]) schedule(e Effect[C]) {
 		if !closed {
 			// A wake-up has no caller to report an action's error to;
 			// the hooks see it.
-			_, _ = i.Send(context.Background(), TimerFired{ID: e.ID})
+			_, _ = i.Send(i.base, TimerFired{ID: e.ID})
 		}
 	})
 }

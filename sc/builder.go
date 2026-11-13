@@ -29,6 +29,16 @@ type build[S comparable, C any] struct {
 	// kinds records, for each service or resource name checked so far,
 	// whether it names a resource.
 	kinds map[string]bool
+
+	// raises holds the names given to RaiseAfter, and cancels the names
+	// CancelRaise refers to.
+	raises  map[string]bool
+	cancels []string
+
+	// sends holds the services SendTo names, and emits is set once any
+	// transition emits.
+	sends []string
+	emits bool
 }
 
 func (b *build[S, C]) errorf(format string, args ...any) {
@@ -167,6 +177,12 @@ type FinalBuilder[S comparable, C any] struct {
 	n *node[S, C]
 }
 
+// Tag labels the final state, as [StateBuilder.Tag] does.
+func (f *FinalBuilder[S, C]) Tag(tags ...string) *FinalBuilder[S, C] {
+	f.n.tags = append(f.n.tags, tags...)
+	return f
+}
+
 // Entry adds an action that runs when the final state is entered.
 func (f *FinalBuilder[S, C]) Entry(name string, fn func(context.Context, C)) *FinalBuilder[S, C] {
 	f.n.entry = append(f.n.entry, action[C]{name: name, fn: fn})
@@ -214,6 +230,36 @@ func (s *StateBuilder[S, C]) On[Ev any]() *Transition[S, C, Ev] {
 	}
 
 	return t
+}
+
+// OnAny declares a transition taken when an event arrives that no other
+// transition of the state takes: one of a type the state has no On for, or
+// one whose On transitions all have failing guards. It is tried after the
+// state's On transitions whatever order they were declared in, and a
+// descendant state's transitions still come first. It suits a state that
+// must answer everything it does not expect, such as by recording it or by
+// leaving for an error state.
+//
+// Only events sent to the machine and those a stream service yields count.
+// Timers, service results and state completions never match.
+//
+// An action on the transition receives the event as it arrived. A driver
+// that persists effects, such as pgdriver, can only store an event whose
+// type the chart names in an On somewhere.
+func (s *StateBuilder[S, C]) OnAny() *Transition[S, C, any] {
+	t := newTransition[S, C, any](s.b, s.n, triggerEvent)
+	t.t.wildcard = true
+
+	return t
+}
+
+// Tag labels the state. A snapshot reports the tags of its active states
+// with [Snapshot.HasTag], which lets a caller ask what kind of state an
+// instance is in, such as "busy" or "terminal", without naming every state
+// of that kind.
+func (s *StateBuilder[S, C]) Tag(tags ...string) *StateBuilder[S, C] {
+	s.n.tags = append(s.n.tags, tags...)
+	return s
 }
 
 // Always declares an eventless transition. It is taken as soon as the state
@@ -371,6 +417,7 @@ func (s *StateBuilder[S, C]) Invoke[R any](name string, fn func(context.Context,
 		doneType: reflect.TypeFor[Done[R]](),
 		run:      adaptService(fn),
 		resource: nil,
+		retry:    nil,
 	}
 	s.n.invocations = append(s.n.invocations, inv)
 
@@ -389,6 +436,7 @@ func (s *StateBuilder[S, C]) Requires[R any](name string) *Invocation[S, C, R] {
 		doneType: reflect.TypeFor[Done[R]](),
 		run:      nil,
 		resource: nil,
+		retry:    nil,
 	}
 	s.n.invocations = append(s.n.invocations, inv)
 
@@ -447,7 +495,7 @@ func (s *StateBuilder[S, C]) HoldsRequired[R any](name string) *Resource[S, C, R
 		name:     name,
 		doneType: reflect.TypeFor[Acquired[R]](),
 		run:      nil,
-		resource: &resourceSpec[S]{key: s.n.name + "\x00" + name, release: nil},
+		resource: &resourceSpec[S]{key: s.n.name + "\x00" + name, release: nil}, retry: nil,
 	}
 	s.n.invocations = append(s.n.invocations, inv)
 
@@ -579,6 +627,7 @@ func (s *StateBuilder[S, C]) Stream(name string, fn func(context.Context, C) ite
 		doneType: reflect.TypeFor[Done[struct{}]](),
 		run:      adaptStream(fn),
 		resource: nil,
+		retry:    nil,
 	}
 	s.n.invocations = append(s.n.invocations, inv)
 
@@ -590,6 +639,36 @@ type Invocation[S comparable, C, R any] struct {
 	b   *build[S, C]
 	n   *node[S, C]
 	inv *invocation[S, C]
+}
+
+// Retry makes the driver run the service again when it fails, after the
+// waits the policy gives, instead of failing it. The chart stays in the
+// state meanwhile, and sees a [Failed] event, through OnError, only for a
+// failure the policy does not cover: one its If rejects, the one after Max
+// retries, or one whose retry could not start before a [StateBuilder.Within]
+// budget around the state runs out. Leaving the state abandons the retry.
+//
+// The count of failures lives in the snapshot, not the context, so it
+// survives a restart and resets each time the state is entered.
+func (i *Invocation[S, C, R]) Retry(policy Retry) *Invocation[S, C, R] {
+	switch {
+	case i.inv.retry != nil:
+		i.b.errorf("state %q: service %q has more than one retry policy", i.n.name, i.inv.name)
+	case policy.Max != Forever && policy.Max <= 0:
+		i.b.errorf("state %q: service %q retries %d times; use a positive number or Forever", i.n.name, i.inv.name, policy.Max)
+	case policy.First < 0 || policy.Cap < 0:
+		i.b.errorf("state %q: service %q has a negative retry wait", i.n.name, i.inv.name)
+	case policy.Cap > 0 && policy.First == 0:
+		i.b.errorf("state %q: service %q has a retry cap but no first wait to grow from", i.n.name, i.inv.name)
+	case policy.Max == Forever && policy.First == 0:
+		i.b.errorf("state %q: service %q retries forever without a wait", i.n.name, i.inv.name)
+	case policy.Jitter < 0 || policy.Jitter > 1:
+		i.b.errorf("state %q: service %q has retry jitter %v, which is not between 0 and 1", i.n.name, i.inv.name, policy.Jitter)
+	}
+
+	i.inv.retry = &policy
+
+	return i
 }
 
 // OnDone declares a transition taken when the service succeeds.
@@ -805,6 +884,84 @@ func (t *Transition[S, C, Ev]) Raise(name string, f func(C, Ev) any) *Transition
 		do:     nil,
 		raise:  func(c C, ev any) any { return f(c, event[Ev](ev)) },
 	})
+
+	return t
+}
+
+// SendTo sends the event f returns to the running service named service,
+// which reads it from [Inbox]. It is how a chart talks to work in progress:
+// a child machine declared with [StateBuilder.InvokeMachine], or a service
+// that takes instructions while it runs. The event goes to every running
+// service of that name; when none is running, because its state is not
+// active or it has finished, the event is dropped. A service started by the
+// same step is not running yet.
+//
+// Only the [Instance] and [Actor] drivers deliver such events; pgdriver
+// rejects a chart that sends them.
+func (t *Transition[S, C, Ev]) SendTo(name, service string, f func(C, Ev) any) *Transition[S, C, Ev] {
+	if t.t.sendTargets == nil {
+		t.t.sendTargets = map[int]string{}
+	}
+	t.t.sendTargets[len(t.t.steps)] = service
+	t.b.sends = append(t.b.sends, service)
+
+	t.t.steps = append(t.t.steps, step[C]{
+		kind:   stepSend,
+		name:   name,
+		assign: nil,
+		do:     nil,
+		raise:  func(c C, ev any) any { return f(c, event[Ev](ev)) },
+	})
+
+	return t
+}
+
+// Emit hands the event f returns to whoever runs the machine: the function
+// its driver was given with [OnEmit], or the parent of a machine run with
+// [StateBuilder.InvokeMachine], which receives it as an event of its own.
+// It is how a machine reports progress without knowing who listens. Without
+// a listener the event is dropped.
+func (t *Transition[S, C, Ev]) Emit(name string, f func(C, Ev) any) *Transition[S, C, Ev] {
+	t.b.emits = true
+	t.t.steps = append(t.t.steps, step[C]{
+		kind:   stepEmit,
+		name:   name,
+		assign: nil,
+		do:     nil,
+		raise:  func(c C, ev any) any { return f(c, event[Ev](ev)) },
+	})
+
+	return t
+}
+
+// RaiseAfter queues the event f returns for the machine itself, to be
+// delivered once d has passed, like an event sent then. Unlike a delayed
+// transition it belongs to no state: it is delivered wherever the chart is
+// by then, unless a [Transition.CancelRaise] of the same name runs first or
+// the machine finishes. The driver keeps the timer, and the event waits in
+// the snapshot, so it survives a restart.
+//
+// The event's type must be one the chart handles with an On somewhere, so
+// that a stored snapshot can name it; raising any other type panics.
+func (t *Transition[S, C, Ev]) RaiseAfter(name string, d time.Duration, f func(C, Ev) any) *Transition[S, C, Ev] {
+	if d < 0 {
+		t.b.errorf("state %q: raise %q has a negative delay %s", t.t.source.name, name, d)
+	}
+
+	if t.t.raiseDelays == nil {
+		t.t.raiseDelays = map[int]time.Duration{}
+	}
+	t.t.raiseDelays[len(t.t.steps)] = d
+	t.b.raises[name] = true
+
+	return t.Raise(name, f)
+}
+
+// CancelRaise drops the events that the [Transition.RaiseAfter] named name
+// raised and that are still waiting. It does nothing when none is.
+func (t *Transition[S, C, Ev]) CancelRaise(name string) *Transition[S, C, Ev] {
+	t.t.steps = append(t.t.steps, step[C]{kind: stepCancel, name: name, assign: nil, do: nil, raise: nil})
+	t.b.cancels = append(t.b.cancels, name)
 
 	return t
 }

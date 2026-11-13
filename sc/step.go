@@ -17,10 +17,40 @@ import (
 // bound turns an Always or Raise cycle into a panic instead of a hang.
 const maxSettleSteps = 10_000
 
-// timer is a delayed transition whose timer is running.
+// timerKind is what a running timer does when it fires.
+type timerKind string
+
+const (
+	// timerAfter takes a delayed transition.
+	timerAfter timerKind = ""
+
+	// timerRetry runs a failed service again.
+	timerRetry timerKind = "retry"
+
+	// timerRaise delivers an event raised with a delay.
+	timerRaise timerKind = "raise"
+)
+
+// timer is a running timer: a delayed transition waiting to be taken, a
+// failed service waiting to be run again, or a raised event waiting to be
+// delivered.
 type timer[S comparable, C any] struct {
-	id string
-	t  *transition[S, C]
+	id   string
+	kind timerKind
+
+	// t is the delayed transition of a timerAfter timer.
+	t *transition[S, C]
+
+	// retry is the service a timerRetry timer runs again, and attempt how
+	// many times it has failed.
+	retry   *invocation[S, C]
+	attempt int
+
+	// source is the state whose transition raised a timerRaise timer's
+	// event, label the name of that raise, and raised the event.
+	source *node[S, C]
+	label  string
+	raised any
 
 	// delay is how long the timer was started for; zero for a deadline.
 	delay time.Duration
@@ -31,17 +61,57 @@ type timer[S comparable, C any] struct {
 	// seq orders timers that are due at the same time: the one started
 	// first fires first, which within one state is declaration order.
 	seq uint64
+
+	// jitter is the fraction by which drivers vary the wait.
+	jitter float64
+}
+
+// owner is the state whose exit cancels the timer. A raised event belongs
+// to no state: it is delivered wherever the chart is by then.
+func (tm timer[S, C]) owner() *node[S, C] {
+	switch tm.kind {
+	case timerAfter:
+		return tm.t.source
+	case timerRetry:
+		return tm.retry.state
+	case timerRaise:
+	}
+
+	return nil
+}
+
+// state is the state the timer is reported under.
+func (tm timer[S, C]) state() *node[S, C] {
+	if tm.kind == timerRaise {
+		return tm.source
+	}
+
+	return tm.owner()
+}
+
+// name is the name the timer is reported under: a computed delay's, the
+// retried service's, or the raise's.
+func (tm timer[S, C]) name() string {
+	switch tm.kind {
+	case timerAfter:
+		return tm.t.delayName
+	case timerRetry:
+		return tm.retry.name
+	case timerRaise:
+	}
+
+	return tm.label
 }
 
 // latest is the latest time the timer can fire: its due time, or for a
 // jittered timer the end of its jitter window. The core fires a timer by
 // then even if its driver has not.
 func (tm timer[S, C]) latest() time.Time {
-	if tm.t.jitter == 0 {
+	if tm.jitter == 0 {
 		return tm.due
 	}
 
-	return tm.due.Add(time.Duration(tm.t.jitter * float64(tm.delay)))
+	return tm.due.Add(time.Duration(tm.jitter * float64(tm.delay)))
 }
 
 // restoredTimer rebuilds a pending timer from what a snapshot recorded. A
@@ -55,7 +125,7 @@ func restoredTimer[S comparable, C any](id string, t *transition[S, C], delay ti
 		due = now.Add(delay)
 	}
 
-	return timer[S, C]{id: id, t: t, delay: delay, due: due, seq: seq}
+	return timer[S, C]{id: id, kind: timerAfter, t: t, retry: nil, attempt: 0, source: nil, label: "", raised: nil, delay: delay, due: due, seq: seq, jitter: t.jitter}
 }
 
 // service is a run of an invocation that has not finished.
@@ -65,6 +135,10 @@ type service[S comparable, C any] struct {
 
 	// acquired is set for a resource once its value has been acquired.
 	acquired bool
+
+	// attempt is how many times a service with a retry policy has failed
+	// before this run.
+	attempt int
 }
 
 // endEffect is the effect that ends the run: a release for a resource, a
@@ -432,10 +506,23 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 	}
 
 	for _, pt := range snap.timers {
-		for _, t := range m.nodes[pt.state].transitions {
-			if t.trigger == triggerAfter && t.afterIndex == pt.index {
-				r.timers = append(r.timers, restoredTimer(pt.id, t, pt.delay, pt.due, pt.seq, now))
+		n := m.nodes[pt.state]
+
+		switch pt.kind {
+		case timerAfter:
+			for _, t := range n.transitions {
+				if t.trigger == triggerAfter && t.afterIndex == pt.index {
+					r.timers = append(r.timers, restoredTimer(pt.id, t, pt.delay, pt.due, pt.seq, now))
+				}
 			}
+		case timerRetry:
+			for _, inv := range n.invocations {
+				if inv.name == pt.name && inv.retry != nil {
+					r.timers = append(r.timers, timer[S, C]{id: pt.id, kind: timerRetry, t: nil, retry: inv, attempt: pt.attempt, source: nil, label: "", raised: nil, delay: pt.delay, due: pt.due, seq: pt.seq, jitter: pt.jitter})
+				}
+			}
+		case timerRaise:
+			r.timers = append(r.timers, timer[S, C]{id: pt.id, kind: timerRaise, t: nil, retry: nil, attempt: 0, source: n, label: pt.name, raised: pt.raised, delay: pt.delay, due: pt.due, seq: pt.seq, jitter: 0})
 		}
 	}
 
@@ -446,7 +533,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 	for _, ri := range snap.invocations {
 		for _, inv := range m.nodes[ri.state].invocations {
 			if inv.name == ri.name {
-				r.services = append(r.services, service[S, C]{id: ri.id, inv: inv, acquired: ri.acquired})
+				r.services = append(r.services, service[S, C]{id: ri.id, inv: inv, acquired: ri.acquired, attempt: ri.attempt})
 			}
 		}
 	}
@@ -470,7 +557,17 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 		invocations: make([]runningInvocation[S], 0, len(r.services)),
 		scopes:      make(map[S]time.Time, len(r.scopes)),
 		counter:     r.counter,
+		tags:        nil,
 	}
+
+	for _, n := range r.active() {
+		for _, tag := range n.tags {
+			if !slices.Contains(snap.tags, tag) {
+				snap.tags = append(snap.tags, tag)
+			}
+		}
+	}
+	slices.Sort(snap.tags)
 
 	for n, deadline := range r.scopes {
 		snap.scopes[n.id] = deadline
@@ -489,14 +586,23 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 	}
 
 	for _, t := range r.timers {
+		index := 0
+		if t.kind == timerAfter {
+			index = t.t.afterIndex
+		}
+
 		snap.timers = append(snap.timers, pendingTimer[S]{
-			id: t.id, state: t.t.source.id, index: t.t.afterIndex, name: t.t.delayName,
-			delay: t.delay, due: t.due, seq: t.seq, jitter: t.t.jitter,
+			id: t.id, kind: t.kind, state: t.state().id, index: index, name: t.name(),
+			delay: t.delay, due: t.due, seq: t.seq, jitter: t.jitter,
+			attempt: t.attempt, raised: t.raised, eventName: "",
 		})
+		if t.kind == timerRaise {
+			snap.timers[len(snap.timers)-1].eventName = r.m.EventName(t.raised)
+		}
 	}
 
 	for _, s := range r.services {
-		snap.invocations = append(snap.invocations, runningInvocation[S]{id: s.id, state: s.inv.state.id, name: s.inv.name, resource: s.inv.resource != nil, acquired: s.acquired})
+		snap.invocations = append(snap.invocations, runningInvocation[S]{id: s.id, state: s.inv.state.id, name: s.inv.name, resource: s.inv.resource != nil, acquired: s.acquired, attempt: s.attempt})
 	}
 
 	return snap
@@ -528,15 +634,12 @@ func (r *run[S, C]) accept(ev any) (stimulus[S, C], bool) {
 			return none, false
 		}
 
-		t := r.timers[i].t
+		tm := r.timers[i]
 		r.timers = slices.Delete(r.timers, i, i+1)
 		r.changed = true
 		r.fired = append(r.fired, e.ID)
 
-		stim := on[S, C](triggerAfter)
-		stim.timer = t
-
-		return stim, true
+		return r.fire(tm), true
 	case Emitted:
 		if !slices.ContainsFunc(r.services, func(s service[S, C]) bool { return s.id == e.ID }) {
 			return none, false
@@ -571,12 +674,19 @@ func (r *run[S, C]) accept(ev any) (stimulus[S, C], bool) {
 			return none, false
 		}
 
-		inv := r.services[i].inv
+		inv, attempt := r.services[i].inv, r.services[i].attempt
 		r.services = slices.Delete(r.services, i, i+1)
 		r.changed = true
 
 		stim := on[S, C](triggerInvokeDone)
-		if _, failed := ev.(Failed); failed {
+		if failed, ok := ev.(Failed); ok {
+			// A failure the service's retry policy covers is not the
+			// chart's to see: the service runs again after a wait.
+			if r.retries(inv, attempt, failed.Err) {
+				r.startRetry(inv, attempt+1)
+				return on[S, C](triggerNone), true
+			}
+
 			stim.trigger = triggerInvokeError
 		}
 		stim.event = ev
@@ -599,7 +709,7 @@ func (r *run[S, C]) matches(t *transition[S, C], stim stimulus[S, C]) bool {
 
 	switch t.trigger {
 	case triggerEvent:
-		if reflect.TypeOf(stim.event) != t.eventType {
+		if !t.wildcard && reflect.TypeOf(stim.event) != t.eventType {
 			return false
 		}
 	case triggerAfter:
@@ -614,7 +724,7 @@ func (r *run[S, C]) matches(t *transition[S, C], stim stimulus[S, C]) bool {
 		if stim.inv != t.invocation || reflect.TypeOf(stim.event) != t.eventType {
 			return false
 		}
-	case triggerAlways:
+	case triggerAlways, triggerNone:
 	}
 
 	for _, in := range t.inNodes {
@@ -651,15 +761,18 @@ func (r *run[S, C]) selectTransitions(stim stimulus[S, C]) []*transition[S, C] {
 
 	ancestors:
 		for n := leaf; n != nil; n = n.parent {
-			for _, t := range n.transitions {
-				if !r.matches(t, stim) {
-					continue
-				}
-				if !slices.Contains(enabled, t) {
-					enabled = append(enabled, t)
-				}
+			// A state's OnAny transitions are tried after its others.
+			for _, wildcard := range []bool{false, true} {
+				for _, t := range n.transitions {
+					if t.wildcard != wildcard || !r.matches(t, stim) {
+						continue
+					}
+					if !slices.Contains(enabled, t) {
+						enabled = append(enabled, t)
+					}
 
-				break ancestors
+					break ancestors
+				}
 			}
 		}
 	}
@@ -879,7 +992,7 @@ func (r *run[S, C]) exit(n *node[S, C], event any) {
 	}
 
 	r.timers = slices.DeleteFunc(r.timers, func(t timer[S, C]) bool {
-		if t.t.source != n {
+		if t.owner() != n {
 			return false
 		}
 		r.effects = append(r.effects, r.bare(EffectCancelTimer, t.id, n, ""))
@@ -918,9 +1031,37 @@ func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
 		case stepRun:
 			r.emitRun(t.source, s.name, stim.event, t.runConds[k])
 		case stepRaise:
+			ev := s.raise(r.ctx, stim.event)
+			if delay, ok := t.raiseDelays[k]; ok {
+				r.startRaise(t.source, s.name, ev, delay)
+				continue
+			}
+
 			raised := on[S, C](triggerEvent)
-			raised.event = s.raise(r.ctx, stim.event)
+			raised.event = ev
 			r.queue = append(r.queue, raised)
+		case stepSend:
+			ev := s.raise(r.ctx, stim.event)
+			for _, running := range r.services {
+				if running.inv.resource == nil && running.inv.name == t.sendTargets[k] {
+					e := r.bare(EffectSend, running.id, running.inv.state, running.inv.name)
+					e.Event = ev
+					r.effects = append(r.effects, e)
+				}
+			}
+		case stepEmit:
+			e := r.bare(EffectEmit, "", t.source, s.name)
+			e.Event = s.raise(r.ctx, stim.event)
+			r.effects = append(r.effects, e)
+		case stepCancel:
+			r.timers = slices.DeleteFunc(r.timers, func(tm timer[S, C]) bool {
+				if tm.kind != timerRaise || tm.label != s.name {
+					return false
+				}
+				r.effects = append(r.effects, r.bare(EffectCancelTimer, tm.id, tm.source, tm.label))
+
+				return true
+			})
 		}
 	}
 }
@@ -995,12 +1136,20 @@ func (r *run[S, C]) nextID(n *node[S, C], label string) string {
 // or deadline from the context as it is now.
 func (r *run[S, C]) startTimer(t *transition[S, C]) {
 	tm := timer[S, C]{
-		id:    r.nextID(t.source, fmt.Sprintf("after.%d", t.afterIndex)),
-		t:     t,
-		delay: t.delay,
-		due:   time.Time{},
-		seq:   r.counter,
+		id:      r.nextID(t.source, fmt.Sprintf("after.%d", t.afterIndex)),
+		kind:    timerAfter,
+		t:       t,
+		retry:   nil,
+		attempt: 0,
+		source:  nil,
+		label:   "",
+		raised:  nil,
+		delay:   t.delay,
+		due:     time.Time{},
+		seq:     0,
+		jitter:  t.jitter,
 	}
+	tm.seq = r.counter
 
 	switch {
 	case t.delayFn != nil:
@@ -1024,11 +1173,11 @@ func timerEffect[S comparable, C any](tm timer[S, C]) Effect[C] {
 	return Effect[C]{
 		Kind:    EffectStartTimer,
 		ID:      tm.id,
-		State:   tm.t.source.name,
-		Name:    tm.t.delayName,
+		State:   tm.state().name,
+		Name:    tm.name(),
 		Delay:   tm.delay,
 		At:      tm.due,
-		Jitter:  tm.t.jitter,
+		Jitter:  tm.jitter,
 		Context: zero,
 		Event:   nil,
 		From:    nil,
@@ -1074,8 +1223,7 @@ func (r *run[S, C]) fireDue() {
 			r.now = tm.latest()
 		}
 
-		stim := on[S, C](triggerAfter)
-		stim.timer = tm.t
+		stim := r.fire(tm)
 		if ts := r.selectTransitions(stim); len(ts) > 0 {
 			r.microstep(ts, stim)
 		}
@@ -1083,9 +1231,110 @@ func (r *run[S, C]) fireDue() {
 	}
 }
 
+// fire does what a timer that has come due is for, and returns what the
+// chart must react to.
+func (r *run[S, C]) fire(tm timer[S, C]) stimulus[S, C] {
+	switch tm.kind {
+	case timerAfter:
+		stim := on[S, C](triggerAfter)
+		stim.timer = tm.t
+
+		return stim
+	case timerRetry:
+		r.startRun(tm.retry, tm.attempt)
+	case timerRaise:
+		stim := on[S, C](triggerEvent)
+		stim.event = tm.raised
+
+		return stim
+	}
+
+	return on[S, C](triggerNone)
+}
+
+// retries reports whether inv, having failed with err after attempt earlier
+// failures, is to be run again instead of failing.
+func (r *run[S, C]) retries(inv *invocation[S, C], attempt int, err error) bool {
+	p := inv.retry
+	if p == nil || (p.Max != Forever && attempt >= p.Max) || (p.If != nil && !p.If(err)) {
+		return false
+	}
+
+	// A retry that could only start once the state's budget has run out
+	// would fail at once, so the failure stands.
+	deadline := r.deadlineFor(inv.state)
+
+	return deadline.IsZero() || r.now.Add(p.wait(attempt+1)).Before(deadline)
+}
+
+// startRetry starts the wait before inv runs again after its failures-th
+// failure.
+func (r *run[S, C]) startRetry(inv *invocation[S, C], failures int) {
+	p := inv.retry
+
+	// Under Forever the count stops growing once the wait has, so the
+	// snapshot takes finitely many values.
+	if p.Max == Forever {
+		failures = min(failures, p.steps())
+	}
+
+	tm := timer[S, C]{
+		id:      r.nextID(inv.state, "retry."+inv.name),
+		kind:    timerRetry,
+		t:       nil,
+		retry:   inv,
+		attempt: failures,
+		source:  nil,
+		label:   "",
+		raised:  nil,
+		delay:   p.wait(failures),
+		due:     time.Time{},
+		seq:     0,
+		jitter:  p.Jitter,
+	}
+	tm.seq = r.counter
+	tm.due = r.now.Add(tm.delay)
+
+	r.timers = append(r.timers, tm)
+	r.effects = append(r.effects, timerEffect[S, C](tm))
+}
+
+// startRaise starts the wait before ev, raised by a transition of source, is
+// delivered.
+func (r *run[S, C]) startRaise(source *node[S, C], name string, ev any, delay time.Duration) {
+	if _, ok := r.m.eventNames[reflect.TypeOf(ev)]; !ok {
+		panic(fmt.Sprintf("sc: machine %q: RaiseAfter %q in state %q raised a %T, which no On transition of the chart handles", r.m.id, name, source.name, ev))
+	}
+
+	tm := timer[S, C]{
+		id:      r.nextID(source, "raise."+name),
+		kind:    timerRaise,
+		t:       nil,
+		retry:   nil,
+		attempt: 0,
+		source:  source,
+		label:   name,
+		raised:  ev,
+		delay:   delay,
+		due:     time.Time{},
+		seq:     0,
+		jitter:  0,
+	}
+	tm.seq = r.counter
+	tm.due = r.now.Add(delay)
+
+	r.timers = append(r.timers, tm)
+	r.effects = append(r.effects, timerEffect[S, C](tm))
+}
+
 func (r *run[S, C]) startService(inv *invocation[S, C]) {
+	r.startRun(inv, 0)
+}
+
+// startRun starts a run of inv that follows attempt failed ones.
+func (r *run[S, C]) startRun(inv *invocation[S, C], attempt int) {
 	id := r.nextID(inv.state, inv.name)
-	r.services = append(r.services, service[S, C]{id: id, inv: inv, acquired: false})
+	r.services = append(r.services, service[S, C]{id: id, inv: inv, acquired: false, attempt: attempt})
 	r.effects = append(r.effects, r.serviceEffect(id, inv))
 }
 
@@ -1271,7 +1520,7 @@ func (r *run[S, C]) settle() {
 
 	if r.done {
 		for _, t := range r.timers {
-			r.effects = append(r.effects, r.bare(EffectCancelTimer, t.id, t.t.source, ""))
+			r.effects = append(r.effects, r.bare(EffectCancelTimer, t.id, t.state(), ""))
 		}
 		names := r.activeNames()
 		first := len(r.effects)

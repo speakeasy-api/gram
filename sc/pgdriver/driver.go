@@ -67,6 +67,12 @@ var (
 	// worker process may carry out an instance's effects, so this driver
 	// cannot hold one. Run such a chart with sc.Instance or sc.Actor.
 	ErrResources = errors.New("chart declares resources, which the Postgres driver cannot hold")
+
+	// ErrMessaging is returned by [New] for a chart that sends events to
+	// its services or emits them to whoever runs it. Both reach a
+	// goroutine in one process, and any worker process may carry out an
+	// instance's effects. Run such a chart with sc.Instance or sc.Actor.
+	ErrMessaging = errors.New("chart sends or emits events, which the Postgres driver cannot deliver")
 )
 
 // Driver stores and runs the instances of one machine. It is safe for
@@ -132,10 +138,15 @@ func WithSink[C any](sink Sink[C]) Option {
 }
 
 // New returns a driver for the instances of m. It fails with an error
-// wrapping [ErrResources] when the chart declares resources.
+// wrapping [ErrResources] when the chart declares resources, and with
+// [ErrMessaging] when it sends or emits events.
 func New[S comparable, C any](pool *pgxpool.Pool, m *sc.Machine[S, C], opts ...Option) (*Driver[S, C], error) {
 	if resources := m.Resources(); len(resources) > 0 {
 		return nil, fmt.Errorf("%w: %s", ErrResources, strings.Join(resources, ", "))
+	}
+
+	if m.Messaging() {
+		return nil, ErrMessaging
 	}
 
 	cfg := config{poll: defaultPollInterval, hooks: nil, store: nil, sink: nil}

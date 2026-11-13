@@ -45,6 +45,9 @@ type Actor[S comparable, C any] struct {
 	// now is the actor's clock.
 	now func() time.Time
 
+	// emit receives the events the chart emits, when set.
+	emit func(context.Context, any)
+
 	// stopped is closed when Run returns.
 	stopped chan struct{}
 
@@ -102,6 +105,7 @@ func (m *Machine[S, C]) newActor(snap Snapshot[S, C], effects []Effect[C], o run
 		hooks:    hooks,
 		services: o.services,
 		now:      o.now,
+		emit:     o.emit,
 		stopped:  make(chan struct{}),
 		started:  atomic.Bool{},
 		initial:  effects,
@@ -147,6 +151,10 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 
 	stops := map[string]context.CancelFunc{}
 
+	// inboxes holds, for each service run, where the chart's events for it
+	// go.
+	inboxes := map[string]*inbox{}
+
 	// stopping holds the stopped service runs that have not returned yet;
 	// a resource is released only once they have.
 	var stopping []chan struct{}
@@ -166,7 +174,9 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 					return err
 				}
 			case EffectStartInvocation:
-				serviceCtx, stop := context.WithCancel(ctx)
+				box := newInbox()
+				inboxes[e.ID] = box
+				serviceCtx, stop := context.WithCancel(serviceContext(ctx, box, a.now))
 				done := make(chan struct{})
 				stops[e.ID] = func() {
 					stop()
@@ -215,6 +225,15 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 				if stop, ok := stops[e.ID]; ok {
 					stop()
 					delete(stops, e.ID)
+				}
+				delete(inboxes, e.ID)
+			case EffectSend:
+				if box, ok := inboxes[e.ID]; ok {
+					box.put(e.Event)
+				}
+			case EffectEmit:
+				if a.emit != nil {
+					a.emit(ctx, e.Event)
 				}
 			case EffectAcquire:
 				res.begin(e)

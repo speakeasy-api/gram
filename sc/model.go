@@ -105,6 +105,9 @@ type node[S comparable, C any] struct {
 	// budget is the time budget services in the state and its descendants
 	// share, from when the state is entered; zero for none.
 	budget time.Duration
+
+	// tags are the labels declared with Tag.
+	tags []string
 }
 
 // states returns the children that are real states, skipping history nodes.
@@ -181,6 +184,16 @@ const (
 	// stepRun emits an action effect for a chart action declared with
 	// Builder.Action.
 	stepRun stepKind = "run"
+
+	// stepCancel cancels the events a RaiseAfter of the same name raised
+	// that are still waiting.
+	stepCancel stepKind = "cancel"
+
+	// stepSend sends an event to a running service of the chart.
+	stepSend stepKind = "send"
+
+	// stepEmit hands an event to whoever runs the machine.
+	stepEmit stepKind = "emit"
 )
 
 // Move is the step a chart action, declared with [Builder.Action], runs in.
@@ -248,6 +261,10 @@ const (
 
 	// triggerAcquired fires when a resource has been acquired.
 	triggerAcquired triggerKind = "acquired"
+
+	// triggerNone is the stimulus of something the core dealt with itself,
+	// such as a failure it retries. No transition has it.
+	triggerNone triggerKind = "none"
 )
 
 // transition is one outgoing edge of a state with its event type erased.
@@ -320,9 +337,19 @@ type transition[S comparable, C any] struct {
 	// its event.
 	stay bool
 
+	// wildcard marks a triggerEvent transition declared with OnAny, which
+	// matches an event of any type.
+	wildcard bool
+
 	// runConds holds, by step index, the condition a chart action run by
 	// RunIf needs.
 	runConds map[int]func(Move[S]) bool
+
+	// raiseDelays holds, by step index, how long a RaiseAfter waits.
+	raiseDelays map[int]time.Duration
+
+	// sendTargets holds, by step index, the service a SendTo sends to.
+	sendTargets map[int]string
 }
 
 // invocation is a service that runs while its state is active.
@@ -344,6 +371,9 @@ type invocation[S comparable, C any] struct {
 	// resource is set for a resource declared with Holds, and nil for a
 	// service.
 	resource *resourceSpec[S]
+
+	// retry is the service's retry policy, or nil for none.
+	retry *Retry
 }
 
 // resourceSpec is what makes an invocation a resource.

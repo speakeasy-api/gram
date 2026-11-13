@@ -1,6 +1,7 @@
 package sc
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -17,6 +18,8 @@ type runOptions struct {
 	now func() time.Time
 
 	manualTimers bool
+
+	emit func(ctx context.Context, ev any)
 }
 
 // RunOption configures a driver in this package: an [Actor] or an
@@ -25,7 +28,7 @@ type RunOption func(*runOptions)
 
 // runSettings applies opts over the defaults.
 func runSettings(opts []RunOption) runOptions {
-	o := runOptions{hooks: nil, services: nil, now: time.Now, manualTimers: false}
+	o := runOptions{hooks: nil, services: nil, now: time.Now, manualTimers: false, emit: nil}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -83,4 +86,13 @@ func LimitServices(sem *semaphore.Weighted) RunOption {
 // loop or by a clock that does not follow real time. The actor ignores it.
 func ManualTimers() RunOption {
 	return func(o *runOptions) { o.manualTimers = true }
+}
+
+// OnEmit makes the driver call fn with each event the chart emits with
+// [Transition.Emit], in order, on the goroutine processing the step that
+// emitted it. fn must not block or send events to the same instance; hand
+// the event to a queue when the listener is slow. ctx is the context of the
+// event that caused the step.
+func OnEmit(fn func(ctx context.Context, ev any)) RunOption {
+	return func(o *runOptions) { o.emit = fn }
 }

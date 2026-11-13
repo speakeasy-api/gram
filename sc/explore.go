@@ -618,7 +618,7 @@ func (m *Machine[S, C]) candidates(snap Snapshot[S, C], now time.Time, x Explora
 	}
 
 	for _, t := range snap.timers {
-		add(later(now, t.due), TimerFired{ID: t.id}, fmt.Sprintf("timer %s.%d", m.nodes[t.state].name, t.index))
+		add(later(now, t.due), TimerFired{ID: t.id}, "timer "+m.timerLabel(t))
 	}
 
 	for _, inv := range snap.invocations {
@@ -778,6 +778,25 @@ type stateIdentity struct {
 	Context any `json:"context"`
 }
 
+// timerLabel names a pending timer by what it is for rather than by its ID.
+func (m *Machine[S, C]) timerLabel(t pendingTimer[S]) string {
+	state := m.nodes[t.state].name
+
+	switch t.kind {
+	case timerAfter:
+	case timerRetry:
+		return fmt.Sprintf("%q retry %q attempt=%d", state, t.name, t.attempt)
+	case timerRaise:
+		// A raised event that does not marshal is caught when the
+		// snapshot is stored; here its text form is enough.
+		ev, _ := json.Marshal(t.raised)
+
+		return fmt.Sprintf("%q raise %q %s %s", state, t.name, t.eventName, ev)
+	}
+
+	return fmt.Sprintf("%q.%d", state, t.index)
+}
+
 func (m *Machine[S, C]) stateKey(snap Snapshot[S, C], now time.Time, key func(C, time.Time) any) (string, error) {
 	var ctx any = snap.Context
 	if key != nil {
@@ -807,13 +826,13 @@ func (m *Machine[S, C]) stateKey(snap Snapshot[S, C], now time.Time, key func(C,
 	}
 
 	for _, t := range snap.timers {
-		id.Timers = append(id.Timers, fmt.Sprintf("%s.%d in %s", m.nodes[t.state].name, t.index, t.due.Sub(now)))
+		id.Timers = append(id.Timers, fmt.Sprintf("%s in %s", m.timerLabel(t), t.due.Sub(now)))
 	}
 	slices.Sort(id.Timers)
 
 	for _, inv := range snap.invocations {
 		// Quoting keeps a name that ends like the marker apart from it.
-		id.Services = append(id.Services, fmt.Sprintf("%q %q held=%t", m.nodes[inv.state].name, inv.name, inv.acquired))
+		id.Services = append(id.Services, fmt.Sprintf("%q %q held=%t attempt=%d", m.nodes[inv.state].name, inv.name, inv.acquired, inv.attempt))
 	}
 	slices.Sort(id.Services)
 

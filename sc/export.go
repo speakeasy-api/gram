@@ -30,13 +30,17 @@ type Definition struct {
 	// Initial is the key of the initial child state.
 	Initial string `json:"initial,omitempty"`
 
+	// Tags lists the state's tags.
+	Tags []string `json:"tags,omitempty"`
+
 	// Entry lists the entry action names.
 	Entry []string `json:"entry,omitempty"`
 
 	// Exit lists the exit action names.
 	Exit []string `json:"exit,omitempty"`
 
-	// On maps event names to their transitions.
+	// On maps event names to their transitions. A [StateBuilder.OnAny]
+	// transition is keyed "*".
 	On map[string][]TransitionDefinition `json:"on,omitempty"`
 
 	// Always lists the eventless transitions.
@@ -86,6 +90,10 @@ type InvokeDefinition struct {
 	// registered under.
 	Src string `json:"src"`
 
+	// Retry describes the service's retry policy, such as
+	// "3 times, 30s doubling to 30m0s". It is not part of XState's format.
+	Retry string `json:"retry,omitempty"`
+
 	// OnDone lists the transitions taken when the service succeeds.
 	OnDone []TransitionDefinition `json:"onDone,omitempty"`
 
@@ -109,6 +117,7 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 		History: string(n.historyKind),
 		Target:  "",
 		Initial: "",
+		Tags:    n.tags,
 		Entry:   nil,
 		Exit:    nil,
 		On:      nil,
@@ -141,7 +150,7 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 	invokes := map[*invocation[S, C]]int{}
 	for _, inv := range n.invocations {
 		invokes[inv] = len(def.Invoke)
-		def.Invoke = append(def.Invoke, InvokeDefinition{ID: inv.name, Src: inv.name, OnDone: nil, OnError: nil})
+		def.Invoke = append(def.Invoke, InvokeDefinition{ID: inv.name, Src: inv.name, Retry: describeRetry(inv.retry), OnDone: nil, OnError: nil})
 	}
 
 	for _, t := range n.transitions {
@@ -170,6 +179,9 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 				def.On = map[string][]TransitionDefinition{}
 			}
 			name := m.eventNames[t.eventType]
+			if t.wildcard {
+				name = "*"
+			}
 			def.On[name] = append(def.On[name], td)
 		case triggerAlways:
 			def.Always = append(def.Always, td)
@@ -190,6 +202,7 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 		case triggerInvokeError:
 			inv := &def.Invoke[invokes[t.invocation]]
 			inv.OnError = append(inv.OnError, td)
+		case triggerNone:
 		}
 	}
 
@@ -201,4 +214,23 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 	}
 
 	return def
+}
+
+// describeRetry puts a retry policy in words for the export.
+func describeRetry(p *Retry) string {
+	if p == nil {
+		return ""
+	}
+
+	times := "forever"
+	if p.Max != Forever {
+		times = strconv.Itoa(p.Max) + " times"
+	}
+
+	waits := "every " + p.First.String()
+	if p.Cap > p.First {
+		waits = p.First.String() + " doubling to " + p.Cap.String()
+	}
+
+	return times + ", " + waits
 }

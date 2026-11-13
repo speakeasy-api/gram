@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"time"
 )
@@ -31,11 +32,16 @@ type Snapshot[S comparable, C any] struct {
 	scopes      map[S]time.Time
 	counter     uint64
 	seed        uint64
+
+	// tags are the tags of the active states, sorted. They follow from
+	// active and are not stored.
+	tags []string
 }
 
 // pendingTimer is a delayed transition whose timer has not fired.
 type pendingTimer[S comparable] struct {
 	id     string
+	kind   timerKind
 	state  S
 	index  int
 	name   string
@@ -43,6 +49,13 @@ type pendingTimer[S comparable] struct {
 	due    time.Time
 	seq    uint64
 	jitter float64
+
+	// attempt is, for a retry, how many times the service has failed.
+	attempt int
+
+	// raised is a delayed raise's event, and eventName its name.
+	raised    any
+	eventName string
 }
 
 // runningInvocation is a service run that has not reported a result.
@@ -54,6 +67,9 @@ type runningInvocation[S comparable] struct {
 	// resource marks a resource; acquired is set once it is held.
 	resource bool
 	acquired bool
+
+	// attempt is how many times a retried service failed before this run.
+	attempt int
 }
 
 // PendingTimer is a timer that has started and not yet fired or been
@@ -63,12 +79,23 @@ type PendingTimer[S comparable] struct {
 	// TimerFired event for it carries.
 	ID string
 
-	// State is the state whose delayed transition the timer belongs to.
+	// State is the state whose delayed transition the timer belongs to,
+	// whose service is waiting to be retried, or whose transition raised a
+	// delayed event.
 	State S
 
 	// Name is the name of a computed delay or deadline, and empty for a
-	// fixed delay.
+	// fixed delay. For a retry it is the service name, and for a delayed
+	// event the name of the raise.
 	Name string
+
+	// Retry is set for the wait before a failed service runs again, and
+	// Attempt is then how many times it has failed.
+	Retry   bool
+	Attempt int
+
+	// Raised is the event a delayed raise will deliver, and nil otherwise.
+	Raised any
 
 	// Delay is how long the timer was started for; zero for a deadline.
 	Delay time.Duration
@@ -99,7 +126,7 @@ type RunningService[S comparable] struct {
 func (s Snapshot[S, C]) Timers() []PendingTimer[S] {
 	out := make([]PendingTimer[S], 0, len(s.timers))
 	for _, t := range s.timers {
-		out = append(out, PendingTimer[S]{ID: t.id, State: t.state, Name: t.name, Delay: t.delay, Due: t.due, Jitter: t.jitter})
+		out = append(out, PendingTimer[S]{ID: t.id, State: t.state, Name: t.name, Retry: t.kind == timerRetry, Attempt: t.attempt, Raised: t.raised, Delay: t.delay, Due: t.due, Jitter: t.jitter})
 	}
 
 	return out
@@ -153,6 +180,13 @@ func (s Snapshot[S, C]) Active() []S { return slices.Clone(s.active) }
 // In reports whether state is active, either as a leaf or as an ancestor of
 // one.
 func (s Snapshot[S, C]) In(state S) bool { return slices.Contains(s.active, state) }
+
+// HasTag reports whether any active state was declared with tag, with
+// [StateBuilder.Tag].
+func (s Snapshot[S, C]) HasTag(tag string) bool { return slices.Contains(s.tags, tag) }
+
+// Tags returns the tags of the active states, sorted, each once.
+func (s Snapshot[S, C]) Tags() []string { return slices.Clone(s.tags) }
 
 // Done reports whether the machine has reached a top-level final state.
 func (s Snapshot[S, C]) Done() bool { return s.done }
@@ -226,6 +260,23 @@ type RawTimer struct {
 
 	// Seq orders timers due at the same time: the lower one started first.
 	Seq uint64 `json:"seq,omitempty"`
+
+	// Kind is empty for a delayed transition, "retry" for the wait before
+	// a failed service runs again, and "raise" for a delayed event.
+	Kind string `json:"kind,omitempty"`
+
+	// Name is the retried service's name, or the name of the raise.
+	Name string `json:"name,omitempty"`
+
+	// Attempt is how many times a retried service has failed.
+	Attempt int `json:"attempt,omitempty"`
+
+	// Jitter is the fraction by which the driver varies a retry's wait.
+	Jitter float64 `json:"jitter,omitempty"`
+
+	// EventName and Event are a delayed raise's event.
+	EventName string          `json:"event_name,omitempty"`
+	Event     json.RawMessage `json:"event,omitempty"`
 }
 
 // RawInvocation is the stored form of an unfinished service run.
@@ -244,6 +295,9 @@ type RawInvocation struct {
 
 	// Acquired is set for a resource that was held.
 	Acquired bool `json:"acquired,omitempty"`
+
+	// Attempt is how many times a retried service failed before this run.
+	Attempt int `json:"attempt,omitempty"`
 }
 
 // MarshalJSON encodes the snapshot in the [RawSnapshot] format.
@@ -282,11 +336,25 @@ func (s Snapshot[S, C]) MarshalJSON() ([]byte, error) {
 	}
 
 	for _, t := range s.timers {
-		raw.Timers = append(raw.Timers, RawTimer{ID: t.id, State: fmt.Sprint(t.state), Index: t.index, DelayNanos: int64(t.delay), Due: t.due, Seq: t.seq})
+		rt := RawTimer{ID: t.id, State: fmt.Sprint(t.state), Index: t.index, DelayNanos: int64(t.delay), Due: t.due, Seq: t.seq, Kind: string(t.kind), Name: "", Attempt: t.attempt, Jitter: 0, EventName: "", Event: nil}
+
+		switch t.kind {
+		case timerAfter:
+		case timerRetry:
+			rt.Name, rt.Jitter = t.name, t.jitter
+		case timerRaise:
+			ev, err := json.Marshal(t.raised)
+			if err != nil {
+				return nil, fmt.Errorf("marshal raised event %q: %w", t.eventName, err)
+			}
+			rt.Name, rt.EventName, rt.Event = t.name, t.eventName, ev
+		}
+
+		raw.Timers = append(raw.Timers, rt)
 	}
 
 	for _, inv := range s.invocations {
-		raw.Invocations = append(raw.Invocations, RawInvocation{ID: inv.id, State: fmt.Sprint(inv.state), Name: inv.name, Resource: inv.resource, Acquired: inv.acquired})
+		raw.Invocations = append(raw.Invocations, RawInvocation{ID: inv.id, State: fmt.Sprint(inv.state), Name: inv.name, Resource: inv.resource, Acquired: inv.acquired, Attempt: inv.attempt})
 	}
 
 	for state, deadline := range s.scopes {
@@ -405,7 +473,9 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 		}
 	}
 
-	r.restoreOutstanding(raw, previously)
+	if err := r.restoreOutstanding(raw, previously); err != nil {
+		return zero, nil, err
+	}
 
 	return r.snapshot(raw.Seq), r.effects, nil
 }
@@ -565,12 +635,34 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 // previously is non-nil and names the states active before the migration;
 // states the migration made active get the timers, services and budget that
 // entering them would have started.
-func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bool) {
+func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bool) error {
 	for _, rt := range raw.Timers {
 		n, ok := r.m.names[rt.State]
 		kept := false
 
-		if ok && r.config[n] && !r.done {
+		switch {
+		case timerKind(rt.Kind) == timerRaise && ok && !r.done:
+			// A raised event waits whatever state the chart is in.
+			t, known := r.m.eventTypes[rt.EventName]
+			if !known {
+				return fmt.Errorf("%w: delayed event %q is not one the chart handles", ErrInvalidSnapshot, rt.EventName)
+			}
+
+			ev := reflect.New(t)
+			if err := json.Unmarshal(rt.Event, ev.Interface()); err != nil {
+				return fmt.Errorf("unmarshal delayed event %q: %w", rt.EventName, err)
+			}
+
+			r.timers = append(r.timers, timer[S, C]{id: rt.ID, kind: timerRaise, t: nil, retry: nil, attempt: 0, source: n, label: rt.Name, raised: ev.Elem().Interface(), delay: time.Duration(rt.DelayNanos), due: rt.Due, seq: rt.Seq, jitter: 0})
+			kept = true
+		case timerKind(rt.Kind) == timerRetry && ok && r.config[n] && !r.done:
+			for _, inv := range n.invocations {
+				if inv.name == rt.Name && inv.retry != nil {
+					r.timers = append(r.timers, timer[S, C]{id: rt.ID, kind: timerRetry, t: nil, retry: inv, attempt: rt.Attempt, source: nil, label: "", raised: nil, delay: time.Duration(rt.DelayNanos), due: rt.Due, seq: rt.Seq, jitter: rt.Jitter})
+					kept = true
+				}
+			}
+		case timerKind(rt.Kind) == timerAfter && ok && r.config[n] && !r.done:
 			for _, t := range n.transitions {
 				if t.trigger == triggerAfter && t.afterIndex == rt.Index {
 					r.timers = append(r.timers, restoredTimer(rt.ID, t, time.Duration(rt.DelayNanos), rt.Due, rt.Seq, r.now))
@@ -592,7 +684,7 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 		if ok && r.config[n] && !r.done {
 			for _, inv := range n.invocations {
 				if inv.name == ri.Name && (inv.resource != nil) == ri.Resource {
-					r.services = append(r.services, service[S, C]{id: ri.ID, inv: inv, acquired: ri.Acquired})
+					r.services = append(r.services, service[S, C]{id: ri.ID, inv: inv, acquired: ri.Acquired, attempt: ri.Attempt})
 					kept = true
 				}
 			}
@@ -607,7 +699,7 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 	}
 
 	if r.done || previously == nil {
-		return
+		return nil
 	}
 
 	for _, n := range r.active() {
@@ -629,6 +721,8 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 			r.startService(inv)
 		}
 	}
+
+	return nil
 }
 
 // Resume returns the effects that restart everything outstanding in snap:

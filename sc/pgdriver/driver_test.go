@@ -463,3 +463,58 @@ func TestNewRejectsAChartThatHoldsResources(t *testing.T) {
 	require.ErrorIs(t, err, pgdriver.ErrResources)
 	require.ErrorContains(t, err, "open.conn")
 }
+
+func TestNewRejectsAChartThatSendsOrEmitsEvents(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
+		b.Initial("open")
+		b.State("open").On[tick]().Emit("report", func(order, tick) any { return tick{} }).To("closed")
+		b.Final("closed")
+	})
+	require.NoError(t, err)
+
+	_, err = pgdriver.New(pool, m)
+
+	require.ErrorIs(t, err, pgdriver.ErrMessaging)
+}
+
+func TestARetriedServiceRunsAgainFromTheOutbox(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int32
+	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
+		b.Initial("charging")
+		inv := b.State("charging").Invoke("charge", func(context.Context, order) (string, error) {
+			if calls.Add(1) < 3 {
+				return "", errCardDeclined
+			}
+
+			return "rcpt", nil
+		}).Retry(sc.Retry{Max: 5, First: 100 * time.Millisecond, Cap: 0, Jitter: 0, If: nil})
+		inv.OnDone().
+			Assign("setReceipt", func(o order, d sc.Done[string]) order { o.Receipt = d.Result; return o }).
+			To("paid")
+		inv.OnError().To("declined")
+		b.Final("paid")
+		b.Final("declined")
+	})
+	require.NoError(t, err)
+
+	d := mustNew(t, m)
+	_, err = d.Create(t.Context(), "o1", order{})
+	require.NoError(t, err)
+
+	// Each failure is stored as a wait, and the worker runs the service
+	// again when the wait is over, without the chart leaving its state.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		drain(t, d)
+
+		snap, err := d.Load(t.Context(), "o1")
+		if assert.NoError(c, err) {
+			assert.Equal(c, []string{"paid"}, snap.Active())
+			assert.Equal(c, "rcpt", snap.Context.Receipt)
+		}
+	}, 10*time.Second, 50*time.Millisecond)
+	require.Equal(t, int32(3), calls.Load())
+}
