@@ -1,0 +1,264 @@
+# Recent tool calls: project-wide recent log vs filtered search vs one server's calls.
+- id: obs-recent-failed-calls-default
+  prompt: Anything erroring in Default in the last hour? Show me the failed calls.
+  expect: [list_recent_tool_calls, search_tool_calls]
+- id: obs-recent-calls-one-agent
+  prompt: Pull up the last 24 hours of calls made by agent 1d2c3b4a-0000-4000-8000-0000000000a1 in the Default project.
+  expect: [list_recent_tool_calls]
+  args:
+    agent_id: 1d2c3b4a-0000-4000-8000-0000000000a1
+- id: obs-search-calls-by-tool-name
+  prompt: Did anyone in Default call anything that deletes a repository this month? Look for tools with "delete" in the name on any server.
+  expect: [search_tool_calls]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    tool_name_contains: delete
+- id: obs-search-calls-by-error-text
+  prompt: Find calls in Default over the past week that failed with a "rate limit" error, whichever server they went to.
+  expect: [search_tool_calls]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    error_contains: rate limit
+- id: obs-search-calls-by-custom-attribute
+  prompt: Our integrations tag calls with a custom team attribute. Show me Default's calls from the last day where that team is "payments".
+  expect: [search_tool_calls]
+  allow: [list_attribute_keys]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    attributes: [{ key: team, values: [payments] }]
+- id: obs-linear-recent-calls
+  prompt: Show me the latest individual requests that hit the Linear server today, I need references to send to their support.
+  expect: [query_mcp_traces]
+  allow: [find_mcp, get_mcp, get_project_overview, get_mcp_diagnostics]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
+
+# Network traffic and organization event feed.
+- id: obs-billing-api-traffic
+  prompt: Before I lock Billing API down to the private network, is anything still reaching it over the public internet? Last week is fine.
+  expect: [get_mcp_network_traffic]
+  allow: [find_mcp, get_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    target_kind: mcp
+    target_id: 5f1e2a00-0000-4000-8000-000000000021
+- id: obs-org-event-feed
+  prompt: what's been going on across Acme lately? give me the org's recent activity feed
+  expect: [list_organization_events]
+- id: obs-org-event-feed-logs-hour
+  prompt: Show me just the log entries that came in across the whole org in the past hour, no spans.
+  expect: [list_organization_events]
+  args:
+    kind: log
+    window: 1h
+
+# Analytics catalog, dimension values, and queries.
+- id: obs-analytics-catalog
+  prompt: Before I build any charts, what data can I actually ask questions about in the Default project, and what fields can I group by?
+  expect: [describe_analytics_catalog]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+- id: obs-analytics-dimension-values
+  prompt: I want to filter a chart in Default by model. Which model names have actually shown up in the sessions data over the past 7 days?
+  expect: [list_analytics_dimension_values]
+  allow: [describe_analytics_catalog]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+- id: obs-analytics-daily-sessions
+  prompt: Give me a count of agent sessions per day in Default for the last 14 days, split by model.
+  expect: [run_analytics_query]
+  allow: [describe_analytics_catalog, list_analytics_dimension_values]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+- id: obs-analytics-risk-findings-by-week
+  prompt: How many risk findings were caught each week in Payments over the last month? Just the numbers, grouped by week.
+  expect: [run_analytics_query]
+  allow: [describe_analytics_catalog, list_analytics_dimension_values]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+
+# Widgets: list, read, create/update, copy, delete.
+- id: obs-list-widgets
+  prompt: What saved charts do we already have in the Default project?
+  expect: [list_widgets]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+- id: obs-get-widget
+  prompt: Show me exactly what query and chart settings widget 8a1b2c3d-0000-4000-8000-0000000000b1 in Default uses.
+  expect: [get_widget]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    widget_id: 8a1b2c3d-0000-4000-8000-0000000000b1
+- id: obs-create-widget
+  prompt: Save a new chart in Default called "Daily sessions" that plots sessions per day as a line chart.
+  expect: [save_widget]
+  allow: [describe_analytics_catalog, run_analytics_query, list_widgets]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    name: Daily sessions
+- id: obs-rename-widget
+  prompt: Rename widget 8a1b2c3d-0000-4000-8000-0000000000b1 in Default to "Errors by tool". Keep everything else the same.
+  expect: [save_widget]
+  allow: [get_widget, list_widgets]
+  args:
+    widget_id: 8a1b2c3d-0000-4000-8000-0000000000b1
+    name: Errors by tool
+- id: obs-duplicate-widget
+  prompt: Sam built widget 8a1b2c3d-0000-4000-8000-0000000000b2 in Default. I want my own version to tweak without messing up the dashboards his shows on.
+  expect: [duplicate_widget]
+  allow: [get_widget, list_widgets]
+  args:
+    widget_id: 8a1b2c3d-0000-4000-8000-0000000000b2
+- id: obs-delete-widget
+  prompt: Get rid of widget 8a1b2c3d-0000-4000-8000-0000000000b3 in Default entirely, we don't need it anywhere anymore.
+  expect: [delete_widget]
+  allow: [get_widget, list_widgets]
+  args:
+    widget_id: 8a1b2c3d-0000-4000-8000-0000000000b3
+
+# Dashboards: list, read, create/rename, copy, delete, layout, filters.
+- id: obs-list-dashboards
+  prompt: which dashboards exist in Payments?
+  expect: [list_dashboards]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+- id: obs-get-dashboard
+  prompt: What's on the Weekly MCP usage dashboard in Default and how are the cards laid out?
+  expect: [get_dashboard]
+  allow: [list_dashboards]
+  args:
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
+- id: obs-create-dashboard
+  prompt: Make a new empty dashboard in Payments called "Billing health".
+  expect: [save_dashboard]
+  allow: [list_dashboards]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    name: Billing health
+- id: obs-rename-dashboard
+  prompt: Rename the Weekly MCP usage dashboard in Default to "MCP usage by week".
+  expect: [save_dashboard]
+  allow: [list_dashboards, get_dashboard]
+  args:
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
+    name: MCP usage by week
+- id: obs-duplicate-dashboard
+  prompt: I'd like a copy of the Weekly MCP usage dashboard in Default that I can change without touching the original.
+  expect: [duplicate_dashboard]
+  allow: [list_dashboards, get_dashboard]
+  args:
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
+- id: obs-delete-dashboard
+  prompt: Remove the Weekly MCP usage dashboard from Default. Nobody looks at it.
+  expect: [delete_dashboard]
+  allow: [list_dashboards, get_dashboard]
+  args:
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
+- id: obs-add-card-to-dashboard
+  prompt: Put widget 8a1b2c3d-0000-4000-8000-0000000000b1 on the Weekly MCP usage dashboard in Default, full width along the top.
+  expect: [edit_dashboard_layout]
+  allow: [get_dashboard, list_dashboards, list_widgets, get_widget]
+  args:
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
+    operations:
+      [{ op: add_card, widget_id: 8a1b2c3d-0000-4000-8000-0000000000b1 }]
+- id: obs-remove-card-keep-widget
+  prompt: Take the widget 8a1b2c3d-0000-4000-8000-0000000000b3 card off the Weekly MCP usage dashboard in Default, but keep the widget itself saved.
+  expect: [edit_dashboard_layout]
+  allow: [get_dashboard, list_dashboards, list_widgets, get_widget]
+  args:
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
+    operations: [{ op: remove_card }]
+- id: obs-dashboard-default-filters
+  prompt: When people open the Weekly MCP usage dashboard in Default it should show the last 30 days by default.
+  expect: [save_dashboard_filters]
+  allow: [get_dashboard, list_dashboards, describe_analytics_catalog]
+  args:
+    dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
+    filters: { range: { preset: 30d } }
+
+# Project health first, then one named server's diagnosis.
+- id: obs-project-overview
+  prompt: Quick health check on the Payments project. How have its servers been doing this week, and is anything failing?
+  expect: [get_project_overview]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+- id: obs-diagnose-linear
+  prompt: Linear keeps breaking for people. Is it us, Linear, or the app they're calling from?
+  expect: [get_mcp_diagnostics]
+  allow: [find_mcp, get_mcp, get_project_overview]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
+
+# One server's totals vs breakdown by tool and outcome.
+- id: obs-github-totals
+  prompt: How many calls did the GitHub server handle this week, how many failed, and how slow is it on average?
+  expect: [query_mcp_metrics]
+  allow: [find_mcp, get_mcp, get_project_overview, get_mcp_diagnostics]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
+- id: obs-github-by-tool-outcome
+  prompt: GitHub has been failing today. Which of its tools is responsible? Break it down per tool with successes and errors.
+  expect: [query_mcp_events]
+  allow: [find_mcp, get_mcp, get_project_overview, get_mcp_diagnostics]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
+
+# Where a project's calls go: hosted, tunneled, gateway, shadow, local, skills.
+- id: obs-tool-usage-shadow-vs-hosted
+  prompt: Over the last month, how much of Default's tool traffic went to shadow MCP servers compared with the ones we host?
+  expect: [get_tool_usage_summary]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+- id: obs-tool-usage-tunneled
+  prompt: Which tunneled servers is the team in Payments actually using?
+  expect: [get_tool_usage_summary]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+
+# People: who uses a server, finding a person, one person's usage.
+- id: obs-linear-users-today
+  prompt: who's been using Linear in the last day, and is anyone hitting errors?
+  expect: [list_mcp_usage_users]
+  allow: [find_mcp, get_mcp, get_project_overview, get_mcp_diagnostics]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
+- id: obs-find-person-partial
+  prompt: Someone with "priya" in their email shows up in Default's activity. Find them for me.
+  expect: [search_users]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    query: priya
+- id: obs-priya-linear-status
+  prompt: Which Linear tools has Priya been using today, and did she run into any errors?
+  expect: [get_user_mcp_status]
+  allow: [find_mcp, get_mcp, list_mcp_usage_users, get_project_overview]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
+- id: obs-sam-activity-summary
+  prompt: Give me a rundown of Sam's activity in the Default project over the last month, across all servers. Which of his tools fail most?
+  expect: [get_user_metrics_summary]
+  allow: [search_users]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+
+# Telemetry attribute keys.
+- id: obs-attribute-keys
+  prompt: Before I filter Default's tool call history, which custom attributes have our integrations been tagging calls with?
+  expect: [list_attribute_keys]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+
+# Related-sounding requests no Platform tool serves.
+- id: obs-negative-postgres-csv
+  prompt: Export our raw Postgres tables to a CSV so I can load them into Excel.
+  expect: []
+- id: obs-negative-email-dashboard-pdf
+  prompt: Email a PDF of the Weekly MCP usage dashboard to the exec team every Monday morning.
+  expect: []

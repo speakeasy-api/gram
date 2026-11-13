@@ -149,6 +149,13 @@ preview-ui:
   - "client/admin/**/*.css"
   - "client/dashboard/**/*.css"
 
+# Gates the Platform MCP tool eval in .github/workflows/pr.yaml. Every tool,
+# instruction or case change shows up here: TestToolEvalCatalogueSnapshotIsCurrent
+# fails until catalogue.json is regenerated.
+platform-tool-eval:
+  - "server/internal/platformmcp/tooleval/catalogue.json"
+  - "server/internal/platformmcp/tooleval/cases/**"
+
 # Paths that were moved or retired. PRs must not add or modify files here —
 # stale generators, cherry-picks, or muscle memory can silently resurrect a
 # directory after it was relocated (e.g. client/sdk lived on for a year after

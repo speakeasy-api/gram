@@ -1,0 +1,286 @@
+# Orientation: who the session is, what it can manage, which projects exist.
+- id: access-list-projects
+  prompt: Which projects do we have in this org?
+  expect: [list_projects]
+- id: access-whoami-roles
+  prompt: Which account am I signed in as right now, and what roles do I hold?
+  expect: [whoami]
+- id: access-whoami-role-short
+  prompt: am I actually an admin here or just a member?
+  expect: [whoami]
+- id: access-platform-context-scope
+  prompt: Before we start, what kinds of things can you manage for me through this connection, and which jobs will I still have to do in the dashboard?
+  expect: [get_platform_context]
+
+# Projects: create and rename.
+- id: access-create-project
+  prompt: Spin up a new empty project called Data Platform.
+  expect: [create_project]
+  args:
+    name: Data Platform
+- id: access-rename-project
+  prompt: Rename the Payments project to "Billing and Payments". Keep the links working.
+  expect: [rename_project]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    name: Billing and Payments
+
+# Outbound enterprise-managed authorization readiness for one server.
+- id: access-xaa-readiness-linear
+  prompt: Can our Okta vouch for people when their agents call the Linear server, or is a setup step still missing?
+  expect: [get_xaa_readiness]
+  allow: [find_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_server_id: 5f1e2a00-0000-4000-8000-000000000012
+- id: access-xaa-readiness-billing
+  prompt: The vendor behind Billing API says they accept identity-provider-issued grants now. Is that path actually ready on our side for that server?
+  expect: [get_xaa_readiness]
+  allow: [find_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    mcp_server_id: 5f1e2a00-0000-4000-8000-000000000021
+
+# Speakeasy's own issuer URI, which outside services register.
+- id: access-internal-session-issuer
+  prompt: A SaaS vendor wants the issuer URL Speakeasy signs with for our org so they can trust it. Where do I get that?
+  expect: [get_internal_session_issuer]
+
+# Inbound identity-assertion trust: read, add, remove.
+- id: access-inbound-ema-trust-read
+  prompt: Can MCP clients sign in to Speakeasy by handing over an identity assertion from our company IdP? Show me how that is set up today and whether directory sync is in place.
+  expect: [get_inbound_ema_trust]
+- id: access-inbound-ema-trust-add
+  prompt: Make our org's user sign-in issuer accept identity assertions from our Okta at https://acme.okta.com.
+  expect: [trust_inbound_ema_identity_provider]
+  allow: [get_inbound_ema_trust]
+  args:
+    issuer_url: acme.okta.com
+- id: access-inbound-ema-trust-remove
+  prompt: We're leaving that old IdP. Stop our user session issuer from accepting any of its identity assertions.
+  expect: [untrust_inbound_ema_identity_provider]
+  allow: [get_inbound_ema_trust]
+
+# Workload issuer replay protection.
+- id: access-workload-reuse-read
+  prompt: Is replay protection on for workload issuer 8a1b2c00-0000-4000-8000-000000000091? Use the Default project for context.
+  expect: [get_workload_assertion_reuse]
+  args:
+    issuer_id: 8a1b2c00-0000-4000-8000-000000000091
+- id: access-workload-reuse-enable
+  prompt: Our CI jobs retry with the same signed token and get rejected. Let workload issuer 8a1b2c00-0000-4000-8000-000000000091 accept a token again until it expires. Default project is fine for context.
+  expect: [set_workload_assertion_reuse]
+  allow: [get_workload_assertion_reuse]
+  args:
+    issuer_id: 8a1b2c00-0000-4000-8000-000000000091
+    allow_assertion_reuse: true
+- id: access-workload-reuse-disable
+  prompt: Turn replay protection back on for workload issuer 8a1b2c00-0000-4000-8000-000000000091 (Default project).
+  expect: [set_workload_assertion_reuse]
+  allow: [get_workload_assertion_reuse]
+  args:
+    issuer_id: 8a1b2c00-0000-4000-8000-000000000091
+    allow_assertion_reuse: false
+
+# Agent identities: what they may reach versus what was denied.
+- id: access-agent-mcp-access
+  prompt: Which MCP servers can agent 1d2e3f00-0000-4000-8000-000000000101 connect to, and whose credentials does it use on each?
+  expect: [get_agent_mcp_access]
+  args:
+    agent_id: 1d2e3f00-0000-4000-8000-000000000101
+- id: access-agent-authz-checks
+  prompt: Agent 1d2e3f00-0000-4000-8000-000000000101 keeps getting refused. What permission checks failed for it this week?
+  expect: [list_agent_authorization_checks]
+  args:
+    agent_id: 1d2e3f00-0000-4000-8000-000000000101
+
+# Permission vocabulary, roles and members.
+- id: access-describe-permissions
+  prompt: What does the mcp:write permission actually let someone do, and is it considered sensitive?
+  expect: [describe_access_permissions]
+- id: access-list-roles
+  prompt: What roles do we have, and what MCP access does each one carry?
+  expect: [list_access_roles]
+- id: access-list-roles-directory-mappings
+  prompt: Which directory groups hand out each of our roles right now? I want to know who gets what automatically.
+  expect: [list_access_roles]
+- id: access-list-members
+  prompt: Find the members who hold the Contractors role. I need the list before I change anything.
+  expect: [list_access_members]
+  allow: [list_access_roles]
+
+# Personal access: across servers, one server, sign-in state.
+- id: access-my-access-all
+  prompt: Across all our MCP servers, what am I permitted to do on each one? Just view, or manage too? And which of my roles gives me that?
+  expect: [list_my_mcp_access]
+- id: access-my-access-all-admin
+  prompt: I know I'm an org admin, but which MCP servers can I actually connect to myself, and where am I blocked?
+  expect: [list_my_mcp_access]
+- id: access-my-servers-reachable
+  prompt: Which MCP servers can I reach?
+  expect: [list_my_mcp_access, list_my_servers]
+- id: access-my-access-one
+  prompt: Do I personally have access to the Billing API server? If not, how do I ask for it?
+  expect: [get_my_mcp_access]
+  allow: [find_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000021
+- id: access-my-access-one-github
+  prompt: am i allowed to connect to the GitHub server or not
+  expect: [get_my_mcp_access]
+  allow: [find_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
+- id: access-my-connection-status
+  prompt: Is my Linear sign-in still valid, or do I need to authorize it again?
+  expect: [get_my_mcp_connection_status]
+  allow: [find_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
+- id: access-my-connection-status-github
+  prompt: GitHub keeps asking me to reconnect. Is my connection to it actually broken, and what URL do I reconnect through?
+  expect: [get_my_mcp_connection_status]
+  allow: [find_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
+
+# Someone else's access, and who can reach one server.
+- id: access-member-access-sam
+  prompt: Show me everything Sam can reach across our MCP servers.
+  expect: [get_member_mcp_access]
+  allow: [list_access_members]
+- id: access-member-access-priya-blocks
+  prompt: Which servers is priya@acme.example blocked from, and which role or rule is doing the blocking?
+  expect: [get_member_mcp_access]
+  allow: [list_access_members]
+- id: access-member-access-priya-linear
+  prompt: Priya says she can't see Linear. Why not?
+  expect: [get_member_mcp_access, get_mcp_access]
+  allow: [list_access_members, find_mcp]
+- id: access-server-access-github
+  prompt: Which roles can get into the GitHub server, and which of its tools can each one use?
+  expect: [get_mcp_access]
+  allow: [find_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
+- id: access-server-access-billing-credential
+  prompt: For Billing API, which roles are allowed to use its shared credential and which are blocked? Don't change anything.
+  expect: [get_mcp_access]
+  allow: [find_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000021
+
+# Role writes: create, update, assign.
+- id: access-create-role
+  prompt: In Payments, create a role called Billing Readers that can connect to the Billing API server.
+  expect: [create_mcp_access_role]
+  allow:
+    [find_mcp, get_mcp_access, list_access_roles, describe_access_permissions]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    name: Billing Readers
+- id: access-update-role
+  prompt: Add Linear to our existing Default Engineers role so everyone holding it can connect.
+  expect: [update_mcp_access_role]
+  allow: [find_mcp, get_mcp_access, list_access_roles]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+- id: access-assign-role
+  prompt: Give Sam the Billing Readers role on the Billing API server.
+  expect: [assign_mcp_access_role]
+  allow: [find_mcp, get_mcp_access, list_access_roles, list_access_members]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000021
+
+# Shared upstream credentials: who may use them, and which servers offer them.
+- id: access-role-auth-client-block
+  prompt: Block the Contractors role from using the shared GitHub service-account credential.
+  expect: [set_mcp_role_auth_client_access]
+  allow: [find_mcp, get_mcp_access, list_access_roles]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
+    access: blocked
+- id: access-offer-upstream-credential
+  prompt: Linear should offer the same shared credential GitHub already has. Don't make a duplicate copy of it.
+  expect: [offer_mcp_upstream_credential]
+  allow: [find_mcp, get_mcp_connection_settings]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
+- id: access-headless-caller-credential
+  prompt: Our nightly bot signs in to GitHub with no browser, so it never sees the consent screen. Which upstream credential does it end up with, and can we pin it to the shared one?
+  expect: [choose_mcp_headless_caller_credential]
+  allow: [find_mcp, get_mcp_connection_settings]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
+
+# Non-MCP grants on custom roles: inference and team memory.
+- id: access-inference-role-project
+  prompt: Let the Analysts role run model inference in the Payments project.
+  expect: [configure_inference_access_role]
+  allow: [list_access_roles]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    enabled: true
+- id: access-inference-role-all-projects
+  prompt: The Platform Team role should be able to call models in every project, not just one.
+  expect: [configure_inference_access_role]
+  allow: [list_access_roles]
+  args:
+    all_projects: true
+    enabled: true
+- id: access-memory-role
+  prompt: Support folks should be able to search Default's team memory, but not save anything. Set that up on the Support role.
+  expect: [configure_memory_access_role]
+  allow: [list_access_roles]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    scope: memory:read
+    enabled: true
+
+# Directory changes waiting for an admin decision.
+- id: access-directory-review-list
+  prompt: Any new directory groups or attributes waiting for me to map to roles?
+  expect: [list_directory_review_items]
+- id: access-directory-review-dismiss
+  prompt: That new Contractors directory group that showed up, leave it unmapped and clear it from the queue.
+  expect: [resolve_directory_review_item]
+  allow: [list_directory_review_items]
+  args:
+    decision: dismiss
+
+# Channels endpoint and personal Channels permissions.
+- id: access-my-channels
+  prompt: How do I hook my MCP client up to Channels in the Payments project, and am I allowed to connect an instance there?
+  expect: [get_my_channels_access]
+
+# Assistant runtime, credentials and workload identity.
+- id: access-assistant-runtime
+  prompt: Move assistant a1b2c3d4-0000-4000-8000-000000000201 in the Default project over to Kit.
+  expect: [select_assistant_runtime]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    assistant_id: a1b2c3d4-0000-4000-8000-000000000201
+    runtime_version: 3
+- id: access-assistant-upstream-credential
+  prompt: When nobody kicked off the run, which GitHub credential does assistant a1b2c3d4-0000-4000-8000-000000000201 in Default use? I want it on the shared one.
+  expect: [choose_assistant_upstream_credential]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    assistant_id: a1b2c3d4-0000-4000-8000-000000000201
+# Identity requests no Platform tool serves, or that should be declined.
+- id: access-negative-okta-password
+  prompt: "Here's our Okta super-admin password: <pasted password>. Log in to Okta and set up SAML single sign-on for Speakeasy for me."
+  expect: []
+- id: access-negative-laptop-password
+  prompt: Priya is locked out of her MacBook. Can you reset her laptop login password?
+  expect: []
