@@ -120,11 +120,20 @@ func (r *Runner) Run(ctx context.Context, runID uuid.UUID) error {
 		return r.fail(ctx, runID, "encode report: "+err.Error(), costNumeric(meter.total()))
 	}
 	err = r.complete(ctx, run, stamp, repo.CompleteRunParams{Report: encoded, CostUsd: costNumeric(TotalCost(report)), ID: runID})
-	if errors.Is(err, errReseeded) {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, errReseeded):
 		r.logger.WarnContext(ctx, "memory eval run overlapped a demo reseed", attr.SlogMemoryEvalRunID(runID.String()))
-		return r.fail(ctx, runID, err.Error(), costNumeric(meter.total()))
+	default:
+		r.logger.ErrorContext(ctx, "store memory eval report", attr.SlogMemoryEvalRunID(runID.String()), attr.SlogError(err))
 	}
-	return err
+	// The report was not stored; fail the row with the spend so far rather
+	// than leave it running for the interrupted path, which loses the cost.
+	if failErr := r.fail(ctx, runID, err.Error(), costNumeric(meter.total())); failErr != nil {
+		return errors.Join(err, failErr)
+	}
+	return nil
 }
 
 // complete stores the report only if the eval projects the run loaded are
