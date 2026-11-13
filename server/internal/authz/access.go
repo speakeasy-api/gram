@@ -39,20 +39,30 @@ type Check struct {
 // Take it from the row the handler loaded, not from the session: the engine
 // compares it with the organization the caller is acting in, so a resource
 // loaded from another organization is caught even when its id is well formed.
+// On an AnyOf it applies to every alternative.
 func (c Check) InOrganization(organization OrgID) Check {
 	c.organization = Some(organization)
+	if c.anyOf != nil {
+		alternatives := make([]Check, len(c.anyOf))
+		for i, alternative := range c.anyOf {
+			alternative.organization = Some(organization)
+			alternatives[i] = alternative
+		}
+		c.anyOf = alternatives
+	}
 	return c
 }
 
 // statedOrganization is the organization a check names: the resource of an
 // org check, otherwise the one given to InOrganization. The second result is
-// false when the check names none.
+// false when the check names none, or states one that is absent, which
+// validation refuses.
 func (c Check) statedOrganization() (string, bool) {
 	if c.resourceKind() == ResourceKindOrg {
 		return c.ResourceID, true
 	}
 	organization, ok := c.organization.Get()
-	if !ok {
+	if !ok || organization.String() == "" {
 		return "", false
 	}
 	return organization.String(), true

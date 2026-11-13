@@ -3,6 +3,7 @@ package authz
 import (
 	"bytes"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,6 +22,9 @@ func TestCheckOrganization_StatedOrganization(t *testing.T) {
 	organization, named := Check{Scope: ScopeProjectRead, ResourceID: "project-one"}.InOrganization(OrgIDFrom("org-one")).statedOrganization()
 	require.True(t, named)
 	require.Equal(t, "org-one", organization)
+
+	_, named = Check{Scope: ScopeProjectRead, ResourceID: "project-one"}.InOrganization(OrgIDFrom("")).statedOrganization()
+	require.False(t, named, "an absent organization is an invalid check, not another organization")
 
 	organization, named = Check{Scope: ScopeOrgAdmin, ResourceID: "org-one"}.statedOrganization()
 	require.True(t, named, "an org check is about its organization")
@@ -86,6 +90,19 @@ func TestCheckOrganization_AnotherOrganizationIsLoggedNotRefused(t *testing.T) {
 
 		logs.Reset()
 		require.NoError(t, engine.Require(ctx, AnyOf(check)), name)
-		require.Contains(t, logs.String(), otherOrganizationLog, name)
+		require.Equal(t, 1, strings.Count(logs.String(), otherOrganizationLog), name)
 	}
+
+	// An organization stated on the AnyOf reaches every alternative, and the
+	// original alternatives are left as they were.
+	alternatives := []Check{project}
+	logs.Reset()
+	require.NoError(t, engine.Require(ctx, AnyOf(alternatives...).InOrganization(OrgIDFrom("org-two"))))
+	require.Equal(t, 1, strings.Count(logs.String(), otherOrganizationLog))
+	_, named := alternatives[0].statedOrganization()
+	require.False(t, named)
+
+	logs.Reset()
+	require.NoError(t, engine.RequireAnyUnblocked(ctx, project.InOrganization(OrgIDFrom("org-two"))))
+	require.Equal(t, 1, strings.Count(logs.String(), otherOrganizationLog))
 }

@@ -68,9 +68,7 @@ func TestEnvironments_HandlersLoadEnvironmentsInsideTheCallersProject(t *testing
 		ProjectSlugInput: nil,
 		Slug:             env.Slug,
 	})
-	if err != nil {
-		requireNotReached(err)
-	}
+	require.NoError(t, err, "deleting a slug the caller's project does not have is a no-op")
 
 	listed, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 		SessionToken:     nil,
