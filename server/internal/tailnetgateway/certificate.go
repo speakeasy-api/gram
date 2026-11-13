@@ -14,6 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
+// CERTIFICATES.md in this directory explains the Let's Encrypt limits this
+// file works around and how a connection's slots coordinate issuance and
+// renewal; read it before changing when or how certificates are requested.
+//
 // A node serves its Tailscale Service over HTTPS with a certificate Tailscale
 // obtains from Let's Encrypt for the service name. Approval alone does not
 // make a host usable: until the certificate is issued every TLS handshake

@@ -29,6 +29,8 @@ per-ingress attestor pods.
   every `Tailscale-*` header with the resolved identity and forwards to the
   private listener with the pod's projected service-account token, exactly as
   the attestor did.
+- Certificates are covered in detail in [CERTIFICATES.md](CERTIFICATES.md):
+  the Let's Encrypt limits and how slots coordinate issuance and renewal.
 - In Kubernetes, tsnet keeps each node's TLS certificate in the state store.
   Every slot of a connection serves the same `svc:<label>` name, so the
   certificate, its key and the ACME account that issues it are stored once
