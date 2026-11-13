@@ -185,7 +185,11 @@ func (r *Runner) execute(ctx context.Context, client openrouter.CompletionClient
 	if err != nil {
 		return nil, fmt.Errorf("build search_team_memory arm: %w", err)
 	}
-	report, err := bench.Run(ctx, client, target.Corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm}, cfg.benchConfig())
+	recallArm, err := bench.RecallTeamHistoryArm(r.logger, target)
+	if err != nil {
+		return nil, fmt.Errorf("build recall_team_history arm: %w", err)
+	}
+	report, err := bench.Run(ctx, client, target.Corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm, recallArm}, cfg.benchConfig())
 	if err != nil {
 		return nil, fmt.Errorf("score arms: %w", err)
 	}
