@@ -142,7 +142,9 @@ func TestStartMemoryEvalRun_ErrorCodes(t *testing.T) {
 
 			_, err := svc.StartMemoryEvalRun(ctx, &gen.StartMemoryEvalRunPayload{Config: memoryEvalConfigView(cfg)})
 			requireOopsCode(t, err, tc.want)
-			require.Empty(t, starter.started, "a refused start launches no workflow")
+			if !tc.noStarter {
+				require.Empty(t, starter.started, "a refused start launches no workflow")
+			}
 		})
 	}
 }
@@ -169,8 +171,8 @@ func spendDailyLimit(t *testing.T, ctx context.Context, db *pgxpool.Pool) {
 	}
 }
 
-// Malformed or unknown IDs are bad requests; a well-formed unknown run ID is
-// not found.
+// Malformed IDs and unknown cursors are bad requests; a well-formed unknown
+// run ID is not found.
 func TestMemoryEvalRunReads_ErrorCodes(t *testing.T) {
 	t.Parallel()
 	ctx, svc, _ := newTestAdminService(t)
