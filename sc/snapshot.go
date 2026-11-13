@@ -494,6 +494,7 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 		entered:  nil,
 		passed:   nil,
 		changed:  false,
+		cause:    nil,
 	}
 
 	if err := json.Unmarshal(raw.Context, &r.ctx); err != nil {
@@ -621,6 +622,7 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 		entered:  nil,
 		passed:   nil,
 		changed:  false,
+		cause:    nil,
 	}
 
 	for _, s := range states {

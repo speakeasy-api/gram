@@ -3,21 +3,13 @@ package sc_test
 // Ports of XState's packages/core/test/transient.test.ts and
 // internalTransitions.test.ts (6.0.0-beta.2), one test per `it`, in order.
 //
-// Three things about sc shape every port in this file:
-//
-//   - sc has no transitions on the chart root, so an XState machine with a
-//     root-level `on` or `always` is wrapped in one compound state that stands
-//     for the root.
-//   - sc entry and exit actions cannot raise events or assign the context, so
-//     an XState entry action that raises is declared as a Raise step on the
-//     transition that enters the state, and entry counters kept in the context
-//     are counted from the returned effects instead.
-//   - XState actions are observed through the effects the core returns.
+// XState actions are observed through the effects the core returns, named
+// "<state>/<action>"; an action declared on the chart itself is named after
+// the chart's id.
 
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -99,7 +91,9 @@ func xtraCandidates(t *testing.T) *sc.Machine[string, xtraData] {
 }
 
 // xtraGreeting is XState's greetingMachine. The state "greeting" stands for
-// the root, which carries the CHANGE and RECHECK transitions.
+// the root: RECHECK targets the root itself ('#greeting'), and an sc
+// transition cannot name the chart as its target, so the root's transitions
+// are declared on a state that can be targeted.
 func xtraGreeting(t *testing.T) *sc.Machine[string, xtraHour] {
 	t.Helper()
 
@@ -187,9 +181,6 @@ func TestXTraTransientCarriesActionsFromPreviousTransitions(t *testing.T) {
 
 // XState: transient states (eventless transitions) > should execute all
 // internal events one after the other
-//
-// A2 and B2 raise from their entry actions in XState; here the transitions
-// that enter them raise instead.
 func TestXTraTransientExecutesAllInternalEventsInOrder(t *testing.T) {
 	t.Parallel()
 
@@ -198,13 +189,13 @@ func TestXTraTransientExecutesAllInternalEventsInOrder(t *testing.T) {
 		b.Parallel("P", func(b *xtraBuilder) {
 			b.State("A", func(b *xtraBuilder) {
 				b.Initial("A1")
-				b.State("A1").On[xtraE]().Raise("raiseInt1", func(counter, xtraE) any { return xtraInt1{} }).To("A2")
-				b.State("A2")
+				b.State("A1").On[xtraE]().To("A2")
+				b.State("A2").RaiseOnEntry("raiseInt1", func(counter) any { return xtraInt1{} })
 			})
 			b.State("B", func(b *xtraBuilder) {
 				b.Initial("B1")
-				b.State("B1").On[xtraE]().Raise("raiseInt2", func(counter, xtraE) any { return xtraInt2{} }).To("B2")
-				b.State("B2")
+				b.State("B1").On[xtraE]().To("B2")
+				b.State("B2").RaiseOnEntry("raiseInt2", func(counter) any { return xtraInt2{} })
 			})
 			b.State("C", func(b *xtraBuilder) {
 				b.Initial("C1")
@@ -317,16 +308,13 @@ func TestXTraTransientResolvesStateFromInitialTransientState(t *testing.T) {
 
 // XState: transient states (eventless transitions) > should select eventless
 // transition before processing raised events
-//
-// b raises BAR from its entry action in XState; here the transition that
-// enters b raises it.
 func TestXTraTransientSelectsEventlessTransitionBeforeRaisedEvents(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("before_raised", func(b *xtraBuilder) {
 		b.Initial("a")
-		b.State("a").On[xtraFoo]().Raise("raiseBar", func(counter, xtraFoo) any { return xtraBar{} }).To("b")
-		sb := b.State("b")
+		b.State("a").On[xtraFoo]().To("b")
+		sb := b.State("b").RaiseOnEntry("raiseBar", func(counter) any { return xtraBar{} })
 		sb.Always().To("c")
 		sb.On[xtraBar]().To("d")
 		b.State("c").On[xtraBar]().To("e")
@@ -365,47 +353,24 @@ func TestXTraTransientDoesNotSelectWildcardForEventlessTransition(t *testing.T) 
 
 // XState: transient states (eventless transitions) > should work with
 // transient transition on root
-//
-// The state "machine" stands for the root. Its final child completes it
-// rather than the chart, so its OnDone leads to a top-level final state.
 func TestXTraTransientWorksWithTransientTransitionOnRoot(t *testing.T) {
 	t.Parallel()
 
-	declare := func(id string, guardAgainstRepeat bool) *sc.Machine[string, counter] {
-		m, err := sc.New(id, func(b *xtraBuilder) {
-			b.Initial("machine")
-			root := b.State("machine", func(b *xtraBuilder) {
-				b.Initial("first")
-				b.State("first").On[xtraAdd]().Assign("increment", increment[xtraAdd])
-				b.Final("success")
-			})
-			always := root.Always().When("counted", func(c counter, _ struct{}) bool { return c.N > 0 })
-			if guardAgainstRepeat {
-				always.WhenNotIn("success")
-			}
-			always.To("success")
-			root.OnDone().To("done")
-			b.Final("done")
-		})
-		require.NoError(t, err)
+	m, err := sc.New("root_always", func(b *xtraBuilder) {
+		b.Initial("first")
+		b.State("first").On[xtraAdd]().Assign("increment", increment[xtraAdd])
+		b.Final("success")
+		b.Always().When("counted", func(c counter, _ struct{}) bool { return c.N > 0 }).To("success")
+	})
+	require.NoError(t, err)
 
-		return m
-	}
+	snap, _ := m.Start(counter{}, epoch)
+	require.False(t, snap.Done())
 
-	// As in XState, the eventless transition is taken once: taking it
-	// again would change nothing.
-	faithful := declare("root_always", false)
-	snap, _ := faithful.Start(counter{}, epoch)
-	snap, _ = faithful.Transition(snap, xtraAdd{}, epoch)
-	require.True(t, snap.Done())
-
-	// With the transition told not to repeat, sc gives XState's result.
-	guarded := declare("root_always_guarded", true)
-	snap, _ = guarded.Start(counter{}, epoch)
-	snap, _ = guarded.Transition(snap, xtraAdd{}, epoch)
+	snap, _ = m.Transition(snap, xtraAdd{}, epoch)
 
 	require.True(t, snap.Done())
-	require.Equal(t, []string{"done"}, snap.Active())
+	require.Equal(t, []string{"success"}, snap.Active())
 }
 
 // XState: transient states (eventless transitions) > shouldn't crash when
@@ -452,58 +417,79 @@ func TestXTraTransientInvokedMachineWithInitialTransientTransition(t *testing.T)
 	require.Equal(t, []string{"active"}, child.Active())
 }
 
+// xtraIsWhatever is XState's guard event.type === 'WHATEVER'.
+func xtraIsWhatever(_ counter, ev any) bool {
+	_, ok := ev.(xtraWhatever)
+	return ok
+}
+
 // XState: transient states (eventless transitions) > should be taken even in
 // absence of other transitions
-//
-// DIVERGES from XState: XState's `always` guard reads the event being
-// processed (event.type === 'WHATEVER'). An sc Always guard is never given
-// the event, so the case cannot be written as it is. The nearest thing an sc
-// guard can read that changes without a transition is the time, so the guard
-// here holds once the clock has moved. sc agrees with XState on what the
-// case is about: an event no state handles still makes the eventless
-// transitions be looked at again.
 func TestXTraTransientTakenInAbsenceOfOtherTransitions(t *testing.T) {
 	t.Parallel()
 
-	m, err := sc.New("absence", func(b *xtraBuilder) {
-		b.Initial("a")
-		b.State("a").Always().
-			WhenAt("later", func(_ counter, _ struct{}, now time.Time) bool { return now.After(epoch) }).
-			To("b")
-		b.State("b")
-	})
-	require.NoError(t, err)
+	declare := func(id string, named bool) *sc.Machine[string, counter] {
+		m, err := sc.New(id, func(b *xtraBuilder) {
+			b.Initial("a")
+			b.State("a").Always().WhenEvent("isWhatever", xtraIsWhatever).To("b")
+			sb := b.State("b")
+			if named {
+				sb.On[xtraWhatever]().Stay()
+			}
+		})
+		require.NoError(t, err)
 
-	snap, _ := m.Start(counter{}, epoch)
+		return m
+	}
+
+	// As in XState, the chart names WHATEVER nowhere but in the guard, and
+	// the eventless transition is still taken when it arrives.
+	faithful := declare("absence", false)
+	snap, _ := faithful.Start(counter{}, epoch)
 	require.Equal(t, []string{"a"}, snap.Active())
 
-	snap, _ = m.Transition(snap, xtraWhatever{}, epoch.Add(time.Second))
+	snap, _ = faithful.Transition(snap, xtraWhatever{}, epoch)
+	require.Equal(t, []string{"b"}, snap.Active())
 
+	// It makes no difference when a state that is not active names the
+	// type.
+	named := declare("absence_named", true)
+	snap, _ = named.Start(counter{}, epoch)
+	snap, _ = named.Transition(snap, xtraWhatever{}, epoch)
 	require.Equal(t, []string{"b"}, snap.Active())
 }
 
 // XState: transient states (eventless transitions) > should select
 // subsequent transient transitions even in absence of other transitions
-//
-// DIVERGES from XState: as in the case before, the guard on the event's type
-// is replaced by one on the time, because an sc Always guard is not given
-// the event.
 func TestXTraTransientSelectsSubsequentTransientTransitions(t *testing.T) {
 	t.Parallel()
 
-	m, err := sc.New("subsequent", func(b *xtraBuilder) {
-		b.Initial("a")
-		b.State("a").Always().
-			WhenAt("later", func(_ counter, _ struct{}, now time.Time) bool { return now.After(epoch) }).
-			To("b")
-		b.State("b").Always().When("always", func(counter, struct{}) bool { return true }).To("c")
-		b.State("c")
-	})
-	require.NoError(t, err)
+	declare := func(id string, named bool) *sc.Machine[string, counter] {
+		m, err := sc.New(id, func(b *xtraBuilder) {
+			b.Initial("a")
+			b.State("a").Always().WhenEvent("isWhatever", xtraIsWhatever).To("b")
+			b.State("b").Always().When("always", func(counter, struct{}) bool { return true }).To("c")
+			last := b.State("c")
+			if named {
+				last.On[xtraWhatever]().Stay()
+			}
+		})
+		require.NoError(t, err)
 
-	snap, _ := m.Start(counter{}, epoch)
-	snap, _ = m.Transition(snap, xtraWhatever{}, epoch.Add(time.Second))
+		return m
+	}
 
+	// As in XState, the chart names WHATEVER nowhere but in the guard.
+	faithful := declare("subsequent", false)
+	snap, _ := faithful.Start(counter{}, epoch)
+	snap, _ = faithful.Transition(snap, xtraWhatever{}, epoch)
+	require.Equal(t, []string{"c"}, snap.Active())
+
+	// It makes no difference when a state that is not active names the
+	// type.
+	named := declare("subsequent_named", true)
+	snap, _ = named.Start(counter{}, epoch)
+	snap, _ = named.Transition(snap, xtraWhatever{}, epoch)
 	require.Equal(t, []string{"c"}, snap.Active())
 }
 
@@ -519,9 +505,11 @@ func TestXTraTransientEventsPreservedInGuards(t *testing.T) {
 		b.State("a").On[xtraEvent]().To("b")
 		b.State("b").Always().To("c")
 		b.State("c").Always().
-			When("sawEvent", func(_ counter, ev struct{}) bool {
+			WhenEvent("isEvent", func(_ counter, ev any) bool {
 				seen = append(seen, ev)
-				return true
+				_, ok := ev.(xtraEvent)
+
+				return ok
 			}).
 			To("d")
 		b.Final("d")
@@ -529,16 +517,13 @@ func TestXTraTransientEventsPreservedInGuards(t *testing.T) {
 	require.NoError(t, err)
 
 	snap, _ := m.Start(counter{}, epoch)
-	snap, _ = m.Transition(snap, xtraEvent{Value: 42}, epoch)
+	snap, _ = m.Transition(snap, xtraEvent{Value: 0}, epoch)
 
 	require.True(t, snap.Done())
-
-	// DIVERGES from XState: XState hands the guard of an eventless
-	// transition the event that started the step ({type: 'EVENT'}), and the
-	// guard takes the transition only for that event. An sc Always guard has
-	// the type func(C, struct{}) bool and is given an empty struct, so it
-	// cannot tell which event led to it.
-	require.Equal(t, []any{struct{}{}}, seen)
+	require.NotEmpty(t, seen)
+	for _, ev := range seen {
+		require.Equal(t, xtraEvent{Value: 0}, ev)
+	}
 }
 
 // XState: transient states (eventless transitions) > events that trigger
@@ -560,12 +545,14 @@ func TestXTraTransientEventsPreservedInActions(t *testing.T) {
 	require.Equal(t, []string{"c"}, snap.Active())
 	require.Equal(t, []string{"b/check", "c/check"}, names(effects))
 
-	// DIVERGES from XState: XState gives both the action of the eventless
-	// transition and the entry action of the state it enters the event that
-	// started the step, {type: 'EVENT', value: 42}. In sc neither effect
-	// carries it: an Always action is declared for struct{} and its effect's
-	// Event is nil, and entry actions never receive an event.
-	require.Nil(t, effects[0].Event)
+	// As in XState, the action of the eventless transition is given the
+	// event that started the step.
+	require.Equal(t, xtraEvent{Value: 42}, effects[0].Event)
+
+	// DIVERGES from XState: XState also gives the entry action of the state
+	// the eventless transition enters that event, {type: 'EVENT', value: 42}.
+	// In sc a state's own entry actions never receive an event, and their
+	// effect's Event is nil.
 	require.Nil(t, effects[1].Event)
 }
 
@@ -592,16 +579,15 @@ func TestXTraTransientAvoidsInfiniteLoopsWithEventlessTransitions(t *testing.T) 
 // XState: transient states (eventless transitions) > should avoid infinite
 // loops with raised events
 //
-// b raises EVENT from its entry action in XState; here the transition that
-// enters b raises it. As in the case before, sc panics where XState reports
-// an error.
+// As in the case before, sc panics where XState reports an error.
 func TestXTraTransientAvoidsInfiniteLoopsWithRaisedEvents(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("loop_raised", func(b *xtraBuilder) {
 		b.Initial("a")
-		b.State("a").Always().Raise("raiseEvent", func(counter, struct{}) any { return xtraEvent{Value: 0} }).To("b")
-		b.State("b").On[xtraEvent]().To("c")
+		b.State("a").Always().To("b")
+		b.State("b").RaiseOnEntry("raiseEvent", func(counter) any { return xtraEvent{Value: 0} }).
+			On[xtraEvent]().To("c")
 		b.State("c").Always().To("a")
 	})
 	require.NoError(t, err)
@@ -720,36 +706,29 @@ func TestXTraTransientLoopsForAssignActions(t *testing.T) {
 // always transition after a raised transition even if that raised transition
 // doesn't change the state
 //
-// The XState machine is a root with no states; here it is the single state
-// "root".
+// The XState machine is a root with no states. An sc chart needs one, so
+// "idle" is added; the transitions are the root's, as in XState.
 func TestXTraTransientExecutesAlwaysAfterRaisedTransition(t *testing.T) {
 	t.Parallel()
 
-	declare := func(id string, withAlways bool) *sc.Machine[string, counter] {
-		m, err := sc.New(id, func(b *xtraBuilder) {
-			b.Initial("root")
-			root := b.State("root")
-			if withAlways {
-				root.Always().Do("spy", func(context.Context, counter, struct{}) {})
-			}
-			root.On[xtraEv]().Raise("raise", func(counter, xtraEv) any { return xtraRaised{} })
-			root.On[xtraRaised]().Do("count", func(context.Context, counter, xtraRaised) {})
-		})
-		require.NoError(t, err)
-
-		return m
-	}
+	m, err := sc.New("always_action", func(b *xtraBuilder) {
+		b.Initial("idle")
+		b.State("idle")
+		b.Always().Do("spy", func(context.Context, counter, struct{}) {})
+		b.On[xtraEv]().Raise("raise", func(counter, xtraEv) any { return xtraRaised{} })
+		b.On[xtraRaised]().Do("count", func(context.Context, counter, xtraRaised) {})
+	})
+	require.NoError(t, err)
 
 	// As in XState, the action of an unguarded, targetless eventless
 	// transition runs once per event processed: once on start, once for EV
 	// and once more for the RAISED event it raises.
-	m := declare("always_action", true)
 	snap, effects := m.Start(counter{}, epoch)
-	require.Equal(t, []string{"root/spy"}, names(effects))
+	require.Equal(t, []string{"always_action/spy"}, names(effects))
 
 	snap, effects = m.Transition(snap, xtraEv{}, epoch)
-	require.Equal(t, []string{"root"}, snap.Active())
-	require.Equal(t, []string{"root/spy", "root/count", "root/spy"}, names(effects))
+	require.Equal(t, []string{"idle"}, snap.Active())
+	require.Equal(t, []string{"always_action/spy", "always_action/count", "always_action/spy"}, names(effects))
 }
 
 // xtraTracked declares entry and exit actions named "enter" and "exit" on a
@@ -849,25 +828,21 @@ func TestXTraInternalParentExitsAndReentersOnExplicitSelfTransitionToChild(t *te
 
 // XState: internal transitions > should listen to events declared at top
 // state
-//
-// The state "top" stands for the root.
 func TestXTraInternalListensToEventsDeclaredAtTopState(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("top_state", func(b *xtraBuilder) {
-		b.Initial("top")
-		b.State("top", func(b *xtraBuilder) {
-			b.Initial("foo")
-			b.State("foo")
-			b.State("bar")
-		}).On[xtraClicked]().To("bar")
+		b.Initial("foo")
+		b.On[xtraClicked]().To("bar")
+		b.State("foo")
+		b.State("bar")
 	})
 	require.NoError(t, err)
 
 	snap, _ := m.Start(counter{}, epoch)
 	snap, _ = m.Transition(snap, xtraClicked{}, epoch)
 
-	require.Equal(t, []string{"top", "bar"}, snap.Active())
+	require.Equal(t, []string{"bar"}, snap.Active())
 }
 
 // xtraTargetlessOnState is the chart of the two "targetless transitions"
@@ -889,24 +864,22 @@ func xtraTargetlessOnState(t *testing.T) {
 }
 
 // xtraTargetlessOnParent is the chart of the two "on parent with targetless
-// transitions" cases. The state "top" stands for the root.
+// transitions" cases.
 func xtraTargetlessOnParent(t *testing.T) {
 	t.Helper()
 
 	m, err := sc.New("targetless_parent", func(b *xtraBuilder) {
-		b.Initial("top")
-		b.State("top", func(b *xtraBuilder) {
-			b.Initial("foo")
-			b.State("foo")
-		}).On[xtraTargetless]().Do("spy", func(context.Context, counter, xtraTargetless) {})
+		b.On[xtraTargetless]().Do("spy", func(context.Context, counter, xtraTargetless) {})
+		b.Initial("foo")
+		b.State("foo")
 	})
 	require.NoError(t, err)
 
 	snap, _ := m.Start(counter{}, epoch)
 	snap, effects := m.Transition(snap, xtraTargetless{}, epoch)
 
-	require.Equal(t, []string{"top", "foo"}, snap.Active())
-	require.Equal(t, []string{"top/spy"}, names(effects))
+	require.Equal(t, []string{"foo"}, snap.Active())
+	require.Equal(t, []string{"targetless_parent/spy"}, names(effects))
 }
 
 // XState: internal transitions > should work with targetless transitions (in
@@ -943,41 +916,59 @@ func TestXTraInternalParentTargetlessTransitionsInObject(t *testing.T) {
 
 // XState: internal transitions > should maintain the child state when
 // targetless transition is handled by parent
-//
-// The state "top" stands for the root.
 func TestXTraInternalMaintainsChildStateOnParentTargetlessTransition(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("maintain_child", func(b *xtraBuilder) {
-		b.Initial("top")
-		b.State("top", func(b *xtraBuilder) {
-			b.Initial("foo")
-			xtraTracked(b.State("foo"))
-		}).On[xtraParentEvent]().Do("noop", func(context.Context, counter, xtraParentEvent) {})
+		b.Initial("foo")
+		b.On[xtraParentEvent]().Do("noop", func(context.Context, counter, xtraParentEvent) {})
+		xtraTracked(b.State("foo"))
 	})
 	require.NoError(t, err)
 
 	snap, _ := m.Start(counter{}, epoch)
 	snap, effects := m.Transition(snap, xtraParentEvent{}, epoch)
 
-	require.Equal(t, []string{"top", "foo"}, snap.Active())
-	require.Equal(t, []string{"top/noop"}, names(effects))
+	require.Equal(t, []string{"foo"}, snap.Active())
+	require.Equal(t, []string{"maintain_child/noop"}, names(effects))
 }
 
+// xtraVisits is the context of the last two cases: how often the source
+// state of the transition, its child and its grandchild were entered, or
+// exited.
+type xtraVisits struct {
+	Source int `json:"source"`
+	Direct int `json:"direct"`
+	Deep   int `json:"deep"`
+}
+
+func xtraCountSource(v xtraVisits) xtraVisits { v.Source++; return v }
+func xtraCountDirect(v xtraVisits) xtraVisits { v.Direct++; return v }
+func xtraCountDeep(v xtraVisits) xtraVisits   { v.Deep++; return v }
+
 // xtraNested is the chart of the last two cases: a1 > a11 > a111, with a
-// transition on a1 that targets a111.
-func xtraNested(t *testing.T) *sc.Machine[string, counter] {
+// transition on a1 that targets a111. Each state counts its entries, or its
+// exits, in the context.
+func xtraNested(t *testing.T, exits bool) *sc.Machine[string, xtraVisits] {
 	t.Helper()
 
-	m, err := sc.New("nested", func(b *xtraBuilder) {
+	count := func(s *sc.StateBuilder[string, xtraVisits], f func(xtraVisits) xtraVisits) *sc.StateBuilder[string, xtraVisits] {
+		if exits {
+			return s.AssignOnExit("count", f)
+		}
+
+		return s.AssignOnEntry("count", f)
+	}
+
+	m, err := sc.New("nested", func(b *sc.Builder[string, xtraVisits]) {
 		b.Initial("a1")
-		xtraTracked(b.State("a1", func(b *xtraBuilder) {
+		count(b.State("a1", func(b *sc.Builder[string, xtraVisits]) {
 			b.Initial("a11")
-			xtraTracked(b.State("a11", func(b *xtraBuilder) {
+			count(b.State("a11", func(b *sc.Builder[string, xtraVisits]) {
 				b.Initial("a111")
-				xtraTracked(b.State("a111"))
-			}))
-		})).On[xtraReenter]().To("a111")
+				count(b.State("a111"), xtraCountDeep)
+			}), xtraCountDirect)
+		}), xtraCountSource).On[xtraReenter]().To("a111")
 	})
 	require.NoError(t, err)
 
@@ -986,23 +977,17 @@ func xtraNested(t *testing.T) *sc.Machine[string, counter] {
 
 // XState: internal transitions > should reenter proper descendants of a
 // source state of an internal transition
-//
-// XState counts entries in the context from entry actions; here they are
-// read from the entry effects.
 func TestXTraInternalReentersProperDescendantsOfSource(t *testing.T) {
 	t.Parallel()
 
-	m := xtraNested(t)
+	m := xtraNested(t, false)
 
-	snap, effects := m.Start(counter{}, epoch)
-	require.Equal(t, []string{"a1/enter", "a11/enter", "a111/enter"}, names(effects))
+	snap, _ := m.Start(xtraVisits{Source: 0, Direct: 0, Deep: 0}, epoch)
+	require.Equal(t, xtraVisits{Source: 1, Direct: 1, Deep: 1}, snap.Context)
 
-	snap, effects = m.Transition(snap, xtraReenter{}, epoch)
+	snap, _ = m.Transition(snap, xtraReenter{}, epoch)
 
-	require.Equal(t, []string{"a1", "a11", "a111"}, snap.Active())
-	require.NotContains(t, names(effects), "a1/enter")
-	require.Contains(t, names(effects), "a11/enter")
-	require.Contains(t, names(effects), "a111/enter")
+	require.Equal(t, xtraVisits{Source: 1, Direct: 2, Deep: 2}, snap.Context)
 }
 
 // XState: internal transitions > should exit proper descendants of a source
@@ -1010,12 +995,12 @@ func TestXTraInternalReentersProperDescendantsOfSource(t *testing.T) {
 func TestXTraInternalExitsProperDescendantsOfSource(t *testing.T) {
 	t.Parallel()
 
-	m := xtraNested(t)
+	m := xtraNested(t, true)
 
-	snap, _ := m.Start(counter{}, epoch)
-	_, effects := m.Transition(snap, xtraReenter{}, epoch)
+	snap, _ := m.Start(xtraVisits{Source: 0, Direct: 0, Deep: 0}, epoch)
+	snap, _ = m.Transition(snap, xtraReenter{}, epoch)
 
-	require.Equal(t, []string{"a111/exit", "a11/exit", "a11/enter", "a111/enter"}, names(effects))
+	require.Equal(t, xtraVisits{Source: 0, Direct: 1, Deep: 1}, snap.Context)
 }
 
 // xtraCount counts how often name occurs among names.

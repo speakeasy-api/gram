@@ -33,6 +33,10 @@ import (
 type xparCtx struct {
 	// Value is what the CHANGE event of the editor chart stores.
 	Value string
+	// Log is what entry actions append to.
+	Log []string
+	// Count is how often an entry action ran.
+	Count int
 }
 
 type xparBuilder = sc.Builder[string, xparCtx]
@@ -109,6 +113,7 @@ type (
 	xparArchive  struct{}
 	xparEdit     struct{}
 	xparReenterA struct{}
+	xparGo       struct{}
 )
 
 func xparNoop(context.Context, xparCtx) {}
@@ -688,29 +693,24 @@ func TestXParShouldProperlyTransitionWhenInAComplexNestedState(t *testing.T) {
 }
 
 // XState: parallel states > nested flat parallel states > should represent the flat nested parallel states in the state value
-//
-// The XState machine declares its to-A transition on the root. An sc chart's
-// root takes no transitions, so the chart is wrapped in a compound state.
 func TestXParShouldRepresentTheFlatNestedParallelStatesInTheStateValue(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("flatNested", func(b *xparBuilder) {
-		b.Initial("root")
-		b.State("root", func(b *xparBuilder) {
-			b.Initial("A")
-			b.State("A").On[xparToB]().To("B")
-			b.Parallel("B", func(b *xparBuilder) {
-				b.State("C")
-				b.State("D")
-			})
-		}).On[xparToA]().To("A")
+		b.Initial("A")
+		b.State("A").On[xparToB]().To("B")
+		b.Parallel("B", func(b *xparBuilder) {
+			b.State("C")
+			b.State("D")
+		})
+		b.On[xparToA]().To("A")
 	})
 	require.NoError(t, err)
 
 	snap, _ := m.Start(xparCtx{}, epoch)
 	snap, _ = m.Transition(snap, xparToB{}, epoch)
 
-	require.Equal(t, []string{"root", "B", "C", "D"}, snap.Active())
+	require.Equal(t, []string{"B", "C", "D"}, snap.Active())
 }
 
 // XState: parallel states > deep flat parallel states > should properly evaluate deep flat parallel states
@@ -808,9 +808,6 @@ func TestXParRegionsShouldBeAbleToTransitionToOrthogonalRegions(t *testing.T) {
 }
 
 // XState: parallel states > other > should calculate the entry set for reentering transitions in parallel states
-//
-// XState's entry action appends to a log in the context. An sc entry action
-// cannot assign, so the entries of foobaz are counted from the effects.
 func TestXParShouldCalculateTheEntrySetForReenteringTransitionsInParallelStates(t *testing.T) {
 	t.Parallel()
 
@@ -820,7 +817,11 @@ func TestXParShouldCalculateTheEntrySetForReenteringTransitionsInParallelStates(
 			b.State("foo", func(b *xparBuilder) {
 				b.Initial("foobar")
 				b.State("foobar").On[xparGotoFoobaz]().To("foobaz")
-				b.State("foobaz").Entry("enteredFoobaz", xparNoop).
+				b.State("foobaz").
+					AssignOnEntry("logEntry", func(c xparCtx) xparCtx {
+						c.Log = append(append([]string(nil), c.Log...), "entered foobaz")
+						return c
+					}).
 					On[xparGotoFoobaz]().To("foobaz").Reenter()
 			})
 			b.State("bar")
@@ -829,10 +830,10 @@ func TestXParShouldCalculateTheEntrySetForReenteringTransitionsInParallelStates(
 	require.NoError(t, err)
 
 	snap, _ := m.Start(xparCtx{}, epoch)
-	snap, first := m.Transition(snap, xparGotoFoobaz{}, epoch)
-	_, second := m.Transition(snap, xparGotoFoobaz{}, epoch)
+	snap, _ = m.Transition(snap, xparGotoFoobaz{}, epoch)
+	snap, _ = m.Transition(snap, xparGotoFoobaz{}, epoch)
 
-	require.Equal(t, 2, xparCount(first, "foobaz/enteredFoobaz")+xparCount(second, "foobaz/enteredFoobaz"))
+	require.Len(t, snap.Context.Log, 2)
 }
 
 // XState: parallel states > should raise a "xstate.done.state.*" event when all child states reach final state
@@ -863,17 +864,13 @@ func TestXParShouldRaiseADoneStateEventWhenAllChildStatesReachFinalState(t *test
 }
 
 // XState: parallel states > should raise a "xstate.done.state.*" event when a pseudostate of a history type is directly on a parallel state
-//
-// XState gives the history state two default targets, one per region. An sc
-// history state has one default, and without one it restores the parent's
-// default entry, which for a parallel state is both regions.
 func TestXParShouldRaiseADoneStateEventWhenAHistoryStateIsDirectlyOnAParallelState(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("historyOnParallel", func(b *xparBuilder) {
 		b.Initial("parallelSteps")
 		b.Parallel("parallelSteps", func(b *xparBuilder) {
-			b.History("hist", sc.Shallow)
+			b.History("hist", sc.Shallow).Default("one", "two")
 			b.State("one", func(b *xparBuilder) {
 				b.Initial("wait_one")
 				b.State("wait_one").On[xparFinishOne]().To("one.done")
@@ -1167,10 +1164,6 @@ func TestXParConformanceATransitionTargetingOneRegionShouldNotResetSiblingRegion
 }
 
 // XState: parallel state conformance > reenter in one region should not re-run sibling region entry actions
-//
-// XState's sibling entry action increments a count in the context. An sc
-// entry action cannot assign, so the sibling's entries are counted from the
-// effects.
 func TestXParConformanceReenterInOneRegionShouldNotRerunSiblingRegionEntryActions(t *testing.T) {
 	t.Parallel()
 
@@ -1186,17 +1179,17 @@ func TestXParConformanceReenterInOneRegionShouldNotRerunSiblingRegionEntryAction
 				b.Initial("c")
 				b.State("c")
 				b.State("d")
-			}).Entry("count", xparNoop)
+			}).AssignOnEntry("count", func(c xparCtx) xparCtx { c.Count++; return c })
 		}).Entry("reentered", xparNoop) // not in XState: shows how far Reenter reaches
 	}, sc.AllowUnreachable())
 	require.NoError(t, err)
 
-	snap, effects := m.Start(xparCtx{}, epoch)
-	require.Equal(t, 1, xparCount(effects, "sibling/count"))
+	snap, _ := m.Start(xparCtx{}, epoch)
+	require.Equal(t, 1, snap.Context.Count)
 
-	_, effects = m.Transition(snap, xparReenterA{}, epoch)
+	snap, effects := m.Transition(snap, xparReenterA{}, epoch)
 
-	require.Zero(t, xparCount(effects, "sibling/count"))
+	require.Equal(t, 1, snap.Context.Count)
 	// Not asserted by XState: the parallel state is not re-entered either.
 	require.Zero(t, xparCount(effects, "reentrytest/reentered"))
 }
@@ -1246,7 +1239,7 @@ func TestXParConformanceSiblingRegionEventsShouldStillBeHandledAfterACrossRegion
 func TestXParConformanceAFinalRegionUnderAParallelRootShouldIgnoreEventsItDoesNotHandle(t *testing.T) {
 	t.Parallel()
 
-	_, err := sc.New("g", func(b *xparBuilder) {
+	m, err := sc.New("g", func(b *xparBuilder) {
 		b.Initial("g")
 		b.Parallel("g", func(b *xparBuilder) {
 			b.Final("regionA")
@@ -1257,10 +1250,15 @@ func TestXParConformanceAFinalRegionUnderAParallelRootShouldIgnoreEventsItDoesNo
 			})
 		})
 	}, sc.AllowUnreachable())
+	require.NoError(t, err)
 
-	// DIVERGES from XState: XState accepts a final state as a region of a
-	// parallel state; the machine starts in {regionA: {}, regionB: 'idle'}
-	// and an event nothing handles leaves it there. sc rejects the chart
-	// when it is declared, so there is nothing to send an event to.
-	require.ErrorContains(t, err, `final state "regionA": declared directly inside parallel state "g"; put it inside a region`)
+	snap, _ := m.Start(xparCtx{}, epoch)
+	require.Equal(t, []string{"g", "regionA", "regionB", "idle"}, snap.Active())
+
+	snap, effects := m.Transition(snap, xparGo{}, epoch)
+
+	require.Equal(t, []string{"g", "regionA", "regionB", "idle"}, snap.Active())
+	// Not asserted by XState: the event changed nothing at all.
+	require.Empty(t, effects)
+	require.False(t, snap.Done())
 }

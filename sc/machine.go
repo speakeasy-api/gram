@@ -261,10 +261,6 @@ func (m *Machine[S, C]) resolveStructure(b *build[S, C], n *node[S, C]) {
 		n.initial = init
 	}
 
-	if n.kind == kindFinal && n.parent.kind == kindParallel {
-		b.errorf("final state %q: declared directly inside parallel state %q; put it inside a region", n.name, n.parent.name)
-	}
-
 	if n.kind != kindHistory {
 		return
 	}
@@ -273,12 +269,21 @@ func (m *Machine[S, C]) resolveStructure(b *build[S, C], n *node[S, C]) {
 		return
 	}
 
-	def, ok := m.nodes[*n.defaultID]
-	if !ok || def.kind == kindHistory || !def.below(n.parent) {
-		b.errorf("history state %q: default %q is not a state inside %q", n.name, fmt.Sprint(*n.defaultID), n.parent.name)
-		return
+	for _, id := range append([]S{*n.defaultID}, n.defaultAlso...) {
+		def, ok := m.nodes[id]
+		if !ok || def.kind == kindHistory || !def.below(n.parent) {
+			b.errorf("history state %q: default %q is not a state inside %q", n.name, fmt.Sprint(id), n.parent.name)
+			return
+		}
+
+		for _, other := range n.defaultNodes {
+			if !apart(def, other) {
+				b.errorf("history state %q: defaults %q and %q are not in different regions of a parallel state", n.name, other.name, def.name)
+			}
+		}
+		n.defaultNodes = append(n.defaultNodes, def)
 	}
-	n.defaultNode = def
+	n.defaultNode = n.defaultNodes[0]
 }
 
 func (m *Machine[S, C]) resolveBehaviour(b *build[S, C], n *node[S, C]) {
@@ -520,8 +525,8 @@ func (m *Machine[S, C]) checkReachable(b *build[S, C]) {
 			// A history state can restore anything its parent could
 			// have been in, which the fixpoint below already covers.
 			// What it adds is its default.
-			if n.defaultNode != nil {
-				mark(n.defaultNode)
+			for _, def := range n.defaultNodes {
+				mark(def)
 			}
 		case kindFinal:
 		}
@@ -531,7 +536,7 @@ func (m *Machine[S, C]) checkReachable(b *build[S, C]) {
 
 	for changed := true; changed; {
 		before := len(reached)
-		for _, n := range m.ordered {
+		for _, n := range append([]*node[S, C]{m.root}, m.ordered...) {
 			if !reached[n] {
 				continue
 			}
@@ -563,8 +568,8 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 	if n.initial != nil {
 		write(" initial=%q", n.initial.name)
 	}
-	if n.defaultNode != nil {
-		write(" default=%q", n.defaultNode.name)
+	for _, def := range n.defaultNodes {
+		write(" default=%q", def.name)
 	}
 	if n.budget != 0 {
 		write(" budget=%d", n.budget)
@@ -585,6 +590,12 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 	}
 	for k, name := range n.exitRuns {
 		write("exit run %q if=%t\n", name, n.exitConds[k] != nil)
+	}
+	for _, assign := range n.entryAssigns {
+		write("entry assign %q\n", assign.name)
+	}
+	for _, assign := range n.exitAssigns {
+		write("exit assign %q\n", assign.name)
 	}
 	for _, raise := range n.entryRaises {
 		write("entry raise %q\n", raise.name)

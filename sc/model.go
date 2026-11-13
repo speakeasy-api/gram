@@ -99,6 +99,11 @@ type node[S comparable, C any] struct {
 	// defaultNode is defaultID resolved to a node.
 	defaultNode *node[S, C]
 
+	// defaultAlso are the further defaults of a history state that covers
+	// several regions, and defaultNodes every default resolved to a node.
+	defaultAlso  []S
+	defaultNodes []*node[S, C]
+
 	// afterCount is the number of delayed transitions declared on the state.
 	afterCount int
 
@@ -113,6 +118,17 @@ type node[S comparable, C any] struct {
 	// machine itself when it is entered and exited.
 	entryRaises []stateRaise[C]
 	exitRaises  []stateRaise[C]
+
+	// entryAssigns and exitAssigns replace the context when the state is
+	// entered and exited, before its entry and exit actions.
+	entryAssigns []stateAssign[C]
+	exitAssigns  []stateAssign[C]
+}
+
+// stateAssign is an assignment a state makes on entry or exit.
+type stateAssign[C any] struct {
+	name string
+	fn   func(C) C
 }
 
 // stateRaise is an event a state raises on entry or exit.

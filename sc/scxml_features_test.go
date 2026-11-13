@@ -123,3 +123,85 @@ func TestUnreachableStatesAreAllowedOnRequest(t *testing.T) {
 	_, err = sc.New("lenient", declare, sc.AllowUnreachable())
 	require.NoError(t, err)
 }
+
+func TestTheChartItselfTakesTransitions(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("everywhere", func(b *sc.Builder[string, counter]) {
+		b.Initial("a")
+		b.On[leave]().To("stopped")
+		b.OnAny().Assign("unexpected", func(c counter, _ any) counter { c.N += 100; return c })
+
+		b.State("a").On[tick]().To("b")
+		b.State("b").On[leave]().Assign("stay", increment[leave])
+		b.Final("stopped")
+	})
+	require.NoError(t, err)
+
+	// The chart's transition applies in a state that does not handle the
+	// event itself.
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	stopped, _ := m.Transition(snap, leave{}, epoch)
+	require.True(t, stopped.Done())
+
+	// A state that handles the event comes first, and the chart catches
+	// what nothing else takes.
+	snap, _ = m.Transition(snap, tick{}, epoch)
+	snap, _ = m.Transition(snap, leave{}, epoch)
+	require.Equal(t, []string{"b"}, snap.Active())
+	require.Equal(t, 1, snap.Context.N)
+
+	snap, _ = m.Transition(snap, ping{}, epoch)
+	require.Equal(t, 101, snap.Context.N)
+}
+
+func TestAStateAssignsOnEntryAndExit(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("visits", func(b *sc.Builder[string, counter]) {
+		b.Initial("idle")
+		b.State("idle").On[tick]().To("trying")
+		b.State("trying").
+			AssignOnEntry("reset", func(counter) counter { return counter{N: 0} }).
+			AssignOnExit("mark", func(c counter) counter { c.N += 1000; return c }).
+			Entry("announce", noop).
+			On[tick]().Assign("count", increment[tick])
+		b.State("trying").On[leave]().To("idle")
+	})
+	require.NoError(t, err)
+
+	snap, _ := m.Start(counter{N: 7}, epoch)
+
+	// Entering resets the count, and the entry action sees the new
+	// context.
+	snap, effects := m.Transition(snap, tick{}, epoch)
+	require.Equal(t, 0, snap.Context.N)
+	require.Equal(t, 0, effects[0].Context.N)
+
+	snap, _ = m.Transition(snap, tick{}, epoch)
+	snap, _ = m.Transition(snap, leave{}, epoch)
+	require.Equal(t, 1001, snap.Context.N)
+}
+
+func TestAFinalStateAssignsBeforeItsParentCompletes(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("outcome", func(b *sc.Builder[string, counter]) {
+		b.Initial("work")
+		b.State("work", func(b *sc.Builder[string, counter]) {
+			b.Initial("doing")
+			b.State("doing").On[tick]().To("finished")
+			b.Final("finished").AssignOnEntry("result", func(c counter) counter { c.N = 42; return c })
+		}).OnDone().
+			When("hasResult", func(c counter, _ struct{}) bool { return c.N == 42 }).
+			To("done")
+		b.Final("done")
+	})
+	require.NoError(t, err)
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	snap, _ = m.Transition(snap, tick{}, epoch)
+
+	require.True(t, snap.Done())
+	require.Equal(t, 42, snap.Context.N)
+}

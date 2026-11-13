@@ -12,8 +12,8 @@ package sc_test
 //     state whose OnDone leads to a top-level final state.
 //   - State identifiers are unique in an sc chart, so XState's repeated
 //     local names ("start", "finish") are qualified by their region.
-//   - sc rejects a state nothing can reach, so a state XState leaves
-//     unreachable is given a transition that reaches it.
+//   - sc rejects a state nothing can reach, so a chart in which XState
+//     leaves a state unreachable is declared with sc.AllowUnreachable.
 
 import (
 	"context"
@@ -87,16 +87,6 @@ func xfinRegion[Ev any](b *xfinBuilder, name string) {
 		b.Initial(name + ".start")
 		b.State(name + ".start").On[Ev]().To(name + ".finish")
 		b.Final(name + ".finish")
-	})
-}
-
-// xfinFinalRegion declares a compound region name that starts in its final
-// state. It stands for an XState region that is itself a final state, which
-// sc does not allow directly inside a parallel state.
-func xfinFinalRegion(b *xfinBuilder, name string) {
-	b.State(name, func(b *xfinBuilder) {
-		b.Initial(name + ".final")
-		b.Final(name + ".final")
 	})
 }
 
@@ -359,22 +349,16 @@ func TestXFinParallelStateCompletesWhenParallelChildFinishesAfterCompoundChild(t
 
 // xfinImmediatelyFinalChart is XState's chart of a parallel state a whose
 // regions are all final from the start: a1, a parallel state of two final
-// regions, and a2, a compound state starting in a final state. direct
-// declares a1's regions as final states directly inside the parallel state,
-// as XState does; otherwise each is a compound region starting in a final
-// state.
-func xfinImmediatelyFinalChart(direct bool) func(*xfinBuilder) {
-	return func(b *xfinBuilder) {
+// regions, and a2, a compound state starting in a final state.
+func xfinImmediatelyFinalChart(t *testing.T) *sc.Machine[string, counter] {
+	t.Helper()
+
+	m, err := sc.New("m", func(b *xfinBuilder) {
 		b.Initial("a")
 		b.Parallel("a", func(b *xfinBuilder) {
 			b.Parallel("a1", func(b *xfinBuilder) {
-				if direct {
-					b.Final("a1a")
-					b.Final("a1b")
-				} else {
-					xfinFinalRegion(b, "a1a")
-					xfinFinalRegion(b, "a1b")
-				}
+				b.Final("a1a")
+				b.Final("a1b")
 			})
 			b.State("a2", func(b *xfinBuilder) {
 				b.Initial("a2a")
@@ -382,24 +366,17 @@ func xfinImmediatelyFinalChart(direct bool) func(*xfinBuilder) {
 			})
 		}).OnDone().To("b")
 		b.Final("b")
-	}
+	})
+	require.NoError(t, err)
+
+	return m
 }
 
 // XState: should reach a final state when a parallel state reaches its final state and transitions to a top-level final state in response to that
-//
-// DIVERGES from XState: XState allows a final state directly inside a
-// parallel state, as a region that is final from the start. sc rejects that
-// as a declaration error, so each such region is declared as a compound
-// state that starts in a final state.
 func TestXFinReachesFinalStateWhenParallelStateCompletesAtStart(t *testing.T) {
 	t.Parallel()
 
-	_, err := sc.New("m", xfinImmediatelyFinalChart(true))
-	require.ErrorContains(t, err, `final state "a1a": declared directly inside parallel state "a1"`)
-	require.ErrorContains(t, err, `final state "a1b": declared directly inside parallel state "a1"`)
-
-	m, err := sc.New("m", xfinImmediatelyFinalChart(false))
-	require.NoError(t, err)
+	m := xfinImmediatelyFinalChart(t)
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
 
@@ -409,13 +386,11 @@ func TestXFinReachesFinalStateWhenParallelStateCompletesAtStart(t *testing.T) {
 
 // XState: should reach a final state when a parallel state nested in a parallel state reaches its final state and transitions to a top-level final state in response to that
 //
-// The XState case declares the same machine as the one before it, and the
-// port declares its final regions the same way.
+// The XState case declares the same machine as the one before it.
 func TestXFinReachesFinalStateWhenNestedParallelStateCompletesAtStart(t *testing.T) {
 	t.Parallel()
 
-	m, err := sc.New("m", xfinImmediatelyFinalChart(false))
-	require.NoError(t, err)
+	m := xfinImmediatelyFinalChart(t)
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
 
@@ -477,8 +452,8 @@ func TestXFinParallelOnDoneIsTakenOnceWhenSeveralRegionsCompleteAtOnce(t *testin
 	m, err := sc.New("m", func(b *xfinBuilder) {
 		b.Initial("a")
 		b.Parallel("a", func(b *xfinBuilder) {
-			xfinFinalRegion(b, "b")
-			xfinFinalRegion(b, "c")
+			b.Final("b")
+			b.Final("c")
 		}).OnDone().Do("spy", xfinSpy)
 	})
 	require.NoError(t, err)
@@ -634,10 +609,13 @@ func TestXFinExitOrderOfParallelStatesAfterMultipleRegionsTransition(t *testing.
 }
 
 // xfinPartlyFinalChart stands for XState's parallel root with region A in
-// its final state from the start and region B not. XState leaves B2
-// unreachable, which sc rejects, so B1 moves to it on an event.
-func xfinPartlyFinalChart(direct bool) func(*xfinBuilder) {
-	return func(b *xfinBuilder) {
+// its final state from the start and region B not. direct declares A as a
+// final state directly inside the parallel state; otherwise A is a compound
+// state starting in a final state. As in XState nothing reaches B2.
+func xfinPartlyFinalChart(t *testing.T, direct bool) *sc.Machine[string, counter] {
+	t.Helper()
+
+	m, err := sc.New("m", func(b *xfinBuilder) {
 		b.Initial("root")
 		b.Parallel("root", func(b *xfinBuilder) {
 			if direct {
@@ -650,20 +628,22 @@ func xfinPartlyFinalChart(direct bool) func(*xfinBuilder) {
 			}
 			b.State("B", func(b *xfinBuilder) {
 				b.Initial("B1")
-				b.State("B1").On[xfinNext1]().To("B2")
+				b.State("B1")
 				b.Final("B2")
 			})
 		}).OnDone().To("end")
 		b.Final("end")
-	}
+	}, sc.AllowUnreachable())
+	require.NoError(t, err)
+
+	return m
 }
 
 // XState: should not complete a parallel root immediately when only some of its regions are in their final states (final state reached in a compound region)
 func TestXFinParallelStateDoesNotCompleteWhenOnlySomeRegionsAreFinalCompoundRegion(t *testing.T) {
 	t.Parallel()
 
-	m, err := sc.New("m", xfinPartlyFinalChart(false))
-	require.NoError(t, err)
+	m := xfinPartlyFinalChart(t, false)
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
 
@@ -672,26 +652,15 @@ func TestXFinParallelStateDoesNotCompleteWhenOnlySomeRegionsAreFinalCompoundRegi
 }
 
 // XState: should not complete a parallel root immediately when only some of its regions are in their final states (a direct final child state reached)
-//
-// DIVERGES from XState: XState allows a final state directly inside a
-// parallel state, as a region that is final from the start. sc rejects that
-// as a declaration error, so each such region is declared as a compound
-// state that starts in a final state.
-// Declared that way the chart is the one of the case before this one, and
-// behaves as XState expects.
 func TestXFinParallelStateDoesNotCompleteWhenOnlySomeRegionsAreFinalDirectFinalChild(t *testing.T) {
 	t.Parallel()
 
-	_, err := sc.New("m", xfinPartlyFinalChart(true))
-	require.ErrorContains(t, err, `final state "A": declared directly inside parallel state "root"`)
-
-	m, err := sc.New("m", xfinPartlyFinalChart(false))
-	require.NoError(t, err)
+	m := xfinPartlyFinalChart(t, true)
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
 
 	require.False(t, snap.Done())
-	require.Equal(t, []string{"root", "A", "A1", "B", "B1"}, snap.Active())
+	require.Equal(t, []string{"root", "A", "B", "B1"}, snap.Active())
 }
 
 // XState: should deliver final outgoing events (from final entry action) to the parent before delivering the `xstate.done.actor.*` event
@@ -794,7 +763,7 @@ func TestXFinPlainFinalStatesAreAccepted(t *testing.T) {
 //   - should resolve top-level final state output once on completion
 //   - output mapper should receive self
 //   - state output should be able to use context updated by the entry action of the reached final state
-//     (an sc entry action cannot change the context either)
+//     (an sc final state cannot assign on entry either)
 //   - root output should be called with a "xstate.done.state.*" event of the parallel root when a direct final child of that parallel root is reached
 //   - root output should be called with a "xstate.done.state.*" event of the parallel root when a final child of its compound child is reached
 //   - root output should be called with a "xstate.done.state.*" event of the parallel root when a final descendant is reached 2 parallel levels deep

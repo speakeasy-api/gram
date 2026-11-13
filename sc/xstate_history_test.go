@@ -15,9 +15,6 @@ package sc_test
 //
 // Cases that are not ported, and why:
 //
-//   - "should enter a legal multi-target default for deep parallel history":
-//     a history state's Default takes one target, so a default naming a state
-//     in each region cannot be declared.
 //   - "should not execute actions of the initial transition when a history
 //     state with a default target is targeted and its parent state was never
 //     visited yet", "should execute parent entry actions when recorded
@@ -312,14 +309,9 @@ func TestXHistExecutesParentEntryActionsWhenAHistoryDefaultIsUsedBeforeItsParent
 }
 
 // xhistRegionsChart is a parallel state with two regions and a history state
-// of the given kind, entered from off through that history state.
-//
-// XState gives the history state a default with one target per region, which
-// sc cannot declare: Default takes a single target. Both XState cases name
-// each region's initial state (or the region itself), which is what sc enters
-// for a history state of a parallel state that has no Default, so the
-// history state is declared without one.
-func xhistRegionsChart(t *testing.T, kind sc.HistoryKind) *xhistMachine {
+// of the given kind whose default names one target per region, entered from
+// off through that history state.
+func xhistRegionsChart(t *testing.T, kind sc.HistoryKind, defaultA, defaultB string) *xhistMachine {
 	t.Helper()
 
 	return xhistNew(t, func(b *xhistBuilder) {
@@ -336,9 +328,37 @@ func xhistRegionsChart(t *testing.T, kind sc.HistoryKind) *xhistMachine {
 				b.State("b1")
 				b.State("b2")
 			})
-			b.History("hist", kind)
+			b.History("hist", kind).Default(defaultA, defaultB)
 		})
 	})
+}
+
+// XState: history states > should enter a legal multi-target default for deep
+// parallel history
+func TestXHistEntersALegalMultiTargetDefaultForDeepParallelHistory(t *testing.T) {
+	t.Parallel()
+
+	m := xhistNew(t, func(b *xhistBuilder) {
+		b.Initial("off")
+		b.State("off").On[xhistPower]().To("hist")
+		b.Parallel("on", func(b *xhistBuilder) {
+			b.State("A", func(b *xhistBuilder) {
+				b.Initial("B")
+				b.State("B")
+				b.State("C")
+			})
+			b.State("K", func(b *xhistBuilder) {
+				b.Initial("L")
+				b.State("L")
+				b.State("M")
+			})
+			b.History("hist", sc.Deep).Default("C", "M")
+		})
+	})
+
+	snap, _ := xhistRun(m, xhistPower{})
+
+	require.Equal(t, []string{"on", "A", "C", "K", "M"}, snap.Active())
 }
 
 // XState: history states > should enter a deep parallel history default
@@ -346,7 +366,7 @@ func xhistRegionsChart(t *testing.T, kind sc.HistoryKind) *xhistMachine {
 func TestXHistEntersADeepParallelHistoryDefaultBeforeItsParentWasVisited(t *testing.T) {
 	t.Parallel()
 
-	snap, _ := xhistRun(xhistRegionsChart(t, sc.Deep), xhistGo{})
+	snap, _ := xhistRun(xhistRegionsChart(t, sc.Deep, "a1", "b1"), xhistGo{})
 
 	require.Equal(t, []string{"on", "regA", "a1", "regB", "b1"}, snap.Active())
 }
@@ -356,7 +376,7 @@ func TestXHistEntersADeepParallelHistoryDefaultBeforeItsParentWasVisited(t *test
 func TestXHistEntersAShallowParallelHistoryDefaultBeforeItsParentWasVisited(t *testing.T) {
 	t.Parallel()
 
-	snap, _ := xhistRun(xhistRegionsChart(t, sc.Shallow), xhistGo{})
+	snap, _ := xhistRun(xhistRegionsChart(t, sc.Shallow, "regA", "regB"), xhistGo{})
 
 	require.Equal(t, []string{"on", "regA", "a1", "regB", "b1"}, snap.Active())
 }
@@ -558,9 +578,7 @@ func TestXHistDeepGoesToTheDeepestHistory(t *testing.T) {
 // XState declares a slightly smaller chart for each case; this is the
 // largest of them, from "should re-enter each regions of parallel state
 // correctly". The cases that use a smaller one never send the events the
-// extra transitions take. As in xhistRegionsChart, on's history states have
-// no Default, because XState's name one target per region and those targets
-// are the regions' initial states.
+// extra transitions take.
 func xhistParallelChart(t *testing.T) *xhistMachine {
 	t.Helper()
 
@@ -596,8 +614,8 @@ func xhistParallelChart(t *testing.T) *xhistMachine {
 				b.History("K_hist", sc.Shallow).Default("L")
 				b.History("K_deep", sc.Deep).Default("L")
 			})
-			b.History("on_hist", sc.Shallow)
-			b.History("on_deep", sc.Deep)
+			b.History("on_hist", sc.Shallow).Default("A", "K")
+			b.History("on_deep", sc.Deep).Default("B", "L")
 		}).On[xhistPower]().To("off")
 	})
 }

@@ -27,6 +27,10 @@ type Definition struct {
 	// Target is the default target of a history state.
 	Target string `json:"target,omitempty"`
 
+	// Also lists the further default targets of a history state that
+	// covers several regions.
+	Also []string `json:"alsoTargets,omitempty"`
+
 	// Initial is the key of the initial child state.
 	Initial string `json:"initial,omitempty"`
 
@@ -121,6 +125,7 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 		Type:    "",
 		History: string(n.historyKind),
 		Target:  "",
+		Also:    nil,
 		Initial: "",
 		Tags:    n.tags,
 		Entry:   nil,
@@ -138,6 +143,9 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 	}
 	if n.defaultNode != nil {
 		def.Target = "#" + n.defaultNode.name
+	}
+	for _, also := range n.defaultNodes[min(1, len(n.defaultNodes)):] {
+		def.Also = append(def.Also, "#"+also.name)
 	}
 	if n.initial != nil {
 		def.Initial = n.initial.name

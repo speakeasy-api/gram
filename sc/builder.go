@@ -106,6 +106,27 @@ func (b *Builder[S, C]) Initial(s S) {
 	b.parent.initialID = &s
 }
 
+// On declares a transition on the enclosing state, as [StateBuilder.On]
+// does. On the Builder given to [New] that is the chart itself, so the
+// transition is taken whatever state the chart is in, unless an active
+// state handles the event first: a cancellation or a shutdown that applies
+// everywhere.
+func (b *Builder[S, C]) On[Ev any]() *Transition[S, C, Ev] {
+	return (&StateBuilder[S, C]{b: b.b, n: b.parent}).On[Ev]()
+}
+
+// OnAny declares a transition on the enclosing state for any event its
+// other transitions do not take, as [StateBuilder.OnAny] does.
+func (b *Builder[S, C]) OnAny() *Transition[S, C, any] {
+	return (&StateBuilder[S, C]{b: b.b, n: b.parent}).OnAny()
+}
+
+// Always declares an eventless transition on the enclosing state, as
+// [StateBuilder.Always] does.
+func (b *Builder[S, C]) Always() *Transition[S, C, struct{}] {
+	return (&StateBuilder[S, C]{b: b.b, n: b.parent}).Always()
+}
+
 // State declares a state. Passing a function makes it a compound state whose
 // children are declared inside that function. Calling State again with the
 // same identifier under the same parent returns the existing state, so its
@@ -130,7 +151,8 @@ func (b *Builder[S, C]) Parallel(s S, regions func(*Builder[S, C])) *StateBuilde
 
 // Final declares a final state. Entering it completes the enclosing state,
 // which fires that state's [StateBuilder.OnDone] transitions. Entering a
-// top-level final state completes the machine.
+// top-level final state completes the machine. Declared directly inside a
+// parallel state it is a region that is complete from the start.
 func (b *Builder[S, C]) Final(s S) *FinalBuilder[S, C] {
 	return &FinalBuilder[S, C]{n: b.declare(s, kindFinal)}
 }
@@ -192,6 +214,21 @@ func (f *FinalBuilder[S, C]) Tag(tags ...string) *FinalBuilder[S, C] {
 	return f
 }
 
+// AssignOnEntry replaces the context when the final state is entered, as
+// [StateBuilder.AssignOnEntry] does, so the transitions taken on the
+// enclosing state's completion see the result.
+func (f *FinalBuilder[S, C]) AssignOnEntry(name string, fn func(C) C) *FinalBuilder[S, C] {
+	f.n.entryAssigns = append(f.n.entryAssigns, stateAssign[C]{name: name, fn: fn})
+	return f
+}
+
+// RaiseOnEntry queues an event for the machine itself when the final state
+// is entered, as [StateBuilder.RaiseOnEntry] does.
+func (f *FinalBuilder[S, C]) RaiseOnEntry(name string, fn func(C) any) *FinalBuilder[S, C] {
+	f.n.entryRaises = append(f.n.entryRaises, stateRaise[C]{name: name, fn: fn})
+	return f
+}
+
 // Entry adds an action that runs when the final state is entered.
 func (f *FinalBuilder[S, C]) Entry(name string, fn func(context.Context, C)) *FinalBuilder[S, C] {
 	f.n.entry = append(f.n.entry, action[C]{name: name, fn: fn})
@@ -206,14 +243,16 @@ type HistoryBuilder[S comparable, C any] struct {
 
 // Default names the state entered when the history state is targeted before
 // its parent has ever been exited. Without a default the parent's initial
-// state is used.
-func (h *HistoryBuilder[S, C]) Default(target S) {
+// state is used. A history state of a parallel state, or a deep one above
+// one, can name a default in each of several regions with also.
+func (h *HistoryBuilder[S, C]) Default(target S, also ...S) {
 	if h.n.defaultID != nil {
 		h.b.errorf("history state %q: default declared twice", h.n.name)
 		return
 	}
 
 	h.n.defaultID = &target
+	h.n.defaultAlso = also
 }
 
 // StateBuilder declares the behaviour of one state.
@@ -372,6 +411,30 @@ func (s *StateBuilder[S, C]) Entry(name string, fn func(context.Context, C)) *St
 // unique among the state's actions.
 func (s *StateBuilder[S, C]) Exit(name string, fn func(context.Context, C)) *StateBuilder[S, C] {
 	s.n.exit = append(s.n.exit, action[C]{name: name, fn: fn})
+	return s
+}
+
+// AssignOnEntry replaces the context with the value f returns whenever the
+// state is entered, before its entry actions, which see the new context. It
+// is the place to reset what belongs to one visit of the state, such as a
+// count of attempts.
+func (s *StateBuilder[S, C]) AssignOnEntry(name string, f func(C) C) *StateBuilder[S, C] {
+	if name == "" {
+		s.b.errorf("state %q: an assignment has no name", s.n.name)
+	}
+	s.n.entryAssigns = append(s.n.entryAssigns, stateAssign[C]{name: name, fn: f})
+
+	return s
+}
+
+// AssignOnExit replaces the context whenever the state is exited, before
+// its exit actions, as AssignOnEntry does on entry.
+func (s *StateBuilder[S, C]) AssignOnExit(name string, f func(C) C) *StateBuilder[S, C] {
+	if name == "" {
+		s.b.errorf("state %q: an assignment has no name", s.n.name)
+	}
+	s.n.exitAssigns = append(s.n.exitAssigns, stateAssign[C]{name: name, fn: f})
+
 	return s
 }
 
@@ -802,6 +865,23 @@ func (t *Transition[S, C, Ev]) WhenAt(name string, g func(c C, ev Ev, now time.T
 	t.t.guards = append(t.t.guards, guard[C]{
 		name: name,
 		fn:   func(c C, ev any, now time.Time) bool { return g(c, event[Ev](ev), now) },
+	})
+
+	return t
+}
+
+// WhenEvent is [Transition.When] for a guard that needs the event being
+// processed whatever its type. On an eventless transition, declared with
+// Always, that is the event that started the step, or the raised event
+// being processed, which a typed guard there cannot see; it is nil when the
+// step began with a timer or with the instance starting. On other
+// transitions it is the transition's own event. An action on an eventless
+// transition carries the event too, in its effect, when the chart names the
+// event's type in an On somewhere.
+func (t *Transition[S, C, Ev]) WhenEvent(name string, g func(c C, ev any) bool) *Transition[S, C, Ev] {
+	t.t.guards = append(t.t.guards, guard[C]{
+		name: name,
+		fn:   func(c C, ev any, _ time.Time) bool { return g(c, ev) },
 	})
 
 	return t

@@ -264,6 +264,17 @@ type run[S comparable, C any] struct {
 	// changed is set once this call has changed anything: taken a
 	// transition, or consumed a timer or service result.
 	changed bool
+
+	// cause is the event being processed, which the eventless transitions
+	// that follow it see.
+	cause any
+}
+
+// noteCause records the event of stim as the one being processed.
+func (r *run[S, C]) noteCause(stim stimulus[S, C]) {
+	if stim.event != nil {
+		r.cause = stim.event
+	}
 }
 
 func byOrder[S comparable, C any](a, b *node[S, C]) int { return cmp.Compare(a.order, b.order) }
@@ -350,6 +361,7 @@ func (m *Machine[S, C]) start(c C, now time.Time, seed uint64) (Snapshot[S, C], 
 		entered:  nil,
 		passed:   nil,
 		changed:  false,
+		cause:    nil,
 	}
 
 	enter := new(transition[S, C])
@@ -407,6 +419,7 @@ func (m *Machine[S, C]) transition(snap Snapshot[S, C], ev any, now time.Time) (
 
 	if ev != nil && !r.done {
 		if stim, ok := r.accept(ev); ok {
+			r.noteCause(stim)
 			if ts := r.selectTransitions(stim); len(ts) > 0 {
 				r.microstep(ts, stim)
 			}
@@ -503,6 +516,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 		entered:  nil,
 		passed:   nil,
 		changed:  false,
+		cause:    nil,
 	}
 
 	for _, s := range snap.active {
@@ -1084,6 +1098,10 @@ func (r *run[S, C]) record(h *node[S, C]) []*node[S, C] {
 }
 
 func (r *run[S, C]) exit(n *node[S, C], event any) {
+	for _, assign := range n.exitAssigns {
+		r.ctx = assign.fn(r.ctx)
+	}
+
 	for _, a := range n.exit {
 		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: nil, Saved: nil})
 	}
@@ -1229,6 +1247,10 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 	r.entered = append(r.entered, n)
 	r.passed = append(r.passed, n)
 
+	for _, assign := range n.entryAssigns {
+		r.ctx = assign.fn(r.ctx)
+	}
+
 	for _, a := range n.entry {
 		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: nil, Saved: nil})
 	}
@@ -1253,11 +1275,17 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 		return
 	}
 
-	r.queueDone(parent)
+	// A final state completes the compound state it is a child of. One
+	// declared directly in a parallel state is a region of it.
+	p := parent
+	if parent.kind != kindParallel {
+		r.queueDone(parent)
+		p = parent.parent
+	}
 
 	// A parallel state completes once every region has, and that may in
 	// turn complete a parallel state it is a region of.
-	for p := parent.parent; p.kind == kindParallel && r.allRegionsFinal(p); p = p.parent {
+	for ; p.kind == kindParallel && r.allRegionsFinal(p); p = p.parent {
 		r.queueDone(p)
 	}
 }
@@ -1286,6 +1314,10 @@ func (r *run[S, C]) allRegionsFinal(p *node[S, C]) bool {
 func (r *run[S, C]) completed(n *node[S, C]) bool {
 	if n.kind == kindParallel {
 		return r.allRegionsFinal(n)
+	}
+
+	if n.kind == kindFinal {
+		return r.config[n]
 	}
 
 	for _, c := range n.children {
@@ -1629,7 +1661,7 @@ func (r *run[S, C]) effectiveTargets(n *node[S, C]) []*node[S, C] {
 
 	switch {
 	case n.defaultNode != nil:
-		return []*node[S, C]{n.defaultNode}
+		return n.defaultNodes
 	case n.parent.kind == kindParallel:
 		return n.parent.states()
 	default:
@@ -1708,7 +1740,15 @@ func (r *run[S, C]) settle() {
 		// taken once, and eventless transitions rest until something else
 		// changes.
 		always := on[S, C](triggerAlways)
+		always.event = r.cause
 		if ts := r.selectTransitions(always); len(ts) > 0 && !rested {
+			// Guards see the event whatever its type. Actions carry
+			// it only when the chart names its type, because an
+			// effect with any other event could not be stored.
+			if _, named := r.m.eventNames[reflect.TypeOf(always.event)]; !named {
+				always.event = nil
+			}
+
 			active, ctx := r.active(), r.ctx
 			r.microstep(ts, always)
 			rested = slices.Equal(active, r.active()) && reflect.DeepEqual(ctx, r.ctx)
@@ -1722,6 +1762,7 @@ func (r *run[S, C]) settle() {
 
 		stim := r.queue[0]
 		r.queue = r.queue[1:]
+		r.noteCause(stim)
 
 		if ts := r.selectTransitions(stim); len(ts) > 0 {
 			r.microstep(ts, stim)
