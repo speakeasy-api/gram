@@ -119,7 +119,7 @@ describe("isSecretInEnvironment", () => {
       key: "BASE_URL",
       state: "system",
       environmentValues: [
-        { environmentSlug: "prod", value: "sup*****", isSecret: true },
+        { environmentSlug: "prod", value: "***", isSecret: true },
         {
           environmentSlug: "staging",
           value: "https://x.test",

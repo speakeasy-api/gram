@@ -4,7 +4,7 @@ export interface EnvironmentVariable {
   id: string;
   key: string;
   // The value this variable holds in each environment that defines it. A secret
-  // entry only ever arrives redacted (e.g. "sup*****"); a non-secret one
+  // entry only ever arrives as a fixed mask ("***"); a non-secret one
   // arrives in cleartext and is safe to show as-is.
   environmentValues: Array<{
     environmentSlug: string;

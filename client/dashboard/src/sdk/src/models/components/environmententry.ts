@@ -17,6 +17,10 @@ export type EnvironmentEntry = {
    */
   createdAt: Date;
   /**
+   * Whether the entry holds a non-empty value. Secret entries can be empty placeholders waiting for a value.
+   */
+  hasValue: boolean;
+  /**
    * Whether the value is a secret. Secret values are redacted in reads; non-secret values are returned in cleartext.
    */
   isSecret: boolean;
@@ -29,7 +33,7 @@ export type EnvironmentEntry = {
    */
   updatedAt: Date;
   /**
-   * The value of the environment variable. Cleartext when is_secret is false, redacted otherwise.
+   * The value of the environment variable. Cleartext when is_secret is false. For a secret, a fixed mask ("***") when it has a value or "<EMPTY>" when it does not; use has_value to tell whether a value is set.
    */
   value: string;
 };
@@ -44,6 +48,7 @@ export const EnvironmentEntry$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    has_value: z.boolean(),
     is_secret: z.boolean(),
     name: z.string(),
     updated_at: z.pipe(
@@ -55,6 +60,7 @@ export const EnvironmentEntry$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "has_value": "hasValue",
       "is_secret": "isSecret",
       "updated_at": "updatedAt",
     });
