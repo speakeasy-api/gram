@@ -332,8 +332,8 @@ func TestRequireAnyUnblockedPrincipalPrecedence(t *testing.T) {
 
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	checks := []Check{
-		{Scope: ScopeSkillRead, ResourceID: "project-one", Dimensions: map[string]string{SelectorKeyProjectID: "project-one"}},
-		{Scope: ScopeSkillRead, ResourceID: "skill-one", Dimensions: map[string]string{SelectorKeyProjectID: "project-one"}},
+		{Scope: ScopeSkillRead, ResourceID: "project-one", Dimensions: nil},
+		{Scope: ScopeSkillRead, ResourceID: "skill-one", Dimensions: nil},
 	}
 	for _, tc := range []struct {
 		name    string
