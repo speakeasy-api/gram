@@ -269,12 +269,10 @@ func TestOrganizationUserSessionIssuerMigrateBlocksSecondClientForHostedServer(t
 }
 
 // A client bound to both the source and the organization's only
-// organization-level issuer is shared with the servers there. Consolidation
-// does not pin it, since a pin claims it on that issuer too, but the moved
-// server still becomes the target's only consumer, and reconcile then
-// associates the client with it. The organization issuer's server stops
-// requiring the client, so the preview reports that server even though it is
-// on neither issuer.
+// organization-level issuer is shared with the servers there. Those servers
+// are part of the preview, so consolidation pins the client to the source
+// server it proves, and the preview reports that the organization issuer's
+// server stops requiring it, even though that server is on neither issuer.
 func TestOrganizationUserSessionIssuerMigrateReportsServerOnOrganizationIssuer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -282,19 +280,25 @@ func TestOrganizationUserSessionIssuerMigrateReportsServerOnOrganizationIssuer(t
 	organizationID := seedOrganizationTierIssuer(t, ctx, ti.conn, "claim-organization")
 	targetID := seedIssuer(t, ctx, ti, "claim-target")
 	sourceID := seedIssuer(t, ctx, ti, "claim-source")
-	impactSeedServer(t, ctx, ti, sourceID)
+	sourceServer := impactSeedServer(t, ctx, ti, sourceID)
 	organizationServer := impactSeedServer(t, ctx, ti, organizationID)
 	shared := leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
 	require.NoError(t, selectionbackfill.New(ti.conn).SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: shared, UserSessionIssuerID: organizationID}))
 
 	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
 	require.NoError(t, err)
-	require.Len(t, preflight.ServerImpacts, 1)
-	impact := preflight.ServerImpacts[0]
-	require.Equal(t, organizationServer.String(), impact.McpServerID)
-	require.Equal(t, orggen.UserSessionIssuerMigrationImpactSeverity("warning"), impact.ImpactSeverity)
-	require.Equal(t, []orggen.UserSessionIssuerMigrationImpactReason{"loses_client"}, impact.Reasons)
-	require.Empty(t, impact.PinnedClientIds)
+	impacts := make(map[string]*orggen.UserSessionIssuerMigrationServerImpact)
+	for _, impact := range preflight.ServerImpacts {
+		impacts[impact.McpServerID] = impact
+	}
+	require.Len(t, impacts, 2)
+	organizationImpact := impacts[organizationServer.String()]
+	require.NotNil(t, organizationImpact)
+	require.Equal(t, orggen.UserSessionIssuerMigrationImpactSeverity("warning"), organizationImpact.ImpactSeverity)
+	require.Equal(t, []orggen.UserSessionIssuerMigrationImpactReason{"loses_client"}, organizationImpact.Reasons)
+	sourceImpact := impacts[sourceServer.String()]
+	require.NotNil(t, sourceImpact)
+	require.Equal(t, []string{shared.String()}, sourceImpact.PinnedClientIds)
 	require.NotEmpty(t, preflight.WarningsFingerprint)
 }
 
@@ -340,4 +344,37 @@ func TestOrganizationUserSessionIssuerMigrateRefusesStaleFingerprint(t *testing.
 
 	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String(), ConfirmedWarningsFingerprint: new(preflight.WarningsFingerprint)})
 	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+// A gateway counts an association as a claim only for the servers it
+// fronts. A gateway fronting another server in the consolidation must not
+// stop a pin for a server it does not front.
+func TestOrganizationUserSessionIssuerMigratePinsDespiteGatewayFrontingAnotherServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	targetID := seedIssuer(t, ctx, ti, "fronted-target")
+	sourceID := seedIssuer(t, ctx, ti, "fronted-source")
+	gatewayIssuerID := seedIssuer(t, ctx, ti, "fronted-gateway-issuer")
+	sourceServer := impactSeedServer(t, ctx, ti, sourceID)
+	frontedServer := impactSeedServer(t, ctx, ti, targetID)
+	shared := leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
+
+	fixtures := selectionbackfill.New(ti.conn)
+	require.NoError(t, fixtures.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: shared, UserSessionIssuerID: gatewayIssuerID}))
+	gatewayID := uuid.New()
+	require.NoError(t, fixtures.SeedMetaMCPServerFixture(ctx, selectionbackfill.SeedMetaMCPServerFixtureParams{ID: gatewayID, OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, Name: "Fronting gateway", UserSessionIssuerID: conv.ToNullUUID(gatewayIssuerID)}))
+	require.NoError(t, fixtures.SeedMetaMCPServerMemberFixture(ctx, selectionbackfill.SeedMetaMCPServerMemberFixtureParams{ProjectID: *auth.ProjectID, MetaMcpServerID: gatewayID, McpServerID: frontedServer}))
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	require.NoError(t, err)
+	var pinned []string
+	for _, impact := range preflight.ServerImpacts {
+		if impact.McpServerID == sourceServer.String() {
+			pinned = impact.PinnedClientIds
+		}
+	}
+	require.Equal(t, []string{shared.String()}, pinned, "the source server is pinned; the gateway fronts another server")
 }

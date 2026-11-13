@@ -769,7 +769,7 @@ var UserSessionIssuerMigrationServerImpact = Type("UserSessionIssuerMigrationSer
 	Attribute("clients_before", ArrayOf(UserSessionIssuerMigrationClient), "The clients the server uses today.")
 	Attribute("clients_after", ArrayOf(UserSessionIssuerMigrationClient), "The clients the server would use after consolidation.")
 	Attribute("pinned_client_ids", ArrayOf(String), "Remote session clients consolidation associates with the server before the move.")
-	Attribute("hosted", Boolean, "True for a hosted server, which uses every OAuth client its user session issuer binds rather than the ones associated with it, so changing its clients means changing that issuer's bindings.")
+	Attribute("hosted", Boolean, "True for a hosted server on an organization not enforcing upstream auth, which uses every OAuth client its user session issuer binds rather than the ones associated with it. Changing its clients then means changing that issuer's bindings; when enforcement is on, its clients are its auth clients' offers instead and this is false.")
 	Required("mcp_server_id", "mcp_server_name", "mcp_server_slug", "project_id", "project_name", "impact_severity", "reasons", "clients_before", "clients_after", "pinned_client_ids", "hosted")
 })
 

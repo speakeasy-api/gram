@@ -1273,7 +1273,7 @@ WITH organization_issuer AS (
       AND issuer.id <> @source_issuer_id::uuid
     HAVING count(*) = 1
 )
-SELECT server.id, server.project_id
+SELECT server.id, server.project_id, organization_issuer.id::uuid AS user_session_issuer_id
 FROM organization_issuer
 JOIN mcp_servers AS server
   ON server.user_session_issuer_id = organization_issuer.id

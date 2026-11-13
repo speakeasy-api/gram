@@ -3390,7 +3390,7 @@ WITH organization_issuer AS (
       AND issuer.id <> $3::uuid
     HAVING count(*) = 1
 )
-SELECT server.id, server.project_id
+SELECT server.id, server.project_id, organization_issuer.id::uuid AS user_session_issuer_id
 FROM organization_issuer
 JOIN mcp_servers AS server
   ON server.user_session_issuer_id = organization_issuer.id
@@ -3418,8 +3418,9 @@ type ListMCPServersOnClaimingOrganizationIssuerForMigrationParams struct {
 }
 
 type ListMCPServersOnClaimingOrganizationIssuerForMigrationRow struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
 }
 
 // Live servers on the organization's only organization-level issuer once the
@@ -3437,7 +3438,7 @@ func (q *Queries) ListMCPServersOnClaimingOrganizationIssuerForMigration(ctx con
 	var items []ListMCPServersOnClaimingOrganizationIssuerForMigrationRow
 	for rows.Next() {
 		var i ListMCPServersOnClaimingOrganizationIssuerForMigrationRow
-		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.UserSessionIssuerID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -223,7 +223,9 @@ func PinServers(ctx context.Context, db DBTX, organizationID string, serverIDs, 
 		decisions = append(decisions, decision)
 		decided = append(decided, decision.Associate...)
 	}
-	claimed := make(map[uuid.UUID]bool)
+	// A client claimed for every server, through the organization issuer,
+	// maps to uuid.Nil; one claimed through a gateway maps to its member.
+	claimed := make(map[uuid.UUID]map[uuid.UUID]bool)
 	if len(decided) > 0 {
 		ids, err := q.ListClientsClaimedThroughOtherIssuers(ctx, ListClientsClaimedThroughOtherIssuersParams{
 			RemoteSessionClientIds: decided,
@@ -235,8 +237,11 @@ func PinServers(ctx context.Context, db DBTX, organizationID string, serverIDs, 
 		if err != nil {
 			return nil, fmt.Errorf("list clients claimed through other issuers: %w", err)
 		}
-		for _, id := range ids {
-			claimed[id] = true
+		for _, row := range ids {
+			if claimed[row.RemoteSessionClientID] == nil {
+				claimed[row.RemoteSessionClientID] = make(map[uuid.UUID]bool)
+			}
+			claimed[row.RemoteSessionClientID][row.McpServerID.UUID] = true
 		}
 	}
 
@@ -244,7 +249,7 @@ func PinServers(ctx context.Context, db DBTX, organizationID string, serverIDs, 
 	for i, server := range servers {
 		decision := decisions[i]
 		for _, clientID := range decision.Associate {
-			if claimed[clientID] {
+			if claimed[clientID][uuid.Nil] || claimed[clientID][decision.MCPServerID] {
 				continue
 			}
 			n, err := q.BackfillUpstreamClientAssociation(ctx, BackfillUpstreamClientAssociationParams{

@@ -560,9 +560,11 @@ type UserSessionIssuerMigrationServerImpact struct {
 	// Remote session clients consolidation associates with the server before the
 	// move.
 	PinnedClientIds []string
-	// True for a hosted server, which uses every OAuth client its user session
-	// issuer binds rather than the ones associated with it, so changing its
-	// clients means changing that issuer's bindings.
+	// True for a hosted server on an organization not enforcing upstream auth,
+	// which uses every OAuth client its user session issuer binds rather than the
+	// ones associated with it. Changing its clients then means changing that
+	// issuer's bindings; when enforcement is on, its clients are its auth clients'
+	// offers instead and this is false.
 	Hosted bool
 }
 

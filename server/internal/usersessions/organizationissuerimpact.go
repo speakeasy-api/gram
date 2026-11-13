@@ -71,6 +71,10 @@ type serverClientSnapshot struct {
 
 	// clients holds the clients each server uses, sorted, keyed by server id.
 	clients map[uuid.UUID][]uuid.UUID
+
+	// enforced reports that the organization enforces upstream auth, so each
+	// server's clients are its auth clients' offers.
+	enforced bool
 }
 
 // snapshotServerClients reads, through tx, the upstream OAuth clients each of
@@ -107,6 +111,7 @@ func snapshotServerClients(ctx context.Context, tx pgx.Tx, organizationID string
 	if err != nil {
 		return snapshot, fmt.Errorf("read upstream auth enforcement: %w", err)
 	}
+	snapshot.enforced = enforced
 	if enforced {
 		offers, err := upstreamclientsrepo.New(tx).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{
 			OrganizationID: organizationID,
@@ -239,6 +244,10 @@ type serverImpact struct {
 
 	// pinned are the clients consolidation associated with the server, sorted.
 	pinned []uuid.UUID
+
+	// bindingResolved reports that the server uses every client its issuer
+	// binds: a hosted server on an organization not enforcing upstream auth.
+	bindingResolved bool
 }
 
 // classifyServerImpacts compares each server's clients before and after the
@@ -280,6 +289,8 @@ func classifyServerImpacts(ctx context.Context, tx pgx.Tx, organizationID string
 			before:   labelled(labels, before.clients[id]),
 			after:    labelled(labels, after.clients[id]),
 			pinned:   serverPins,
+
+			bindingResolved: after.servers[id].Hosted && !after.enforced,
 		}
 		impact.reasons = impactReasons(impact)
 		impact.severity = impactSeverity(impact.reasons)
@@ -518,7 +529,7 @@ func serverImpactViews(impacts []serverImpact) []*orggen.UserSessionIssuerMigrat
 			ClientsBefore:   migrationClientViews(impact.before),
 			ClientsAfter:    migrationClientViews(impact.after),
 			PinnedClientIds: pinned,
-			Hosted:          impact.server.Hosted,
+			Hosted:          impact.bindingResolved,
 		})
 	}
 	return views

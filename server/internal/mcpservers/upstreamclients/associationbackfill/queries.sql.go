@@ -397,38 +397,41 @@ func (q *Queries) DeleteClientBindingsFixture(ctx context.Context, remoteSession
 }
 
 const listClientsClaimedThroughOtherIssuers = `-- name: ListClientsClaimedThroughOtherIssuers :many
-SELECT DISTINCT link.remote_session_client_id
+SELECT link.remote_session_client_id, NULL::uuid AS mcp_server_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS other
+  ON other.id = link.user_session_issuer_id
+ AND other.deleted IS FALSE
+WHERE link.remote_session_client_id = ANY($1::uuid[])
+  AND other.id <> ALL($2::uuid[])
+  AND other.project_id IS NULL
+  AND other.organization_id = $3::text
+  AND (
+    SELECT count(*)
+    FROM user_session_issuers AS organization_issuer
+    WHERE organization_issuer.organization_id = $3::text
+      AND organization_issuer.project_id IS NULL
+      AND organization_issuer.deleted IS FALSE
+      AND organization_issuer.id <> ALL($4::uuid[])
+  ) = 1
+UNION
+SELECT link.remote_session_client_id, member.mcp_server_id
 FROM remote_session_client_user_session_issuers AS link
 JOIN user_session_issuers AS other
   ON other.id = link.user_session_issuer_id
  AND other.deleted IS FALSE
 LEFT JOIN projects AS other_project
   ON other_project.id = other.project_id
+JOIN meta_mcp_servers AS gateway
+  ON gateway.user_session_issuer_id = other.id
+ AND gateway.deleted IS FALSE
+JOIN meta_mcp_server_members AS member
+  ON member.meta_mcp_server_id = gateway.id
+ AND member.deleted IS FALSE
 WHERE link.remote_session_client_id = ANY($1::uuid[])
   AND other.id <> ALL($2::uuid[])
   AND COALESCE(other.organization_id, other_project.organization_id) = $3::text
-  AND (
-    (other.project_id IS NULL
-     AND (
-       SELECT count(*)
-       FROM user_session_issuers AS organization_issuer
-       WHERE organization_issuer.organization_id = $3::text
-         AND organization_issuer.project_id IS NULL
-         AND organization_issuer.deleted IS FALSE
-         AND organization_issuer.id <> ALL($4::uuid[])
-     ) = 1)
-    OR EXISTS (
-      SELECT 1
-      FROM meta_mcp_servers AS gateway
-      JOIN meta_mcp_server_members AS member
-        ON member.meta_mcp_server_id = gateway.id
-       AND member.deleted IS FALSE
-      WHERE gateway.user_session_issuer_id = other.id
-        AND gateway.deleted IS FALSE
-        AND member.mcp_server_id = ANY($5::uuid[])
-    )
-  )
-ORDER BY link.remote_session_client_id
+  AND member.mcp_server_id = ANY($5::uuid[])
 `
 
 type ListClientsClaimedThroughOtherIssuersParams struct {
@@ -439,14 +442,21 @@ type ListClientsClaimedThroughOtherIssuersParams struct {
 	McpServerIds           []uuid.UUID
 }
 
-// The named clients that an association with one of the named servers would
-// also claim on a user session issuer outside scope_issuer_ids. Serving counts
-// another server's association as claiming a client on an issuer that server
-// reaches as a gateway member, or on the organization's only
-// organization-level issuer. Associating such a client therefore changes what
-// unassociated servers on that issuer require. retiring_issuer_ids are about
-// to be retired, so they do not count toward the organization-level issuers.
-func (q *Queries) ListClientsClaimedThroughOtherIssuers(ctx context.Context, arg ListClientsClaimedThroughOtherIssuersParams) ([]uuid.UUID, error) {
+type ListClientsClaimedThroughOtherIssuersRow struct {
+	RemoteSessionClientID uuid.UUID
+	McpServerID           uuid.NullUUID
+}
+
+// The named clients that an association would also claim on a user session
+// issuer outside scope_issuer_ids, with the server whose association would.
+// Serving counts another server's association as claiming a client on the
+// organization's only organization-level issuer, for any server (returned
+// with a NULL mcp_server_id), and on the issuer of a gateway the server is a
+// member of, for that member only. Associating such a client therefore
+// changes what unassociated servers on that issuer require.
+// retiring_issuer_ids are about to be retired, so they do not count toward
+// the organization-level issuers.
+func (q *Queries) ListClientsClaimedThroughOtherIssuers(ctx context.Context, arg ListClientsClaimedThroughOtherIssuersParams) ([]ListClientsClaimedThroughOtherIssuersRow, error) {
 	rows, err := q.db.Query(ctx, listClientsClaimedThroughOtherIssuers,
 		arg.RemoteSessionClientIds,
 		arg.ScopeIssuerIds,
@@ -458,13 +468,13 @@ func (q *Queries) ListClientsClaimedThroughOtherIssuers(ctx context.Context, arg
 		return nil, err
 	}
 	defer rows.Close()
-	var items []uuid.UUID
+	var items []ListClientsClaimedThroughOtherIssuersRow
 	for rows.Next() {
-		var remote_session_client_id uuid.UUID
-		if err := rows.Scan(&remote_session_client_id); err != nil {
+		var i ListClientsClaimedThroughOtherIssuersRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.McpServerID); err != nil {
 			return nil, err
 		}
-		items = append(items, remote_session_client_id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

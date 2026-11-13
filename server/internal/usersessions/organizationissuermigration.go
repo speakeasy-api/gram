@@ -515,6 +515,11 @@ type issuerMigrationScope struct {
 	// consolidation reconciles exactly these, so it never takes a writer
 	// scope after its first write.
 	projects []uuid.UUID
+
+	// issuerIDs are the user session issuers whose servers are in serverIDs
+	// by issuer: the source, the target, and the organization's only
+	// organization-level issuer when its servers share a client with them.
+	issuerIDs []uuid.UUID
 }
 
 // lockIssuerMigrationAuth prepares the complete credential reach before any
@@ -531,7 +536,7 @@ func lockIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID st
 	}
 	// Non-nil is intentional: empty means no maintenance, while nil would
 	// widen existing target credentials to their full issuer reach downstream.
-	scope := issuerMigrationScope{serverIDs: nil, syncServers: make([]uuid.UUID, 0), projects: nil}
+	scope := issuerMigrationScope{serverIDs: nil, syncServers: make([]uuid.UUID, 0), projects: nil, issuerIDs: []uuid.UUID{source.ID, target.ID}}
 	for _, server := range servers {
 		scope.projects = append(scope.projects, server.ProjectID)
 		scope.serverIDs = append(scope.serverIDs, server.ID)
@@ -552,6 +557,14 @@ func lockIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID st
 		if !slices.Contains(scope.serverIDs, server.ID) {
 			scope.serverIDs = append(scope.serverIDs, server.ID)
 			scope.projects = append(scope.projects, server.ProjectID)
+		}
+		// A client it newly loses can leave its typed offers and credential
+		// choices stale, so it is maintained like the moved servers.
+		if !slices.Contains(scope.syncServers, server.ID) {
+			scope.syncServers = append(scope.syncServers, server.ID)
+		}
+		if !slices.Contains(scope.issuerIDs, server.UserSessionIssuerID) {
+			scope.issuerIDs = append(scope.issuerIDs, server.UserSessionIssuerID)
 		}
 	}
 	for _, issuer := range []repo.UserSessionIssuer{source, target} {
@@ -752,7 +765,7 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	// Record the clients each server on either issuer provably uses while
 	// its own issuer still says so; after the move the merged bindings no
 	// longer prove which server a client was meant for.
-	run.pins, err = associationbackfill.PinServers(ctx, dbtx, organizationID, before.serversOn(source.ID, target.ID), []uuid.UUID{source.ID, target.ID}, []uuid.UUID{source.ID})
+	run.pins, err = associationbackfill.PinServers(ctx, dbtx, organizationID, before.serversOn(source.ID, target.ID), scope.issuerIDs, []uuid.UUID{source.ID})
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "pin MCP server upstream clients").LogError(ctx, logger)
 	}

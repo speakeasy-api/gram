@@ -241,11 +241,15 @@ export function describeServerImpact(
 
 /** What an admin does to clear a server's blocker before consolidating. */
 export function serverImpactRemedy(
-  impact: Pick<UserSessionIssuerMigrationServerImpact, "hosted">,
+  impact: Pick<UserSessionIssuerMigrationServerImpact, "hosted" | "reasons">,
 ): string {
   // A hosted server uses every OAuth client its authorization server lists,
   // so only removing one from that list changes what it uses.
-  return impact.hosted
-    ? "Remove the extra OAuth client from one of these authorization servers, then try again."
-    : "Set its OAuth client in its authentication settings, then try again.";
+  if (impact.hosted) {
+    return "Remove the extra OAuth client from one of these authorization servers, then try again.";
+  }
+  if (impact.reasons.includes("multiple_clients_for_provider")) {
+    return "Keep one OAuth client for that provider in its authentication settings, then try again.";
+  }
+  return "Choose an OAuth client its upstream accepts in its authentication settings, then try again.";
 }

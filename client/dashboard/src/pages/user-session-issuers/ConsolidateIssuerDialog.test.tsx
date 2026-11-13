@@ -15,20 +15,12 @@ const testState = vi.hoisted(() => ({
   preflightError: false,
   preflightErrorValue: null as Error | null,
   migrateError: null as Error | null,
+  preflightKeys: [] as unknown[][],
 }));
 
-vi.mock(
-  "@gram/client/react-query/organizationUserSessionIssuerMigratePreflight.js",
-  () => ({
-    useOrganizationUserSessionIssuerMigratePreflight: () => ({
-      data: testState.preflight,
-      isFetching: false,
-      isError: testState.preflightError,
-      error: testState.preflightErrorValue,
-      refetch: vi.fn(),
-    }),
-  }),
-);
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
+}));
 
 vi.mock(
   "@gram/client/react-query/migrateOrganizationUserSessionIssuer.js",
@@ -48,6 +40,18 @@ vi.mock("./invalidateIssuers", () => ({ invalidateIssuers: vi.fn() }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => ({}),
+  // Only the preview uses a plain query; record its key so a test can check
+  // which target it previews.
+  useQuery: (options: { queryKey: unknown[]; enabled?: boolean }) => {
+    testState.preflightKeys.push(options.queryKey);
+    return {
+      data: options.enabled === false ? undefined : testState.preflight,
+      isFetching: false,
+      isError: testState.preflightError,
+      error: testState.preflightErrorValue,
+      refetch: vi.fn(),
+    };
+  },
 }));
 
 // The real select is a Radix popover; a native one keeps the test on the
@@ -166,6 +170,7 @@ beforeEach(() => {
   testState.preflight = undefined;
   testState.preflightError = false;
   testState.preflightErrorValue = null;
+  testState.preflightKeys = [];
   testState.migrateError = null;
 });
 
@@ -200,6 +205,29 @@ describe("ConsolidateIssuerDialog", () => {
         },
       },
     });
+  });
+
+  it("previews each target it is pointed at", () => {
+    testState.preflight = preflight({});
+    render(
+      <ConsolidateIssuerDialog
+        source={issuer("source")}
+        candidates={[issuer("first"), issuer("second")]}
+        onClose={() => {}}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Consolidate into"), {
+      target: { value: "first" },
+    });
+    expect(testState.preflightKeys.at(-1)).toEqual(
+      expect.arrayContaining(["source", "first"]),
+    );
+    fireEvent.change(screen.getByLabelText("Consolidate into"), {
+      target: { value: "second" },
+    });
+    expect(testState.preflightKeys.at(-1)).toEqual(
+      expect.arrayContaining(["source", "second"]),
+    );
   });
 
   it("confirms the MCP server changes it shows", () => {

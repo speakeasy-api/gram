@@ -10,6 +10,7 @@ import {
   describeServerImpact,
   impactServerName,
   providerLabel,
+  serverImpactRemedy,
   settingValue,
   unavailableReason,
 } from "./issuerDisplay";
@@ -273,5 +274,28 @@ describe("describeServerImpact", () => {
   it("labels a provider it can't parse by its raw value", () => {
     expect(providerLabel({ providerIssuer: "not a url" })).toBe("not a url");
     expect(providerLabel({ providerIssuer: "" })).toBe("an unknown provider");
+  });
+});
+
+describe("serverImpactRemedy", () => {
+  it("fits the remedy to how the server gets its OAuth clients", () => {
+    expect(
+      serverImpactRemedy({
+        hosted: true,
+        reasons: ["multiple_clients_for_provider"],
+      }),
+    ).toMatch(/^Remove the extra OAuth client/);
+    expect(
+      serverImpactRemedy({
+        hosted: false,
+        reasons: ["multiple_clients_for_provider", "changes_clients"],
+      }),
+    ).toMatch(/^Keep one OAuth client for that provider/);
+    expect(
+      serverImpactRemedy({
+        hosted: false,
+        reasons: ["provider_not_in_metadata", "gains_client"],
+      }),
+    ).toMatch(/^Choose an OAuth client its upstream accepts/);
   });
 });

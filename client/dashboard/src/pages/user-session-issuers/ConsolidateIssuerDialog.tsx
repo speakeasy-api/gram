@@ -22,8 +22,9 @@ import type { UserSessionIssuerMigrationClient } from "@gram/client/models/compo
 import type { UserSessionIssuerMigrationServerImpact } from "@gram/client/models/components/usersessionissuermigrationserverimpact.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useMigrateOrganizationUserSessionIssuerMutation } from "@gram/client/react-query/migrateOrganizationUserSessionIssuer.js";
-import { useOrganizationUserSessionIssuerMigratePreflight } from "@gram/client/react-query/organizationUserSessionIssuerMigratePreflight.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { buildOrganizationUserSessionIssuerMigratePreflightQuery } from "@gram/client/react-query/organizationUserSessionIssuerMigratePreflight.core.js";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -72,23 +73,26 @@ export function ConsolidateIssuerDialog({
   // consolidation's locks, so it refreshes only when asked: on a new target,
   // a retry, "Check again", or a refused confirmation. It is never kept once
   // the dialog closes, so reopening it after fixing a server checks afresh.
-  const preflight = useOrganizationUserSessionIssuerMigratePreflight(
-    {
+  const gramClient = useGramContext();
+  const preflightQuery =
+    buildOrganizationUserSessionIssuerMigratePreflightQuery(gramClient, {
       getUserSessionIssuerMigratePreflightRequestBody: {
         sourceId: source.id,
         targetId,
       },
-    },
-    undefined,
-    {
-      enabled: targetId !== "",
-      throwOnError: false,
-      retry: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      gcTime: 0,
-    },
-  );
+    });
+  const preflight = useQuery({
+    ...preflightQuery,
+    // The generated key leaves out the request body, so it would serve one
+    // target's preview for another; name the pair being previewed.
+    queryKey: [...preflightQuery.queryKey, source.id, targetId],
+    enabled: targetId !== "",
+    throwOnError: false,
+    retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    gcTime: 0,
+  });
 
   const migrate = useMigrateOrganizationUserSessionIssuerMutation({
     onSuccess: async (result) => {
