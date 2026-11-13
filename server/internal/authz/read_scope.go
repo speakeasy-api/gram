@@ -54,7 +54,7 @@ func (e *Engine) ResolveReadScope(ctx context.Context, scope Scope, projectID st
 	if !ok || authCtx == nil {
 		return ReadScope{}, oops.C(oops.CodeUnauthorized)
 	}
-	check := Check{Scope: scope, ResourceKind: "", ResourceID: projectID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
+	check := Check{Scope: scope, ResourceKind: "", ResourceID: projectID, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 	humanMember := authCtx.UserID != "" && authCtx.ExternalUserID == "" && authCtx.APIKeyID == "" && !isAssistantCall
 	if !allowsOwnFallback(scope) || !humanMember {

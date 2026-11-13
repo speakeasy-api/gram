@@ -108,6 +108,8 @@ The flag refuses to overwrite a fixture. Never regenerate an existing one, becau
 
 ## Never
 
+- **A tool or disposition goes on a tool call and nowhere else.** `ToolCall` (and `MCPToolCallCheck`) mark the check as a tool call. A check that carries `tool` or `disposition` without being built that way, or a tool call on any scope but `mcp:connect`, is an invalid check. The engine reads that mark, not which dimensions happen to be present, so a tool call can never be evaluated as a connection.
+- **A check with a scope the registry does not know, a resource kind that is not its scope's, or a dimension its scope does not declare is an invalid check.** `resource_kind` and `resource_id` are never dimensions.
 - **Never build a raw `authz.Check{...}`, or call `authz.EnvironmentCheck` / `MCPCheck` / `MCPToolCallCheck` / `AssistantCheck` / `HooksIngestCheck` / `ChatReadCheck` / `ChatWriteCheck`, in a migrated package.** The `norawauthzchecks` glint rule reports it. Once no raw constructor or `authz.Check{}` literal remains anywhere in a package, add it to `noRawAuthzChecksPackages` in `glint/no_raw_authz_checks.go`. A partial migration leaves the list alone.
 - **Never pass a probe to `Require`, or `AnyOf` anywhere but as the single check of `Require` or `Can`.** Both are invalid checks, which map to an unexpected error rather than a 403.
 - **Never build a ref with an empty project.** An empty dimension is an invalid check. Take the project from the row you loaded, not from the request, when they can differ.
