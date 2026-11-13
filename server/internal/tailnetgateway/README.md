@@ -111,11 +111,16 @@ The `network_ingresses.runtime` column decides:
 - `NULL` (or anything else): hosted only by the Tailscale Kubernetes operator,
   as before. Nothing in this package moves an ingress between the two.
 
-Every new ingress is created with `gateway`. Ingresses created before the
-gateway existed stay on the operator.
+A new ingress is created with `gateway` only when its organization has the
+`private-network-gateway` PostHog flag (targeted by organization slug), and
+with `NULL` otherwise, including when the flag cannot be read. The choice is
+fixed at creation, so changing the flag never moves an ingress; the API
+returns it as `runtime`, and the dashboard's setup sheet reads the same flag
+to show matching steps. Local development sets the flag on.
 `GRAM_NETWORK_INGRESS_GATEWAY_ENABLED` tells the reconciler the gateway pods
 are deployed; until it is set, gateway ingresses wait as
-`provider_configuration_unavailable` instead of falling back to the operator.
+`provider_configuration_unavailable` instead of falling back to the operator,
+so target the flag only once the gateway runs in that environment.
 
 ## Running locally
 
