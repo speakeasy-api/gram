@@ -862,7 +862,7 @@ func (q *Queries) ListRecallDigests(ctx context.Context, arg ListRecallDigestsPa
 }
 
 const listRecallMemos = `-- name: ListRecallMemos :many
-SELECT m.id, m.content, m.created_at
+SELECT m.id, m.chat_id, m.content, m.created_at
 FROM memory_memos m
 LEFT JOIN chats c ON c.id = m.chat_id
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
@@ -910,6 +910,7 @@ type ListRecallMemosParams struct {
 
 type ListRecallMemosRow struct {
 	ID        uuid.UUID
+	ChatID    uuid.NullUUID
 	Content   string
 	CreatedAt pgtype.Timestamptz
 }
@@ -931,7 +932,12 @@ func (q *Queries) ListRecallMemos(ctx context.Context, arg ListRecallMemosParams
 	var items []ListRecallMemosRow
 	for rows.Next() {
 		var i ListRecallMemosRow
-		if err := rows.Scan(&i.ID, &i.Content, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Content,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

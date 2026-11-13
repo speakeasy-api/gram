@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -55,7 +56,15 @@ type RecallTeamHistoryOutput struct {
 
 	// Since is the earliest time the block reaches back to.
 	Since time.Time `json:"since"`
+
+	// Capped is true when more summaries or memos are waiting for a digest
+	// than the block reads; the oldest of them are left out and are reachable
+	// through search_team_memory.
+	Capped bool `json:"capped"`
 }
+
+// teamMemoryRecallCappedNote ends the block when Capped is true.
+const teamMemoryRecallCappedNote = "\n\n(More recent sessions and memos are waiting for a digest than fit here; the oldest of them are left out. Use search_team_memory to reach them.)"
 
 // Recall renders a project's last year of team memory as one block: month
 // digests for older history, then the week and day digests no month or week
@@ -98,17 +107,21 @@ func (s *TeamMemoryService) recall(ctx context.Context, principal Principal, pro
 		return zero, fmt.Errorf("list recall digests: %w", err)
 	}
 	chatRows, err := queries.ListRecallChats(ctx, memorydigestrepo.ListRecallChatsParams{
-		ProjectID: project.ID, OrganizationID: principal.OrganizationID, Since: conv.ToPGTimestamptz(since), RowLimit: teamMemoryRecallRowLimit,
+		ProjectID: project.ID, OrganizationID: principal.OrganizationID, Since: conv.ToPGTimestamptz(since), RowLimit: teamMemoryRecallRowLimit + 1,
 	})
 	if err != nil {
 		return zero, fmt.Errorf("list recall chats: %w", err)
 	}
 	memoRows, err := queries.ListRecallMemos(ctx, memorydigestrepo.ListRecallMemosParams{
-		ProjectID: project.ID, OrganizationID: principal.OrganizationID, Since: conv.ToPGTimestamptz(since), RowLimit: teamMemoryRecallRowLimit,
+		ProjectID: project.ID, OrganizationID: principal.OrganizationID, Since: conv.ToPGTimestamptz(since), RowLimit: teamMemoryRecallRowLimit + 1,
 	})
 	if err != nil {
 		return zero, fmt.Errorf("list recall memos: %w", err)
 	}
+	// One row past the cap tells a full page from a cut one.
+	capped := len(chatRows) > teamMemoryRecallRowLimit || len(memoRows) > teamMemoryRecallRowLimit
+	chatRows = chatRows[:min(len(chatRows), teamMemoryRecallRowLimit)]
+	memoRows = memoRows[:min(len(memoRows), teamMemoryRecallRowLimit)]
 
 	digests := make([]memorydigest.Digest, 0, len(digestRows))
 	for _, row := range digestRows {
@@ -130,7 +143,11 @@ func (s *TeamMemoryService) recall(ctx context.Context, principal Principal, pro
 		chats = append(chats, memorydigest.ChatNote{ID: row.ID, SummarizedAt: row.SummaryGeneratedAt.Time.UTC(), Summary: summary})
 	}
 	memos := make([]memorydigest.MemoNote, 0, len(memoRows))
+	memoChats := make(map[uuid.UUID]string, len(memoRows))
 	for _, row := range memoRows {
+		if row.ChatID.Valid {
+			memoChats[row.ID] = row.ChatID.UUID.String()
+		}
 		content, _, err := s.redactor.Text(ctx, row.Content)
 		if err != nil {
 			return zero, fmt.Errorf("redact recall memo: %w", err)
@@ -153,9 +170,16 @@ func (s *TeamMemoryService) recall(ctx context.Context, principal Principal, pro
 	}
 	kept, omitted := memorydigest.Budget(entries, budget)
 
-	output := RecallTeamHistoryOutput{History: memorydigest.Render(kept, omitted), Sources: make([]TeamMemorySource, 0, len(kept)), Omitted: omitted, Since: since}
+	output := RecallTeamHistoryOutput{History: memorydigest.Render(kept, omitted), Sources: make([]TeamMemorySource, 0, len(kept)), Omitted: omitted, Since: since, Capped: capped}
+	if capped {
+		output.History += teamMemoryRecallCappedNote
+	}
 	for _, entry := range kept {
-		output.Sources = append(output.Sources, TeamMemorySource{Kind: string(entry.Kind), ID: entry.ID.String(), ChatID: ""})
+		source := TeamMemorySource{Kind: string(entry.Kind), ID: entry.ID.String(), ChatID: ""}
+		if entry.Kind == memorydigest.SourceMemo {
+			source.ChatID = memoChats[entry.ID]
+		}
+		output.Sources = append(output.Sources, source)
 	}
 	if err := s.recordRead(ctx, principal, project, recallTeamHistoryToolName, output.Sources); err != nil {
 		return zero, err
