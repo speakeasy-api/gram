@@ -108,7 +108,7 @@
   "tools": [
     {
       "name": "select_assistant_runtime",
-      "description": "Select the persisted runtime for one assistant in an exact project. Select 2 for the legacy runtime or explicitly opt into Kit with 3. First call with confirmed:false to preview the current runtime_version without changing it, then obtain explicit confirmation of the exact target and choice. Supply that value as expected_runtime_version. Requires organization administrator access and assistant:write authorization on the selected assistant; a frontend feature flag is not authorization. The shared service rejects stale versions and unsettled active or background work. On conflict read again and reconfirm; never automatically overwrite. Returns committed runtime configuration, not runtime readiness, instructions or credentials. Managed assistants cannot change their own runtime through this tool.",
+      "description": "Select the persisted runtime for one assistant in an exact project. Select 2 for the legacy runtime or explicitly opt into Kit with 3. First call with confirmed:false to preview the current runtime_version without changing it, then obtain explicit confirmation of the exact target and choice. Supply that value as expected_runtime_version. Requires organization administrator access and assistant:write authorization on the selected assistant; a frontend feature flag is not authorization. Kit requires reasoning effort low, medium, or high; none is incompatible. If reasoning is none, use set_assistant_reasoning_effort to choose low, medium, or high before retrying the Kit switch. The shared service rejects stale versions and unsettled active or background work. On conflict read again and reconfirm; never automatically overwrite. Returns committed runtime configuration, not runtime readiness, instructions or credentials. Managed assistants cannot change their own runtime through this tool.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -145,6 +145,47 @@
       "annotations": {
         "destructiveHint": true,
         "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "set_assistant_reasoning_effort",
+      "description": "Configure reasoning effort for one assistant in an exact project: none, low, medium, or high. The none setting is only available on the default runtime (2) with compatible models; Kit (3) requires low, medium, or high. First call with confirmed:false to inspect the current preference and runtime_version, then obtain explicit confirmation of the exact assistant and desired value before confirmed:true. If the current runtime is Kit, choose low, medium, or high, or explicitly switch to the default runtime before setting none. Requires organization administrator access and assistant:write authorization. Omits all unrelated configuration, preserving model, runtime and attachments. Returns committed configuration only, not inference support or runtime readiness. Managed assistants cannot change their own configuration through this tool.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "assistant_id": {
+            "type": "string",
+            "description": "Exact assistant UUID.",
+            "format": "uuid"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "description": "False previews; true requires explicit confirmation of the exact target and reasoning effort."
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Exact project UUID; never inferred.",
+            "format": "uuid"
+          },
+          "reasoning_effort": {
+            "type": "string",
+            "enum": ["none", "low", "medium", "high"]
+          }
+        },
+        "required": [
+          "project_id",
+          "assistant_id",
+          "reasoning_effort",
+          "confirmed"
+        ],
+        "additionalProperties": false
+      },
+      "read_only": false,
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
         "openWorldHint": false,
         "readOnlyHint": false
       }
