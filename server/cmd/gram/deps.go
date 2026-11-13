@@ -542,6 +542,8 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	// The dashboard shows every flag on in local dev, so the server lets local
 	// orgs create tool approval policies too. A CSV row can still turn it off.
 	inmem.SetFlag(feature.FlagToolApprovals, feature.AnyDistinctID, true)
+	// Local development runs the tailnet gateway, not the operator.
+	inmem.SetFlag(feature.FlagPrivateNetworkGateway, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")

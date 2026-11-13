@@ -105,6 +105,10 @@ type NetworkIngress struct {
 	Provider string
 	// Private DNS label advertised by the provider
 	Hostname string
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime string
 	// Pinned endpoint namespace
 	EndpointNamespaceKind string
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain

@@ -12,6 +12,7 @@ var NetworkIngress = Type("NetworkIngress", func() {
 	Attribute("organization_id", String, "Owning organization ID")
 	Attribute("provider", String, "Private-network provider", func() { Enum("tailscale") })
 	Attribute("hostname", String, "Private DNS label advertised by the provider")
+	Attribute("runtime", String, "What hosts the ingress on the customer's tailnet: the Speakeasy tailnet gateway or the Tailscale Kubernetes operator. Fixed when the ingress is created.", func() { Enum("gateway", "operator") })
 	Attribute("endpoint_namespace_kind", String, "Pinned endpoint namespace", func() { Enum("platform", "custom_domain") })
 	Attribute("custom_domain_id", String, "Pinned custom-domain ID when endpoint_namespace_kind is custom_domain", func() { Format(FormatUUID) })
 	Attribute("enabled", Boolean, "Whether desired-state reconciliation may keep the ingress online")
@@ -24,7 +25,7 @@ var NetworkIngress = Type("NetworkIngress", func() {
 	Attribute("connected_since", String, func() { Format(FormatDateTime) })
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, func() { Format(FormatDateTime) })
-	Required("id", "organization_id", "provider", "hostname", "endpoint_namespace_kind", "enabled", "identity_required", "credentials_configured", "status", "created_at", "updated_at")
+	Required("id", "organization_id", "provider", "hostname", "runtime", "endpoint_namespace_kind", "enabled", "identity_required", "credentials_configured", "status", "created_at", "updated_at")
 })
 
 var GetResult = Type("NetworkIngressResult", func() {

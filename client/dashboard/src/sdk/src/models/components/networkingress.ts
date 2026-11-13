@@ -33,6 +33,18 @@ export const NetworkIngressProvider = {
  */
 export type NetworkIngressProvider = OpenEnum<typeof NetworkIngressProvider>;
 
+/**
+ * What hosts the ingress on the customer's tailnet: the Speakeasy tailnet gateway or the Tailscale Kubernetes operator. Fixed when the ingress is created.
+ */
+export const Runtime = {
+  Gateway: "gateway",
+  Operator: "operator",
+} as const;
+/**
+ * What hosts the ingress on the customer's tailnet: the Speakeasy tailnet gateway or the Tailscale Kubernetes operator. Fixed when the ingress is created.
+ */
+export type Runtime = OpenEnum<typeof Runtime>;
+
 export type NetworkIngress = {
   connectedSince?: Date | undefined;
   createdAt: Date;
@@ -82,6 +94,10 @@ export type NetworkIngress = {
    */
   provider: NetworkIngressProvider;
   /**
+   * What hosts the ingress on the customer's tailnet: the Speakeasy tailnet gateway or the Tailscale Kubernetes operator. Fixed when the ingress is created.
+   */
+  runtime: Runtime;
+  /**
    * Latest redacted lifecycle status
    */
   status: string;
@@ -99,6 +115,10 @@ export const NetworkIngressProvider$inboundSchema: z.ZodMiniType<
   NetworkIngressProvider,
   unknown
 > = openEnums.inboundSchema(NetworkIngressProvider);
+
+/** @internal */
+export const Runtime$inboundSchema: z.ZodMiniType<Runtime, unknown> = openEnums
+  .inboundSchema(Runtime);
 
 /** @internal */
 export const NetworkIngress$inboundSchema: z.ZodMiniType<
@@ -127,6 +147,7 @@ export const NetworkIngress$inboundSchema: z.ZodMiniType<
     last_error: z.optional(z.string()),
     organization_id: z.string(),
     provider: NetworkIngressProvider$inboundSchema,
+    runtime: Runtime$inboundSchema,
     status: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),

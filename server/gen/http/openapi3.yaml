@@ -121134,6 +121134,12 @@ components:
                     description: Private-network provider
                     enum:
                         - tailscale
+                runtime:
+                    type: string
+                    description: 'What hosts the ingress on the customer''s tailnet: the Speakeasy tailnet gateway or the Tailscale Kubernetes operator. Fixed when the ingress is created.'
+                    enum:
+                        - gateway
+                        - operator
                 status:
                     type: string
                     description: Latest redacted lifecycle status
@@ -121145,6 +121151,7 @@ components:
                 - organization_id
                 - provider
                 - hostname
+                - runtime
                 - endpoint_namespace_kind
                 - enabled
                 - identity_required
