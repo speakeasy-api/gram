@@ -218,7 +218,8 @@ func (q *Queries) GetRunStatus(ctx context.Context, id uuid.UUID) (string, error
 }
 
 const listRuns = `-- name: ListRuns :many
-SELECT id, organization_id, status, config, report, error, cost_usd, requested_by, started_at, finished_at, created_at, updated_at, deleted_at, deleted FROM memory_eval_runs
+SELECT id, status, config, error, cost_usd, requested_by, started_at, finished_at, created_at
+FROM memory_eval_runs
 WHERE deleted IS FALSE
   AND ($1::timestamptz IS NULL
        OR (created_at, id) < ($1::timestamptz, $2::uuid))
@@ -232,31 +233,39 @@ type ListRunsParams struct {
 	RowLimit        int32
 }
 
-// Newest first, keyset-paged on created_at and id.
-func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]MemoryEvalRun, error) {
+type ListRunsRow struct {
+	ID          uuid.UUID
+	Status      string
+	Config      []byte
+	Error       pgtype.Text
+	CostUsd     pgtype.Numeric
+	RequestedBy string
+	StartedAt   pgtype.Timestamptz
+	FinishedAt  pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+}
+
+// Newest first, keyset-paged on created_at and id. Leaves out the report,
+// which only a single-run read returns, so a page stays small.
+func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]ListRunsRow, error) {
 	rows, err := q.db.Query(ctx, listRuns, arg.BeforeCreatedAt, arg.BeforeID, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []MemoryEvalRun
+	var items []ListRunsRow
 	for rows.Next() {
-		var i MemoryEvalRun
+		var i ListRunsRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.OrganizationID,
 			&i.Status,
 			&i.Config,
-			&i.Report,
 			&i.Error,
 			&i.CostUsd,
 			&i.RequestedBy,
 			&i.StartedAt,
 			&i.FinishedAt,
 			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}

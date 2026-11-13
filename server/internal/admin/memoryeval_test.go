@@ -82,8 +82,10 @@ func TestStartMemoryEvalRun_QueuesAndStartsTheWorkflow(t *testing.T) {
 
 	opts, err := svc.GetMemoryEvalOptions(ctx, &gen.GetMemoryEvalOptionsPayload{})
 	require.NoError(t, err)
-	require.Equal(t, 1, opts.RunsToday)
+	require.Equal(t, 1, opts.RunsLast24h)
 	require.Equal(t, evalrun.DailyRunLimit, opts.DailyRunLimit)
+	require.Equal(t, evalrun.MaxAnswerModels, opts.MaxAnswerModels)
+	require.Equal(t, evalrun.MaxRuns, opts.MaxRuns)
 	require.NotEmpty(t, opts.AllowedModels)
 }
 
@@ -105,7 +107,7 @@ func TestStartMemoryEvalRun_FailsTheRowWhenTheWorkflowCannotStart(t *testing.T) 
 
 	opts, err := svc.GetMemoryEvalOptions(ctx, &gen.GetMemoryEvalOptionsPayload{})
 	require.NoError(t, err)
-	require.Equal(t, 0, opts.RunsToday, "a run no workflow claimed spent nothing, so it must not use up the daily limit")
+	require.Equal(t, 0, opts.RunsLast24h, "a run no workflow claimed spent nothing, so it must not use up the daily limit")
 }
 
 func TestStartMemoryEvalRun_Unconfigured(t *testing.T) {

@@ -421,7 +421,8 @@ type Service interface {
 	// Default Organizational Memory eval config, the models a run may pick from,
 	// and the daily run budget.
 	GetMemoryEvalOptions(context.Context, *GetMemoryEvalOptionsPayload) (res *AdminMemoryEvalOptions, err error)
-	// Organizational Memory eval runs, newest first, without their reports.
+	// Organizational Memory eval runs, newest first, without their reports. Read
+	// one run with getMemoryEvalRun for its report.
 	ListMemoryEvalRuns(context.Context, *ListMemoryEvalRunsPayload) (res *ListMemoryEvalRunsResult, err error)
 	// One Organizational Memory eval run with its report.
 	GetMemoryEvalRun(context.Context, *GetMemoryEvalRunPayload) (res *AdminMemoryEvalRun, err error)
@@ -1339,7 +1340,11 @@ type AdminMemoryEvalOptions struct {
 	// Runs allowed per rolling 24 hours, across all staff.
 	DailyRunLimit int
 	// Runs started in the last 24 hours.
-	RunsToday int
+	RunsLast24h int
+	// Most answer models one run may compare.
+	MaxAnswerModels int
+	// Most repeats per answer model and arm.
+	MaxRuns int
 }
 
 // AdminMemoryEvalRun is the result type of the admin service getMemoryEvalRun

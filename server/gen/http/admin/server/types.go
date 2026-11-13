@@ -3312,7 +3312,11 @@ type GetMemoryEvalOptionsResponseBody struct {
 	// Runs allowed per rolling 24 hours, across all staff.
 	DailyRunLimit int `form:"daily_run_limit" json:"daily_run_limit" xml:"daily_run_limit"`
 	// Runs started in the last 24 hours.
-	RunsToday int `form:"runs_today" json:"runs_today" xml:"runs_today"`
+	RunsLast24h int `form:"runs_last_24h" json:"runs_last_24h" xml:"runs_last_24h"`
+	// Most answer models one run may compare.
+	MaxAnswerModels int `form:"max_answer_models" json:"max_answer_models" xml:"max_answer_models"`
+	// Most repeats per answer model and arm.
+	MaxRuns int `form:"max_runs" json:"max_runs" xml:"max_runs"`
 }
 
 // ListMemoryEvalRunsResponseBody is the type of the "admin" service
@@ -26044,6 +26048,24 @@ type StartMemoryEvalRunRateLimitExceededResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// StartMemoryEvalRunUnavailableResponseBody is the type of the "admin" service
+// "startMemoryEvalRun" endpoint HTTP response body for the "unavailable" error.
+type StartMemoryEvalRunUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // StartMemoryEvalRunUnauthorizedResponseBody is the type of the "admin"
 // service "startMemoryEvalRun" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -31520,8 +31542,10 @@ func NewVerifyGcpIamPlatformCredentialResponseBody(res *admin.VerifyPlatformCred
 // result of the "getMemoryEvalOptions" endpoint of the "admin" service.
 func NewGetMemoryEvalOptionsResponseBody(res *admin.AdminMemoryEvalOptions) *GetMemoryEvalOptionsResponseBody {
 	body := &GetMemoryEvalOptionsResponseBody{
-		DailyRunLimit: res.DailyRunLimit,
-		RunsToday:     res.RunsToday,
+		DailyRunLimit:   res.DailyRunLimit,
+		RunsLast24h:     res.RunsLast24h,
+		MaxAnswerModels: res.MaxAnswerModels,
+		MaxRuns:         res.MaxRuns,
 	}
 	if res.Defaults != nil {
 		body.Defaults = marshalAdminAdminMemoryEvalRunConfigToAdminMemoryEvalRunConfigResponseBody(res.Defaults)
@@ -49422,6 +49446,20 @@ func NewGetMemoryEvalRunGatewayErrorResponseBody(res *goa.ServiceError) *GetMemo
 // service.
 func NewStartMemoryEvalRunRateLimitExceededResponseBody(res *goa.ServiceError) *StartMemoryEvalRunRateLimitExceededResponseBody {
 	body := &StartMemoryEvalRunRateLimitExceededResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunUnavailableResponseBody builds the HTTP response body
+// from the result of the "startMemoryEvalRun" endpoint of the "admin" service.
+func NewStartMemoryEvalRunUnavailableResponseBody(res *goa.ServiceError) *StartMemoryEvalRunUnavailableResponseBody {
+	body := &StartMemoryEvalRunUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

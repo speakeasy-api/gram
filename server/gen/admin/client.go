@@ -2991,6 +2991,7 @@ func (c *Client) GetMemoryEvalRun(ctx context.Context, p *GetMemoryEvalRunPayloa
 // service.
 // StartMemoryEvalRun may return the following errors:
 //   - "rate_limit_exceeded" (type *goa.ServiceError): rate limit exceeded
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

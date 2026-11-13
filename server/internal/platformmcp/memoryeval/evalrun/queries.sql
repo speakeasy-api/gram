@@ -7,8 +7,10 @@ RETURNING *;
 SELECT * FROM memory_eval_runs WHERE id = @id AND deleted IS FALSE;
 
 -- name: ListRuns :many
--- Newest first, keyset-paged on created_at and id.
-SELECT * FROM memory_eval_runs
+-- Newest first, keyset-paged on created_at and id. Leaves out the report,
+-- which only a single-run read returns, so a page stays small.
+SELECT id, status, config, error, cost_usd, requested_by, started_at, finished_at, created_at
+FROM memory_eval_runs
 WHERE deleted IS FALSE
   AND (sqlc.narg(before_created_at)::timestamptz IS NULL
        OR (created_at, id) < (sqlc.narg(before_created_at)::timestamptz, sqlc.narg(before_id)::uuid))
