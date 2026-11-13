@@ -10,11 +10,11 @@ import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js"
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import {
   hostedToolCountLabel,
-  MCP_SERVER_KIND_LABEL,
   mcpServerDisplayName,
   mcpServerHref,
   type McpServerKind,
 } from "./mcp-server-kind";
+import { McpKindBadge } from "./McpKindBadge";
 import { SpeakeasyMark } from "./OrganizationGatewayCard";
 import { AlertTriangleIcon, Link2, Network } from "lucide-react";
 import { useHostedMcpOAuthConfigStatus } from "../sources/sources-hooks";
@@ -96,7 +96,7 @@ export function GatewayTableRow({
     >
       <NameCell name={gateway.name} />
       <td className={CELL}>
-        <Badge variant="neutral">Gateway</Badge>
+        <McpKindBadge kind="gateway" />
       </td>
       <AddressCell url={mcpUrl} />
       <td className={CELL}>
@@ -127,7 +127,7 @@ export function OrganizationGatewayTableRow({
         {isOff && <Badge variant="warning">Off</Badge>}
       </NameCell>
       <td className={CELL}>
-        <Badge variant="neutral">Gateway</Badge>
+        <McpKindBadge kind="gateway" />
       </td>
       <td className={`max-w-xs ${CELL}`}>
         {url ? (
@@ -198,7 +198,7 @@ export function MCPServerTableRow({
         )}
       </NameCell>
       <td className={CELL}>
-        <Badge variant="neutral">{MCP_SERVER_KIND_LABEL[kind]}</Badge>
+        <McpKindBadge kind={kind} />
       </td>
       {server.primaryEndpointUrl || hosted ? (
         <AddressCell url={server.primaryEndpointUrl} />
