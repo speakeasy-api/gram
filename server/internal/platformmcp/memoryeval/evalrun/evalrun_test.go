@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	demoseedrepo "github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/bench"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun/repo"
@@ -163,4 +164,29 @@ func TestCountRunsSinceIncludesDeletedRuns(t *testing.T) {
 	count, err := q.CountRunsSince(t.Context(), run.CreatedAt)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, count)
+}
+
+// A run checks before storing its report that the eval projects it loaded are
+// still the ones the seed wrote: a reseed re-creates them, deleting the memory
+// the run prepared, and a delete removes them.
+func TestRunnerCatchesAReseedDuringTheRun(t *testing.T) {
+	t.Parallel()
+
+	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
+	require.NoError(t, err)
+	orgID := seedCorpusProject(t, db)
+	runner := evalrun.NewRunner(testenv.NewLogger(t), db, noCalls{})
+
+	require.NoError(t, evalrun.CheckSeedUnchangedSince(t.Context(), runner, orgID, func() {}))
+
+	reseed := func() {
+		require.NoError(t, demoseedrepo.New(db).OrgDeleteProjects(t.Context(), orgID))
+		seedCorpusProject(t, db)
+	}
+	require.ErrorIs(t, evalrun.CheckSeedUnchangedSince(t.Context(), runner, orgID, reseed), evalrun.ErrReseeded)
+
+	purge := func() {
+		require.NoError(t, demoseedrepo.New(db).OrgDeleteProjects(t.Context(), orgID))
+	}
+	require.ErrorIs(t, evalrun.CheckSeedUnchangedSince(t.Context(), runner, orgID, purge), evalrun.ErrReseeded)
 }
