@@ -49,7 +49,7 @@ type HomeSource struct {
 }
 
 // NewHomeSource returns the Home tab data source. flags gates the tool
-// approval and MCP review sections the way the dashboard does.
+// approval section the way the dashboard does.
 func NewHomeSource(logger *slog.Logger, db *pgxpool.Pool, flags HomeFlags) *HomeSource {
 	s := &HomeSource{logger: logger.With(attr.SlogComponent("slack_app_home")), db: db, flags: flags, serverURL: nil, isMember: nil}
 	s.isMember = func(ctx context.Context, organizationID, userID string) (bool, error) {
@@ -108,7 +108,7 @@ func (s *HomeSource) Load(ctx context.Context, organizationID, userID, dashboard
 			data.ApprovalsEnabled, data.Approvals, data.ApprovalsError = true, nil, true
 		}
 	}
-	if isAdmin && s.flagEnabled(ctx, logger, feature.FlagMCPApproval, organizationID, groups) {
+	if isAdmin {
 		data.MCPRequestsEnabled = true
 		data.MCPRequests, err = mcpRequests(ctx, queries, organizationID, links)
 		if err != nil {

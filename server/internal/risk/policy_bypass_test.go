@@ -1178,41 +1178,6 @@ func TestCreatePolicyBypassRequest_FallsBackToTheBlockReasonWithoutANote(t *test
 	require.Equal(t, "Blocked by policy: unreviewed MCP server", intake.gotNote)
 }
 
-// An intake that reports the approval feature is unavailable falls back to
-// the legacy bypass request, so organizations without the workflow keep the
-// old flow intact.
-func TestCreatePolicyBypassRequest_FallsBackWhenApprovalUnavailable(t *testing.T) {
-	t.Parallel()
-
-	intake := &fakeApprovalIntake{
-		err:       oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization"),
-		requestID: "", status: "",
-		gotOrganizationID: "", gotProjectID: uuid.Nil, gotServerURL: "", gotRequesterID: "", gotNote: "",
-	}
-	ctx, ti := newTestRiskService(t, func(instance *testInstance) {
-		instance.approvalIntake = intake
-	})
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
-		Scope:    authz.ScopeOrgAdmin,
-		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
-	})
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name: new("Approval Intake Fallback"),
-	})
-	require.NoError(t, err)
-
-	redemption, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
-		RequestToken: riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/fallback"),
-	})
-	require.NoError(t, err)
-	require.Equal(t, "bypass_request", redemption.Kind)
-	require.Equal(t, "requested", redemption.Status)
-	require.Equal(t, authCtx.UserID, redeemedBypassRow(t, ctx, ti, redemption).RequesterUserID)
-}
-
 // withAgentKeyAuth rewrites the auth context to look like an API-key-
 // authenticated device agent: no session, the given key scopes, and the key
 // owner as the caller. Mirrors what internal/auth/key.go builds for a

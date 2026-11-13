@@ -33,7 +33,6 @@ const state = vi.hoisted(() => ({
   orgAdmin: true,
   orgRead: true,
   projectWrite: true,
-  oktaView: true,
   calls: [] as string[],
   prepare: vi.fn(),
   unlink: vi.fn(),
@@ -91,14 +90,6 @@ vi.mock("@/hooks/useRBAC", () => ({
             ? state.projectWrite
             : true,
   }),
-}));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({
-    status: state.oktaView ? "enabled" : "disabled",
-  }),
-}));
-vi.mock("@/lib/featureFlags", () => ({
-  FEATURE_FLAGS: { oktaConnections: "okta-connections" },
 }));
 vi.mock("@/lib/remote-identity", () => ({
   useRemoteSessionIssuersByIds: () => issuerNames,
@@ -204,7 +195,6 @@ beforeEach(() => {
   state.orgAdmin = true;
   state.orgRead = true;
   state.projectWrite = true;
-  state.oktaView = true;
   state.calls.length = 0;
   state.prepare.mockReset();
   state.unlink.mockReset();
@@ -1228,19 +1218,6 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(
       screen.getByText("Set up example.com in Okta’s Cross App Access"),
     ).toBeTruthy();
-  });
-
-  it("doesn't link Cross App Access when the Okta view isn't available", () => {
-    state.oktaIssuerId = "okta";
-    state.oktaView = false;
-    read.data = {
-      ...bound("first"),
-      emaProviders: { ...providersOf(okta, speakeasyUnused), isDefault: false },
-    };
-    render(speakeasyField({ userSessionIssuer: trusting }), {
-      wrapper: MemoryRouter,
-    });
-    expect(screen.queryByRole("link", { name: /Cross App Access/ })).toBeNull();
   });
 
   it("says nothing about acceptance when it's withheld", () => {

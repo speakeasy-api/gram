@@ -15,13 +15,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidencediff"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	approvalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -52,19 +50,17 @@ type McpApprovalRecheck struct {
 	logger    *slog.Logger
 	db        *pgxpool.Pool
 	assembler *evidence.Assembler
-	flags     feature.Provider
 	audit     *audit.Logger
 }
 
 // NewMcpApprovalRecheck builds the recheck activities over the same evidence
 // assembler the intake path uses, so a sweep gather and a page-view gather
 // can never disagree about what a source said.
-func NewMcpApprovalRecheck(logger *slog.Logger, db *pgxpool.Pool, assembler *evidence.Assembler, flags feature.Provider, auditLogger *audit.Logger) *McpApprovalRecheck {
+func NewMcpApprovalRecheck(logger *slog.Logger, db *pgxpool.Pool, assembler *evidence.Assembler, auditLogger *audit.Logger) *McpApprovalRecheck {
 	return &McpApprovalRecheck{
 		logger:    logger.With(attr.SlogComponent("mcp-approval-recheck")),
 		db:        db,
 		assembler: assembler,
-		flags:     flags,
 		audit:     auditLogger,
 	}
 }
@@ -103,26 +99,6 @@ func (m *McpApprovalRecheck) Recheck(ctx context.Context, target McpApprovalRech
 
 	stopHeartbeat := startActivityHeartbeat(ctx)
 	defer stopHeartbeat()
-
-	// The rollout gate is per-organization state that can change between the
-	// scan and this activity, so it is checked here rather than in the list.
-	// Mirrors the service's gate, failing closed: an unresolvable slug
-	// degrades to distinct-id-only evaluation, and a flag-service error skips
-	// the recheck rather than sweeping an org the flag may not cover.
-	var groups map[string]string
-	org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, target.OrganizationID)
-	if err != nil {
-		m.logger.WarnContext(ctx, "resolve organization slug for mcp approval flag", attr.SlogError(err), attr.SlogOrganizationID(target.OrganizationID))
-	} else {
-		groups = feature.OrgProjectGroups(org.Slug, "")
-	}
-	enabled, err := m.flags.IsFlagEnabled(ctx, feature.FlagMCPApproval, target.OrganizationID, groups)
-	if err != nil {
-		return fmt.Errorf("check mcp approval flag: %w", err)
-	}
-	if !enabled {
-		return nil
-	}
 
 	queries := approvalrepo.New(m.db)
 

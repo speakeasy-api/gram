@@ -656,10 +656,8 @@ func (s *Service) ListShadowMCPInventoryServersForUser(ctx context.Context, payl
 
 	chRepo := telemetryrepo.New(s.chConn)
 	usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
-		// Gated, not the raw org id: the fold is behind a rollout flag, and
-		// this endpoint must fall under the same switch as every other folded
-		// read. With the fold off the email leg drops and matching falls back
-		// to the user id, which returns less rather than something wrong.
+		// With no fold org the email leg drops and matching falls back to the
+		// user id, which returns less rather than something wrong.
 		OrganizationID:      s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID),
 		GramProjectID:       projectID.String(),
 		CanonicalServerURLs: nil,

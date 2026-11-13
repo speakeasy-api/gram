@@ -15,8 +15,6 @@ import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { HumanizeDateTime } from "@/lib/dates";
 import {
   openSafeExternalUrl,
@@ -506,7 +504,6 @@ function ResearchReports({
   reports: ResearchReport[];
   requestId: string;
 }): JSX.Element {
-  const researchFlag = useFeatureFlag(FEATURE_FLAGS.mcpResearch);
   const project = useProject();
   const queryClient = useQueryClient();
   const startResearch = useStartMcpResearchMutation({
@@ -528,43 +525,30 @@ function ResearchReports({
   const latest = reports[0];
   const previous = reports.slice(1);
 
-  // Display only — the endpoint enforces the same flag, and it fails closed on
-  // an unreadable flag, so anything but a confirmed enabled renders no button:
-  // a control the server would 403 is the breakage this section exists to
-  // remove. Loading/missing/error resolve to nothing at all.
-  let headerNote: React.ReactNode = null;
-  if (researchFlag.status === "enabled") {
-    // The same org-admin gate as the endpoint behind it: research spends the
-    // org's money, so a non-admin must not see a button whose click comes
-    // back 403.
-    headerNote = (
-      <RequireScope scope="org:admin" resourceId={project.id} level="component">
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={running || startResearch.isPending}
-          onClick={() =>
-            startResearch.mutate({
-              request: { id: requestId, gramProject: project.slug },
-            })
-          }
-        >
-          {running && (
-            <Button.LeftIcon>
-              <Spinner className="mr-0" />
-            </Button.LeftIcon>
-          )}
-          <Button.Text>{running ? "Researching…" : "Run Research"}</Button.Text>
-        </Button>
-      </RequireScope>
-    );
-  } else if (researchFlag.status === "disabled") {
-    headerNote = (
-      <span className="text-muted-foreground text-xs">
-        Not included in your plan — contact your Speakeasy representative.
-      </span>
-    );
-  }
+  // The same org-admin gate as the endpoint behind it: research spends the
+  // org's money, so a non-admin must not see a button whose click comes back
+  // 403.
+  const headerNote = (
+    <RequireScope scope="org:admin" resourceId={project.id} level="component">
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={running || startResearch.isPending}
+        onClick={() =>
+          startResearch.mutate({
+            request: { id: requestId, gramProject: project.slug },
+          })
+        }
+      >
+        {running && (
+          <Button.LeftIcon>
+            <Spinner className="mr-0" />
+          </Button.LeftIcon>
+        )}
+        <Button.Text>{running ? "Researching…" : "Run Research"}</Button.Text>
+      </Button>
+    </RequireScope>
+  );
 
   // The same group shell as the evidence questions above it, so its heading,
   // its hint icon and the top edge of its body line up with theirs instead of
@@ -575,16 +559,14 @@ function ResearchReports({
       hint={RESEARCH_HINT}
       note={headerNote}
     >
-      {researchFlag.status === "enabled" && (
-        <p className="border-warning border px-2.5 py-1.5 text-xs">
-          <span className="font-medium">
-            A research run spends real AI credits.
-          </span>{" "}
-          The agent makes dozens of model calls, web searches, and page reads —
-          typically several hundred thousand tokens, several minutes per run.
-        </p>
-      )}
-      {!latest && researchFlag.status === "enabled" && (
+      <p className="border-warning border px-2.5 py-1.5 text-xs">
+        <span className="font-medium">
+          A research run spends real AI credits.
+        </span>{" "}
+        The agent makes dozens of model calls, web searches, and page reads —
+        typically several hundred thousand tokens, several minutes per run.
+      </p>
+      {!latest && (
         <p className="border-border text-muted-foreground border border-dashed px-2.5 py-1.5 text-xs">
           No research has been run for this server.
         </p>

@@ -39,7 +39,6 @@ func TestShadowDecisionDeniesAndReplaysAtomically(t *testing.T) {
 	require.NoError(t, approvalrepo.New(conn).SetApprovalRequestEvidence(ctx, approvalrepo.SetApprovalRequestEvidenceParams{CurrentEvidence: []byte(`{"identity":{"kind":"remote"}}`), EvidenceVersion: 1, ID: request.ID, ProjectID: project.ID}))
 
 	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagMCPApproval, principal.OrganizationID, true)
 	flags.SetFlag(feature.FlagPlatformMCPShadowAccessDecisions, principal.OrganizationID, true)
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -51,7 +50,7 @@ func TestShadowDecisionDeniesAndReplaysAtomically(t *testing.T) {
 	require.NoError(t, err)
 	versions, err := newShadowDecisionVersionCodec("shadow-decision-key")
 	require.NoError(t, err)
-	shadow := &ShadowInventoryService{projects: postgresRiskProjectResolver{queries: platformrepo.New(conn)}, inventory: stubShadowInventory{}, reviews: stubShadowReview{}, flags: flags, organizations: NewPostgresOrganizationSlugResolver(conn), budget: testOperationBudget(), references: references, versions: versions, now: time.Now}
+	shadow := &ShadowInventoryService{projects: postgresRiskProjectResolver{queries: platformrepo.New(conn)}, inventory: stubShadowInventory{}, reviews: stubShadowReview{}, budget: testOperationBudget(), references: references, versions: versions, now: time.Now}
 	targetPayload := `{"kind":"server_url","key":"https://shadow.example.test/mcp"}`
 	targetReference, err := shadow.references.EncodeScoped(principal, shadowTargetReferenceKind, queryScope("shadow_target", project.ID.String()), targetPayload, time.Now())
 	require.NoError(t, err)
@@ -129,7 +128,6 @@ func TestShadowDecisionAllowsEveryoneAndReplaysAtomically(t *testing.T) {
 	require.NoError(t, err)
 
 	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagMCPApproval, principal.OrganizationID, true)
 	flags.SetFlag(feature.FlagPlatformMCPShadowAccessDecisions, principal.OrganizationID, true)
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -141,7 +139,7 @@ func TestShadowDecisionAllowsEveryoneAndReplaysAtomically(t *testing.T) {
 	require.NoError(t, err)
 	versions, err := newShadowDecisionVersionCodec("shadow-decision-allow-key")
 	require.NoError(t, err)
-	shadow := &ShadowInventoryService{projects: postgresRiskProjectResolver{queries: platformrepo.New(conn)}, inventory: stubShadowInventory{}, reviews: stubShadowReview{}, flags: flags, organizations: NewPostgresOrganizationSlugResolver(conn), budget: testOperationBudget(), references: references, versions: versions, now: time.Now}
+	shadow := &ShadowInventoryService{projects: postgresRiskProjectResolver{queries: platformrepo.New(conn)}, inventory: stubShadowInventory{}, reviews: stubShadowReview{}, budget: testOperationBudget(), references: references, versions: versions, now: time.Now}
 	targetReference, err := shadow.references.EncodeScoped(principal, shadowTargetReferenceKind, queryScope("shadow_target", project.ID.String()), `{"kind":"server_url","key":"https://allowed-shadow.example.test/mcp"}`, time.Now())
 	require.NoError(t, err)
 	review, err := core.ReadPlatformReview(ctx, mcpapproval.PlatformReviewReadInput{OrganizationID: principal.OrganizationID, ProjectID: project.ID, TargetKind: shadowTargetKindServerURL, TargetKey: serverURL})

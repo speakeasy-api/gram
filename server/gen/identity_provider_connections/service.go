@@ -19,8 +19,8 @@ import (
 type Service interface {
 	// Create the organization's Okta connection. Discovers the org's authorization
 	// server, provisions a signing key and JWKS URL, and returns the console
-	// checklist. Requires org:admin and the okta-connections rollout. One live
-	// connection per organization; creation is rate limited.
+	// checklist. Requires org:admin. One live connection per organization;
+	// creation is rate limited.
 	Create(context.Context, *CreatePayload) (res *OktaIdentityProviderConnection, err error)
 	// Record the client ID of the Okta API Services application and verify it.
 	// Connections installed from the Okta Integration Network also take the client
