@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"maps"
 	"net"
@@ -260,7 +261,7 @@ func TestEnvelopeCopilotPreToolUse(t *testing.T) {
 		got = buildEnvelope(e, "test-host")
 		return agenthooks.NoDecision(), nil
 	})
-	agenthookstest.Invoke(t, runner, agenthooks.ProviderCopilot, payload)
+	agenthookstest.Invoke(t, runner, agenthooks.ProviderCopilotCLI, payload)
 
 	require.Equal(t, "copilot", got.Source.Adapter)
 	require.NotNil(t, got.Source.RawEventName)
@@ -583,7 +584,7 @@ func TestRatchetCopilotFailsClosedWithoutExitingNonZero(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
-	res := invoke(t, cfg, agenthooks.ProviderCopilot, "copilot/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderCopilotCLI, "copilot/pre_tool_use.json")
 
 	require.Equal(t, 0, res.ExitCode, "copilot denies on any non-zero exit; the verdict must ride stdout")
 	var out map[string]any
@@ -2104,4 +2105,73 @@ func TestMCPInventoryEnvelopeReportsIncompleteSnapshot(t *testing.T) {
 	require.Len(t, payload.Data.McpInventory, 1)
 	require.NotNil(t, payload.Data.McpInventoryCollected)
 	require.False(t, *payload.Data.McpInventoryCollected)
+}
+
+func TestAntigravitySessionStartRelaysMCPInventory(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	home := t.TempDir()
+	cwd := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	writeTestFile(t, filepath.Join(home, ".gemini", "config", "mcp_config.json"),
+		`{"mcpServers":{"linear":{"serverUrl":"https://mcp.linear.app/mcp?token=secret"}}}`)
+	writeTestFile(t, filepath.Join(cwd, ".agents", "mcp_config.json"),
+		`{"mcpServers":{"local":{"command":"node","args":["server.js"]}}}`)
+	payload := []byte(fmt.Sprintf(`{"conversationId":"agy-conv-1","workspacePaths":[%q],"modelName":"gemini-3-pro"}`, cwd))
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderAntigravity, payload, "--event=SessionStart")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Empty(t, strings.TrimSpace(string(res.Stdout)), "{} denies on Antigravity, so the no-op must be empty")
+	require.Equal(t, 2, fs.count())
+	inventory := fs.requests[0]
+	require.Equal(t, components.TypeMcpInventory, inventory.Event.Type)
+	require.Equal(t, "antigravity", inventory.Source.Adapter)
+	require.NotNil(t, inventory.Data.McpInventoryCollected)
+	require.True(t, *inventory.Data.McpInventoryCollected)
+	require.Len(t, inventory.Data.McpInventory, 2)
+	require.Equal(t, "local", *inventory.Data.McpInventory[0].ServerName)
+	require.Equal(t, "node server.js", *inventory.Data.McpInventory[0].Command)
+	require.Equal(t, "linear", *inventory.Data.McpInventory[1].ServerName)
+	require.Equal(t, "https://mcp.linear.app/mcp?token=%2A%2A%2A", *inventory.Data.McpInventory[1].URL)
+	require.Equal(t, components.TypeSessionStarted, fs.last().Event.Type)
+	require.Equal(t, "SessionStart", *fs.last().Source.RawEventName)
+}
+
+func TestWritePluginAntigravityMergesUserHooks(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "hooks.json"), `{"audit-log":{"Stop":[{"type":"command","command":"log.sh"}]}}`)
+	err := WritePlugin(t.Context(), "antigravity", dir, PluginConfig{
+		ServerURL:    "https://gram.test",
+		ProjectSlug:  "default",
+		OrgID:        "org-1",
+		HooksAPIKey:  "shared-key",
+		AgentKey:     false,
+		BrowserLogin: false,
+		BinaryPath:   "/tmp/speakeasy-hooks",
+	})
+	require.NoError(t, err)
+
+	b, err := os.ReadFile(filepath.Join(dir, "hooks.json"))
+	require.NoError(t, err)
+	var doc map[string]map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(b, &doc))
+	require.Contains(t, doc, "audit-log", "foreign handlers must survive the merge")
+	ours := doc[pluginName]
+	require.NotNil(t, ours)
+	events := slices.Collect(maps.Keys(ours))
+	require.ElementsMatch(t, []string{"enabled", "PostToolUse", "PreToolUse", "SessionStart", "Stop"}, events)
+	require.Contains(t, string(ours["PreToolUse"]), "--provider=antigravity")
+	require.Contains(t, string(ours["PreToolUse"]), "--event=PreToolUse")
+	require.Contains(t, string(ours["PreToolUse"]), "--config="+filepath.Join(dir, configFileName))
+	require.NotContains(t, string(b), "shared-key", "the API key stays in speakeasy.json")
+}
+
+func writeTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 }
