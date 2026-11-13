@@ -1,11 +1,12 @@
 package assistants
 
 import (
-	"context"
 	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,20 +28,25 @@ func TestKitATEAssertionProjectionPath(t *testing.T) {
 	require.NotContains(t, string(ate), KitWorkloadAssertionPath)
 }
 
-func TestKitATEStoredWorkloadRecovery(t *testing.T) {
+func TestKitATEStoredWorkloadRecoveryValidation(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
 	c.Environment, c.nativeIdentity = "dev", nil
-	c.WorkloadIssuerURL, c.WorkloadJWKSURL = "https://ate-issuer.example.com", "https://ate-issuer.example.com/jwks"
+	c.WorkloadIssuerURL, c.WorkloadJWKSURL = "https://ATE-ISSUER.example.com:443/", "https://ate-issuer.example.com/jwks"
 	c.ateIdentity = &kitATEWorkloadIdentity{Atespace: "preview-one", ActorName: "actor-one"}
 	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "actor-generation-one")
 	require.NoError(t, err)
-	tx, err := db.Begin(t.Context())
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) }()
+	tx := testenv.BeginTx(t, t.Context(), db)
 	r.LifecycleTx = tx
+	q := workloadrepo.New(tx)
+	params := workloadrepo.ListWorkloadAdmissionsParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}}
+	before, err := q.ListWorkloadAdmissions(t.Context(), params)
+	require.NoError(t, err)
 	require.NoError(t, core.validateKitATEBootstrapWorkload(t.Context(), r, c, binding, identity, "actor-generation-one"))
-	require.NoError(t, core.validateKitATEBootstrapWorkload(t.Context(), r, c, binding, identity, "actor-generation-one"), "recovery must not insert duplicate admissions")
+	require.NoError(t, core.validateKitATEBootstrapWorkload(t.Context(), r, c, binding, identity, "actor-generation-one"))
+	after, err := q.ListWorkloadAdmissions(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, after, len(before), "stored-workload validation must not change admission count")
 	require.ErrorIs(t, core.validateKitATEBootstrapWorkload(t.Context(), r, c, binding, identity, "actor-generation-two"), ErrKitRuntimeBinding)
 	foreign := *binding
 	foreign.Subject = "actor/preview-one/other-actor"
@@ -76,6 +82,7 @@ func TestKitATEPreviewGate(t *testing.T) {
 		{"explicit", "dev", "preview-one", true, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateKitATEPreview(tt.environment, tt.enabled, tt.preview)
 			if tt.valid {
 				require.NoError(t, err)

@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"io"
 	"math/big"
 	"net"
@@ -66,64 +67,102 @@ func testConfig(t *testing.T) (Config, tls.Certificate, *x509.CertPool) {
 }
 
 func TestActorTunnel(t *testing.T) {
-	cfg, cert, pool := testConfig(t)
-	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "CONNECT" || r.Host != "actor-one:8081" || r.Header.Get("ate-target-actor") != "test-space/actor-one" || r.Header.Get("Authorization") != "Bearer rotated-token" || len(r.TLS.PeerCertificates) == 0 {
-			t.Error("invalid CONNECT identity")
-			w.WriteHeader(403)
-			return
-		}
-		conn, rw, err := w.(http.Hijacker).Hijack()
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		defer conn.Close()
-		// Send the first tunneled bytes with the CONNECT response to exercise read-ahead.
-		_, _ = rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello")
-		_ = rw.Flush()
-		inner, err := http.ReadRequest(rw.Reader)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		_ = inner.Body.Close()
-	}))
-	server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}, ClientCAs: pool, ClientAuth: tls.RequireAndVerifyClientCert, MinVersion: tls.VersionTLS12}
-	server.StartTLS()
-	defer server.Close()
-	cfg.RouterAddress = strings.TrimPrefix(server.URL, "https://")
-	client := &Client{config: cfg, tlsConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12, GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) { return &cert, nil }}}
-	if err := os.WriteFile(cfg.AudienceJWTFile, []byte("rotated-token"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	httpClient, err := client.ActorHTTPClient("actor-one", 8081)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, target := range []string{"http://other:8081/acp", "http://actor-one:80/acp", "https://actor-one:8081/acp"} {
-		if _, err := httpClient.Get(target); err == nil {
-			t.Fatalf("allowed %s", target)
-		}
-	}
-	req, _ := http.NewRequest("POST", "http://actor-one:8081/acp", strings.NewReader("{}"))
-	response, err := httpClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	data, err := io.ReadAll(response.Body)
-	if err != nil || string(data) != "hello" {
-		t.Fatalf("buffered response: %q, %v", data, err)
+	t.Parallel()
+	for _, tc := range []struct {
+		name, header string
+		reject       bool
+	}{
+		{"unframed", "", false},
+		{"keepalive", "Connection: keep-alive\r\n", false},
+		{"close", "Connection: close\r\n", true},
+		{"mixed-case", "Connection: cLoSe\r\n", true},
+		{"comma-list", "Connection: keep-alive, CLOSE\r\n", true},
+		{"multiple-headers", "Connection: keep-alive\r\nConnection: Close\r\n", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg, cert, pool := testConfig(t)
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != "CONNECT" || r.Host != "actor-one:8081" || r.Header.Get("ate-target-actor") != "test-space/actor-one" || r.Header.Get("Authorization") != "Bearer rotated-token" || len(r.TLS.PeerCertificates) == 0 {
+					t.Error("invalid CONNECT identity")
+					w.WriteHeader(403)
+					return
+				}
+				hijacker, ok := w.(http.Hijacker)
+				if !ok {
+					t.Error("response writer cannot hijack")
+					return
+				}
+				conn, rw, err := hijacker.Hijack()
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				defer func() { _ = conn.Close() }()
+				// Wait for the tunneled request before sending its HTTP response.
+				_, _ = rw.WriteString("HTTP/1.1 200 Connection Established\r\n" + tc.header + "\r\n")
+				_ = rw.Flush()
+				if tc.reject {
+					return
+				}
+				inner, err := http.ReadRequest(rw.Reader)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				_, _ = io.Copy(io.Discard, inner.Body)
+				_ = inner.Body.Close()
+				_, _ = rw.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello")
+				_ = rw.Flush()
+			}))
+			server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}, ClientCAs: pool, ClientAuth: tls.RequireAndVerifyClientCert, MinVersion: tls.VersionTLS12}
+			server.StartTLS()
+			defer server.Close()
+			cfg.RouterAddress = strings.TrimPrefix(server.URL, "https://")
+			client := &Client{config: cfg, tlsConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12, GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) { return &cert, nil }}}
+			if err := os.WriteFile(cfg.AudienceJWTFile, []byte("rotated-token"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			httpClient, err := client.ActorHTTPClient("actor-one", 8081)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, target := range []string{"http://other:8081/acp", "http://actor-one:80/acp", "https://actor-one:8081/acp"} {
+				if response, err := httpClient.Get(target); err == nil {
+					_ = response.Body.Close()
+					t.Fatalf("allowed %s", target)
+				}
+			}
+			req, _ := http.NewRequest("POST", "http://actor-one:8081/acp", strings.NewReader("{}"))
+			response, err := httpClient.Do(req)
+			if tc.reject {
+				if response != nil {
+					_ = response.Body.Close()
+				}
+				if _, ok := errors.AsType[*ConnectError](err); !ok {
+					t.Fatalf("expected CONNECT rejection, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = response.Body.Close() }()
+			data, err := io.ReadAll(response.Body)
+			if err != nil || string(data) != "hello" {
+				t.Fatalf("buffered response: %q, %v", data, err)
+			}
+		})
 	}
 }
 
 func TestReflectionAndStrictInvocation(t *testing.T) {
+	t.Parallel()
 	cfg, cert, pool := testConfig(t)
 	file, err := protodesc.NewFile(&descriptorpb.FileDescriptorProto{
 		Name: new("control_test.proto"), Package: new("substrate.ateapi.v1"), Syntax: new("proto3"),
 		MessageType: []*descriptorpb.DescriptorProto{{Name: new("Actor"), Field: []*descriptorpb.FieldDescriptorProto{{Name: new("name"), Number: proto.Int32(1), Type: descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()}}}},
-		Service:     []*descriptorpb.ServiceDescriptorProto{{Name: new("Control"), Method: []*descriptorpb.MethodDescriptorProto{{Name: new("GetActor"), InputType: new(".substrate.ateapi.v1.Actor"), OutputType: new(".substrate.ateapi.v1.Actor")}}}},
+		Service:     []*descriptorpb.ServiceDescriptorProto{{Name: new("Control"), Method: []*descriptorpb.MethodDescriptorProto{{Name: new("GetActor"), InputType: new(".substrate.ateapi.v1.Actor"), OutputType: new(".substrate.ateapi.v1.Actor")}, {Name: new("SuspendActor"), InputType: new(".substrate.ateapi.v1.Actor"), OutputType: new(".substrate.ateapi.v1.Actor")}}}},
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -133,16 +172,21 @@ func TestReflectionAndStrictInvocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	message := file.Messages().Get(0)
-	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}, ClientCAs: pool, ClientAuth: tls.RequireAndVerifyClientCert, MinVersion: tls.VersionTLS12})), grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	sni := make(chan string, 1)
+	deadlines := make(chan time.Time, 1)
+	server := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) { sni <- hello.ServerName; return nil, nil }, Certificates: []tls.Certificate{cert}, ClientCAs: pool, ClientAuth: tls.RequireAndVerifyClientCert, MinVersion: tls.VersionTLS12})), grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		return handler(ctx, req)
 	}))
-	server.RegisterService(&grpc.ServiceDesc{ServiceName: controlService, HandlerType: (*any)(nil), Metadata: "control_test.proto", Methods: []grpc.MethodDesc{{MethodName: "GetActor", Handler: func(_ any, _ context.Context, decode func(any) error, _ grpc.UnaryServerInterceptor) (any, error) {
+	handler := func(_ any, ctx context.Context, decode func(any) error, _ grpc.UnaryServerInterceptor) (any, error) {
 		request := dynamicpb.NewMessage(message)
 		if err := decode(request); err != nil {
 			return nil, err
 		}
+		deadline, _ := ctx.Deadline()
+		deadlines <- deadline
 		return request, nil
-	}}}}, struct{}{})
+	}
+	server.RegisterService(&grpc.ServiceDesc{ServiceName: controlService, HandlerType: (*any)(nil), Metadata: "control_test.proto", Methods: []grpc.MethodDesc{{MethodName: "GetActor", Handler: handler}, {MethodName: "SuspendActor", Handler: handler}}}, struct{}{})
 	reflectionv1.RegisterServerReflectionServer(server, reflection.NewServerV1(reflection.ServerOptions{Services: server, DescriptorResolver: registry}))
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -156,13 +200,33 @@ func TestReflectionAndStrictInvocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
+	if got := <-sni; got != cfg.APIServerName {
+		t.Fatalf("API SNI = %q, want %q", got, cfg.APIServerName)
+	}
 	out, err := client.Invoke(context.Background(), "GetActor", []byte(`{"name":"actor-one"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(out), "actor-one") {
 		t.Fatalf("unexpected response %s", out)
+	}
+	if remaining := time.Until(<-deadlines); remaining <= 0 || remaining > cfg.RPCTimeout {
+		t.Fatalf("ordinary RPC deadline %v", remaining)
+	}
+	if _, err := client.Invoke(context.Background(), "SuspendActor", []byte(`{"name":"actor-one"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if remaining := time.Until(<-deadlines); remaining < 179*time.Second || remaining > 3*time.Minute {
+		t.Fatalf("suspend deadline %v", remaining)
+	}
+	callerCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, err := client.Invoke(callerCtx, "SuspendActor", []byte(`{"name":"actor-one"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if remaining := time.Until(<-deadlines); remaining <= 0 || remaining > time.Second {
+		t.Fatalf("caller deadline not honored: %v", remaining)
 	}
 	for _, tc := range []struct{ method, input string }{{"DeleteWorker", `{}`}, {"GetActor", `{"unexpected":true}`}} {
 		if _, err := client.Invoke(context.Background(), tc.method, []byte(tc.input)); err == nil {
@@ -172,6 +236,7 @@ func TestReflectionAndStrictInvocation(t *testing.T) {
 }
 
 func TestTokenBoundsAndRotation(t *testing.T) {
+	t.Parallel()
 	cfg, _, _ := testConfig(t)
 	bearer := fileBearer{cfg.AudienceJWTFile}
 	for _, token := range []string{"", strings.Repeat("x", 16385), "injected\r\nheader"} {
@@ -189,9 +254,10 @@ func TestTokenBoundsAndRotation(t *testing.T) {
 
 // Ensure the connection wrapper does not discard prefetched bytes.
 func TestBufferedConn(t *testing.T) {
+	t.Parallel()
 	a, b := net.Pipe()
-	defer a.Close()
-	defer b.Close()
+	defer func() { _ = a.Close() }()
+	defer func() { _ = b.Close() }()
 	reader := bufio.NewReader(a)
 	go func() { _, _ = b.Write([]byte("header\nbody")) }()
 	if _, err := reader.ReadString('\n'); err != nil {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -35,7 +36,11 @@ type initializer struct {
 }
 
 func (s *initializer) token() ([]byte, error) {
-	return os.ReadFile(filepath.Join(s.home, ".kit/credentials/gateway-token"))
+	token, err := os.ReadFile(filepath.Join(s.home, ".kit/credentials/gateway-token"))
+	if err != nil {
+		return nil, fmt.Errorf("read gateway credential: %w", err)
+	}
+	return token, nil
 }
 
 func (s *initializer) authorized(r *http.Request) bool {
@@ -96,29 +101,32 @@ func (s *initializer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func atomicWrite(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
+		return fmt.Errorf("create atomic file directory: %w", err)
 	}
 	f, err := os.CreateTemp(filepath.Dir(path), ".ate-init-*")
 	if err != nil {
-		return err
+		return fmt.Errorf("create atomic temporary file: %w", err)
 	}
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }()
 	if err := f.Chmod(0600); err != nil {
 		_ = f.Close()
-		return err
+		return fmt.Errorf("set atomic file permissions: %w", err)
 	}
 	if _, err := f.Write(data); err != nil {
 		_ = f.Close()
-		return err
+		return fmt.Errorf("write atomic file: %w", err)
 	}
 	if err := f.Sync(); err != nil {
 		_ = f.Close()
-		return err
+		return fmt.Errorf("sync atomic file: %w", err)
 	}
 	if err := f.Close(); err != nil {
-		return err
+		return fmt.Errorf("close atomic file: %w", err)
 	}
-	return os.Rename(f.Name(), path)
+	if err := os.Rename(f.Name(), path); err != nil {
+		return fmt.Errorf("install atomic file: %w", err)
+	}
+	return nil
 }
 
 func (s *initializer) install(body []byte) error {
@@ -130,7 +138,7 @@ func (s *initializer) install(body []byte) error {
 			break
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("read bootstrap archive header: %w", err)
 		}
 		if entry.Typeflag == tar.TypeDir && (entry.Name == ".kit/" || entry.Name == ".kit/credentials/" || entry.Name == "workspace/") {
 			continue
@@ -162,7 +170,7 @@ func (s *initializer) install(body []byte) error {
 	for _, dir := range []string{".kit", ".kit/credentials", "workspace"} {
 		path := filepath.Join(s.home, dir)
 		if err := os.MkdirAll(path, 0700); err != nil {
-			return err
+			return fmt.Errorf("create bootstrap directory: %w", err)
 		}
 		info, err := os.Lstat(path)
 		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
@@ -178,19 +186,22 @@ func (s *initializer) install(body []byte) error {
 }
 
 func run(ctx context.Context) error {
-	state := &initializer{home: home, assertion: assertionPath, launch: make(chan struct{})}
+	state := new(initializer)
+	state.home = home
+	state.assertion = assertionPath
+	state.launch = make(chan struct{})
 	if _, err := os.Stat(filepath.Join(home, ".kit/ate-initialized")); err == nil {
 		state.started = true
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
+		return fmt.Errorf("check initialization marker: %w", err)
 	}
 	server := &http.Server{Addr: ":8082", Handler: state, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, MaxHeaderBytes: 8192}
 	errs := make(chan error, 2)
 	go func() { errs <- server.ListenAndServe() }()
-	defer server.Close()
+	defer func() { _ = server.Close() }()
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("initialization canceled: %w", ctx.Err())
 	case err := <-errs:
 		return err
 	case <-state.launch:
@@ -203,14 +214,15 @@ func run(ctx context.Context) error {
 	case err := <-errs:
 		return err
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("initialization canceled: %w", ctx.Err())
 	}
 }
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer cancel()
-	if err := run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+	err := run(ctx)
+	cancel()
+	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Print("ATE Kit initialization stopped")
 		os.Exit(1)
 	}

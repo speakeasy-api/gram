@@ -7,18 +7,21 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/stretchr/testify/require"
 )
 
 func TestATEOrdinaryWorkloadDoesNotRequireActorClaims(t *testing.T) {
+	t.Parallel()
 	for _, subject := range []string{"ordinary-subject", "actor/foo/name", "actor/foo/spk-kit-not-managed", "actor/foo/spk-kit-ABCDEF0123456789ABCDEF0123456789-0123456789abcdef"} {
-		require.NoError(t, ateWorkloadStoreBindingCheck(nil)(t.Context(), workloadTenancy{}, uuid.New(), subject, nil))
+		require.NoError(t, admitATEWorkloadGrantInTx(t.Context(), nil, workloadTenancy{}, presentedWorkload{subject: subject}))
 	}
 }
 
 func TestATEReservedActorClassification(t *testing.T) {
+	t.Parallel()
 	id := uuid.New()
 	name := "spk-kit-" + strings.ReplaceAll(id.String(), "-", "") + "-0123456789abcdef"
 	subject := "actor/preview/" + name
@@ -31,10 +34,28 @@ func TestATEReservedActorClassification(t *testing.T) {
 	}
 	// Reserved subjects cannot fall back to ordinary admission even with no
 	// tenancy (and therefore no database from which to establish a binding).
-	require.ErrorIs(t, ateWorkloadStoreBindingCheck(nil)(t.Context(), workloadTenancy{}, uuid.New(), subject, nil), errWorkloadNotAdmitted)
+	require.ErrorIs(t, admitATEWorkloadGrantInTx(t.Context(), nil, workloadTenancy{}, presentedWorkload{subject: subject}), errWorkloadNotAdmitted)
+}
+
+func TestATEWorkloadAgentLifecycle(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		agent  agentrepo.Agent
+		active bool
+	}{
+		{name: "active", agent: agentrepo.Agent{}, active: true},
+		{name: "suspended", agent: agentrepo.Agent{SuspendedAt: pgtype.Timestamptz{Valid: true}}, active: false},
+		{name: "revoked", agent: agentrepo.Agent{RevokedAt: pgtype.Timestamptz{Valid: true}}, active: false},
+		{name: "deleted", agent: agentrepo.Agent{Deleted: true, DeletedAt: pgtype.Timestamptz{Valid: true}}, active: false},
+		{name: "owner reassignment", agent: agentrepo.Agent{OwnerReassignmentRequiredAt: pgtype.Timestamptz{Valid: true}}, active: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) { t.Parallel(); require.Equal(t, tc.active, ateWorkloadAgentActive(tc.agent)) })
+	}
 }
 
 func TestATEActorBinding(t *testing.T) {
+	t.Parallel()
 	project, assistant, runtime, issuer := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	identity := assistantidentity.RuntimeIdentity{OrganizationID: "org_test", ProjectID: project, AssistantID: assistant, AgentID: uuid.New(), BindingID: uuid.New(), BindingGeneration: 1}
 	actorName := "spk-kit-" + strings.ReplaceAll(runtime.String(), "-", "") + "-0123456789abcdef"
@@ -58,9 +79,9 @@ func TestATEActorBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, identity, resolved)
 	for _, missing := range []string{`{}`, `{"threads":{}}`, `{"threads":{"thread":{"actor_name":"` + actorName + `","actor_uid":"original-uid"}}}`, `{"threads":{"thread":{"workload":{"issuer_id":"` + issuer.String() + `","subject":"other"}}}}`, `not-json`} {
-		copy := row
-		copy.BackendMetadataJson = []byte(missing)
-		_, err := resolveATEStoredBinding(copy, tenancy, identity.AgentID, issuer, subject, claims)
+		runtimeCopy := row
+		runtimeCopy.BackendMetadataJson = []byte(missing)
+		_, err := resolveATEStoredBinding(runtimeCopy, tenancy, identity.AgentID, issuer, subject, claims)
 		require.ErrorIs(t, err, errWorkloadNotAdmitted)
 	}
 	parsed, managed := ateManagedRuntimeID(subject)
@@ -117,6 +138,7 @@ func TestATEActorBinding(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			r, m, th, c := row, metadata, thread, claims
 			if c.Actor != nil {
 				a := *c.Actor

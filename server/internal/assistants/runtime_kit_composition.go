@@ -318,8 +318,8 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		if err := s.validateKitATEBootstrapWorkload(ctx, r, c, workload, identity, gateway); err != nil {
 			return zero, err
 		}
-		copy := *workload
-		workload = &copy
+		recovered := *workload
+		workload = &recovered
 	} else {
 		workload, err = s.provisionKitWorkload(ctx, r, c, identity, gateway)
 		if err != nil {

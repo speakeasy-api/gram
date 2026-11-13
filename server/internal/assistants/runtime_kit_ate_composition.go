@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistants/ateclient"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -38,6 +40,7 @@ type KitATECompositionConfig struct {
 	ClientConfig ateclient.Config
 	Atespace     string
 	Template     string
+	EgressHosts  []string
 }
 
 type kitATEWorkloadIdentity struct {
@@ -103,10 +106,10 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 	c.ClientConfig.Atespace = c.Atespace
 	client, err := ateclient.New(ctx, c.ClientConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("create ATE control client: %w", err)
 	}
 	backend, err := NewKitATERuntimeBackend(KitATERuntimeConfig{
-		Environment: c.Environment, PreviewID: c.PreviewID, Image: c.Image, Atespace: c.Atespace, Template: c.Template, ServerURL: s.serverURL, Client: client,
+		Environment: c.Environment, PreviewID: c.PreviewID, Image: c.Image, Atespace: c.Atespace, Template: c.Template, ServerURL: s.serverURL, Client: client, EgressHosts: append(slices.Clone(c.EgressHosts), c.Origin.Hostname(), s.serverURL.Hostname()),
 		Bootstrap: s.kitATECompositionBootstrap(c), Token: s.kitATEToken, Protocol: s.kitATEProtocolFactory(c), Lifecycle: s.kitATELifecycle, Revoke: s.kitATERevoke, CheckSettled: s.kitATECheckSettled,
 	})
 	if err != nil {
@@ -141,7 +144,8 @@ func (s *ServiceCore) validateKitATEBrokerKeys(ctx context.Context, raw string) 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	resolver := jwks.NewResolver(s.guardianPolicy, noop.NewMeterProvider(), s.logger)
-	if _, err := resolver.Resolve(ctx, source, jwks.CacheState{}); err != nil {
+	var initialCache jwks.CacheState
+	if _, err := resolver.Resolve(ctx, source, initialCache); err != nil {
 		return fmt.Errorf("ATE JWKS must be reachable through the broker's public HTTPS trust path: %w", err)
 	}
 	return nil
@@ -155,7 +159,7 @@ func (s *ServiceCore) kitATERevoke(ctx context.Context, r assistantRuntimeRecord
 		Workload *KitWorkloadBinding `json:"workload"`
 	}{binding})
 	if err != nil {
-		return err
+		return fmt.Errorf("encode ATE workload revocation: %w", err)
 	}
 	r.BackendMetadataJSON = raw
 	return s.revokeKitWorkload(ctx, r.LifecycleTx, r)
@@ -197,12 +201,16 @@ func (s *ServiceCore) validateKitATEBootstrapWorkload(ctx context.Context, r ass
 	if err != nil {
 		return fmt.Errorf("load recovered ATE workload issuer: %w", err)
 	}
-	if issuer.ProjectID != project || !kitOwnedWorkloadIssuer(issuer, c.WorkloadIssuerURL, c.WorkloadJWKSURL) {
+	canonicalIssuer, err := issuerurl.ParseHTTPSOnly(c.WorkloadIssuerURL)
+	if err != nil {
+		return fmt.Errorf("canonicalize recovered ATE workload issuer: %w", err)
+	}
+	if issuer.ProjectID != project || !kitOwnedWorkloadIssuer(issuer, canonicalIssuer.String(), c.WorkloadJWKSURL) {
 		return ErrKitRuntimeBinding
 	}
 	admissions, err := q.ListWorkloadAdmissions(ctx, workloadrepo.ListWorkloadAdmissionsParams{OrganizationID: identity.OrganizationID, ProjectID: project})
 	if err != nil {
-		return err
+		return fmt.Errorf("load recovered ATE admissions: %w", err)
 	}
 	admitted := false
 	for _, a := range admissions {
@@ -215,7 +223,7 @@ func (s *ServiceCore) validateKitATEBootstrapWorkload(ctx context.Context, r ass
 	}
 	assignments, err := q.GetWorkloadAgentAssignmentForSubject(ctx, workloadrepo.GetWorkloadAgentAssignmentForSubjectParams{OrganizationID: identity.OrganizationID, WorkloadIssuerID: b.IssuerID, Subject: b.Subject, MatchKind: "exact"})
 	if err != nil {
-		return err
+		return fmt.Errorf("load recovered ATE agent assignments: %w", err)
 	}
 	if len(assignments) == 0 {
 		return ErrKitRuntimeBinding
@@ -227,14 +235,14 @@ func (s *ServiceCore) validateKitATEBootstrapWorkload(ctx context.Context, r ass
 	}
 	shared, err := usersessionsrepo.New(r.LifecycleTx).GetSharedUserSessionIssuerByID(ctx, c.MCPUserSessionIssuerID)
 	if err != nil {
-		return err
+		return fmt.Errorf("load recovered ATE broker issuer: %w", err)
 	}
 	if shared.ResolvedOrganizationID != identity.OrganizationID || (shared.UserSessionIssuer.ProjectID.Valid && shared.UserSessionIssuer.ProjectID.UUID != r.ProjectID) {
 		return ErrKitRuntimeBinding
 	}
 	audience, err := (authserver.Hosts{ServerURL: s.serverURL.String(), AuthenticationHostBaseURL: c.WorkloadIssuerBaseURL, PlatformHosts: nil}).SharedIssuerURL(shared.UserSessionIssuer)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve recovered ATE broker audience: %w", err)
 	}
 	if b.Audience != audience {
 		return ErrKitRuntimeBinding
@@ -333,7 +341,7 @@ func (s *ServiceCore) kitATECompositionBootstrap(c KitATECompositionConfig) func
 	}
 }
 
-func (s *ServiceCore) kitATEProtocolFactory(c KitATECompositionConfig) func(context.Context, assistantRuntimeRecord, uuid.UUID, string, *url.URL, *http.Client, string) (runtimeProtocol, error) {
+func (s *ServiceCore) kitATEProtocolFactory(c KitATECompositionConfig) func(context.Context, assistantRuntimeRecord, uuid.UUID, string, *url.URL, *guardian.HTTPClient, string) (runtimeProtocol, error) {
 	projector := NewKitTranscriptProjector(s.db, s.chatWriter, c.TurnStream, func(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
 		bound, err := s.ValidateKitRuntimeSessionInTx(ctx, tx, kitRuntimeSessionKey{ProjectID: b.ProjectID, AssistantID: b.AssistantID, RuntimeID: b.RuntimeID, ThreadID: b.ThreadID}, b.SessionID)
 		if err != nil {
@@ -344,7 +352,7 @@ func (s *ServiceCore) kitATEProtocolFactory(c KitATECompositionConfig) func(cont
 		}
 		return nil
 	})
-	return func(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID, actorName string, endpoint *url.URL, client *http.Client, token string) (runtimeProtocol, error) {
+	return func(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID, actorName string, endpoint *url.URL, client *guardian.HTTPClient, token string) (runtimeProtocol, error) {
 		if threadID == uuid.Nil || actorName == "" || endpoint == nil || endpoint.Path != "/acp" || client == nil || token == "" {
 			return nil, ErrKitRuntimeBinding
 		}

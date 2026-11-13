@@ -8,6 +8,7 @@ import (
 	"fmt"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"net"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -38,15 +39,25 @@ var _ runtimeSwitchCoordinator = (*KitRuntimeProtocol)(nil)
 const kitHistoryDroppedNotice = "Earlier messages in this conversation are not available to you. Respond to the current message without assuming what was said before."
 
 func NewKitRuntimeProtocol(c KitRuntimeProtocolConfig) (*KitRuntimeProtocol, error) {
-	if c.Core == nil || c.Projector == nil || c.Endpoint == nil || !kitProtocolEndpoint(c.Endpoint) || !filepath.IsAbs(c.CWD) {
+	if c.Core == nil || c.Projector == nil || c.Endpoint == nil || !kitProtocolEndpoint(c.Endpoint, c.HTTPClient) || !filepath.IsAbs(c.CWD) {
 		return nil, errors.New("incomplete Kit protocol configuration")
 	}
 	return &KitRuntimeProtocol{config: c}, nil
 }
 
 // Both routes use ACP v2 messages; /acp opts into native Kit session ownership.
-func kitProtocolEndpoint(u *url.URL) bool {
-	return u != nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" &&
+func kitProtocolEndpoint(u *url.URL, hc *guardian.HTTPClient) bool {
+	if u == nil {
+		return false
+	}
+	// Remote HTTP origins require a transport that guarantees encrypted delivery.
+	secureOrigin := u.Scheme == "https" || (u.Scheme == "http" &&
+		(strings.EqualFold(u.Hostname(), "localhost") || net.ParseIP(u.Hostname()).IsLoopback()))
+	if !secureOrigin && u.Scheme == "http" && hc != nil {
+		confidential, ok := hc.Transport.(interface{ ConfidentialOrigin(*url.URL) bool })
+		secureOrigin = ok && confidential.ConfidentialOrigin(u)
+	}
+	return secureOrigin && u.Host != "" &&
 		(u.Path == "/acp" || u.Path == "/acp/v2") && u.RawPath == "" &&
 		u.RawQuery == "" && !u.ForceQuery && u.Fragment == "" && u.RawFragment == "" && u.User == nil && u.Opaque == ""
 }

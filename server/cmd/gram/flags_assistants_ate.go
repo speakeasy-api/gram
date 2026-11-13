@@ -2,6 +2,7 @@ package gram
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	"net/url"
 
 	"github.com/redis/go-redis/v9"
@@ -14,6 +15,7 @@ import (
 
 func assistantATERuntimeFlags() []cli.Flag {
 	return []cli.Flag{
+		&cli.StringSliceFlag{Name: "assistant-ate-egress-host", EnvVars: []string{"GRAM_ASSISTANT_ATE_EGRESS_HOSTS"}, Usage: "Operator-approved extra DNS origins for ATE actor egress; no wildcards or IP addresses. Empty permits only the configured inference, server and workload broker origins."},
 		&cli.BoolFlag{Name: "assistant-ate-enabled", EnvVars: []string{"GRAM_ASSISTANT_ATE_ENABLED"}, Usage: "Explicitly enable ATE only in a named dev preview; never enabled by default."},
 		&cli.StringFlag{Name: "assistant-ate-preview-id", EnvVars: []string{"GRAM_ASSISTANT_ATE_PREVIEW_ID"}, Usage: "Required DNS-label identifier of the isolated development preview."},
 		&cli.StringFlag{Name: "assistant-ate-api-address", EnvVars: []string{"GRAM_ASSISTANT_ATE_API_ADDRESS"}, Usage: "ATE control API host:port, authenticated with TLS and an audience-bound JWT."},
@@ -31,7 +33,7 @@ func assistantATERuntimeFlags() []cli.Flag {
 
 func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, redisClient *redis.Client, serverURL *url.URL) error {
 	if err := assistants.ValidateKitATEPreview(c.String("environment"), c.Bool("assistant-ate-enabled"), c.String("assistant-ate-preview-id")); err != nil {
-		return err
+		return fmt.Errorf("validate assistant ATE preview: %w", err)
 	}
 	if !c.Bool("assistant-ate-enabled") {
 		return nil
@@ -41,15 +43,16 @@ func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, r
 	}
 	authenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, c.String("environment"))
 	if err != nil {
-		return err
+		return fmt.Errorf("configure ATE authentication host: %w", err)
 	}
 	issuerBaseURL := authenticationHost.BaseURL()
 	if issuerBaseURL == "" {
 		issuerBaseURL = (&url.URL{Scheme: serverURL.Scheme, Host: serverURL.Host}).String()
 	}
-	return core.InstallKitATERuntime(c.Context, assistants.KitATECompositionConfig{
-		Enabled: true, PreviewID: c.String("assistant-ate-preview-id"), Atespace: c.String("assistant-ate-atespace"), Template: c.String("assistant-ate-template"),
+	err = core.InstallKitATERuntime(c.Context, assistants.KitATECompositionConfig{
+		Enabled: true, EgressHosts: c.StringSlice("assistant-ate-egress-host"), PreviewID: c.String("assistant-ate-preview-id"), Atespace: c.String("assistant-ate-atespace"), Template: c.String("assistant-ate-template"),
 		KitLocalCompositionConfig: assistants.KitLocalCompositionConfig{
+			AllowInsecureInference: false, MCPResource: nil, MCPIssuer: nil, MCPUserSessionIssuerID: uuid.Nil, WorkloadNamespace: "",
 			PersistedMCP: true, Environment: c.String("environment"), Image: c.String("assistant-kit-image"),
 			Origin: &url.URL{Scheme: "https", Host: "ai.speakeasy.com"}, TurnStream: chat.NewTurnStream(redisClient),
 			WorkloadIssuerURL: c.String("assistant-kit-workload-issuer"), WorkloadJWKSURL: c.String("assistant-kit-workload-jwks-url"), WorkloadIssuerBaseURL: issuerBaseURL,
@@ -57,9 +60,14 @@ func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, r
 			Network: c.String("assistant-kit-network"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
 		},
 		ClientConfig: ateclient.Config{
+			Atespace: c.String("assistant-ate-atespace"), ConnectTimeout: 0, RPCTimeout: 0,
 			APIAddress: c.String("assistant-ate-api-address"), RouterAddress: c.String("assistant-ate-router-address"),
 			APIServerName: c.String("assistant-ate-api-server-name"), RouterServerName: c.String("assistant-ate-router-server-name"),
 			ServiceCAFile: c.String("assistant-ate-service-ca-file"), ClientCertFile: c.String("assistant-ate-client-cert-file"), ClientKeyFile: c.String("assistant-ate-client-key-file"), AudienceJWTFile: c.String("assistant-ate-audience-jwt-file"),
 		},
 	})
+	if err != nil {
+		return fmt.Errorf("install assistant ATE runtime: %w", err)
+	}
+	return nil
 }

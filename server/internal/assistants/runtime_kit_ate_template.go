@@ -36,7 +36,20 @@ func (k *KitATERuntimeBackend) ensureTemplate(ctx context.Context) error {
 		Containers []struct {
 			Name, Image string
 			Command     []string
+			Probe       struct {
+				HTTP struct {
+					Port int32  `json:"port"`
+					Path string `json:"path"`
+				} `json:"http_get"`
+				Timeout int32 `json:"timeout_seconds"`
+			} `json:"wakeup_probe"`
 		} `json:"containers"`
+		Resources struct {
+			Limits struct {
+				CPU    string `json:"cpu_millicores"`
+				Memory string `json:"memory_bytes"`
+			} `json:"limits"`
+		} `json:"resources"`
 		Selector struct {
 			Labels map[string]string `json:"match_labels"`
 		} `json:"worker_selector"`
@@ -57,7 +70,7 @@ func (k *KitATERuntimeBackend) ensureTemplate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if len(existing.Containers) != 1 || existing.Containers[0].Name != "kit" || existing.Containers[0].Image != k.config.Image || !slices.Equal(existing.Containers[0].Command, []string{"/usr/local/bin/kit-ate-init"}) || !reflect.DeepEqual(existing.Selector.Labels, map[string]string{"workload-type": "ate-poc"}) || existing.Snapshot.Fidelity != "SNAPSHOT_FIDELITY_ROOTFS" || existing.Snapshot.Golden.Mode != "GOLDEN_SNAPSHOT_MODE_DISABLED" {
+	if len(existing.Containers) != 1 || existing.Containers[0].Name != "kit" || existing.Containers[0].Image != k.config.Image || !slices.Equal(existing.Containers[0].Command, []string{"/usr/local/bin/kit-ate-init"}) || !reflect.DeepEqual(existing.Selector.Labels, map[string]string{"workload-type": "ate-poc"}) || existing.Containers[0].Probe.HTTP.Port != 8082 || existing.Containers[0].Probe.HTTP.Path != "/readyz" || existing.Containers[0].Probe.Timeout != 120 || existing.Resources.Limits.CPU != "1000" || existing.Resources.Limits.Memory != "1073741824" || existing.Snapshot.Fidelity != "SNAPSHOT_FIDELITY_ROOTFS" || existing.Snapshot.Golden.Mode != "GOLDEN_SNAPSHOT_MODE_DISABLED" {
 		return errors.New("ATE template does not match this preview's Kit image and rootfs contract")
 	}
 	return nil
@@ -65,12 +78,21 @@ func (k *KitATERuntimeBackend) ensureTemplate(ctx context.Context) error {
 
 func (k *KitATERuntimeBackend) ensureEgress(ctx context.Context, actor string, b KitLocalBootstrap) error {
 	hosts := map[string]bool{}
+	audience, err := url.Parse(b.Workload.Audience)
+	if err != nil || !kitATETrustedDNSHost(strings.ToLower(audience.Hostname())) {
+		return errors.New("invalid ATE broker origin")
+	}
+	trusted := append(append([]string(nil), k.config.EgressHosts...), strings.ToLower(audience.Hostname()))
 	add := func(raw string) error {
 		u, err := url.Parse(raw)
 		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || (u.Port() != "" && u.Port() != "443") {
 			return errors.New("ATE Kit egress requires an HTTPS origin on port 443")
 		}
-		hosts[strings.ToLower(u.Hostname())] = true
+		host := strings.ToLower(u.Hostname())
+		if !kitATETrustedDNSHost(host) || !slices.Contains(trusted, host) {
+			return errors.New("ATE egress origin is not explicitly approved for this preview")
+		}
+		hosts[host] = true
 		return nil
 	}
 	for _, raw := range []string{b.InferenceEndpoint, b.Workload.Audience} {
@@ -106,7 +128,7 @@ func (k *KitATERuntimeBackend) ensureEgress(ctx context.Context, actor string, b
 	var policy struct {
 		Rules []any `json:"rules"`
 	}
-	err := k.call(ctx, "GetActorEgressPolicy", map[string]any{"actor": k.ref(actor), "name": "default"}, &policy)
+	err = k.call(ctx, "GetActorEgressPolicy", map[string]any{"actor": k.ref(actor), "name": "default"}, &policy)
 	if status.Code(err) == codes.NotFound {
 		err = k.call(ctx, "CreateActorEgressPolicy", map[string]any{"actor": k.ref(actor), "egress_policy": map[string]any{"metadata": map[string]string{"atespace": k.config.Atespace, "name": "default"}, "rules": rules}}, &policy)
 	}

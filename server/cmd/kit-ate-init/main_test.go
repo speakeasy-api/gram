@@ -34,7 +34,11 @@ func testArchive(t *testing.T, names []string) []byte {
 }
 
 func TestBootstrapAndAssertion(t *testing.T) {
-	s := &initializer{home: t.TempDir(), assertion: filepath.Join(t.TempDir(), "assertion"), launch: make(chan struct{})}
+	t.Parallel()
+	s := new(initializer)
+	s.home = t.TempDir()
+	s.assertion = filepath.Join(t.TempDir(), "assertion")
+	s.launch = make(chan struct{})
 	post := func(path, token string, body []byte) int {
 		r := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
 		if token != "" {
@@ -75,7 +79,9 @@ func TestBootstrapAndAssertion(t *testing.T) {
 	if err != nil || info.Mode().Perm() != 0600 {
 		t.Fatal("assertion must be private")
 	}
-	restored := &initializer{home: s.home, assertion: s.assertion}
+	restored := new(initializer)
+	restored.home = s.home
+	restored.assertion = s.assertion
 	request := httptest.NewRequest(http.MethodPost, "/assertion", nil)
 	request.Header.Set("Authorization", "Bearer "+strings.Repeat("x", 43))
 	if !restored.authorized(request) {
@@ -87,7 +93,9 @@ func TestBootstrapAndAssertion(t *testing.T) {
 }
 
 func TestBootstrapRejectsTraversalAndSymlinks(t *testing.T) {
-	s := &initializer{home: t.TempDir()}
+	t.Parallel()
+	s := new(initializer)
+	s.home = t.TempDir()
 	if err := s.install(testArchive(t, append(append([]string{}, bootstrapFiles...), "../outside"))); err == nil {
 		t.Fatal("path traversal accepted")
 	}

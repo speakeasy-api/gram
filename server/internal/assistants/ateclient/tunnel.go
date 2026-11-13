@@ -9,16 +9,20 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"time"
 
 	"google.golang.org/grpc/status"
 )
 
 func sanitizedRPCError(err error) error {
-	return status.Error(status.Code(err), "ATE control RPC failed")
+	return fmt.Errorf("ATE control RPC: %w", status.Error(status.Code(err), "ATE control RPC failed"))
 }
 
 type ConnectError struct{ StatusCode int }
@@ -43,7 +47,7 @@ func ActorEndpoint(actor string, port uint16) (string, error) {
 // ActorHTTPClient restricts all requests to exactly actor:port. It does not follow
 // redirects, use proxy environment variables, retry POSTs, or time out SSE bodies.
 // Request context cancellation remains the caller's responsibility.
-func (c *Client) ActorHTTPClient(actor string, port uint16) (*http.Client, error) {
+func (c *Client) ActorHTTPClient(actor string, port uint16) (*guardian.HTTPClient, error) {
 	endpoint, err := ActorEndpoint(actor, port)
 	if err != nil {
 		return nil, err
@@ -63,7 +67,7 @@ func (c *Client) ActorHTTPClient(actor string, port uint16) (*http.Client, error
 			return c.connect(ctx, actor, authority)
 		},
 	}
-	return &http.Client{
+	return &guardian.HTTPClient{
 		Transport:     actorTransport{authority: authority, transport: transport},
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}, nil
@@ -74,11 +78,20 @@ type actorTransport struct {
 	transport *http.Transport
 }
 
+// ConfidentialOrigin identifies the exact HTTP origin carried inside verified mTLS CONNECT.
+func (t actorTransport) ConfidentialOrigin(u *url.URL) bool {
+	return u != nil && u.Scheme == "http" && u.Host == t.authority && u.User == nil && u.Opaque == ""
+}
+
 func (t actorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL == nil || req.URL.Scheme != "http" || req.URL.Host != t.authority || req.URL.User != nil || req.URL.Opaque != "" || (req.Host != "" && req.Host != t.authority) {
 		return nil, errors.New("ATE actor request authority rejected")
 	}
-	return t.transport.RoundTrip(req)
+	response, err := t.transport.RoundTrip(req)
+	if err != nil {
+		return nil, fmt.Errorf("ATE actor request: %w", err)
+	}
+	return response, nil
 }
 func (t actorTransport) CloseIdleConnections() { t.transport.CloseIdleConnections() }
 
@@ -87,7 +100,13 @@ type bufferedConn struct {
 	reader *bufio.Reader
 }
 
-func (c *bufferedConn) Read(p []byte) (int, error) { return c.reader.Read(p) }
+func (c *bufferedConn) Read(p []byte) (int, error) {
+	n, err := c.reader.Read(p)
+	if err != nil {
+		return n, fmt.Errorf("read ATE tunnel: %w", err)
+	}
+	return n, nil
+}
 
 func (c *Client) connect(ctx context.Context, actor, authority string) (net.Conn, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.config.ConnectTimeout)
@@ -119,10 +138,14 @@ func (c *Client) connect(ctx context.Context, actor, authority string) (net.Conn
 	if err != nil {
 		return nil, err
 	}
-	request := &http.Request{
-		Method: http.MethodConnect, URL: &url.URL{Opaque: authority}, Host: authority,
-		Header: http.Header{"Ate-Target-Actor": []string{c.config.Atespace + "/" + actor}, "Authorization": []string{metadata["authorization"]}},
+	request, err := http.NewRequestWithContext(ctx, http.MethodConnect, "http://"+authority, nil)
+	if err != nil {
+		return nil, errors.New("create ATE CONNECT request")
 	}
+	request.URL = &url.URL{Opaque: authority}
+	request.Host = authority
+	request.Header.Set("ate-target-actor", c.config.Atespace+"/"+actor)
+	request.Header.Set("Authorization", metadata["authorization"])
 	if err := request.Write(conn); err != nil {
 		return nil, errors.New("write ATE CONNECT")
 	}
@@ -138,11 +161,23 @@ func (c *Client) connect(ctx context.Context, actor, authority string) (net.Conn
 			break
 		}
 	}
+	// The standard response parser removes explicit Connection: close headers.
+	// Inspect the original MIME headers, not response.Close (also true for a
+	// valid unframed CONNECT response).
+	rawReader := textproto.NewReader(bufio.NewReader(bytes.NewReader(headers.Bytes())))
+	if _, err := rawReader.ReadLine(); err != nil {
+		return nil, errors.New("invalid ATE CONNECT status line")
+	}
+	rawHeaders, err := rawReader.ReadMIMEHeader()
+	if err != nil {
+		return nil, errors.New("invalid ATE CONNECT response headers")
+	}
 	response, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(headers.Bytes())), request)
 	if err != nil {
 		return nil, errors.New("invalid ATE CONNECT response")
 	}
-	if response.ProtoMajor != 1 || response.StatusCode != http.StatusOK || len(response.TransferEncoding) != 0 || response.ContentLength > 0 || response.Header.Get("Connection") == "close" {
+	defer func() { _ = response.Body.Close() }()
+	if response.ProtoMajor != 1 || response.StatusCode != http.StatusOK || len(response.TransferEncoding) != 0 || response.ContentLength > 0 || hasCloseToken(http.Header(rawHeaders)) {
 		return nil, &ConnectError{StatusCode: response.StatusCode}
 	}
 	// Stop cancellation before handing the socket to net/http. A cancellation that
@@ -155,4 +190,17 @@ func (c *Client) connect(ctx context.Context, actor, authority string) (net.Conn
 	}
 	success = true
 	return &bufferedConn{Conn: conn, reader: reader}, nil
+}
+
+// ReadResponse marks an unframed 200 CONNECT as Close even without an explicit
+// Connection header. Only explicit close tokens invalidate a successful tunnel.
+func hasCloseToken(header http.Header) bool {
+	for _, value := range header.Values("Connection") {
+		for token := range strings.SplitSeq(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(token), "close") {
+				return true
+			}
+		}
+	}
+	return false
 }

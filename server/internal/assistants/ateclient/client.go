@@ -97,7 +97,7 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 	if err != nil {
 		return nil, errors.New("create ATE control connection")
 	}
-	c := &Client{config: cfg, conn: conn, tlsConfig: tlsConfig}
+	c := &Client{config: cfg, conn: conn, service: nil, tlsConfig: tlsConfig}
 	resolveCtx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)
 	defer cancel()
 	c.service, err = resolveControl(resolveCtx, conn)
@@ -108,7 +108,12 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 	return c, nil
 }
 
-func (c *Client) Close() error { return c.conn.Close() }
+func (c *Client) Close() error {
+	if err := c.conn.Close(); err != nil {
+		return fmt.Errorf("close ATE control connection: %w", err)
+	}
+	return nil
+}
 
 var allowedMethods = map[string]bool{
 	"CreateActor": true, "GetActor": true, "DeleteActor": true, "ListActors": true, "SuspendActor": true, "MintActorJwt": true,
@@ -131,13 +136,15 @@ func (c *Client) Invoke(ctx context.Context, method string, input json.RawMessag
 		return nil, errors.New("invalid ATE control request")
 	}
 	resp := dynamicpb.NewMessage(md.Output())
-	ctx, cancel := context.WithTimeout(ctx, c.config.RPCTimeout)
+	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout(method))
 	defer cancel()
 	if err := c.conn.Invoke(ctx, "/"+controlService+"/"+method, req, resp); err != nil {
 		// Preserve status codes for callers without exposing server-generated bodies.
 		return nil, sanitizedRPCError(err)
 	}
-	out, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(resp)
+	var marshal protojson.MarshalOptions
+	marshal.UseProtoNames = true
+	out, err := marshal.Marshal(resp)
 	if err != nil {
 		return nil, errors.New("encode ATE control response")
 	}
@@ -152,7 +159,7 @@ func (b fileBearer) GetRequestMetadata(context.Context, ...string) (map[string]s
 	if err != nil {
 		return nil, errors.New("read ATE audience token")
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	token, err := io.ReadAll(io.LimitReader(f, 16385))
 	if err != nil || len(token) > 16384 {
 		return nil, errors.New("invalid ATE audience token size")
@@ -169,7 +176,7 @@ func resolveControl(ctx context.Context, conn *grpc.ClientConn) (protoreflect.Se
 	if err != nil {
 		return nil, errors.New("open reflection stream")
 	}
-	defer stream.CloseSend()
+	defer func() { _ = stream.CloseSend() }()
 	files := map[string]*descriptorpb.FileDescriptorProto{}
 	pending := []*reflection.ServerReflectionRequest{{MessageRequest: &reflection.ServerReflectionRequest_FileContainingSymbol{FileContainingSymbol: controlService}}}
 	for requests := 0; len(pending) > 0; requests++ {
@@ -202,16 +209,16 @@ func resolveControl(ctx context.Context, conn *grpc.ClientConn) (protoreflect.Se
 		for _, file := range files {
 			for _, dep := range file.Dependency {
 				if files[dep] == nil {
-					pending = append(pending, &reflection.ServerReflectionRequest{MessageRequest: &reflection.ServerReflectionRequest_FileByFilename{FileByFilename: dep}})
+					pending = append(pending, &reflection.ServerReflectionRequest{Host: "", MessageRequest: &reflection.ServerReflectionRequest_FileByFilename{FileByFilename: dep}})
 				}
 			}
 		}
 	}
-	set := &descriptorpb.FileDescriptorSet{}
+	var set descriptorpb.FileDescriptorSet
 	for _, file := range files {
 		set.File = append(set.File, file)
 	}
-	registry, err := protodesc.NewFiles(set)
+	registry, err := protodesc.NewFiles(&set)
 	if err != nil {
 		return nil, errors.New("invalid ATE schema dependency graph")
 	}
@@ -224,4 +231,13 @@ func resolveControl(ctx context.Context, conn *grpc.ClientConn) (protoreflect.Se
 		return nil, errors.New("ATE Control is not a service")
 	}
 	return service, nil
+}
+
+// Durable checkpoint uploads can outlast ordinary control calls. The caller's
+// earlier deadline still wins, and no RPC is automatically retried.
+func (c *Client) rpcTimeout(method string) time.Duration {
+	if method == "SuspendActor" {
+		return 3 * time.Minute
+	}
+	return c.config.RPCTimeout
 }

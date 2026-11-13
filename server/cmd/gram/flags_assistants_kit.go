@@ -47,7 +47,7 @@ func assistantKitRuntimeFlags() []cli.Flag {
 
 func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, db *pgxpool.Pool, auditLogger *audit.Logger, redisClient *redis.Client, serverURL *url.URL) error {
 	if err := assistants.ValidateKitATEPreview(c.String("environment"), c.Bool("assistant-ate-enabled"), c.String("assistant-ate-preview-id")); err != nil {
-		return err
+		return fmt.Errorf("validate assistant ATE preview: %w", err)
 	}
 	if c.Bool("assistant-ate-enabled") {
 		return installKitATERuntimeFromCLI(c, core, redisClient, serverURL)

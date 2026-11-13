@@ -86,8 +86,9 @@ func (p *KitRuntimeProtocol) closeNativeThreadSession(ctx context.Context, c *ki
 			}
 		}
 	}()
+	// Do not filter by cwd: a foreign workspace must prevent suspension too.
 	inventory := func() error {
-		raw, err := c.Call(ctx, "session/list", map[string]string{"cwd": p.config.CWD}, "")
+		raw, err := c.Call(ctx, "session/list", struct{}{}, "")
 		if err != nil {
 			return fmt.Errorf("list native Kit thread sessions: %w", err)
 		}

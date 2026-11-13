@@ -80,7 +80,6 @@ type workloadGrant struct {
 	issuers    *workloadIssuerAdmission
 	identities workloadIdentityLookup
 	verifier   *workload.Verifier
-	ateBinding ateWorkloadBindingCheck
 	// deviceKeys resolves the key registered for a device subject, for issuers
 	// whose assertions verify per device. Nil refuses every such assertion.
 	deviceKeys workloadDeviceKeyLookup
@@ -139,7 +138,6 @@ func newWorkloadGrant(db *pgxpool.Pool, redisClient *redis.Client, policy *guard
 		issuers:    newWorkloadIssuerAdmission(workloadIssuerStoreLookup(db), newWorkloadIssuerLookupBudget(redisClient, meterProvider)),
 		identities: workloadIdentityStoreLookup(db),
 		verifier:   verifier,
-		ateBinding: ateWorkloadStoreBindingCheck(db),
 		deviceKeys: budgetedDeviceKeyLookup(workloadDeviceKeyStoreLookup(db), newWorkloadDeviceKeyLookupBudget(redisClient, meterProvider)),
 	}
 }
@@ -228,6 +226,7 @@ type presentedWorkload struct {
 	// signatureVerified reports the assertion's signature verified, so issuer
 	// and subject are proven even when a later check refused it.
 	signatureVerified bool
+	ateClaims         *ateBrokerClaims
 }
 
 // admitWorkloadAssertion runs the grant's verification stages in order:
@@ -247,7 +246,7 @@ func admitWorkloadAssertion(
 ) (presentedWorkload, error) {
 	presented := presentedWorkload{
 		issuerURL: "", subject: "", issuerID: uuid.Nil, jwksURI: "",
-		assertionPolicyChecked: false, allowAssertionReuse: false, signatureVerified: false,
+		assertionPolicyChecked: false, allowAssertionReuse: false, signatureVerified: false, ateClaims: nil,
 	}
 
 	token, err := assertioncore.ParseSigned(raw, workloadAssertionMaxBytes)
@@ -338,13 +337,13 @@ func admitWorkloadAssertion(
 		return presented, workloadGrantStageUnavailable("subject_admission_unavailable", err)
 	}
 
-	if grant.ateBinding != nil {
-		if err := grant.ateBinding(ctx, tenancy, issuer.ID, claims.Subject, token); err != nil {
-			if errors.Is(err, errWorkloadNotAdmitted) {
-				return presented, refuseWorkloadGrant("ate_actor_binding_invalid", err)
-			}
-			return presented, workloadGrantStageUnavailable("ate_actor_binding_unavailable", err)
+	if _, managed := ateManagedRuntimeID(claims.Subject); managed {
+		var actorClaims ateBrokerClaims
+		// Retain custom claims only after this exact token passed Verify.
+		if err := token.UnsafeClaimsWithoutVerification(&actorClaims); err != nil {
+			return presented, refuseWorkloadGrant("ate_actor_binding_invalid", errWorkloadNotAdmitted)
 		}
+		presented.ateClaims = &actorClaims
 	}
 
 	return presented, nil
@@ -692,10 +691,10 @@ func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.Response
 }
 
 // lockWorkloadAssertionPolicy fences issuer-policy changes through commit.
-// The transaction must use REPEATABLE READ: an issuer update while acquiring its
-// lock fails closed. Admission and assignment are evaluated in that consistent
-// snapshot, not promised to include child-only changes committed during a lock
-// wait (those mutations need not update the issuer row).
+// Ordinary grants retain their REPEATABLE READ snapshot. Managed ATE grants
+// first fence assistant/runtime lifecycle, then use READ COMMITTED so these
+// post-lock reads see child-only withdrawals committed during a lock wait.
+// Every policy, admission and assignment writer serializes on this issuer.
 func lockWorkloadAssertionPolicy(ctx context.Context, dbtx pgx.Tx, organizationID string, projectIDPtr *uuid.UUID, presented presentedWorkload) error {
 	if presented.assertionPolicyChecked {
 		// Policy and admission writes take this same issuer lock. Hold it through
@@ -808,13 +807,33 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	// A database that cannot start or commit the transaction is an outage,
 	// not a verdict on the assertion: the caller is told to retry rather than
 	// handed a permanent failure.
-	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: ""})
+	isolation := pgx.RepeatableRead
+	if _, managed := ateManagedRuntimeID(grant.presented.subject); managed {
+		// Managed ATE holds explicit lifecycle and issuer locks. A fresh
+		// statement snapshot after a lock wait must see child-only withdrawals.
+		isolation = pgx.ReadCommitted
+	}
+	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: isolation, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		return nil, workloadGrantStageUnavailable("session_persist_unavailable", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	if err := lockWorkloadAssertionPolicy(ctx, dbtx, organizationID, grant.projectID, grant.presented); err != nil {
+	if _, managed := ateManagedRuntimeID(grant.presented.subject); managed {
+		tenancy := workloadTenancy{OrganizationID: organizationID, ProjectID: uuid.Nil, UserSessionIssuerID: grant.session.UserSessionIssuerID}
+		if grant.projectID != nil {
+			tenancy.ProjectID = *grant.projectID
+		}
+		if err := admitATEWorkloadGrantInTx(ctx, dbtx, tenancy, grant.presented); err != nil {
+			if errors.Is(err, errWorkloadNotAdmitted) {
+				return nil, refuseWorkloadGrant("ate_actor_binding_invalid", err)
+			}
+			if _, ok := errors.AsType[*workloadGrantError](err); ok {
+				return nil, err
+			}
+			return nil, workloadGrantStageUnavailable("ate_actor_binding_unavailable", err)
+		}
+	} else if err := lockWorkloadAssertionPolicy(ctx, dbtx, organizationID, grant.projectID, grant.presented); err != nil {
 		return nil, err
 	}
 	// All database work after the lock uses dbtx, never another pool connection.

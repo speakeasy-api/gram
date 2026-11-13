@@ -176,9 +176,19 @@ func newAssistantRuntime(
 	_ *pgxpool.Pool,
 	serverURL *url.URL,
 ) (assistants.RuntimeBackend, error) {
+	if err := assistants.ValidateKitATEPreview(c.String("environment"), c.Bool("assistant-ate-enabled"), c.String("assistant-ate-preview-id")); err != nil {
+		return nil, fmt.Errorf("validate assistant ATE preview: %w", err)
+	}
 	cfg, err := assistantRuntimeConfigFromCLI(c, serverURL)
 	if err != nil {
 		return nil, err
+	}
+
+	// Server, worker and private ingress all compose legacy dispatch here before
+	// installing Kit. An ATE-only preview has no legacy GKE cluster, but must not
+	// redirect old runtime rows to ATE or silently select the local provider.
+	if c.Bool("assistant-ate-enabled") && cfg.Provider == assistants.RuntimeProviderGKE && c.String("assistant-runtime-gke-cluster-endpoint") == "" {
+		return assistants.NewUnavailableRuntimeBackend(cfg.Provider, cfg.GKE.ServerURL), nil
 	}
 
 	// Build the GKE backend whenever an assistant cluster is configured (its

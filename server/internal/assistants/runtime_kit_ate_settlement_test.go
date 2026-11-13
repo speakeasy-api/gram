@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -33,10 +34,12 @@ func TestNativeThreadCatalog(t *testing.T) {
 		{"unbound", `{"sessions":[{"sessionId":"s","cwd":"/workspace"}]}`, "", false},
 		{"missing canonical", `{"sessions":[]}`, "s", false},
 		{"wrong session", `{"sessions":[{"sessionId":"other","cwd":"/workspace"}]}`, "s", false},
+		{"foreign alongside canonical", `{"sessions":[{"sessionId":"s","cwd":"/workspace"},{"sessionId":"foreign","cwd":"/other"}]}`, "s", false},
 		{"wrong cwd", `{"sessions":[{"sessionId":"s","cwd":"/other"}]}`, "s", false},
 		{"duplicate", `{"sessions":[{"sessionId":"s","cwd":"/workspace"},{"sessionId":"s","cwd":"/workspace"}]}`, "s", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			require.Equal(t, tc.valid, nativeThreadCatalog(json.RawMessage(tc.raw), "/workspace", tc.canonical) == nil)
 		})
 	}
@@ -56,9 +59,10 @@ func TestNativeThreadSessionSettlement(t *testing.T) {
 	t.Parallel()
 	settled := `{"sessionId":"s","settled":true,"foregroundActive":false,"backgroundActive":false,"pendingBackgroundTerminals":false,"activeSubagents":0}`
 	for _, tc := range []struct {
-		name, status                                 string
-		closeError, changedCatalog, valid, wantClose bool
+		name, status                                                 string
+		closeError, changedCatalog, foreignCatalog, valid, wantClose bool
 	}{
+		{name: "foreign workspace in complete catalog", foreignCatalog: true},
 		{name: "settled close ACK", status: settled, valid: true, wantClose: true},
 		{name: "foreground", status: `{"sessionId":"s","settled":true,"foregroundActive":true,"backgroundActive":false,"pendingBackgroundTerminals":false,"activeSubagents":0}`},
 		{name: "background", status: `{"sessionId":"s","settled":true,"foregroundActive":false,"backgroundActive":true,"pendingBackgroundTerminals":false,"activeSubagents":0}`},
@@ -69,6 +73,7 @@ func TestNativeThreadSessionSettlement(t *testing.T) {
 		{name: "postclose catalog changed", status: settled, changedCatalog: true, wantClose: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 			var mu sync.Mutex
@@ -81,18 +86,24 @@ func TestNativeThreadSessionSettlement(t *testing.T) {
 				session := r.Header.Get("Acp-Session-Id")
 				switch r.Method {
 				case http.MethodGet:
+					flusher, ok := w.(http.Flusher)
+					if !ok {
+						t.Error("response writer does not support SSE flushing")
+						http.Error(w, "flushing unavailable", http.StatusInternalServerError)
+						return
+					}
 					ch := make(chan string, 8)
 					mu.Lock()
 					streams[session] = ch
 					mu.Unlock()
 					w.Header().Set("Content-Type", "text/event-stream")
 					w.WriteHeader(http.StatusOK)
-					w.(http.Flusher).Flush()
+					flusher.Flush()
 					for {
 						select {
 						case frame := <-ch:
 							_, _ = fmt.Fprint(w, frame)
-							w.(http.Flusher).Flush()
+							flusher.Flush()
 						case <-r.Context().Done():
 							return
 						}
@@ -105,7 +116,11 @@ func TestNativeThreadSessionSettlement(t *testing.T) {
 						Method string          `json:"method"`
 						Params json.RawMessage `json:"params"`
 					}
-					require.NoError(t, json.NewDecoder(r.Body).Decode(&msg))
+					if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+						t.Errorf("decode ACP request: %v", err)
+						http.Error(w, "invalid request", http.StatusInternalServerError)
+						return
+					}
 					if msg.Method == "initialize" {
 						w.Header().Set("Acp-Connection-Id", "connection")
 						_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}}}}}`, msg.ID)
@@ -115,24 +130,45 @@ func TestNativeThreadSessionSettlement(t *testing.T) {
 					methods = append(methods, msg.Method)
 					ch := streams[session]
 					mu.Unlock()
+					var params map[string]string
+					if err := json.Unmarshal(msg.Params, &params); err != nil {
+						t.Errorf("decode ACP params: %v", err)
+						http.Error(w, "invalid params", http.StatusInternalServerError)
+						return
+					}
+					expectedSession := "s"
+					expectedParams := map[string]string{"sessionId": "s"}
+					switch msg.Method {
+					case "session/list":
+						expectedSession = ""
+						expectedParams = map[string]string{}
+					case "session/resume":
+						expectedParams["cwd"] = "/workspace"
+					}
+					if session != expectedSession || !reflect.DeepEqual(params, expectedParams) {
+						t.Errorf("unexpected %s request: session=%q params=%v", msg.Method, session, params)
+						http.Error(w, "unexpected request", http.StatusInternalServerError)
+						return
+					}
 					result := `{}`
 					switch msg.Method {
 					case "session/list":
-						require.Equal(t, "", session)
-						require.JSONEq(t, `{"cwd":"/workspace"}`, string(msg.Params))
 						catalogReads++
 						result = `{"sessions":[{"sessionId":"s","cwd":"/workspace"}]}`
+						if tc.foreignCatalog {
+							result = `{"sessions":[{"sessionId":"s","cwd":"/workspace"},{"sessionId":"foreign","cwd":"/other"}]}`
+						}
 						if tc.changedCatalog && catalogReads == 2 {
 							result = `{"sessions":[]}`
 						}
 					case "session/resume":
-						require.JSONEq(t, `{"sessionId":"s","cwd":"/workspace"}`, string(msg.Params))
 					case "kit/session/status":
 						result = tc.status
 					case "session/close":
-						require.JSONEq(t, `{"sessionId":"s"}`, string(msg.Params))
 					default:
 						t.Errorf("unexpected method %s", msg.Method)
+						http.Error(w, "unexpected method", http.StatusInternalServerError)
+						return
 					}
 					w.WriteHeader(http.StatusAccepted)
 					if msg.Method == "session/close" {
@@ -176,8 +212,9 @@ func TestNativeThreadSessionSettlement(t *testing.T) {
 				default:
 				}
 				mu.Lock()
-				require.Equal(t, []string{"session/list", "session/resume", "kit/session/status", "session/close"}, methods)
+				gotMethods := append([]string(nil), methods...)
 				mu.Unlock()
+				require.Equal(t, []string{"session/list", "session/resume", "kit/session/status", "session/close"}, gotMethods)
 				close(closeAck)
 			}
 			select {

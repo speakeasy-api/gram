@@ -155,6 +155,9 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
 		for _, runtime := range runtimes {
+			// The selection transaction is already committed or rolled back.
+			// Retirement must acquire and reload its own lifecycle authority.
+			runtime.LifecycleTx = nil
 			if err := s.finishRuntimeSwitchRetirement(cleanup, runtime); err != nil && s.logger != nil {
 				s.logger.ErrorContext(cleanup, "runtime switch retirement pending retry", attr.SlogError(err))
 			}
