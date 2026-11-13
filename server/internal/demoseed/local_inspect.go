@@ -144,7 +144,8 @@ func runLocalInspectFixtures(ctx context.Context, logger *slog.Logger, q *repo.Q
 // scoped to the local project, removes them. The rows also feed aggregated
 // summary tables, so they cannot be deleted on their own: when this seed
 // generation already holds them, the insert is skipped instead, which keeps
-// repeated RunLocalFixtures calls from duplicating them.
+// repeated RunLocalFixtures calls from duplicating them. Callers must hold the
+// demo seed advisory lock, or two runs can both see no rows and both insert.
 func insertLocalInspectTelemetry(ctx context.Context, s *seeder, ch driver.Conn) error {
 	tasks, remote := s.det("mcpserver-"+localTasksKey), s.det("remotemcp-"+localTasksKey)
 

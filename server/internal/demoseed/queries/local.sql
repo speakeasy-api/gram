@@ -238,9 +238,14 @@ ON CONFLICT (id) DO UPDATE
       deleted_at = NULL, updated_at = clock_timestamp();
 
 -- name: LocalUpsertInspectEndpoint :exec
+-- Restores the fixture endpoint if it was soft-deleted, but only within the
+-- local fixture's project.
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)
 VALUES (@id::uuid, @project_id::uuid, @mcp_server_id::uuid, @slug::text)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE
+  SET mcp_server_id = EXCLUDED.mcp_server_id, meta_mcp_server_id = NULL, slug = EXCLUDED.slug,
+      deleted_at = NULL, updated_at = clock_timestamp()
+  WHERE mcp_endpoints.project_id = EXCLUDED.project_id;
 
 -- name: LocalGrantRoleReadOnlyConnect :execrows
 -- A role limited to the read-only tools of one server, the read_only reason

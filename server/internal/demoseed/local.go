@@ -259,7 +259,11 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	}
 
 	if opts.ClickHouse != nil && opts.MockMCPURL != "" {
-		if err := insertLocalInspectTelemetry(ctx, inspect, opts.ClickHouse); err != nil {
+		// Under the seed lock, so a concurrent seed cannot purge or insert the
+		// same rows between the existence check and the insert.
+		if err := withSeedLock(ctx, logger, db, func(*pgxpool.Conn) error {
+			return insertLocalInspectTelemetry(ctx, inspect, opts.ClickHouse)
+		}); err != nil {
 			return fmt.Errorf("local fixture %q: %w", "inspect tab telemetry", err)
 		}
 	}

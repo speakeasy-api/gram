@@ -46,7 +46,7 @@ const (
 // summaries.
 //
 // Pass DefaultSpec() for the shared production demo org.
-func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL string, spec Spec) (retErr error) {
+func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL string, spec Spec) error {
 	logger = logger.With(attr.SlogComponent("demoseed"), attr.SlogOrganizationID(spec.OrgID))
 
 	if err := spec.Validate(); err != nil {
@@ -59,6 +59,30 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		return fmt.Errorf("demo seed needs a postgres pool of at least 2 connections, got %d", db.Config().MaxConns)
 	}
 
+	return withSeedLock(ctx, logger, db, func(conn *pgxpool.Conn) error {
+		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, spec)
+		if err != nil {
+			return err
+		}
+		logger.InfoContext(ctx, "demo seed applied to postgres")
+
+		if err := migrateUpstreamAuth(ctx, logger, db, spec.OrgID); err != nil {
+			return fmt.Errorf("migrate demo seed upstream auth: %w", err)
+		}
+		logger.InfoContext(ctx, "demo seed upstream auth migrated")
+
+		if err := s.runClickHouse(ctx, ch); err != nil {
+			return fmt.Errorf("apply demo seed to clickhouse: %w", err)
+		}
+		logger.InfoContext(ctx, "demo seed applied to clickhouse")
+		return nil
+	})
+}
+
+// withSeedLock runs fn while this session holds the shared demo seed advisory
+// lock, on the connection that holds it. It refuses to run when another
+// session holds the lock.
+func withSeedLock(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, fn func(conn *pgxpool.Conn) error) (retErr error) {
 	conn, err := db.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire postgres connection: %w", err)
@@ -100,22 +124,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		retErr = errors.Join(retErr, fmt.Errorf("release demo seed advisory lock: %w", unlockErr))
 	}()
 
-	s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, spec)
-	if err != nil {
-		return err
-	}
-	logger.InfoContext(ctx, "demo seed applied to postgres")
-
-	if err := migrateUpstreamAuth(ctx, logger, db, spec.OrgID); err != nil {
-		return fmt.Errorf("migrate demo seed upstream auth: %w", err)
-	}
-	logger.InfoContext(ctx, "demo seed upstream auth migrated")
-
-	if err := s.runClickHouse(ctx, ch); err != nil {
-		return fmt.Errorf("apply demo seed to clickhouse: %w", err)
-	}
-	logger.InfoContext(ctx, "demo seed applied to clickhouse")
-	return nil
+	return fn(conn)
 }
 
 // txBeginner starts a transaction. Run passes the *pgxpool.Conn that holds the
