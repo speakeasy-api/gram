@@ -12,11 +12,17 @@ const (
 	orgEncryptionServiceAccountFlag     = "org-encryption-service-account"
 	orgEncryptionSwitchGracePeriodFlag  = "org-encryption-switch-grace-period"
 	orgEncryptionManagedKeyRetention    = "org-encryption-managed-key-retention"
+	orgEncryptionDisabledFlag           = "org-encryption-disabled"
 	orgEncryptionKMSKeyRingLocalDefault = "projects/gram-local/locations/global/keyRings/org-encryption"
 )
 
 func orgEncryptionFlags() []cli.Flag {
 	return []cli.Flag{
+		&cli.BoolFlag{
+			Name:    orgEncryptionDisabledFlag,
+			Usage:   "Run without organization encryption in an environment that otherwise requires it (every environment except local and test). Preview deployments set this because they share dev's KMS keys but not its database. Conflicts with a configured platform credential.",
+			EnvVars: []string{"GRAM_ORG_ENCRYPTION_DISABLED"},
+		},
 		&cli.StringFlag{
 			Name:    orgEncryptionKMSKeyRingFlag,
 			Usage:   "GCP KMS key ring Speakeasy-managed organization encryption keys are minted in.",
@@ -24,7 +30,7 @@ func orgEncryptionFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:    orgEncryptionCredentialIDFlag,
-			Usage:   "ID of the platform-tier GCP IAM credential that reaches Speakeasy-managed organization encryption keys. Organization encryption is off without it.",
+			Usage:   "ID of the platform-tier GCP IAM credential that reaches Speakeasy-managed organization encryption keys. Without it, organization encryption is off in local and test environments, and every other environment refuses to start unless organization encryption is disabled.",
 			EnvVars: []string{"GRAM_ORG_ENCRYPTION_CREDENTIAL_ID"},
 		},
 		&cli.StringFlag{
