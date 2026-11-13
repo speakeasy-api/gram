@@ -59,8 +59,8 @@ func (a grantAuthorization) authorizerWouldRefuse(allowed []Check, anyOf bool) (
 	return refused, firstErr
 }
 
-// reportAuthorizerRefusals logs, once per engine call, that the call was
-// allowed checks the authorizer's policies refuse, naming the first of them.
+// reportAuthorizerRefusals logs, once per engine call, that the call passed
+// checks which the authorizer's policies refuse, naming the first of them.
 // The decision is unchanged.
 func (e *Engine) reportAuthorizerRefusals(ctx context.Context, authorization grantAuthorization, allowed []Check, anyOf bool) {
 	refused, err := authorization.authorizerWouldRefuse(allowed, anyOf)
