@@ -22,6 +22,10 @@ import (
 	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 )
 
+// speakeasyHomepageURL is the author and homepage URL written into generated
+// plugin manifests and marketplace metadata.
+const speakeasyHomepageURL = "https://speakeasy.com"
+
 // ServerEnvConfig represents a user-facing environment variable required by a server.
 type ServerEnvConfig struct {
 	VariableName string
@@ -947,7 +951,7 @@ func generateReadme(plugins []sharedPluginEntry, cfg GenerateConfig) []byte {
 	var b strings.Builder
 
 	b.WriteString("# " + cfg.OrgName + " Plugins\n\n")
-	b.WriteString("This repository contains plugin packages managed by [Speakeasy](https://getgram.ai). ")
+	b.WriteString("This repository contains plugin packages managed by [Speakeasy](" + speakeasyHomepageURL + "). ")
 	b.WriteString("Each plugin bundles MCP servers for distribution via supported coding agent marketplaces.\n\n")
 	b.WriteString("## How this repo works\n\n")
 	b.WriteString("- **Admin access.** Collaborators are granted admin permission so they can connect this repository to a platform marketplace — several of those setup flows, including Cursor's \"Serve marketplace from Cursor\", are only available to repository admins. Collaborators added before admin became the default keep their original permission until they are re-added from Speakeasy.\n")
@@ -1418,8 +1422,8 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 		DisplayName:      cfg.OrgName + " Observability",
 		Description:      "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:          hooksManifestVersion(cfg),
-		Author:           pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:         "https://getgram.ai",
+		Author:           pluginAuthor{Name: cfg.OrgName, URL: speakeasyHomepageURL},
+		Homepage:         speakeasyHomepageURL,
 		UserConfig:       nil,
 		PrivacyPolicyURL: "",
 	})
@@ -1479,7 +1483,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     hooksManifestVersion(cfg),
 		Author:      cursorAuthor{Name: cfg.OrgName, Email: cfg.OrgEmail},
-		Homepage:    "https://getgram.ai",
+		Homepage:    speakeasyHomepageURL,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -3571,8 +3575,8 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 		DisplayName:      p.Name,
 		Description:      p.Description,
 		Version:          pluginManifestVersion(cfg),
-		Author:           pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:         "https://getgram.ai",
+		Author:           pluginAuthor{Name: cfg.OrgName, URL: speakeasyHomepageURL},
+		Homepage:         speakeasyHomepageURL,
 		UserConfig:       userConfigPtr,
 		PrivacyPolicyURL: "",
 	})
@@ -3647,7 +3651,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		Description: p.Description,
 		Version:     pluginManifestVersion(cfg),
 		Author:      cursorAuthor{Name: cfg.OrgName, Email: ""},
-		Homepage:    "https://getgram.ai",
+		Homepage:    speakeasyHomepageURL,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
