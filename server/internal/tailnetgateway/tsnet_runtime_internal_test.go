@@ -7,6 +7,7 @@ import (
 	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/tailcfg"
 	"tailscale.com/tailcfg/nodecap"
+	"tailscale.com/tsnet"
 )
 
 func TestHostsServiceReadsServiceHostCapability(t *testing.T) {
@@ -46,4 +47,15 @@ func TestHostsServiceReadsServiceHostCapability(t *testing.T) {
 	ok, err := hostsService(self(`not json`), "svc:private")
 	require.Error(t, err)
 	require.False(t, ok)
+}
+
+// TestServiceModeLeavesTLSToTheGateway guards the fix for a slot ordering a
+// certificate outside the issuance lease: if tsnet terminated TLS, in HTTPS
+// mode or with TerminateTLS, it would order one for any client that connects
+// before one is stored. The opt-in issuancetest package shows that against a
+// real tsnet and ACME server.
+func TestServiceModeLeavesTLSToTheGateway(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, tsnet.ServiceModeTCP{Port: 443, TerminateTLS: false, PROXYProtocolVersion: 2}, serviceMode(),
+		"tsnet forwards raw TCP with the peer's address and never terminates TLS")
 }
