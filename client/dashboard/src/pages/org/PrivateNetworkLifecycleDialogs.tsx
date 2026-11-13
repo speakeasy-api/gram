@@ -2,7 +2,10 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import type { NetworkIngress } from "@gram/client/models/components/networkingress.js";
-import { NetworkIngressCredentialsFields } from "./NetworkIngressCredentialsFields";
+import {
+  NetworkIngressCredentialsFields,
+  TailscaleTrustCredentialsLink,
+} from "./NetworkIngressCredentialsFields";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { handleAPIError } from "@/lib/errors";
@@ -79,7 +82,8 @@ export function RotateNetworkIngressCredentialsDialog({
           <Dialog.Title>Rotate Tailscale credentials</Dialog.Title>
           <Dialog.Description>
             The new OAuth client replaces the stored credentials. Values are
-            never shown again after submission.
+            never shown again after submission. Create one under{" "}
+            <TailscaleTrustCredentialsLink /> in the Tailscale admin console.
           </Dialog.Description>
         </Dialog.Header>
         <div className="space-y-4 py-4">

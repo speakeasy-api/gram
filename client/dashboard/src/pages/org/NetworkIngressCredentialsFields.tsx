@@ -1,6 +1,23 @@
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 
+// Where a tailnet admin creates the OAuth client Speakeasy needs.
+export const TAILSCALE_TRUST_CREDENTIALS_URL =
+  "https://console.tailscale.com/admin/settings/trust-credentials";
+
+export function TailscaleTrustCredentialsLink(): JSX.Element {
+  return (
+    <a
+      href={TAILSCALE_TRUST_CREDENTIALS_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-foreground underline underline-offset-4"
+    >
+      Trust credentials
+    </a>
+  );
+}
+
 export function NetworkIngressCredentialsFields({
   idPrefix,
   clientId,
