@@ -3861,7 +3861,8 @@ type McpServer struct {
 	NetworkAccessMode pgtype.Text
 	// Whether the upstream needs authentication: true needs it, false explicitly needs none, NULL is undecided.
 	// @access: confidential
-	RequiresUpstreamAuth  pgtype.Bool
+	RequiresUpstreamAuth pgtype.Bool
+	// @access: confidential
 	SetupGuideCompletedAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz

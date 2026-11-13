@@ -1,7 +1,10 @@
 // @vitest-environment node
 import { expect, it } from "vitest";
 import { extractFields } from "../inspect/toolSchemaFields";
-import { codeModeCallSnippet } from "./codeModeSnippet";
+import {
+  codeModeCallSnippet,
+  DEFAULT_CODE_MODE_SOURCE,
+} from "./codeModeSnippet";
 
 const fields = extractFields({
   type: "object",
@@ -60,4 +63,8 @@ it("calls a tool without arguments with an empty dict", () => {
   expect(codeModeCallSnippet("a--b", [], {})).toBe(
     'result = await tools.call("a--b", {})\nresult["data"] if result["ok"] else result',
   );
+});
+
+it("starts the editor with a program that lists the callable tools", () => {
+  expect(DEFAULT_CODE_MODE_SOURCE).toContain("tools.search");
 });

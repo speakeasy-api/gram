@@ -2,6 +2,8 @@
 import { describe, expect, it } from "vitest";
 import {
   extractFields,
+  isJsonField,
+  jsonFieldError,
   optionKey,
   toArguments,
   type ToolField,
@@ -376,5 +378,27 @@ describe("toArguments", () => {
     expect(extractFields(schema)).toMatchObject([
       { name: "arguments", kind: "arguments", required: true, schema },
     ]);
+  });
+});
+
+describe("jsonFieldError", () => {
+  const [config, name] = extractFields({
+    type: "object",
+    properties: {
+      config: { type: "object" },
+      name: { type: "string" },
+    },
+  });
+
+  it("checks only fields whose text must be JSON", () => {
+    expect(isJsonField(config!)).toBe(true);
+    expect(isJsonField(name!)).toBe(false);
+    expect(jsonFieldError(name!, "{")).toBeUndefined();
+  });
+
+  it("reports text that does not parse, and accepts empty or valid JSON", () => {
+    expect(jsonFieldError(config!, "{")).toEqual(expect.any(String));
+    expect(jsonFieldError(config!, "")).toBeUndefined();
+    expect(jsonFieldError(config!, '{"a": 1}')).toBeUndefined();
   });
 });
