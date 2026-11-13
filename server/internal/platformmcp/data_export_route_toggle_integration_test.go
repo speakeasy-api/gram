@@ -515,6 +515,44 @@ func TestPauseDataExportReplayIsNotChargedAgainstAnExhaustedBudget(t *testing.T)
 	require.EqualValues(t, 1, auditCount(t, ctx, f.conn, audit.ActionDataExportRoutePause))
 }
 
+func TestPauseDataExportPreviewChecksTheKeyAndSpendsTheAllowance(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_toggle_preview_bound")
+	connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	service, err := NewDataExportRouteToggleService(testenv.NewLogger(t), f.conn, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), stubAuthorizer{err: nil}, OperationBudget{Connection: connection, Organization: organization})
+	require.NoError(t, err)
+	created := f.createRoute(t, ctx, "product_telemetry", true, uuid.NullUUID{UUID: f.destination, Valid: true})
+	other := f.createRoute(t, ctx, "risk_findings", true, uuid.NullUUID{UUID: f.destination, Valid: true})
+
+	_, err = service.Pause(ctx, f.principal, f.input(created.ID, "preview-key"))
+	require.NoError(t, err)
+	charges := len(connection.keys)
+
+	// A preview under a key the confirmed call would refuse is refused the
+	// same way, before anything is charged.
+	reused := f.input(other.ID, "preview-key")
+	reused.Confirmed = false
+	_, err = service.Pause(ctx, f.principal, reused)
+	requireDataExportToggleCode(t, err, "conflict")
+	require.Len(t, connection.keys, charges)
+
+	// A preview spends the allowance, and an exhausted one refuses it before
+	// the preview transaction opens.
+	preview := f.input(other.ID, "preview-fresh")
+	preview.Confirmed = false
+	_, err = service.Pause(ctx, f.principal, preview)
+	requireDataExportTogglePreview(t, err)
+	require.Len(t, connection.keys, charges+1)
+	connection.result = ratelimit.Result{Allowed: false}
+	_, err = service.Pause(ctx, f.principal, preview)
+	requireDataExportToggleCode(t, err, "rate_limited")
+	require.True(t, f.route(t, ctx, other.ID).Enabled)
+	require.False(t, f.receiptStored(t, ctx, operationPauseDataExport, "preview-fresh"))
+}
+
 // blockingLimiter holds every charge until released, so a test can inspect
 // what the caller is holding while the budget round-trip is in flight.
 type blockingLimiter struct {

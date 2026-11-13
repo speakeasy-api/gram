@@ -367,8 +367,21 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 		}
 		return receiptResult, nil
 	}
+	receiptRequest := RiskMutationReceiptRequest{
+		Operation: operation, IdempotencyKey: input.IdempotencyKey,
+		Input: map[string]any{"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": input.ExpectedVersion, "patch": normalizedPatch},
+	}
 	if changeAudience && !delta.Confirmed {
-		preview, err := s.previewAudienceChange(ctx, input.IdempotencyKey, mutate, func() ChangeRiskPolicyAudiencePreview {
+		// A preview refuses the key the confirmed call would refuse, and it
+		// spends the same allowance, since it takes the same locks and writes
+		// before rolling back. It stores nothing.
+		if err := s.controls.Receipts().CheckPreview(ctx, principal, project, receiptRequest); err != nil {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
+		}
+		if err := s.controls.Charge(principal)(ctx); err != nil {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
+		}
+		preview, err := s.previewAudienceChange(ctx, mutate, func() ChangeRiskPolicyAudiencePreview {
 			return ChangeRiskPolicyAudiencePreview{
 				Project: riskReceiptProject(project), Policy: riskPolicyReceiptSummary(committed.Row), PolicyName: committed.Row.Name,
 				ExpectedVersion: input.ExpectedVersion, AudienceBefore: canonicalStrings(audienceBefore),
@@ -381,10 +394,7 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 		}
 		return riskPolicyAudiencePreviewRefusal(preview)
 	}
-	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
-		Operation: operation, IdempotencyKey: input.IdempotencyKey,
-		Input: map[string]any{"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": input.ExpectedVersion, "patch": normalizedPatch},
-	}, s.controls.Charge(principal), mutate)
+	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, receiptRequest, s.controls.Charge(principal), mutate)
 	if err != nil {
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
 	}
@@ -1099,11 +1109,13 @@ func validateCreateRiskPolicyKind(input createRiskPolicyInput) error {
 			name string
 			set  bool
 		}{
-			{"sources", len(input.Sources) > 0},
+			// Presence, not length: an explicit empty list would otherwise be
+			// replaced by the preset's own values without a word.
+			{"sources", input.Sources != nil},
 			{"presidio_score_threshold", input.PresidioScoreThreshold != nil},
-			{"prompt_injection_rules", len(input.PromptInjectionRules) > 0},
-			{"disabled_rules", len(input.DisabledRules) > 0},
-			{"detection_scopes", len(input.DetectionScopes) > 0},
+			{"prompt_injection_rules", input.PromptInjectionRules != nil},
+			{"disabled_rules", input.DisabledRules != nil},
+			{"detection_scopes", input.DetectionScopes != nil},
 		} {
 			if field.set {
 				return invalidRiskPolicyKind(field.name + " cannot override a preset. Use policy_type standard to choose detectors by hand.")

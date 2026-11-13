@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/jackc/pgx/v5"
@@ -73,11 +72,9 @@ func (s *riskPolicyMutationService) changePolicyAudienceTool(ctx context.Context
 
 // previewAudienceChange runs the confirmed write in a transaction it rolls
 // back, so the preview and the confirmed call refuse the same changes. Nothing
-// is charged, stored, or published; build reads what mutate captured.
-func (s *riskPolicyMutationService) previewAudienceChange(ctx context.Context, idempotencyKey string, mutate func(context.Context, pgx.Tx) (RiskMutationReceiptResult, error), build func() ChangeRiskPolicyAudiencePreview) (ChangeRiskPolicyAudiencePreview, error) {
-	if key := strings.TrimSpace(idempotencyKey); key == "" || len(idempotencyKey) > 128 {
-		return ChangeRiskPolicyAudiencePreview{}, invalidRiskPolicyRequest()
-	}
+// is stored or published; build reads what mutate captured. The caller has
+// already checked the idempotency key and charged the allowance.
+func (s *riskPolicyMutationService) previewAudienceChange(ctx context.Context, mutate func(context.Context, pgx.Tx) (RiskMutationReceiptResult, error), build func() ChangeRiskPolicyAudiencePreview) (ChangeRiskPolicyAudiencePreview, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return ChangeRiskPolicyAudiencePreview{}, riskMutationUnavailableWithCause(fmt.Errorf("begin risk policy audience preview: %w", err))

@@ -154,6 +154,13 @@ func TestRiskPolicyAudienceChangeTransaction(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, changed.Receipt.Replayed)
 		require.ElementsMatch(t, []string{self.String(), role.String()}, read(t, id).Audience.PrincipalURNs)
+
+		// A preview under a key already used for different input is the
+		// conflict the confirmed call would return.
+		reused := arguments(id, changed.Version, []string{other.String()}, nil)
+		reused["idempotency_key"], reused["confirmed"] = args["idempotency_key"], false
+		_, _, err = handlers.ChangeAudience(ctx, nil, reused)
+		requireRiskMutationRefusal(t, err, "conflict")
 	})
 	t.Run("stale replay and key conflict", func(t *testing.T) {
 		id, version := create(t, []string{self.String()})

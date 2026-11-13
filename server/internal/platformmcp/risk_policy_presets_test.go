@@ -173,6 +173,8 @@ func TestValidateCreateRiskPolicyKind(t *testing.T) {
 		"preset with sources":       {input: createRiskPolicyInput{Preset: "secrets_and_credentials", Sources: []string{"gitleaks"}}, refusal: "sources cannot override a preset"},
 		"preset with threshold":     {input: createRiskPolicyInput{Preset: "customer_pii_egress", PresidioScoreThreshold: &threshold}, refusal: "presidio_score_threshold cannot override a preset"},
 		"preset with scopes":        {input: createRiskPolicyInput{Preset: "customer_pii_egress", DetectionScopes: []riskDetectionScope{{Category: "pii", MessageTypes: []string{"user"}}}}, refusal: "detection_scopes cannot override a preset"},
+		"preset with empty sources": {input: createRiskPolicyInput{Preset: "secrets_and_credentials", Sources: []string{}}, refusal: "sources cannot override a preset"},
+		"preset with empty rules":   {input: createRiskPolicyInput{Preset: "secrets_and_credentials", DisabledRules: []string{}}, refusal: "disabled_rules cannot override a preset"},
 		"neither preset nor type":   {input: createRiskPolicyInput{Name: "policy", Enabled: &enabled, Sources: []string{"gitleaks"}}, refusal: "Name a preset, or set policy_type"},
 		"standard without name":     {input: createRiskPolicyInput{PolicyType: "standard", Enabled: &enabled, Sources: []string{"gitleaks"}}, refusal: "needs name and enabled"},
 		"standard without enabled":  {input: createRiskPolicyInput{PolicyType: "standard", Name: "policy", Sources: []string{"gitleaks"}}, refusal: "needs name and enabled"},

@@ -99,6 +99,8 @@
   args:
     project_slug: payments
     policy_type: prompt_based
+    name: No refunds over 10k
+    prompt: refund
     action: block
 
 # Policy changes.

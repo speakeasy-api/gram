@@ -296,9 +296,6 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 		return ToggleDataExportRouteOutput{}, dataExportToggleUnavailable(fmt.Errorf("resolve data export route project: %w", err))
 	}
 	project := ResolvedProject{ID: row.ID, Name: row.Name, Slug: row.Slug}
-	if !input.Confirmed {
-		return ToggleDataExportRouteOutput{}, s.preview(ctx, principal, project, routeID, enabled, expect)
-	}
 
 	request := dataExportToggleRequest{Operation: operation, ProjectID: project.ID.String(), RouteID: routeID.String(), ExpectedDataSource: "", ExpectedDestinationID: ""}
 	if expect != nil {
@@ -323,7 +320,7 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 		}
 		return nil
 	}
-	receipt, err := executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[dataExportToggleReceipt]{
+	execution := mutationReceiptExecution[dataExportToggleReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
 		IdempotencyKey: key, InputHash: inputHash, Label: "data export " + operation,
 		Invalid: func(error) error { return dataExportToggleInvalid("The request is invalid.") },
@@ -361,7 +358,20 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 			}
 			return result, nil
 		},
-	})
+	}
+	if !input.Confirmed {
+		// A preview refuses the key the confirmed call would refuse, and it
+		// spends the same allowance, since it takes the same row lock and
+		// writes the same audit entry before rolling back. It stores nothing.
+		if err := checkPreviewReceipt(ctx, execution); err != nil {
+			return ToggleDataExportRouteOutput{}, err
+		}
+		if err := charge(ctx); err != nil {
+			return ToggleDataExportRouteOutput{}, err
+		}
+		return ToggleDataExportRouteOutput{}, s.preview(ctx, principal, project, routeID, enabled, expect)
+	}
+	receipt, err := executeChargedMutationReceipt(ctx, charge, execution)
 	if err != nil {
 		return ToggleDataExportRouteOutput{}, err
 	}
@@ -404,7 +414,7 @@ func (s *DataExportRouteToggleService) finish(ctx context.Context, principal Pri
 
 // preview returns a preview only when the confirmed write would succeed now: it
 // runs that write in a transaction it rolls back, so the preview and the
-// confirmed call refuse the same changes. Nothing is charged or stored.
+// confirmed call refuse the same changes. Nothing is stored.
 func (s *DataExportRouteToggleService) preview(ctx context.Context, principal Principal, project ResolvedProject, routeID uuid.UUID, enabled bool, expect *dataexports.RouteExpectation) error {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {

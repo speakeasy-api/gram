@@ -148,12 +148,13 @@
   allow: [find_mcp, get_mcp, inspect_mcp_candidate, get_mcp_connection_settings]
   args:
     mcp_id: 5f1e2a00-0000-4000-8000-000000000012
-- id: mcp-setup-handoff-sentry
-  prompt: We added Sentry from the catalog to Default but never finished its source and auth setup. I'll do the rest myself in the dashboard, so give me the link.
+- id: mcp-setup-handoff-linear
+  prompt: We added Linear from the catalog to Default but never finished its source and auth setup. I'll do the rest myself in the dashboard, so give me the link.
   expect: [get_setup_handoff]
   allow: [find_mcp, get_mcp]
   args:
     project_slug: default
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
 
 # Renaming and switching servers off and on.
 - id: mcp-rename-linear
