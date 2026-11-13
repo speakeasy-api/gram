@@ -3220,21 +3220,19 @@ func pluginMCPKeyPolicy(ctx context.Context, dbtx repo.DBTX, projectID uuid.UUID
 	}}
 	policy := []*authz.RoleGrant{shared}
 
-	rows, err := repo.New(dbtx).ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: nil})
+	rows, err := listPluginMCPServers(ctx, dbtx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: nil})
 	if err != nil {
 		return nil, fmt.Errorf("list plugin servers: %w", err)
 	}
-	// mcp:connect is checked on a server's id, or on its toolset's for a
-	// toolset-backed server.
+	// mcp:connect is checked on the server's id on every path a plugin's
+	// address reaches: a toolset served at its own address is the wrapper
+	// whose id is the toolset's.
 	var resources []string
 	for _, row := range rows {
 		if !slices.Contains(slugs, row.PluginSlug) || row.McpServerIsPublic || row.McpServerIsOauth || row.UnproxiedUrl.Valid || !row.McpServerID.Valid {
 			continue
 		}
 		resources = append(resources, row.McpServerID.UUID.String())
-		if row.McpServerToolsetID.Valid {
-			resources = append(resources, row.McpServerToolsetID.UUID.String())
-		}
 	}
 	slices.Sort(resources)
 	resources = slices.Compact(resources)

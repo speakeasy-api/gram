@@ -2612,7 +2612,6 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.mcp_server_id,
-  s.toolset_id AS mcp_server_toolset_id,
   s.slug AS mcp_server_slug,
   (s.visibility = 'public')::bool AS mcp_server_is_public,
   (s.user_session_issuer_id IS NOT NULL)::bool AS mcp_server_is_oauth,
@@ -2689,7 +2688,6 @@ type ListPluginsWithMcpServersForProjectRow struct {
 	ServerPolicy         string
 	ServerSortOrder      int32
 	McpServerID          uuid.NullUUID
-	McpServerToolsetID   uuid.NullUUID
 	McpServerSlug        pgtype.Text
 	McpServerIsPublic    bool
 	McpServerIsOauth     bool
@@ -2739,7 +2737,6 @@ func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, arg L
 			&i.ServerPolicy,
 			&i.ServerSortOrder,
 			&i.McpServerID,
-			&i.McpServerToolsetID,
 			&i.McpServerSlug,
 			&i.McpServerIsPublic,
 			&i.McpServerIsOauth,
