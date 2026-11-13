@@ -228,6 +228,7 @@ func TestSearchPassesTenantAndNormalizedPrefixBoundsToProjectQueries(t *testing.
 	_, err := service(t, store, fakeAuthz{}).Search(ctxFor(projectID), &gen.SearchPayload{Q: "API"})
 	require.NoError(t, err)
 	require.Equal(t, repo.ListCommandIndexAssistantsParams{ProjectID: projectID, LowerBound: "api", LowerCeiling: "apj", ResultLimit: int32(perKindQueryLimit)}, store.assistantParams)
+	require.Equal(t, repo.ListCommandIndexEnvironmentsParams{ProjectID: projectID, LowerBound: "api", LowerCeiling: "apj", ResultLimit: int32(perKindQueryLimit)}, store.environmentParams)
 	require.Equal(t, repo.ListCommandIndexMCPServersParams{ProjectID: projectID, LowerBound: "api", LowerCeiling: "apj", ResultLimit: int32(perKindQueryLimit)}, store.mcpParams)
 	require.Equal(t, repo.ListCommandIndexSkillsParams{ProjectID: projectID, LowerBound: "api", LowerCeiling: "apj", ResultLimit: int32(perKindQueryLimit)}, store.skillParams)
 }
