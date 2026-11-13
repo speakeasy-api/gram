@@ -347,25 +347,27 @@ func isReservedMCPRoute(slug string) bool {
 }
 
 func (s *Service) authorizedKinds(ctx context.Context, organizationID string, projectID uuid.UUID) (map[string]bool, error) {
+	mcpCollectionCheck := authz.MCPCheck(authz.ScopeMCPRead, authz.WildcardResource, projectID.String())
 	checks := []struct {
-		kind  string
+		kinds []string
 		check authz.Check
 	}{
-		{"assistant", authz.AssistantCheck(authz.ScopeAssistantRead, authz.WildcardResource, projectID.String())},
-		{"environment", authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
-		{"gateway", authz.MCPCheck(authz.ScopeMCPRead, authz.WildcardResource, projectID.String())},
-		{"mcp", authz.MCPCheck(authz.ScopeMCPRead, authz.WildcardResource, projectID.String())},
-		{"plugin", authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil}},
-		{"rule", authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}},
-		{"skill", authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
+		{[]string{"assistant"}, authz.AssistantCheck(authz.ScopeAssistantRead, authz.WildcardResource, projectID.String())},
+		{[]string{"environment"}, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
+		{[]string{"gateway", "mcp"}, mcpCollectionCheck},
+		{[]string{"plugin"}, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil}},
+		{[]string{"rule"}, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}},
+		{[]string{"skill"}, authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
 	}
-	result := make(map[string]bool, len(checks))
+	result := make(map[string]bool, len(allKinds))
 	for _, candidate := range checks {
 		ok, err := s.authz.Evaluate(ctx, candidate.check)
 		if err != nil {
-			return nil, fmt.Errorf("authorize command search kind %s: %w", candidate.kind, err)
+			return nil, fmt.Errorf("authorize command search kind %s: %w", strings.Join(candidate.kinds, "/"), err)
 		}
-		result[candidate.kind] = ok
+		for _, kind := range candidate.kinds {
+			result[kind] = ok
+		}
 	}
 	if !result["plugin"] {
 		err := s.authz.RequirePluginWrite(ctx, organizationID, projectID.String())

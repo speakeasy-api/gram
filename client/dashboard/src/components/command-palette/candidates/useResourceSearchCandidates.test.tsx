@@ -128,9 +128,12 @@ describe("resource command search", () => {
     expect(mocks.queryOptions?.queryKey).toContain("grants-b");
   });
 
-  it("gates normalized queries by Unicode code points from 2 through 128", () => {
-    renderSearch("s");
+  it("keeps legacy fallback without requesting ineligible Unicode queries", () => {
+    const short = renderSearch("s");
     expect(mocks.queryOptions?.enabled).toBe(false);
+    expect([...short.result.current.fallbackKinds]).toEqual(
+      MIGRATED_RESOURCE_KINDS,
+    );
     renderSearch("skill", false);
     expect(mocks.queryOptions?.enabled).toBe(false);
     renderSearch("😀😀");
@@ -157,6 +160,7 @@ describe("resource command search", () => {
     const loading = renderSearch("search");
     const loadingCandidates = loading.result.current.candidates;
     const loadingFallback = loading.result.current.fallbackKinds;
+    expect([...loadingFallback]).toEqual([]);
     loading.rerender({ open: true, query: "searching", access: "grants-a" });
     expect(loading.result.current.candidates).toBe(loadingCandidates);
     expect(loading.result.current.fallbackKinds).toBe(loadingFallback);

@@ -1765,6 +1765,18 @@ describe("useLauncherCandidates", () => {
     expect(optionsOf(mocks.calls.useMcpServers?.at(-1)).enabled).toBe(true);
   });
 
+  it("keeps assistant and skill inventories for an ineligible short query", () => {
+    mocks.scopes = ["assistant:read", "skill:read"];
+    renderCandidates({ query: "😀" });
+
+    expect(mocks.indexOptions.at(-1)).toMatchObject({
+      enabled: true,
+      query: "😀",
+    });
+    expect(optionsOf(mocks.calls.useAssistantsList?.at(-1)).enabled).toBe(true);
+    expect(optionsOf(mocks.calls.useSkillsInfinite?.at(-1)).enabled).toBe(true);
+  });
+
   it("enables legacy inventory only for each failed remote kind", () => {
     mocks.indexFallback = false;
     mocks.failedKinds = ["assistant", "plugin"];
@@ -1820,6 +1832,9 @@ describe("useLauncherCandidates", () => {
     );
 
     expect(candidates).toHaveLength(1);
+    expect(
+      result.current.some((candidate) => candidate.id === "mcp:toolset-local"),
+    ).toBe(false);
     expect(candidates[0]).toMatchObject({
       title: "Local server",
       detail: "MCP server · enabled",

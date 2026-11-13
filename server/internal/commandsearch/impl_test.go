@@ -28,6 +28,9 @@ type fakeStore struct {
 	blockedStarted    chan struct{}
 	blockedStartOnce  sync.Once
 	blockedErr        error
+	assistantParams   repo.ListCommandIndexAssistantsParams
+	mcpParams         repo.ListCommandIndexMCPServersParams
+	skillParams       repo.ListCommandIndexSkillsParams
 	environmentParams repo.ListCommandIndexEnvironmentsParams
 	assistants        []repo.ListCommandIndexAssistantsRow
 	mcpServers        []repo.ListCommandIndexMCPServersRow
@@ -56,13 +59,22 @@ func (f *fakeStore) call(ctx context.Context, kind string) error {
 	return nil
 }
 
-func (f *fakeStore) ListCommandIndexAssistants(ctx context.Context, _ repo.ListCommandIndexAssistantsParams) ([]repo.ListCommandIndexAssistantsRow, error) {
+func (f *fakeStore) ListCommandIndexAssistants(ctx context.Context, params repo.ListCommandIndexAssistantsParams) ([]repo.ListCommandIndexAssistantsRow, error) {
+	f.mu.Lock()
+	f.assistantParams = params
+	f.mu.Unlock()
 	return f.assistants, f.call(ctx, "assistant")
 }
-func (f *fakeStore) ListCommandIndexMCPServers(ctx context.Context, _ repo.ListCommandIndexMCPServersParams) ([]repo.ListCommandIndexMCPServersRow, error) {
+func (f *fakeStore) ListCommandIndexMCPServers(ctx context.Context, params repo.ListCommandIndexMCPServersParams) ([]repo.ListCommandIndexMCPServersRow, error) {
+	f.mu.Lock()
+	f.mcpParams = params
+	f.mu.Unlock()
 	return f.mcpServers, f.call(ctx, "mcp")
 }
-func (f *fakeStore) ListCommandIndexSkills(ctx context.Context, _ repo.ListCommandIndexSkillsParams) ([]repo.ListCommandIndexSkillsRow, error) {
+func (f *fakeStore) ListCommandIndexSkills(ctx context.Context, params repo.ListCommandIndexSkillsParams) ([]repo.ListCommandIndexSkillsRow, error) {
+	f.mu.Lock()
+	f.skillParams = params
+	f.mu.Unlock()
 	return f.skills, f.call(ctx, "skill")
 }
 func (f *fakeStore) ListCommandIndexEnvironments(ctx context.Context, params repo.ListCommandIndexEnvironmentsParams) ([]repo.ListCommandIndexEnvironmentsRow, error) {
@@ -208,15 +220,16 @@ func TestMakePrefixBoundsUsesSingleNormalizedLowerRange(t *testing.T) {
 	require.Equal(t, prefixBounds{lower: "api", lowerCeiling: "apj"}, makePrefixBounds("  API  "))
 }
 
-func TestSearchPassesNormalizedLowerPrefixRange(t *testing.T) {
+func TestSearchPassesTenantAndNormalizedPrefixBoundsToProjectQueries(t *testing.T) {
 	t.Parallel()
 
 	store := storeWithAllKinds()
-	_, err := service(t, store, fakeAuthz{}).Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "API"})
+	projectID := uuid.New()
+	_, err := service(t, store, fakeAuthz{}).Search(ctxFor(projectID), &gen.SearchPayload{Q: "API"})
 	require.NoError(t, err)
-	require.Equal(t, "api", store.environmentParams.LowerBound)
-	require.Equal(t, "apj", store.environmentParams.LowerCeiling)
-	require.Equal(t, int32(perKindQueryLimit), store.environmentParams.ResultLimit)
+	require.Equal(t, repo.ListCommandIndexAssistantsParams{ProjectID: projectID, LowerBound: "api", LowerCeiling: "apj", ResultLimit: int32(perKindQueryLimit)}, store.assistantParams)
+	require.Equal(t, repo.ListCommandIndexMCPServersParams{ProjectID: projectID, LowerBound: "api", LowerCeiling: "apj", ResultLimit: int32(perKindQueryLimit)}, store.mcpParams)
+	require.Equal(t, repo.ListCommandIndexSkillsParams{ProjectID: projectID, LowerBound: "api", LowerCeiling: "apj", ResultLimit: int32(perKindQueryLimit)}, store.skillParams)
 }
 
 func TestSearchRejectsQueryOutsideNormalizedLengthBounds(t *testing.T) {
@@ -265,7 +278,7 @@ func TestSearchAssistantCollectionAuthorizationUsesProjectAwareWildcard(t *testi
 	}
 }
 
-func TestSearchGatewayCollectionAuthorizationUsesProjectAwareWildcard(t *testing.T) {
+func TestSearchMCPCollectionAuthorizationUsesOneProjectAwareWildcardCheck(t *testing.T) {
 	t.Parallel()
 
 	currentProject := uuid.New()
@@ -282,12 +295,12 @@ func TestSearchGatewayCollectionAuthorizationUsesProjectAwareWildcard(t *testing
 			t.Parallel()
 
 			store := storeWithAllKinds()
-			seenGatewayCheck := false
+			mcpCheckCount := 0
 			authorizer := fakeAuthz{evaluate: func(check authz.Check) bool {
 				if check.Scope != authz.ScopeMCPRead {
 					return true
 				}
-				seenGatewayCheck = true
+				mcpCheckCount++
 				require.Equal(t, authz.WildcardResource, check.ResourceID)
 				require.Empty(t, check.ResourceKind)
 				require.Equal(t, map[string]string{authz.SelectorKeyProjectID: currentProject.String()}, check.Dimensions)
@@ -295,13 +308,17 @@ func TestSearchGatewayCollectionAuthorizationUsesProjectAwareWildcard(t *testing
 			}}
 			result, err := service(t, store, authorizer).Search(ctxFor(currentProject), &gen.SearchPayload{Q: "ga"})
 			require.NoError(t, err)
-			require.True(t, seenGatewayCheck)
+			require.Equal(t, 1, mcpCheckCount)
 			if tt.wantGateway {
 				require.Equal(t, 1, store.calls["gateway"])
+				require.Equal(t, 1, store.calls["mcp"])
 				require.Contains(t, itemKinds(result.Items), "gateway")
+				require.Contains(t, itemKinds(result.Items), "mcp")
 			} else {
 				require.Zero(t, store.calls["gateway"])
+				require.Zero(t, store.calls["mcp"])
 				require.NotContains(t, itemKinds(result.Items), "gateway")
+				require.NotContains(t, itemKinds(result.Items), "mcp")
 			}
 		})
 	}

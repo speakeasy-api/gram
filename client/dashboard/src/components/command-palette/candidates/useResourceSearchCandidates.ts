@@ -358,7 +358,10 @@ export function useResourceSearchCandidates({
 
   return {
     candidates: EMPTY_CANDIDATES,
-    fallbackKinds: EMPTY_FALLBACK_KINDS,
+    // Ineligible short queries stay useful through the legacy sources without
+    // going remote. Eligible requests suppress those inventories while loading
+    // so the optimization does not issue both request sets.
+    fallbackKinds: searchEnabled ? EMPTY_FALLBACK_KINDS : ALL_FALLBACK_KINDS,
     metrics: searchEnabled
       ? {
           ...EMPTY_METRICS,
