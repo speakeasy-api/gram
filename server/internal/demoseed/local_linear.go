@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,6 +51,12 @@ type linearClient struct {
 func wireLocalLinear(ctx context.Context, logger *slog.Logger, s *seeder, opts LocalMCPFixtureOptions) error {
 	if opts.Policy == nil {
 		logger.InfoContext(ctx, "no egress policy to register a Linear client with; Linear stays for an admin to set up")
+		return nil
+	}
+	// Linear redirects sign-ins, with their authorization codes, to this
+	// origin: never register a plain-HTTP callback except on loopback.
+	if opts.ServerURL.Scheme != "https" && !isLoopbackHost(opts.ServerURL.Hostname()) {
+		logger.WarnContext(ctx, "GRAM_SERVER_URL is plain HTTP on a non-loopback host; Linear stays for an admin to set up", attr.SlogURLOriginal(opts.ServerURL.String()))
 		return nil
 	}
 	origin := strings.TrimRight(opts.ServerURL.String(), "/")
@@ -150,6 +157,15 @@ func linearClientID(ctx context.Context, s *seeder, opts LocalMCPFixtureOptions,
 		}
 	}
 	return registered.ClientID, nil
+}
+
+// isLoopbackHost reports whether host is localhost or a loopback address.
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func readLinearClient(path string) (linearClient, bool) {
