@@ -1512,7 +1512,8 @@ ORDER BY assignment.principal_urn;
 -- name: ListPluginConnectResources :many
 -- The ids mcp:connect is checked on for everything the named plugins of a
 -- project distribute: each server and its toolset when it has one, each
--- gateway, and each gateway's live members.
+-- gateway, and each gateway's live members. A disabled server or gateway is
+-- left out, as a publish leaves it out of the plugin.
 WITH distributed AS (
     SELECT ps.mcp_server_id, ps.meta_mcp_server_id
     FROM plugin_servers AS ps
@@ -1528,6 +1529,7 @@ gateways AS (
     FROM meta_mcp_servers AS g
     WHERE g.project_id = @project_id
       AND g.deleted IS FALSE
+      AND g.visibility <> 'disabled'
       AND g.id IN (SELECT d.meta_mcp_server_id FROM distributed AS d)
 ),
 servers AS (
@@ -1535,6 +1537,7 @@ servers AS (
     FROM mcp_servers AS s
     WHERE s.project_id = @project_id
       AND s.deleted IS FALSE
+      AND s.visibility <> 'disabled'
       AND (
         s.id IN (SELECT d.mcp_server_id FROM distributed AS d)
         OR s.id IN (

@@ -1969,6 +1969,7 @@ gateways AS (
     FROM meta_mcp_servers AS g
     WHERE g.project_id = $1
       AND g.deleted IS FALSE
+      AND g.visibility <> 'disabled'
       AND g.id IN (SELECT d.meta_mcp_server_id FROM distributed AS d)
 ),
 servers AS (
@@ -1976,6 +1977,7 @@ servers AS (
     FROM mcp_servers AS s
     WHERE s.project_id = $1
       AND s.deleted IS FALSE
+      AND s.visibility <> 'disabled'
       AND (
         s.id IN (SELECT d.mcp_server_id FROM distributed AS d)
         OR s.id IN (
@@ -2005,7 +2007,8 @@ type ListPluginConnectResourcesParams struct {
 
 // The ids mcp:connect is checked on for everything the named plugins of a
 // project distribute: each server and its toolset when it has one, each
-// gateway, and each gateway's live members.
+// gateway, and each gateway's live members. A disabled server or gateway is
+// left out, as a publish leaves it out of the plugin.
 func (q *Queries) ListPluginConnectResources(ctx context.Context, arg ListPluginConnectResourcesParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listPluginConnectResources, arg.ProjectID, arg.Slugs)
 	if err != nil {
