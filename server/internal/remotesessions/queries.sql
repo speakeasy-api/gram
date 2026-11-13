@@ -1581,7 +1581,11 @@ VALUES (
     @subject_urn,
     @user_session_issuer_id,
     @remote_session_client_id,
-    @access_token_encrypted,
+    -- The column is nullable, but every writer still stores a platform-key
+    -- token, so the cast keeps the parameter a string. Switch it to
+    -- sqlc.narg when a finalized organization starts writing NULL here; never
+    -- write '' in place of NULL.
+    @access_token_encrypted::text,
     @access_expires_at,
     @refresh_token_encrypted,
     @authorization_expires_at,
@@ -1629,7 +1633,9 @@ RETURNING *;
 -- every encryption, so they cannot say whether the provider echoed the same token.
 UPDATE remote_sessions
 SET
-    access_token_encrypted = @access_token_encrypted,
+    -- Cast for the same reason as in UpsertRemoteSession: switch to sqlc.narg
+    -- when finalized organizations write NULL, and never write '' instead.
+    access_token_encrypted = @access_token_encrypted::text,
     access_expires_at = @access_expires_at,
     refresh_token_encrypted = @refresh_token_encrypted,
     authorization_expires_at = @authorization_expires_at,

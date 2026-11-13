@@ -784,7 +784,7 @@ func (m *ChallengeManager) EnrichRemoteSession(ctx context.Context, ref RemoteSe
 	if sess.IdentitySource.Valid && !slices.Contains(overwritableIdentitySources(IdentitySourceUserinfo), sess.IdentitySource.String) {
 		target.userinfoEndpoint = ""
 	}
-	accessToken, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
+	accessToken, err := m.enc.Decrypt(sess.AccessTokenEncrypted.String)
 	if err != nil {
 		return none, fmt.Errorf("decrypt access token for enrichment: %w", err)
 	}

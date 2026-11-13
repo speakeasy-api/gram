@@ -399,7 +399,7 @@ func TestServeConsentAction_VerifyRefreshFailureOnConnectedCard(t *testing.T) {
 			requireValidated(t, fx)
 			require.EqualValues(t, 2, tokenRequests.Load(), "recovery refreshes exactly once")
 			recovered := storedSession(t, ctx, fx)
-			accessToken, err := fx.ti.enc.Decrypt(recovered.AccessTokenEncrypted)
+			accessToken, err := fx.ti.enc.Decrypt(recovered.AccessTokenEncrypted.String)
 			require.NoError(t, err)
 			require.Equal(t, "recovered-token", accessToken)
 			require.True(t, recovered.LastValidatedAt.Valid)
