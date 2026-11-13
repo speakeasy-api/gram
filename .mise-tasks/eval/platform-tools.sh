@@ -11,6 +11,8 @@
 #USAGE flag "--max-cases <n>" env="TOOLEVAL_MAX_CASES" help="Run at most this many cases, sampled stably by case id"
 #USAGE flag "--concurrency <n>" env="TOOLEVAL_CONCURRENCY" help="Cases in flight at once (default 8); lower it if the key is rate limited"
 #USAGE flag "--out <file>" env="TOOLEVAL_OUT" help="Also write the markdown report to this file"
+#USAGE flag "--gate" help="Fail when a case that passes in tooleval/baseline.json now fails in most runs"
+#USAGE flag "--baseline-out <file>" env="TOOLEVAL_BASELINE_OUT" help="Write tooleval/baseline.json updated with this run's results to this file"
 
 set -euo pipefail
 
@@ -42,6 +44,24 @@ if [ -n "${usage_max_cases:-}" ]; then
 fi
 if [ -n "${usage_concurrency:-}" ]; then
   export TOOLEVAL_CONCURRENCY="$usage_concurrency"
+fi
+if [ "${usage_gate:-false}" = "true" ]; then
+  export TOOLEVAL_GATE=1
+fi
+if [ -n "${usage_baseline_out:-}" ]; then
+  case "$usage_baseline_out" in
+  /*) ;;
+  *) usage_baseline_out="${MISE_ORIGINAL_CWD:-$PWD}/$usage_baseline_out" ;;
+  esac
+  export TOOLEVAL_BASELINE_OUT="$usage_baseline_out"
+fi
+if [ "${TOOLEVAL_GATE:-}" = "1" ] && [ ! -s internal/platformmcp/tooleval/baseline.json ]; then
+  # A gated run with no committed baseline has nothing to compare against,
+  # so it runs every case uncapped and --baseline-out writes the first
+  # baseline. Report-only runs keep their change selection.
+  echo "No committed tool eval baseline, so every case runs to take one" >&2
+  usage_changed_since=""
+  unset TOOLEVAL_MAX_CASES
 fi
 if [ -n "${usage_changed_since:-}" ]; then
   # The catalogue snapshot and case files where this branch left the ref. The

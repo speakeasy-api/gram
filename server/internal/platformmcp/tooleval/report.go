@@ -159,7 +159,7 @@ func (r *Report) Misses() []Miss {
 			order = append(order, k)
 		}
 		m.Total++
-		if o.OnPath || (o.Hit && (o.Case.Negative() || (o.SchemaValid && (len(o.Case.Args) == 0 || o.ArgsMatch)))) {
+		if o.Pass() {
 			continue
 		}
 		m.Wrong++
