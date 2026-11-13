@@ -62,6 +62,10 @@ func StaffSwitchToKit(ctx context.Context, tx pgx.Tx, organizationID string, pro
 		return "", fmt.Errorf("assistant has unknown runtime version %d", assistant.RuntimeVersion)
 	}
 
+	if err := validateRuntimeReasoningEffort(3, reasoningEffortFromPGText(assistant.ReasoningEffort)); err != nil {
+		return "", err
+	}
+
 	// Kit bootstrap resolves this identity and refuses to start without it.
 	if _, err := assistantidentity.ResolveRuntimeLocked(ctx, tx, organizationID, projectID, assistantID); errors.Is(err, assistantidentity.ErrInvalidIdentity) {
 		return KitSwitchNeedsIdentity, nil

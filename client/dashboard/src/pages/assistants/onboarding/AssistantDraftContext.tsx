@@ -39,8 +39,14 @@ export function AssistantDraftProvider({
   const [assistantEnv, setAssistantEnvState] = useState<AssistantEnv | null>(
     null,
   );
-  const [reasoningEffort, setReasoningEffort] =
+  const [reasoningEffort, setReasoningEffortState] =
     useState<ReasoningEffort>("medium");
+  const reasoningEffortRef = useRef<ReasoningEffort>("medium");
+  const getReasoningEffort = useCallback(() => reasoningEffortRef.current, []);
+  const setReasoningEffort = useCallback((value: ReasoningEffort) => {
+    reasoningEffortRef.current = value;
+    setReasoningEffortState(value);
+  }, []);
   const pendingRef = useRef(new Map<string, PendingResolver>());
 
   const { data: assistant, refetch } = useAssistantsGet(
@@ -127,6 +133,7 @@ export function AssistantDraftProvider({
   const value = useMemo<DraftContextValue>(
     () => ({
       reasoningEffort,
+      getReasoningEffort,
       setReasoningEffort,
       assistantId,
       setAssistantId,
@@ -142,6 +149,7 @@ export function AssistantDraftProvider({
     }),
     [
       reasoningEffort,
+      getReasoningEffort,
       setReasoningEffort,
       assistantId,
       setAssistantId,

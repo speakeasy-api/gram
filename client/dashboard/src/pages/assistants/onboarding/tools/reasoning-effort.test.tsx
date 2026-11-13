@@ -22,6 +22,7 @@ vi.mock("../useAssistantDraft", () => ({
   useAssistantDraft: () => ({
     assistantId: null,
     reasoningEffort: mocks.effort,
+    getReasoningEffort: () => mocks.effort,
     setAssistant: vi.fn(),
     invalidateAll: vi.fn(),
     assistantEnv: null,

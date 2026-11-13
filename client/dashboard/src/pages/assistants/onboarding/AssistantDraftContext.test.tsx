@@ -35,6 +35,14 @@ it("initializes a real new-assistant provider with Medium reasoning effort", () 
   });
   expect(result.current.assistantId).toBeNull();
   expect(result.current.reasoningEffort).toBe("medium");
-  act(() => result.current.setReasoningEffort("none"));
+  const getReasoningEffort = result.current.getReasoningEffort;
+  const setReasoningEffort = result.current.setReasoningEffort;
+  expect(getReasoningEffort()).toBe("medium");
+  act(() => {
+    setReasoningEffort("none");
+    expect(getReasoningEffort()).toBe("none");
+  });
+  expect(result.current.getReasoningEffort).toBe(getReasoningEffort);
+  expect(result.current.setReasoningEffort).toBe(setReasoningEffort);
   expect(result.current.reasoningEffort).toBe("none");
 });

@@ -42,6 +42,7 @@ vi.mock("./useAssistantDraft", () => ({
   useAssistantDraft: () => ({
     assistantId: state.assistantId,
     reasoningEffort: "medium",
+    getReasoningEffort: () => "medium",
     setReasoningEffort: state.setReasoningEffort,
     assistant: { id: "assistant", name: "Example assistant", instructions: "" },
   }),

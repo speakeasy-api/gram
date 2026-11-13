@@ -8,6 +8,7 @@ export type AssistantEnv = { id: string; slug: string };
 
 export type DraftContextValue = {
   reasoningEffort: ReasoningEffort;
+  getReasoningEffort: () => ReasoningEffort;
   setReasoningEffort: (value: ReasoningEffort) => void;
   assistantId: string | null;
   setAssistantId: (id: string) => void;
