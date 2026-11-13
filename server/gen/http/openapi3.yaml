@@ -30137,14 +30137,12 @@ paths:
             operationId: searchCommandResources
             parameters:
                 - allowEmptyValue: true
-                  description: Case-insensitive resource name or alias query.
+                  description: Case-insensitive resource name or alias query. Whitespace is trimmed and the normalized value must contain 2–128 characters.
                   in: query
                   name: q
                   required: true
                   schema:
-                    description: Case-insensitive resource name or alias query.
-                    maxLength: 128
-                    minLength: 2
+                    description: Case-insensitive resource name or alias query. Whitespace is trimmed and the normalized value must contain 2–128 characters.
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -106695,6 +106693,14 @@ components:
                 timed_out:
                     type: boolean
                     description: Whether the shared search deadline expired.
+                truncated:
+                    type: boolean
+                    description: Whether per-kind or global result caps omitted matching resources.
+                truncated_kinds:
+                    type: array
+                    items:
+                        type: string
+                    description: Resource kinds with matching resources omitted by a result cap.
             required:
                 - schema_version
                 - generated_at
@@ -106702,6 +106708,8 @@ components:
                 - partial
                 - timed_out
                 - failed_kinds
+                - truncated
+                - truncated_kinds
         Commandresourceindexitem:
             type: object
             properties:

@@ -22,6 +22,9 @@ type fakeStore struct {
 	mu                sync.Mutex
 	calls             map[string]int
 	blocked           string
+	blockedStarted    chan struct{}
+	blockedStartOnce  sync.Once
+	blockedErr        error
 	environmentParams repo.ListCommandIndexEnvironmentsParams
 	environments      []repo.ListCommandIndexEnvironmentsRow
 	gateways          []repo.ListCommandIndexGatewaysRow
@@ -35,7 +38,13 @@ func (f *fakeStore) call(ctx context.Context, kind string) error {
 	blocked := f.blocked == kind
 	f.mu.Unlock()
 	if blocked {
+		if f.blockedStarted != nil {
+			f.blockedStartOnce.Do(func() { close(f.blockedStarted) })
+		}
 		<-ctx.Done()
+		if f.blockedErr != nil {
+			return f.blockedErr
+		}
 		return fmt.Errorf("wait for blocked fake query: %w", ctx.Err())
 	}
 	return nil
@@ -57,9 +66,19 @@ func (f *fakeStore) ListCommandIndexCustomRules(ctx context.Context, _ repo.List
 	return f.rules, f.call(ctx, "rule")
 }
 
-type fakeAuthz struct{ denied authz.Scope }
+type fakeAuthz struct {
+	denied      authz.Scope
+	evaluate    func(authz.Check) bool
+	evaluateCtx func(context.Context, authz.Check) (bool, error)
+}
 
-func (f fakeAuthz) Evaluate(_ context.Context, checks ...authz.Check) (bool, error) {
+func (f fakeAuthz) Evaluate(ctx context.Context, checks ...authz.Check) (bool, error) {
+	if f.evaluateCtx != nil {
+		return f.evaluateCtx(ctx, checks[0])
+	}
+	if f.evaluate != nil {
+		return f.evaluate(checks[0]), nil
+	}
 	return checks[0].Scope != f.denied, nil
 }
 func (fakeAuthz) RequirePluginWrite(context.Context, string, string) error { return nil }
@@ -116,14 +135,27 @@ func TestSearchDeadlineReturnsExactPartialMetadata(t *testing.T) {
 
 	store := storeWithAllKinds()
 	store.blocked = "gateway"
+	store.blockedStarted = make(chan struct{})
 	svc := service(t, store, fakeAuthz{})
-	svc.budget = 10 * time.Millisecond
-	result, err := svc.Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "ga"})
-	require.NoError(t, err)
-	require.True(t, result.Partial)
-	require.True(t, result.TimedOut)
-	require.Equal(t, []string{"gateway"}, result.FailedKinds)
-	require.Len(t, result.Items, 3)
+	svc.budget = 100 * time.Millisecond
+	type searchResult struct {
+		result *gen.Commandresourceindex
+		err    error
+	}
+	done := make(chan searchResult, 1)
+	go func() {
+		result, err := svc.Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "ga"})
+		done <- searchResult{result: result, err: err}
+	}()
+	<-store.blockedStarted
+	got := <-done
+	require.NoError(t, got.err)
+	require.True(t, got.result.Partial)
+	require.True(t, got.result.TimedOut)
+	require.False(t, got.result.Truncated)
+	require.Empty(t, got.result.TruncatedKinds)
+	require.Equal(t, []string{"gateway"}, got.result.FailedKinds)
+	require.Len(t, got.result.Items, 3)
 }
 
 func TestSearchPluginUsesIDSelectorAndSlugKeyword(t *testing.T) {
@@ -156,7 +188,7 @@ func TestSearchPassesNormalizedLowerPrefixRange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "api", store.environmentParams.LowerBound)
 	require.Equal(t, "apj", store.environmentParams.LowerCeiling)
-	require.Equal(t, int32(perKindLimit), store.environmentParams.ResultLimit)
+	require.Equal(t, int32(perKindQueryLimit), store.environmentParams.ResultLimit)
 }
 
 func TestSearchRejectsQueryOutsideNormalizedLengthBounds(t *testing.T) {
@@ -179,4 +211,130 @@ func TestMatchRankExactThenAliasPrefixThenNamePrefix(t *testing.T) {
 	require.Equal(t, 0, matchRank(&gen.Commandresourceindexitem{Name: "Other", Keywords: []string{"CAT"}}, query))
 	require.Equal(t, 1, matchRank(&gen.Commandresourceindexitem{Name: "Other", Keywords: []string{"catalog"}}, query))
 	require.Equal(t, 2, matchRank(&gen.Commandresourceindexitem{Name: "Catalog"}, query))
+}
+
+func TestSearchGatewayCollectionAuthorizationMatchesCanonicalList(t *testing.T) {
+	t.Parallel()
+
+	currentProject := uuid.New()
+	tests := []struct {
+		name        string
+		grantTarget string
+		wantGateway bool
+	}{
+		{name: "current project grant", grantTarget: "current-project", wantGateway: true},
+		{name: "other project grant", grantTarget: "other-project", wantGateway: false},
+		{name: "individual gateway grant", grantTarget: "gateway", wantGateway: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			store := storeWithAllKinds()
+			grantResourceID := map[string]string{
+				"current-project": currentProject.String(),
+				"other-project":   uuid.New().String(),
+				"gateway":         store.gateways[0].ID.String(),
+			}[tt.grantTarget]
+			seenGatewayCheck := false
+			authorizer := fakeAuthz{evaluate: func(check authz.Check) bool {
+				if check.Scope != authz.ScopeMCPRead {
+					return true
+				}
+				seenGatewayCheck = true
+				require.Equal(t, currentProject.String(), check.ResourceID)
+				require.Empty(t, check.ResourceKind)
+				require.Nil(t, check.Dimensions)
+				return check.ResourceID == grantResourceID
+			}}
+			result, err := service(t, store, authorizer).Search(ctxFor(currentProject), &gen.SearchPayload{Q: "ga"})
+			require.NoError(t, err)
+			require.True(t, seenGatewayCheck)
+			if tt.wantGateway {
+				require.Equal(t, 1, store.calls["gateway"])
+				require.Contains(t, itemKinds(result.Items), "gateway")
+			} else {
+				require.Zero(t, store.calls["gateway"])
+				require.NotContains(t, itemKinds(result.Items), "gateway")
+			}
+		})
+	}
+}
+
+func itemKinds(items []*gen.Commandresourceindexitem) []string {
+	kinds := make([]string, 0, len(items))
+	for _, item := range items {
+		kinds = append(kinds, item.Kind)
+	}
+	return kinds
+}
+
+func TestDeadlineAdapterErrorClassificationPreservesOrdinaryErrors(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, deadlineInterruptedAdapter(context.DeadlineExceeded, context.Canceled))
+	require.True(t, deadlineInterruptedAdapter(context.DeadlineExceeded, context.DeadlineExceeded))
+	require.False(t, deadlineInterruptedAdapter(context.DeadlineExceeded, fmt.Errorf("database unavailable")))
+}
+
+func TestSearchReportsPerKindTruncationWithoutFailure(t *testing.T) {
+	t.Parallel()
+
+	store := storeWithAllKinds()
+	store.environments = make([]repo.ListCommandIndexEnvironmentsRow, perKindQueryLimit)
+	for i := range store.environments {
+		store.environments[i] = repo.ListCommandIndexEnvironmentsRow{ID: uuid.New(), Name: fmt.Sprintf("Environment %02d", i), Slug: fmt.Sprintf("environment-%02d", i)}
+	}
+	result, err := service(t, store, fakeAuthz{}).Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "en"})
+	require.NoError(t, err)
+	require.True(t, result.Truncated)
+	require.Equal(t, []string{"environment"}, result.TruncatedKinds)
+	require.False(t, result.Partial)
+	require.Empty(t, result.FailedKinds)
+	require.Len(t, result.Items, perKindLimit+3)
+}
+
+func TestSearchReportsGlobalTruncatedKinds(t *testing.T) {
+	t.Parallel()
+
+	store := storeWithAllKinds()
+	store.environments = make([]repo.ListCommandIndexEnvironmentsRow, perKindLimit)
+	store.gateways = make([]repo.ListCommandIndexGatewaysRow, perKindLimit)
+	store.plugins = make([]repo.ListCommandIndexPluginsRow, perKindLimit)
+	store.rules = make([]repo.ListCommandIndexCustomRulesRow, perKindLimit)
+	for i := range perKindLimit {
+		name := fmt.Sprintf("Match %02d", i)
+		store.environments[i] = repo.ListCommandIndexEnvironmentsRow{ID: uuid.New(), Name: name, Slug: fmt.Sprintf("environment-%02d", i)}
+		store.gateways[i] = repo.ListCommandIndexGatewaysRow{ID: uuid.New(), Name: name}
+		store.plugins[i] = repo.ListCommandIndexPluginsRow{ID: uuid.New(), Name: name, Slug: fmt.Sprintf("plugin-%02d", i)}
+		store.rules[i] = repo.ListCommandIndexCustomRulesRow{ID: uuid.New(), Title: name, RuleID: fmt.Sprintf("rule.%02d", i), Severity: "medium"}
+	}
+	result, err := service(t, store, fakeAuthz{}).Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "ma"})
+	require.NoError(t, err)
+	require.True(t, result.Truncated)
+	require.Equal(t, []string{"plugin", "rule"}, result.TruncatedKinds)
+	require.False(t, result.Partial)
+	require.Empty(t, result.FailedKinds)
+	require.Len(t, result.Items, globalLimit)
+}
+
+func TestSearchPreflightDeadlineIsRequestError(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	var once sync.Once
+	authorizer := fakeAuthz{evaluateCtx: func(ctx context.Context, _ authz.Check) (bool, error) {
+		once.Do(func() { close(started) })
+		<-ctx.Done()
+		return false, fmt.Errorf("wait for preflight deadline: %w", ctx.Err())
+	}}
+	svc := service(t, storeWithAllKinds(), authorizer)
+	svc.budget = 100 * time.Millisecond
+	done := make(chan error, 1)
+	go func() {
+		_, err := svc.Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "ga"})
+		done <- err
+	}()
+	<-started
+	require.Error(t, <-done)
 }

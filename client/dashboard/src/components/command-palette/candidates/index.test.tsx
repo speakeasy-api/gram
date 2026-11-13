@@ -80,9 +80,11 @@ vi.mock("./useResourceSearchCandidates", () => ({
       metrics: {
         state: mocks.indexFallback ? "fallback" : "ready",
         searchRequestCount: options.enabled ? 1 : 0,
+        searchInFlight: false,
         candidateCount: mocks.indexCandidates.length,
         complete: !mocks.indexFallback,
         truncated: false,
+        truncatedKindCount: 0,
         payloadByteBucket: "under_10k",
         parseSearchDurationMs: 1,
       },

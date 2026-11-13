@@ -27,6 +27,10 @@ type SearchResponseBody struct {
 	TimedOut bool `form:"timed_out" json:"timed_out" xml:"timed_out"`
 	// Resource kinds that did not finish before the deadline.
 	FailedKinds []string `form:"failed_kinds" json:"failed_kinds" xml:"failed_kinds"`
+	// Whether per-kind or global result caps omitted matching resources.
+	Truncated bool `form:"truncated" json:"truncated" xml:"truncated"`
+	// Resource kinds with matching resources omitted by a result cap.
+	TruncatedKinds []string `form:"truncated_kinds" json:"truncated_kinds" xml:"truncated_kinds"`
 }
 
 // SearchUnauthorizedResponseBody is the type of the "commandSearch" service
@@ -231,6 +235,7 @@ func NewSearchResponseBody(res *commandsearchviews.CommandresourceindexView) *Se
 		GeneratedAt:   *res.GeneratedAt,
 		Partial:       *res.Partial,
 		TimedOut:      *res.TimedOut,
+		Truncated:     *res.Truncated,
 	}
 	if res.Items != nil {
 		body.Items = make([]*CommandresourceindexitemResponseBody, len(res.Items))
@@ -251,6 +256,14 @@ func NewSearchResponseBody(res *commandsearchviews.CommandresourceindexView) *Se
 		}
 	} else {
 		body.FailedKinds = []string{}
+	}
+	if res.TruncatedKinds != nil {
+		body.TruncatedKinds = make([]string, len(res.TruncatedKinds))
+		for i, val := range res.TruncatedKinds {
+			body.TruncatedKinds[i] = val
+		}
+	} else {
+		body.TruncatedKinds = []string{}
 	}
 	return body
 }

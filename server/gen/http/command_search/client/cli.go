@@ -8,28 +8,15 @@
 package client
 
 import (
-	"unicode/utf8"
-
 	commandsearch "github.com/speakeasy-api/gram/server/gen/command_search"
-	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildSearchPayload builds the payload for the commandSearch search endpoint
 // from CLI flags.
 func BuildSearchPayload(commandSearchSearchQ string, commandSearchSearchSessionToken string, commandSearchSearchApikeyToken string, commandSearchSearchProjectSlugInput string) (*commandsearch.SearchPayload, error) {
-	var err error
 	var q string
 	{
 		q = commandSearchSearchQ
-		if utf8.RuneCountInString(q) < 2 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("q", q, utf8.RuneCountInString(q), 2, true))
-		}
-		if utf8.RuneCountInString(q) > 128 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("q", q, utf8.RuneCountInString(q), 128, false))
-		}
-		if err != nil {
-			return nil, err
-		}
 	}
 	var sessionToken *string
 	{

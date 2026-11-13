@@ -47,6 +47,14 @@ export type Commandresourceindex = {
    * Whether the shared search deadline expired.
    */
   timedOut: boolean;
+  /**
+   * Whether per-kind or global result caps omitted matching resources.
+   */
+  truncated: boolean;
+  /**
+   * Resource kinds with matching resources omitted by a result cap.
+   */
+  truncatedKinds: Array<string>;
 };
 
 /** @internal */
@@ -70,6 +78,8 @@ export const Commandresourceindex$inboundSchema: z.ZodMiniType<
     partial: z.boolean(),
     schema_version: SchemaVersion$inboundSchema,
     timed_out: z.boolean(),
+    truncated: z.boolean(),
+    truncated_kinds: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -77,6 +87,7 @@ export const Commandresourceindex$inboundSchema: z.ZodMiniType<
       "generated_at": "generatedAt",
       "schema_version": "schemaVersion",
       "timed_out": "timedOut",
+      "truncated_kinds": "truncatedKinds",
     });
   }),
 );

@@ -20,7 +20,12 @@ WHERE organization_id = $1
     (lower(title) >= $3::text AND lower(title) < $4::text)
     OR (rule_id >= $3::text AND rule_id < $4::text)
   )
-ORDER BY title, id LIMIT $5
+ORDER BY CASE
+  WHEN rule_id = $3::text OR lower(title) = $3::text THEN 0
+  WHEN rule_id >= $3::text AND rule_id < $4::text THEN 1
+  ELSE 2
+END, title, id
+LIMIT $5
 `
 
 type ListCommandIndexCustomRulesParams struct {
@@ -78,7 +83,12 @@ WHERE project_id = $1
     (lower(name) >= $2::text AND lower(name) < $3::text)
     OR (slug >= $2::text AND slug < $3::text)
   )
-ORDER BY name, id LIMIT $4
+ORDER BY CASE
+  WHEN slug = $2::text OR lower(name) = $2::text THEN 0
+  WHEN slug >= $2::text AND slug < $3::text THEN 1
+  ELSE 2
+END, name, id
+LIMIT $4
 `
 
 type ListCommandIndexEnvironmentsParams struct {
@@ -94,9 +104,9 @@ type ListCommandIndexEnvironmentsRow struct {
 	Slug string
 }
 
-// Each query performs bounded server-side prefix matching and returns at most
-// the per-kind cap. Names use matching lower-expression indexes; canonical
-// lowercase slugs and rule ids use their existing raw composite indexes.
+// Each query performs bounded server-side prefix matching and overfetches one
+// row beyond the per-kind response cap. Names use matching lower-expression
+// indexes; canonical lowercase slugs and rule ids use raw composite indexes.
 func (q *Queries) ListCommandIndexEnvironments(ctx context.Context, arg ListCommandIndexEnvironmentsParams) ([]ListCommandIndexEnvironmentsRow, error) {
 	rows, err := q.db.Query(ctx, listCommandIndexEnvironments,
 		arg.ProjectID,
@@ -129,7 +139,8 @@ WHERE organization_id = $1
   AND deleted IS FALSE
   AND lower(name) >= $3::text
   AND lower(name) < $4::text
-ORDER BY name, id LIMIT $5
+ORDER BY CASE WHEN lower(name) = $3::text THEN 0 ELSE 2 END, name, id
+LIMIT $5
 `
 
 type ListCommandIndexGatewaysParams struct {
@@ -180,7 +191,12 @@ WHERE organization_id = $1
     (lower(name) >= $3::text AND lower(name) < $4::text)
     OR (slug >= $3::text AND slug < $4::text)
   )
-ORDER BY name, id LIMIT $5
+ORDER BY CASE
+  WHEN slug = $3::text OR lower(name) = $3::text THEN 0
+  WHEN slug >= $3::text AND slug < $4::text THEN 1
+  ELSE 2
+END, name, id
+LIMIT $5
 `
 
 type ListCommandIndexPluginsParams struct {

@@ -38,6 +38,7 @@ describe("CommandPalettePerformanceTracker", () => {
       search_candidate_count: 0,
       search_complete: false,
       search_truncated: false,
+      search_truncated_kind_count: 0,
       search_payload_byte_bucket: null,
       time_to_search_ready_ms: null,
       parse_search_duration_ms: null,
@@ -53,6 +54,12 @@ describe("CommandPalettePerformanceTracker", () => {
     expect(payload?.cache_state).toBe("warm");
     expect(payload?.time_to_first_resource_ms).toBe(0);
     expect(payload?.resource_quiet_before_close).toBe(false);
+    expect(payload).toMatchObject({
+      searched_resource_kind_count: 0,
+      net_eliminated_inventory_call_baseline: 0,
+      remaining_inventory_call_baseline: 17,
+      modeled_no_fallback_call_count: 17,
+    });
   });
 
   it("measures page actions that become available after open", () => {
@@ -68,9 +75,11 @@ describe("CommandPalettePerformanceTracker", () => {
     tracker.search(125, {
       state: "ready",
       searchRequestCount: 1,
+      searchInFlight: false,
       candidateCount: 418,
       complete: true,
       truncated: false,
+      truncatedKindCount: 0,
       payloadByteBucket: "50k_to_250k",
       parseSearchDurationMs: 3.5,
     });
@@ -85,10 +94,46 @@ describe("CommandPalettePerformanceTracker", () => {
       search_candidate_count: 418,
       search_complete: true,
       search_truncated: false,
+      search_truncated_kind_count: 0,
       search_payload_byte_bucket: "50k_to_250k",
       time_to_search_ready_ms: 25,
       parse_search_duration_ms: 3.5,
       fallback_used: false,
+    });
+  });
+
+  it("does not finalize cached metadata during a refetch and records zero-row fallback", () => {
+    const tracker = new CommandPalettePerformanceTracker();
+    tracker.open(100, { total: 2, pages: 2, resources: 0 });
+    tracker.search(110, {
+      state: "loading",
+      searchRequestCount: 2,
+      searchInFlight: true,
+      candidateCount: 7,
+      complete: true,
+      truncated: false,
+      truncatedKindCount: 0,
+      payloadByteBucket: "under_10k",
+      parseSearchDurationMs: 1,
+    });
+    tracker.search(130, {
+      state: "fallback",
+      searchRequestCount: 2,
+      searchInFlight: false,
+      candidateCount: 0,
+      complete: false,
+      truncated: false,
+      truncatedKindCount: 0,
+      payloadByteBucket: "under_10k",
+      parseSearchDurationMs: 2,
+    });
+    expect(tracker.close(150, "project")).toMatchObject({
+      search_request_count: 2,
+      search_candidate_count: 0,
+      search_complete: false,
+      time_to_search_ready_ms: 30,
+      parse_search_duration_ms: 2,
+      fallback_used: true,
     });
   });
 

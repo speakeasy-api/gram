@@ -6,6 +6,8 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
 
+const EMPTY_CANDIDATES: LauncherCandidate[] = [];
+
 /**
  * Detection rules: the static built-ins plus the project's custom rules. The
  * detail page's `?rule=<id>` deep link tells them apart via the `custom.` id
@@ -78,5 +80,12 @@ export function useBuiltinRuleCandidates({
   enabled: boolean;
 }): LauncherCandidate[] {
   const candidates = useRuleCandidates({ enabled: false });
-  return enabled ? candidates : [];
+  const builtins = useMemo(
+    () =>
+      candidates.filter(
+        (candidate) => !candidate.id.startsWith("rule:custom."),
+      ),
+    [candidates],
+  );
+  return enabled ? builtins : EMPTY_CANDIDATES;
 }

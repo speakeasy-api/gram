@@ -22,7 +22,7 @@ export type SearchCommandResourcesSecurity = {
 
 export type SearchCommandResourcesRequest = {
   /**
-   * Case-insensitive resource name or alias query.
+   * Case-insensitive resource name or alias query. Whitespace is trimmed and the normalized value must contain 2–128 characters.
    */
   q: string;
   /**

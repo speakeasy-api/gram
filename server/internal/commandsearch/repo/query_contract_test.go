@@ -19,6 +19,7 @@ func TestSearchQueriesUseScopedBoundedPrefixRanges(t *testing.T) {
 		require.Contains(t, q, " >= ")
 		require.Contains(t, q, " < ")
 		require.Contains(t, q, "lower(")
+		require.Contains(t, q, "order by case")
 		require.NotContains(t, q, "count(")
 		require.NotContains(t, q, " like ")
 		require.NotContains(t, q, "ilike")
@@ -34,6 +35,8 @@ func TestSearchQuerySourceUsesOneNormalizedRange(t *testing.T) {
 	q := string(source)
 	require.Contains(t, q, "@lower_bound")
 	require.Contains(t, q, "@lower_ceiling")
+	require.Contains(t, q, "slug = @lower_bound")
+	require.Contains(t, q, "rule_id = @lower_bound")
 	for _, stale := range []string{"@titlecase_bound", "@uppercase_bound", "ListCommandIndexAssistants", "ListCommandIndexMCPServers", "ListCommandIndexSkills"} {
 		require.NotContains(t, q, stale)
 	}

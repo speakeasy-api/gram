@@ -56,9 +56,11 @@ interface ResourceSearchItem {
 export interface ResourceSearchMetrics {
   state: "idle" | "loading" | "ready" | "fallback";
   searchRequestCount: number;
+  searchInFlight: boolean;
   candidateCount: number;
   complete: boolean;
   truncated: boolean;
+  truncatedKindCount: number;
   payloadByteBucket: PayloadByteBucket | null;
   parseSearchDurationMs: number | null;
 }
@@ -69,12 +71,19 @@ export interface ResourceSearchCandidatesResult {
   metrics: ResourceSearchMetrics;
 }
 
+const EMPTY_CANDIDATES: LauncherCandidate[] = [];
+const EMPTY_FALLBACK_KINDS: ReadonlySet<MigratedResourceKind> = new Set();
+const ALL_FALLBACK_KINDS: ReadonlySet<MigratedResourceKind> = new Set(
+  MIGRATED_RESOURCE_KINDS,
+);
 const EMPTY_METRICS: ResourceSearchMetrics = {
   state: "idle",
   searchRequestCount: 0,
+  searchInFlight: false,
   candidateCount: 0,
   complete: false,
   truncated: false,
+  truncatedKindCount: 0,
   payloadByteBucket: null,
   parseSearchDurationMs: null,
 };
@@ -229,7 +238,9 @@ export function useResourceSearchCandidates({
   wasEnabled.current = enabled;
 
   const normalizedQuery = searchQuery.trim();
-  const searchEnabled = enabled && normalizedQuery.length >= 2;
+  const queryCodePointLength = Array.from(normalizedQuery).length;
+  const searchEnabled =
+    enabled && queryCodePointLength >= 2 && queryCodePointLength <= 128;
   const queryKey = useMemo(
     () =>
       [
@@ -269,8 +280,11 @@ export function useResourceSearchCandidates({
     throwOnError: false,
   });
 
+  const searchInFlight = searchEnabled && result.fetchStatus === "fetching";
   const indexed = useMemo(() => {
-    if (!searchEnabled || !result.data) return null;
+    // React Query may retain the previous key's data while the next request is
+    // in flight. Never expose it under the new query.
+    if (!searchEnabled || searchInFlight || !result.data) return null;
     const data = result.data;
     if (data.schemaVersion !== COMMAND_SEARCH_SCHEMA_VERSION) return null;
     const startedAt = performance.now();
@@ -280,47 +294,60 @@ export function useResourceSearchCandidates({
       failedKinds: migratedKinds(data.failedKinds),
       partial: data.partial === true,
       timedOut: data.timedOut === true,
+      truncated: data.truncated === true,
+      truncatedKinds: migratedKinds(data.truncatedKinds),
       parseSearchDurationMs: performance.now() - startedAt,
       bytes: estimatePayloadBytes(data.items),
     };
-  }, [navigate, result.data, routes, searchEnabled]);
+  }, [navigate, result.data, routes, searchEnabled, searchInFlight]);
 
   if (indexed) {
     return {
       candidates: indexed.candidates,
       fallbackKinds: indexed.failedKinds,
       metrics: {
-        state: indexed.failedKinds.size > 0 ? "fallback" : "ready",
+        state:
+          indexed.timedOut || indexed.failedKinds.size > 0
+            ? "fallback"
+            : "ready",
         searchRequestCount: requestCount.current,
+        searchInFlight: false,
         candidateCount: indexed.candidates.length,
-        complete: !indexed.partial,
-        truncated: indexed.timedOut,
+        complete: !indexed.partial && !indexed.truncated,
+        truncated: indexed.truncated,
+        truncatedKindCount: indexed.truncatedKinds.size,
         payloadByteBucket: payloadBucket(indexed.bytes),
         parseSearchDurationMs: indexed.parseSearchDurationMs,
       },
     };
   }
 
-  if (searchEnabled && (result.isError || result.data !== undefined)) {
+  if (
+    searchEnabled &&
+    !searchInFlight &&
+    (result.isError || result.data !== undefined)
+  ) {
     return {
-      candidates: [],
-      fallbackKinds: new Set(MIGRATED_RESOURCE_KINDS),
+      candidates: EMPTY_CANDIDATES,
+      fallbackKinds: ALL_FALLBACK_KINDS,
       metrics: {
         ...EMPTY_METRICS,
         state: "fallback",
         searchRequestCount: requestCount.current,
+        searchInFlight: false,
       },
     };
   }
 
   return {
-    candidates: [],
-    fallbackKinds: new Set(),
+    candidates: EMPTY_CANDIDATES,
+    fallbackKinds: EMPTY_FALLBACK_KINDS,
     metrics: searchEnabled
       ? {
           ...EMPTY_METRICS,
           state: "loading",
           searchRequestCount: requestCount.current,
+          searchInFlight,
         }
       : EMPTY_METRICS,
   };

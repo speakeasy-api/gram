@@ -88,6 +88,8 @@ function response(overrides: Record<string, unknown> = {}) {
     partial: false,
     timedOut: false,
     failedKinds: [],
+    truncated: false,
+    truncatedKinds: [],
     ...overrides,
   };
 }
@@ -126,11 +128,38 @@ describe("resource command search", () => {
     expect(mocks.queryOptions?.queryKey).toContain("grants-b");
   });
 
-  it("does not enable a request for a closed, organization, or short query", () => {
+  it("gates normalized queries by Unicode code points from 2 through 128", () => {
     renderSearch("s");
     expect(mocks.queryOptions?.enabled).toBe(false);
     renderSearch("skill", false);
     expect(mocks.queryOptions?.enabled).toBe(false);
+    renderSearch("😀😀");
+    expect(mocks.queryOptions?.enabled).toBe(true);
+    renderSearch("😀".repeat(128));
+    expect(mocks.queryOptions?.enabled).toBe(true);
+    renderSearch("😀".repeat(129));
+    expect(mocks.queryOptions?.enabled).toBe(false);
+  });
+
+  it("keeps shared empty candidates and fallback sets stable while idle or loading", () => {
+    const idle = renderSearch("s");
+    const idleCandidates = idle.result.current.candidates;
+    const idleFallback = idle.result.current.fallbackKinds;
+    idle.rerender({ open: true, query: "x", access: "grants-a" });
+    expect(idle.result.current.candidates).toBe(idleCandidates);
+    expect(idle.result.current.fallbackKinds).toBe(idleFallback);
+
+    mocks.queryResult = {
+      data: undefined,
+      isError: false,
+      fetchStatus: "fetching",
+    };
+    const loading = renderSearch("search");
+    const loadingCandidates = loading.result.current.candidates;
+    const loadingFallback = loading.result.current.fallbackKinds;
+    loading.rerender({ open: true, query: "searching", access: "grants-a" });
+    expect(loading.result.current.candidates).toBe(loadingCandidates);
+    expect(loading.result.current.fallbackKinds).toBe(loadingFallback);
   });
 
   it("passes the normalized query and AbortSignal to the SDK", async () => {
@@ -164,14 +193,17 @@ describe("resource command search", () => {
     };
     const hook = renderSearch("old");
     expect(hook.result.current.candidates).toHaveLength(1);
+    // Simulate retained previous-key data rather than replacing it with
+    // undefined; the old row must still disappear under the new key.
     mocks.queryResult = {
-      data: undefined,
-      isError: false,
+      ...mocks.queryResult,
       fetchStatus: "fetching",
     };
-    act(() => hook.rerender({ open: true, query: "new", access: "grants-a" }));
+    act(() => hook.rerender({ open: true, query: "new", access: "grants-b" }));
     expect(hook.result.current.candidates).toEqual([]);
+    expect(hook.result.current.metrics.searchInFlight).toBe(true);
     expect(mocks.queryOptions?.queryKey).toContain("new");
+    expect(mocks.queryOptions?.queryKey).toContain("grants-b");
   });
 
   it("falls back only failed kinds while preserving successful remote rows", () => {
@@ -197,7 +229,26 @@ describe("resource command search", () => {
       "Remote environment",
     ]);
     expect([...result.fallbackKinds]).toEqual(["plugin"]);
-    expect(result.metrics).toMatchObject({ complete: false, truncated: true });
+    expect(result.metrics).toMatchObject({ complete: false, truncated: false });
+  });
+
+  it("records intentional result caps without enabling legacy fallback", () => {
+    mocks.queryResult = {
+      data: response({
+        truncated: true,
+        truncatedKinds: ["gateway", "rule"],
+      }),
+      isError: false,
+      fetchStatus: "idle",
+    };
+    const result = renderSearch().result.current;
+    expect(result.fallbackKinds.size).toBe(0);
+    expect(result.metrics).toMatchObject({
+      state: "ready",
+      complete: false,
+      truncated: true,
+      truncatedKindCount: 2,
+    });
   });
 
   it("falls back all migrated kinds on a whole-request error", () => {
@@ -255,6 +306,40 @@ describe("resource command search", () => {
     void candidates[0]?.run("open");
     expect(mocks.goTo).toHaveBeenCalledWith(
       "11111111-1111-4111-8111-111111111111",
+    );
+  });
+
+  it("maps gateways and encoded detection-rule selectors to exact routes", () => {
+    const gatewayGoTo = vi.fn();
+    const candidates = mapResourceSearchItems(
+      [
+        {
+          id: "gateway-1",
+          kind: "gateway",
+          name: "Gateway",
+          routeSelector: "customer-gateway",
+        },
+        {
+          id: "rule-1",
+          kind: "rule",
+          name: "Rule",
+          routeSelector: "custom.rule/with spaces",
+        },
+      ],
+      {
+        environments: { environment: { goTo: mocks.goTo } },
+        mcp: { gateway: { overview: { goTo: gatewayGoTo } } },
+        plugins: { detail: { goTo: mocks.goTo } },
+        policyCenter: { href: () => "/guardrails" },
+      } as never,
+      mocks.navigate,
+    );
+
+    void candidates[0]?.run("open");
+    expect(gatewayGoTo).toHaveBeenCalledWith("customer-gateway");
+    void candidates[1]?.run("open");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/guardrails?tab=detection-rules&rule=custom.rule%2Fwith%20spaces",
     );
   });
 });

@@ -33,6 +33,10 @@ type CommandresourceindexView struct {
 	TimedOut *bool
 	// Resource kinds that did not finish before the deadline.
 	FailedKinds []string
+	// Whether per-kind or global result caps omitted matching resources.
+	Truncated *bool
+	// Resource kinds with matching resources omitted by a result cap.
+	TruncatedKinds []string
 }
 
 // CommandresourceindexitemView is a type that runs validations on a projected
@@ -58,6 +62,8 @@ var (
 			"partial",
 			"timed_out",
 			"failed_kinds",
+			"truncated",
+			"truncated_kinds",
 		},
 	}
 	// CommandresourceindexitemMap is a map indexing the attribute names of
@@ -105,6 +111,12 @@ func ValidateCommandresourceindexView(result *CommandresourceindexView) (err err
 	}
 	if result.FailedKinds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("failed_kinds", "result"))
+	}
+	if result.Truncated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("truncated", "result"))
+	}
+	if result.TruncatedKinds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("truncated_kinds", "result"))
 	}
 	if result.SchemaVersion != nil {
 		if !(*result.SchemaVersion == "1") {

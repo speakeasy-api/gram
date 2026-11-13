@@ -29,9 +29,10 @@ import (
 )
 
 const (
-	indexBudget  = 250 * time.Millisecond
-	perKindLimit = 20
-	globalLimit  = 40
+	indexBudget       = 250 * time.Millisecond
+	perKindLimit      = 20
+	perKindQueryLimit = perKindLimit + 1
+	globalLimit       = 40
 )
 
 var allKinds = []string{"environment", "gateway", "plugin", "rule"}
@@ -73,10 +74,11 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 type adapterResult struct {
-	kind     string
-	items    []*gen.Commandresourceindexitem
-	err      error
-	duration time.Duration
+	kind      string
+	items     []*gen.Commandresourceindexitem
+	truncated bool
+	err       error
+	duration  time.Duration
 }
 
 type adapter struct {
@@ -112,11 +114,16 @@ func (s *Service) Search(ctx context.Context, payload *gen.SearchPayload) (*gen.
 		go func() {
 			started := time.Now()
 			items, err := a.run(indexCtx)
-			results <- adapterResult{kind: a.kind, items: items, err: err, duration: time.Since(started)}
+			truncated := len(items) > perKindLimit
+			if truncated {
+				items = items[:perKindLimit]
+			}
+			results <- adapterResult{kind: a.kind, items: items, truncated: truncated, err: err, duration: time.Since(started)}
 		}()
 	}
 
 	items := make([]*gen.Commandresourceindexitem, 0)
+	truncatedSet := make(map[string]struct{}, len(adapters))
 	pending := make(map[string]struct{}, len(adapters))
 	for _, a := range adapters {
 		pending[a.kind] = struct{}{}
@@ -129,18 +136,20 @@ func (s *Service) Search(ctx context.Context, payload *gen.SearchPayload) (*gen.
 			attr.SlogCommandSearchFailed(result.err != nil),
 		)
 		if result.err != nil {
-			if indexCtx.Err() != nil {
+			if deadlineInterruptedAdapter(indexCtx.Err(), result.err) {
 				return nil
 			}
 			delete(pending, result.kind)
-			return oops.E(oops.CodeUnavailable, result.err, "resource index could not be completed").LogError(ctx, s.logger)
+			return oops.E(oops.CodeUnavailable, nil, "resource search adapter failed")
 		}
 		delete(pending, result.kind)
+		if result.truncated {
+			truncatedSet[result.kind] = struct{}{}
+		}
 		items = append(items, result.items...)
 		return nil
 	}
 
-	timedOut := false
 collect:
 	for len(pending) > 0 {
 		select {
@@ -156,11 +165,14 @@ collect:
 						return nil, err
 					}
 				default:
-					timedOut = len(pending) > 0
 					break collect
 				}
 			}
 		}
+	}
+	timedOut := errors.Is(indexCtx.Err(), context.DeadlineExceeded) && len(pending) > 0
+	if len(pending) > 0 && !timedOut {
+		return nil, oops.E(oops.CodeUnavailable, nil, "resource search canceled")
 	}
 	failedKinds := make([]string, 0, len(pending))
 	for kind := range pending {
@@ -183,8 +195,17 @@ collect:
 		return a.ID < b.ID
 	})
 	if len(items) > globalLimit {
+		for _, item := range items[globalLimit:] {
+			truncatedSet[item.Kind] = struct{}{}
+		}
 		items = items[:globalLimit]
 	}
+	truncatedKinds := make([]string, 0, len(truncatedSet))
+	for kind := range truncatedSet {
+		truncatedKinds = append(truncatedKinds, kind)
+	}
+	sort.Strings(truncatedKinds)
+	truncated := len(truncatedKinds) > 0
 	payloadEstimate := 0
 	for _, item := range items {
 		payloadEstimate += len(item.Kind) + len(item.ID) + len(item.Name) + len(item.RouteSelector) + 32
@@ -201,11 +222,11 @@ collect:
 		attr.SlogCommandSearchTimedOut(timedOut),
 		attr.SlogCommandSearchFailedKindCount(len(failedKinds)),
 	)
-	return &gen.Commandresourceindex{SchemaVersion: "1", GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano), Items: items, Partial: partial, TimedOut: timedOut, FailedKinds: failedKinds}, nil
+	return &gen.Commandresourceindex{SchemaVersion: "1", GeneratedAt: time.Now().UTC().Format(time.RFC3339Nano), Items: items, Partial: partial, TimedOut: timedOut, FailedKinds: failedKinds, Truncated: truncated, TruncatedKinds: truncatedKinds}, nil
 }
 
 func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, allowed map[string]bool) []adapter {
-	limit := int32(perKindLimit)
+	limit := int32(perKindQueryLimit)
 	bounds := makePrefixBounds(searchQuery)
 	out := make([]adapter, 0, len(allKinds))
 	add := func(kind string, fn func(context.Context) ([]*gen.Commandresourceindexitem, error)) {
@@ -294,6 +315,11 @@ func (s *Service) authorizedKinds(ctx context.Context, organizationID string, pr
 		}
 	}
 	return result, nil
+}
+
+func deadlineInterruptedAdapter(ctxErr, adapterErr error) bool {
+	return errors.Is(ctxErr, context.DeadlineExceeded) &&
+		(errors.Is(adapterErr, context.Canceled) || errors.Is(adapterErr, context.DeadlineExceeded))
 }
 
 func compactKeywords(name string, aliases ...string) []string {

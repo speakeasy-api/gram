@@ -12,7 +12,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"unicode/utf8"
 
 	commandsearch "github.com/speakeasy-api/gram/server/gen/command_search"
 	commandsearchviews "github.com/speakeasy-api/gram/server/gen/command_search/views"
@@ -47,12 +46,6 @@ func DecodeSearchRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		q = r.URL.Query().Get("q")
 		if q == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("q", "query string"))
-		}
-		if utf8.RuneCountInString(q) < 2 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("q", q, utf8.RuneCountInString(q), 2, true))
-		}
-		if utf8.RuneCountInString(q) > 128 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("q", q, utf8.RuneCountInString(q), 128, false))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {

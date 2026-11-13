@@ -19,7 +19,7 @@ var _ = Service("commandSearch", func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
-			Attribute("q", String, "Case-insensitive resource name or alias query.", func() { MinLength(2); MaxLength(128) })
+			Attribute("q", String, "Case-insensitive resource name or alias query. Whitespace is trimmed and the normalized value must contain 2–128 characters.")
 			Required("q")
 		})
 		Result(ResourceIndexResult)
@@ -44,7 +44,9 @@ var ResourceIndexResult = ResultType("CommandResourceIndex", func() {
 	Attribute("partial", Boolean, "Whether the deadline prevented one or more resource kinds from completing.")
 	Attribute("timed_out", Boolean, "Whether the shared search deadline expired.")
 	Attribute("failed_kinds", ArrayOf(String), "Resource kinds that did not finish before the deadline.")
-	Required("schema_version", "generated_at", "items", "partial", "timed_out", "failed_kinds")
+	Attribute("truncated", Boolean, "Whether per-kind or global result caps omitted matching resources.")
+	Attribute("truncated_kinds", ArrayOf(String), "Resource kinds with matching resources omitted by a result cap.")
+	Required("schema_version", "generated_at", "items", "partial", "timed_out", "failed_kinds", "truncated", "truncated_kinds")
 })
 
 var ResourceIndexItem = ResultType("CommandResourceIndexItem", func() {

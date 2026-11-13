@@ -57,6 +57,10 @@ type Commandresourceindex struct {
 	TimedOut bool
 	// Resource kinds that did not finish before the deadline.
 	FailedKinds []string
+	// Whether per-kind or global result caps omitted matching resources.
+	Truncated bool
+	// Resource kinds with matching resources omitted by a result cap.
+	TruncatedKinds []string
 }
 
 type Commandresourceindexitem struct {
@@ -74,7 +78,8 @@ type SearchPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// Case-insensitive resource name or alias query.
+	// Case-insensitive resource name or alias query. Whitespace is trimmed and the
+	// normalized value must contain 2–128 characters.
 	Q string
 }
 
@@ -158,6 +163,9 @@ func newCommandresourceindex(vres *commandsearchviews.CommandresourceindexView) 
 	if vres.TimedOut != nil {
 		res.TimedOut = *vres.TimedOut
 	}
+	if vres.Truncated != nil {
+		res.Truncated = *vres.Truncated
+	}
 	if vres.Items != nil {
 		res.Items = make([]*Commandresourceindexitem, len(vres.Items))
 		for i, val := range vres.Items {
@@ -174,6 +182,12 @@ func newCommandresourceindex(vres *commandsearchviews.CommandresourceindexView) 
 			res.FailedKinds[i] = val
 		}
 	}
+	if vres.TruncatedKinds != nil {
+		res.TruncatedKinds = make([]string, len(vres.TruncatedKinds))
+		for i, val := range vres.TruncatedKinds {
+			res.TruncatedKinds[i] = val
+		}
+	}
 	return res
 }
 
@@ -185,6 +199,7 @@ func newCommandresourceindexView(res *Commandresourceindex) *commandsearchviews.
 		GeneratedAt:   &res.GeneratedAt,
 		Partial:       &res.Partial,
 		TimedOut:      &res.TimedOut,
+		Truncated:     &res.Truncated,
 	}
 	if res.Items != nil {
 		vres.Items = make([]*commandsearchviews.CommandresourceindexitemView, len(res.Items))
@@ -205,6 +220,14 @@ func newCommandresourceindexView(res *Commandresourceindex) *commandsearchviews.
 		}
 	} else {
 		vres.FailedKinds = []string{}
+	}
+	if res.TruncatedKinds != nil {
+		vres.TruncatedKinds = make([]string, len(res.TruncatedKinds))
+		for i, val := range res.TruncatedKinds {
+			vres.TruncatedKinds[i] = val
+		}
+	} else {
+		vres.TruncatedKinds = []string{}
 	}
 	return vres
 }

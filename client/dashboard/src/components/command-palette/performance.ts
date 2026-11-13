@@ -22,14 +22,15 @@ export interface CommandPalettePerformancePayload {
   ranking_duration_ms: number;
   ranking_max_duration_ms: number;
   inventory_call_baseline: 17;
-  searched_resource_kind_count: 4;
-  net_eliminated_inventory_call_baseline: 3;
-  remaining_inventory_call_baseline: 14;
+  searched_resource_kind_count: number;
+  net_eliminated_inventory_call_baseline: number;
+  remaining_inventory_call_baseline: number;
   search_request_count: number;
   modeled_no_fallback_call_count: number;
   search_candidate_count: number;
   search_complete: boolean;
   search_truncated: boolean;
+  search_truncated_kind_count: number;
   search_payload_byte_bucket: ResourceSearchMetrics["payloadByteBucket"];
   time_to_search_ready_ms: number | null;
   parse_search_duration_ms: number | null;
@@ -52,6 +53,7 @@ interface Session {
   searchCandidateCount: number;
   searchComplete: boolean;
   searchTruncated: boolean;
+  searchTruncatedKindCount: number;
   searchPayloadByteBucket: ResourceSearchMetrics["payloadByteBucket"];
   searchReadyAt: number | null;
   parseSearchDuration: number | null;
@@ -95,6 +97,7 @@ export class CommandPalettePerformanceTracker {
       searchCandidateCount: 0,
       searchComplete: false,
       searchTruncated: false,
+      searchTruncatedKindCount: 0,
       searchPayloadByteBucket: null,
       searchReadyAt: null,
       parseSearchDuration: null,
@@ -130,12 +133,14 @@ export class CommandPalettePerformanceTracker {
       metrics.searchRequestCount,
     );
     session.fallbackUsed ||= metrics.state === "fallback";
-    // Partial searches are classified as fallback but still contain useful
-    // successful-kind rows and parse measurements.
-    if (metrics.state !== "ready" && metrics.candidateCount === 0) return;
+    // Cached rows can coexist with an issued refetch. Only a settled response
+    // may finalize result metadata, including valid zero-candidate outcomes.
+    if (metrics.searchInFlight) return;
+    if (metrics.state !== "ready" && metrics.state !== "fallback") return;
     session.searchCandidateCount = metrics.candidateCount;
     session.searchComplete = metrics.complete;
     session.searchTruncated = metrics.truncated;
+    session.searchTruncatedKindCount = metrics.truncatedKindCount;
     session.searchPayloadByteBucket = metrics.payloadByteBucket;
     session.parseSearchDuration = metrics.parseSearchDurationMs;
     session.searchReadyAt ??= now;
@@ -187,14 +192,16 @@ export class CommandPalettePerformanceTracker {
       // needs its shared inventory, so three list requests are net eliminated.
       // This is an explicit no-fallback model, not a measured total.
       inventory_call_baseline: 17,
-      searched_resource_kind_count: 4,
-      net_eliminated_inventory_call_baseline: 3,
-      remaining_inventory_call_baseline: 14,
+      searched_resource_kind_count: scope === "project" ? 4 : 0,
+      net_eliminated_inventory_call_baseline: scope === "project" ? 3 : 0,
+      remaining_inventory_call_baseline: scope === "project" ? 14 : 17,
       search_request_count: session.searchRequestCount,
-      modeled_no_fallback_call_count: 14 + session.searchRequestCount,
+      modeled_no_fallback_call_count:
+        (scope === "project" ? 14 : 17) + session.searchRequestCount,
       search_candidate_count: session.searchCandidateCount,
       search_complete: session.searchComplete,
       search_truncated: session.searchTruncated,
+      search_truncated_kind_count: session.searchTruncatedKindCount,
       search_payload_byte_bucket: session.searchPayloadByteBucket,
       time_to_search_ready_ms:
         session.searchReadyAt === null
