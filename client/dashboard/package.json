@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.147.0",
+  "version": "0.146.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -61,9 +61,9 @@
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-query": "catalog:",
-    "@tanstack/react-virtual": "^3.14.24",
+    "@tanstack/react-virtual": "^3.14.26",
     "@xstate/react": "^6.1.0",
-    "@xyflow/react": "^12.12.1",
+    "@xyflow/react": "^12.11.1",
     "ai": "catalog:",
     "assistant-stream": "^0.3.55",
     "canvas-confetti": "^1.9.4",
