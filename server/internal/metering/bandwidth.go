@@ -96,9 +96,14 @@ func AttributeMCPBandwidthServer(ctx context.Context, serverType MCPServerType, 
 // headers, HTTP framing, unread request bytes, and nested gateway fan-out.
 //
 // Ordering invariant: install this inside recovery and after middleware that
-// enriches the request context without consuming request bodies or transforming
-// successful response bodies. Panics and outer-middleware rejections are
-// intentionally outside the billable exchange.
+// enriches the request context without consuming request bodies or buffering,
+// truncating, or replacing successful response bodies. Response compression
+// belongs outside this middleware, so egress is metered before compression.
+// The request body limit also sits outside it: when a body overflows during a
+// read, the meter has counted the handler's discarded response rather than the
+// 413 that replaces it.
+// Panics and outer-middleware rejections are intentionally outside the billable
+// exchange.
 func NewMCPBandwidthMiddleware(logger *slog.Logger, publisher gcp.Publisher[*meteringv1.MeterReading]) func(http.Handler) http.Handler {
 	logger = logger.With(attr.SlogComponent("mcp-bandwidth-meter"))
 	return func(next http.Handler) http.Handler {
