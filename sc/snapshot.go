@@ -348,9 +348,14 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 	case raw.Version != m.version && m.migrate == nil:
 		return zero, nil, fmt.Errorf("%w: snapshot version %d, chart version %d", ErrVersionMismatch, raw.Version, m.version)
 	case raw.Version != m.version:
+		// A stored snapshot may name only leaf states; restoring it
+		// activates their ancestors too, so those count as active before.
 		previously = map[string]bool{}
 		for _, name := range raw.Active {
 			previously[name] = true
+			for n := m.names[name]; n != nil; n = n.parent {
+				previously[n.name] = true
+			}
 		}
 
 		migrated, err := m.migrate(raw)
@@ -471,9 +476,10 @@ func (r *run[S, C]) checkConfig() error {
 // StartIn returns a new instance with context c that is already in the
 // given states at now, as if it had arrived there. states names leaf states,
 // one per active region; their ancestors become active too. No entry action
-// runs, but the timers and services of every active state start, so the
-// returned effects are the ones a driver must carry out to keep the instance
-// going.
+// runs, but the timers and services of every active state start, and an
+// Always transition whose guard holds is taken as it would be on arrival, so
+// the returned effects are the ones a driver must carry out to keep the
+// instance going.
 //
 // It is for tests that need an instance in a particular state, and for
 // adopting work that is already under way, such as an existing row whose
@@ -543,6 +549,7 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 			r.entered = append(r.entered, n)
 		}
 		r.startServices()
+		r.settle()
 		r.fireDue()
 	}
 
@@ -552,8 +559,8 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 // restoreOutstanding loads the timers and service runs that still belong to
 // an active state and cancels the rest. When the snapshot was migrated,
 // previously is non-nil and names the states active before the migration;
-// states the migration made active get the timers and services that entering
-// them would have started.
+// states the migration made active get the timers, services and budget that
+// entering them would have started.
 func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bool) {
 	for _, rt := range raw.Timers {
 		n, ok := r.m.names[rt.State]
@@ -602,6 +609,10 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 	for _, n := range r.active() {
 		if previously[n.name] {
 			continue
+		}
+
+		if _, ok := r.scopes[n]; !ok && n.budget > 0 {
+			r.scopes[n] = r.now.Add(n.budget)
 		}
 
 		for _, t := range n.transitions {

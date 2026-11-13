@@ -59,8 +59,12 @@ func WithHooks[S comparable, C any](h *Hooks[S, C]) RunOption {
 // default is [time.Now]. Drivers still wait for timers with the time
 // package, so under a clock that does not follow real time, timers only fire
 // when an event arrives after their due time, or when the driver is asked
-// to advance.
+// to advance. WithClock panics when now is nil.
 func WithClock(now func() time.Time) RunOption {
+	if now == nil {
+		panic("sc: WithClock: the clock is nil")
+	}
+
 	return func(o *runOptions) { o.now = now }
 }
 

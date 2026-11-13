@@ -38,18 +38,33 @@ type Binder[S comparable, C any] struct {
 // its implementation, which is how a test substitutes a fake. R must be the
 // result type the chart declared.
 func (b *Binder[S, C]) Service[R any](name string, fn func(context.Context, C) (R, error)) {
+	if fn == nil {
+		b.errs = append(b.errs, fmt.Errorf("service %q is bound to a nil function", name))
+		return
+	}
+
 	b.bind(name, reflect.TypeFor[Done[R]](), adaptService(fn))
 }
 
 // Stream binds the stream service named name to fn, as Service does for
 // a service that returns one result.
 func (b *Binder[S, C]) Stream(name string, fn func(context.Context, C) iter.Seq2[any, error]) {
+	if fn == nil {
+		b.errs = append(b.errs, fmt.Errorf("stream service %q is bound to a nil function", name))
+		return
+	}
+
 	b.bind(name, reflect.TypeFor[Done[struct{}]](), adaptStream(fn))
 }
 
 // Action binds the chart action named name to fn, replacing any
 // implementation it had.
 func (b *Binder[S, C]) Action(name string, fn func(ctx context.Context, c C, mv Move[S])) {
+	if fn == nil {
+		b.errs = append(b.errs, fmt.Errorf("chart action %q is bound to a nil function", name))
+		return
+	}
+
 	if _, ok := b.m.actions[name]; !ok {
 		b.errs = append(b.errs, fmt.Errorf("chart action %q is not declared", name))
 		return
@@ -65,6 +80,11 @@ func (b *Binder[S, C]) bind(name string, doneType reflect.Type, run func(context
 // Resource binds the resource named name to its acquire and release
 // functions, replacing any it had. R must be the type the chart declared.
 func (b *Binder[S, C]) Resource[R any](name string, acquire func(context.Context, C) (R, error), release func(ctx context.Context, value R, why Leave[S])) {
+	if acquire == nil || release == nil {
+		b.errs = append(b.errs, fmt.Errorf("resource %q is bound to a nil function", name))
+		return
+	}
+
 	if b.bindKind("resource", true, name, reflect.TypeFor[Acquired[R]](), adaptAcquire(acquire)) {
 		b.releases[name] = adaptRelease(release)
 	}
@@ -101,8 +121,8 @@ func (b *Binder[S, C]) bindKind(kind string, resource bool, name string, doneTyp
 // The copy shares the chart, so snapshots and effects of either work with
 // the other. Binding the same machine several ways, for example once per
 // tenant with that tenant's credentials or once with fakes in a test, is
-// cheap. Bind returns every binding error at once: an undeclared name, or a
-// result type that does not match the declaration.
+// cheap. Bind returns every binding error at once: an undeclared name, a
+// nil implementation, or a result type that does not match the declaration.
 func (m *Machine[S, C]) Bind(def func(b *Binder[S, C])) (*Machine[S, C], error) {
 	b := &Binder[S, C]{
 		m:        m,

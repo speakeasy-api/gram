@@ -276,7 +276,27 @@ func TestAPanickingServiceFailsInsteadOfCrashing(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m := workChart(t, func(context.Context, counter) (int, error) { panic("boom") })
 
-		inst, err := m.Instance(t.Context(), counter{})
+		// The chart ends the same way whether the service succeeds or
+		// fails, so the failure itself is read from the hooks.
+		var (
+			mu     sync.Mutex
+			failed error
+		)
+		hooks := &sc.Hooks[string, counter]{
+			Transition:    nil,
+			Ignored:       nil,
+			EffectStarted: nil,
+			EffectFinished: func(_ context.Context, e sc.Effect[counter], _ time.Duration, err error) {
+				if e.Kind == sc.EffectStartInvocation {
+					mu.Lock()
+					defer mu.Unlock()
+
+					failed = err
+				}
+			},
+		}
+
+		inst, err := m.Instance(t.Context(), counter{}, sc.WithHooks(hooks))
 		require.NoError(t, err)
 		defer inst.Close()
 
@@ -286,6 +306,12 @@ func TestAPanickingServiceFailsInsteadOfCrashing(t *testing.T) {
 		done, err := inst.Await(t.Context(), func(s sc.Snapshot[string, counter]) bool { return s.Done() })
 		require.NoError(t, err)
 		require.True(t, done.Done())
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		require.ErrorIs(t, failed, sc.ErrPanicked)
+		require.ErrorContains(t, failed, "boom")
 	})
 }
 

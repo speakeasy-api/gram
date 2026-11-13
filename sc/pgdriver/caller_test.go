@@ -136,6 +136,9 @@ func (s *capturingSink) Enqueue(_ context.Context, _ pgx.Tx, _ string, _ time.Ti
 	return nil
 }
 
+// The test checks the stored state only: its sink keeps effects in memory,
+// outside the transaction. TestSendTxEffectsRollBackWithTheCallersTransaction
+// covers the effects, with the built-in outbox.
 func TestSendTxCommitsWithTheCallersTransactionAndRollsBackWithIt(t *testing.T) {
 	t.Parallel()
 
@@ -233,8 +236,9 @@ func TestLoadShowsAnExpiryNothingHasProcessed(t *testing.T) {
 	d := mustNew(t, m, pgdriver.WithStore[string, invitation](store), pgdriver.WithSink[invitation](sink))
 
 	// expiresIn is short so the test can pass it; long enough that the
-	// invitation is still pending when created.
-	const expiresIn = 300 * time.Millisecond
+	// invitation is still pending when created, even when the database's
+	// clock and this process's differ a little.
+	const expiresIn = time.Second
 
 	_, err := d.Create(t.Context(), "i1", invitation{ExpiresAt: time.Now().Add(expiresIn)})
 	require.NoError(t, err)

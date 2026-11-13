@@ -351,8 +351,8 @@ type edge struct {
 // time.
 //
 // Two snapshots count as the same state when their active states, history,
-// outstanding services, the time left on each pending timer, and context
-// are equal, so the context must marshal to JSON and must take finitely many
+// outstanding services, the time left on each pending timer and Within
+// budget, and context are equal, so the context must marshal to JSON and must take finitely many
 // values for the exploration to end. A counter that only grows has to be
 // capped by a guard, and stored times need a Key.
 //
@@ -392,6 +392,10 @@ func (m *Machine[S, C]) Explore(c C, x Exploration[S, C]) (Report[S, C], error) 
 		if _, ok := seen[startKey]; ok {
 			continue
 		}
+		if len(found) >= limit {
+			report.Truncated = true
+			continue
+		}
 
 		seen[startKey] = len(found)
 		found = append(found, explored[S, C]{snap: start, now: begin, key: startKey, parent: -1, event: Timed{At: begin, Event: nil}, initial: initial})
@@ -411,10 +415,21 @@ func (m *Machine[S, C]) Explore(c C, x Exploration[S, C]) (Report[S, C], error) 
 		return Trace[S, C]{Start: begin, Initial: found[at].initial, Events: events, Snapshot: found[i].snap}
 	}
 
-	violate := func(name string, tr Trace[S, C]) {
+	// violate reports the first violation of each invariant, and builds a
+	// trace only for that one.
+	violate := func(name string, tr func() Trace[S, C]) {
 		if !broken[name] {
 			broken[name] = true
-			report.Violations = append(report.Violations, Violation[S, C]{Invariant: name, Trace: tr})
+			report.Violations = append(report.Violations, Violation[S, C]{Invariant: name, Trace: tr()})
+		}
+	}
+
+	// through is the trace to found[i] followed by one more step.
+	through := func(i int, ev Timed, next Snapshot[S, C]) func() Trace[S, C] {
+		return func() Trace[S, C] {
+			tr := trace(i)
+
+			return Trace[S, C]{Start: begin, Initial: tr.Initial, Events: append(tr.Events, ev), Snapshot: next}
 		}
 	}
 
@@ -425,7 +440,7 @@ func (m *Machine[S, C]) Explore(c C, x Exploration[S, C]) (Report[S, C], error) 
 
 		for _, inv := range x.Invariants {
 			if !inv.holds(found[i].snap, found[i].now) {
-				violate(inv.Name, trace(i))
+				violate(inv.Name, func() Trace[S, C] { return trace(i) })
 			}
 		}
 	}
@@ -442,7 +457,8 @@ func (m *Machine[S, C]) Explore(c C, x Exploration[S, C]) (Report[S, C], error) 
 
 		moved := false
 
-		for _, ev := range m.candidates(from.snap, from.now, x) {
+		for _, cand := range m.candidates(from.snap, from.now, x) {
+			ev := cand.Timed
 			next, effects, passed := m.transition(from.snap, ev.Event, ev.At)
 			for _, n := range passed {
 				report.reached[n.id] = true
@@ -460,16 +476,14 @@ func (m *Machine[S, C]) Explore(c C, x Exploration[S, C]) (Report[S, C], error) 
 					return report, err
 				}
 				if againKey != key || !sameEffects(effects, againEffects) {
-					tr := trace(i)
-					violate("deterministic", Trace[S, C]{Start: begin, Initial: tr.Initial, Events: append(tr.Events, ev), Snapshot: next})
+					violate("deterministic", through(i, ev, next))
 				}
 			}
 			moved = moved || next.seq != from.snap.seq
 
 			for _, inv := range x.Steps {
 				if !inv.Holds(Step[S, C]{At: ev.At, From: from.snap, Event: ev.Event, To: next, Effects: effects}) {
-					tr := trace(i)
-					violate(inv.Name, Trace[S, C]{Start: begin, Initial: tr.Initial, Events: append(tr.Events, ev), Snapshot: next})
+					violate(inv.Name, through(i, ev, next))
 				}
 			}
 
@@ -482,8 +496,7 @@ func (m *Machine[S, C]) Explore(c C, x Exploration[S, C]) (Report[S, C], error) 
 						return report, err
 					}
 					if !same {
-						tr := trace(i)
-						violate("key", Trace[S, C]{Start: begin, Initial: tr.Initial, Events: append(tr.Events, ev), Snapshot: next})
+						violate("key", through(i, ev, next))
 					}
 				}
 
@@ -558,7 +571,7 @@ func (m *Machine[S, C]) Explore(c C, x Exploration[S, C]) (Report[S, C], error) 
 			// cannot reach the goal has a shortest trace.
 			for i := range found {
 				if inScope[i] && !reaches[i] {
-					violate("goal: "+goal.Name, trace(i))
+					violate("goal: "+goal.Name, func() Trace[S, C] { return trace(i) })
 					break
 				}
 			}
@@ -582,17 +595,30 @@ func sameEffects[C any](a, b []Effect[C]) bool {
 	})
 }
 
+// candidate is one thing the environment can do in a state.
+type candidate struct {
+	Timed
+
+	// label names the candidate by what it is rather than by a run ID, so
+	// two states that share a key name their candidates alike.
+	label string
+}
+
 // candidates lists everything the environment can do in snap at now: each
 // external event and service outcome now, each pending timer at its due
 // time, and each wait.
-func (m *Machine[S, C]) candidates(snap Snapshot[S, C], now time.Time, x Exploration[S, C]) []Timed {
-	events := make([]Timed, 0, len(x.Events)+len(snap.timers)+len(x.Waits))
-	for _, ev := range x.Events {
-		events = append(events, Timed{At: now, Event: ev})
+func (m *Machine[S, C]) candidates(snap Snapshot[S, C], now time.Time, x Exploration[S, C]) []candidate {
+	events := make([]candidate, 0, len(x.Events)+len(snap.timers)+len(x.Waits))
+	add := func(at time.Time, ev any, label string) {
+		events = append(events, candidate{Timed: Timed{At: at, Event: ev}, label: label})
+	}
+
+	for i, ev := range x.Events {
+		add(now, ev, fmt.Sprintf("event %d", i))
 	}
 
 	for _, t := range snap.timers {
-		events = append(events, Timed{At: later(now, t.due), Event: TimerFired{ID: t.id}})
+		add(later(now, t.due), TimerFired{ID: t.id}, fmt.Sprintf("timer %s.%d", m.nodes[t.state].name, t.index))
 	}
 
 	for _, inv := range snap.invocations {
@@ -601,21 +627,23 @@ func (m *Machine[S, C]) candidates(snap Snapshot[S, C], now time.Time, x Explora
 			continue
 		}
 
+		service := m.nodes[inv.state].name + "." + inv.name
+
 		// A service under a Within budget can only report before the
 		// deadline, and fails with the deadline at it.
 		deadline := m.serviceDeadline(snap, inv.state)
 		if deadline.IsZero() || now.Before(deadline) {
-			for _, outcome := range x.Outcomes[inv.name] {
-				events = append(events, Timed{At: now, Event: outcome(inv.id, now)})
+			for i, outcome := range x.Outcomes[inv.name] {
+				add(now, outcome(inv.id, now), fmt.Sprintf("service %s outcome %d", service, i))
 			}
 		}
 		if !deadline.IsZero() {
-			events = append(events, Timed{At: later(now, deadline), Event: Failed{ID: inv.id, Err: context.DeadlineExceeded}})
+			add(later(now, deadline), Failed{ID: inv.id, Err: context.DeadlineExceeded}, "service "+service+" deadline")
 		}
 	}
 
 	for _, d := range x.Waits {
-		events = append(events, Timed{At: now.Add(d), Event: nil})
+		add(now.Add(d), nil, "wait "+d.String())
 	}
 
 	return events
@@ -681,7 +709,9 @@ func sameSnapshot[S comparable, C any](a, b Snapshot[S, C]) bool {
 }
 
 // sameSuccessors reports whether two states that share a key lead, through
-// every candidate, to states that share keys too.
+// each candidate, to states that share a key too. Successors are matched by
+// candidate, so two states whose candidates lead to each other's successors
+// do not pass.
 func (m *Machine[S, C]) sameSuccessors(a Snapshot[S, C], aNow time.Time, b Snapshot[S, C], bNow time.Time, x Exploration[S, C]) (bool, error) {
 	keys := func(snap Snapshot[S, C], now time.Time) ([]string, error) {
 		var out []string
@@ -691,7 +721,7 @@ func (m *Machine[S, C]) sameSuccessors(a Snapshot[S, C], aNow time.Time, b Snaps
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, key)
+			out = append(out, ev.label+" -> "+key)
 		}
 		slices.Sort(out)
 
@@ -739,6 +769,10 @@ type stateIdentity struct {
 	// Services lists the services that have not finished.
 	Services []string `json:"services"`
 
+	// Budgets lists the active states with a Within budget, with the time
+	// each has left, which decides when the services inside them fail.
+	Budgets []string `json:"budgets"`
+
 	// Context is the chart's extended state, or what the exploration's Key
 	// projects it onto.
 	Context any `json:"context"`
@@ -756,6 +790,7 @@ func (m *Machine[S, C]) stateKey(snap Snapshot[S, C], now time.Time, key func(C,
 		History:  make(map[string][]string, len(snap.history)),
 		Timers:   make([]string, 0, len(snap.timers)),
 		Services: make([]string, 0, len(snap.invocations)),
+		Budgets:  make([]string, 0, len(snap.scopes)),
 		Context:  ctx,
 	}
 
@@ -784,6 +819,12 @@ func (m *Machine[S, C]) stateKey(snap Snapshot[S, C], now time.Time, key func(C,
 		id.Services = append(id.Services, m.nodes[inv.state].name+"."+inv.name+held)
 	}
 	slices.Sort(id.Services)
+
+	// A budget that has run out behaves the same however long ago it did.
+	for state, deadline := range snap.scopes {
+		id.Budgets = append(id.Budgets, fmt.Sprintf("%s in %s", m.nodes[state].name, max(deadline.Sub(now), 0)))
+	}
+	slices.Sort(id.Budgets)
 
 	data, err := json.Marshal(id)
 	if err != nil {

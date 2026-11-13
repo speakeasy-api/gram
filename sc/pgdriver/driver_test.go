@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -106,8 +107,8 @@ type order struct {
 
 // retryDelay is how long the test chart waits before charging again. It is
 // short so tests that wait for the timer stay fast, and long enough that a
-// test can observe the waiting state first.
-const retryDelay = 300 * time.Millisecond
+// test on a slow machine can observe the waiting state first.
+const retryDelay = time.Second
 
 var errCardDeclined = errors.New("card declined")
 
@@ -239,6 +240,38 @@ func TestSendPersistsStateAndWorkerCarriesOutEffects(t *testing.T) {
 
 	require.Equal(t, []string{"announce [book] [book]", "audit", "charge", "ship rcpt-book"}, rec.list())
 	require.Zero(t, outboxSize(t, "o1"))
+}
+
+func TestSendTxEffectsRollBackWithTheCallersTransaction(t *testing.T) {
+	t.Parallel()
+
+	rec := &recorder{mu: sync.Mutex{}, calls: nil}
+	d := newDriver(t, rec, func(context.Context, order) (string, error) { return "rcpt", nil })
+
+	_, err := d.Create(t.Context(), "o1", order{})
+	require.NoError(t, err)
+	before := outboxSize(t, "o1")
+
+	errAborted := errors.New("caller aborted")
+	err = pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
+		step, err := d.SendTx(t.Context(), tx, "o1", submit{Items: []string{"book"}})
+		require.NoError(t, err)
+		require.True(t, step.Accepted())
+
+		return errAborted
+	})
+	require.ErrorIs(t, err, errAborted)
+	require.Equal(t, before, outboxSize(t, "o1"))
+
+	err = pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
+		if _, err := d.SendTx(t.Context(), tx, "o1", submit{Items: []string{"book"}}); err != nil {
+			return fmt.Errorf("submit: %w", err)
+		}
+
+		return nil
+	})
+	require.NoError(t, err)
+	require.Greater(t, outboxSize(t, "o1"), before)
 }
 
 func TestFailedServiceIsRetriedWhenItsTimerIsDue(t *testing.T) {

@@ -292,7 +292,9 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 
 			// The new snapshot is published once its effects have been
 			// carried out, so a reader never sees a state whose actions
-			// have not run.
+			// are still to run. It is published even when an action
+			// failed: the transition was taken, and the error goes to
+			// the sender.
 			err := apply(effects)
 			a.publish(next)
 			if env.reply != nil {

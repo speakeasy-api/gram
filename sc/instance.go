@@ -64,7 +64,8 @@ type Instance[S comparable, C any] struct {
 	wakeups map[string]*time.Timer
 
 	// unsettled counts, per settle token, the service runs still going,
-	// guarded by mu.
+	// guarded by mu. A token's entry is removed when its count reaches
+	// zero.
 	unsettled map[uint64]int
 
 	// lastToken is the last settle token handed out, guarded by mu.
@@ -185,7 +186,11 @@ func (i *Instance[S, C]) Send(ctx context.Context, ev any) (Step[S, C], error) {
 	select {
 	case <-i.turn:
 	case <-ctx.Done():
-		return Step[S, C]{At: time.Time{}, From: i.Snapshot(), Event: ev, To: i.Snapshot(), Effects: nil}, fmt.Errorf("send to instance: %w", context.Cause(ctx))
+		// One read serves both ends of the step, so a step another send
+		// publishes meanwhile cannot make this event look accepted.
+		snap := i.Snapshot()
+
+		return Step[S, C]{At: time.Time{}, From: snap, Event: ev, To: snap, Effects: nil}, fmt.Errorf("send to instance: %w", context.Cause(ctx))
 	}
 	defer func() { i.turn <- struct{}{} }()
 
@@ -198,33 +203,31 @@ func (i *Instance[S, C]) Send(ctx context.Context, ev any) (Step[S, C], error) {
 // caller, such as one pass of a poll loop, that must not move on while the
 // work it caused is still going. ctx bounds the wait. A service that never
 // finishes, such as a stream, keeps it waiting until ctx ends.
+//
+// An action's error does not cut the wait short: the transition was taken
+// and its services started, so they are settled first and the error is
+// returned with the step afterwards.
 func (i *Instance[S, C]) SendAndSettle(ctx context.Context, ev any) (Step[S, C], error) {
 	i.mu.Lock()
 	i.lastToken++
 	token := i.lastToken
 	i.mu.Unlock()
 
-	step, err := i.Send(context.WithValue(ctx, settleToken{}, token), ev)
-	if err != nil {
-		return step, err
-	}
+	step, sendErr := i.Send(context.WithValue(ctx, settleToken{}, token), ev)
 
 	for {
 		i.mu.Lock()
 		pending, ended := i.unsettled[token], i.ended
-		if pending == 0 {
-			delete(i.unsettled, token)
-		}
 		i.mu.Unlock()
 
 		if pending == 0 {
-			return step, nil
+			return step, sendErr
 		}
 
 		select {
 		case <-ended:
 		case <-ctx.Done():
-			return step, fmt.Errorf("settle instance: %w", context.Cause(ctx))
+			return step, errors.Join(sendErr, fmt.Errorf("settle instance: %w", context.Cause(ctx)))
 		}
 	}
 }
@@ -327,7 +330,9 @@ func (i *Instance[S, C]) process(ctx context.Context, ev any) (Step[S, C], error
 	err := i.apply(ctx, effects)
 
 	// The new snapshot is published once its effects have been carried
-	// out, so a reader never sees a state whose actions have not run.
+	// out, so a reader never sees a state whose actions are still to run.
+	// It is published even when an action failed: the transition was
+	// taken, and the error goes to the sender.
 	i.mu.Lock()
 	if next.seq != from.seq {
 		i.snap = next
@@ -394,21 +399,6 @@ func (i *Instance[S, C]) startService(ctx context.Context, e Effect[C]) {
 	token, _ := ctx.Value(settleToken{}).(uint64)
 	run := serviceRun{stop: stop, cancel: cancel, token: token, done: make(chan struct{})}
 
-	i.mu.Lock()
-	if i.closed {
-		i.mu.Unlock()
-		cancel()
-		stop()
-		close(run.done)
-
-		return
-	}
-	i.running[e.ID] = run
-	if token != 0 {
-		i.unsettled[token]++
-	}
-	i.mu.Unlock()
-
 	deliver := func(evCtx context.Context, ev any) {
 		// An acquired value is kept before the chart hears of it. One
 		// that arrives after its state was left has been released, and
@@ -439,6 +429,25 @@ func (i *Instance[S, C]) startService(ctx context.Context, e Effect[C]) {
 		}
 	}
 
+	i.mu.Lock()
+	if i.closed {
+		i.mu.Unlock()
+		cancel()
+		stop()
+		close(run.done)
+
+		return
+	}
+	i.running[e.ID] = run
+	if token != 0 {
+		i.unsettled[token]++
+	}
+
+	// The goroutine is registered before mu is released: Close sets closed
+	// under mu and then waits for runs, so it either sees this run or this
+	// run sees closed.
+	defer i.mu.Unlock()
+
 	i.runs.Go(func() {
 		defer close(run.done)
 		defer stop()
@@ -449,7 +458,12 @@ func (i *Instance[S, C]) startService(ctx context.Context, e Effect[C]) {
 				delete(i.running, e.ID)
 			}
 			if token != 0 {
+				// A run its result started is counted before this one
+				// ends, so a count of zero means the token has settled.
 				i.unsettled[token]--
+				if i.unsettled[token] == 0 {
+					delete(i.unsettled, token)
+				}
 			}
 			close(i.ended)
 			i.ended = make(chan struct{})

@@ -217,7 +217,9 @@ ChargedAtMostOnce == Cardinality(Charged) <= 1
 \* An order is only paid if the card was charged.
 PaidMeansCharged == state = "paid" => Charged # {}
 
-\* A cancelled order never keeps the customer's money.
+\* A cancelled order never keeps the customer's money: a refund has been
+\* requested for every charge. Carrying the request out is the provider's
+\* side, which the model leaves to the refund being durable and idempotent.
 NoChargeKeptAfterCancel == state = "cancelled" => Charged \subseteq refunds
 
 \* Once submitted, an order ends up paid or cancelled.

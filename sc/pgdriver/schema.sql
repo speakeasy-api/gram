@@ -25,7 +25,10 @@ CREATE TABLE IF NOT EXISTS statechart_effects (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
--- Finds the next due effect for a machine.
+-- Finds the next due effect for a machine. Workers claim due effects in id
+-- order, so a deployment that lets a large backlog of due effects build up
+-- may want an index on (machine, id) as well; one with many pending timers
+-- and a short backlog is better served by this one.
 CREATE INDEX IF NOT EXISTS statechart_effects_due_idx ON statechart_effects (machine, run_after, id);
 
 -- Finds an instance's effects, to cancel one and to keep actions in order.

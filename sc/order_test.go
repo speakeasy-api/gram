@@ -380,10 +380,15 @@ func TestTransitionDoesNotModifyItsInput(t *testing.T) {
 	m := orderChart(t, chargeOK)
 	before, _ := submitted(t, m)
 
+	// note runs an assignment, so the step produces a new context.
+	after, _ := m.Transition(before, note{Text: "gift"}, epoch)
+	require.Equal(t, []string{"gift"}, after.Context.Notes)
+
 	_, _ = m.Transition(before, hold{}, epoch)
 
 	require.Equal(t, []state{paying, charging}, before.Active())
 	require.Equal(t, uint64(1), before.Seq())
+	require.Equal(t, order{Items: []string{"book"}, Attempts: 0, Receipt: "", Notes: nil}, before.Context)
 }
 
 func TestFoldReplaysEvents(t *testing.T) {

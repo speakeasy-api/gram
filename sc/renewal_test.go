@@ -54,7 +54,8 @@ const (
 	minRenewalBackoff = 30 * time.Second
 
 	// maxRenewalBackoff caps the wait. Doubling from 30 seconds reaches it
-	// after renewalBackoffSteps failures.
+	// after renewalBackoffSteps doublings, so it first applies to the
+	// failure after that many.
 	maxRenewalBackoff   = 30 * time.Minute
 	renewalBackoffSteps = 6
 )

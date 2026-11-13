@@ -17,6 +17,11 @@
 // Every attribute value comes from the chart: machine, state, action, service
 // and event names. None comes from the context, so cardinality is bounded by
 // the chart.
+//
+// The one value that does not come from the chart is the error of a failed
+// action or service, which is recorded on its span as OpenTelemetry records
+// any error, and never on a metric. An effect whose errors may carry data
+// that must not reach traces should return errors that leave it out.
 package sco11y
 
 import (

@@ -197,9 +197,17 @@ type StateBuilder[S comparable, C any] struct {
 // state is active. Transitions for the same event are tried in declaration
 // order and the first whose guard holds is taken. A descendant state's
 // transition takes priority over its ancestor's.
+//
+// Ev must be a concrete type: an event matches the transition whose Ev is
+// exactly its own type, so an interface type would match nothing and is a
+// declaration error.
 func (s *StateBuilder[S, C]) On[Ev any]() *Transition[S, C, Ev] {
 	t := newTransition[S, C, Ev](s.b, s.n, triggerEvent)
 	t.t.eventType = reflect.TypeFor[Ev]()
+
+	if t.t.eventType.Kind() == reflect.Interface {
+		s.b.errorf("state %q: event type %s is an interface; events are matched by their concrete type", s.n.name, t.t.eventType)
+	}
 
 	return t
 }
@@ -278,6 +286,10 @@ func (s *StateBuilder[S, C]) OnDone() *Transition[S, C, struct{}] {
 func (s *StateBuilder[S, C]) Within(d time.Duration) *StateBuilder[S, C] {
 	if d <= 0 {
 		s.b.errorf("state %q: budget %s is not positive", s.n.name, d)
+	}
+
+	if s.n.budget != 0 {
+		s.b.errorf("state %q: budget declared twice", s.n.name)
 	}
 
 	s.n.budget = d

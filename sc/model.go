@@ -258,8 +258,9 @@ type transition[S comparable, C any] struct {
 	// trigger is what causes the transition to be considered.
 	trigger triggerKind
 
-	// eventType is the dynamic type an event must have to match. It is nil
-	// for triggers that carry no event value.
+	// eventType is the concrete type an event must have to match: an
+	// event's dynamic type is compared with it exactly. It is nil for
+	// triggers that carry no event value.
 	eventType reflect.Type
 
 	// delay is the timer duration for triggerAfter.

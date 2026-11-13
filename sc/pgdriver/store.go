@@ -15,11 +15,17 @@ type Querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// Store is where a [Driver] keeps each instance's snapshot. Every method
-// runs inside the transaction the driver was given, so a store can keep the
+// Store is where a [Driver] keeps each instance's snapshot. The methods
+// that take a transaction run inside the one the driver was given, so a
+// store can keep the
 // snapshot on the domain's own row, copy the state into the columns that
 // queries and indexes read, and write an audit row in the same transaction
-// as the state change.
+// as the state change. Read runs outside any transaction, on the driver's
+// pool.
+//
+// A store decides how instances are keyed and scoped. One that serves
+// several tenants scopes every query by tenant itself; the driver passes
+// IDs through unchanged.
 //
 // The default store, [TableStore], keeps snapshots in the driver's own table.
 type Store[S comparable, C any] interface {
@@ -38,7 +44,10 @@ type Store[S comparable, C any] interface {
 	Insert(ctx context.Context, tx pgx.Tx, id string, snap sc.Snapshot[S, C], data []byte) error
 
 	// Update replaces an instance's snapshot after step, with the new
-	// snapshot encoded as data. It is called only for accepted steps.
+	// snapshot encoded as data. It is called whenever the stored snapshot
+	// changes: for an accepted step, and for an ignored one when restoring
+	// the snapshot produced effects, as after a migration. Check
+	// step.Accepted before treating the call as a state change.
 	Update(ctx context.Context, tx pgx.Tx, id string, step sc.Step[S, C], data []byte) error
 }
 

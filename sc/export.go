@@ -94,6 +94,10 @@ type InvokeDefinition struct {
 }
 
 // Definition returns a description of the chart for export.
+//
+// The format has no place for a condition on a single action, so a chart
+// action run conditionally, with RunIf, OnEntryIf or OnExitIf, is listed
+// like one that always runs.
 func (m *Machine[S, C]) Definition() *Definition {
 	return m.define(m.root)
 }

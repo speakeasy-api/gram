@@ -69,7 +69,8 @@ linters:
               desc: Use github.com/jackc/pgx/v5
             - pkg: "github.com/pkg/errors"
               desc: Should be replaced by standard lib errors package
-            # The core must stay free of I/O so that any driver can run it.
+            # The package is a library the server builds on, never the
+            # other way round.
             - pkg: "github.com/speakeasy-api/gram/server"
               desc: The statechart package must not depend on the server
     forbidigo:

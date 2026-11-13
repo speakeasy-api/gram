@@ -106,7 +106,11 @@ type Provider interface {
 	// that key the same outcome.
 	Charge(ctx context.Context, idempotencyKey string) (receipt string, err error)
 
-	// Refund returns the money taken by the charge with the given receipt.
+	// Refund asks for the money taken by the charge with the given
+	// receipt to be returned. It reports nothing: an action cannot fail a
+	// transition, and a driver may deliver it more than once, so the
+	// implementation must be idempotent per receipt and must keep trying
+	// until the provider has the request, for example through a queue.
 	Refund(ctx context.Context, receipt string)
 }
 

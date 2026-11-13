@@ -28,8 +28,8 @@
 // waits a fixed duration, [StateBuilder.Delay] a duration computed from the
 // context, and [StateBuilder.Deadline] until a time computed from it. Timers
 // that are due fire inside Transition before the event, earliest first and in
-// declaration order when due together, so their order never depends on a
-// driver. [Machine.Advance] fires them without an event, which is how a read
+// the order they started when due together, so their order never depends on
+// a driver. [Machine.Advance] fires them without an event, which is how a read
 // sees an expiry nothing has processed. [StateBuilder.Within] gives the
 // services inside a state one shared deadline.
 //

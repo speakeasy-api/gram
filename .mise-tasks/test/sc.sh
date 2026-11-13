@@ -5,11 +5,14 @@
 
 set -e
 
-# Flags alone, such as -count=1, still test every package.
+# Flags alone, such as -count=1, still test every package. A flag's value
+# that looks like a path, such as -coverprofile ./cover.out, is not a
+# package: only a directory or a ... pattern is.
 has_package=false
 for arg in "$@"; do
   case "$arg" in
-    . | ./* | */...) has_package=true ;;
+    . | */...) has_package=true ;;
+    ./*) if [ -d "$arg" ]; then has_package=true; fi ;;
   esac
 done
 if [ "$has_package" = false ]; then

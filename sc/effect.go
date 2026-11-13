@@ -292,6 +292,21 @@ func (e Effect[C]) Wait(now time.Time, random func() float64) time.Duration {
 // what a crashed service means the way it does for any other failure.
 var ErrPanicked = errors.New("action or service panicked")
 
+// sendPanic carries a panic raised by a driver's send callback through the
+// service that was producing events, so that Exec does not report it as the
+// service's own.
+type sendPanic struct{ value any }
+
+func guardedSend(send func(ev any), ev any) {
+	defer func() {
+		if p := recover(); p != nil {
+			panic(sendPanic{value: p})
+		}
+	}()
+
+	send(ev)
+}
+
 // ErrUnknownEffect is returned when an effect names an action or service the
 // chart does not declare, which happens when an effect outlives a chart
 // change.
@@ -302,9 +317,16 @@ var ErrUnknownEffect = errors.New("effect does not match the chart")
 // send with each event the service produces; the driver passes those events
 // to [Machine.Transition]. Timer and stop effects are the driver's to handle
 // and are rejected.
+//
+// A panic in the action or service comes back as [ErrPanicked]. A panic in
+// send is the driver's own and is not caught.
 func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)) (err error) {
 	defer func() {
 		if p := recover(); p != nil {
+			if own, ok := p.(sendPanic); ok {
+				panic(own.value)
+			}
+
 			err = fmt.Errorf("%w: %s %q in state %q: %v\n%s", ErrPanicked, e.Kind, e.Name, e.State, p, debug.Stack())
 		}
 	}()
@@ -329,7 +351,7 @@ func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)
 			}
 
 			for ev := range run(ctx, e.Context, e.ID) {
-				send(ev)
+				guardedSend(send, ev)
 				if ctx.Err() != nil {
 					break
 				}

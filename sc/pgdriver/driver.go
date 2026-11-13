@@ -97,15 +97,21 @@ type config struct {
 type Option func(*config)
 
 // WithPollInterval sets how long an idle worker waits before it looks for
-// due effects again.
+// due effects again. A duration that is not positive keeps the default, so
+// a worker never polls without a pause.
 func WithPollInterval(d time.Duration) Option {
-	return func(c *config) { c.poll = d }
+	return func(c *config) {
+		if d > 0 {
+			c.poll = d
+		}
+	}
 }
 
-// WithHooks makes the driver report to h. [Driver.Send] and
-// [Driver.Create] report a step after the transaction that saved it commits,
-// so a step that was rolled back is never reported. [Driver.SendTx] cannot
-// know when the caller commits; call [Driver.Report] after the commit.
+// WithHooks makes the driver report to h. [Driver.Send] reports a step
+// after the transaction that saved it commits, so a step that was rolled
+// back is never reported. [Driver.SendTx] cannot know when the caller
+// commits; call [Driver.Report] after the commit. Creating an instance is
+// not a step and is not reported.
 // New panics when h is for another state or context type.
 func WithHooks[S comparable, C any](h *sc.Hooks[S, C]) Option {
 	return func(c *config) { c.hooks = h }
@@ -275,7 +281,10 @@ func (d *Driver[S, C]) Send(ctx context.Context, id string, ev any) (sc.Step[S, 
 // SendTx applies one event to an instance inside tx, at the database's
 // time. It locks the instance through the store, so take any locks that
 // must come first before calling it. An accepted step's snapshot and effects
-// are written in tx and commit with it; an ignored one writes nothing. Use
+// are written in tx and commit with it; an ignored one writes nothing,
+// unless restoring the stored snapshot itself produced effects, as after a
+// migration, in which case the restored snapshot and those effects are
+// written. Use
 // [sc.Step.Accepted] to tell them apart, and call [Driver.Report] after the
 // commit to reach the hooks.
 func (d *Driver[S, C]) SendTx(ctx context.Context, tx pgx.Tx, id string, ev any) (sc.Step[S, C], error) {
@@ -415,6 +424,11 @@ func (d *Driver[S, C]) Work(ctx context.Context) error {
 // The actions of one instance run in the order the machine produced them.
 // Services and timers of the same instance are not held up by each other or
 // by a running action.
+//
+// Step keeps one pool connection for the claim while the effect runs, and
+// delivering a timer or a service's result takes a second one for its own
+// transaction. Size the pool above the number of workers calling Step, or
+// they can hold every connection while each waits for another.
 func (d *Driver[S, C]) Step(ctx context.Context) (bool, error) {
 	if !d.outbox {
 		return false, ErrNoOutbox
