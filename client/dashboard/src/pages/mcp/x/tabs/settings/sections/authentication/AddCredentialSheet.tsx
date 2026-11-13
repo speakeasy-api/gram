@@ -355,7 +355,7 @@ export function AddCredentialSheet({
 
           {choice === "existing" ? (
             <section className="space-y-2">
-              <Label htmlFor="existing-credential">Credential</Label>
+              <Label htmlFor="existing-credential">Credential (required)</Label>
               {reusable.isLoading ? (
                 <Text muted small>
                   Loading credentials…
@@ -367,6 +367,7 @@ export function AddCredentialSheet({
                 </FieldError>
               ) : (
                 <Select
+                  required
                   value={existingId}
                   onValueChange={(id) => {
                     setPicked("existing");
@@ -390,9 +391,10 @@ export function AddCredentialSheet({
           ) : (
             <section className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="credential-name">Name</Label>
+                <Label htmlFor="credential-name">Name (required)</Label>
                 <Input
                   id="credential-name"
+                  required
                   placeholder={
                     choice === "service_account"
                       ? "e.g. Marketing service account"
@@ -407,7 +409,9 @@ export function AddCredentialSheet({
                 <PersonalSignInFields draft={personal} />
               ) : owner ? (
                 <div className="space-y-2">
-                  <Label htmlFor="credential-registration">Sign-in</Label>
+                  <Label htmlFor="credential-registration">
+                    Sign-in (required)
+                  </Label>
                   {signIns.isLoading ? (
                     <Text muted small>
                       Loading sign-ins…
@@ -528,7 +532,7 @@ export function AddCredentialSheet({
         </div>
 
         <SheetFooter className="flex-row justify-end gap-2 border-t">
-          {problem && (choice === "existing" ? existingId : name) ? (
+          {problem && (choice !== "existing" || reusable.isSuccess) ? (
             <Text muted small className="mr-auto self-center">
               {problem}
             </Text>
