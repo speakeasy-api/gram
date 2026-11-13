@@ -224,6 +224,48 @@ describe("extractFields", () => {
     expect(tags).toMatchObject({ kind: "json", typeLabel: "string[]" });
   });
 
+  it("uses the arguments editor when named properties sit next to dynamic keys", () => {
+    for (const dynamic of [
+      { additionalProperties: { type: "string" } },
+      { patternProperties: { "^x-": { type: "string" } } },
+    ]) {
+      expect(
+        extractFields({
+          type: "object",
+          properties: { name: { type: "string" } },
+          ...dynamic,
+        }),
+      ).toMatchObject([{ kind: "arguments" }]);
+    }
+  });
+
+  it("reads an enum of only null as a choice", () => {
+    const [empty] = extractFields({ properties: { empty: { enum: [null] } } });
+    expect(empty).toMatchObject({
+      kind: "enum",
+      options: [{ label: "null", value: null }],
+    });
+  });
+
+  it("reads a const union that includes null as a choice", () => {
+    const [mode] = extractFields({
+      properties: { mode: { anyOf: [{ const: "a" }, { const: null }] } },
+    });
+    expect(mode).toMatchObject({
+      kind: "enum",
+      options: [
+        { label: "a", value: "a" },
+        { label: "null", value: null },
+      ],
+    });
+  });
+
+  it("keeps the whole nullable schema on a field read as its non-null type", () => {
+    const count = { anyOf: [{ type: "integer" }, { type: "null" }] };
+    const [field] = extractFields({ properties: { count } });
+    expect(field).toMatchObject({ kind: "number", schema: count });
+  });
+
   it("returns no fields for a missing schema", () => {
     expect(extractFields(undefined)).toEqual([]);
     expect(extractFields({ type: "object" })).toEqual([]);
@@ -348,6 +390,24 @@ describe("toArguments", () => {
       ok: true,
       args: { color: null },
     });
+  });
+
+  it("keeps an argument named __proto__ as a plain key", () => {
+    const [proto] = extractFields({
+      properties: { ["__proto__"]: { type: "object" } },
+    });
+    if (!proto) throw new Error("no field");
+    const fromField = toArguments([proto], { ["__proto__"]: '{"a":1}' });
+    expect(fromField.ok && JSON.stringify(fromField.args)).toBe(
+      '{"__proto__":{"a":1}}',
+    );
+    const composed = extractFields({ oneOf: [{ type: "object" }] });
+    const fromEditor = toArguments(composed, {
+      arguments: '{"__proto__":{"a":1}}',
+    });
+    expect(fromEditor.ok && JSON.stringify(fromEditor.args)).toBe(
+      '{"__proto__":{"a":1}}',
+    );
   });
 
   it("requires arguments when a composed editor is left blank", () => {

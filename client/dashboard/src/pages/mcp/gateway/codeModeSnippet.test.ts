@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { extractFields } from "../inspect/toolSchemaFields";
 import {
   codeModeCallSnippet,
@@ -57,6 +57,41 @@ it("writes typed values as Python literals, escaping strings", () => {
       'result["data"] if result["ok"] else result',
     ].join("\n"),
   );
+});
+
+describe("a composed root schema", () => {
+  const composed = extractFields({
+    anyOf: [
+      { properties: { a: { type: "string" } } },
+      { properties: { b: { type: "integer" } } },
+    ],
+  });
+
+  it.each(["", "{not json", "[1]"])(
+    "names the arguments when the editor holds %j",
+    (text) => {
+      expect(codeModeCallSnippet("a--b", composed, { arguments: text })).toBe(
+        'result = await tools.call("a--b", "<arguments>")\nresult["data"] if result["ok"] else result',
+      );
+    },
+  );
+
+  it("writes each key of the arguments object", () => {
+    expect(
+      codeModeCallSnippet("a--b", composed, {
+        arguments: '{"a": "x", "b": 2, "c": true}',
+      }),
+    ).toBe(
+      [
+        'result = await tools.call("a--b", {',
+        '    "a": "x",',
+        '    "b": 2,',
+        '    "c": True,',
+        "})",
+        'result["data"] if result["ok"] else result',
+      ].join("\n"),
+    );
+  });
 });
 
 it("calls a tool without arguments with an empty dict", () => {

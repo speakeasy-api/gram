@@ -16,12 +16,16 @@ export function codeModeCallSnippet(
   values: Record<string, string>,
 ): string {
   const entries: [string, string][] = [];
+  // A whole-arguments field that is empty or invalid becomes one placeholder.
+  let argsPlaceholder: string | undefined;
   for (const field of fields) {
     if (field.kind === "arguments") {
       const parsed = toArguments([field], values);
       if (parsed.ok) {
         for (const [key, value] of Object.entries(parsed.args))
           entries.push([key, toPython(value)]);
+      } else {
+        argsPlaceholder = JSON.stringify(placeholderFor(field));
       }
       continue;
     }
@@ -43,9 +47,10 @@ export function codeModeCallSnippet(
     ]);
   }
   const args =
-    entries.length === 0
+    argsPlaceholder ??
+    (entries.length === 0
       ? "{}"
-      : `{\n${entries.map(([key, value]) => `    ${JSON.stringify(key)}: ${value},`).join("\n")}\n}`;
+      : `{\n${entries.map(([key, value]) => `    ${JSON.stringify(key)}: ${value},`).join("\n")}\n}`);
   return `result = await tools.call(${JSON.stringify(path)}, ${args})\nresult["data"] if result["ok"] else result`;
 }
 
