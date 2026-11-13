@@ -275,14 +275,18 @@ func (r Registry) DeriveRequiredCheckDimensions() map[string][]string {
 }
 
 // DeriveDimensionValues returns the closed value set of the dimension key on
-// kind, as a lookup.
+// kind, whether the type or one of its permissions declares it, as a lookup.
 func (r Registry) DeriveDimensionValues(kind Kind, key string) map[string]bool {
 	out := make(map[string]bool)
 	for _, t := range r.Types {
 		if t.Kind != kind {
 			continue
 		}
-		for _, d := range t.Dimensions {
+		dimensions := slices.Clone(t.Dimensions)
+		for _, p := range t.Permissions {
+			dimensions = append(dimensions, p.Dimensions...)
+		}
+		for _, d := range dimensions {
 			if d.Key != key {
 				continue
 			}

@@ -258,11 +258,7 @@ var requiredCheckDimensions = map[string][]string{
 // SelectorValueUnknown.
 var unknownableDimensions = map[Scope]map[string]bool{
 	"mcp:blocked_connect": {"disposition": true, "tool": true},
-	"mcp:blocked_read":    {"disposition": true, "tool": true},
-	"mcp:blocked_write":   {"disposition": true, "tool": true},
 	"mcp:connect":         {"disposition": true, "tool": true},
-	"mcp:read":            {"disposition": true, "tool": true},
-	"mcp:write":           {"disposition": true, "tool": true},
 	"risk_policy:block":   {"server_identity": true, "server_url": true},
 }
 
@@ -274,7 +270,7 @@ var allowedSelectorKeys = map[string]map[string]bool{
 	"assistant":       {"project_id": true},
 	"environment":     {"project_id": true},
 	"inference":       {"project_id": true},
-	"mcp":             {"disposition": true, "project_id": true, "tool": true},
+	"mcp":             {"project_id": true},
 	"mcp_auth_client": {"client_type": true, "connection_owner": true, "project_id": true, "upstream_client": true},
 	"risk_policy":     {"server_identity": true, "server_url": true},
 }
@@ -282,7 +278,9 @@ var allowedSelectorKeys = map[string]map[string]bool{
 // scopeSelectorKeys holds the keys single permissions declare beyond their
 // type's.
 var scopeSelectorKeys = map[Scope]map[string]bool{
-	"org:hooks_ingest": {"project_id": true},
+	"mcp:blocked_connect": {"disposition": true, "tool": true},
+	"mcp:connect":         {"disposition": true, "tool": true},
+	"org:hooks_ingest":    {"project_id": true},
 }
 
 // validAuthClientTypes is the closed value set of client_type.

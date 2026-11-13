@@ -163,8 +163,6 @@ var Definitions = Registry{
 			Category: authz.ScopeCategoryMCP,
 			Match:    authz.MatchLoose,
 			Dimensions: []Dimension{
-				{Key: authz.SelectorKeyTool, Values: nil, Required: false},
-				{Key: authz.SelectorKeyDisposition, Values: []string{authz.DispositionReadOnly, authz.DispositionDestructive, authz.DispositionIdempotent, authz.DispositionOpenWorld}, Required: false},
 				// Required since the hotfix: a project-bounded grant must
 				// never match a check that does not name its project.
 				{Key: authz.SelectorKeyProjectID, Values: nil, Required: true},
@@ -205,8 +203,14 @@ var Definitions = Registry{
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "MCP connect access"),
-					Dimensions:  nil,
-					Source:      authz.GrantSourceRoles,
+					// A grant or a block may be limited to some tools or
+					// dispositions on connect only. Viewing or managing a
+					// server has no tool, so read and write carry neither.
+					Dimensions: []Dimension{
+						{Key: authz.SelectorKeyTool, Values: nil, Required: false},
+						{Key: authz.SelectorKeyDisposition, Values: []string{authz.DispositionReadOnly, authz.DispositionDestructive, authz.DispositionIdempotent, authz.DispositionOpenWorld}, Required: false},
+					},
+					Source: authz.GrantSourceRoles,
 					// ToolCall carries the tool and its disposition; plain
 					// Connect() asks about the server as a whole.
 					DimensionSets: []DimensionSet{
