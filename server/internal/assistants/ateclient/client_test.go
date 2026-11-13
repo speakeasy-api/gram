@@ -259,12 +259,19 @@ func TestBufferedConn(t *testing.T) {
 	defer func() { _ = a.Close() }()
 	defer func() { _ = b.Close() }()
 	reader := bufio.NewReader(a)
-	go func() { _, _ = b.Write([]byte("header\nbody")) }()
+	go func() {
+		_, _ = b.Write([]byte("header\nbody"))
+		_ = b.Close()
+	}()
 	if _, err := reader.ReadString('\n'); err != nil {
 		t.Fatal(err)
 	}
 	data := make([]byte, 4)
-	if _, err := io.ReadFull(&bufferedConn{Conn: a, reader: reader}, data); err != nil || string(data) != "body" {
+	conn := &bufferedConn{Conn: a, reader: reader}
+	if _, err := io.ReadFull(conn, data); err != nil || string(data) != "body" {
 		t.Fatalf("%q %v", data, err)
+	}
+	if n, err := conn.Read(data); n != 0 || err != io.EOF { //nolint:errorlint // net/http requires the unwrapped EOF sentinel.
+		t.Fatalf("end of tunnel = %d, %v; want 0, io.EOF", n, err)
 	}
 }

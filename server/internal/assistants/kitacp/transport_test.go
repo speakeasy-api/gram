@@ -503,6 +503,20 @@ func TestTransportConfidentialTunnel(t *testing.T) {
 	testTransport(t, "/acp", true)
 }
 
+func TestConfidentialTunnelRejectsHostMismatch(t *testing.T) {
+	t.Parallel()
+	transport := confidentialTestTransport{authority: "actor.test"}
+	req := httptest.NewRequest(http.MethodGet, "http://actor.test/acp", nil)
+	req.Host = "foreign.test"
+	response, err := transport.RoundTrip(req)
+	if response != nil {
+		_ = response.Body.Close()
+	}
+	if err == nil {
+		t.Fatal("accepted foreign request host")
+	}
+}
+
 type confidentialTestTransport struct {
 	authority string
 	target    *url.URL
@@ -514,7 +528,7 @@ func (t confidentialTestTransport) ConfidentialOrigin(u *url.URL) bool {
 }
 
 func (t confidentialTestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if !t.ConfidentialOrigin(req.URL) {
+	if !t.ConfidentialOrigin(req.URL) || (req.Host != "" && req.Host != t.authority) {
 		return nil, errors.New("test tunnel origin rejected")
 	}
 	cloned := req.Clone(req.Context())

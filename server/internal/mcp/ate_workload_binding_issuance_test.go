@@ -208,7 +208,7 @@ func TestATEGrantHoldsLifecycleFencesThroughIssuance(t *testing.T) {
 		},
 	} {
 		tx := testenv.BeginTx(t, t.Context(), f.ti.conn)
-		ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 		err := write(ctx, tx)
 		cancel()
 		// Query cancellation may already have closed the writer connection.

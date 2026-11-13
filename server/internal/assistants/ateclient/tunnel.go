@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/textproto"
@@ -102,6 +103,9 @@ type bufferedConn struct {
 
 func (c *bufferedConn) Read(p []byte) (int, error) {
 	n, err := c.reader.Read(p)
+	if err == io.EOF {
+		return n, io.EOF
+	}
 	if err != nil {
 		return n, fmt.Errorf("read ATE tunnel: %w", err)
 	}
