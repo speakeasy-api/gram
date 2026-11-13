@@ -65,5 +65,11 @@ describe("CommandPalettePerformanceTracker", () => {
     for (const forbidden of ["query", "candidate", "name", "id", "route"]) {
       expect(keys).not.toContain(forbidden);
     }
+    expect(["organization", "project"]).toContain(payload.scope);
+    expect(["cold", "warm"]).toContain(payload.cache_state);
+    for (const [key, value] of Object.entries(payload)) {
+      if (key === "scope" || key === "cache_state" || value === null) continue;
+      expect(["number", "boolean"], key).toContain(typeof value);
+    }
   });
 });
