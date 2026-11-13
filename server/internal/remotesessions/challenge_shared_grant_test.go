@@ -704,7 +704,7 @@ func setStoredSessionResource(t *testing.T, ctx context.Context, fx sharedGrantF
 		SubjectUrn:             fx.subject,
 		UserSessionIssuerID:    fx.session.UserSessionIssuerID,
 		RemoteSessionClientID:  fx.clientID,
-		AccessTokenEncrypted:   fx.session.AccessTokenEncrypted,
+		AccessTokenEncrypted:   fx.session.AccessTokenEncrypted.String,
 		AccessExpiresAt:        fx.session.AccessExpiresAt,
 		RefreshTokenEncrypted:  fx.session.RefreshTokenEncrypted,
 		AuthorizationExpiresAt: fx.session.AuthorizationExpiresAt,

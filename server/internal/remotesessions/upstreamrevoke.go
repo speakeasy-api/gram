@@ -172,7 +172,7 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 	for _, row := range rows {
 		creds = append(creds, RevokedCredentials{
 			RemoteSessionClientID: row.RemoteSessionClientID,
-			AccessTokenEncrypted:  row.AccessTokenEncrypted,
+			AccessTokenEncrypted:  row.AccessTokenEncrypted.String,
 			RefreshTokenEncrypted: row.RefreshTokenEncrypted,
 		})
 	}
@@ -231,7 +231,7 @@ func (r *UpstreamRevoker) softDeleteSubjectSessions(ctx context.Context, tx repo
 	for _, row := range rows {
 		creds = append(creds, RevokedCredentials{
 			RemoteSessionClientID: row.RemoteSessionClientID,
-			AccessTokenEncrypted:  row.AccessTokenEncrypted,
+			AccessTokenEncrypted:  row.AccessTokenEncrypted.String,
 			RefreshTokenEncrypted: row.RefreshTokenEncrypted,
 		})
 	}
@@ -283,7 +283,7 @@ func (r *UpstreamRevoker) DetachUserSessionIssuerFromClients(ctx context.Context
 		for _, row := range rows {
 			creds = append(creds, RevokedCredentials{
 				RemoteSessionClientID: row.RemoteSessionClientID,
-				AccessTokenEncrypted:  row.AccessTokenEncrypted,
+				AccessTokenEncrypted:  row.AccessTokenEncrypted.String,
 				RefreshTokenEncrypted: row.RefreshTokenEncrypted,
 			})
 		}
@@ -332,7 +332,7 @@ func (r *UpstreamRevoker) DetachOrganizationUserSessionIssuerFromClients(ctx con
 		for _, row := range rows {
 			creds = append(creds, RevokedCredentials{
 				RemoteSessionClientID: row.RemoteSessionClientID,
-				AccessTokenEncrypted:  row.AccessTokenEncrypted,
+				AccessTokenEncrypted:  row.AccessTokenEncrypted.String,
 				RefreshTokenEncrypted: row.RefreshTokenEncrypted,
 			})
 		}
