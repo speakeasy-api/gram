@@ -47,6 +47,21 @@ function openProvider(
 }
 
 describe("installation instructions", () => {
+  it("installs the OpenCode plugin package, with observability as a separate optional step", () => {
+    const text = openProvider("opencode");
+    expect(text).toContain(
+      "git clone https://github.com/example-owner/example-org-plugins.git speakeasy-marketplace",
+    );
+    expect(text).toContain(
+      "cp -R speakeasy-marketplace/opencode-plugins/example-plugin/. ~/.config/opencode/",
+    );
+    expect(text).toContain("adds the plugin's MCP servers and skills");
+    expect(text).toContain("Optional: add observability");
+    expect(text).toContain("does not configure any MCP servers");
+    expect(text).not.toContain("<server-name>");
+    expect(text).not.toContain("speakeasy-hooks install");
+  });
+
   it("offers Pro/Max personal marketplaces and ZIPs without claiming a vendor restriction", () => {
     const text = openProvider("Claude Cowork");
     expect(text).toContain("On Pro or Max, add a personal marketplace");

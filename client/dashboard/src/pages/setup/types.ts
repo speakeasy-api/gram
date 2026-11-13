@@ -58,7 +58,10 @@ export interface PlatformSetupStep {
     personalSteps: PlatformSetupStep[];
   };
   /** Renders a button that downloads this platform's observability plugin ZIP. */
-  download?: { platform: "claude" | "cursor" | "copilot"; label: string };
+  download?: {
+    platform: "claude" | "cursor" | "copilot" | "opencode";
+    label: string;
+  };
 }
 
 export interface AgentPlatform {

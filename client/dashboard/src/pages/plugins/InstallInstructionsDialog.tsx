@@ -643,56 +643,83 @@ function CodexInstallContent({
 }
 
 /**
- * opencode install. opencode has no plugin-marketplace or deep-link concept
- * (unlike Claude Code / Cursor / Codex), so the primary path is the
- * server-generated observability ZIP (plugins.downloadObservabilityPlugin) —
- * a self-contained `.opencode` plugin (`plugin/agenthooks.ts` + `speakeasy.json`
- * + bootstrappers) with a freshly-minted hooks-scoped key already embedded,
- * extracted straight into a repo's `.opencode/`. The manual CLI path
- * (speakeasy-hooks install --provider=opencode) is kept as a fallback, plus
- * connecting an MCP server through opencode's own `mcp` config block. The MCP
- * snippet uses placeholders — grab the real name/URL from that server's own
- * hosted install page.
+ * OpenCode install. OpenCode has no marketplace importer, so the plugin's
+ * self-contained package (opencode-plugins/<slug>/ in the published repo:
+ * a loader under plugin/ plus the MCP servers and skills) is copied into an
+ * OpenCode config directory. Observability is a separate ZIP that only adds
+ * hooks, so it is offered after the plugin and labelled as such.
  */
-function OpencodeInstallContent(): JSX.Element {
+function OpencodeInstallContent({
+  repoOwner,
+  repoName,
+  pluginSlug,
+}: Pick<ContentProps, "repoOwner" | "repoName" | "pluginSlug">): JSX.Element {
   const { isDownloading, download: handleDownloadPlugin } =
     useObservabilityPluginDownload("opencode", "observability-opencode.zip");
 
-  const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
-
-  const installCommand = `SPEAKEASY_AI_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
-speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`;
-
-  const mcpConfig = `{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "<server-name>": {
-      "type": "remote",
-      "enabled": true,
-      "url": "<mcp-server-url>",
-      "headers": {
-        "Authorization": "Bearer {env:MCP_SERVER_API_KEY}"
-      }
-    }
-  }
-}`;
+  const slug = pluginSlug ?? "<plugin-slug>";
+  const cloneCommand = `git clone https://github.com/${repoOwner}/${repoName}.git speakeasy-marketplace`;
+  const copyCommand = `cp -R speakeasy-marketplace/opencode-plugins/${slug}/. ~/.config/opencode/`;
 
   return (
     <div className="min-w-0 space-y-6">
-      {/* ── Quick install ─────────────────────────────────────────────────── */}
+      <InstallSteps
+        steps={[
+          {
+            title: "Clone your Speakeasy marketplace repository",
+            description:
+              "OpenCode has no marketplace importer, so the plugin is copied out of the repository Speakeasy publishes to. You need read access to it.",
+            code: cloneCommand,
+          },
+          {
+            title: "Copy the plugin into your OpenCode config",
+            description: (
+              <>
+                This adds the plugin's MCP servers and skills. Copy into{" "}
+                <code className="bg-muted px-1 py-0.5 text-xs">
+                  ~/.config/opencode/
+                </code>{" "}
+                for every project, or into a repo's{" "}
+                <code className="bg-muted px-1 py-0.5 text-xs">.opencode/</code>{" "}
+                for that project only.
+              </>
+            ),
+            code: copyCommand,
+          },
+          {
+            title: "Restart OpenCode",
+            description: (
+              <>
+                OpenCode loads the plugin on its next start. If a server needs
+                credentials, export the environment variables named in{" "}
+                <code className="bg-muted px-1 py-0.5 text-xs">
+                  {slug}/mcp.json
+                </code>{" "}
+                first. To uninstall, delete the copied files.
+              </>
+            ),
+          },
+        ]}
+      />
+      {!pluginSlug && (
+        <p className="text-muted-foreground text-xs">
+          Replace{" "}
+          <code className="bg-muted px-1 py-0.5">&lt;plugin-slug&gt;</code> with
+          the plugin to install.
+        </p>
+      )}
+
+      <div className="border-t" />
+
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <h3 className="mb-2 text-sm font-semibold">
+          Optional: add observability
+        </h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          Download the Speakeasy observability plugin as a ZIP — a
-          self-contained{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">.opencode</code> plugin
-          with a hooks-scoped API key already embedded (no CLI, no key to
-          export). Extract it into your repo's{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">.opencode/</code> (or{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">
-            ~/.config/opencode/
-          </code>{" "}
-          for every repo) and opencode auto-discovers it on next start.
+          The Speakeasy observability plugin is separate. It only adds hooks
+          that report sessions and tool calls, and does not configure any MCP
+          servers. The ZIP has a hooks-scoped API key embedded; extract it into
+          the same config directory.
         </p>
         <Button
           variant="secondary"
@@ -702,59 +729,22 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
           className="inline-flex items-center gap-2"
         >
           <Download className="size-4" />
-          {isDownloading ? "Downloading…" : "Download Plugin"}
+          {isDownloading ? "Downloading…" : "Download observability plugin"}
         </Button>
         <p className="text-muted-foreground mt-2 text-xs">
           Then extract:{" "}
           <code className="bg-muted px-1 py-0.5">
-            unzip observability-opencode.zip -d .opencode
+            unzip observability-opencode.zip -d ~/.config/opencode
           </code>
         </p>
       </div>
 
-      <div className="border-t" />
-
-      {/* ── Manual setup ──────────────────────────────────────────────────── */}
-      <div className="space-y-4">
-        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-          Manual setup
-        </p>
-        <p className="text-muted-foreground text-sm">
-          Prefer the CLI? Install the{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">speakeasy-hooks</code>{" "}
-          binary:
-        </p>
-        <CodeBlock language="bash" className="bg-background">
-          {installBinary}
-        </CodeBlock>
-        <p className="text-muted-foreground text-sm">
-          Then run it from your repo to render the same plugin into{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">
-            .opencode/plugin/
-          </code>
-          :
-        </p>
-        <CodeBlock language="bash" className="bg-background">
-          {installCommand}
-        </CodeBlock>
-      </div>
-
-      {/* ── Connect an MCP server ─────────────────────────────────────────── */}
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
-        <p className="text-muted-foreground mb-3 text-sm">
-          Merge an entry into the{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">mcp</code> block of
-          your project's{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">opencode.json</code>.
-          Replace the placeholders with the name, URL, and auth token from that
-          server's own install page — that token is separate from the Speakeasy
-          hooks credential.
-        </p>
-        <CodeBlock language="json" className="bg-background">
-          {mcpConfig}
-        </CodeBlock>
-      </div>
+      <RelatedLinks
+        links={[
+          { href: "https://opencode.ai/docs/plugins/", label: "Plugin Docs" },
+          { href: "https://opencode.ai/docs/mcp-servers/", label: "MCP Docs" },
+        ]}
+      />
     </div>
   );
 }
@@ -1216,7 +1206,13 @@ export function InstallInstructionsDialog({
                   pluginSlug={effectivePluginSlug}
                 />
               )}
-              {selected === "opencode" && <OpencodeInstallContent />}
+              {selected === "opencode" && (
+                <OpencodeInstallContent
+                  repoOwner={content.repoOwner}
+                  repoName={content.repoName}
+                  pluginSlug={effectivePluginSlug}
+                />
+              )}
               {selected === "copilot" && <CopilotInstallContent />}
               {selected === "pi" && <PiInstallContent />}
             </div>
