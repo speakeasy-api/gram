@@ -207,8 +207,23 @@ describe("AddCredentialSheet", () => {
       target: { value: "   " },
     });
     expect(
+      screen
+        .getByRole("button", { name: "Add credential" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
       screen.getByText("Give the credential a name people will recognize."),
     ).toBeTruthy();
+  });
+
+  it("waits for reusable credentials before asking for a selection", async () => {
+    mocks.clientPages = [[client({ id: "shared", name: "Shared token" })]];
+    renderSheet();
+
+    expect(screen.getByText("Loading credentials…")).toBeTruthy();
+    expect(screen.queryByText("Choose a credential.")).toBeNull();
+    expect(await screen.findByText("Choose a credential.")).toBeTruthy();
+    expect(screen.getByLabelText("Credential (required)")).toBeTruthy();
   });
 
   it("offers only credentials this server can share", async () => {
@@ -398,7 +413,7 @@ describe("AddCredentialSheet", () => {
         },
       ];
     };
-    const picker = () => screen.getByLabelText("Start from");
+    const picker = () => screen.getByLabelText("Start from (required)");
     const chooseOwnAccount = () => {
       fireEvent.click(
         screen.getByRole("radio", { name: /^Each person's own account/ }),
@@ -445,7 +460,7 @@ describe("AddCredentialSheet", () => {
           /with auth\.example\.com can be used as a starting point yet/,
         ),
       ).toBeTruthy();
-      expect(screen.queryByLabelText("Start from")).toBeNull();
+      expect(screen.queryByLabelText("Start from (required)")).toBeNull();
       expect(screen.queryByText(/Showing sign-ins for/)).toBeNull();
       expect(screen.getByRole("button", { name: "Show all" })).toBeTruthy();
     });
@@ -719,7 +734,7 @@ describe("AddCredentialSheet", () => {
       fireEvent.click(
         screen.getByRole("radio", { name: /^New from existing/ }),
       );
-      fireEvent.click(screen.getByLabelText("Start from"));
+      fireEvent.click(screen.getByLabelText("Start from (required)"));
       fireEvent.click(screen.getByRole("option", { name: /Linear/ }));
       fireEvent.change(screen.getByLabelText("Name (required)"), {
         target: { value: "Linear for engineering" },
@@ -929,7 +944,7 @@ describe("AddCredentialSheet", () => {
         screen.getByRole("radio", { name: /^New from existing/ }),
       );
 
-      expect(screen.queryByLabelText("Start from")).toBeNull();
+      expect(screen.queryByLabelText("Start from (required)")).toBeNull();
       expect(
         screen.getByText(/can be used as a starting point yet/),
       ).toBeTruthy();

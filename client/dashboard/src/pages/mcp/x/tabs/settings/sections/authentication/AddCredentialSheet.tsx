@@ -532,7 +532,7 @@ export function AddCredentialSheet({
         </div>
 
         <SheetFooter className="flex-row justify-end gap-2 border-t">
-          {problem ? (
+          {problem && (choice !== "existing" || reusable.isSuccess) ? (
             <Text muted small className="mr-auto self-center">
               {problem}
             </Text>
