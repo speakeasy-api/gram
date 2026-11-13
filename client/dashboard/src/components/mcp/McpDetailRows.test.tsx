@@ -189,14 +189,16 @@ describe("UpstreamCredentialsIdentitySummary", () => {
   it.each([
     ["configured", false, "Credentials set up"],
     ["setup_incomplete", false, "Authentication setup incomplete"],
-    ["no_auth_required", false, "No authentication required"],
+    ["no_auth_required", false, "No authentication"],
     ["no_auth_required", true, "Authentication setup incomplete"],
     ["unexpected", false, "Status unavailable"],
   ] as const)(
     "labels %s (sign-in detected: %s) from the credentials status",
     (status, authenticationRequired, label) => {
       renderSummary({ status, authenticationRequired });
-      const pill = screen.getByRole("link", { name: new RegExp(label) });
+      const pill = screen.getByRole("link", {
+        name: `Identity: ${label}. Open identity settings`,
+      });
       expect(pill.getAttribute("href")).toBe(
         "/mcp/example/settings#authentication",
       );
