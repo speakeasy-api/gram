@@ -66,6 +66,6 @@ Okta adds no instance header or provisioning capability.
 
 ## Keep provider mutations isolated
 
-`useProviderConnection.ts` selects account connections explicitly for Snowflake and Okta; other providers return no account connection. Salesforce owns `MCP-Instance-URL` parsing and mutation. Other providers preserve unrelated headers, including duplicate, secret and request-mapped headers. The shared Authorization-header conflict check still applies to User Identity verification.
+`useProviderConnection.ts` selects provider connections explicitly for Salesforce, Snowflake and Okta through `selectedProviderConnection`; Slack and GitHub return no selected connection and use their fixed provider configuration. Salesforce owns `MCP-Instance-URL` parsing and mutation. Other providers preserve unrelated headers, including duplicate, secret and request-mapped headers. The shared Authorization-header conflict check still applies to User Identity verification.
 
 For endpoint, domain, app-type or permission edits, verify both provider-specific invalidation and the shared progress/source fingerprints. Saved configuration is not a saved authorization or test pass. Record live evidence separately for each branch, account type and endpoint tested; a merged implementation or controlled OAuth response is not a live compatibility result.
