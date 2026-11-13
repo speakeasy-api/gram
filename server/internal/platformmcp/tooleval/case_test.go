@@ -47,6 +47,41 @@ func TestCaseSeparatesOrientationFromFirstSteps(t *testing.T) {
 	require.True(t, allowsOrientation.onPath("find_mcp"))
 }
 
+func TestAttachIdentityProviderCaseAcceptsReadinessFirst(t *testing.T) {
+	t.Parallel()
+
+	cases, err := LoadCases()
+	require.NoError(t, err)
+	var c Case
+	for _, candidate := range cases {
+		if candidate.ID == "mcp-attach-idp-linear" {
+			c = candidate
+			break
+		}
+	}
+	require.Equal(t, "mcp-attach-idp-linear", c.ID)
+	require.Equal(t, []string{"attach_platform_mcp_identity_provider"}, c.Expect)
+	require.Equal(t, []string{"find_mcp", "get_mcp", "inspect_mcp_candidate", "get_mcp_connection_settings", "get_mcp_readiness"}, c.Allow)
+
+	for _, tc := range []struct {
+		tool   string
+		hit    bool
+		onPath bool
+	}{
+		{tool: "get_mcp_readiness", hit: false, onPath: true},
+		{tool: "attach_platform_mcp_identity_provider", hit: true, onPath: false},
+		{tool: "get_mcp_network_traffic", hit: false, onPath: false},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			require.False(t, c.orients(tc.tool), "each call ends the attempt, rather than becoming an orientation read")
+			o := Outcome{Case: c, Selected: &Call{Tool: tc.tool, Arguments: json.RawMessage(`{}`)}}
+			score(&o, nil, nil)
+			require.Equal(t, tc.hit, o.Hit)
+			require.Equal(t, tc.onPath, o.OnPath)
+		})
+	}
+}
+
 // LoadCases rejects duplicate ids and cases without a prompt, so loading
 // every embedded file is the check.
 func TestLoadCasesParsesEveryFile(t *testing.T) {

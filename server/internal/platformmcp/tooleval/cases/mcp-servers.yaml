@@ -145,7 +145,15 @@
 - id: mcp-attach-idp-linear
   prompt: The Linear server advertises its own OAuth sign-in. Connect it to that provider so each person logs in with their own Linear account. Yes, I'm sure.
   expect: [attach_platform_mcp_identity_provider]
-  allow: [find_mcp, get_mcp, inspect_mcp_candidate, get_mcp_connection_settings]
+  # tools.go documents readiness inspection before attaching a missing upstream OAuth provider.
+  allow:
+    [
+      find_mcp,
+      get_mcp,
+      inspect_mcp_candidate,
+      get_mcp_connection_settings,
+      get_mcp_readiness,
+    ]
 - id: mcp-setup-handoff-sentry
   prompt: We added Sentry from the catalog to Default but never finished its source and auth setup. I'll do the rest myself in the dashboard, so give me the link.
   expect: [get_setup_handoff]
