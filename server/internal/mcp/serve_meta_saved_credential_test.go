@@ -22,8 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// keyRefusingUpstream answers every request with status, and challenge as its
-// WWW-Authenticate when set, recording each X-Api-Key it received.
+// keyRefusingUpstream answers status, with challenge as WWW-Authenticate, and records each X-Api-Key.
 type keyRefusingUpstream struct {
 	*httptest.Server
 
@@ -62,15 +61,14 @@ func saveServerKey(t *testing.T, ti *testInstance, projectID, remoteServerID uui
 	require.NoError(t, err)
 }
 
-// A person whose gateway member sends the key an admin saved on it, and is
-// refused, is told an admin updates the key. Connecting would not fix it, so
-// the message does not ask for that, and a 403 does not claim the key is wrong.
+// A person refused on a member's configured key connects first when it has a sign-in, and otherwise asks an admin.
 func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *testing.T) {
 	t.Parallel()
 
 	const (
-		rejected = `server "member" rejected the credential configured for it in Speakeasy, such as an API key. Signing in does not change it. Ask an admin of the server's project to update the server's credential, then retry`
-		refused  = `server "member" refused the credential configured for it in Speakeasy, such as an API key: the credential may be wrong, or its account may not be allowed to do this. Signing in does not change it. Ask an admin of the server's project to check the server's credential and what its account may do, then retry`
+		rejected     = `server "member" refused the credential configured for it in Speakeasy, such as an API key. Connecting does not change it. Ask an admin to update the server's credential, then retry`
+		refused      = `server "member" refused the credential configured for it in Speakeasy, such as an API key. The credential may be wrong, or its account may not be allowed to do this. Connecting does not change it. Ask an admin to check the server's credential and what its account may do, then retry`
+		connectFirst = `server "member" refused the request. Ask the user to open {page} to connect it, then retry. If it still fails, ask an admin to check the credential configured for the server in Speakeasy`
 	)
 	for _, tc := range []struct {
 		name      string
@@ -81,9 +79,10 @@ func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *test
 		recorded  bool
 	}{
 		{name: "no sign-in, 401", status: http.StatusUnauthorized, want: rejected, recorded: true},
-		{name: "sign-in not connected, 401", signIn: true, status: http.StatusUnauthorized, want: rejected, recorded: true},
+		{name: "sign-in not connected, 401", signIn: true, status: http.StatusUnauthorized, want: connectFirst, recorded: true},
+		{name: "sign-in not connected, 401 bearer challenge", signIn: true, status: http.StatusUnauthorized, challenge: `Bearer resource_metadata="https://example.com/.well-known/oauth-protected-resource"`, want: connectFirst, recorded: true},
 		{name: "no sign-in, 403", status: http.StatusForbidden, want: refused},
-		{name: "sign-in not connected, 403", signIn: true, status: http.StatusForbidden, want: refused},
+		{name: "sign-in not connected, 403", signIn: true, status: http.StatusForbidden, want: connectFirst},
 		{name: "403 invalid token", status: http.StatusForbidden, challenge: `Bearer error="invalid_token"`, want: refused, recorded: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -114,7 +113,8 @@ func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *test
 			text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 			require.True(t, isError)
 			message, reference, _ := strings.Cut(text, "\nReference: ")
-			require.Equal(t, tc.want, message)
+			page := ti.serverURL.String() + "/mcp/" + metaSlug + "/connect/first-party?server=member"
+			require.Equal(t, strings.ReplaceAll(tc.want, "{page}", page), message)
 			require.Equal(t, tc.recorded, reference != "", "a recorded row is referenced")
 			upstream.requireSaw(t, "saved-key")
 
@@ -130,8 +130,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *test
 	}
 }
 
-// An agent refused on the key saved on its member is told it cannot change
-// the key, rather than to sign in again.
+// An agent refused on its member's configured key is told it cannot change it.
 func TestAgentGateway_SavedKeyRefusedAsksAnAdmin(t *testing.T) {
 	t.Parallel()
 
@@ -159,7 +158,7 @@ func TestAgentGateway_SavedKeyRefusedAsksAnAdmin(t *testing.T) {
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
 	require.True(t, isError)
 	message, _, _ := strings.Cut(text, "\nReference: ")
-	require.Equal(t, `server "`+fx.granted+`" rejected the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin of the server's project to update the server's credential, then retry`, message)
+	require.Equal(t, `server "`+fx.granted+`" refused the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin to update the server's credential, then retry`, message)
 	upstream.requireSaw(t, "saved-key")
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
 	require.Equal(t, serverID.String(), row.MemberID)

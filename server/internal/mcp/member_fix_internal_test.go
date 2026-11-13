@@ -131,8 +131,8 @@ func TestMemberAuthFailure_AgentServerCredentialIsTheServers(t *testing.T) {
 	fix := testAgentFix
 	oauth := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
 	rejected := memberAuthFailure(oauth, memberDial{anonymous: true, oauthSignIn: true, configuredHeaders: true, fix: fix}, http.StatusUnauthorized)
-	require.ErrorContains(t, rejected, `server "linear" rejected the credential configured for it in Speakeasy, such as an API key`)
-	require.ErrorContains(t, rejected, "Ask an admin of the server's project to update the server's credential")
+	require.ErrorContains(t, rejected, `server "linear" refused the credential configured for it in Speakeasy, such as an API key`)
+	require.ErrorContains(t, rejected, "Ask an admin to update the server's credential")
 	require.NotContains(t, rejected.Error(), testAgentSignIn)
 
 	apiKey := gatewayTestMember("weather", "Weather", uuid.Nil, uuid.New())
@@ -142,37 +142,42 @@ func TestMemberAuthFailure_AgentServerCredentialIsTheServers(t *testing.T) {
 	require.NotContains(t, missing.Error(), testAgentSignIn)
 }
 
-// A refused saved credential is the server's to fix for every caller. A
-// person is not sent to connect, an agent is not sent to its sign-in step,
-// and a 403 does not claim the credential is wrong.
+// A refused configured credential: an agent and a person with nothing to
+// connect ask an admin; a person with a connect page connects first.
 func TestMemberAuthFailure_SavedCredentialRefused(t *testing.T) {
 	t.Parallel()
 
 	member := gatewayTestMember("weather", "Weather", uuid.New(), uuid.New())
 	page := "https://app.example.com/mcp/tools/connect/first-party?server=weather"
+	connectFirst := `server "weather" refused the request. Ask the user to open ` + page + ` to connect it, then retry. If it still fails, ask an admin to check the credential configured for the server in Speakeasy`
 	for _, tc := range []struct {
 		name   string
-		fix    func() memberFix
+		dial   memberDial
 		status int
 		want   string
 	}{
-		{name: "person 401", fix: personFix(page), status: http.StatusUnauthorized, want: `server "weather" rejected the credential configured for it in Speakeasy, such as an API key. Signing in does not change it. Ask an admin of the server's project to update the server's credential, then retry`},
-		{name: "person without a page", fix: nil, status: http.StatusUnauthorized, want: `server "weather" rejected the credential configured for it in Speakeasy, such as an API key. Signing in does not change it. Ask an admin of the server's project to update the server's credential, then retry`},
-		{name: "person 403", fix: personFix(page), status: http.StatusForbidden, want: `server "weather" refused the credential configured for it in Speakeasy, such as an API key: the credential may be wrong, or its account may not be allowed to do this. Signing in does not change it. Ask an admin of the server's project to check the server's credential and what its account may do, then retry`},
-		{name: "agent 401", fix: testAgentFix, status: http.StatusUnauthorized, want: `server "weather" rejected the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin of the server's project to update the server's credential, then retry`},
-		{name: "agent 403", fix: testAgentFix, status: http.StatusForbidden, want: `server "weather" refused the credential configured for it in Speakeasy, such as an API key: the credential may be wrong, or its account may not be allowed to do this. This agent cannot change it. Ask an admin of the server's project to check the server's credential and what its account may do, then retry`},
+		{name: "person with a page 401", dial: memberDial{fix: personFix(page)}, status: http.StatusUnauthorized, want: connectFirst},
+		{name: "person with a page 403", dial: memberDial{fix: personFix(page)}, status: http.StatusForbidden, want: connectFirst},
+		{name: "nothing to connect 401", status: http.StatusUnauthorized, want: `server "weather" refused the credential configured for it in Speakeasy, such as an API key. Connecting does not change it. Ask an admin to update the server's credential, then retry`},
+		{name: "nothing to connect 403", status: http.StatusForbidden, want: `server "weather" refused the credential configured for it in Speakeasy, such as an API key. The credential may be wrong, or its account may not be allowed to do this. Connecting does not change it. Ask an admin to check the server's credential and what its account may do, then retry`},
+		{name: "agent 401", dial: memberDial{fix: testAgentFix}, status: http.StatusUnauthorized, want: `server "weather" refused the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin to update the server's credential, then retry`},
+		{name: "agent 403", dial: memberDial{fix: testAgentFix}, status: http.StatusForbidden, want: `server "weather" refused the credential configured for it in Speakeasy, such as an API key. The credential may be wrong, or its account may not be allowed to do this. This agent cannot change it. Ask an admin to check the server's credential and what its account may do, then retry`},
+		{name: "agent's self client keeps its message", dial: memberDial{clientCredential: true, fix: testAgentFix}, status: http.StatusUnauthorized, want: `server "weather" requires authentication and has no credential for this caller. Ask your administrator to connect it`},
+		{name: "person's self client keeps its message", dial: memberDial{clientCredential: true, fix: personFix(page)}, status: http.StatusUnauthorized, want: `server "weather" is not connected for this user. Ask the user to open ` + page + ` to connect it, then retry`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := memberAuthFailure(member, memberDial{anonymous: true, configuredHeaders: true, fix: tc.fix}, tc.status)
+			dial := tc.dial
+			dial.anonymous, dial.configuredHeaders = true, true
+			err := memberAuthFailure(member, dial, tc.status)
 			require.EqualError(t, err, tc.want)
 			_, credential := errors.AsType[memberCredentialError](err)
 			require.True(t, credential, "the error type is unchanged")
 		})
 	}
 
-	// A personal token sent beside the saved key is the person's to reconnect.
-	require.ErrorContains(t, memberAuthFailure(member, memberDial{configuredHeaders: true, fix: personFix(page)}, http.StatusUnauthorized), "rejected the user's credential. Ask the user to open "+page)
+	// A personal token sent beside the configured credential is the person's to reconnect.
+	require.EqualError(t, memberAuthFailure(member, memberDial{configuredHeaders: true, fix: personFix(page)}, http.StatusUnauthorized), `server "weather" rejected the user's credential. Ask the user to open `+page+` to reconnect it, then retry`)
 }
 
 // A service account's credential is configured on the server and shared by
