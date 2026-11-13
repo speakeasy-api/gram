@@ -96,6 +96,25 @@ const (
 	ModelUsageSourcePromptInjection ModelUsageSource = "prompt-injection"
 )
 
+// IsOrgMemorySource reports whether s tags an Organizational Memory pipeline
+// stage.
+func IsOrgMemorySource(s ModelUsageSource) bool {
+	switch s {
+	case ModelUsageSourceOrgMemorySummary, ModelUsageSourceOrgMemoryFacts, ModelUsageSourceOrgMemoryDigest:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsPlatformOnlySource reports whether s is reserved for inference the
+// platform runs itself. The completions proxy must not accept it from a
+// client: it would dodge Polar metering and TUM counts and mislabel the
+// traffic.
+func IsPlatformOnlySource(s ModelUsageSource) bool {
+	return s == ModelUsageSourceRiskAnalysis || IsOrgMemorySource(s)
+}
+
 // ModelUsageSources lists every registered completion surface.
 func ModelUsageSources() []ModelUsageSource {
 	return slices.Clone(modelUsageSources)

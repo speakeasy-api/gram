@@ -1945,7 +1945,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// falls back to the default customer surface. Client-supplied "gram"
 	// stays accepted: Elements sends it for follow-on-suggestion inference
 	// and relies on its metering exemption.
-	if source == billing.ModelUsageSourceRiskAnalysis {
+	// The Organizational Memory sources are reserved the same way.
+	if billing.IsPlatformOnlySource(source) {
 		source = billing.ModelUsageSourcePlayground
 	}
 	if source == "" {

@@ -7,10 +7,10 @@
 -- Summary and facts rows carry the judged chat in chat_id, so `chats` counts
 -- distinct chats judged per day and `cost_per_chat` is the per-chat unit cost.
 --
--- Read-only. Run against the telemetry_logs database; adjust the window as
+-- Days are UTC. Read-only. Run against the telemetry_logs database; adjust the window as
 -- needed.
 SELECT
-    toDate(fromUnixTimestamp64Nano(time_unix_nano)) AS day,
+    toDate(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS day,
     toString(attributes.gram.org.id) AS org_id,
     hook_source AS source,
     count() AS calls,
@@ -22,6 +22,6 @@ SELECT
 FROM telemetry_logs
 WHERE event_source = 'chat_completion'
   AND hook_source IN ('org-memory-summary', 'org-memory-facts', 'org-memory-digest')
-  AND time_unix_nano >= toUnixTimestamp64Nano(toDateTime64(today() - 30, 9))
+  AND time_unix_nano >= toUnixTimestamp64Nano(toDateTime64(toDate(now('UTC')) - 30, 9, 'UTC'))
 GROUP BY day, org_id, source
 ORDER BY day DESC, cost_usd DESC;
