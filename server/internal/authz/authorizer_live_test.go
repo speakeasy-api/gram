@@ -55,6 +55,10 @@ func TestAuthorizerLivePolicy_ReportsWhatItWouldRefuse(t *testing.T) {
 	logs.Reset()
 	require.NoError(t, engine.Require(narrowed, two), "the decision is unchanged")
 	require.Equal(t, 1, count())
+	for _, want := range []string{"user_u", "server-two", string(ScopeMCPConnect)} {
+		require.Contains(t, logs.String(), want, "the warning names the user, the resource and the scope")
+	}
+	require.NotContains(t, logs.String(), "server-one")
 
 	logs.Reset()
 	allowed, err := engine.Can(narrowed, two)
@@ -80,5 +84,5 @@ func TestAuthorizerLivePolicy_ReportsWhatItWouldRefuse(t *testing.T) {
 	ids, err := engine.Filter(narrowed, []Check{one, two})
 	require.NoError(t, err)
 	require.Len(t, ids, 2, "the list is unchanged")
-	require.Equal(t, 1, count(), "one line per request, however many rows")
+	require.Equal(t, 1, count(), "one line per call, however many rows")
 }
