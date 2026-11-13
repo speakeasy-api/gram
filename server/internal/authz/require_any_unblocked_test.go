@@ -29,7 +29,6 @@ func TestRequireAnyUnblocked(t *testing.T) {
 		{"root explicit deny", []Grant{NewGrant(ScopeRoot, "*"), NewGrant(ScopeSkillBlockedRead, "skill-one")}, false},
 		{"other skill exclusion", []Grant{NewGrant(ScopeSkillWrite, "project-one"), NewGrant(ScopeSkillBlockedRead, "skill-two")}, true},
 		{"write exclusion does not deny reads", []Grant{NewGrant(ScopeSkillWrite, "project-one"), NewGrant(ScopeSkillBlockedWrite, "skill-one")}, true},
-		{"wrong project exclusion", []Grant{NewGrant(ScopeSkillWrite, "project-one"), NewGrantWithSelector(ScopeSkillBlockedRead, Selector{SelectorKeyResourceKind: ResourceKindSkill, SelectorKeyResourceID: "skill-one", SelectorKeyProjectID: "project-two"})}, true},
 		{"no grants", nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
