@@ -295,9 +295,11 @@ function MCPOverview() {
   // result set to empty on their own, so the no-matches state must consider an
   // active filter, not just a search query.
   const hasItems = mcpServers.length + gateways.length > 0;
+  const isNarrowed = search !== "" || hasActiveMcpFilters(mcpFilters.values);
   // Also shown when the list failed to load: the toolbar carries the retry and
-  // "Add new", which are exactly what you need when nothing came back.
-  const showFilters = !isLoading && (hasItems || hasRefreshError);
+  // "Add new", which are exactly what you need when nothing came back. And
+  // whenever a filter or search is set, so it can always be cleared from here.
+  const showFilters = !isLoading && (hasItems || hasRefreshError || isNarrowed);
   // The Organization Gateway is the organization's, not one of this project's servers,
   // so it leads the unfiltered list and steps aside once the list is narrowed —
   // except to gateways alone, since it is one.
@@ -317,7 +319,7 @@ function MCPOverview() {
   );
   const showNoMatches =
     !isLoading &&
-    (search !== "" || hasActiveMcpFilters(mcpFilters.values)) &&
+    isNarrowed &&
     filteredMcpServers.length === 0 &&
     filteredGateways.length === 0 &&
     !showOrganizationGateway;
@@ -346,9 +348,13 @@ function MCPOverview() {
     </SimpleTooltip>
   );
 
+  // The empty state is for a project with nothing in it yet. A filter or search
+  // set from the URL still takes the list path, which carries the toolbar to
+  // clear it and keeps the Organization Gateway out of "No MCP servers yet".
   if (
     !isLoading &&
     !hasRefreshError &&
+    !isNarrowed &&
     mcpServers.length === 0 &&
     gateways.length === 0
   ) {
@@ -393,8 +399,9 @@ function MCPOverview() {
             {/* A one-click shortcut for the Source filter's Gateway option. It
                 reads and writes that same filter, so the chip and the sheet
                 stay in step; any other source selection leaves both segments
-                unlit rather than claiming "All". */}
-            <Page.Toolbar.Leading>
+                unlit rather than claiming "All". It sits in the right cluster
+                so filter chips appearing on the left don't shift it. */}
+            <Page.Toolbar.Actions>
               <SegmentedControl
                 ariaLabel="Quick filter by source"
                 value={
@@ -418,7 +425,7 @@ function MCPOverview() {
                   },
                 ]}
               />
-            </Page.Toolbar.Leading>
+            </Page.Toolbar.Actions>
             <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
             <Page.Toolbar.Refresh
               onRefresh={handleRefresh}
