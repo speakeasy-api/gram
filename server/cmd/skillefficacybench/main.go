@@ -20,6 +20,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
+	"github.com/google/uuid"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -385,6 +386,7 @@ func buildRequest(model string, tc testCase, reasoning *openrouter.Reasoning) (o
 	}
 	temperature := 0.0
 	return openrouter.ObjectCompletionRequest{
+		ChatID:         uuid.Nil,
 		OrgID:          benchOrgID,
 		ProjectID:      benchProjectID,
 		Model:          model,

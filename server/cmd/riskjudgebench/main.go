@@ -42,6 +42,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
+	"github.com/google/uuid"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
@@ -237,6 +238,7 @@ func evaluate(client openrouter.CompletionClient, model, orgID, projectID string
 
 	t0 := time.Now()
 	resp, err := client.GetObjectCompletion(ctx, openrouter.ObjectCompletionRequest{
+		ChatID:         uuid.Nil,
 		OrgID:          orgID,
 		ProjectID:      projectID,
 		Model:          model,

@@ -176,7 +176,7 @@ func (g *SummaryGenerator) Draft(ctx context.Context, orgID string, projectID, c
 		MaxTokens: &maxTokens,
 		OrgID:     orgID,
 		ProjectID: projectID.String(),
-		ChatID:    uuid.Nil,
+		ChatID:    chatID,
 		Messages: []or.ChatMessages{
 			openrouter.CreateMessageSystem(maskedSummarySystemPrompt),
 			openrouter.CreateMessageUser("<transcript>\n" + masked + "\n</transcript>"),
