@@ -73,12 +73,12 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   "org:admin": ["org:blocked_admin", "org:blocked_read"],
   "project:read": ["project:blocked_read"],
   "project:write": ["project:blocked_write", "project:blocked_read"],
-  // The mcp:blocked_* scopes are independent of one another, unlike the
-  // other families: connecting to a server and administering it are
-  // different jobs, so a block on one takes nothing from the others. Mirrors
-  // scopeExpansions in server/internal/authz/scopes.go.
+  // Blocks follow the implication graph in reverse, as in every other
+  // family: a block on read also takes write away. mcp:connect is implied by
+  // neither, so its block stays on its own. Mirrors scopeExpansions in
+  // server/internal/authz/scopes.go.
   "mcp:read": ["mcp:blocked_read"],
-  "mcp:write": ["mcp:blocked_write"],
+  "mcp:write": ["mcp:blocked_write", "mcp:blocked_read"],
   "mcp:connect": ["mcp:blocked_connect"],
   "mcp:auth": ["mcp:blocked_auth"],
   "environment:read": ["environment:blocked_read"],

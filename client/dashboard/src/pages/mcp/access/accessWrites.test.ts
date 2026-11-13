@@ -84,6 +84,52 @@ describe("allowWrite", () => {
 
     expect(allowWrite(direct, rows[0]!, "use").entries).toEqual([]);
   });
+
+  it("lifts the row's own view block when opening manage", () => {
+    // A view block also takes manage, so allowing manage has to lift it or
+    // the new grant stays blocked.
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "blocked_view" }),
+    ]);
+
+    expect(allowWrite(direct, rows[0]!, "manage").entries).toEqual([
+      {
+        principalUrn: "user:1",
+        level: "manage",
+        tools: [],
+        dispositions: [],
+      },
+    ]);
+  });
+});
+
+describe("allowWrite keeps what a lifted block also closed", () => {
+  it("keeps manage blocked when allowing view lifts a view block", () => {
+    // The view block also closes the manage the role grants. Allowing view
+    // must not hand that manage back.
+    const { direct, rows } = state([
+      role({ level: "manage" }),
+      role({ appliesTo: "resource", level: "blocked_view" }),
+    ]);
+
+    expect(allowWrite(direct, rows[0]!, "view").entries).toEqual([
+      {
+        principalUrn: "role:global:1",
+        level: "blocked_manage",
+        tools: [],
+        dispositions: [],
+      },
+    ]);
+  });
+
+  it("writes no manage block when nothing grants manage", () => {
+    const { direct, rows } = state([
+      role({ level: "view" }),
+      role({ appliesTo: "resource", level: "blocked_view" }),
+    ]);
+
+    expect(allowWrite(direct, rows[0]!, "view").entries).toEqual([]);
+  });
 });
 
 describe("revokeScopeWrite", () => {
@@ -119,8 +165,8 @@ describe("revokeScopeWrite", () => {
   });
 
   it("blocks view without touching a block already written for manage", () => {
-    // The mcp:blocked_* scopes are independent, so each line's block stands
-    // on its own rather than one making another redundant.
+    // Each line's block is written for that line, even where a view block
+    // would also cover manage, so lifting one line later leaves the other.
     const { direct, rows } = state([
       role({ level: "manage" }),
       role({ appliesTo: "resource", level: "blocked_manage" }),
@@ -213,15 +259,14 @@ describe("lifting a block", () => {
     expect(allowWrite(direct, rows[0]!, "manage").entries).toEqual([]);
   });
 
-  it("keeps another line's block, which takes nothing from this scope", () => {
+  it("lifts a view block, which takes manage too", () => {
+    // Manage includes view, so the view block is what closes the manage line.
     const { direct, rows } = state([
       role({ level: "manage" }),
       role({ appliesTo: "resource", level: "blocked_view" }),
     ]);
 
-    expect(allowWrite(direct, rows[0]!, "manage").entries).toEqual([
-      { principalUrn: "role:global:1", level: "blocked_view" },
-    ]);
+    expect(allowWrite(direct, rows[0]!, "manage").entries).toEqual([]);
   });
 
   it("keeps a stronger block, which takes nothing from this scope", () => {
@@ -315,8 +360,8 @@ describe("revokeRowWrite", () => {
   });
 
   it("blocks every scope for a principal an organization-wide rule reaches", () => {
-    // Blocks are independent, so "no access at all" has to say so three
-    // times rather than leaning on one block to cover the rest.
+    // Connect's block stands alone, so "no access at all" writes a block for
+    // each line rather than leaning on the view block to cover the rest.
     const { direct, rows } = state([role()]);
 
     const write = revokeRowWrite(direct, rows[0]!, "Acme Ops");

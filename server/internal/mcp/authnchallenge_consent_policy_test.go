@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The mcp:blocked_* scopes are independent of one another: each removes the
-// grant it names and nothing else. Connecting to a server and administering
-// it are different jobs, so blocking one must leave the other standing (see
-// scopeExpansions in authz/scopes.go).
+// An mcp:blocked_* scope removes the permission it names and every
+// permission that implies it: blocking read also takes write, because write
+// implies read. Connect is implied by nothing else here, so blocking it leaves
+// read and write standing, and blocking read or write leaves connect.
 func TestConsentPolicyExclusionHierarchy(t *testing.T) {
 	t.Parallel()
 	for _, blocked := range []authz.Scope{authz.ScopeMCPBlockedConnect, authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite} {
@@ -24,12 +24,15 @@ func TestConsentPolicyExclusionHierarchy(t *testing.T) {
 				}
 				allowed, err := consentPolicyConnect(policy, authz.MCPCheck(scope, "example-server", "example-project"))
 				require.NoError(t, err)
-				// mcp:write and mcp:connect satisfy all three checks, so the
-				// only thing that can take one away is that scope's own
-				// exclusion.
-				exclusion, ok := authz.ExclusionScopeFor(scope)
-				require.True(t, ok)
-				want := blocked != exclusion
+				// mcp:write and mcp:connect satisfy all three checks, so what
+				// takes one away is the block on the checked scope or on any
+				// scope it implies.
+				want := true
+				for _, implied := range authz.ScopeImplicationClosure(scope) {
+					if exclusion, ok := authz.ExclusionScopeFor(implied); ok && exclusion == blocked {
+						want = false
+					}
+				}
 				require.Equal(t, want, allowed)
 			})
 		}

@@ -69,6 +69,34 @@ func TestService_ListIdentityAccess_OwnBlockOutranksOwnGrant(t *testing.T) {
 	require.Empty(t, result.Servers)
 }
 
+// A read block also withdraws write access, as it does in the engine, so an
+// mcp:write grant does not keep a read-blocked server listed.
+func TestService_ListIdentityAccess_MCPReadBlockWithdrawsWriteGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	blockedServer := seedRemoteMCPServer(t, ctx, ti.conn, orgID)
+	openServer := seedRemoteMCPServer(t, ctx, ti.conn, orgID)
+
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_mcp_writer", "mcp-writer@test.com", "MCP Writer", "workos_mcp_writer", "membership_mcp_writer")
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "local_mcp_writer")
+	seedGrant(t, ctx, ti.conn, orgID, userPrincipal, authz.ScopeMCPWrite, authz.WildcardResource)
+	seedGrant(t, ctx, ti.conn, orgID, userPrincipal, authz.ScopeMCPBlockedRead, blockedServer)
+
+	result, err := ti.service.ListIdentityAccess(ctx, &gen.ListIdentityAccessPayload{UserID: "local_mcp_writer", SessionToken: nil})
+	require.NoError(t, err)
+
+	serverIDs := make([]string, 0, len(result.Servers))
+	for _, server := range result.Servers {
+		serverIDs = append(serverIDs, server.ID)
+	}
+	require.ElementsMatch(t, []string{openServer}, serverIDs)
+}
+
 func seedSkill(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) string {
 	t.Helper()
 

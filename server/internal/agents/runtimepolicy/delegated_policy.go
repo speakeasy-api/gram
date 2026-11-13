@@ -299,7 +299,16 @@ func delegatedPolicyClosure(version DelegatedPolicyVersion, requested []Delegate
 // issued at those versions. A stored policy is only a ceiling, so the connect
 // it records still needs a live mcp:connect grant from the agent and its owner
 // before it allows anything.
+//
+// Versions 1 through 8 also predate MCP blocks following Implies in reverse,
+// when mcp:blocked_read implied no other block, so they keep recording an MCP
+// block on its own. Evaluation still applies the wider rule: a stored
+// mcp:blocked_read takes mcp:write away whatever the policy records, because
+// checks expand blocks when they are evaluated, not when they are stored.
 func delegatedScopeClosure(version DelegatedPolicyVersion, scope authz.Scope) []authz.Scope {
+	if version <= DelegatedPolicyVersion8 && slices.Contains(legacyIndependentMCPBlocks, scope) {
+		return []authz.Scope{scope}
+	}
 	closure := authz.ScopeImplicationClosure(scope)
 	if version >= DelegatedPolicyVersion8 || slices.Contains(closure, authz.ScopeMCPConnect) {
 		return closure
@@ -310,6 +319,14 @@ func delegatedScopeClosure(version DelegatedPolicyVersion, scope authz.Scope) []
 	closure = append(closure, authz.ScopeMCPConnect)
 	slices.Sort(closure)
 	return closure
+}
+
+// legacyIndependentMCPBlocks are the MCP blocks whose closure stored policies
+// of versions 1 through 8 record as the block alone.
+var legacyIndependentMCPBlocks = []authz.Scope{
+	authz.ScopeMCPBlockedRead,
+	authz.ScopeMCPBlockedWrite,
+	authz.ScopeMCPBlockedConnect,
 }
 
 func runtimeGrants(version DelegatedPolicyVersion, effective []DelegatedPolicyGrant) []authz.Grant {

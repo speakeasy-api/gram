@@ -407,7 +407,9 @@ func TestToolsListMCPConnectFilterInterceptor_Inspection(t *testing.T) {
 			wantMarked: true,
 		},
 		{
-			name: "mcp:write keeps and marks even when read is blocked",
+			// A read block takes write away too, so the holder is left with
+			// connect alone and gets the filtered list.
+			name: "mcp:write blocked by a read block no longer inspects",
 			grants: []authz.Grant{
 				authz.NewGrantWithSelector(authz.ScopeMCPWrite, onServer),
 				authz.NewGrantWithSelector(authz.ScopeMCPBlockedRead, onServer),
@@ -415,7 +417,7 @@ func TestToolsListMCPConnectFilterInterceptor_Inspection(t *testing.T) {
 				blockDelete,
 			},
 			inspect:    true,
-			wantMarked: true,
+			wantMarked: false,
 		},
 		{
 			name:       "connect alone still drops them when inspection is requested",

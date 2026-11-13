@@ -12,12 +12,6 @@ import (
 // and the catalogue read. They hold no policy of their own: a question about
 // what a scope means is answered in registry_resources.go.
 
-// independentBlockKinds lists the kinds whose blocks do not yet follow
-// Implies in reverse. Today mcp:blocked_read does not block mcp:write; the
-// plan treats that as a bug (R7) and fixes it as its own behaviour change, by
-// emptying this list. Until then the derived tables keep today's behaviour.
-var independentBlockKinds = []Kind{"mcp"}
-
 // ModelScope is one stored scope and where it comes from.
 type ModelScope struct {
 	Scope      Scope
@@ -101,7 +95,7 @@ func (r Registry) deriveScopeExpansions() map[Scope][]Scope {
 				lowerScope := t.ScopeFor(lower)
 				out[lowerScope] = append(out[lowerScope], t.ScopeFor(higher))
 
-				if slices.Contains(independentBlockKinds, t.Kind) || !higher.HasBlock() || !lower.HasBlock() {
+				if !higher.HasBlock() || !lower.HasBlock() {
 					continue
 				}
 				higherBlock := t.BlockScopeFor(higher)
