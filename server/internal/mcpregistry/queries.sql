@@ -169,7 +169,7 @@ CROSS JOIN LATERAL jsonb_array_elements(
         ELSE '[]'::jsonb
     END
 ) AS n(value)
-WHERE e.server_id <> sqlc.arg(server_id)::uuid
+WHERE e.server_id IS DISTINCT FROM sqlc.arg(server_id)::uuid
 AND jsonb_typeof(n.value) = 'string'
 AND (n.value #>> '{}') = ANY(sqlc.arg(names)::text[]);
 

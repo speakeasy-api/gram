@@ -5,10 +5,33 @@ local disposable tests; no deployed database or configured application database
 is a migration test target. Use the approved operator connection and normal
 review/deployment safeguards for any eventual rollout.
 
+## Pre-freeze name preflight (read-only prerequisite)
+
+Before freezing writers, run this read-only check through the approved operator
+connection against the explicitly verified target. Missing, null, empty, and
+non-string names all count as invalid:
+
+```sql
+SELECT count(*) AS invalid_server_names
+FROM public.mcp_registry_entries
+WHERE NOT COALESCE(
+  jsonb_typeof(data #> '{server,name}') = 'string'
+  AND data #>> '{server,name}' <> '', false
+);
+```
+
+Require **zero** before beginning the freeze. A nonzero result blocks the rollout:
+agree and complete an explicitly approved reconciliation **before the freeze**,
+then repeat this check. This runbook authorizes no destructive repair, deletion,
+replacement of IDs, or automatic rewriting of historical records. Do not begin
+the freeze hoping the backfill will repair invalid names; it intentionally aborts.
+The preflight does not replace the backfill's locked validation.
+
 ## Release boundaries and continuous write freeze
 
-The final development checkout contains both generated migrations. It is **not**
-a single deployable artifact: never apply all migrations to unbackfilled data.
+This release A checkout contains only the generated expand migration and
+expand-compatible code. Release B delivers the separately approved contract
+migration and final backend capabilities. Never apply contract to unbackfilled data.
 Prepare the entire green, approved release stack **before** draining writers.
 There are no new flags, application backfill hooks, arbitrary-version fallback,
 or temporary `AdoptPublishedDefault` behavior.
@@ -17,7 +40,8 @@ or temporary `AdoptPublishedDefault` behavior.
    `20261113192306_registry_server_identities.sql`. Entry linkage remains nullable
    and name-only uniqueness remains. Package migrations separately from application
    behavior; do not accidentally include the contract migration in this release.
-2. Begin one continuous registry-write freeze using the approved operational
+2. Pass the **pre-freeze name preflight** below with zero invalid names before
+   beginning one continuous registry-write freeze using the approved operational
    procedure. Drain **all** registry writers and their in-flight work: admin
    dashboard/API edits, creates, publish toggles and icons; Admin MCP registry
    operations; promotion approvals, promotion workers, seeding and other
@@ -34,10 +58,11 @@ or temporary `AdoptPublishedDefault` behavior.
    a nonzero count is a stop condition requiring investigation and reconciliation. A must preserve final
    immutable-version and no-auto-default semantics, not introduce transitional
    republish behavior. Nullable SQLc outputs must be generated, not transplanted.
-5. Still frozen, apply the existing generated contract migration
-   `*_registry_server_versions.sql` as its separately approved schema artifact.
-   Discover it with `find server/migrations -maxdepth 1 -name '*_registry_server_versions.sql'`;
-   require **exactly one** result before proceeding. The unshipped contract timestamp
+5. **Release B handoff, not executable from this A checkout:** still frozen,
+   obtain B's separately approved generated contract schema artifact
+   `*_registry_server_versions.sql`. In that B artifact, discover it with `find server/migrations -maxdepth 1 -name '*_registry_server_versions.sql'`;
+   require **exactly one** result before applying it. Zero results is expected in A;
+   do not create or apply a contract migration from A. The unshipped contract timestamp
    may change on regeneration; the shipped expand filename above remains fixed. Revalidate linkage, default ownership/publication, NOT NULL, removal
    of name-only uniqueness, and validity of exact-version uniqueness. Stop on any
    failure. Do not regenerate a duplicate contract migration.
@@ -134,7 +159,7 @@ failed transaction before retrying; never alter historical JSON or replace IDs
 to force success. An unpublished legacy default needs explicit operator
 reconciliation, not repeated backfill or fallback selection.
 
-After contract:
+Release B only, after applying B's contract artifact:
 
 ```sql
 SELECT attnotnull FROM pg_attribute
@@ -223,13 +248,23 @@ readers with writes stopped. No schema downgrade is promised.
 
 ## Local executable verification and remaining gates
 
+In this **release A** checkout,
 `mise run test:server ./internal/mcpregistry/ -count=1` includes
-`TestVersionMigrationTransition`: it reuses disposable test containers/clones,
-creates a private schema, replays the actual legacy and generated expand/contract
-files statement-by-statement, executes the operator backfill twice, and checks
-preservation, default decisions, linkage, index validity and constraint enforcement.
-It never uses the configured application database. Migration lint must likewise
-point only at a separately owned disposable database using process-only overrides.
+`TestExpandMigrationTransition`: it reuses disposable test containers/clones,
+creates a private schema, replays the actual legacy and generated expand files,
+executes the operator backfill twice, and checks preservation, existing default
+choices and zero linkage/default invariant counts. `TestExpandLinkageRejectsInvalidOwnership`
+checks the actual expand ownership constraints. Neither test applies contract.
+
+**Release B** must deliver `TestVersionMigrationTransition` with its actual
+contract migration and verify NOT NULL, index validity, name-only index removal,
+and version uniqueness. B's exact-one migration-discovery gate above must pass
+against B's artifact, not this checkout. These are B delivery requirements, not
+claims about tests or migration files present in A.
+
+These tests never use the configured application database. Migration lint must
+likewise point only at a separately owned disposable database using process-only
+overrides.
 
 This test and runbook do not establish whole-feature acceptance. Combined backend,
 admin/dashboard tests and typechecks, final browser/persistence acceptance, and

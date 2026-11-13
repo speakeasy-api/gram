@@ -14,7 +14,7 @@ WITH inserted AS (
  FROM mcp_registry_entries WHERE server_id IS NULL
  ON CONFLICT (name) DO NOTHING RETURNING id
 )
-SELECT count(*) FROM inserted;
+SELECT count(*) AS inserted FROM inserted;
 UPDATE mcp_registry_entries e SET server_id = s.id
 FROM mcp_registry_servers s
 WHERE e.server_id IS NULL AND s.name = e.data #>> '{server,name}';

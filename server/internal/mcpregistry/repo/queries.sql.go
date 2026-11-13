@@ -527,7 +527,7 @@ CROSS JOIN LATERAL jsonb_array_elements(
         ELSE '[]'::jsonb
     END
 ) AS n(value)
-WHERE e.server_id <> $1::uuid
+WHERE e.server_id IS DISTINCT FROM $1::uuid
 AND jsonb_typeof(n.value) = 'string'
 AND (n.value #>> '{}') = ANY($2::text[])
 `
