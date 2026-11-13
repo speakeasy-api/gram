@@ -333,11 +333,11 @@ func (s *Service) recordDialFailure(ctx context.Context, gate *metaGateContext, 
 			code = failure.code
 			opts = append(opts, mcpconnectionattempts.Provider(failure.provider))
 		}
-		s.recordMemberOutcome(ctx, gate, member, code, opts...)
+		s.recordMemberFailure(ctx, gate, member, code, opts...)
 		return
 	}
 	if failure, ok := errors.AsType[memberConnectionError](err); ok {
-		s.recordMemberOutcome(ctx, gate, member, failure.code, append(opts, mcpconnectionattempts.Provider(failure.provider))...)
+		s.recordMemberFailure(ctx, gate, member, failure.code, append(opts, mcpconnectionattempts.Provider(failure.provider))...)
 	}
 }
 
@@ -683,14 +683,13 @@ func (s *Service) executeProxiedMemberTool(
 	}
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberOutcome(ctx, gate, member, failure.code, mcpconnectionattempts.Provider(failure.provider))
+			s.recordMemberFailure(ctx, gate, member, failure.code, mcpconnectionattempts.Provider(failure.provider))
 		}
 		// The gateway logs this failure only when the call never reached
 		// the upstream interceptor.
 		failMetaToolCall(ctx, metaMemberErrorStatus(err), err.Error())
 		return marshalMetaMemberFailure(ctx, logger, req.ID, err, err.Error())
 	}
-	s.recordMemberOutcome(ctx, gate, member, mcpconnectionattempts.ResultServed, mcpconnectionattempts.Provider(dial.provider))
 
 	bs, err := json.Marshal(&result[json.RawMessage]{
 		ID:     req.ID,

@@ -681,7 +681,7 @@ func (s *Service) checkCatalogApproval(ctx context.Context, logger *slog.Logger,
 // refuseCatalogConsentCall records and words a call refused because its approval no longer matches.
 func (s *Service) refuseCatalogConsentCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, consent catalogConsentError, named bool) (string, staleChoiceRemedy) {
 	message, remedy := s.catalogConsentRefusal(ctx, logger, gate, member, consent, named)
-	s.recordMemberOutcome(ctx, gate, member, consentRefusalHappened(remedy), mcpconnectionattempts.Detail(string(consent.reason)))
+	s.recordMemberFailure(ctx, gate, member, consentRefusalHappened(remedy), mcpconnectionattempts.Detail(string(consent.reason)))
 	return message, remedy
 }
 

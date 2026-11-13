@@ -52,8 +52,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// The healthy path: a named caller's served requests write one served row an hour, not one each.
-func TestHealthyToolCallRecordsOneServedRow(t *testing.T) {
+// The healthy path: an authenticated tools/call forwarded to a working server writes nothing.
+func TestHealthyToolCallRecordsNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -79,78 +79,7 @@ func TestHealthyToolCallRecordsOneServedRow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	rows := rec.Rows()
-	require.Len(t, rows, 1, "the second served request within the hour writes nothing")
-	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.ResultServed)
-	require.Equal(t, subject.String(), row.SubjectURN)
-	require.Equal(t, string(mcpconnectionattempts.OutcomeConnected), row.Outcome)
-	require.Empty(t, row.Reason)
-}
-
-// An anonymous caller is nobody's connection, so serving it writes nothing.
-func TestAnonymousServedRequestRecordsNothing(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx := requireProjectAuthContext(t, ctx)
-	rec := mcpconnectionattemptstest.New(t)
-	ti.service.SetConnectionRecorder(rec.Recorder)
-	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "served-anonymous-"+uuid.NewString()[:8])
-
-	resp, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	rec.RequireNothing()
-}
-
-// A proxied server that answers writes a served row naming its upstream, once an hour.
-func TestProxiedServedRequestRecordsOnce(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx := requireProjectAuthContext(t, ctx)
-	rec := mcpconnectionattemptstest.New(t)
-	ti.service.SetConnectionRecorder(rec.Recorder)
-
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var rpc struct {
-			ID json.RawMessage `json:"id"`
-		}
-		if json.NewDecoder(r.Body).Decode(&rpc) != nil || len(rpc.ID) == 0 {
-			w.WriteHeader(http.StatusAccepted)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": rpc.ID, "result": map[string]any{"content": []any{}}}))
-	}))
-	t.Cleanup(upstream.Close)
-
-	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
-	slug := "endpoint-" + uuid.NewString()
-	mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, slug, "public", issuerID)
-	subject := urn.NewUserSubject(mockidp.MockUserID)
-	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
-		Subject:  subject,
-		Audience: urn.NewUserSessionIssuer(issuerID).String(),
-		Issuer:   ti.serverURL.String() + "/x/mcp/" + slug,
-		Lifetime: time.Hour,
-	})
-	require.NoError(t, err)
-	persistTestUserSession(t, ti, issuerID, subject, jti)
-
-	call, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": map[string]any{"name": "ping", "arguments": map[string]any{}}})
-	require.NoError(t, err)
-	for range 2 {
-		resp, err := servePublicHTTP(t, context.Background(), ti, slug, call, token, nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-	}
-
-	require.Len(t, rec.Rows(), 1)
-	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.ResultServed)
-	require.Equal(t, mcpServer.ID.String(), row.ServerID)
-	require.Equal(t, subject.String(), row.SubjectURN)
-	require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(upstream.URL), row.ProviderHost)
 }
 
 // A client's first handshake carries no credentials. It is how sign-in starts.
@@ -578,7 +507,7 @@ func TestGateRejectionReadsTheReportedClient(t *testing.T) {
 }
 
 // A gateway member that answers writes nothing, through the real request path.
-func TestHealthyGatewayMemberRecordsServedRows(t *testing.T) {
+func TestHealthyGatewayMemberRecordsNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -593,23 +522,7 @@ func TestHealthyGatewayMemberRecordsServedRows(t *testing.T) {
 
 	envelope := callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{"name": memberSlug + "--ping", "arguments": map[string]any{}})
 	require.NotContains(t, string(envelope["result"]), `"isError":true`)
-
-	rows := rec.Rows()
-	require.Len(t, rows, 2, "one row for the gateway, one for the member")
-	members := map[string]mcpconnectionattempts.Row{}
-	for _, row := range rows {
-		require.Equal(t, mcpconnectionattempts.ResultServed.String(), row.StepResult)
-		require.Equal(t, meta.ID.String(), row.ServerID)
-		require.NotEmpty(t, row.SubjectURN)
-		members[row.MemberID] = row
-	}
-	require.Contains(t, members, "")
-	require.Len(t, members, 2)
-	for id, row := range members {
-		if id != "" {
-			require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(upstream.url), row.ProviderHost)
-		}
-	}
+	rec.RequireNothing()
 }
 
 // A row written the production way reaches ClickHouse, so the recorder is really wired to the service.

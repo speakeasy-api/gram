@@ -37,12 +37,6 @@ const (
 
 	// oncePendingPerPass bounds one periodic pass, so it holds the lock only briefly.
 	oncePendingPerPass = 1_000
-
-	// servedInterval is how often one connection's served requests write a row.
-	servedInterval = time.Hour
-
-	// servedMaxConnections bounds memory to about 10 MiB. An evicted connection writes its next row early.
-	servedMaxConnections = 25_000
 )
 
 // onceKey is what one repeating single-request row looks like.
@@ -108,15 +102,10 @@ func newOnceLimiter() *onceLimiter {
 	return l
 }
 
-// nameable reports a subject that tells one caller from another.
-func nameable(subject string) bool {
-	return subject != "" && !strings.HasPrefix(subject, string(urn.SessionSubjectKindAnonymous)+":")
-}
-
 func onceKeyOf(row Row) onceKey {
 	// Anonymous subjects and refused ones anyone can mint can't tell callers apart, so they fold.
 	subject := row.SubjectURN
-	if !nameable(subject) || row.foldSubjects != "" {
+	if strings.HasPrefix(subject, string(urn.SessionSubjectKindAnonymous)+":") || row.foldSubjects != "" {
 		subject = ""
 	}
 	what := row.Reason
@@ -236,61 +225,4 @@ func (l *onceLimiter) pendingRows(now time.Time, last bool) []Row {
 		rows = append(rows, row)
 	}
 	return rows
-}
-
-// servedKey is one connection: a person on one server, or gateway member, through one app.
-type servedKey struct {
-	organizationID string
-	serverID       string
-	memberID       string
-	subject        string
-	appKey         string
-}
-
-func servedKeyOf(row Row) servedKey {
-	return servedKey{organizationID: row.OrganizationID, serverID: row.ServerID, memberID: row.MemberID, subject: row.SubjectURN, appKey: row.AppKey}
-}
-
-// servedConnections samples served rows: one per connection per servedInterval. Unlike Once
-// rows, a sampled-out row is not counted, since a success needs no total. It has its own lock,
-// so a served request never waits on Once rows.
-type servedConnections struct {
-	mu   sync.Mutex
-	last *simplelru.LRU[servedKey, time.Time]
-}
-
-func newServedConnections() *servedConnections {
-	last, err := simplelru.NewLRU[servedKey, time.Time](servedMaxConnections, nil)
-	if err != nil {
-		// Only a non-positive size fails, and this is a constant.
-		panic("served connections size must be positive")
-	}
-	return &servedConnections{mu: sync.Mutex{}, last: last}
-}
-
-// claim reports whether a connection's served row is due, and if so claims the interval, so
-// concurrent requests write one row.
-func (s *servedConnections) claim(row Row, now time.Time) bool {
-	key := servedKeyOf(row)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if last, ok := s.last.Get(key); ok && now.Sub(last) < servedInterval {
-		return false
-	}
-	s.last.Add(key, now)
-	return true
-}
-
-// release gives back a claim whose row was not queued, so the next request tries again.
-func (s *servedConnections) release(row Row, claimedAt time.Time) {
-	key := servedKeyOf(row)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if last, ok := s.last.Peek(key); ok && last.Equal(claimedAt) {
-		s.last.Remove(key)
-	}
 }

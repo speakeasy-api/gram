@@ -18,8 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Per-request rows record refusals and failures, and a served request by a named caller,
-// sampled to one row per connection per hour.
+// Per-request rows record refusals and failures only: a served request writes nothing.
 
 // errRiskPolicyDenied marks a tools/call a risk policy stopped.
 var errRiskPolicyDenied = errors.New("risk policy denied the call")
@@ -47,12 +46,12 @@ func (s *Service) gatewayReportedClient(ctx context.Context, gate *metaGateConte
 	return s.reportedClient(ctx, gate.request, uuid.Nil, metaClientInfoScope(gate.metaServerID))
 }
 
-// recordRequestOutcome writes one request's refusal or failure, or ResultServed, unless there is none or the caller left.
-func (s *Service) recordRequestOutcome(ctx context.Context, scope mcpconnectionattempts.Scope, what mcpconnectionattempts.Happened, r *http.Request, opts ...mcpconnectionattempts.Option) {
-	if what == nil || what == (mcpconnectionattempts.Code{}) || errors.Is(ctx.Err(), context.Canceled) {
+// recordRequestOutcome writes one request's refusal or failure, unless there is none or the caller left.
+func (s *Service) recordRequestOutcome(ctx context.Context, scope mcpconnectionattempts.Scope, code mcpconnectionattempts.Code, r *http.Request, opts ...mcpconnectionattempts.Option) {
+	if code == (mcpconnectionattempts.Code{}) || errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
-	s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, what, append(opts, mcpconnectionattempts.FromRequest(r))...)
+	s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, code, append(opts, mcpconnectionattempts.FromRequest(r))...)
 }
 
 // recordGateRejection attributes invalid bearers only when their signature proves a subject.
@@ -155,9 +154,8 @@ func (s *Service) memberConnectionOption(ctx context.Context, gate *metaGateCont
 	})
 }
 
-// recordMemberOutcome records a member's failed tool call, refining a missing connection to its
-// cause, or ResultServed for one the member answered.
-func (s *Service) recordMemberOutcome(ctx context.Context, gate *metaGateContext, member metaMember, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
+// recordMemberFailure records a member's failed tool call, refining a missing connection to its cause.
+func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext, member metaMember, what mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 	if what == mcpconnectionattempts.CodeInvalidRemoteSession {
 		what = gate.memberNoCredentialHappened(member)
 	}
