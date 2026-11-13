@@ -2,6 +2,7 @@ package memoryeval_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"slices"
@@ -11,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/memorydigest"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/bench"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -135,6 +138,37 @@ func TestSearchTeamMemoryMechanical(t *testing.T) {
 	}
 	require.Empty(t, card.privateCanaries, "personal-account sessions never reach team memory")
 	require.Empty(t, card.otherProjectCanaries, "team memory is scoped to one project")
+}
+
+// TestRecallTeamHistoryMechanical holds arm D to the same privacy bar. Its
+// sweep reads the largest recall block, every item reachable by zooming down
+// from it, and every search a sweep query can make. The default block must
+// also stay inside its token budget, which is under the RFC's 8k bar.
+func TestRecallTeamHistoryMechanical(t *testing.T) {
+	t.Parallel()
+	corpus := memoryeval.Build(corpusNow)
+	loaded := loadCorpus(t, "memoryeval_recall_team_history", corpus)
+	_, err := bench.Prepare(t.Context(), testenv.NewLogger(t), &echoModel{}, loaded.target(), bench.DefaultMemoryModels, 8)
+	require.NoError(t, err)
+	recallArm, err := bench.RecallTeamHistoryArm(testenv.NewLogger(t), loaded.target())
+	require.NoError(t, err)
+
+	card := probe(t.Context(), t, corpus, recallArm)
+	t.Log("\n" + card.String())
+
+	for category, leaks := range card.leaks {
+		require.Empty(t, leaks, "recall_team_history and zoom leaked %s", category)
+	}
+	require.Empty(t, card.privateCanaries, "personal-account sessions never reach team memory")
+	require.Empty(t, card.otherProjectCanaries, "team memory is scoped to one project")
+
+	main := loaded.target().Projects[memoryeval.ProjectMain]
+	block, err := recallArm.Call(t.Context(), "recall_team_history", `{"project_slug":"`+main.Slug+`"}`)
+	require.NoError(t, err)
+	var recall platformmcp.RecallTeamHistoryOutput
+	require.NoError(t, json.Unmarshal([]byte(block), &recall))
+	require.NotEmpty(t, recall.Sources, "the prepared corpus has history to recall")
+	require.LessOrEqual(t, memorydigest.EstimateTokens(recall.History), 4000)
 }
 
 // hashEmbedder is a deterministic bag-of-words embedder for CI: each word

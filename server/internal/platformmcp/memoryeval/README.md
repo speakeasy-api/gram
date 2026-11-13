@@ -19,8 +19,8 @@ Synthetic corpus, questions and checks for team chat memory in the Platform MCP.
   loads the corpus into Postgres and probes the `search_chats` baseline. It
   asserts no credential leaks, no other-project results and full retrieval of
   source chats, and logs the remaining leaks, private-session hits and
-  estimated tool tokens. The PRs that add arms C and D will add their own
-  probes and the recall size assertion.
+  estimated tool tokens. Arms C, D and E have their own probes, and arm D's
+  also checks that the default recall block stays inside its 4k-token budget.
 - **Judged accuracy** (on demand, costs LLM calls): `mise run eval:memory`
   answers every question with each arm's tools, grades answers with a judge
   model that differs from the answering model, and prints a report. Set
@@ -39,8 +39,11 @@ Synthetic corpus, questions and checks for team chat memory in the Platform MCP.
   tests and future scheduled runs share one implementation.
 
 Arms: A has no memory tools, B is today's `search_chats` and `read_chat`.
-Arms C (`search_team_memory`) and D (`recall_team_history` + `zoom` +
-`search_team_memory`) are added by the PRs that ship those tools. Arm E is
+Arm C is `search_team_memory` alone. Arm D is `recall_team_history` + `zoom` +
+`search_team_memory`; it recalls as of the corpus anchor (`WithClock`), so a
+corpus built at a fixed date recalls the same history whenever it runs, and
+its sweep reads the largest recall block plus everything reachable by zooming
+down from it. Admin eval runs score arms A to D. Arm E is
 `search_team_memory` with hybrid retrieval: the same masked items are embedded
 in memory (`--embedding-model`, default the business memory model) and each
 query fuses the vector ranks with the full-text ranks (reciprocal rank

@@ -101,6 +101,10 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	require.NoError(t, err)
 	memoryArm, err := bench.SearchTeamMemoryArm(testenv.NewLogger(t), loaded.target())
 	require.NoError(t, err)
+	// Arm D adds recall_team_history and zoom to search; its gate results
+	// decide whether Organizational Memory turns on for customers.
+	recallArm, err := bench.RecallTeamHistoryArm(testenv.NewLogger(t), loaded.target())
+	require.NoError(t, err)
 	// Arm E embeds the same masked items and fuses vector with full-text
 	// ranks, to decide whether team memory needs embeddings at all.
 	embedder := bench.NewOpenRouterEmbedder(client, loaded.organizationID, envOr("MEMORYEVAL_EMBEDDING_MODEL", bench.DefaultEmbeddingModel))
@@ -109,7 +113,7 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	recall, err := bench.QuestionRecall(t.Context(), corpus, []bench.Arm{memoryArm, hybridArm})
 	require.NoError(t, err)
 
-	report, err := bench.Run(t.Context(), client, corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm, hybridArm}, cfg)
+	report, err := bench.Run(t.Context(), client, corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm, recallArm, hybridArm}, cfg)
 	require.NoError(t, err)
 	report.Preparation = &prep
 	markdown := report.Markdown() + "\n" + recall.Markdown()
