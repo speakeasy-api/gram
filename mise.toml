@@ -250,13 +250,10 @@ GRAM_MCP_FIXTURE_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_MCP_FIXTURE_PORT}}"
 GRAM_MCP_FIXTURE_URL = "{{env.GRAM_HTTP_SCHEME}}://{{env.GRAM_HOST}}:{{env.GRAM_MCP_FIXTURE_PORT}}"
 ## Short access tokens make expiry and refresh visible; refresh tokens last 30 days.
 GRAM_MCP_FIXTURE_ACCESS_TOKEN_TTL = "1h"
-## The fixture runs a tunnel agent through the local gateway, serving its open
-## MCP endpoint as the seeded Tunnelled Private Server.
-GRAM_MCP_FIXTURE_TUNNEL_GATEWAY_URL = "ws://localhost:{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}/connect"
-## The fixture's Enterprise Managed Authorization endpoint (/mcp/ema) takes
-## tokens from this dev-idp's resource authorization server. The local seed
-## points the Enterprise Sign-In (ID-JAG) Server at it.
-GRAM_MCP_FIXTURE_DEVIDP_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}"
+## The fixture reads TUNNEL_GATEWAY_PUBLIC_PORT (its tunnel agent serves the
+## open endpoint as the seeded Tunnelled Private Server) and
+## GRAM_DEVIDP_EXTERNAL_URL (its /mcp/ema endpoint takes the dev-idp's tokens)
+## directly, so they follow this worktree's ports without a git:worksync.
 ## GitHub App for plugin publishing (leave unset to disable)
 # GRAM_PLUGINS_GITHUB_APP_ID = ""
 # GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""

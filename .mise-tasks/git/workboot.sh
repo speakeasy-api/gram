@@ -57,9 +57,10 @@ fi
 
 # `mise run seed` is `zero`'s last step, and the one that fills the org with
 # data and lifts it off the demo gate -- a boot that stops here leaves a
-# dashboard that looks broken. It talks only to Postgres and ClickHouse (no
-# server, no dev-idp handshake), so the remaining failure mode is a database
-# still settling on a cold volume. Retry the seed alone -- if `zero` failed
+# dashboard that looks broken. It needs only Postgres and ClickHouse (its one
+# dev-idp call, for the Enterprise Sign-In server, falls back to a display-only
+# server with a warning), so the remaining failure mode is a database still
+# settling on a cold volume. Retry the seed alone -- if `zero` failed
 # earlier than seeding, these retries fail too and the boot is reported failed
 # anyway.
 for delay in 15 30 60; do

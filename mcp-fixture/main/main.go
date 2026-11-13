@@ -31,8 +31,11 @@ func main() {
 	keyFile := flag.String("ssl-key-file", os.Getenv("GRAM_SSL_KEY_FILE"), "TLS key file")
 	ttl := flag.Duration("access-token-ttl", durationEnv("GRAM_MCP_FIXTURE_ACCESS_TOKEN_TTL", time.Hour), "access token lifetime")
 	suggested := flag.String("suggested-emails", envOr("GRAM_MCP_FIXTURE_SUGGESTED_EMAILS", "alex@fixture.test,sam@fixture.test"), "comma-separated emails offered on the sign-in page")
-	devIDPURL := flag.String("devidp-url", os.Getenv("GRAM_MCP_FIXTURE_DEVIDP_URL"), "dev-idp external URL; serves the Enterprise Managed Authorization endpoint (empty: not served)")
-	tunnelGateway := flag.String("tunnel-gateway-url", os.Getenv("GRAM_MCP_FIXTURE_TUNNEL_GATEWAY_URL"), "local tunnel gateway to serve the open endpoint through (empty: no tunnel)")
+	// Both defaults read the stack's own settings rather than fixture-specific
+	// copies: those are pinned per worktree, while a copy declared in mise.toml
+	// keeps the primary worktree's port until git:worksync re-emits it.
+	devIDPURL := flag.String("devidp-url", os.Getenv("GRAM_DEVIDP_EXTERNAL_URL"), "dev-idp external URL; serves the Enterprise Managed Authorization endpoint (empty: not served)")
+	tunnelGateway := flag.String("tunnel-gateway-url", tunnelGatewayURL(os.Getenv("TUNNEL_GATEWAY_PUBLIC_PORT")), "local tunnel gateway to serve the open endpoint through (empty: no tunnel)")
 	flag.Parse()
 
 	useTLS, err := tlsMode(*certFile, *keyFile)
@@ -92,6 +95,15 @@ func envOr(name, def string) string {
 		return v
 	}
 	return def
+}
+
+// tunnelGatewayURL is the local tunnel gateway's agent endpoint on port, or
+// empty (no tunnel) when the port is not set.
+func tunnelGatewayURL(port string) string {
+	if port == "" {
+		return ""
+	}
+	return "ws://" + net.JoinHostPort("localhost", port) + "/connect"
 }
 
 func durationEnv(name string, def time.Duration) time.Duration {
