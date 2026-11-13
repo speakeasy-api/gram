@@ -108,6 +108,17 @@ type node[S comparable, C any] struct {
 
 	// tags are the labels declared with Tag.
 	tags []string
+
+	// entryRaises and exitRaises are the events the state raises for the
+	// machine itself when it is entered and exited.
+	entryRaises []stateRaise[C]
+	exitRaises  []stateRaise[C]
+}
+
+// stateRaise is an event a state raises on entry or exit.
+type stateRaise[C any] struct {
+	name string
+	fn   func(C) any
 }
 
 // states returns the children that are real states, skipping history nodes.
@@ -333,6 +344,12 @@ type transition[S comparable, C any] struct {
 
 	// targetID is the declared target, when the transition has one.
 	targetID *S
+
+	// alsoIDs are the further targets of a transition that enters several
+	// regions of a parallel state at once, and targets is every target
+	// resolved to a node, the first being target.
+	alsoIDs []S
+	targets []*node[S, C]
 
 	// target is targetID resolved to a node.
 	target *node[S, C]

@@ -272,7 +272,12 @@ func (s *StateBuilder[S, C]) Tag(tags ...string) *StateBuilder[S, C] {
 }
 
 // Always declares an eventless transition. It is taken as soon as the state
-// is active and its guard holds, before any further event is processed.
+// is active and its guard holds, before any further event is processed. One
+// that changes nothing, neither the active states nor the context, is taken
+// once and then rests until something else changes, so an action on a
+// transition that stays where it is runs once per event and not for ever.
+// Eventless transitions that keep changing things without settling are a
+// cycle, and panic.
 func (s *StateBuilder[S, C]) Always() *Transition[S, C, struct{}] {
 	return newTransition[S, C, struct{}](s.b, s.n, triggerAlways)
 }
@@ -367,6 +372,30 @@ func (s *StateBuilder[S, C]) Entry(name string, fn func(context.Context, C)) *St
 // unique among the state's actions.
 func (s *StateBuilder[S, C]) Exit(name string, fn func(context.Context, C)) *StateBuilder[S, C] {
 	s.n.exit = append(s.n.exit, action[C]{name: name, fn: fn})
+	return s
+}
+
+// RaiseOnEntry queues the event f returns for the machine itself whenever
+// the state is entered, as [Transition.Raise] does from a transition. It is
+// processed in the same call to [Machine.Transition], once the step that
+// entered the state is complete.
+func (s *StateBuilder[S, C]) RaiseOnEntry(name string, f func(C) any) *StateBuilder[S, C] {
+	if name == "" {
+		s.b.errorf("state %q: a raise has no name", s.n.name)
+	}
+	s.n.entryRaises = append(s.n.entryRaises, stateRaise[C]{name: name, fn: f})
+
+	return s
+}
+
+// RaiseOnExit queues the event f returns for the machine itself whenever the
+// state is exited, as RaiseOnEntry does on entry.
+func (s *StateBuilder[S, C]) RaiseOnExit(name string, f func(C) any) *StateBuilder[S, C] {
+	if name == "" {
+		s.b.errorf("state %q: a raise has no name", s.n.name)
+	}
+	s.n.exitRaises = append(s.n.exitRaises, stateRaise[C]{name: name, fn: f})
+
 	return s
 }
 
@@ -1068,13 +1097,18 @@ func (t *Transition[S, C, Ev]) CancelRaise(name string) *Transition[S, C, Ev] {
 //
 // When the target is the source state or lies inside it, the source is not
 // exited and entered again unless [Transition.Reenter] is also called.
-func (t *Transition[S, C, Ev]) To(target S) *Transition[S, C, Ev] {
+//
+// Naming further states with also enters each of them as well, which is how
+// one transition puts several regions of a parallel state where it wants
+// them. The targets must lie in different regions of one parallel state.
+func (t *Transition[S, C, Ev]) To(target S, also ...S) *Transition[S, C, Ev] {
 	if t.t.targetID != nil {
-		t.b.errorf("state %q: transition has more than one target", t.t.source.name)
+		t.b.errorf("state %q: To is called more than once on a transition", t.t.source.name)
 		return t
 	}
 
 	t.t.targetID = &target
+	t.t.alsoIDs = also
 
 	return t
 }

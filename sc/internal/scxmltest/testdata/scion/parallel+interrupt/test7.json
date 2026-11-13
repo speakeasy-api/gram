@@ -1,0 +1,18 @@
+{
+  "initialConfiguration": ["c", "e1", "f1"],
+  "events": [
+    {
+      "event": { "name": "t" },
+      "nextConfiguration": ["a1"]
+    }
+  ],
+  "legacySemantics": {
+    "initialConfiguration": ["c", "e1", "f1"],
+    "events": [
+      {
+        "event": { "name": "t" },
+        "nextConfiguration": ["c", "e2", "f2"]
+      }
+    ]
+  }
+}

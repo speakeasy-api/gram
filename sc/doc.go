@@ -97,6 +97,25 @@
 // deterministic. Services invoked from different regions do run concurrently,
 // because drivers execute them outside the core.
 //
+// Regions are independent. A transition into a region exits and enters only
+// that region: the others, the source's own included, keep their states,
+// timers and services, and a region that re-enters itself restarts itself
+// alone. That follows XState rather than SCXML, where such a transition
+// leaves the whole parallel state. A transition between regions that is
+// marked [Transition.Reenter] keeps SCXML's rule and restarts every region,
+// and [StrictSCXML] applies SCXML's rule throughout, for imported charts.
+// One transition can place several regions at once by naming a target in
+// each with [Transition.To].
+//
+// # Conformance
+//
+// The core's semantics are checked against two outside sources. The SCXML
+// conformance fixtures of the SCION test framework that need no scripting
+// run under internal/scxmltest. XState's own tests for parallel, history,
+// final and eventless behaviour are ported in the xstate_*_test.go files,
+// where a comment starting "DIVERGES from XState" marks each place sc
+// behaves differently on purpose.
+//
 // # Checking a chart
 //
 // [Machine.Explore] walks every state a chart can reach, on a clock of its

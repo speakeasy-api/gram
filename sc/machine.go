@@ -54,6 +54,9 @@ type Machine[S comparable, C any] struct {
 	// boundReleases holds the resource release functions given to Bind.
 	boundReleases map[string]func(context.Context, any, Leave[S])
 
+	// strict is set by StrictSCXML.
+	strict bool
+
 	// sends is set when a transition sends to a service, and emits when
 	// one emits.
 	sends bool
@@ -71,8 +74,28 @@ func (m *Machine[S, C]) Emits() bool { return m.emits }
 
 // options holds what the Option values passed to New configure.
 type options struct {
-	version int
-	migrate func(RawSnapshot) (RawSnapshot, error)
+	version          int
+	migrate          func(RawSnapshot) (RawSnapshot, error)
+	allowUnreachable bool
+	strictSCXML      bool
+}
+
+// StrictSCXML makes a transition marked [Transition.Reenter] follow SCXML's
+// rule for what it exits without exception: a region of a parallel state
+// that re-enters itself leaves the whole parallel state, restarting its
+// sibling regions, where sc otherwise exits that region alone. It is for
+// charts imported from SCXML, whose external transitions are Reenter
+// transitions, and for checking the core against SCXML conformance tests.
+func StrictSCXML() Option {
+	return func(o *options) { o.strictSCXML = true }
+}
+
+// AllowUnreachable lets a chart declare states that no transition can ever
+// enter, which is otherwise a declaration error. It is for charts that are
+// generated or imported, where such a state is not a mistake worth
+// stopping for.
+func AllowUnreachable() Option {
+	return func(o *options) { o.allowUnreachable = true }
 }
 
 // Option configures a [Machine] at construction.
@@ -140,6 +163,7 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 		actions:       b.actions,
 		bound:         map[string]boundService[C]{},
 		boundReleases: map[string]func(context.Context, any, Leave[S]){},
+		strict:        o.strictSCXML,
 		sends:         false,
 		emits:         false,
 	}
@@ -177,7 +201,7 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	}
 	m.sends, m.emits = len(b.sends) > 0, b.emits
 	m.registerEvents(b)
-	if len(b.errs) == 0 {
+	if len(b.errs) == 0 && !o.allowUnreachable {
 		m.checkReachable(b)
 	}
 
@@ -222,8 +246,16 @@ func (m *Machine[S, C]) resolveStructure(b *build[S, C], n *node[S, C]) {
 		b.errorf("machine declares no states")
 	case n.initialID != nil:
 		init, ok := m.nodes[*n.initialID]
-		if !ok || init.parent != n || init.kind == kindHistory {
+		if !ok || init.parent != n {
 			b.errorf("state %q: initial state %q is not one of its child states", n.name, fmt.Sprint(*n.initialID))
+			break
+		}
+
+		// A history state may be the initial state: the state then
+		// resumes what it last had active, and starts from the history
+		// state's default the first time.
+		if init.kind == kindHistory && init.defaultID == nil {
+			b.errorf("state %q: initial state %q is a history state without a default", n.name, init.name)
 			break
 		}
 		n.initial = init
@@ -352,6 +384,24 @@ func (m *Machine[S, C]) resolveBehaviour(b *build[S, C], n *node[S, C]) {
 			continue
 		}
 		t.target = target
+		t.targets = []*node[S, C]{target}
+
+		for _, id := range t.alsoIDs {
+			also, ok := m.nodes[id]
+			if !ok {
+				b.errorf("state %q: transition targets undeclared state %q", n.name, fmt.Sprint(id))
+				continue
+			}
+
+			// Two targets can be active together only when they sit
+			// in different regions of a parallel state.
+			for _, other := range t.targets {
+				if !apart(also, other) {
+					b.errorf("state %q: transition targets %q and %q, which are not in different regions of a parallel state", n.name, other.name, also.name)
+				}
+			}
+			t.targets = append(t.targets, also)
+		}
 	}
 }
 
@@ -486,7 +536,9 @@ func (m *Machine[S, C]) checkReachable(b *build[S, C]) {
 				continue
 			}
 			for _, t := range n.transitions {
-				mark(t.target)
+				for _, target := range t.targets {
+					mark(target)
+				}
 			}
 		}
 		changed = len(reached) != before
@@ -533,6 +585,12 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 	}
 	for k, name := range n.exitRuns {
 		write("exit run %q if=%t\n", name, n.exitConds[k] != nil)
+	}
+	for _, raise := range n.entryRaises {
+		write("entry raise %q\n", raise.name)
+	}
+	for _, raise := range n.exitRaises {
+		write("exit raise %q\n", raise.name)
 	}
 	for _, inv := range n.invocations {
 		write("invoke %q %s resource=%t spawned=%t", inv.name, inv.doneType, inv.resource != nil, inv.spawned)
@@ -586,6 +644,9 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 		if t.target != nil {
 			write(" target=%q reenter=%t", t.target.name, t.reenter)
 		}
+		for _, also := range t.targets[min(1, len(t.targets)):] {
+			write(" also=%q", also.name)
+		}
 		if t.stay {
 			write(" stay")
 		}
@@ -596,4 +657,20 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 		m.fingerprint(w, c)
 	}
 	write("end\n")
+}
+
+// apart reports whether a and b can be active together: neither contains
+// the other, and the nearest state that contains both is a parallel state.
+func apart[S comparable, C any](a, b *node[S, C]) bool {
+	if a.within(b) || b.within(a) {
+		return false
+	}
+
+	for anc := a.parent; anc != nil; anc = anc.parent {
+		if b.below(anc) {
+			return anc.kind == kindParallel
+		}
+	}
+
+	return false
 }

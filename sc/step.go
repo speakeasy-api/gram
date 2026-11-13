@@ -356,6 +356,7 @@ func (m *Machine[S, C]) start(c C, now time.Time, seed uint64) (Snapshot[S, C], 
 	enter.source = m.root
 	enter.trigger = triggerAlways
 	enter.target = m.root.initial
+	enter.targets = []*node[S, C]{m.root.initial}
 
 	r.microstep([]*transition[S, C]{enter}, on[S, C](triggerAlways))
 	r.settle()
@@ -845,22 +846,88 @@ func (r *run[S, C]) exitsOverlap(a, b *transition[S, C]) bool {
 
 // domain returns the state whose descendants t exits and re-enters. It is
 // nil for a transition without a target.
+//
+// A transition that does not re-enter disturbs as little as it can: it
+// leaves its source alone when the target lies inside it, and inside a
+// parallel state it exits only the region that contains its target, so the
+// other regions, the source's own included, stay as they are. That follows
+// XState rather than SCXML, whose rule a transition marked Reenter keeps:
+// its domain is the nearest compound state that properly contains both
+// source and target, which for a transition between regions is outside the
+// parallel state, so every region is exited and entered again. The one
+// exception is a region re-entering itself; see reentersRegion.
 func (r *run[S, C]) domain(t *transition[S, C]) *node[S, C] {
 	if t.target == nil {
 		return nil
 	}
 
-	if !t.reenter && t.target.within(t.source) {
-		return t.source
+	all := func(pred func(*node[S, C]) bool) bool {
+		return !slices.ContainsFunc(t.targets, func(n *node[S, C]) bool { return !pred(n) })
+	}
+
+	if r.reentersRegion(t) {
+		return t.source.parent
+	}
+
+	if t.reenter {
+		for a := t.source.parent; a != nil; a = a.parent {
+			if a.kind == kindState && all(func(n *node[S, C]) bool { return n.below(a) }) {
+				return a
+			}
+		}
+
+		return r.m.root
+	}
+
+	if all(func(n *node[S, C]) bool { return n.within(t.source) }) {
+		return r.narrow(t.source, t.targets)
 	}
 
 	for a := t.source.parent; a != nil; a = a.parent {
-		if (a.kind == kindState) && t.target.below(a) {
-			return a
+		if all(func(n *node[S, C]) bool { return n.below(a) }) {
+			return r.narrow(a, t.targets)
 		}
 	}
 
-	return r.m.root
+	return r.narrow(r.m.root, t.targets)
+}
+
+// narrow moves a domain that is a parallel state down to the one region
+// that contains everything the targets stand for, and further while that is
+// again a parallel state. Targets in several regions, or a history target
+// that restores states in several, leave the domain where it is.
+func (r *run[S, C]) narrow(dom *node[S, C], declared []*node[S, C]) *node[S, C] {
+	var targets []*node[S, C]
+	for _, target := range declared {
+		targets = append(targets, r.effectiveTargets(target)...)
+	}
+
+	for dom.kind == kindParallel {
+		var region *node[S, C]
+		for _, child := range dom.states() {
+			if !slices.ContainsFunc(targets, func(n *node[S, C]) bool { return !n.within(child) }) {
+				region = child
+				break
+			}
+		}
+
+		if region == nil {
+			break
+		}
+		dom = region
+	}
+
+	return dom
+}
+
+// reentersRegion reports whether t re-enters a region of a parallel state
+// from inside it: its source is a region and every target lies within it.
+// Such a transition exits and enters that region alone. SCXML would have it
+// leave the whole parallel state, which restarts the other regions for no
+// reason of their own.
+func (r *run[S, C]) reentersRegion(t *transition[S, C]) bool {
+	return !r.m.strict && t.reenter && t.source.parent != nil && t.source.parent.kind == kindParallel &&
+		!slices.ContainsFunc(t.targets, func(n *node[S, C]) bool { return !n.within(t.source) })
 }
 
 // exitSet returns the active states t exits.
@@ -870,8 +937,18 @@ func (r *run[S, C]) exitSet(t *transition[S, C]) []*node[S, C] {
 		return nil
 	}
 
+	region := r.reentersRegion(t)
+
 	var out []*node[S, C]
 	for n := range r.config {
+		if region {
+			if n.within(t.source) {
+				out = append(out, n)
+			}
+
+			continue
+		}
+
 		if n.below(dom) {
 			out = append(out, n)
 		}
@@ -1013,6 +1090,7 @@ func (r *run[S, C]) exit(n *node[S, C], event any) {
 	for k, name := range n.exitRuns {
 		r.emitRun(n, name, event, n.exitConds[k])
 	}
+	r.raise(n.exitRaises)
 
 	r.timers = slices.DeleteFunc(r.timers, func(t timer[S, C]) bool {
 		if t.owner() != n {
@@ -1036,6 +1114,15 @@ func (r *run[S, C]) exit(n *node[S, C], event any) {
 	r.endServices(ending)
 
 	delete(r.config, n)
+}
+
+// raise queues the events a state raises on entry or exit.
+func (r *run[S, C]) raise(raises []stateRaise[C]) {
+	for _, raise := range raises {
+		raised := on[S, C](triggerEvent)
+		raised.event = raise.fn(r.ctx)
+		r.queue = append(r.queue, raised)
+	}
 }
 
 // bare builds an effect that carries no context or event.
@@ -1148,6 +1235,7 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 	for k, name := range n.entryRuns {
 		r.emitRun(n, name, event, n.entryConds[k])
 	}
+	r.raise(n.entryRaises)
 
 	for _, t := range n.transitions {
 		if t.trigger == triggerAfter {
@@ -1167,8 +1255,10 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 
 	r.queueDone(parent)
 
-	if gp := parent.parent; gp.kind == kindParallel && r.allRegionsFinal(gp) {
-		r.queueDone(gp)
+	// A parallel state completes once every region has, and that may in
+	// turn complete a parallel state it is a region of.
+	for p := parent.parent; p.kind == kindParallel && r.allRegionsFinal(p); p = p.parent {
+		r.queueDone(p)
 	}
 }
 
@@ -1179,20 +1269,32 @@ func (r *run[S, C]) queueDone(n *node[S, C]) {
 	r.queue = append(r.queue, stim)
 }
 
-// allRegionsFinal reports whether every region of parallel state p is in a
-// final state.
+// allRegionsFinal reports whether every region of parallel state p has
+// completed.
 func (r *run[S, C]) allRegionsFinal(p *node[S, C]) bool {
 	for _, region := range p.states() {
-		final := false
-		for _, c := range region.children {
-			final = final || (c.kind == kindFinal && r.config[c])
-		}
-		if !final {
+		if !r.completed(region) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// completed reports whether n has completed: a compound state is in one of
+// its final children, and a parallel state has every region completed.
+func (r *run[S, C]) completed(n *node[S, C]) bool {
+	if n.kind == kindParallel {
+		return r.allRegionsFinal(n)
+	}
+
+	for _, c := range n.children {
+		if c.kind == kindFinal && r.config[c] {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (r *run[S, C]) nextID(n *node[S, C], label string) string {
@@ -1483,17 +1585,27 @@ func (r *run[S, C]) entrySet(ts []*transition[S, C]) []*node[S, C] {
 		}
 
 		dom := r.domain(t)
-		r.addDescendants(set, t.target)
 
-		for _, n := range r.effectiveTargets(t.target) {
-			r.addAncestors(set, n, dom)
+		// Every target is in place before the states around them are
+		// added, so a region one target names is not also given its
+		// default entry on behalf of another.
+		for _, target := range t.targets {
+			r.addDescendants(set, target)
+		}
+
+		for _, target := range t.targets {
+			for _, n := range r.effectiveTargets(target) {
+				r.addAncestors(set, n, dom)
+			}
 		}
 
 		// The domain stays active throughout, so it is never entered.
 		// When it is a parallel state its other regions were exited
 		// and need their default entry.
 		delete(set, dom)
-		r.fillRegions(set, dom)
+		if !r.reentersRegion(t) {
+			r.fillRegions(set, dom)
+		}
 	}
 
 	out := make([]*node[S, C], 0, len(set))
@@ -1584,14 +1696,23 @@ func (r *run[S, C]) fillRegions(set map[*node[S, C]]bool, p *node[S, C]) {
 // until nothing more can happen, then starts the services of the states that
 // ended up active.
 func (r *run[S, C]) settle() {
+	rested := false
+
 	for steps := 0; !r.done; steps++ {
 		if steps > maxSettleSteps {
 			panic(fmt.Sprintf("sc: machine %q does not settle: its Always transitions or raised events form a cycle", r.m.id))
 		}
 
+		// An eventless transition that changed nothing, neither the active
+		// states nor the context, would be taken again for ever. It is
+		// taken once, and eventless transitions rest until something else
+		// changes.
 		always := on[S, C](triggerAlways)
-		if ts := r.selectTransitions(always); len(ts) > 0 {
+		if ts := r.selectTransitions(always); len(ts) > 0 && !rested {
+			active, ctx := r.active(), r.ctx
 			r.microstep(ts, always)
+			rested = slices.Equal(active, r.active()) && reflect.DeepEqual(ctx, r.ctx)
+
 			continue
 		}
 
@@ -1604,6 +1725,7 @@ func (r *run[S, C]) settle() {
 
 		if ts := r.selectTransitions(stim); len(ts) > 0 {
 			r.microstep(ts, stim)
+			rested = false
 		}
 	}
 

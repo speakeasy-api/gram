@@ -67,6 +67,11 @@ type TransitionDefinition struct {
 	// transition without a target.
 	Target string `json:"target,omitempty"`
 
+	// Also lists the further targets of a transition that enters several
+	// regions at once. XState writes all of a transition's targets as one
+	// array; a tool reading the export must join Target and Also.
+	Also []string `json:"alsoTargets,omitempty"`
+
 	// Guard names the transition's conditions, joined with &&: each guard
 	// by its name, a [Transition.WhenIn] state as in(#state), and a
 	// [Transition.WhenNotIn] state as !in(#state). XState has no string
@@ -154,9 +159,12 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 	}
 
 	for _, t := range n.transitions {
-		td := TransitionDefinition{Target: "", Guard: "", Actions: nil, Reenter: t.reenter}
+		td := TransitionDefinition{Target: "", Also: nil, Guard: "", Actions: nil, Reenter: t.reenter}
 		if t.target != nil {
 			td.Target = "#" + t.target.name
+		}
+		for _, also := range t.targets[min(1, len(t.targets)):] {
+			td.Also = append(td.Also, "#"+also.name)
 		}
 		var conditions []string
 		for _, g := range t.guards {
