@@ -28,7 +28,7 @@ const (
 	// has no usable dedicated agent.
 	KitSwitchNeedsIdentity KitSwitchOutcome = "needs_identity"
 	// KitSwitchIneligible means Kit cannot serve the current configuration: its
-	// reasoning effort is unsupported or its project has no shared user-session issuer.
+	// valid reasoning preference is unsupported or its project has no shared user-session issuer.
 	KitSwitchIneligible KitSwitchOutcome = "ineligible"
 	// KitSwitchBusy means the assistant has work in flight or a runtime that
 	// may still be finishing a turn. Running again later retries it.
@@ -41,9 +41,9 @@ const (
 // past its warm window by more than the grace its thread workflow has to expire
 // it. The switch marks those runtimes switch_retiring, and the
 // runtime janitor stops their resources. The caller commits tx and audits a
-// KitSwitchSwitched outcome. Unsupported reasoning and other eligibility
-// refusals return a typed outcome without an error or any runtime mutation;
-// errors are reserved for invalid targets and failures to inspect or persist state.
+// KitSwitchSwitched outcome. Valid but unsupported reasoning and other eligibility
+// refusals return a typed outcome without an error or any runtime mutation. Errors
+// cover malformed persisted configuration, invalid targets, and inspection or persistence failures.
 func StaffSwitchToKit(ctx context.Context, tx pgx.Tx, organizationID string, projectID, assistantID uuid.UUID, now time.Time) (KitSwitchOutcome, error) {
 	queries := assistantrepo.New(tx)
 	if err := queries.AcquireAssistantAdvisoryLock(ctx, assistantID.String()); err != nil {
@@ -64,7 +64,11 @@ func StaffSwitchToKit(ctx context.Context, tx pgx.Tx, organizationID string, pro
 		return "", fmt.Errorf("assistant has unknown runtime version %d", assistant.RuntimeVersion)
 	}
 
-	if err := validateRuntimeReasoningEffort(3, reasoningEffortFromPGText(assistant.ReasoningEffort)); err != nil {
+	effort := reasoningEffortFromPGText(assistant.ReasoningEffort)
+	if err := validateReasoningEffort(effort); err != nil {
+		return "", fmt.Errorf("invalid stored assistant reasoning effort: %w", err)
+	}
+	if err := validateRuntimeReasoningEffort(3, effort); err != nil {
 		return KitSwitchIneligible, nil
 	}
 

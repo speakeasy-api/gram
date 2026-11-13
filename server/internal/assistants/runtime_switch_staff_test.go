@@ -74,8 +74,13 @@ func TestStaffSwitchToKitValidatesReasoningBeforeRetirement(t *testing.T) {
 			assistantAfter, err := q.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: projectID, AssistantID: assistant.ID})
 			require.NoError(t, err)
 			if effort == "none" || effort == "malformed" {
-				require.NoError(t, switchErr)
-				require.Equal(t, KitSwitchIneligible, outcome)
+				if effort == "malformed" {
+					require.ErrorIs(t, switchErr, errAssistantValidation)
+					require.Empty(t, outcome)
+				} else {
+					require.NoError(t, switchErr)
+					require.Equal(t, KitSwitchIneligible, outcome)
+				}
 				require.Equal(t, assistantBefore, assistantAfter)
 				require.Equal(t, runtimeBefore, runtimeAfter, "refusal must not retire or alter existing runtime authority")
 				// The same assistant is otherwise eligible: correcting only effort permits the switch.
