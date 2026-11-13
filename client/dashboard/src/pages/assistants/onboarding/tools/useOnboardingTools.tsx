@@ -235,6 +235,7 @@ async function ensureAssistant(
       name: payload.name ?? "Untitled assistant",
       instructions: payload.instructions ?? "You are a helpful assistant.",
       model: payload.model ?? DEFAULT_ASSISTANT_MODEL,
+      reasoningEffort: draft.getReasoningEffort(),
       status: payload.status,
       toolsets: [],
       ...(payload.warm_ttl_seconds !== undefined
@@ -1415,7 +1416,7 @@ function buildAssistantTools(deps: ToolDeps) {
               description: e.description,
               entry_names: e.entries.map((entry) => entry.name),
               populated_entry_names: e.entries
-                .filter((entry) => entry.value !== "<EMPTY>")
+                .filter((entry) => entry.hasValue)
                 .map((entry) => entry.name),
             })),
           });

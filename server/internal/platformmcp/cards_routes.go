@@ -41,6 +41,9 @@ var cardTools = map[string]cardSpec{
 	"register_remote_mcp":                   {kind: cardKindReceipt, route: "P/mcp/{mcp}", label: "Open MCP server"},
 	"attach_platform_mcp_identity_provider": {kind: cardKindReceipt, route: "P/mcp/{mcp}/settings", label: "Open settings"},
 
+	// Configuration previews and committed preferences both link to Overview.
+	"set_assistant_reasoning_effort": {kind: cardKindDetail, route: "P/assistants/{assistant}", label: "Open assistant Overview"},
+
 	// MCP servers.
 	"find_mcp":                              {kind: cardKindList, route: "P/mcp", label: "Open MCP servers"},
 	"get_mcp":                               {kind: cardKindDetail, route: "P/mcp/{mcp}", label: "Open MCP server"},
@@ -274,6 +277,7 @@ type cardRouteParam struct {
 }
 
 var cardRouteParams = map[string]cardRouteParam{
+	"assistant":  {exact: []string{"assistant_id"}, subject: nil, nested: ""},
 	"mcp":        {exact: []string{"mcp_slug", "mcp_id"}, subject: []string{"slug"}, nested: "mcp"},
 	"plugin":     {exact: []string{"plugin_id"}, subject: []string{"id"}, nested: "plugin"},
 	"skill":      {exact: []string{"skill_id"}, subject: []string{"id"}, nested: "skill"},

@@ -2413,6 +2413,7 @@ func marshalTypesAssistantToAssistantResponseBody(v *types.Assistant) *Assistant
 		AgentID:         v.AgentID,
 		Name:            v.Name,
 		Model:           v.Model,
+		ReasoningEffort: v.ReasoningEffort,
 		Instructions:    v.Instructions,
 		WarmTTLSeconds:  v.WarmTTLSeconds,
 		MaxConcurrency:  v.MaxConcurrency,

@@ -91069,6 +91069,14 @@ components:
           type: string
           description: The project ID owning the assistant.
           format: uuid
+        reasoning_effort:
+          type: string
+          description: The reasoning effort used by the assistant.
+          enum:
+            - none
+            - low
+            - medium
+            - high
         runtime_version:
           type: integer
           description: 'Desired runtime protocol version: 2 is the default runtime, 3 is Kit. Runtime changes require a settled assistant and available destination.'
@@ -91105,6 +91113,7 @@ components:
         - project_id
         - name
         - model
+        - reasoning_effort
         - instructions
         - toolsets
         - mcp_servers
@@ -93672,6 +93681,15 @@ components:
         name:
           type: string
           description: The assistant name.
+        reasoning_effort:
+          type: string
+          description: The reasoning effort used by the assistant.
+          default: medium
+          enum:
+            - none
+            - low
+            - medium
+            - high
         status:
           type: string
           description: Optional initial status.
@@ -97699,6 +97717,9 @@ components:
           type: string
           description: The creation date of the environment entry
           format: date-time
+        has_value:
+          type: boolean
+          description: Whether the entry holds a non-empty value. Secret entries can be empty placeholders waiting for a value.
         is_secret:
           type: boolean
           description: Whether the value is a secret. Secret values are redacted in reads; non-secret values are returned in cleartext.
@@ -97711,12 +97732,13 @@ components:
           format: date-time
         value:
           type: string
-          description: The value of the environment variable. Cleartext when is_secret is false, redacted otherwise.
+          description: The value of the environment variable. Cleartext when is_secret is false. For a secret, a fixed mask ("***") when it has a value or "<EMPTY>" when it does not; use has_value to tell whether a value is set.
       description: A single environment entry
       required:
         - name
         - value
         - is_secret
+        - has_value
         - created_at
         - updated_at
     EnvironmentEntryInput:
@@ -122511,6 +122533,14 @@ components:
         name:
           type: string
           description: The assistant name.
+        reasoning_effort:
+          type: string
+          description: The reasoning effort used by the assistant.
+          enum:
+            - none
+            - low
+            - medium
+            - high
         runtime_version:
           type: integer
           description: 'Desired runtime protocol: 2 for the default runtime, 3 for Kit. Switching requires the assistant and all background work to be settled.'

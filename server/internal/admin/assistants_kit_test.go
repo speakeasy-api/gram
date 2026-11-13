@@ -115,6 +115,14 @@ func TestMigrateOrganizationAssistantsToKit(t *testing.T) {
 	org.pendingEvent(working)
 	legacy := org.legacyAssistant("Legacy", owner)
 
+	off := org.identifiedAssistant(svc.assistantIdentities, "Reasoning Off", owner)
+	offRuntime := org.runtime(off, "active", past)
+	queries := assistantrepo.New(db)
+	_, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{ProjectID: org.project, AssistantID: off, ReasoningEffort: pgtype.Text{String: "none", Valid: true}})
+	require.NoError(t, err)
+	offBefore, err := queries.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ProjectID: org.project, ID: offRuntime})
+	require.NoError(t, err)
+
 	other := newAssistantMigrationOrg(t, db, "assistant-kit-migration-other")
 	other.sharedIssuer()
 	untouched := other.identifiedAssistant(svc.assistantIdentities, "Other organization", other.member(true))
@@ -128,18 +136,23 @@ func TestMigrateOrganizationAssistantsToKit(t *testing.T) {
 		expiring.String(): string(assistants.KitSwitchBusy),
 		working.String():  string(assistants.KitSwitchBusy),
 		legacy.String():   string(assistants.KitSwitchNeedsIdentity),
+		off.String():      string(assistants.KitSwitchIneligible),
 	}, kitOutcomes(first))
 	require.Equal(t, int64(2), first.Switched)
 	require.Equal(t, int64(3), first.Busy)
 	require.Equal(t, int64(1), first.NeedsIdentity)
-	require.Zero(t, first.Failed)
+	require.EqualValues(t, 1, first.Ineligible)
+	require.Zero(t, first.Failed, "unsupported reasoning is an eligibility refusal, not a retryable failure")
 
 	require.Equal(t, int16(3), org.runtimeVersion(idle))
 	require.Equal(t, int16(3), org.runtimeVersion(fresh))
 	require.Equal(t, int16(2), org.runtimeVersion(warm))
 	require.Equal(t, int16(2), org.runtimeVersion(working))
 	require.Equal(t, int16(2), org.runtimeVersion(legacy))
-	queries := assistantrepo.New(db)
+	require.Equal(t, int16(2), org.runtimeVersion(off))
+	offAfter, err := queries.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ProjectID: org.project, ID: offRuntime})
+	require.NoError(t, err)
+	require.Equal(t, offBefore, offAfter)
 	for _, id := range []uuid.UUID{idleStopped, idleExpired} {
 		row, err := queries.GetAssistantRuntime(t.Context(), assistantrepo.GetAssistantRuntimeParams{ProjectID: org.project, ID: id})
 		require.NoError(t, err)

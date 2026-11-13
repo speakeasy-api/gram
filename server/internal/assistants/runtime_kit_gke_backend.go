@@ -121,7 +121,7 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	}
 	p.Identity = KitGKEIdentity{Namespace: config.GKE.Namespace, AssistantID: "", Lineage: "", CompatibilityGeneration: p.Identity.CompatibilityGeneration}
 	p.Name = ""
-	p.Model = ""
+	p.Model, p.ReasoningEffort = "", ""
 	p.AgentsMD = nil
 	p.MCPJSON = nil
 	p.GatewayToken = nil
@@ -369,7 +369,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	in.Workload, in.InferenceEndpoint = b.Workload, b.InferenceEndpoint
 	in.Identity = k.identity(r)
 	in.Name = name
-	in.Model = b.Model
+	in.Model, in.ReasoningEffort = b.Model, b.ReasoningEffort
 	in.AgentsMD = b.AgentsMD
 	in.MCPJSON = b.MCPJSON
 	in.GatewayToken = b.GatewayToken

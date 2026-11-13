@@ -255,8 +255,9 @@ var EnvironmentEntry = Type("EnvironmentEntry", func() {
 	Description("A single environment entry")
 
 	Attribute("name", String, "The name of the environment variable")
-	Attribute("value", String, "The value of the environment variable. Cleartext when is_secret is false, redacted otherwise.")
+	Attribute("value", String, "The value of the environment variable. Cleartext when is_secret is false. For a secret, a fixed mask (\"***\") when it has a value or \"<EMPTY>\" when it does not; use has_value to tell whether a value is set.")
 	Attribute("is_secret", Boolean, "Whether the value is a secret. Secret values are redacted in reads; non-secret values are returned in cleartext.")
+	Attribute("has_value", Boolean, "Whether the entry holds a non-empty value. Secret entries can be empty placeholders waiting for a value.")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the environment entry")
 		Format(FormatDateTime)
@@ -266,5 +267,5 @@ var EnvironmentEntry = Type("EnvironmentEntry", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("name", "value", "is_secret", "created_at", "updated_at")
+	Required("name", "value", "is_secret", "has_value", "created_at", "updated_at")
 })

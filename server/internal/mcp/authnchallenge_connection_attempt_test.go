@@ -28,6 +28,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestip"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -143,10 +144,11 @@ func TestAuthorize_DeviceKeyFromTheRiskKeyring(t *testing.T) {
 
 	q := url.Values{"response_type": {"code"}, "client_id": {clientID}, "redirect_uri": {"http://example.com/cb"}, "state": {"state-123"}, "code_challenge": {"challenge"}, "code_challenge_method": {"S256"}}
 	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/authorize?"+q.Encode(), nil)
-	req.Header.Set("X-Forwarded-For", "198.51.100.1, 203.0.113.7")
+	req.Header.Set("X-Forwarded-For", "198.51.100.1, 198.51.100.2")
+	req.Header.Set("X-Client-IP", "203.0.113.7")
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", slug)
-	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+	req = req.WithContext(requestip.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx), requestip.Resolve(req)))
 
 	w := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleAuthorize(w, req))

@@ -6,6 +6,7 @@ import type { Assistant } from "@gram/client/models/components/assistant.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { useId } from "react";
 import { toast } from "sonner";
 import { Row } from "./PanelSection";
 
@@ -33,6 +34,8 @@ export function AssistantRuntimeSettings({
     },
   });
   const isKit = assistant.runtimeVersion === 3;
+  const compatibilityHelpId = useId();
+  const kitRequiresReasoning = !isKit && assistant.reasoningEffort === "none";
   const knownVersion = isKit || assistant.runtimeVersion === 2;
 
   return (
@@ -47,25 +50,53 @@ export function AssistantRuntimeSettings({
         </Text>
       </Row>
       {flag.status === "enabled" && (
-        <Row label="Use Kit runtime">
-          <Switch
-            aria-label="Use Kit runtime"
-            checked={isKit}
-            disabled={!canWrite || !knownVersion || update.isPending}
-            onCheckedChange={(checked) => {
-              if (!canWrite || !knownVersion || update.isPending) return;
-              update.mutate({
-                request: {
-                  updateAssistantForm: {
-                    id: assistant.id,
-                    runtimeVersion: checked ? 3 : 2,
-                    expectedRuntimeVersion: isKit ? 3 : 2,
+        <div
+          role="group"
+          aria-label="Kit runtime selection"
+          aria-describedby={
+            kitRequiresReasoning ? compatibilityHelpId : undefined
+          }
+        >
+          <Row label="Use Kit runtime">
+            <Switch
+              aria-label="Use Kit runtime"
+              checked={isKit}
+              disabled={
+                !canWrite ||
+                !knownVersion ||
+                update.isPending ||
+                kitRequiresReasoning
+              }
+              onCheckedChange={(checked) => {
+                if (
+                  !canWrite ||
+                  !knownVersion ||
+                  update.isPending ||
+                  (checked && kitRequiresReasoning)
+                )
+                  return;
+                update.mutate({
+                  request: {
+                    updateAssistantForm: {
+                      id: assistant.id,
+                      runtimeVersion: checked ? 3 : 2,
+                      expectedRuntimeVersion: isKit ? 3 : 2,
+                    },
                   },
-                },
-              });
-            }}
-          />
-        </Row>
+                });
+              }}
+            />
+          </Row>
+          {kitRequiresReasoning && (
+            <div id={compatibilityHelpId}>
+              <Text small muted>
+                {canWrite
+                  ? "Set reasoning effort to Low, Medium, or High and save before switching to Kit runtime. Kit does not support Off."
+                  : "Kit runtime requires Low, Medium, or High reasoning effort. A user with assistant write permission can change this setting. Kit does not support Off."}
+              </Text>
+            </div>
+          )}
+        </div>
       )}
     </>
   );

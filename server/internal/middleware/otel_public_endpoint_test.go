@@ -251,11 +251,10 @@ func newOTelChain(t *testing.T, recorder *tracetest.SpanRecorder, gotBaggage *ba
 		w.WriteHeader(http.StatusOK)
 	})
 
-	return middleware.DropInboundOTelBaggage(otelhttp.NewHandler(
-		inner,
-		"http",
+	wrap := middleware.PublicHTTPTracing(
+		"test",
 		otelhttp.WithTracerProvider(tp),
 		otelhttp.WithPropagators(propagators),
-		otelhttp.WithPublicEndpointFn(middleware.IsOTelPublicEndpoint),
-	))
+	)
+	return middleware.DropInboundOTelBaggage(wrap(inner))
 }

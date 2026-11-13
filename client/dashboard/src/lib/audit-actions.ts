@@ -62,6 +62,7 @@ export const AUDIT_ACTIONS = [
   "assistant:runtime_switch",
   "assistant:tool_call",
   "assistant:update_execution_profile",
+  "assistant:update_reasoning_effort",
   "aws_iam_credential:create",
   "aws_iam_credential:delete",
   "aws_iam_credential:update",
@@ -509,6 +510,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "changed the runtime of assistant";
     case "assistant:tool_call":
       return "ran assistant tool";
+    case "assistant:update_reasoning_effort":
+      return "changed the reasoning effort of assistant";
     case "assistant:update_execution_profile":
       return "changed the upstream credentials of assistant";
 

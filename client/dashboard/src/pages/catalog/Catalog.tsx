@@ -272,6 +272,7 @@ function CatalogInner() {
 
       <AddServerDialog
         openProviderSetup={!attachToGatewayId}
+        attachToGatewayId={attachToGatewayId ?? undefined}
         servers={addingServers}
         projectSlug={project.slug}
         open={addingServers.length > 0}

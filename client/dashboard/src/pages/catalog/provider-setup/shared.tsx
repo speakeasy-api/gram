@@ -13,6 +13,7 @@ import { ArrowUpRight, CirclePlus, SquareDashed } from "lucide-react";
 import { type FieldName, names } from "./state";
 import { cn } from "@/lib/utils";
 import { Alert } from "@/components/ui/Alert";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 
 export function CallbackUrlStatus({
   label,
@@ -74,13 +75,54 @@ export function ExternalAction({
   label,
   href,
   disabled = false,
+  disabledReason,
 }: {
   title: string;
   children?: ReactNode;
   label: string;
   href?: string;
   disabled?: boolean;
+  disabledReason?: string;
 }): JSX.Element {
+  const disabledAction = (
+    <Button
+      variant="primary"
+      disabled={disabled}
+      className="self-end @min-[650px]/task:self-start"
+    >
+      <Button.Text>{label}</Button.Text>
+      <Button.RightIcon>
+        <ArrowUpRight />
+      </Button.RightIcon>
+    </Button>
+  );
+  let action = disabledAction;
+  if (href && !disabled)
+    action = (
+      <Button
+        variant="primary"
+        asChild
+        className="self-end @min-[650px]/task:self-start"
+      >
+        <a href={href} target="_blank" rel="noopener noreferrer">
+          {label}
+          <ArrowUpRight className="ml-2 size-4" />
+        </a>
+      </Button>
+    );
+  else if (disabled && disabledReason)
+    action = (
+      <SimpleTooltip tooltip={disabledReason}>
+        <span
+          tabIndex={0}
+          role="group"
+          aria-label={`${label} unavailable`}
+          className="inline-flex self-end @min-[650px]/task:self-start"
+        >
+          {disabledAction}
+        </span>
+      </SimpleTooltip>
+    );
   return (
     <div className="mt-6 flex flex-col items-start justify-between gap-6 bg-warning-softest p-[22px] border-l-2 border-warning-default first:mt-0 @min-[650px]/task:flex-row">
       <div className="min-w-0 flex-1">
@@ -89,29 +131,7 @@ export function ExternalAction({
         )}
         {children}
       </div>
-      {href ? (
-        <Button
-          variant="primary"
-          asChild
-          className="self-end @min-[650px]/task:self-start"
-        >
-          <a href={href} target="_blank" rel="noopener noreferrer">
-            {label}
-            <ArrowUpRight className="ml-2 size-4" />
-          </a>
-        </Button>
-      ) : (
-        <Button
-          variant="primary"
-          disabled={disabled}
-          className="self-end @min-[650px]/task:self-start"
-        >
-          <Button.Text>{label}</Button.Text>
-          <Button.RightIcon>
-            <ArrowUpRight />
-          </Button.RightIcon>
-        </Button>
-      )}
+      {action}
     </div>
   );
 }

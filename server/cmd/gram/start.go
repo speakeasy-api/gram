@@ -25,7 +25,6 @@ import (
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
@@ -1470,18 +1469,7 @@ func newStartCommand() *cli.Command {
 			// extracts inbound trace context, so untrusted baggage never enters
 			// the request context.
 			mux.Use(middleware.DropInboundOTelBaggage)
-			mux.Use(func(h http.Handler) http.Handler {
-				return otelhttp.NewHandler(h, "http",
-					otelhttp.WithServerName("gram"),
-					// Public MCP/OAuth routes are reachable by any third party, so
-					// their inbound trace context is potentially untrusted input.
-					// Treat them as OTel public endpoints: start a fresh root span
-					// and record the inbound context as a span link rather than
-					// adopting it as the parent. Trusted first-party routes (/rpc,
-					// /admin) keep parent-child continuity.
-					otelhttp.WithPublicEndpointFn(middleware.IsOTelPublicEndpoint),
-				)
-			})
+			mux.Use(middleware.PublicHTTPTracing("gram"))
 			mux.Use(middleware.RouteLabelerMiddleware)
 			// Must stay below otelhttp: they stamp attributes onto the span
 			// otelhttp opened for the request.

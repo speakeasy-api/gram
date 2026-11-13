@@ -317,7 +317,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	}
 
 	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n")
-	bootstrap := KitLocalBootstrap{Model: assistant.Model, AgentsMD: instructions, MCPJSON: mcpJSON, GatewayToken: []byte(gateway), Workload: workload, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: c.Origin.String() + "/chat/completions"}
+	bootstrap := KitLocalBootstrap{Model: assistant.Model, ReasoningEffort: assistant.ReasoningEffort, AgentsMD: instructions, MCPJSON: mcpJSON, GatewayToken: []byte(gateway), Workload: workload, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: c.Origin.String() + "/chat/completions"}
 	if err := validateKitBootstrap(bootstrap); err != nil {
 		return zero, err
 	}

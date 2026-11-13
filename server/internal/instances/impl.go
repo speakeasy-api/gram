@@ -346,7 +346,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			return err
 		}
 
-		environmentEntries, err := s.env.ListEnvironmentEntries(ctx, *authCtx.ProjectID, envModel.ID, false)
+		environmentEntries, err := s.env.ListEnvironmentEntries(ctx, *authCtx.ProjectID, envModel.ID)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to load environment entries").LogError(ctx, logger)
 		}

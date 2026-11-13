@@ -237,7 +237,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 
 	var result []*types.Environment
 	for _, environment := range environments {
-		entries, err := s.entries.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
+		entries, err := s.entries.ListRedactedEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").LogError(ctx, s.logger)
 		}
@@ -306,7 +306,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		}
 	}
 
-	beforeEntries, err := entriesRepo.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
+	beforeEntries, err := entriesRepo.ListRedactedEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").LogError(ctx, logger)
 	}
@@ -400,7 +400,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to re-fetch environment").LogError(ctx, logger)
 	}
 
-	entries, err := entriesRepo.ListEnvironmentEntries(ctx, projectID, environment.ID, true)
+	entries, err := entriesRepo.ListRedactedEnvironmentEntries(ctx, projectID, environment.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").LogError(ctx, logger)
 	}
@@ -514,7 +514,7 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 		}
 	}
 
-	entries, err := entriesRepo.ListEnvironmentEntries(ctx, *authCtx.ProjectID, newEnv.ID, true)
+	entries, err := entriesRepo.ListRedactedEnvironmentEntries(ctx, *authCtx.ProjectID, newEnv.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list cloned environment entries").LogError(ctx, logger)
 	}
@@ -607,22 +607,26 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 	return nil
 }
 
-func buildEnvironmentEntries(entries []repo.EnvironmentEntry) []*types.EnvironmentEntry {
+func buildEnvironmentEntries(entries []RedactedEntry) []*types.EnvironmentEntry {
 	genEntries := make([]*types.EnvironmentEntry, len(entries))
 	for i, entry := range entries {
 		genEntries[i] = &types.EnvironmentEntry{
-			Name:      entry.Name,
-			Value:     entry.Value,
-			IsSecret:  entry.IsSecret,
-			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
+			Name:      entry.name,
+			Value:     entry.value,
+			IsSecret:  entry.isSecret,
+			HasValue:  entry.hasValue,
+			CreatedAt: entry.createdAt.Time.Format(time.RFC3339),
+			UpdatedAt: entry.updatedAt.Time.Format(time.RFC3339),
 		}
 	}
 
 	return genEntries
 }
 
-func buildEnvironmentView(environment repo.Environment, entries []repo.EnvironmentEntry) *types.Environment {
+// buildEnvironmentView builds the API view of an environment. It takes
+// RedactedEntry values so that responses and the audit snapshots built from
+// this view never carry a secret's plaintext.
+func buildEnvironmentView(environment repo.Environment, entries []RedactedEntry) *types.Environment {
 	return &types.Environment{
 		ID:             environment.ID.String(),
 		OrganizationID: environment.OrganizationID,
@@ -715,7 +719,7 @@ func (s *Service) GetSourceEnvironment(ctx context.Context, payload *gen.GetSour
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment for source").LogError(ctx, s.logger)
 	}
 
-	entries, err := s.entries.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
+	entries, err := s.entries.ListRedactedEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").LogError(ctx, s.logger)
 	}
@@ -812,7 +816,7 @@ func (s *Service) GetToolsetEnvironment(ctx context.Context, payload *gen.GetToo
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment for toolset").LogError(ctx, s.logger)
 	}
 
-	entries, err := s.entries.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
+	entries, err := s.entries.ListRedactedEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").LogError(ctx, s.logger)
 	}

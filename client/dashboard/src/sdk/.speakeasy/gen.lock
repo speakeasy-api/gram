@@ -5114,7 +5114,7 @@ examples:
         application/json: {"new_name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2025-10-20T20:04:05.659Z", "entries": [{"created_at": "2025-01-06T15:50:05.639Z", "is_secret": false, "name": "<value>", "updated_at": "2026-06-15T19:26:29.483Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-23T01:37:04.789Z"}
+          application/json: {"created_at": "2025-10-20T20:04:05.659Z", "entries": [{"created_at": "2025-01-06T15:50:05.639Z", "has_value": false, "is_secret": false, "name": "<value>", "updated_at": "2026-06-15T19:26:29.483Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-23T01:37:04.789Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -5289,10 +5289,10 @@ examples:
   createAssistant:
     speakeasy-default-create-assistant:
       requestBody:
-        application/json: {"instructions": "<value>", "model": "Land Cruiser", "name": "<value>", "toolsets": []}
+        application/json: {"instructions": "<value>", "model": "Land Cruiser", "name": "<value>", "reasoning_effort": "medium", "toolsets": []}
       responses:
         "200":
-          application/json: {"created_at": "2024-11-06T04:22:35.666Z", "id": "406a80c5-7c29-42ee-8297-0b6685afaed8", "instructions": "<value>", "max_concurrency": 728739, "mcp_servers": [{"mcp_server_slug": "<value>"}], "model": "Model S", "name": "<value>", "project_id": "430c6bd6-bd36-4d3e-9bf9-636e791621bc", "runtime_version": 3, "skills": [{"resolved_version_id": "34406a80-c57c-4292-bee2-970b6685afae", "skill_id": "82bb430c-6bd6-4bd3-86d3-ebf9636e7916"}], "status": "active", "toolsets": [{"toolset_slug": "<value>"}], "updated_at": "2026-01-09T20:24:02.859Z", "warm_ttl_seconds": 722753}
+          application/json: {"created_at": "2024-11-06T04:22:35.666Z", "id": "406a80c5-7c29-42ee-8297-0b6685afaed8", "instructions": "<value>", "max_concurrency": 728739, "mcp_servers": [{"mcp_server_slug": "<value>"}], "model": "Model S", "name": "<value>", "project_id": "430c6bd6-bd36-4d3e-9bf9-636e791621bc", "reasoning_effort": "medium", "runtime_version": 3, "skills": [{"resolved_version_id": "34406a80-c57c-4292-bee2-970b6685afae", "skill_id": "82bb430c-6bd6-4bd3-86d3-ebf9636e7916"}], "status": "active", "toolsets": [{"toolset_slug": "<value>"}], "updated_at": "2026-01-09T20:24:02.859Z", "warm_ttl_seconds": 722753}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -7179,7 +7179,7 @@ examples:
     speakeasy-default-ensure-managed-assistant:
       responses:
         "200":
-          application/json: {"created_at": "2025-11-23T20:07:20.423Z", "id": "a2bc1d28-98c6-4e00-a761-bfd9e7745a3f", "instructions": "<value>", "max_concurrency": 762734, "mcp_servers": [{"mcp_server_slug": "<value>"}], "model": "Volt", "name": "<value>", "project_id": "4be9122d-4cc9-42ab-a034-5831eedda143", "runtime_version": 3, "skills": [{"resolved_version_id": "a2bc1d28-98c6-4e00-a761-bfd9e7745a3f", "skill_id": "cf4be912-2d4c-4c92-9ab0-345831eedda1"}], "status": "active", "toolsets": [], "updated_at": "2025-06-01T23:02:16.393Z", "warm_ttl_seconds": 622901}
+          application/json: {"created_at": "2025-11-23T20:07:20.423Z", "id": "a2bc1d28-98c6-4e00-a761-bfd9e7745a3f", "instructions": "<value>", "max_concurrency": 762734, "mcp_servers": [{"mcp_server_slug": "<value>"}], "model": "Volt", "name": "<value>", "project_id": "4be9122d-4cc9-42ab-a034-5831eedda143", "reasoning_effort": "medium", "runtime_version": 3, "skills": [{"resolved_version_id": "a2bc1d28-98c6-4e00-a761-bfd9e7745a3f", "skill_id": "cf4be912-2d4c-4c92-9ab0-345831eedda1"}], "status": "active", "toolsets": [], "updated_at": "2025-06-01T23:02:16.393Z", "warm_ttl_seconds": 622901}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -7491,7 +7491,7 @@ examples:
           id: "7959ce44-a426-4488-b91d-9fb41e57e13f"
       responses:
         "200":
-          application/json: {"created_at": "2024-12-07T17:47:36.734Z", "id": "d8ef9971-87c5-4e71-a53e-07fd176eef0c", "instructions": "<value>", "max_concurrency": 214020, "mcp_servers": [], "model": "2", "name": "<value>", "project_id": "4ed6c201-b08c-43a4-be72-00304cf338f2", "runtime_version": 2, "skills": [], "status": "paused", "toolsets": [], "updated_at": "2024-09-14T19:59:19.950Z", "warm_ttl_seconds": 412954}
+          application/json: {"created_at": "2024-12-07T17:47:36.734Z", "id": "d8ef9971-87c5-4e71-a53e-07fd176eef0c", "instructions": "<value>", "max_concurrency": 214020, "mcp_servers": [], "model": "2", "name": "<value>", "project_id": "4ed6c201-b08c-43a4-be72-00304cf338f2", "reasoning_effort": "low", "runtime_version": 2, "skills": [], "status": "paused", "toolsets": [], "updated_at": "2024-09-14T19:59:19.950Z", "warm_ttl_seconds": 412954}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -7992,7 +7992,7 @@ examples:
     speakeasy-default-get-managed-assistant:
       responses:
         "200":
-          application/json: {"created_at": "2024-02-05T22:44:27.577Z", "id": "c661aa46-07c0-4c6a-97bb-bc47883500cd", "instructions": "<value>", "max_concurrency": 130261, "mcp_servers": [], "model": "2", "name": "<value>", "project_id": "790956c2-fca6-450d-aa54-beb049272cc1", "runtime_version": 2, "skills": [], "status": "paused", "toolsets": [{"toolset_slug": "<value>"}], "updated_at": "2026-09-04T15:38:02.228Z", "warm_ttl_seconds": 120403}
+          application/json: {"created_at": "2024-02-05T22:44:27.577Z", "id": "c661aa46-07c0-4c6a-97bb-bc47883500cd", "instructions": "<value>", "max_concurrency": 130261, "mcp_servers": [], "model": "2", "name": "<value>", "project_id": "790956c2-fca6-450d-aa54-beb049272cc1", "reasoning_effort": "none", "runtime_version": 2, "skills": [], "status": "paused", "toolsets": [{"toolset_slug": "<value>"}], "updated_at": "2026-09-04T15:38:02.228Z", "warm_ttl_seconds": 120403}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -9086,7 +9086,7 @@ examples:
           toolset_id: "7003cb87-ab79-4484-b08e-a7afac2dc2b5"
       responses:
         "200":
-          application/json: {"created_at": "2024-10-11T00:52:32.537Z", "entries": [{"created_at": "2025-10-05T02:06:46.478Z", "is_secret": true, "name": "<value>", "updated_at": "2026-02-11T02:25:29.751Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-14T08:23:10.020Z"}
+          application/json: {"created_at": "2024-10-11T00:52:32.537Z", "entries": [{"created_at": "2025-10-05T02:06:46.478Z", "has_value": true, "is_secret": true, "name": "<value>", "updated_at": "2026-02-11T02:25:29.751Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-14T08:23:10.020Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -9812,7 +9812,7 @@ examples:
     speakeasy-default-list-assistants:
       responses:
         "200":
-          application/json: {"assistants": [{"created_at": "2026-06-16T10:44:56.530Z", "id": "73ad9ea9-869c-468a-aaf8-6d9e8cc77932", "instructions": "<value>", "max_concurrency": 60913, "mcp_servers": [{"mcp_server_slug": "<value>"}], "model": "Explorer", "name": "<value>", "project_id": "8438687b-d8a1-4da0-85c5-b7d770075bb5", "runtime_version": 3, "skills": [{"resolved_version_id": "d73ad9ea-9869-4c68-8aaf-86d9e8cc7793", "skill_id": "80784386-87bd-48a1-ada0-5c5b7d770075"}], "status": "active", "toolsets": [], "updated_at": "2024-10-13T00:20:42.472Z", "warm_ttl_seconds": 382618}]}
+          application/json: {"assistants": [{"created_at": "2026-06-16T10:44:56.530Z", "id": "73ad9ea9-869c-468a-aaf8-6d9e8cc77932", "instructions": "<value>", "max_concurrency": 60913, "mcp_servers": [{"mcp_server_slug": "<value>"}], "model": "Explorer", "name": "<value>", "project_id": "8438687b-d8a1-4da0-85c5-b7d770075bb5", "reasoning_effort": "high", "runtime_version": 3, "skills": [{"resolved_version_id": "d73ad9ea-9869-4c68-8aaf-86d9e8cc7793", "skill_id": "80784386-87bd-48a1-ada0-5c5b7d770075"}], "status": "active", "toolsets": [], "updated_at": "2024-10-13T00:20:42.472Z", "warm_ttl_seconds": 382618}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -14024,7 +14024,7 @@ examples:
         application/json: {"id": "5594282a-e57b-4b5c-9e20-eb3e75589d17"}
       responses:
         "200":
-          application/json: {"created_at": "2026-12-08T14:02:50.487Z", "id": "6700d580-4ae9-4a6b-84a3-6c9083668248", "instructions": "<value>", "max_concurrency": 63604, "mcp_servers": [], "model": "Corvette", "name": "<value>", "project_id": "c90463b1-6ca6-4c9c-8579-ae24470b8750", "runtime_version": 2, "skills": [], "status": "active", "toolsets": [{"toolset_slug": "<value>"}], "updated_at": "2026-12-11T05:45:33.143Z", "warm_ttl_seconds": 975161}
+          application/json: {"created_at": "2026-12-08T14:02:50.487Z", "id": "6700d580-4ae9-4a6b-84a3-6c9083668248", "instructions": "<value>", "max_concurrency": 63604, "mcp_servers": [], "model": "Corvette", "name": "<value>", "project_id": "c90463b1-6ca6-4c9c-8579-ae24470b8750", "reasoning_effort": "low", "runtime_version": 2, "skills": [], "status": "active", "toolsets": [{"toolset_slug": "<value>"}], "updated_at": "2026-12-11T05:45:33.143Z", "warm_ttl_seconds": 975161}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

@@ -42,6 +42,12 @@ function goAuditActions(): string[] {
 }
 
 describe("AUDIT_ACTIONS", () => {
+  it("describes assistant reasoning effort updates", () => {
+    expect(isAuditAction("assistant:update_reasoning_effort")).toBe(true);
+    expect(staticActionPhrase("assistant:update_reasoning_effort")).toBe(
+      "changed the reasoning effort of assistant",
+    );
+  });
   it.each([
     ["catalog-promotion:reject", "rejected catalog promotion candidate"],
     ["catalog-promotion:archive", "archived catalog promotion candidate"],

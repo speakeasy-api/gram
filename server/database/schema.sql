@@ -4537,6 +4537,7 @@ CREATE TABLE IF NOT EXISTS assistants (
   created_by_user_id TEXT,
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
   model TEXT NOT NULL CHECK (model <> '' AND CHAR_LENGTH(model) <= 200),
+  reasoning_effort TEXT DEFAULT 'medium',
   instructions TEXT NOT NULL,
   warm_ttl_seconds BIGINT NOT NULL DEFAULT 300 CHECK (warm_ttl_seconds >= 0 AND warm_ttl_seconds <= 3600),
   max_concurrency BIGINT NOT NULL DEFAULT 1 CHECK (max_concurrency >= 1 AND max_concurrency <= 100),
@@ -4558,6 +4559,7 @@ COMMENT ON COLUMN assistants.organization_id IS '@access: confidential';
 COMMENT ON COLUMN assistants.created_by_user_id IS '@access: confidential';
 COMMENT ON COLUMN assistants.name IS '@access: confidential';
 COMMENT ON COLUMN assistants.model IS '@access: confidential';
+COMMENT ON COLUMN assistants.reasoning_effort IS '@access: confidential';
 COMMENT ON COLUMN assistants.instructions IS '@access: opaque-restricted';
 COMMENT ON COLUMN assistants.warm_ttl_seconds IS '@access: confidential';
 COMMENT ON COLUMN assistants.max_concurrency IS '@access: confidential';

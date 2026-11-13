@@ -1,4 +1,9 @@
+import { OktaTask, OktaCredentialInstructions } from "./OktaTask";
 import { SalesforceTask } from "./SalesforceTask";
+import {
+  SnowflakeTask,
+  SnowflakeCredentialInstructions,
+} from "./SnowflakeTask";
 import { useSetup } from "./setup-context";
 import { names, orgValid } from "./state";
 import type { ReactNode } from "react";
@@ -40,6 +45,20 @@ function Plan() {
           </div>
         </Card.Content>
       </Card>
+      {s.provider === "snowflake" && (
+        <details className="mt-6">
+          <summary>Check permissions and region availability</summary>
+          <p className="mt-3">
+            You’ll need a security owner to grant access, a role that can create
+            the MCP server if needed, and ACCOUNTADMIN or a delegated role with
+            CREATE INTEGRATION for OAuth. These can be different people.
+          </p>
+          <p className="mt-3">
+            This setup isn’t available in China or government regions. Each
+            person will sign in using their own Snowflake account.
+          </p>
+        </details>
+      )}
       {s.provider === "github" && (
         <details className="mt-6">
           <summary>Organization approval and SSO</summary>
@@ -113,6 +132,14 @@ function Credentials() {
   const saved = s.saved;
   return (
     <>
+      {s.provider === "okta" && (s.errors.oktaOrg || s.errors.oktaAppType) && (
+        <Alert variant="error">
+          Review your Okta configuration before saving credentials.{" "}
+          <Correction step="organization">Review organization</Correction>
+          {" · "}
+          <Correction step="app">Review app type</Correction>
+        </Alert>
+      )}
       {s.provider === "salesforce" && s.errors.salesforceServer && (
         <Alert variant="error">
           {s.errors.salesforceServer}{" "}
@@ -127,12 +154,25 @@ function Credentials() {
           </Correction>
         </Alert>
       )}
-      <InProvider
-        actions={credentialInstructions(
-          s.provider,
-          s.values.appChoice === "existing",
-        )}
-      />
+      {s.provider === "okta" ? (
+        <OktaCredentialInstructions />
+      ) : s.provider === "snowflake" ? (
+        <SnowflakeCredentialInstructions />
+      ) : (
+        <InProvider
+          actions={credentialInstructions(
+            s.provider,
+            s.values.appChoice === "existing",
+          )}
+        />
+      )}
+      {s.provider === "snowflake" && s.errors.host && (
+        <Alert variant="error">
+          {s.errors.host} <Correction step="account">Review account</Correction>
+          {" · "}
+          <Correction step="server">Review server details</Correction>
+        </Alert>
+      )}
       <SetupField
         field="clientId"
         label={s.provider === "salesforce" ? "Consumer Key" : "Client ID"}
@@ -142,15 +182,16 @@ function Credentials() {
           s.provider === "salesforce" ? "Paste Consumer Key" : "Paste Client ID"
         }
       />
-      {s.provider !== "salesforce" && (
-        <SetupField
-          field="clientSecret"
-          label="Client Secret"
-          disabled={saved}
-          value={saved ? "••••••••" : undefined}
-          placeholder="Paste Client Secret"
-        />
-      )}
+      {s.provider !== "salesforce" &&
+        !(s.provider === "okta" && s.values.oktaAppType === "native") && (
+          <SetupField
+            field="clientSecret"
+            label="Client Secret"
+            disabled={saved}
+            value={saved ? "••••••••" : undefined}
+            placeholder="Paste Client Secret"
+          />
+        )}
       {saved && (
         <div className="mt-5 flex justify-end">
           <Button
@@ -439,6 +480,8 @@ export function ProviderTask({
   const { s } = useSetup();
   if (s.step === "begin") return <Plan />;
   if (s.step === "credentials") return <Credentials />;
+  if (s.provider === "okta") return <OktaTask />;
+  if (s.provider === "snowflake") return <SnowflakeTask />;
   if (s.provider === "salesforce") return <SalesforceTask />;
   if (s.provider === "github") return <GitHubTask />;
   return <SlackTask serverName={serverName} />;
