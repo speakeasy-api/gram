@@ -1,7 +1,7 @@
 // oxlint-disable react/only-export-components -- context, provider and its markers belong together
 import type { ReadinessCheck } from "@/components/mcp-server-readiness-bar";
 import { cn } from "@/lib/utils";
-import { CircleAlert, TriangleAlert } from "lucide-react";
+import { Alert } from "@/components/ui/Alert";
 import { createContext, use, type ReactNode } from "react";
 
 /**
@@ -83,25 +83,43 @@ export function ReadinessIssueMarker({
   anchorId: string | undefined;
   className?: string;
 }): JSX.Element | null {
-  const { issues } = useReadinessIssuesFor(anchorId);
-  if (issues.length === 0) return null;
+  const { issues, tone } = useReadinessIssuesFor(anchorId);
+  if (issues.length === 0 || !tone) return null;
+  // A callout, not a line of text: the section needs doing before the
+  // server works, and a muted sentence above the panel read as a note.
   return (
-    <ul data-readiness-issue="" className={cn("space-y-1", className)}>
-      {issues.map((issue) => {
-        const Icon = issue.broken ? CircleAlert : TriangleAlert;
-        const color = issue.broken ? "text-destructive" : "text-warning";
-        return (
-          <li key={issue.key} className="flex items-start gap-2 text-sm">
-            <Icon aria-hidden className={cn("mt-0.5 size-4 shrink-0", color)} />
-            <span>
-              <span className={cn("font-medium", color)}>{issue.label}.</span>{" "}
-              <span className="text-muted-foreground">{issue.description}</span>
-            </span>
-          </li>
-        );
-      })}
-    </ul>
+    <div data-readiness-issue="" className={className}>
+      <Alert
+        variant={tone === "error" ? "error" : "warning"}
+        title={
+          issues.length === 1
+            ? `Action needed: ${issues[0]!.label}`
+            : "Action needed"
+        }
+      >
+        {issues.length === 1 ? (
+          here(issues[0]!.description)
+        ) : (
+          <ul className="list-disc space-y-1 pl-4">
+            {issues.map((issue) => (
+              <li key={issue.key}>
+                <span className="font-medium">{issue.label}.</span>{" "}
+                {here(issue.description)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Alert>
+    </div>
   );
+}
+
+/**
+ * A check's words, read where they are shown: the marker sits on the very
+ * page a check points to, so "in Settings" only says where the reader is.
+ */
+function here(description: string): string {
+  return description.replace(/\s+(?:in|under) Settings(?=\.)/g, "");
 }
 
 /**

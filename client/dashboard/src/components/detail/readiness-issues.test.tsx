@@ -29,7 +29,9 @@ it("shows the header issues that link to this section", () => {
       <ReadinessIssueMarker anchorId="authentication" />
     </ReadinessIssuesProvider>,
   );
-  expect(screen.getByText("Set up sign-in for Linear.")).toBeTruthy();
+  expect(
+    screen.getByText("Action needed: Set up sign-in for Linear"),
+  ).toBeTruthy();
 });
 
 it("ignores an issue that links to the same anchor on another page", () => {
