@@ -26,6 +26,9 @@ type selectorMatchMode int
 const (
 	selectorMatchNormal selectorMatchMode = iota
 	selectorMatchStrict
+	// selectorMatchBlock matches block grants: strictly, with an unknown
+	// check value matched by any constraint (see SelectorValueUnknown).
+	selectorMatchBlock
 )
 
 // WithStrictSelectorMatch returns a copy that only accepts grants whose every
@@ -37,10 +40,25 @@ func (c Check) WithStrictSelectorMatch() Check {
 }
 
 func (c Check) matchesAllowSelector(selector Selector) bool {
+	if c.selectorMatch == selectorMatchBlock {
+		return selector.blockMatches(c.selector(), c.representedUser)
+	}
 	if c.selectorMatch == selectorMatchStrict || c.isAuthClientCheck() {
 		return selector.strictMatches(c.selector(), c.representedUser)
 	}
 	return selector.matches(c.selector(), c.representedUser)
+}
+
+// exclusionCheck is the check that looks for exclusion grants against c: the
+// same resource and dimensions under the exclusion scope, matched strictly. A
+// block also matches values c could not determine; an exemption such as
+// risk_policy:bypass never does, so an unknown value cannot exempt anyone.
+func (c Check) exclusionCheck(exclusion Scope) Check {
+	mode := selectorMatchStrict
+	if IsBlocklistScope(exclusion) {
+		mode = selectorMatchBlock
+	}
+	return Check{Scope: exclusion, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: mode, representedUser: c.representedUser}
 }
 
 // isAuthClientCheck reports whether c targets an auth client. Those checks

@@ -68,6 +68,8 @@ func isAPIKeyGrant(grant *Grant) bool {
 // apiKeyGrantMatches matches a legacy API key's grant. It is strict, and an
 // MCP check must name its server's project: a key's server grants are scoped
 // by project, so a check without one could pass an allow while missing a block.
+// A block lookup matches the way every other block does, so a value the check
+// could not determine is covered by it.
 func apiKeyGrantMatches(grant *Grant, check *Check) bool {
 	kind := check.ResourceKind
 	if kind == "" {
@@ -75,6 +77,9 @@ func apiKeyGrantMatches(grant *Grant, check *Check) bool {
 	}
 	if kind == ResourceKindMCP && check.Dimensions[SelectorKeyProjectID] == "" {
 		return false
+	}
+	if check.selectorMatch == selectorMatchBlock {
+		return grant.Selector.blockMatches(check.selector(), check.representedUser)
 	}
 	return grant.Selector.strictMatches(check.selector(), check.representedUser)
 }

@@ -255,6 +255,28 @@ scope_selector_keys:
 required_dimensions:
   mcp:
     - project_id
+unknown_dimensions:
+  mcp:blocked_connect:
+    - disposition
+    - tool
+  mcp:blocked_read:
+    - disposition
+    - tool
+  mcp:blocked_write:
+    - disposition
+    - tool
+  mcp:connect:
+    - disposition
+    - tool
+  mcp:read:
+    - disposition
+    - tool
+  mcp:write:
+    - disposition
+    - tool
+  risk_policy:block:
+    - server_identity
+    - server_url
 dimension_values:
   mcp.disposition:
     - destructive

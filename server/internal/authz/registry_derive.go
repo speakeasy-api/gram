@@ -211,6 +211,52 @@ func (r Registry) deriveScopeSelectorKeys() map[Scope]map[string]bool {
 	return out
 }
 
+// deriveUnknownableDimensions maps each scope to the dimensions its checks
+// may carry as SelectorValueUnknown: the optional dimensions of a loosely
+// matched type or permission whose exclusions, if any, are blocks. A required
+// dimension must be known, a strictly matched type has no optional ones, and
+// an unknown value must never reach an exemption, which would grant it.
+// project_id is never unknown: a request always knows its tenant.
+func (r Registry) deriveUnknownableDimensions() map[Scope]map[string]bool {
+	out := make(map[Scope]map[string]bool)
+	for _, t := range r.Types {
+		if t.Match == MatchStrict {
+			continue
+		}
+		for _, p := range t.Permissions {
+			if slices.ContainsFunc(p.Exclusions, func(x Exclusion) bool { return x.Kind == ExclusionExemption }) || r.isExemptionTarget(t, p) {
+				continue
+			}
+			keys := make(map[string]bool)
+			for _, d := range slices.Concat(t.Dimensions, p.Dimensions) {
+				if !d.Required && d.Key != SelectorKeyProjectID {
+					keys[d.Key] = true
+				}
+			}
+			if len(keys) > 0 {
+				out[t.ScopeFor(p)] = keys
+				if p.HasBlock() {
+					out[t.BlockScopeFor(p)] = keys
+				}
+			}
+		}
+	}
+	return out
+}
+
+// isExemptionTarget reports whether another permission on t names p as its
+// exemption.
+func (r Registry) isExemptionTarget(t ResourceType, p Permission) bool {
+	for _, other := range t.Permissions {
+		for _, x := range other.Exclusions {
+			if x.Kind == ExclusionExemption && x.Action == p.Action {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // deriveRequiredCheckDimensions maps each resource kind to the dimensions
 // every one of its checks must carry.
 func (r Registry) deriveRequiredCheckDimensions() map[string][]string {

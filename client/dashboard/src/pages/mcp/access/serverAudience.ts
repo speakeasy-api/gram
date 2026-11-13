@@ -139,6 +139,19 @@ export function isUnnarrowed(entry: {
   );
 }
 
+/**
+ * Whether a block takes this tool away. A block limited to some annotations
+ * also takes a tool that carries none: its disposition is unknown, and the
+ * server fails closed on it (SelectorValueUnknown in authz/selector.go).
+ */
+export function blockCoversTool(
+  block: { tools?: string[]; dispositions?: string[] },
+  tool: ToolSelectionTool,
+): boolean {
+  if (coversTool(block, tool)) return true;
+  return (block.dispositions ?? []).length > 0 && tool.annotations.length === 0;
+}
+
 /** Whether a rule names this tool, by name or by annotation. */
 export function coversTool(
   entry: { tools?: string[]; dispositions?: string[] },
@@ -317,7 +330,7 @@ export function effectiveReach(
       (tool) =>
         !connectBlocks.some(
           (block) =>
-            coversTool(block, tool) &&
+            blockCoversTool(block, tool) &&
             (block.principalUrn === principalUrn ||
               !directConnect.some((grant) => coversTool(grant, tool))),
         ),

@@ -385,3 +385,39 @@ describe("effectiveReach without an explicit connect rule", () => {
     }
   });
 });
+
+describe("tools with no annotations", () => {
+  const tools: ToolSelectionTool[] = [
+    { name: "lookup", annotations: [] } as unknown as ToolSelectionTool,
+    {
+      name: "search",
+      annotations: ["read_only"],
+    } as unknown as ToolSelectionTool,
+  ];
+
+  it("are taken by a block limited to destructive tools", () => {
+    const reaching = [
+      gtmGrant,
+      entry({
+        principalUrn: "role:global:admin",
+        displayName: "Admin",
+        level: "blocked",
+        appliesTo: "resource",
+        dispositions: ["destructive"],
+      }),
+    ];
+
+    expect(effectiveReach(reaching, tools)?.reachableTools).toEqual(["search"]);
+  });
+
+  it("are not reached by a grant limited to read-only tools", () => {
+    const reaching = [
+      entry({
+        principalUrn: "role:organization:gtm",
+        dispositions: ["read_only"],
+      }),
+    ];
+
+    expect(effectiveReach(reaching, tools)?.toolsLabel).not.toContain("Lookup");
+  });
+});

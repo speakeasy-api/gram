@@ -243,10 +243,11 @@ func TestExplainGrantCheckDispositionDirectGrantDoesNotReachUnannotatedTool(t *t
 		heldBy(precedenceUser, NewGrantWithSelector(ScopeMCPConnect, direct)),
 	}
 
+	// The unannotated tool's disposition is unknown, so the read_only grant
+	// does not reach it at all: only the block is part of the answer.
 	explanation := requireConsistentExplanation(t, grants, MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "unannotated", Disposition: "", ProjectID: "project-1"}))
 	require.False(t, explanation.Allowed)
 	require.Equal(t, []explainedGrant{
-		{principal: precedenceUser, scope: ScopeMCPConnect, effect: GrantEffectBlocked, reason: BlockedReasonNarrowerDirectGrant},
 		{principal: precedenceRole, scope: ScopeMCPBlockedConnect, effect: GrantEffectBlocks, reason: BlockedReasonNone},
 	}, explainedGrants(explanation))
 }

@@ -825,6 +825,9 @@ func validateInput(c Check) error {
 	case WildcardResource:
 		return InvalidCheck(c.Scope, c.ResourceID)
 	default:
+		if err := validateCheckDimensions(c); err != nil {
+			return err
+		}
 		if err := validateRequiredDimensions(c); err != nil {
 			return err
 		}

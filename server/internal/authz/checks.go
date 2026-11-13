@@ -12,18 +12,25 @@ type MCPToolCallDimensions struct {
 
 // MCPToolCallCheck builds a Check for an MCP tool call with the given dimensions.
 // dims.ProjectID is required: evaluation rejects an MCP check without one.
+// The check always carries the tool and its disposition. One that is empty
+// is carried as unknown, so a grant limited to some tools or dispositions
+// never allows it and a block limited to them always applies.
 func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
-	dimensions := map[string]string{}
-	if dims.Tool != "" {
-		dimensions[SelectorKeyTool] = dims.Tool
-	}
-	if dims.Disposition != "" {
-		dimensions[SelectorKeyDisposition] = dims.Disposition
+	dimensions := map[string]string{
+		SelectorKeyTool:        valueOrUnknown(dims.Tool),
+		SelectorKeyDisposition: valueOrUnknown(dims.Disposition),
 	}
 	if dims.ProjectID != "" {
 		dimensions[SelectorKeyProjectID] = dims.ProjectID
 	}
 	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: ""}
+}
+
+func valueOrUnknown(value string) string {
+	if value == "" {
+		return SelectorValueUnknown
+	}
+	return value
 }
 
 // MCPCheck builds a Check for an MCP scope (read/write/connect) with project_id
@@ -112,6 +119,29 @@ func RequiredCheckDimensions(resourceKind string) []string {
 	return slices.Clone(requiredCheckDimensions[resourceKind])
 }
 
+// unknownableDimensions lists, per scope, the dimensions a check may carry as
+// SelectorValueUnknown.
+var unknownableDimensions = Model.deriveUnknownableDimensions()
+
+// validateCheckDimensions rejects dimension values no concrete request can
+// carry: an empty string, the wildcard, the represented-user marker, and an
+// unknown value on a dimension that must be known.
+func validateCheckDimensions(c Check) error {
+	for key, value := range c.Dimensions {
+		switch value {
+		case "":
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" is empty")
+		case WildcardResource, SelectorValueRepresentedUser:
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" must be concrete")
+		case SelectorValueUnknown:
+			if !unknownableDimensions[c.Scope][key] {
+				return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" must be known")
+			}
+		}
+	}
+	return nil
+}
+
 // validateRequiredDimensions rejects a check that omits, or wildcards, a
 // dimension its resource kind requires, so it fails closed instead of matching
 // a grant bounded on that dimension.
@@ -191,7 +221,7 @@ func expressionForCheck(check Check) GrantExpression {
 	return GrantDifference{
 		Base: base,
 		Exclusion: GrantCheck{
-			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, selectorMatch: selectorMatchStrict, representedUser: check.representedUser},
+			Check:    check.exclusionCheck(exclusion),
 			Instance: instance,
 		},
 	}
