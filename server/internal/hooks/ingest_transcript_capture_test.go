@@ -14,6 +14,7 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 // blockMarkerScanner blocks any scanned text containing BLOCK_TEST_CONTENT.
@@ -225,4 +226,41 @@ func TestIngest_CoworkHookRowsLabelledCoworkWithoutCachedSurface(t *testing.T) {
 	claudeSession := uuid.NewString()
 	ingest(claudeSession, false)
 	require.Equal(t, []string{"claude-code", "claude-code"}, sources(claudeSession), "a plain Claude Code session is unchanged")
+}
+
+// A tool call blocked inside the Cowork VM arrives with the generic "claude"
+// adapter slug and, with SessionStart skipped, nothing cached for the session.
+// The block page must still say it came from Claude Cowork.
+func TestIngest_CoworkBlockStoresCoworkProviderWithoutCachedSurface(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = &blockMarkerScanner{stubResultScanner: stubResultScanner{}}
+
+	surface, promptID := surfaceCowork, "prompt-1"
+	toolID, toolName := "toolu_1", "Bash"
+	payload := canonicalIngestPayload("claude", "tool.requested", uuid.NewString())
+	payload.Session.Surface = &surface
+	payload.Session.TurnID = &promptID
+	payload.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{ID: &toolID, Name: &toolName, Input: map[string]any{"command": "echo BLOCK_TEST_CONTENT"}}}
+
+	res, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "deny", res.Decision)
+	require.NotNil(t, res.Message)
+	blockID := requireBlockIDFromMessage(t, *res.Message)
+
+	var block riskRepo.GetToolCallBlockRow
+	require.Eventually(t, func() bool {
+		block, err = riskRepo.New(ti.conn).GetToolCallBlock(ctx, riskRepo.GetToolCallBlockParams{
+			ID:           blockID,
+			ViewerUserID: authCtx.UserID,
+		})
+		return err == nil
+	}, 2*time.Second, 25*time.Millisecond)
+	require.Equal(t, agentVariantCowork, block.Provider)
 }

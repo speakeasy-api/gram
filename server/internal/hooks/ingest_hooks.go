@@ -861,7 +861,7 @@ func (s *Service) appendCanonicalBlockURL(ctx context.Context, authCtx *contextv
 		return userReason
 	}
 	bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
-		Provider:       strings.TrimSpace(payload.Source.Adapter),
+		Provider:       canonicalServiceName(payload),
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		Reason:         auditReason,
@@ -979,7 +979,7 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 		// another block row (and a second block URL) for the same call.
 		if !s.isHookDuplicate(ctx) {
 			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
-				Provider:       strings.TrimSpace(payload.Source.Adapter),
+				Provider:       canonicalServiceName(payload),
 				OrganizationID: authCtx.ActiveOrganizationID,
 				ProjectID:      *authCtx.ProjectID,
 				Reason:         auditReason,
@@ -1278,7 +1278,7 @@ func (s *Service) persistPromptAttachmentsLogged(ctx context.Context, payload *g
 func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor) SessionMetadata {
 	metadata := SessionMetadata{
 		SessionID:           canonicalSessionID(payload),
-		ServiceName:         strings.TrimSpace(payload.Source.Adapter),
+		ServiceName:         canonicalServiceName(payload),
 		UserEmail:           actor.Email,
 		UserID:              actor.UserID,
 		Provider:            "",
@@ -1295,13 +1295,6 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		GramOrgID:           authCtx.ActiveOrganizationID,
 		ProjectID:           authCtx.ProjectID.String(),
 	}
-	// A Cowork event names its surface itself. The relay skips SessionStart
-	// inside the Cowork VM and sends the generic "claude" adapter slug, so
-	// without this the session reads as Claude Code until Claude's OTEL
-	// stream reaches the server, while its transcript rows say cowork.
-	if fromCowork(payload) {
-		metadata.ServiceName = agentVariantCowork
-	}
 	if metadata.SessionID == "" {
 		return metadata
 	}
@@ -1313,8 +1306,9 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		}
 		// Surface-specificity merge: the OTEL path caches "cowork" from the
 		// resource service.name, which must survive this event's re-cache —
-		// cowork ships the same "claude-code-desktop" adapter slug as Claude
-		// Code Desktop, so the adapter alone can never downgrade it. See
+		// Cowork events from the desktop hook client carry no session.surface
+		// and ship the same "claude-code-desktop" adapter slug as Claude Code
+		// Desktop, so the adapter alone can never downgrade it. See
 		// claudeServiceNameSpecificity for the full ranking.
 		metadata.ServiceName = preferClaudeServiceName(metadata.ServiceName, cached.ServiceName)
 		metadata.Provider = cached.Provider
@@ -2699,6 +2693,19 @@ const surfaceCowork = agentVariantCowork
 func fromCowork(payload *gen.IngestPayload) bool {
 	return payload != nil && payload.Session != nil &&
 		strings.EqualFold(strings.TrimSpace(conv.PtrValOr(payload.Session.Surface, "")), surfaceCowork)
+}
+
+// canonicalServiceName is the sender an event names for itself: the adapter
+// slug, or "cowork" for an event from inside Claude Cowork. The relay there
+// sends the generic "claude" adapter slug and skips SessionStart, so until
+// Claude's OTEL service name is cached the adapter alone would label the
+// session's hook rows and blocks Claude Code while its transcript rows say
+// Cowork.
+func canonicalServiceName(payload *gen.IngestPayload) string {
+	if fromCowork(payload) {
+		return agentVariantCowork
+	}
+	return strings.TrimSpace(payload.Source.Adapter)
 }
 
 // persistCoworkEventRow stores a Cowork event under the
