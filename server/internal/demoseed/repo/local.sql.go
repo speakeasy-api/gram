@@ -189,10 +189,10 @@ func (q *Queries) LocalGrantSessionVisibility(ctx context.Context, arg LocalGran
 }
 
 const localGrantToolLogVisibility = `-- name: LocalGrantToolLogVisibility :exec
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1::text, 'user:' || $2::text, 'log:read', NULL,
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1::text, 'user:' || $2::text, 'log:read',
         jsonb_build_object('resource_kind', 'project', 'resource_id', '*'))
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors) DO NOTHING
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
 `
 
 type LocalGrantToolLogVisibilityParams struct {
