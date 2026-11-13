@@ -115,20 +115,22 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	principalCredentials *principalcredential.Issuer
-	service              *migratedService
-	conn                 *pgxpool.Pool
-	sessionManager       *sessions.Manager
-	serverURL            *url.URL
-	siteURL              *url.URL
-	logger               *slog.Logger
-	tracerProvider       trace.TracerProvider
-	cacheAdapter         cache.Cache
-	chatSessionsManager  *chatsessions.Manager
-	authnChallengeCache  cache.TypedCacheObject[mcp.AuthnChallengeState]
-	enc                  *encryption.Client
-	authzEngine          *authz.Engine
-	audit                *audit.Logger
-	tunnelRoutes         route.Store
+	// assistantTokens mints and authorizes assistant turn credentials.
+	assistantTokens     *assistanttokens.Manager
+	service             *migratedService
+	conn                *pgxpool.Pool
+	sessionManager      *sessions.Manager
+	serverURL           *url.URL
+	siteURL             *url.URL
+	logger              *slog.Logger
+	tracerProvider      trace.TracerProvider
+	cacheAdapter        cache.Cache
+	chatSessionsManager *chatsessions.Manager
+	authnChallengeCache cache.TypedCacheObject[mcp.AuthnChallengeState]
+	enc                 *encryption.Client
+	authzEngine         *authz.Engine
+	audit               *audit.Logger
+	tunnelRoutes        route.Store
 	// features is the injectable flag provider wired into the service; tests
 	// enable flag-gated behavior (e.g. the Platform MCP assistant toolset
 	// variant) with SetFlagVariant.
@@ -698,17 +700,20 @@ func buildTestMCPService(
 	})
 	assistantSkillTools := platformtoolsruntime.AssistantSkillTools(logger, conn, platformskills.WithEfficacySignaler(efficacySignaler))
 	var platformMCPReadTools []platformtools.ExternalTool
+	var platformMCPReadActingContext func(context.Context) (context.Context, error)
 	if withPlatformMCPReadTools {
 		// Composed the way the server composes it: descriptors admitted to the
 		// assistant audience, called directly by the adapter.
+		platformMCPAuthorizer := platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine)
 		platformMCPReadTools = assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
-				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "test-cursor-key",
+				logger, nil, nil, platformMCPAuthorizer, "", "test-cursor-key",
 				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
-			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),
+			platformMCPAuthorizer,
 		)
+		platformMCPReadActingContext = assistant_platform_mcp_adapter.ActingContext(platformMCPAuthorizer)
 	}
 	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 		AssistantMemoryTools:          nil,
@@ -716,6 +721,7 @@ func buildTestMCPService(
 		AssistantTriggerTools:         nil,
 		ManagedAssistantInsightsTools: managedLogsTools,
 		PlatformMCPReadTools:          platformMCPReadTools,
+		PlatformMCPReadActingContext:  platformMCPReadActingContext,
 	})
 	tunnelRoutes := route.NewRouteTable()
 	toolCallRecords := &toolCallRecorder{}
@@ -734,6 +740,7 @@ func buildTestMCPService(
 
 	return ctx, &testInstance{
 		principalCredentials: principalCredentials,
+		assistantTokens:      assistantTokens,
 		service:              &migratedService{Service: svc, conn: conn, manual: false},
 		conn:                 conn,
 		sessionManager:       sessionManager,

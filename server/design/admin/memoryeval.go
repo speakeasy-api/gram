@@ -44,6 +44,12 @@ var AdminMemoryEvalOptions = Type("AdminMemoryEvalOptions", func() {
 
 // memoryEvalMethods are Organizational Memory eval runs over the synthetic corpus the
 // demo seed loads into the demo organization. Runs never touch customer data.
+//
+// MCP parity: listMemoryEvalRuns and getMemoryEvalRun are exposed through
+// Staff Admin MCP as list_memory_eval_runs and get_memory_eval_run. Start and
+// options stay dashboard-only: a start launches a Temporal workflow outside
+// the transaction an Admin MCP write shares with its staff event row, and
+// options only feed the dashboard's start form.
 func memoryEvalMethods() {
 	Method("getMemoryEvalOptions", func() {
 		Meta("openapi:operationId", "adminGetMemoryEvalOptions")
