@@ -7,38 +7,13 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/demoseed"
-	demoseedrepo "github.com/speakeasy-api/gram/server/internal/demoseed/repo"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun/evalruntest"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun/repo"
 )
-
-// seedCorpusProject creates the local seed tenant's organization and both
-// eval projects, which is all corpusOrganization looks for.
-func seedCorpusProject(t *testing.T, db *pgxpool.Pool) string {
-	t.Helper()
-	return seedCorpusProjects(t, db, memoryeval.ProjectMain, memoryeval.ProjectOther)
-}
-
-// seedCorpusProjects creates the local seed tenant's organization and the
-// given eval projects.
-func seedCorpusProjects(t *testing.T, db *pgxpool.Pool, keys ...memoryeval.ProjectKey) string {
-	t.Helper()
-	spec := demoseed.LocalSpec()
-	_, err := orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{ID: spec.OrgID, Name: spec.OrgName, Slug: spec.OrgSlug})
-	require.NoError(t, err)
-	for _, key := range keys {
-		id, ok := demoseed.MemoryEvalProjectID(spec, key)
-		require.True(t, ok)
-		require.NoError(t, demoseedrepo.New(db).MemoryEvalInsertProject(t.Context(), demoseedrepo.MemoryEvalInsertProjectParams{ProjectID: id, Name: "Team memory eval " + string(key), Slug: "team-memory-eval-" + string(key), OrgID: spec.OrgID, CreatedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}}))
-	}
-	return spec.OrgID
-}
 
 func TestQueueNeedsTheSeededCorpus(t *testing.T) {
 	t.Parallel()
@@ -49,7 +24,7 @@ func TestQueueNeedsTheSeededCorpus(t *testing.T) {
 	require.ErrorIs(t, err, evalrun.ErrNoCorpus)
 
 	// A partial corpus would fail the run after it spent a slot.
-	seedCorpusProjects(t, db, memoryeval.ProjectMain)
+	evalruntest.SeedCorpusProjects(t, db, memoryeval.ProjectMain)
 	_, err = evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
 	require.ErrorIs(t, err, evalrun.ErrNoCorpus)
 }
@@ -61,7 +36,7 @@ func TestQueueAllowsOneActiveRunAndADailyLimit(t *testing.T) {
 
 	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
 	require.NoError(t, err)
-	orgID := seedCorpusProject(t, db)
+	orgID := evalruntest.SeedCorpus(t, db)
 	q := repo.New(db)
 
 	first, err := evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
@@ -96,7 +71,7 @@ func TestQueueDoesNotCountRunsThatNeverStarted(t *testing.T) {
 
 	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
 	require.NoError(t, err)
-	seedCorpusProject(t, db)
+	evalruntest.SeedCorpus(t, db)
 
 	for range evalrun.DailyRunLimit + 1 {
 		run, err := evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
@@ -116,7 +91,7 @@ func TestQueueFailsRunsOlderThanAnyWorkflow(t *testing.T) {
 
 	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
 	require.NoError(t, err)
-	seedCorpusProject(t, db)
+	evalruntest.SeedCorpus(t, db)
 	q := repo.New(db)
 
 	orphan, err := evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
@@ -150,7 +125,7 @@ func TestQueueAcceptsOneOfConcurrentStarts(t *testing.T) {
 
 	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
 	require.NoError(t, err)
-	seedCorpusProject(t, db)
+	evalruntest.SeedCorpus(t, db)
 
 	const starters = 6
 	ready := make(chan struct{})
@@ -183,7 +158,7 @@ func TestQueueRejectsInvalidConfig(t *testing.T) {
 
 	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
 	require.NoError(t, err)
-	seedCorpusProject(t, db)
+	evalruntest.SeedCorpus(t, db)
 	cfg := evalrun.DefaultConfig()
 	cfg.Runs = evalrun.MaxRuns + 1
 	_, err = evalrun.Queue(t.Context(), db, cfg, "staff@example.com")
@@ -197,7 +172,7 @@ func TestFailToStartOnlyFailsQueuedRuns(t *testing.T) {
 
 	db, err := testInfra(t).CloneTestDatabase(t, "evalrun")
 	require.NoError(t, err)
-	seedCorpusProject(t, db)
+	evalruntest.SeedCorpus(t, db)
 	q := repo.New(db)
 
 	claimed, err := evalrun.Queue(t.Context(), db, evalrun.DefaultConfig(), "staff@example.com")
