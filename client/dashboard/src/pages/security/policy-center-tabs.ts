@@ -17,12 +17,12 @@ export type PolicyCenterTab = (typeof POLICY_CENTER_TABS)[number];
 
 /** Tabs that moved to the Shadow AI page, and the tab each now opens there.
  *  Slack, block messages and bookmarks still carry these `?tab=` values. */
-export const MOVED_TO_SHADOW_AI = {
+const MOVED_TO_SHADOW_AI = {
   "mcp-approvals": "mcp-servers",
   "shadow-ai-targets": "ai-tools",
 } as const satisfies Record<string, ShadowAITab>;
 
-export type MovedToShadowAITab = keyof typeof MOVED_TO_SHADOW_AI;
+type MovedToShadowAITab = keyof typeof MOVED_TO_SHADOW_AI;
 
 export function movedToShadowAITab(
   tab: string | null,
