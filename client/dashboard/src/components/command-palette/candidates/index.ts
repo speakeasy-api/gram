@@ -1,7 +1,7 @@
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { LauncherCandidate } from "./types";
 import { useAccessRequestCandidates } from "./useAccessRequestCandidates";
 import { useInferenceSetupCandidate } from "./useInferenceSetupCandidate";
@@ -22,7 +22,15 @@ import { usePluginCandidates } from "./usePluginCandidates";
 import { usePolicyCandidates } from "./usePolicyCandidates";
 import { useProjectCandidates } from "./useProjectCandidates";
 import { useRecentCandidates } from "./useRecentCandidates";
-import { useRuleCandidates } from "./useRuleCandidates";
+import {
+  useBuiltinRuleCandidates,
+  useRuleCandidates,
+} from "./useRuleCandidates";
+import {
+  createGrantFingerprint,
+  type ProjectResourceIndexMetrics,
+  useProjectResourceIndexCandidates,
+} from "./useProjectResourceIndexCandidates";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useSourceCandidates } from "./useSourceCandidates";
 
@@ -55,16 +63,20 @@ export function useLauncherCandidates({
   recentsUserId,
   orgSlug,
   projectSlug,
+  query: _query,
+  onIndexMetrics,
 }: {
   enabled: boolean;
   inProject: boolean;
   recentsUserId: string | null;
   orgSlug: string | undefined;
   projectSlug: string | undefined;
+  query: string;
+  onIndexMetrics?: (metrics: ProjectResourceIndexMetrics) => void;
 }): LauncherCandidate[] {
   const organization = useOrganization();
   const project = useProject();
-  const { hasAnyScope, hasScope } = useRBAC();
+  const { grants, hasAnyScope, hasScope } = useRBAC();
   // Every org-level check names the organization: without a resource id
   // hasScope is existential (a grant on any org passes), so a member who is
   // an admin elsewhere would otherwise fire this tenant's forbidden calls.
@@ -103,6 +115,24 @@ export function useLauncherCandidates({
   const canReadSkills = hasScope("skill:read", project.id);
 
   const projectEnabled = enabled && inProject;
+  // Row-level assistant and MCP grants can change without changing any coarse
+  // page gate. Keep the canonical grant fingerprint local to the query cache; it
+  // is never included in palette telemetry.
+  const accessKey = useMemo(() => createGrantFingerprint(grants), [grants]);
+  const resourceIndex = useProjectResourceIndexCandidates({
+    enabled: projectEnabled,
+    accessKey,
+  });
+  useEffect(() => {
+    onIndexMetrics?.(resourceIndex.metrics);
+  }, [onIndexMetrics, resourceIndex.metrics]);
+  // A partial response identifies exactly which inventories need legacy
+  // coverage. Successful remote kinds never re-enable their old list calls.
+  const fallback = useCallback(
+    (kind: string) =>
+      projectEnabled && resourceIndex.fallbackKinds.has(kind as never),
+    [projectEnabled, resourceIndex.fallbackKinds],
+  );
 
   const gatewayConnections = useGatewayConnectionCandidates({
     enabled,
@@ -116,36 +146,52 @@ export function useLauncherCandidates({
     projectSlug,
   });
   const marketplace = useMarketplaceCandidate({ enabled, inProject });
+  // Keep the MCP inventory live even after its open/detail rows migrate: the
+  // local candidates carry visibility state and per-server mutation verbs that
+  // the compact remote index intentionally does not model. Overlapping remote
+  // open rows are deduplicated below, while remote-only rows remain available.
   const mcpServers = useMcpServerCandidates({
     enabled: projectEnabled && canListMcp,
   });
   const gateways = useGatewayCandidates({
-    enabled: projectEnabled && canListGateways,
+    enabled: fallback("gateway") && canListGateways,
   });
   const catalog = useCatalogCandidates({
     enabled: projectEnabled && canBrowseCatalog,
   });
   const plugins = usePluginCandidates({
-    enabled: projectEnabled && canListPlugins,
+    enabled: fallback("plugin") && canListPlugins,
   });
   const assistants = useAssistantCandidates({
-    enabled: projectEnabled && canReadAssistants,
+    enabled: fallback("assistant") && canReadAssistants,
   });
   const skills = useSkillCandidates({
-    enabled: projectEnabled && canReadSkills,
+    enabled: fallback("skill") && canReadSkills,
   });
   const inferenceSetup = useInferenceSetupCandidate({ enabled, inProject });
   const platformSetups = usePlatformSetupCandidates({ enabled, inProject });
   const agentIdentities = useAgentIdentityCandidates({ enabled });
-  const environments = useEnvironmentCandidates({ enabled: projectEnabled });
+  const environments = useEnvironmentCandidates({
+    enabled: fallback("environment"),
+  });
   const sources = useSourceCandidates({
     enabled: projectEnabled && canListMcp,
   });
-  const deployments = useDeploymentCandidates({ enabled: projectEnabled });
+  // Deployment rows are synthetic history entries, not durable named
+  // resources, so they remain on their existing independent source.
+  const deployments = useDeploymentCandidates({
+    enabled: projectEnabled,
+  });
   const policies = usePolicyCandidates({
     enabled: projectEnabled && isAdmin,
   });
-  const rules = useRuleCandidates({ enabled: projectEnabled && isAdmin });
+  const rules = useRuleCandidates({
+    enabled: fallback("rule") && isAdmin,
+    includeBuiltins: false,
+  });
+  const builtinRules = useBuiltinRuleCandidates({
+    enabled: projectEnabled && isAdmin,
+  });
   const accessRequests = useAccessRequestCandidates({
     enabled: projectEnabled && canReadApprovals,
   });
@@ -161,27 +207,41 @@ export function useLauncherCandidates({
     const projectOnly = (list: LauncherCandidate[]) => (inProject ? list : []);
     const adminOnly = (list: LauncherCandidate[]) =>
       inProject && isAdmin ? list : [];
+    const localMcpRouteIDs = new Set(
+      mcpServers.map((candidate) => candidate.id.replace(/^mcp:/, "")),
+    );
+    const indexedCandidates = resourceIndex.candidates.filter((candidate) => {
+      if (candidate.kind !== "mcp_server") return true;
+      const identity = candidate.resourceIdentity;
+      return (
+        !identity ||
+        (!localMcpRouteIDs.has(identity.id) &&
+          !localMcpRouteIDs.has(identity.routeSelector))
+      );
+    });
     return [
       ...actions,
       ...gatewayConnections,
       ...recents,
       ...marketplace,
       ...(inProject && canListMcp ? mcpServers : []),
-      ...(inProject && canListGateways ? gateways : []),
+      ...(inProject ? indexedCandidates : []),
+      ...(fallback("gateway") && canListGateways ? gateways : []),
       // Directly below the project's own servers: when a name matches both,
       // what you already run should read first and the catalog offer second.
       ...(inProject && canBrowseCatalog ? catalog : []),
-      ...(inProject && canListPlugins ? plugins : []),
-      ...(inProject && canReadAssistants ? assistants : []),
-      ...(inProject && canReadSkills ? skills : []),
+      ...(fallback("plugin") && canListPlugins ? plugins : []),
+      ...(fallback("assistant") && canReadAssistants ? assistants : []),
+      ...(fallback("skill") && canReadSkills ? skills : []),
       ...agentIdentities,
       ...inferenceSetup,
       ...platformSetups,
-      ...projectOnly(environments),
+      ...(fallback("environment") ? projectOnly(environments) : []),
       ...(inProject && canListMcp ? sources : []),
       ...projectOnly(deployments),
       ...adminOnly(policies),
-      ...adminOnly(rules),
+      ...adminOnly(builtinRules),
+      ...(fallback("rule") ? adminOnly(rules) : []),
       ...(inProject && canReadApprovals ? accessRequests : []),
       ...(canReadPeople ? people : []),
       ...(canReadDevices ? devices : []),
@@ -199,6 +259,8 @@ export function useLauncherCandidates({
     canBrowseCatalog,
     canReadAssistants,
     canReadSkills,
+    resourceIndex.candidates,
+    fallback,
     skills,
     agentIdentities,
     inferenceSetup,
@@ -217,6 +279,7 @@ export function useLauncherCandidates({
     deployments,
     policies,
     rules,
+    builtinRules,
     accessRequests,
     people,
     devices,

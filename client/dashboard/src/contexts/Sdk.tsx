@@ -1,4 +1,4 @@
-import { QueryCache, QueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { createContext, useContext } from "react";
 import {
   isGramSessionUnauthorizedError,
@@ -11,6 +11,7 @@ import type { Gram } from "@gram/client";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { handleError } from "@/lib/errors";
 import { redirectToLoginOnUnauthorized } from "@/lib/session-expired";
+import { invalidateProjectResourceIndexes } from "@/lib/project-resource-index-cache";
 
 // SdkProvider cannot call useIsPlatformAdmin() directly because it wraps AuthProvider
 // (AuthProvider needs QueryClientProvider which SdkProvider supplies). Instead,
@@ -32,8 +33,16 @@ export const useSdkClient = (): Gram => {
 };
 
 // Preserve QueryClient across HMR to prevent cache loss
-const createQueryClient = () =>
-  new QueryClient({
+const createQueryClient = () => {
+  let client: QueryClient;
+  client = new QueryClient({
+    // The resource index spans seven domains. Conservatively invalidating it
+    // after every successful mutation prevents stale discovery without
+    // duplicating each domain's mutation wiring. The five-minute freshness
+    // window still bounds staleness from changes made in other sessions.
+    mutationCache: new MutationCache({
+      onSuccess: () => invalidateProjectResourceIndexes(client),
+    }),
     // A Speakeasy API 401 means the session is dead (expired, revoked, or — in
     // local dev — overwritten by another worktree's stack, since the cookie is
     // scoped to `localhost` and cookies ignore ports). Send the user to /login
@@ -90,6 +99,8 @@ const createQueryClient = () =>
       },
     },
   });
+  return client;
+};
 
 // In development, preserve queryClient across HMR
 export const queryClient: QueryClient =

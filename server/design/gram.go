@@ -68,6 +68,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/platformmcp"
 	_ "github.com/speakeasy-api/gram/server/design/plugins"
 	_ "github.com/speakeasy-api/gram/server/design/productfeatures"
+	_ "github.com/speakeasy-api/gram/server/design/projectresourceindex"
 	_ "github.com/speakeasy-api/gram/server/design/projects"
 	_ "github.com/speakeasy-api/gram/server/design/remotemcp"
 	_ "github.com/speakeasy-api/gram/server/design/remotesessionclients"

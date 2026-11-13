@@ -80,6 +80,7 @@ import (
 	platformkillswitchesc "github.com/speakeasy-api/gram/server/gen/http/platform_killswitches/client"
 	platformmcpc "github.com/speakeasy-api/gram/server/gen/http/platform_mcp/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
+	projectresourceindexc "github.com/speakeasy-api/gram/server/gen/http/project_resource_index/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	registrydiscoveryc "github.com/speakeasy-api/gram/server/gen/http/registry_discovery/client"
 	remotemcpc "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/client"
@@ -179,6 +180,7 @@ func UsageCommands() []string {
 		"platform-mcp (get-onboarding|start-onboarding|record-dashboard-cta-event|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
 		"plugins (list-distribution-plugins|get-distribution-plugin|list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|rotate-observability-credential|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
+		"project-resource-index get",
 		"projects (get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|get-server-scopes|set-server-scope-pin|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delegation-status|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|rotate-client|duplicate-client|delete-client|remove-client-from-mcp-server)",
@@ -2556,6 +2558,13 @@ func ParseEndpoint(
 		featuresSetRemoteSessionAutoRefreshPolicyFlags            = flag.NewFlagSet("set-remote-session-auto-refresh-policy", flag.ExitOnError)
 		featuresSetRemoteSessionAutoRefreshPolicyBodyFlag         = featuresSetRemoteSessionAutoRefreshPolicyFlags.String("body", "REQUIRED", "")
 		featuresSetRemoteSessionAutoRefreshPolicySessionTokenFlag = featuresSetRemoteSessionAutoRefreshPolicyFlags.String("session-token", "", "")
+
+		projectResourceIndexFlags = flag.NewFlagSet("project-resource-index", flag.ContinueOnError)
+
+		projectResourceIndexGetFlags                = flag.NewFlagSet("get", flag.ExitOnError)
+		projectResourceIndexGetSessionTokenFlag     = projectResourceIndexGetFlags.String("session-token", "", "")
+		projectResourceIndexGetApikeyTokenFlag      = projectResourceIndexGetFlags.String("apikey-token", "", "")
+		projectResourceIndexGetProjectSlugInputFlag = projectResourceIndexGetFlags.String("project-slug-input", "", "")
 
 		projectsFlags = flag.NewFlagSet("projects", flag.ContinueOnError)
 
@@ -6191,6 +6200,9 @@ func ParseEndpoint(
 	featuresSetProductFeatureFlags.Usage = featuresSetProductFeatureUsage
 	featuresSetRemoteSessionAutoRefreshPolicyFlags.Usage = featuresSetRemoteSessionAutoRefreshPolicyUsage
 
+	projectResourceIndexFlags.Usage = projectResourceIndexUsage
+	projectResourceIndexGetFlags.Usage = projectResourceIndexGetUsage
+
 	projectsFlags.Usage = projectsUsage
 	projectsGetProjectFlags.Usage = projectsGetProjectUsage
 	projectsCreateProjectFlags.Usage = projectsCreateProjectUsage
@@ -6957,6 +6969,8 @@ func ParseEndpoint(
 			svcf = pluginsFlags
 		case "features":
 			svcf = featuresFlags
+		case "project-resource-index":
+			svcf = projectResourceIndexFlags
 		case "projects":
 			svcf = projectsFlags
 		case "remote-mcp":
@@ -8597,6 +8611,13 @@ func ParseEndpoint(
 
 			case "set-remote-session-auto-refresh-policy":
 				epf = featuresSetRemoteSessionAutoRefreshPolicyFlags
+
+			}
+
+		case "project-resource-index":
+			switch epn {
+			case "get":
+				epf = projectResourceIndexGetFlags
 
 			}
 
@@ -12021,6 +12042,13 @@ func ParseEndpoint(
 			case "set-remote-session-auto-refresh-policy":
 				endpoint = c.SetRemoteSessionAutoRefreshPolicy()
 				data, err = featuresc.BuildSetRemoteSessionAutoRefreshPolicyPayload(*featuresSetRemoteSessionAutoRefreshPolicyBodyFlag, *featuresSetRemoteSessionAutoRefreshPolicySessionTokenFlag)
+			}
+		case "project-resource-index":
+			c := projectresourceindexc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get":
+				endpoint = c.Get()
+				data, err = projectresourceindexc.BuildGetPayload(*projectResourceIndexGetSessionTokenFlag, *projectResourceIndexGetApikeyTokenFlag, *projectResourceIndexGetProjectSlugInputFlag)
 			}
 		case "projects":
 			c := projectsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -24526,6 +24554,39 @@ func featuresSetRemoteSessionAutoRefreshPolicyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-remote-session-auto-refresh-policy --body '{\n      \"organization_id\": \"abc123\",\n      \"policy\": \"user_controlled\"\n   }' --session-token \"abc123\"")
+}
+
+// projectResourceIndexUsage displays the usage of the project-resource-index
+// command and its subcommands.
+func projectResourceIndexUsage() {
+	fmt.Fprintln(os.Stderr, `Returns the complete authorized, openable resource inventory for a project.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] project-resource-index COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get: Returns a complete snapshot of authorized project resources for local discovery.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s project-resource-index COMMAND --help\n", os.Args[0])
+}
+func projectResourceIndexGetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] project-resource-index get", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns a complete snapshot of authorized project resources for local discovery.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "project-resource-index get --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // projectsUsage displays the usage of the projects command and its subcommands.

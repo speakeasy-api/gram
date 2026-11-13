@@ -22,6 +22,11 @@ const mocks = vi.hoisted(() => ({
   capture: vi.fn(),
   prefilter: vi.fn(),
   rank: vi.fn(),
+  launcherOptions: [] as Array<{
+    query: string;
+    enabled: boolean;
+    inProject: boolean;
+  }>,
 }));
 
 vi.mock("@/contexts/CommandPalette", () => ({
@@ -43,7 +48,14 @@ vi.mock("./recentlyVisited", () => ({
   useRecentsUserId: () => "user_1",
 }));
 vi.mock("./candidates", () => ({
-  useLauncherCandidates: () => mocks.candidates,
+  useLauncherCandidates: (options: {
+    query: string;
+    enabled: boolean;
+    inProject: boolean;
+  }) => {
+    mocks.launcherOptions.push(options);
+    return mocks.candidates;
+  },
 }));
 vi.mock("./ranker", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./ranker")>();
@@ -127,6 +139,7 @@ beforeEach(() => {
   mocks.capture.mockReset();
   mocks.prefilter.mockReset();
   mocks.rank.mockReset();
+  mocks.launcherOptions = [];
   palette.isOpen = true;
   palette.close.mockReset();
   runSettings.mockReset();
@@ -137,6 +150,13 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("CommandPalette", () => {
+  it("ranks queries immediately without network debounce", () => {
+    render(<CommandPalette />);
+    fireEvent.change(input(), { target: { value: "ab" } });
+    expect(mocks.launcherOptions.at(-1)?.query).toBe("ab");
+    expect(mocks.prefilter).toHaveBeenLastCalledWith("ab", mocks.candidates);
+  });
+
   it("captures one performance event per open under StrictMode", () => {
     const view = render(
       <StrictMode>

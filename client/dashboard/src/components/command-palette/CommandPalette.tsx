@@ -16,6 +16,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -24,6 +25,7 @@ import {
 import { requestAskAi } from "./askAiBridge";
 import { useLauncherCandidates } from "./candidates";
 import type { LauncherCandidate } from "./candidates/types";
+import type { ProjectResourceIndexMetrics } from "./candidates/useProjectResourceIndexCandidates";
 import {
   captureCommandPalettePerformance,
   CommandPalettePerformanceTracker,
@@ -273,6 +275,14 @@ export function CommandPalette(): JSX.Element {
   const tracker = performanceTracker.current;
   const wasOpen = useRef(false);
   const recordedRanking = useRef<object | null>(null);
+  const indexMetrics = useRef<ProjectResourceIndexMetrics | null>(null);
+  const recordIndexMetrics = useCallback(
+    (metrics: ProjectResourceIndexMetrics) => {
+      indexMetrics.current = metrics;
+      tracker.index(performance.now(), metrics);
+    },
+    [tracker],
+  );
 
   // Project Assistant and resource search are project-scoped. At the org level
   // (no project in the URL) the palette still works for navigating org pages.
@@ -284,15 +294,16 @@ export function CommandPalette(): JSX.Element {
   // history. Gate the session lookup on `isOpen` so we don't poll auth.info on
   // every page (it 401s when unauthenticated).
   const recentsUserId = useRecentsUserId(isOpen);
-
+  const trimmedQuery = query.trim();
   const candidates = useLauncherCandidates({
     enabled: isOpen,
     inProject,
     recentsUserId: recentsUserId ?? null,
     orgSlug,
     projectSlug,
+    query: trimmedQuery,
+    onIndexMetrics: recordIndexMetrics,
   });
-  const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
 
   const ranked = useMemo(() => {
@@ -320,6 +331,7 @@ export function CommandPalette(): JSX.Element {
         pages,
         resources,
       });
+      if (indexMetrics.current) tracker.index(now, indexMetrics.current);
     }
     if (isOpen) {
       tracker.candidates(now, candidates.length, pages, resources);

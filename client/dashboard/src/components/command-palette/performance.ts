@@ -1,4 +1,5 @@
 import type { Telemetry } from "@/contexts/Telemetry";
+import type { ProjectResourceIndexMetrics } from "./candidates/useProjectResourceIndexCandidates";
 
 export const COMMAND_PALETTE_PERFORMANCE_EVENT =
   "command_palette_open_performance";
@@ -6,7 +7,7 @@ export const COMMAND_PALETTE_PERFORMANCE_EVENT =
 const RESOURCE_QUIET_WINDOW_MS = 300;
 
 export interface CommandPalettePerformancePayload {
-  schema_version: 1;
+  schema_version: 4;
   scope: "organization" | "project";
   cache_state: "cold" | "warm";
   candidate_count_at_open: number;
@@ -20,6 +21,20 @@ export interface CommandPalettePerformancePayload {
   ranking_invocation_count: number;
   ranking_duration_ms: number;
   ranking_max_duration_ms: number;
+  inventory_call_baseline: 17;
+  indexed_resource_kind_count: number;
+  net_eliminated_inventory_call_baseline: number;
+  remaining_inventory_call_baseline: number;
+  index_request_count: number;
+  modeled_no_fallback_call_count: number;
+  index_item_count: number;
+  index_complete: boolean;
+  index_cache_hit: boolean;
+  index_incomplete_kind_count: number;
+  index_payload_byte_bucket: ProjectResourceIndexMetrics["payloadByteBucket"];
+  time_to_index_ready_ms: number | null;
+  index_mapping_duration_ms: number | null;
+  fallback_used: boolean;
 }
 
 interface Session {
@@ -34,6 +49,15 @@ interface Session {
   rankingInvocationCount: number;
   rankingDuration: number;
   rankingMaxDuration: number;
+  indexRequestCount: number;
+  indexItemCount: number;
+  indexComplete: boolean;
+  indexCacheHit: boolean;
+  indexIncompleteKindCount: number;
+  indexPayloadByteBucket: ProjectResourceIndexMetrics["payloadByteBucket"];
+  indexReadyAt: number | null;
+  mappingDuration: number | null;
+  fallbackUsed: boolean;
 }
 
 /**
@@ -69,6 +93,15 @@ export class CommandPalettePerformanceTracker {
       rankingInvocationCount: 0,
       rankingDuration: 0,
       rankingMaxDuration: 0,
+      indexRequestCount: 0,
+      indexItemCount: 0,
+      indexComplete: false,
+      indexCacheHit: false,
+      indexIncompleteKindCount: 0,
+      indexPayloadByteBucket: null,
+      indexReadyAt: null,
+      mappingDuration: null,
+      fallbackUsed: false,
     };
   }
 
@@ -92,6 +125,27 @@ export class CommandPalettePerformanceTracker {
     }
   }
 
+  index(now: number, metrics: ProjectResourceIndexMetrics): void {
+    const session = this.session;
+    if (!session) return;
+    session.indexRequestCount = Math.max(
+      session.indexRequestCount,
+      metrics.indexRequestCount,
+    );
+    session.fallbackUsed ||= metrics.state === "fallback";
+    // Cached rows can coexist with an issued refetch. Only a settled response
+    // may finalize result metadata, including valid zero-candidate outcomes.
+    if (metrics.indexInFlight) return;
+    if (metrics.state !== "ready" && metrics.state !== "fallback") return;
+    session.indexItemCount = metrics.itemCount;
+    session.indexComplete = metrics.complete;
+    session.indexCacheHit = metrics.cacheHit;
+    session.indexIncompleteKindCount = metrics.incompleteKindCount;
+    session.indexPayloadByteBucket = metrics.payloadByteBucket;
+    session.mappingDuration = metrics.mappingDurationMs;
+    session.indexReadyAt ??= now;
+  }
+
   ranking(durationMs: number): void {
     const session = this.session;
     if (!session) return;
@@ -112,7 +166,7 @@ export class CommandPalettePerformanceTracker {
     const quietAt = session.lastCandidateChangeAt + RESOURCE_QUIET_WINDOW_MS;
     const quiet = quietAt <= now;
     return {
-      schema_version: 1,
+      schema_version: 4,
       scope,
       cache_state: session.warm ? "warm" : "cold",
       candidate_count_at_open: session.candidateCountAtOpen,
@@ -134,6 +188,27 @@ export class CommandPalettePerformanceTracker {
       ranking_invocation_count: session.rankingInvocationCount,
       ranking_duration_ms: session.rankingDuration,
       ranking_max_duration_ms: session.rankingMaxDuration,
+      // Seven collection-authorized kinds are searched. Live MCP actions still
+      // need their shared inventory, so six list requests are net eliminated.
+      // This is an explicit no-fallback model, not a measured total.
+      inventory_call_baseline: 17,
+      indexed_resource_kind_count: scope === "project" ? 7 : 0,
+      net_eliminated_inventory_call_baseline: scope === "project" ? 6 : 0,
+      remaining_inventory_call_baseline: scope === "project" ? 11 : 17,
+      index_request_count: session.indexRequestCount,
+      modeled_no_fallback_call_count:
+        (scope === "project" ? 11 : 17) + session.indexRequestCount,
+      index_item_count: session.indexItemCount,
+      index_complete: session.indexComplete,
+      index_cache_hit: session.indexCacheHit,
+      index_incomplete_kind_count: session.indexIncompleteKindCount,
+      index_payload_byte_bucket: session.indexPayloadByteBucket,
+      time_to_index_ready_ms:
+        session.indexReadyAt === null
+          ? null
+          : Math.max(0, session.indexReadyAt - session.startedAt),
+      index_mapping_duration_ms: session.mappingDuration,
+      fallback_used: session.fallbackUsed,
     };
   }
 }

@@ -975,6 +975,8 @@ tags:
     description: Manage distributable plugin bundles of MCP servers and hooks.
   - name: features
     description: Manage product level feature controls.
+  - name: projectResourceIndex
+    description: Returns the complete authorized, openable resource inventory for a project.
   - name: projects
     description: Manages projects in Speakeasy.
   - name: remoteMcp

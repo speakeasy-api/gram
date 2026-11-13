@@ -12,6 +12,17 @@ import (
 type Key = attribute.Key
 
 const (
+	// ProjectResourceIndexKindKey identifies one indexed resource kind.
+	ProjectResourceIndexKindKey = attribute.Key("gram.project_resource_index.kind")
+	// ProjectResourceIndexDurationMSKey records adapter or complete-index duration.
+	ProjectResourceIndexDurationMSKey = attribute.Key("gram.project_resource_index.duration_ms")
+	// ProjectResourceIndexItemCountKey counts returned index items.
+	ProjectResourceIndexItemCountKey = attribute.Key("gram.project_resource_index.item_count")
+	// ProjectResourceIndexFailedKey reports whether one index adapter failed.
+	ProjectResourceIndexFailedKey = attribute.Key("gram.project_resource_index.failed")
+	// ProjectResourceIndexAdapterCountKey counts adapters used for one snapshot.
+	ProjectResourceIndexAdapterCountKey = attribute.Key("gram.project_resource_index.adapter_count")
+
 	// SigintSensorIDKey identifies the sensor configuration responsible for an evaluation.
 	SigintSensorIDKey = attribute.Key("gram.sigint.sensor.id")
 
@@ -2065,6 +2076,37 @@ func SlogFlyOrgSlug(v string) slog.Attr      { return slog.String(string(FlyOrgS
 
 func FlyMachineIDs(v []string) attribute.KeyValue { return FlyMachineIDsKey.StringSlice(v) }
 func SlogFlyMachineIDs(v []string) slog.Attr      { return slog.Any(string(FlyMachineIDsKey), v) }
+
+func ProjectResourceIndexKind(v string) attribute.KeyValue {
+	return ProjectResourceIndexKindKey.String(v)
+}
+func SlogProjectResourceIndexKind(v string) slog.Attr {
+	return slog.String(string(ProjectResourceIndexKindKey), v)
+}
+func ProjectResourceIndexDurationMS(v int64) attribute.KeyValue {
+	return ProjectResourceIndexDurationMSKey.Int64(v)
+}
+func SlogProjectResourceIndexDurationMS(v int64) slog.Attr {
+	return slog.Int64(string(ProjectResourceIndexDurationMSKey), v)
+}
+func ProjectResourceIndexItemCount(v int) attribute.KeyValue {
+	return ProjectResourceIndexItemCountKey.Int(v)
+}
+func SlogProjectResourceIndexItemCount(v int) slog.Attr {
+	return slog.Int(string(ProjectResourceIndexItemCountKey), v)
+}
+func ProjectResourceIndexFailed(v bool) attribute.KeyValue {
+	return ProjectResourceIndexFailedKey.Bool(v)
+}
+func SlogProjectResourceIndexFailed(v bool) slog.Attr {
+	return slog.Bool(string(ProjectResourceIndexFailedKey), v)
+}
+func ProjectResourceIndexAdapterCount(v int) attribute.KeyValue {
+	return ProjectResourceIndexAdapterCountKey.Int(v)
+}
+func SlogProjectResourceIndexAdapterCount(v int) slog.Attr {
+	return slog.Int(string(ProjectResourceIndexAdapterCountKey), v)
+}
 
 func ValueAny(v any) attribute.KeyValue       { return ValueKey.String(fmt.Sprintf("%v", v)) }
 func SlogValueAny(v any) slog.Attr            { return slog.Any(string(ValueKey), v) }

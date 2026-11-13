@@ -67,6 +67,7 @@ import { Packages } from "./packages.js";
 import { PlatformKillswitches } from "./platformkillswitches.js";
 import { PlatformMcp } from "./platformmcp.js";
 import { Plugins } from "./plugins.js";
+import { ProjectResourceIndex } from "./projectresourceindex.js";
 import { Projects } from "./projects.js";
 import { RegistryDiscovery } from "./registrydiscovery.js";
 import { RemoteMcp } from "./remotemcp.js";
@@ -437,6 +438,13 @@ export class Gram extends ClientSDK {
   private _features?: Features;
   get features(): Features {
     return (this._features ??= new Features(this._options));
+  }
+
+  private _projectResourceIndex?: ProjectResourceIndex;
+  get projectResourceIndex(): ProjectResourceIndex {
+    return (this._projectResourceIndex ??= new ProjectResourceIndex(
+      this._options,
+    ));
   }
 
   private _projects?: Projects;

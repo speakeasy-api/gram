@@ -15,7 +15,7 @@ describe("CommandPalettePerformanceTracker", () => {
     tracker.ranking(1.5);
 
     expect(tracker.close(600, "project")).toEqual({
-      schema_version: 1,
+      schema_version: 4,
       scope: "project",
       cache_state: "cold",
       candidate_count_at_open: 4,
@@ -29,6 +29,20 @@ describe("CommandPalettePerformanceTracker", () => {
       ranking_invocation_count: 2,
       ranking_duration_ms: 4,
       ranking_max_duration_ms: 2.5,
+      inventory_call_baseline: 17,
+      indexed_resource_kind_count: 7,
+      net_eliminated_inventory_call_baseline: 6,
+      remaining_inventory_call_baseline: 11,
+      index_request_count: 0,
+      modeled_no_fallback_call_count: 11,
+      index_item_count: 0,
+      index_complete: false,
+      index_cache_hit: false,
+      index_incomplete_kind_count: 0,
+      index_payload_byte_bucket: null,
+      time_to_index_ready_ms: null,
+      index_mapping_duration_ms: null,
+      fallback_used: false,
     });
     expect(tracker.close(700, "project")).toBeNull();
   });
@@ -40,6 +54,12 @@ describe("CommandPalettePerformanceTracker", () => {
     expect(payload?.cache_state).toBe("warm");
     expect(payload?.time_to_first_resource_ms).toBe(0);
     expect(payload?.resource_quiet_before_close).toBe(false);
+    expect(payload).toMatchObject({
+      indexed_resource_kind_count: 0,
+      net_eliminated_inventory_call_baseline: 0,
+      remaining_inventory_call_baseline: 17,
+      modeled_no_fallback_call_count: 17,
+    });
   });
 
   it("measures page actions that become available after open", () => {
@@ -47,6 +67,74 @@ describe("CommandPalettePerformanceTracker", () => {
     tracker.open(10, { total: 0, pages: 0, resources: 0 });
     tracker.candidates(35, 2, 2, 0);
     expect(tracker.close(40, "project")?.time_to_page_actions_ms).toBe(25);
+  });
+
+  it("records complete search semantics without high-cardinality values", () => {
+    const tracker = new CommandPalettePerformanceTracker();
+    tracker.open(100, { total: 2, pages: 2, resources: 0 });
+    tracker.index(125, {
+      state: "ready",
+      indexRequestCount: 1,
+      indexInFlight: false,
+      cacheHit: false,
+      itemCount: 418,
+      complete: true,
+      incompleteKindCount: 0,
+      payloadByteBucket: "50k_to_250k",
+      mappingDurationMs: 3.5,
+    });
+    const payload = tracker.close(150, "project");
+    expect(payload).toMatchObject({
+      inventory_call_baseline: 17,
+      indexed_resource_kind_count: 7,
+      net_eliminated_inventory_call_baseline: 6,
+      remaining_inventory_call_baseline: 11,
+      index_request_count: 1,
+      modeled_no_fallback_call_count: 12,
+      index_item_count: 418,
+      index_complete: true,
+      index_cache_hit: false,
+      index_incomplete_kind_count: 0,
+      index_payload_byte_bucket: "50k_to_250k",
+      time_to_index_ready_ms: 25,
+      index_mapping_duration_ms: 3.5,
+      fallback_used: false,
+    });
+  });
+
+  it("does not finalize cached metadata during a refetch and records zero-row fallback", () => {
+    const tracker = new CommandPalettePerformanceTracker();
+    tracker.open(100, { total: 2, pages: 2, resources: 0 });
+    tracker.index(110, {
+      state: "loading",
+      indexRequestCount: 2,
+      indexInFlight: true,
+      cacheHit: false,
+      itemCount: 7,
+      complete: true,
+      incompleteKindCount: 0,
+      payloadByteBucket: "under_10k",
+      mappingDurationMs: 1,
+    });
+    tracker.index(130, {
+      state: "fallback",
+      indexRequestCount: 2,
+      indexInFlight: false,
+      cacheHit: false,
+      itemCount: 0,
+      complete: false,
+      incompleteKindCount: 0,
+      payloadByteBucket: "under_10k",
+      mappingDurationMs: 2,
+    });
+    expect(tracker.close(150, "project")).toMatchObject({
+      index_request_count: 2,
+      index_item_count: 0,
+      index_complete: false,
+      time_to_index_ready_ms: 30,
+      index_mapping_duration_ms: 2,
+      fallback_used: true,
+    });
   });
 
   it("captures a fixed privacy-safe payload without query or candidate fields", () => {
