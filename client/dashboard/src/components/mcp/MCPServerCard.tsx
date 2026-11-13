@@ -12,11 +12,11 @@ import { useHostedMcpOAuthConfigStatus } from "../sources/sources-hooks";
 import { ExternalMcpIcon } from "./MCPToolsetIcon";
 import {
   hostedToolCountLabel,
-  MCP_SERVER_KIND_LABEL,
   mcpServerDisplayName,
   mcpServerHref,
   type McpServerKind,
 } from "./mcp-server-kind";
+import { McpKindBadge } from "./McpKindBadge";
 
 /** One card per mcp_servers row in the /mcp grid, whatever its backend. */
 export function MCPServerCard({
@@ -122,9 +122,7 @@ export function MCPServerCard({
 
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <div className="flex items-center gap-2">
-            <Badge variant="neutral">
-              <Badge.Text>{MCP_SERVER_KIND_LABEL[kind]}</Badge.Text>
-            </Badge>
+            <McpKindBadge kind={kind} />
           </div>
           {needsOAuth ? (
             <div className="text-warning flex items-center gap-1 text-sm">
