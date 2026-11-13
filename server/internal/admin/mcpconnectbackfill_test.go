@@ -23,8 +23,8 @@ import (
 )
 
 // connectBackfillFixture writes grants straight into principal_grants, so a
-// fixture can hold rows no API writes today: temporary, expired, deny-effect
-// or backdated grants.
+// fixture can hold rows no API writes today: temporary, expired or backdated
+// grants.
 type connectBackfillFixture struct {
 	t     *testing.T
 	db    *pgxpool.Pool
@@ -45,7 +45,6 @@ type fixtureGrant struct {
 	scope     authz.Scope
 	selector  authz.Selector
 	expiresAt *time.Time
-	effect    string
 	createdAt *time.Time
 }
 
@@ -64,7 +63,6 @@ func (f *connectBackfillFixture) grant(g fixtureGrant) {
 		OrganizationID: f.orgID,
 		PrincipalUrn:   g.principal,
 		Scope:          string(g.scope),
-		Effect:         pgtype.Text{String: g.effect, Valid: g.effect != ""},
 		Selectors:      raw,
 		ExpiresAt:      optionalTime(g.expiresAt),
 		CreatedAt:      optionalTime(g.createdAt),
@@ -146,7 +144,7 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 	viewers := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString())
 	operators := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString())
 	user := func() urn.Principal { return urn.NewPrincipal(urn.PrincipalTypeUser, "user_"+uuid.NewString()) }
-	namedOverride, wildcardViewer, temporaryViewer, inferredOverride, expiredViewer, toolViewer, denyRow, narrowedViewer :=
+	namedOverride, wildcardViewer, temporaryViewer, inferredOverride, expiredViewer, toolViewer, plainViewer, narrowedViewer :=
 		user(), user(), user(), user(), user(), user(), user(), user()
 	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
 	apiKey := urn.NewPrincipal(urn.PrincipalTypeAPIKey, uuid.NewString())
@@ -181,8 +179,8 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 		// Tool- and disposition-narrowed grants keep every dimension.
 		{principal: toolViewer, scope: authz.ScopeMCPRead, selector: mcpSelector(serverA, authz.SelectorKeyTool, "search", authz.SelectorKeyProjectID, projectA)},
 		{principal: narrowedViewer, scope: authz.ScopeMCPWrite, selector: mcpSelector(serverD, authz.SelectorKeyDisposition, authz.DispositionDestructive)},
-		// Grant loading ignores effect, so a deny-effect row allows today.
-		{principal: denyRow, scope: authz.ScopeMCPRead, selector: mcpSelector(serverB), effect: "deny"},
+		// A plain read on another server.
+		{principal: plainViewer, scope: authz.ScopeMCPRead, selector: mcpSelector(serverB)},
 		// Non-user principals.
 		{principal: agent, scope: authz.ScopeMCPRead, selector: mcpSelector(serverA)},
 		{principal: apiKey, scope: authz.ScopeMCPWrite, selector: mcpSelector(authz.WildcardResource, authz.SelectorKeyProjectID, projectB)},
@@ -200,7 +198,7 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 		"expiredViewer":    {expiredViewer, everyone},
 		"toolViewer":       {toolViewer, operators, everyone},
 		"narrowedViewer":   {narrowedViewer, everyone},
-		"denyRow":          {denyRow},
+		"plainViewer":          {plainViewer},
 		"agent":            {agent, viewers},
 		"apiKey":           {apiKey},
 		"workload":         {workload},
