@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -91,7 +92,7 @@ func TestMemberAuthFailure_AgentAsksAnEditor(t *testing.T) {
 	member := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
 	fix := testAgentFix
 
-	err := memberAuthFailure(member, memberDial{anonymous: false, fix: fix}, http.StatusUnauthorized)
+	err := memberAuthFailure(member, memberDial{anonymous: false, fix: fix}, http.StatusUnauthorized, false, true)
 	require.ErrorContains(t, err, `server "linear" rejected this agent's connection, so it needs re-authentication`)
 	require.ErrorContains(t, err, "Ask someone who can edit this agent to open "+testAgentSignIn+" and reconnect it, then retry")
 	require.NotContains(t, err.Error(), "administrator")
@@ -101,13 +102,13 @@ func TestMemberAuthFailure_AgentAsksAnEditor(t *testing.T) {
 
 	// Without a page to send anyone to, the generic wording stands.
 	noPage := func() memberFix { return memberFix{agent: true, url: "", accessURL: ""} }
-	require.ErrorContains(t, memberAuthFailure(member, memberDial{fix: noPage}, http.StatusUnauthorized), "Ask your administrator to reconnect it")
+	require.ErrorContains(t, memberAuthFailure(member, memberDial{fix: noPage}, http.StatusUnauthorized, false, true), "Ask your administrator to reconnect it")
 	// A self client's credential is the administrator's.
-	require.ErrorContains(t, memberAuthFailure(member, memberDial{clientCredential: true, fix: fix}, http.StatusUnauthorized), "Ask an admin of the server's project to fix the server's credential")
-	require.EqualError(t, memberAuthFailure(member, memberDial{anonymous: true, clientCredential: true, fix: fix}, http.StatusUnauthorized), `server "linear" requires authentication and has no credential for this caller. Ask your administrator to connect it`, "the agent's page is never offered as the caller's own")
+	require.ErrorContains(t, memberAuthFailure(member, memberDial{clientCredential: true, fix: fix}, http.StatusUnauthorized, false, true), "Ask an admin of the server's project to fix the server's credential")
+	require.EqualError(t, memberAuthFailure(member, memberDial{anonymous: true, clientCredential: true, fix: fix}, http.StatusUnauthorized, false, true), `server "linear" requires authentication and has no credential for this caller. Ask your administrator to connect it`, "the agent's page is never offered as the caller's own")
 	// With the agent's token sent beside configured headers, the refusal is
 	// the token's.
-	require.ErrorContains(t, memberAuthFailure(member, memberDial{configuredHeaders: true, fix: fix}, http.StatusUnauthorized), "Ask someone who can edit this agent to open "+testAgentSignIn+" and reconnect it")
+	require.ErrorContains(t, memberAuthFailure(member, memberDial{configuredHeaders: true, fix: fix}, http.StatusUnauthorized, false, true), "Ask someone who can edit this agent to open "+testAgentSignIn+" and reconnect it")
 }
 
 // A 403 to a connection the upstream accepted is the upstream account's
@@ -116,7 +117,7 @@ func TestMemberAuthFailure_AgentForbiddenIsNotReauthentication(t *testing.T) {
 	t.Parallel()
 
 	member := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
-	err := memberAuthFailure(member, memberDial{fix: testAgentFix}, http.StatusForbidden)
+	err := memberAuthFailure(member, memberDial{fix: testAgentFix}, http.StatusForbidden, false, true)
 	require.ErrorContains(t, err, `server "linear" answered 403 Forbidden`)
 	require.ErrorContains(t, err, "signing in again as the same account does not change that")
 	require.ErrorContains(t, err, testAgentSignIn)
@@ -130,54 +131,77 @@ func TestMemberAuthFailure_AgentServerCredentialIsTheServers(t *testing.T) {
 
 	fix := testAgentFix
 	oauth := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
-	rejected := memberAuthFailure(oauth, memberDial{anonymous: true, oauthSignIn: true, configuredHeaders: true, fix: fix}, http.StatusUnauthorized)
+	rejected := memberAuthFailure(oauth, memberDial{anonymous: true, oauthSignIn: true, configuredHeaders: true, fix: fix}, http.StatusUnauthorized, true, true)
 	require.ErrorContains(t, rejected, `server "linear" refused the credential configured for it in Speakeasy, such as an API key`)
 	require.ErrorContains(t, rejected, "Ask an admin to update the server's credential")
 	require.NotContains(t, rejected.Error(), testAgentSignIn)
 
 	apiKey := gatewayTestMember("weather", "Weather", uuid.Nil, uuid.New())
-	missing := memberAuthFailure(apiKey, memberDial{anonymous: true, fix: fix}, http.StatusUnauthorized)
+	missing := memberAuthFailure(apiKey, memberDial{anonymous: true, fix: fix}, http.StatusUnauthorized, false, true)
 	require.ErrorContains(t, missing, `server "weather" needs a credential configured for it in Speakeasy, such as an API key or a service account, and has none this agent can use`)
 	require.ErrorContains(t, missing, "Ask an admin of the server's project to add or fix the server's credential")
 	require.NotContains(t, missing.Error(), testAgentSignIn)
 }
 
-// A refused configured credential: an agent and a person with nothing to
-// connect ask an admin; a person with a connect page connects first.
-func TestMemberAuthFailure_SavedCredentialRefused(t *testing.T) {
+// The configured credential's message follows what the rejected request
+// carried, as the recorded row does: a credential that never reached the
+// server keeps the caller's earlier message.
+func TestMemberClientFailure_SavedCredentialRefused(t *testing.T) {
 	t.Parallel()
 
 	member := gatewayTestMember("weather", "Weather", uuid.New(), uuid.New())
 	page := "https://app.example.com/mcp/tools/connect/first-party?server=weather"
+	keySent := memberRejection{configuredSent: true}
+	invalidKey := memberRejection{configuredSent: true, challenges: []string{`Bearer error="invalid_token"`}}
+	stripped := memberRejection{}
+	static, none := mcpconnectionattempts.CodeStaticKeyRejected, mcpconnectionattempts.Code{}
+	const (
+		refused   = `server "weather" refused the credential configured for it in Speakeasy, such as an API key. Connecting does not change it. Ask an admin to update the server's credential, then retry`
+		forbidden = `server "weather" answered 403 Forbidden to a request carrying the credential configured for it in Speakeasy, such as an API key. The credential's account may not be allowed to do this. Connecting does not change that. Ask an admin to check the server's credential and what its account may do, then retry`
+		agentKey  = `server "weather" refused the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin to update the server's credential, then retry`
+		agent403  = `server "weather" answered 403 Forbidden to a request carrying the credential configured for it in Speakeasy, such as an API key. The credential's account may not be allowed to do this. This agent cannot change that. Ask an admin to check the server's credential and what its account may do, then retry`
+		noKey     = `server "weather" requires authentication and has no credential for this caller. Ask your administrator to connect it`
+	)
 	connectFirst := `server "weather" refused the request. Ask the user to open ` + page + ` to connect it, then retry. If it still fails, ask an admin to check the credential configured for the server in Speakeasy`
+	notConnected := `server "weather" is not connected for this user. Ask the user to open ` + page + ` to connect it, then retry`
 	for _, tc := range []struct {
 		name   string
-		dial   memberDial
+		fix    func() memberFix
+		self   bool
 		status int
+		answer memberRejection
 		want   string
+		code   mcpconnectionattempts.Code
 	}{
-		{name: "person with a page 401", dial: memberDial{fix: personFix(page)}, status: http.StatusUnauthorized, want: connectFirst},
-		{name: "person with a page 403", dial: memberDial{fix: personFix(page)}, status: http.StatusForbidden, want: connectFirst},
-		{name: "nothing to connect 401", status: http.StatusUnauthorized, want: `server "weather" refused the credential configured for it in Speakeasy, such as an API key. Connecting does not change it. Ask an admin to update the server's credential, then retry`},
-		{name: "nothing to connect 403", status: http.StatusForbidden, want: `server "weather" refused the credential configured for it in Speakeasy, such as an API key. The credential may be wrong, or its account may not be allowed to do this. Connecting does not change it. Ask an admin to check the server's credential and what its account may do, then retry`},
-		{name: "agent 401", dial: memberDial{fix: testAgentFix}, status: http.StatusUnauthorized, want: `server "weather" refused the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin to update the server's credential, then retry`},
-		{name: "agent 403", dial: memberDial{fix: testAgentFix}, status: http.StatusForbidden, want: `server "weather" refused the credential configured for it in Speakeasy, such as an API key. The credential may be wrong, or its account may not be allowed to do this. This agent cannot change it. Ask an admin to check the server's credential and what its account may do, then retry`},
-		{name: "agent's self client keeps its message", dial: memberDial{clientCredential: true, fix: testAgentFix}, status: http.StatusUnauthorized, want: `server "weather" requires authentication and has no credential for this caller. Ask your administrator to connect it`},
-		{name: "person's self client keeps its message", dial: memberDial{clientCredential: true, fix: personFix(page)}, status: http.StatusUnauthorized, want: `server "weather" is not connected for this user. Ask the user to open ` + page + ` to connect it, then retry`},
+		{name: "nothing to connect 401", status: http.StatusUnauthorized, answer: keySent, want: refused, code: static},
+		{name: "nothing to connect 403 invalid token", status: http.StatusForbidden, answer: invalidKey, want: refused, code: static},
+		{name: "nothing to connect plain 403", status: http.StatusForbidden, answer: keySent, want: forbidden, code: none},
+		{name: "nothing to connect, credential stripped", status: http.StatusUnauthorized, answer: stripped, want: noKey, code: none},
+		{name: "page 401", fix: personFix(page), status: http.StatusUnauthorized, answer: keySent, want: connectFirst, code: static},
+		{name: "page plain 403", fix: personFix(page), status: http.StatusForbidden, answer: keySent, want: connectFirst, code: none},
+		{name: "page, credential stripped", fix: personFix(page), status: http.StatusUnauthorized, answer: stripped, want: notConnected, code: none},
+		{name: "agent 401", fix: testAgentFix, status: http.StatusUnauthorized, answer: keySent, want: agentKey, code: static},
+		{name: "agent 403 invalid token", fix: testAgentFix, status: http.StatusForbidden, answer: invalidKey, want: agentKey, code: static},
+		{name: "agent plain 403", fix: testAgentFix, status: http.StatusForbidden, answer: keySent, want: agent403, code: none},
+		{name: "agent, credential stripped", fix: testAgentFix, status: http.StatusUnauthorized, answer: stripped, want: agentKey, code: none},
+		{name: "agent's self client", fix: testAgentFix, self: true, status: http.StatusUnauthorized, answer: keySent, want: noKey, code: static},
+		{name: "person's self client", fix: personFix(page), self: true, status: http.StatusUnauthorized, answer: keySent, want: notConnected, code: static},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			dial := tc.dial
-			dial.anonymous, dial.configuredHeaders = true, true
-			err := memberAuthFailure(member, dial, tc.status)
+			dial := memberDial{anonymous: true, configuredHeaders: true, clientCredential: tc.self, fix: tc.fix}
+			err := memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{rejected: tc.status, answer: tc.answer}, dial, member, errors.New("call failed"))
 			require.EqualError(t, err, tc.want)
+			failure, ok := errors.AsType[memberConnectionError](err)
+			require.True(t, ok)
+			require.Equal(t, tc.code, failure.code)
 			_, credential := errors.AsType[memberCredentialError](err)
 			require.True(t, credential, "the error type is unchanged")
 		})
 	}
 
 	// A personal token sent beside the configured credential is the person's to reconnect.
-	require.EqualError(t, memberAuthFailure(member, memberDial{configuredHeaders: true, fix: personFix(page)}, http.StatusUnauthorized), `server "weather" rejected the user's credential. Ask the user to open `+page+` to reconnect it, then retry`)
+	require.EqualError(t, memberAuthFailure(member, memberDial{configuredHeaders: true, fix: personFix(page)}, http.StatusUnauthorized, true, true), `server "weather" rejected the user's credential. Ask the user to open `+page+` to reconnect it, then retry`)
 }
 
 // A service account's credential is configured on the server and shared by
@@ -220,7 +244,7 @@ func TestAgentSharedCredential_IsTheServers(t *testing.T) {
 	require.Equal(t, skipped, gate.agentUnroutedError(member, map[uuid.UUID]remotesessions.UpstreamToken{issuer: personal}, skipped), "a client left out is the cause")
 
 	// A service account rejected upstream after it was sent names the same admin.
-	rejected := memberAuthFailure(member, memberDial{clientCredential: true, fix: testAgentFix}, http.StatusUnauthorized)
+	rejected := memberAuthFailure(member, memberDial{clientCredential: true, fix: testAgentFix}, http.StatusUnauthorized, false, true)
 	require.ErrorContains(t, rejected, "Ask an admin of the server's project to fix the server's credential")
 	require.NotContains(t, rejected.Error(), testAgentSignIn)
 }
@@ -244,7 +268,7 @@ func TestAgentOAuthSignIn_NeedsAPersonalConnection(t *testing.T) {
 	noAuth.upstreamNoAuth = true
 	require.False(t, agentOAuthSignIn(noAuth, own))
 
-	missing := memberAuthFailure(member, memberDial{anonymous: true, oauthSignIn: agentOAuthSignIn(member, nil), fix: testAgentFix}, http.StatusUnauthorized)
+	missing := memberAuthFailure(member, memberDial{anonymous: true, oauthSignIn: agentOAuthSignIn(member, nil), fix: testAgentFix}, http.StatusUnauthorized, false, true)
 	require.ErrorContains(t, missing, "Ask an admin of the server's project to add or fix the server's credential")
 	require.NotContains(t, missing.Error(), testAgentSignIn)
 	row := notConnectedRow(&agent, agentOAuthSignIn(member, nil))
