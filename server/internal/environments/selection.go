@@ -56,7 +56,7 @@ func ResolveReadableEnvironment(ctx context.Context, logger *slog.Logger, engine
 		return repo.Environment{}, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger, attr.SlogProjectID(projectID.String()))
 	}
 
-	if err := engine.Require(ctx, authz.Environment(authz.EnvironmentIDOf(environment.ID), authz.ProjectIDOf(projectID)).Read()); err != nil {
+	if err := engine.Require(ctx, authz.Environment(authz.EnvironmentIDOf(environment.ID), authz.ProjectIDOf(projectID)).Read().InOrganization(authz.OrgIDFrom(environment.OrganizationID))); err != nil {
 		return repo.Environment{}, err
 	}
 

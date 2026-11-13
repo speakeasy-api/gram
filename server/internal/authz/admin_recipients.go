@@ -31,6 +31,7 @@ func ResolveOrganizationAdminEmails(ctx context.Context, db repo.DBTX, organizat
 		probe:           false,
 		anyOf:           nil,
 		operation:       operationDefault,
+		organization:    None[OrgID](),
 	}
 	type recipient struct {
 		email  string

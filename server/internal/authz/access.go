@@ -29,6 +29,33 @@ type Check struct {
 	// operation says what the check asks to do. Constructors set it; the
 	// matcher reads it instead of guessing from which dimensions are present.
 	operation operation
+	// organization is the organization the caller says the resource belongs
+	// to, set with InOrganization from the row the handler loaded. A check on
+	// an org scope needs none: its resource is the organization.
+	organization Option[OrgID]
+}
+
+// InOrganization states the organization the check's resource belongs to.
+// Take it from the row the handler loaded, not from the session: the engine
+// compares it with the organization the caller is acting in, so a resource
+// loaded from another organization is caught even when its id is well formed.
+func (c Check) InOrganization(organization OrgID) Check {
+	c.organization = Some(organization)
+	return c
+}
+
+// statedOrganization is the organization a check names: the resource of an
+// org check, otherwise the one given to InOrganization. The second result is
+// false when the check names none.
+func (c Check) statedOrganization() (string, bool) {
+	if c.resourceKind() == ResourceKindOrg {
+		return c.ResourceID, true
+	}
+	organization, ok := c.organization.Get()
+	if !ok {
+		return "", false
+	}
+	return organization.String(), true
 }
 
 // operation is what a check asks to do. The zero value is an ordinary action
@@ -103,6 +130,7 @@ func AnyOf(alternatives ...Check) Check {
 		probe:           false,
 		anyOf:           append([]Check{}, alternatives...),
 		operation:       operationDefault,
+		organization:    None[OrgID](),
 	}
 }
 
@@ -125,7 +153,7 @@ func (c Check) exclusionCheck(exclusion Scope) Check {
 	if IsBlocklistScope(exclusion) {
 		mode = selectorMatchBlock
 	}
-	return Check{Scope: exclusion, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: mode, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation}
+	return Check{Scope: exclusion, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: mode, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation, organization: c.organization}
 }
 
 // isAuthClientCheck reports whether c targets an auth client. Those checks
@@ -170,7 +198,7 @@ func GrantsContainSelectorFor(representedUser string, grants []Grant, scope Scop
 	dimensions := maps.Clone(selector)
 	delete(dimensions, SelectorKeyResourceKind)
 	delete(dimensions, SelectorKeyResourceID)
-	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: representedUser, probe: false, anyOf: nil, operation: operationDefault}
+	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: representedUser, probe: false, anyOf: nil, operation: operationDefault, organization: None[OrgID]()}
 	grant, _ := matchingGrant(grants, check.expand())
 	return grant != nil
 }
@@ -181,12 +209,12 @@ func GrantsContainSelectorFor(representedUser string, grants []Grant, scope Scop
 // matches any check), so we only need one entry per scope level.
 func (c Check) expand() []Check {
 	checks := []Check{
-		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation},
-		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation},
+		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation, organization: c.organization},
+		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation, organization: c.organization},
 	}
 	// Additional scopes that also satisfy this check.
 	for _, s := range scopeExpansions[c.Scope] {
-		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation})
+		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation, organization: c.organization})
 	}
 	// Root administers everything but uses no auth client.
 	if c.isAuthClientCheck() {
