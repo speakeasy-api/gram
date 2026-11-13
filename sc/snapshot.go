@@ -1,0 +1,396 @@
+package sc
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"slices"
+)
+
+// Snapshot is the complete state of one machine instance: its active states,
+// its context, what its history states remember, and which timers and
+// services are outstanding. It is a value; [Machine.Transition] returns a new
+// one and leaves its input alone.
+//
+// A Snapshot marshals to JSON. Loading one back needs the machine, so use
+// [Machine.Restore] instead of json.Unmarshal.
+type Snapshot[S comparable, C any] struct {
+	// Context is the chart's extended state.
+	Context C
+
+	machine     string
+	version     int
+	hash        string
+	seq         uint64
+	done        bool
+	active      []S
+	history     map[S][]S
+	timers      []pendingTimer[S]
+	invocations []runningInvocation[S]
+	counter     uint64
+}
+
+// pendingTimer is a delayed transition whose timer has not fired.
+type pendingTimer[S comparable] struct {
+	id    string
+	state S
+	index int
+}
+
+// runningInvocation is a service run that has not reported a result.
+type runningInvocation[S comparable] struct {
+	id    string
+	state S
+	name  string
+}
+
+// Active returns every active state in document order: each active leaf
+// together with all of its ancestors.
+func (s Snapshot[S, C]) Active() []S { return slices.Clone(s.active) }
+
+// In reports whether state is active, either as a leaf or as an ancestor of
+// one.
+func (s Snapshot[S, C]) In(state S) bool { return slices.Contains(s.active, state) }
+
+// Done reports whether the machine has reached a top-level final state.
+func (s Snapshot[S, C]) Done() bool { return s.done }
+
+// Seq returns the number of events the instance has processed. Drivers use
+// it to detect a concurrent update when saving.
+func (s Snapshot[S, C]) Seq() uint64 { return s.seq }
+
+// RawSnapshot is the stored form of a [Snapshot], with states as the text
+// form of their identifiers. It is what a [Migrate] hook reads and returns.
+type RawSnapshot struct {
+	// Machine is the ID of the machine that took the snapshot.
+	Machine string `json:"machine"`
+
+	// Version is the chart version the snapshot was taken at.
+	Version int `json:"version"`
+
+	// Hash fingerprints the chart the snapshot was taken with.
+	Hash string `json:"hash"`
+
+	// Seq is the number of events the instance has processed.
+	Seq uint64 `json:"seq"`
+
+	// Done is set once the machine reached a top-level final state.
+	Done bool `json:"done"`
+
+	// Active lists the active states.
+	Active []string `json:"active"`
+
+	// History maps each history state to the states it recorded.
+	History map[string][]string `json:"history,omitempty"`
+
+	// Timers lists the delayed transitions whose timers are running.
+	Timers []RawTimer `json:"timers,omitempty"`
+
+	// Invocations lists the service runs that have not finished.
+	Invocations []RawInvocation `json:"invocations,omitempty"`
+
+	// Counter is the last number used in a timer or service run ID.
+	Counter uint64 `json:"counter"`
+
+	// Context is the chart's extended state.
+	Context json.RawMessage `json:"context"`
+}
+
+// RawTimer is the stored form of a running timer.
+type RawTimer struct {
+	// ID is the ID of the effect that started the timer.
+	ID string `json:"id"`
+
+	// State is the state whose delayed transition the timer belongs to.
+	State string `json:"state"`
+
+	// Index is the position of that transition among the state's delayed
+	// transitions.
+	Index int `json:"index"`
+}
+
+// RawInvocation is the stored form of an unfinished service run.
+type RawInvocation struct {
+	// ID is the ID of the effect that started the run.
+	ID string `json:"id"`
+
+	// State is the state that owns the service.
+	State string `json:"state"`
+
+	// Name is the service name.
+	Name string `json:"name"`
+}
+
+// MarshalJSON encodes the snapshot in the [RawSnapshot] format.
+func (s Snapshot[S, C]) MarshalJSON() ([]byte, error) {
+	ctx, err := json.Marshal(s.Context)
+	if err != nil {
+		return nil, fmt.Errorf("marshal snapshot context: %w", err)
+	}
+
+	raw := RawSnapshot{
+		Machine:     s.machine,
+		Version:     s.version,
+		Hash:        s.hash,
+		Seq:         s.seq,
+		Done:        s.done,
+		Active:      make([]string, 0, len(s.active)),
+		History:     make(map[string][]string, len(s.history)),
+		Timers:      make([]RawTimer, 0, len(s.timers)),
+		Invocations: make([]RawInvocation, 0, len(s.invocations)),
+		Counter:     s.counter,
+		Context:     ctx,
+	}
+
+	for _, st := range s.active {
+		raw.Active = append(raw.Active, fmt.Sprint(st))
+	}
+
+	for h, recorded := range s.history {
+		names := make([]string, 0, len(recorded))
+		for _, st := range recorded {
+			names = append(names, fmt.Sprint(st))
+		}
+		raw.History[fmt.Sprint(h)] = names
+	}
+
+	for _, t := range s.timers {
+		raw.Timers = append(raw.Timers, RawTimer{ID: t.id, State: fmt.Sprint(t.state), Index: t.index})
+	}
+
+	for _, inv := range s.invocations {
+		raw.Invocations = append(raw.Invocations, RawInvocation{ID: inv.id, State: fmt.Sprint(inv.state), Name: inv.name})
+	}
+
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("marshal snapshot: %w", err)
+	}
+
+	return data, nil
+}
+
+var (
+	// ErrVersionMismatch is returned by [Machine.Restore] for a snapshot
+	// taken at another chart version when the machine has no [Migrate]
+	// hook.
+	ErrVersionMismatch = errors.New("snapshot was taken at another chart version and no migration is configured")
+
+	// ErrChartChanged is returned by [Machine.Restore] for a snapshot whose
+	// chart differs from the machine's although the versions are equal,
+	// which means the chart was changed without raising its [Version].
+	ErrChartChanged = errors.New("chart changed without a version change")
+
+	// ErrInvalidSnapshot is returned by [Machine.Restore] for a snapshot
+	// that does not describe a legal state of the chart.
+	ErrInvalidSnapshot = errors.New("invalid snapshot")
+)
+
+// Restore loads a snapshot produced by marshalling a [Snapshot].
+//
+// A snapshot taken at another [Version] is passed through the [Migrate] hook
+// first. Restore then checks that the result is a legal state of the chart.
+// The returned effects bring the outstanding timers and services in line
+// with the active states: they cancel those belonging to states that are no
+// longer active and start those of states that became active. They are empty
+// unless a migration changed the active states.
+func (m *Machine[S, C]) Restore(data []byte) (Snapshot[S, C], []Effect[C], error) {
+	var zero Snapshot[S, C]
+
+	var raw RawSnapshot
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return zero, nil, fmt.Errorf("unmarshal snapshot: %w", err)
+	}
+
+	if raw.Machine != m.id {
+		return zero, nil, fmt.Errorf("%w: taken by machine %q, not %q", ErrInvalidSnapshot, raw.Machine, m.id)
+	}
+
+	// previously holds the states that were active before a migration. It
+	// stays nil when the snapshot is not migrated.
+	var previously map[string]bool
+
+	switch {
+	case raw.Version != m.version && m.migrate == nil:
+		return zero, nil, fmt.Errorf("%w: snapshot version %d, chart version %d", ErrVersionMismatch, raw.Version, m.version)
+	case raw.Version != m.version:
+		previously = map[string]bool{}
+		for _, name := range raw.Active {
+			previously[name] = true
+		}
+
+		migrated, err := m.migrate(raw)
+		if err != nil {
+			return zero, nil, fmt.Errorf("migrate snapshot from version %d: %w", raw.Version, err)
+		}
+		raw = migrated
+	case raw.Hash != m.hash:
+		return zero, nil, fmt.Errorf("%w: version %d", ErrChartChanged, m.version)
+	}
+
+	r := &run[S, C]{
+		m:        m,
+		config:   map[*node[S, C]]bool{m.root: true},
+		history:  map[*node[S, C]][]*node[S, C]{},
+		timers:   nil,
+		services: nil,
+		counter:  raw.Counter,
+		ctx:      zero.Context,
+		done:     raw.Done,
+		effects:  nil,
+		queue:    nil,
+		entered:  nil,
+	}
+
+	if err := json.Unmarshal(raw.Context, &r.ctx); err != nil {
+		return zero, nil, fmt.Errorf("unmarshal snapshot context: %w", err)
+	}
+
+	if err := r.restoreStates(raw); err != nil {
+		return zero, nil, err
+	}
+
+	r.restoreOutstanding(raw, previously)
+
+	return r.snapshot(raw.Seq), r.effects, nil
+}
+
+// restoreStates loads and checks the active and remembered states.
+func (r *run[S, C]) restoreStates(raw RawSnapshot) error {
+	for _, name := range raw.Active {
+		n, ok := r.m.names[name]
+		if !ok || n.kind == kindHistory {
+			return fmt.Errorf("%w: %q is not a state of the chart", ErrInvalidSnapshot, name)
+		}
+
+		for a := n; a != nil; a = a.parent {
+			r.config[a] = true
+		}
+	}
+
+	for n := range r.config {
+		activeChildren := 0
+		for _, c := range n.states() {
+			if r.config[c] {
+				activeChildren++
+			}
+		}
+
+		switch {
+		case n.kind == kindParallel && activeChildren != len(n.states()):
+			return fmt.Errorf("%w: parallel state %q does not have every region active", ErrInvalidSnapshot, n.name)
+		case n.kind == kindState && !n.atomic() && activeChildren != 1:
+			return fmt.Errorf("%w: state %q has %d active child states, want 1", ErrInvalidSnapshot, n.name, activeChildren)
+		}
+	}
+
+	for name, recorded := range raw.History {
+		h, ok := r.m.names[name]
+		if !ok || h.kind != kindHistory {
+			return fmt.Errorf("%w: %q is not a history state of the chart", ErrInvalidSnapshot, name)
+		}
+
+		nodes := make([]*node[S, C], 0, len(recorded))
+		for _, rn := range recorded {
+			n, ok := r.m.names[rn]
+			if !ok || n.kind == kindHistory || !n.below(h.parent) {
+				return fmt.Errorf("%w: history state %q remembers %q, which is not a state inside %q", ErrInvalidSnapshot, name, rn, h.parent.name)
+			}
+			nodes = append(nodes, n)
+		}
+
+		if len(nodes) > 0 {
+			r.history[h] = nodes
+		}
+	}
+
+	return nil
+}
+
+// restoreOutstanding loads the timers and service runs that still belong to
+// an active state and cancels the rest. When the snapshot was migrated,
+// previously is non-nil and names the states active before the migration;
+// states the migration made active get the timers and services that entering
+// them would have started.
+func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bool) {
+	for _, rt := range raw.Timers {
+		n, ok := r.m.names[rt.State]
+		kept := false
+
+		if ok && r.config[n] && !r.done {
+			for _, t := range n.transitions {
+				if t.trigger == triggerAfter && t.afterIndex == rt.Index {
+					r.timers = append(r.timers, timer[S, C]{id: rt.ID, t: t})
+					kept = true
+				}
+			}
+		}
+
+		if !kept {
+			var zero C
+			r.effects = append(r.effects, Effect[C]{Kind: EffectCancelTimer, ID: rt.ID, State: rt.State, Name: "", Delay: 0, Context: zero, Event: nil})
+		}
+	}
+
+	for _, ri := range raw.Invocations {
+		n, ok := r.m.names[ri.State]
+		kept := false
+
+		if ok && r.config[n] && !r.done {
+			for _, inv := range n.invocations {
+				if inv.name == ri.Name {
+					r.services = append(r.services, service[S, C]{id: ri.ID, inv: inv})
+					kept = true
+				}
+			}
+		}
+
+		if !kept {
+			var zero C
+			r.effects = append(r.effects, Effect[C]{Kind: EffectStopInvocation, ID: ri.ID, State: ri.State, Name: ri.Name, Delay: 0, Context: zero, Event: nil})
+		}
+	}
+
+	if r.done || previously == nil {
+		return
+	}
+
+	for _, n := range r.active() {
+		if previously[n.name] {
+			continue
+		}
+
+		for _, t := range n.transitions {
+			if t.trigger == triggerAfter {
+				r.startTimer(t)
+			}
+		}
+
+		for _, inv := range n.invocations {
+			r.startService(inv)
+		}
+	}
+}
+
+// Resume returns the effects that restart everything outstanding in snap:
+// one [EffectStartTimer] per pending timer, with its full delay, and one
+// [EffectStartInvocation] per unfinished service run. Drivers that keep
+// timers and services in memory call it after loading a snapshot in a new
+// process. Drivers that store them durably do not need it.
+func (m *Machine[S, C]) Resume(snap Snapshot[S, C]) []Effect[C] {
+	r := m.load(snap)
+
+	effects := make([]Effect[C], 0, len(r.timers)+len(r.services))
+
+	for _, t := range r.timers {
+		e := r.bare(EffectStartTimer, t.id, t.t.source, "")
+		e.Delay = t.t.delay
+		effects = append(effects, e)
+	}
+
+	for _, s := range r.services {
+		effects = append(effects, Effect[C]{Kind: EffectStartInvocation, ID: s.id, State: s.inv.state.name, Name: s.inv.name, Delay: 0, Context: r.ctx, Event: nil})
+	}
+
+	return effects
+}

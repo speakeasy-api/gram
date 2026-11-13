@@ -110,6 +110,14 @@ plog:
   - "go.sum"
   - "plog/**"
 
+sc:
+  - ".github/**"
+  - "go.mod"
+  - "go.sum"
+  - "sc/**"
+  - ".mise-tasks/lint/sc.sh"
+  - ".mise-tasks/test/sc.sh"
+
 infra:
   - ".github/**"
   - "go.mod"
