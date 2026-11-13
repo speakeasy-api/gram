@@ -627,6 +627,7 @@ trackedFiles:
   src/funcs/remoteSessionIssuersRefreshMetadata.ts: {}
   src/funcs/remoteSessionIssuersUpdate.ts: {}
   src/funcs/remoteSessionsAttachBinding.ts: {}
+  src/funcs/remoteSessionsAttachServerClientAssociation.ts: {}
   src/funcs/remoteSessionsBeginBindingRefresh.ts: {}
   src/funcs/remoteSessionsCommitServerIdentityConfiguration.ts: {}
   src/funcs/remoteSessionsCompleteBindingRefresh.ts: {}
@@ -1038,6 +1039,7 @@ trackedFiles:
   src/models/components/attachauthclienttomcpserverrequestbody.ts: {}
   src/models/components/attachbindingrequestbody.ts: {}
   src/models/components/attachkeysetform.ts: {}
+  src/models/components/attachserverclientassociationresult.ts: {}
   src/models/components/attachusersessionissuerform.ts: {}
   src/models/components/audienceoption.ts: {}
   src/models/components/auditlog.ts: {}
@@ -1204,7 +1206,6 @@ trackedFiles:
   src/models/components/destination.ts: {}
   src/models/components/detachauthclientfrommcpserverrequestbody.ts: {}
   src/models/components/detachbindingrequestbody.ts: {}
-  src/models/components/detachserverclientassociationrequestbody.ts: {}
   src/models/components/deviceagentconfiguration.ts: {}
   src/models/components/deviceintegrationconfig.ts: {}
   src/models/components/deviceintegrationcoverage.ts: {}
@@ -1940,6 +1941,7 @@ trackedFiles:
   src/models/components/sendmessagerequestbody.ts: {}
   src/models/components/sendmessageresult.ts: {}
   src/models/components/serverclientassociation.ts: {}
+  src/models/components/serverclientassociationform.ts: {}
   src/models/components/serverconnectiontestresult.ts: {}
   src/models/components/serveridentityclientconfiguration.ts: {}
   src/models/components/serveridentityimpactresult.ts: {}
@@ -2324,6 +2326,7 @@ trackedFiles:
   src/models/operations/attachbinding.ts: {}
   src/models/operations/attachorganizationremotesessionclientkeyset.ts: {}
   src/models/operations/attachremotesessionclientkeyset.ts: {}
+  src/models/operations/attachserverclientassociation.ts: {}
   src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
   src/models/operations/authlogin.ts: {}
@@ -3251,6 +3254,7 @@ trackedFiles:
   src/react-query/attachAuthClientToMcpServer.ts: {}
   src/react-query/attachOrganizationRemoteSessionClientKeySet.ts: {}
   src/react-query/attachRemoteSessionClientKeySet.ts: {}
+  src/react-query/attachServerClientAssociation.ts: {}
   src/react-query/attachUserSessionIssuer.ts: {}
   src/react-query/audienceOptions.core.ts: {}
   src/react-query/audienceOptions.ts: {}
@@ -4863,6 +4867,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  attachServerClientAssociation:
+    speakeasy-default-attach-server-client-association:
+      requestBody:
+        application/json: {"mcp_server_id": "39a77dfb-79b2-436d-ba52-d6d2e736ccde", "remote_session_client_id": "e5bf8972-3b2b-44ca-96dd-b9fc72e54fc7"}
+      responses:
+        "200":
+          application/json: {"association": {"associated_at": "2025-11-02T07:30:34.788Z", "client_id": "<id>", "issuer_slug": "<value>", "issuer_url": "https://round-minor.org", "remote_session_client_id": "17c940ee-b271-488b-b5f0-a93d72d3773b", "remote_session_issuer_id": "06dcd6c2-a28f-44eb-b7e9-0f0175f60f34", "scope": "global", "server_count": 451878}, "bound_user_session_issuer_ids": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   attachServerToCollection:
     speakeasy-default-attach-server-to-collection:
       requestBody:

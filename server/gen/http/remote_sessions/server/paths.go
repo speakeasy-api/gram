@@ -52,6 +52,11 @@ func ListServerClientAssociationsRemoteSessionsPath() string {
 	return "/rpc/remoteSessions.listServerClientAssociations"
 }
 
+// AttachServerClientAssociationRemoteSessionsPath returns the URL path to the remoteSessions service attachServerClientAssociation HTTP endpoint.
+func AttachServerClientAssociationRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.attachServerClientAssociation"
+}
+
 // DetachServerClientAssociationRemoteSessionsPath returns the URL path to the remoteSessions service detachServerClientAssociation HTTP endpoint.
 func DetachServerClientAssociationRemoteSessionsPath() string {
 	return "/rpc/remoteSessions.detachServerClientAssociation"

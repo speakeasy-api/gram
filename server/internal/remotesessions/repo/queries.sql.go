@@ -8556,6 +8556,134 @@ func (q *Queries) ListEligiblePrincipalRemoteSessionBindings(ctx context.Context
 	return items, nil
 }
 
+const listGatewayMembersCaptureWouldAddAtAnotherAddress = `-- name: ListGatewayMembersCaptureWouldAddAtAnotherAddress :many
+SELECT DISTINCT member_server.id
+FROM meta_mcp_servers AS gateway
+JOIN meta_mcp_server_members AS member
+  ON member.meta_mcp_server_id = gateway.id
+ AND member.project_id = gateway.project_id
+ AND member.deleted IS FALSE
+JOIN mcp_servers AS member_server
+  ON member_server.id = member.mcp_server_id
+ AND member_server.project_id = member.project_id
+ AND member_server.deleted IS FALSE
+ AND (member_server.remote_mcp_server_id IS NOT NULL OR member_server.tunneled_mcp_server_id IS NOT NULL)
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = member_server.remote_mcp_server_id
+ AND remote.project_id = member_server.project_id
+ AND remote.deleted IS FALSE
+WHERE gateway.user_session_issuer_id = $1::uuid
+  AND gateway.organization_id = $2::text
+  AND gateway.deleted IS FALSE
+  AND member_server.id <> $3::uuid
+  AND member_server.remote_session_issuer_id = $4::uuid
+  AND (remote.url IS NULL OR rtrim(remote.url, '/') <> rtrim($5::text, '/'))
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS recorded
+    WHERE recorded.mcp_server_id = member_server.id
+      AND recorded.remote_session_client_id = $6::uuid
+  )
+ORDER BY member_server.id
+`
+
+type ListGatewayMembersCaptureWouldAddAtAnotherAddressParams struct {
+	UserSessionIssuerID   uuid.UUID
+	OrganizationID        string
+	McpServerID           uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	UpstreamUrl           string
+	RemoteSessionClientID uuid.UUID
+}
+
+// The other live proxied members of gateways on a user session issuer that
+// reconcile would associate with a client newly bound there, because the issuer
+// then holds a client of their derived provider, and whose upstream address is
+// not the given one. A recorded association or explicit detach for the pair
+// stops that capture. Trailing slashes are ignored, as token routing ignores them.
+func (q *Queries) ListGatewayMembersCaptureWouldAddAtAnotherAddress(ctx context.Context, arg ListGatewayMembersCaptureWouldAddAtAnotherAddressParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listGatewayMembersCaptureWouldAddAtAnotherAddress,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.RemoteSessionIssuerID,
+		arg.UpstreamUrl,
+		arg.RemoteSessionClientID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGatewaysFrontingMCPServer = `-- name: ListGatewaysFrontingMCPServer :many
+SELECT gateway.id AS meta_mcp_server_id, gateway_issuer.id AS user_session_issuer_id
+FROM meta_mcp_server_members AS member
+JOIN meta_mcp_servers AS gateway
+  ON gateway.id = member.meta_mcp_server_id
+ AND gateway.project_id = member.project_id
+ AND gateway.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = gateway.project_id
+ AND project.organization_id = $1::text
+ AND project.deleted IS FALSE
+JOIN user_session_issuers AS gateway_issuer
+  ON gateway_issuer.id = gateway.user_session_issuer_id
+ AND gateway_issuer.deleted IS FALSE
+ AND (gateway_issuer.project_id = gateway.project_id
+      OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = project.organization_id))
+WHERE member.mcp_server_id = $2::uuid
+  AND member.project_id = $3::uuid
+  AND member.deleted IS FALSE
+ORDER BY gateway_issuer.id, gateway.id
+`
+
+type ListGatewaysFrontingMCPServerParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type ListGatewaysFrontingMCPServerRow struct {
+	MetaMcpServerID     uuid.UUID
+	UserSessionIssuerID uuid.UUID
+}
+
+// The live gateways one MCP server is a member of, each with the live user
+// session issuer its consent signs in through. Ordered so callers lock the
+// issuers deterministically.
+func (q *Queries) ListGatewaysFrontingMCPServer(ctx context.Context, arg ListGatewaysFrontingMCPServerParams) ([]ListGatewaysFrontingMCPServerRow, error) {
+	rows, err := q.db.Query(ctx, listGatewaysFrontingMCPServer, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGatewaysFrontingMCPServerRow
+	for rows.Next() {
+		var i ListGatewaysFrontingMCPServerRow
+		if err := rows.Scan(&i.MetaMcpServerID, &i.UserSessionIssuerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGlobalRemoteSessionClientsByIssuerID = `-- name: ListGlobalRemoteSessionClientsByIssuerID :many
 SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_secret_org_encrypted, client_secret_generation, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, display_name, forward_client_name, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
@@ -8869,6 +8997,44 @@ func (q *Queries) ListGlobalRemoteSessionIssuersByIssuerURL(ctx context.Context,
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOnlyOrganizationUserSessionIssuer = `-- name: ListOnlyOrganizationUserSessionIssuer :many
+SELECT issuer.id
+FROM user_session_issuers AS issuer
+WHERE issuer.project_id IS NULL
+  AND issuer.organization_id = $1::text
+  AND issuer.deleted IS FALSE
+  AND (
+    SELECT count(*)
+    FROM user_session_issuers AS sibling
+    WHERE sibling.organization_id = issuer.organization_id
+      AND sibling.project_id IS NULL
+      AND sibling.deleted IS FALSE
+  ) = 1
+`
+
+// The organization's organization-level user session issuer when it has exactly
+// one, which is the issuer the organization gateway signs in through. No row
+// when it has none or several.
+func (q *Queries) ListOnlyOrganizationUserSessionIssuer(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOnlyOrganizationUserSessionIssuer, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -10008,6 +10174,47 @@ func (q *Queries) ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuer
 	return items, nil
 }
 
+const listOtherProviderClientsBoundToUserSessionIssuer = `-- name: ListOtherProviderClientsBoundToUserSessionIssuer :many
+SELECT client.id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS client
+  ON client.id = link.remote_session_client_id
+ AND client.deleted IS FALSE
+WHERE link.user_session_issuer_id = $1::uuid
+  AND client.remote_session_issuer_id = $2::uuid
+  AND client.id <> $3::uuid
+ORDER BY client.id
+`
+
+type ListOtherProviderClientsBoundToUserSessionIssuerParams struct {
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// The live clients of one provider bound to a user session issuer, other than
+// the given client. Reads every tenant tier, because an issuer holds one client
+// per provider whichever project's client that is.
+func (q *Queries) ListOtherProviderClientsBoundToUserSessionIssuer(ctx context.Context, arg ListOtherProviderClientsBoundToUserSessionIssuerParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOtherProviderClientsBoundToUserSessionIssuer, arg.UserSessionIssuerID, arg.RemoteSessionIssuerID, arg.RemoteSessionClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPrincipalRemoteSessionBindings = `-- name: ListPrincipalRemoteSessionBindings :many
 SELECT b.id, b.principal_id, b.user_session_issuer_id, b.remote_session_client_id, b.remote_session_id, b.grant_generation, u.display_name AS subject_display_name, u.email AS subject_email
 FROM principal_remote_session_bindings AS b
@@ -10171,6 +10378,64 @@ func (q *Queries) ListPrincipalRemoteSessionCandidates(ctx context.Context, arg 
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProxiedMCPServersUsingClientAtAnotherAddress = `-- name: ListProxiedMCPServersUsingClientAtAnotherAddress :many
+SELECT other.id
+FROM mcp_server_remote_session_clients AS association
+JOIN mcp_servers AS other
+  ON other.id = association.mcp_server_id
+ AND other.project_id = association.project_id
+ AND other.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = other.remote_mcp_server_id
+ AND remote.project_id = other.project_id
+ AND remote.deleted IS FALSE
+WHERE association.organization_id = $1::text
+  AND association.remote_session_client_id = $2::uuid
+  AND association.mcp_server_id <> $3::uuid
+  AND association.deleted IS FALSE
+  AND (other.remote_mcp_server_id IS NOT NULL OR other.tunneled_mcp_server_id IS NOT NULL)
+  AND (remote.url IS NULL OR rtrim(remote.url, '/') <> rtrim($4::text, '/'))
+ORDER BY other.id
+`
+
+type ListProxiedMCPServersUsingClientAtAnotherAddressParams struct {
+	OrganizationID        string
+	RemoteSessionClientID uuid.UUID
+	McpServerID           uuid.UUID
+	UpstreamUrl           string
+}
+
+// The other live proxied MCP servers of the organization associated with a
+// client whose upstream address is not the given one. A person holds one grant
+// per client, and that grant records one resource, so only one of these servers
+// can use it at a time. A tunneled server has no fixed address, so it always
+// counts as another address. Trailing slashes are ignored, as token routing
+// ignores them.
+func (q *Queries) ListProxiedMCPServersUsingClientAtAnotherAddress(ctx context.Context, arg ListProxiedMCPServersUsingClientAtAnotherAddressParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProxiedMCPServersUsingClientAtAnotherAddress,
+		arg.OrganizationID,
+		arg.RemoteSessionClientID,
+		arg.McpServerID,
+		arg.UpstreamUrl,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -18493,4 +18758,54 @@ func (q *Queries) UpsertTrustedDelegationCredential(ctx context.Context, arg Ups
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const userSessionIssuerHasConsumersWithoutAssociations = `-- name: UserSessionIssuerHasConsumersWithoutAssociations :one
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM mcp_servers AS direct
+    JOIN projects AS project
+      ON project.id = direct.project_id
+     AND project.organization_id = $1::text
+     AND project.deleted IS FALSE
+    WHERE direct.user_session_issuer_id = $2::uuid
+      AND direct.deleted IS FALSE
+  ) OR EXISTS (
+    SELECT 1
+    FROM meta_mcp_servers AS gateway
+    JOIN meta_mcp_server_members AS member
+      ON member.meta_mcp_server_id = gateway.id
+     AND member.project_id = gateway.project_id
+     AND member.deleted IS FALSE
+    JOIN mcp_servers AS hosted
+      ON hosted.id = member.mcp_server_id
+     AND hosted.project_id = member.project_id
+     AND hosted.deleted IS FALSE
+     AND hosted.remote_mcp_server_id IS NULL
+     AND hosted.tunneled_mcp_server_id IS NULL
+    WHERE gateway.user_session_issuer_id = $2::uuid
+      AND gateway.organization_id = $1::text
+      AND gateway.deleted IS FALSE
+      AND hosted.id <> $3::uuid
+  )
+)::boolean AS has_consumers
+`
+
+type UserSessionIssuerHasConsumersWithoutAssociationsParams struct {
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+	McpServerID         uuid.UUID
+}
+
+// Whether anything signs in through a user session issuer's bindings without an
+// association to show for it, besides one gateway member giving up a client: a
+// server on the issuer itself, which can fall back to an unclaimed client, or a
+// hosted member of a gateway on the issuer, which serves from every client the
+// issuer binds.
+func (q *Queries) UserSessionIssuerHasConsumersWithoutAssociations(ctx context.Context, arg UserSessionIssuerHasConsumersWithoutAssociationsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, userSessionIssuerHasConsumersWithoutAssociations, arg.OrganizationID, arg.UserSessionIssuerID, arg.McpServerID)
+	var has_consumers bool
+	err := row.Scan(&has_consumers)
+	return has_consumers, err
 }
