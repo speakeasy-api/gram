@@ -403,7 +403,7 @@ var _ = Service("organizationUserSessionIssuers", func() {
 	})
 
 	Method("getIssuerMigratePreflight", func() {
-		Description("Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. Requires org:read.")
+		Description("Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. When no hard blocker is present, it runs the consolidation in a transaction it rolls back and reports how each affected MCP server's upstream OAuth clients would change. That run takes the same locks a consolidation does, and returns 409 when another writer holds them for too long. Requires org:admin.")
 		Payload(func() {
 			Attribute("source_id", String, "The user_session_issuer to migrate away from.", func() { Format(FormatUUID) })
 			Attribute("target_id", String, "The user_session_issuer to migrate onto.", func() { Format(FormatUUID) })
@@ -428,7 +428,7 @@ var _ = Service("organizationUserSessionIssuers", func() {
 		Payload(func() {
 			Attribute("source_id", String, "The user_session_issuer to migrate away from; soft-deleted on success.", func() { Format(FormatUUID) })
 			Attribute("target_id", String, "The surviving user_session_issuer.", func() { Format(FormatUUID) })
-			Attribute("confirmed_warnings_fingerprint", String, "The exact warnings_fingerprint returned by the latest preflight. Required when that preflight reports warnings.")
+			Attribute("confirmed_warnings_fingerprint", String, "The exact warnings_fingerprint returned by the latest preflight. Required when that preflight reports warnings, server impacts, or dropped client links.")
 			Required("source_id", "target_id")
 			security.SessionPayload()
 		})
@@ -727,9 +727,48 @@ var OrganizationUserSessionIssuerMigratePreflight = Type("OrganizationUserSessio
 	Attribute("ema_binding_conflict_count", Int, "Enterprise-managed authorization bindings already present on the target. Non-zero blocks migration.")
 	Attribute("platform_owned", Boolean, "Whether a Platform MCP catalog registration owns either issuer. True blocks migration.")
 	Attribute("warnings", ArrayOf(UserSessionIssuerFieldMismatch), "Configuration differences that do not block the migration. The target's values become authoritative for future authorization; existing sessions and refresh tokens are unaffected. Besides the issuer settings, this reports authorization_server_mode, use_authentication_host, and issuer_url (the shared authorization server's issuer identifier, empty when not served) whenever they differ: repointed MCP servers then direct clients to a different authorization server, so anything configured with the source's values, such as an identity provider or a federated platform, must be updated.")
-	Attribute("warnings_fingerprint", String, "Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.")
-	Attribute("can_migrate", Boolean, "True when no hard blocker is present.")
+	Attribute("warnings_fingerprint", String, "Stable fingerprint of the current warnings, server impacts, and dropped client links. Empty when there are none; otherwise pass this exact value to migrateIssuer to confirm them. Counts that change on their own, such as unscoped_session_count, are not part of it.")
+	Attribute("can_migrate", Boolean, "True when no hard blocker is present, including no server impact with blocker impact_severity.")
 	Required("client_count", "session_count", "consent_count", "cimd_client_count", "remote_session_count", "conflicting_client_ids", "principal_binding_conflict_count", "ema_binding_conflict_count", "platform_owned", "warnings", "warnings_fingerprint", "can_migrate")
+	Attribute("impact_previewed", Boolean, "True when the consolidation was run and rolled back to compute server_impacts and dropped_client_links. False when a hard blocker stopped it, in which case both are empty.")
+	Attribute("server_impacts", ArrayOf(UserSessionIssuerMigrationServerImpact), "The MCP servers whose upstream OAuth clients consolidation would change, and those it would pin. A server whose clients do not change and that is not pinned is not listed.")
+	Attribute("dropped_client_links", ArrayOf(UserSessionIssuerMigrationClient), "Clients the source binds that consolidation would not carry to the target because nothing signs in through them afterwards. A deleted client is never carried and not listed. Users' grants for them still move to the target, so attaching a client to the target later makes its grants usable again.")
+	Attribute("unscoped_session_count", Int, "Live sign-ins on the source with no tool selection. Every MCP server on their issuer accepts them, so after consolidation they also reach the target's servers. Informational; not part of the fingerprint.")
+	Attribute("newly_reachable_server_count", Int, "Live MCP servers already on the target that the source's unscoped sign-ins would reach for the first time. Informational; not part of the fingerprint.")
+	Required("impact_previewed", "server_impacts", "dropped_client_links", "unscoped_session_count", "newly_reachable_server_count")
+})
+
+var UserSessionIssuerMigrationClient = Type("UserSessionIssuerMigrationClient", func() {
+	Description("An upstream OAuth client (remote session client) in a consolidation preview.")
+	Attribute("remote_session_client_id", String, "The remote session client.", func() { Format(FormatUUID) })
+	Attribute("client_id", String, "The client's OAuth client_id at its provider.")
+	Attribute("provider_issuer", String, "The issuer URL of the client's provider. Empty when the provider is unknown.")
+	Required("remote_session_client_id", "client_id", "provider_issuer")
+})
+
+var UserSessionIssuerMigrationImpactSeverity = Type("UserSessionIssuerMigrationImpactSeverity", String, func() {
+	Description("How a consolidation's change to one MCP server ranks.")
+	Enum("blocker", "warning", "info")
+})
+
+var UserSessionIssuerMigrationImpactReason = Type("UserSessionIssuerMigrationImpactReason", String, func() {
+	Description("Why a consolidation preview lists an MCP server.")
+	Enum("multiple_clients_for_provider", "provider_not_in_metadata", "gains_client", "loses_client", "changes_provider", "changes_clients", "pinned")
+})
+
+var UserSessionIssuerMigrationServerImpact = Type("UserSessionIssuerMigrationServerImpact", func() {
+	Description("How consolidation changes the upstream OAuth clients one MCP server uses. A server's clients are the ones its callers must have connected: on an organization enforcing upstream auth, the clients its auth clients offer; otherwise, for a server on a user session issuer, the clients serving requires of it, and for any other server, its associated clients.")
+	Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })
+	Attribute("mcp_server_name", String, "The MCP server's display name.")
+	Attribute("mcp_server_slug", String, "The MCP server's slug.")
+	Attribute("project_id", String, "The MCP server's project.", func() { Format(FormatUUID) })
+	Attribute("project_name", String, "The MCP server's project name.")
+	Attribute("impact_severity", UserSessionIssuerMigrationImpactSeverity, "blocker stops the consolidation; warning needs confirming through the fingerprint; info only reports a pinned association.")
+	Attribute("reasons", ArrayOf(UserSessionIssuerMigrationImpactReason), "Why the server is listed. multiple_clients_for_provider (blocker): it would use two or more clients of one provider. provider_not_in_metadata (blocker): it would gain a client whose provider its upstream's protected resource metadata does not list. gains_client: it uses no client today and would use some. loses_client: it would use none. changes_provider: the providers it uses would change. changes_clients: the same providers, different clients. pinned: consolidation associates it with the clients its current configuration proves it uses, so they stay its own after the move.")
+	Attribute("clients_before", ArrayOf(UserSessionIssuerMigrationClient), "The clients the server uses today.")
+	Attribute("clients_after", ArrayOf(UserSessionIssuerMigrationClient), "The clients the server would use after consolidation.")
+	Attribute("pinned_client_ids", ArrayOf(String), "Remote session clients consolidation associates with the server before the move.")
+	Required("mcp_server_id", "mcp_server_name", "mcp_server_slug", "project_id", "project_name", "impact_severity", "reasons", "clients_before", "clients_after", "pinned_client_ids")
 })
 
 var MigrateOrganizationUserSessionIssuerResult = Type("MigrateOrganizationUserSessionIssuerResult", func() {
@@ -742,4 +781,7 @@ var MigrateOrganizationUserSessionIssuerResult = Type("MigrateOrganizationUserSe
 	Attribute("remote_sessions_migrated", Int, "Remote-session credentials whose provenance moved.")
 	Attribute("source_deleted", Boolean, "True when the source issuer was soft-deleted.")
 	Required("issuer", "clients_migrated", "sessions_migrated", "consents_migrated", "cimd_clients_migrated", "remote_sessions_migrated", "source_deleted")
+	Attribute("server_impacts", ArrayOf(UserSessionIssuerMigrationServerImpact), "How consolidation changed each affected MCP server's upstream OAuth clients, read in its transaction just before it committed.")
+	Attribute("dropped_client_links", ArrayOf(UserSessionIssuerMigrationClient), "Clients the source bound that consolidation did not carry to the target.")
+	Required("server_impacts", "dropped_client_links")
 })

@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -85,7 +84,7 @@ func TestOrganizationUserSessionIssuerMigrateAssociatesSoleConsumerClientsUnderE
 				UserSessionIssuerID:   targetID,
 			}))
 
-			_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+			_, err = ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 			require.NoError(t, err)
 
 			associations, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: moved, ProjectID: projectID})

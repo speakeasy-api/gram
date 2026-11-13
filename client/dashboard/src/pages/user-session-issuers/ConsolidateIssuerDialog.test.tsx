@@ -1,4 +1,5 @@
 import type { OrganizationUserSessionIssuerMigratePreflight } from "@gram/client/models/components/organizationusersessionissuermigratepreflight.js";
+import type { UserSessionIssuerMigrationServerImpact } from "@gram/client/models/components/usersessionissuermigrationserverimpact.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +13,7 @@ const testState = vi.hoisted(() => ({
   mutate: vi.fn(),
   reset: vi.fn(),
   preflightError: false,
+  preflightErrorValue: null as Error | null,
   migrateError: null as Error | null,
 }));
 
@@ -22,6 +24,7 @@ vi.mock(
       data: testState.preflight,
       isFetching: false,
       isError: testState.preflightError,
+      error: testState.preflightErrorValue,
       refetch: vi.fn(),
     }),
   }),
@@ -104,6 +107,41 @@ function preflight(
     emaBindingConflictCount: 0,
     warnings: [],
     warningsFingerprint: "",
+    impactPreviewed: true,
+    serverImpacts: [],
+    droppedClientLinks: [],
+    unscopedSessionCount: 0,
+    newlyReachableServerCount: 0,
+    ...overrides,
+  };
+}
+
+function serverImpact(
+  overrides: Partial<UserSessionIssuerMigrationServerImpact>,
+): UserSessionIssuerMigrationServerImpact {
+  return {
+    mcpServerId: "server-1",
+    mcpServerName: "Slack",
+    mcpServerSlug: "slack",
+    projectId: "project-1",
+    projectName: "Sales",
+    impactSeverity: "warning",
+    reasons: ["changes_provider"],
+    clientsBefore: [
+      {
+        remoteSessionClientId: "client-1",
+        clientId: "slack-app",
+        providerIssuer: "https://slack.com",
+      },
+    ],
+    clientsAfter: [
+      {
+        remoteSessionClientId: "client-2",
+        clientId: "google-app",
+        providerIssuer: "https://accounts.google.com",
+      },
+    ],
+    pinnedClientIds: [],
     ...overrides,
   };
 }
@@ -126,6 +164,7 @@ beforeEach(() => {
   testState.reset.mockReset();
   testState.preflight = undefined;
   testState.preflightError = false;
+  testState.preflightErrorValue = null;
   testState.migrateError = null;
 });
 
@@ -162,6 +201,94 @@ describe("ConsolidateIssuerDialog", () => {
     });
   });
 
+  it("confirms the MCP server changes it shows", () => {
+    testState.preflight = preflight({
+      serverImpacts: [serverImpact({})],
+      warningsFingerprint: "fingerprint-servers",
+    });
+    renderDialog();
+
+    expect(
+      screen.getByText(/would change which accounts people connect/),
+    ).toBeDefined();
+    expect(
+      screen.getByText(/Would switch from slack.com to accounts.google.com/),
+    ).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Consolidate" }));
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        migrateIssuerRequestBody2: {
+          sourceId: "source",
+          targetId: "target",
+          confirmedWarningsFingerprint: "fingerprint-servers",
+        },
+      },
+    });
+  });
+
+  it("refuses while an MCP server would get a client its upstream rejects", () => {
+    testState.preflight = preflight({
+      canMigrate: false,
+      serverImpacts: [
+        serverImpact({
+          impactSeverity: "blocker",
+          reasons: ["provider_not_in_metadata", "gains_client"],
+          clientsBefore: [],
+        }),
+      ],
+    });
+    renderDialog();
+
+    expect(
+      screen.getByText(
+        /Slack \(Sales\): Would use an OAuth client for accounts.google.com, which its upstream doesn't accept/,
+      ),
+    ).toBeDefined();
+    expect(
+      screen
+        .getByRole("button", { name: "Consolidate" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("names the OAuth clients that won't move and the servers that keep theirs", () => {
+    testState.preflight = preflight({
+      droppedClientLinks: [
+        {
+          remoteSessionClientId: "client-3",
+          clientId: "unused-app",
+          providerIssuer: "https://mcp.notion.com",
+        },
+      ],
+      serverImpacts: [
+        serverImpact({
+          mcpServerName: "Linear",
+          impactSeverity: "info",
+          reasons: ["pinned"],
+          clientsAfter: [],
+          pinnedClientIds: ["client-1"],
+        }),
+      ],
+      unscopedSessionCount: 4,
+      newlyReachableServerCount: 2,
+      warningsFingerprint: "fingerprint-dropped",
+    });
+    renderDialog();
+
+    expect(
+      screen.getByText(/1 OAuth client for mcp.notion.com won't move/),
+    ).toBeDefined();
+    expect(
+      screen.getByText(/Linear keeps its current OAuth client/),
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        /4 sign-ins will also work on the target's 2 MCP servers/,
+      ),
+    ).toBeDefined();
+  });
+
   it("refuses while something blocks the move", () => {
     testState.preflight = preflight({
       canMigrate: false,
@@ -175,6 +302,21 @@ describe("ConsolidateIssuerDialog", () => {
         .getByRole("button", { name: "Consolidate" })
         .hasAttribute("disabled"),
     ).toBe(true);
+  });
+
+  it("says when another change holds the preview's locks", () => {
+    testState.preflight = preflight({});
+    testState.preflightError = true;
+    testState.preflightErrorValue = new GramError("busy", {
+      response: new Response(null, { status: 409 }),
+      request: new Request("https://example.com"),
+      body: "",
+    });
+    renderDialog();
+
+    expect(
+      screen.getByText(/Another change to these authorization servers/),
+    ).toBeDefined();
   });
 
   it("does not confirm a preview whose refresh failed", () => {

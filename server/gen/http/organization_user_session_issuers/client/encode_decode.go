@@ -3846,6 +3846,61 @@ func unmarshalUserSessionIssuerFieldMismatchResponseBodyToOrganizationusersessio
 	return res
 }
 
+// unmarshalUserSessionIssuerMigrationServerImpactResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationServerImpact
+// builds a value of type
+// *organizationusersessionissuers.UserSessionIssuerMigrationServerImpact from
+// a value of type *UserSessionIssuerMigrationServerImpactResponseBody.
+func unmarshalUserSessionIssuerMigrationServerImpactResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationServerImpact(v *UserSessionIssuerMigrationServerImpactResponseBody) *organizationusersessionissuers.UserSessionIssuerMigrationServerImpact {
+	res := &organizationusersessionissuers.UserSessionIssuerMigrationServerImpact{
+		McpServerID:    *v.McpServerID,
+		McpServerName:  *v.McpServerName,
+		McpServerSlug:  *v.McpServerSlug,
+		ProjectID:      *v.ProjectID,
+		ProjectName:    *v.ProjectName,
+		ImpactSeverity: organizationusersessionissuers.UserSessionIssuerMigrationImpactSeverity(*v.ImpactSeverity),
+	}
+	res.Reasons = make([]organizationusersessionissuers.UserSessionIssuerMigrationImpactReason, len(v.Reasons))
+	for i, val := range v.Reasons {
+		res.Reasons[i] = organizationusersessionissuers.UserSessionIssuerMigrationImpactReason(val)
+	}
+	res.ClientsBefore = make([]*organizationusersessionissuers.UserSessionIssuerMigrationClient, len(v.ClientsBefore))
+	for i, val := range v.ClientsBefore {
+		if val == nil {
+			res.ClientsBefore[i] = nil
+			continue
+		}
+		res.ClientsBefore[i] = unmarshalUserSessionIssuerMigrationClientResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationClient(val)
+	}
+	res.ClientsAfter = make([]*organizationusersessionissuers.UserSessionIssuerMigrationClient, len(v.ClientsAfter))
+	for i, val := range v.ClientsAfter {
+		if val == nil {
+			res.ClientsAfter[i] = nil
+			continue
+		}
+		res.ClientsAfter[i] = unmarshalUserSessionIssuerMigrationClientResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationClient(val)
+	}
+	res.PinnedClientIds = make([]string, len(v.PinnedClientIds))
+	for i, val := range v.PinnedClientIds {
+		res.PinnedClientIds[i] = val
+	}
+
+	return res
+}
+
+// unmarshalUserSessionIssuerMigrationClientResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationClient
+// builds a value of type
+// *organizationusersessionissuers.UserSessionIssuerMigrationClient from a
+// value of type *UserSessionIssuerMigrationClientResponseBody.
+func unmarshalUserSessionIssuerMigrationClientResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationClient(v *UserSessionIssuerMigrationClientResponseBody) *organizationusersessionissuers.UserSessionIssuerMigrationClient {
+	res := &organizationusersessionissuers.UserSessionIssuerMigrationClient{
+		RemoteSessionClientID: *v.RemoteSessionClientID,
+		ClientID:              *v.ClientID,
+		ProviderIssuer:        *v.ProviderIssuer,
+	}
+
+	return res
+}
+
 // unmarshalUserSessionIssuerCimdClientResponseBodyToTypesUserSessionIssuerCimdClient
 // builds a value of type *types.UserSessionIssuerCimdClient from a value of
 // type *UserSessionIssuerCimdClientResponseBody.

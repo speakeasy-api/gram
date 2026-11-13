@@ -649,6 +649,7 @@ WITH page AS (
            s.user_session_issuer_id,
            s.remote_mcp_server_id,
            s.toolset_id,
+           s.requires_upstream_auth,
            s.remote_session_issuer_id AS derived_issuer_id,
            rms.url AS remote_url,
            EXISTS (
@@ -677,8 +678,9 @@ WITH page AS (
     WHERE s.deleted IS FALSE
       AND s.id > $1::uuid
       AND ($2::text = '' OR p.organization_id = $2::text)
+      AND (COALESCE(cardinality($3::uuid[]), 0) = 0 OR s.id = ANY($3::uuid[]))
     ORDER BY s.id
-    LIMIT $3::int
+    LIMIT $4::int
 )
 SELECT page.id AS mcp_server_id,
        page.project_id,
@@ -726,7 +728,9 @@ SELECT page.id AS mcp_server_id,
            AND offer.source = 'admin'
            AND offer.deleted IS FALSE
        )::boolean AS offers_own_oauth_client,
+       (page.requires_upstream_auth IS FALSE)::boolean AS upstream_auth_not_required,
        c.id AS remote_session_client_id,
+       c.remote_session_issuer_id AS client_provider_id,
        COALESCE((
          SELECT i.issuer = ANY (rpr.authorization_servers)
          FROM remote_session_issuers AS i
@@ -793,27 +797,30 @@ ORDER BY page.id, c.id
 type ListUpstreamClientBackfillCandidatesParams struct {
 	Cursor         uuid.UUID
 	OrganizationID string
+	McpServerIds   []uuid.UUID
 	PageSize       int32
 }
 
 type ListUpstreamClientBackfillCandidatesRow struct {
-	McpServerID           uuid.UUID
-	ProjectID             uuid.UUID
-	OrganizationID        string
-	UserSessionIssuerID   uuid.UUID
-	RemoteBacked          bool
-	Hosted                bool
-	Proxied               bool
-	IssuerServerCount     int64
-	IssuerHasGateway      bool
-	LiveAssociations      int64
-	OffersOwnOauthClient  bool
-	RemoteSessionClientID uuid.NullUUID
-	MetadataMatch         bool
-	GrantMatch            bool
-	DerivedMatch          bool
-	PairLive              bool
-	PairRecorded          bool
+	McpServerID             uuid.UUID
+	ProjectID               uuid.UUID
+	OrganizationID          string
+	UserSessionIssuerID     uuid.UUID
+	RemoteBacked            bool
+	Hosted                  bool
+	Proxied                 bool
+	IssuerServerCount       int64
+	IssuerHasGateway        bool
+	LiveAssociations        int64
+	OffersOwnOauthClient    bool
+	UpstreamAuthNotRequired bool
+	RemoteSessionClientID   uuid.NullUUID
+	ClientProviderID        uuid.NullUUID
+	MetadataMatch           bool
+	GrantMatch              bool
+	DerivedMatch            bool
+	PairLive                bool
+	PairRecorded            bool
 }
 
 // One row per live MCP server carrying a user session issuer and each client
@@ -841,8 +848,20 @@ type ListUpstreamClientBackfillCandidatesRow struct {
 //
 // offers_own_oauth_client reports that the server offers an OAuth-backed auth
 // client an administrator or a server-only identity commit configured for it.
+//
+// upstream_auth_not_required reports that the server is explicitly recorded
+// as needing no upstream authentication. client_provider_id is the bound
+// client's remote session issuer.
+//
+// A non-empty mcp_server_ids limits the page to those servers, for a caller
+// deciding a known set inside its own transaction.
 func (q *Queries) ListUpstreamClientBackfillCandidates(ctx context.Context, arg ListUpstreamClientBackfillCandidatesParams) ([]ListUpstreamClientBackfillCandidatesRow, error) {
-	rows, err := q.db.Query(ctx, listUpstreamClientBackfillCandidates, arg.Cursor, arg.OrganizationID, arg.PageSize)
+	rows, err := q.db.Query(ctx, listUpstreamClientBackfillCandidates,
+		arg.Cursor,
+		arg.OrganizationID,
+		arg.McpServerIds,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -862,7 +881,9 @@ func (q *Queries) ListUpstreamClientBackfillCandidates(ctx context.Context, arg 
 			&i.IssuerHasGateway,
 			&i.LiveAssociations,
 			&i.OffersOwnOauthClient,
+			&i.UpstreamAuthNotRequired,
 			&i.RemoteSessionClientID,
+			&i.ClientProviderID,
 			&i.MetadataMatch,
 			&i.GrantMatch,
 			&i.DerivedMatch,

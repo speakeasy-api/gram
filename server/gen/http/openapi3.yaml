@@ -56088,7 +56088,7 @@ paths:
                 name: OrganizationUserSessionIssuerDeletePreflight
     /rpc/organizationUserSessionIssuers.getMigratePreflight:
         get:
-            description: Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. Requires org:read.
+            description: Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. When no hard blocker is present, it runs the consolidation in a transaction it rolls back and reports how each affected MCP server's upstream OAuth clients would change. That run takes the same locks a consolidation does, and returns 409 when another writer holds them for too long. Requires org:admin.
             operationId: getOrganizationUserSessionIssuerMigratePreflight
             parameters:
                 - allowEmptyValue: true
@@ -120883,7 +120883,7 @@ components:
             properties:
                 confirmed_warnings_fingerprint:
                     type: string
-                    description: The exact warnings_fingerprint returned by the latest preflight. Required when that preflight reports warnings.
+                    description: The exact warnings_fingerprint returned by the latest preflight. Required when that preflight reports warnings, server impacts, or dropped client links.
                 source_id:
                     type: string
                     description: The user_session_issuer to migrate away from; soft-deleted on success.
@@ -120949,12 +120949,22 @@ components:
                     type: integer
                     description: Consents normalized to the target scope.
                     format: int64
+                dropped_client_links:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuerMigrationClient'
+                    description: Clients the source bound that consolidation did not carry to the target.
                 issuer:
                     $ref: '#/components/schemas/UserSessionIssuer'
                 remote_sessions_migrated:
                     type: integer
                     description: Remote-session credentials whose provenance moved.
                     format: int64
+                server_impacts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuerMigrationServerImpact'
+                    description: How consolidation changed each affected MCP server's upstream OAuth clients, read in its transaction just before it committed.
                 sessions_migrated:
                     type: integer
                     description: User sessions re-pointed to the target.
@@ -120971,6 +120981,8 @@ components:
                 - cimd_clients_migrated
                 - remote_sessions_migrated
                 - source_deleted
+                - server_impacts
+                - dropped_client_links
         MigrateRemoteSessionIssuerRequestBody:
             type: object
             properties:
@@ -122718,7 +122730,7 @@ components:
             properties:
                 can_migrate:
                     type: boolean
-                    description: True when no hard blocker is present.
+                    description: True when no hard blocker is present, including no server impact with blocker impact_severity.
                 cimd_client_count:
                     type: integer
                     description: Custom CIMD allowlist entries that would move or merge.
@@ -122736,9 +122748,21 @@ components:
                     type: integer
                     description: User-session consents that would move.
                     format: int64
+                dropped_client_links:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuerMigrationClient'
+                    description: Clients the source binds that consolidation would not carry to the target because nothing signs in through them afterwards. A deleted client is never carried and not listed. Users' grants for them still move to the target, so attaching a client to the target later makes its grants usable again.
                 ema_binding_conflict_count:
                     type: integer
                     description: Enterprise-managed authorization bindings already present on the target. Non-zero blocks migration.
+                    format: int64
+                impact_previewed:
+                    type: boolean
+                    description: True when the consolidation was run and rolled back to compute server_impacts and dropped_client_links. False when a hard blocker stopped it, in which case both are empty.
+                newly_reachable_server_count:
+                    type: integer
+                    description: Live MCP servers already on the target that the source's unscoped sign-ins would reach for the first time. Informational; not part of the fingerprint.
                     format: int64
                 platform_owned:
                     type: boolean
@@ -122751,9 +122775,18 @@ components:
                     type: integer
                     description: Remote-session credentials whose issuer provenance would move.
                     format: int64
+                server_impacts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuerMigrationServerImpact'
+                    description: The MCP servers whose upstream OAuth clients consolidation would change, and those it would pin. A server whose clients do not change and that is not pinned is not listed.
                 session_count:
                     type: integer
                     description: User sessions that would move.
+                    format: int64
+                unscoped_session_count:
+                    type: integer
+                    description: Live sign-ins on the source with no tool selection. Every MCP server on their issuer accepts them, so after consolidation they also reach the target's servers. Informational; not part of the fingerprint.
                     format: int64
                 warnings:
                     type: array
@@ -122762,7 +122795,7 @@ components:
                     description: 'Configuration differences that do not block the migration. The target''s values become authoritative for future authorization; existing sessions and refresh tokens are unaffected. Besides the issuer settings, this reports authorization_server_mode, use_authentication_host, and issuer_url (the shared authorization server''s issuer identifier, empty when not served) whenever they differ: repointed MCP servers then direct clients to a different authorization server, so anything configured with the source''s values, such as an identity provider or a federated platform, must be updated.'
                 warnings_fingerprint:
                     type: string
-                    description: Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+                    description: Stable fingerprint of the current warnings, server impacts, and dropped client links. Empty when there are none; otherwise pass this exact value to migrateIssuer to confirm them. Counts that change on their own, such as unscoped_session_count, are not part of it.
             description: Authoritative impact summary for consolidating one user_session_issuer onto another.
             required:
                 - client_count
@@ -122777,6 +122810,11 @@ components:
                 - warnings
                 - warnings_fingerprint
                 - can_migrate
+                - impact_previewed
+                - server_impacts
+                - dropped_client_links
+                - unscoped_session_count
+                - newly_reachable_server_count
         OrganizationUserSessionIssuerReference:
             type: object
             properties:
@@ -140315,6 +140353,92 @@ components:
                 - name
                 - project_id
                 - project_name
+        UserSessionIssuerMigrationClient:
+            type: object
+            properties:
+                client_id:
+                    type: string
+                    description: The client's OAuth client_id at its provider.
+                provider_issuer:
+                    type: string
+                    description: The issuer URL of the client's provider. Empty when the provider is unknown.
+                remote_session_client_id:
+                    type: string
+                    description: The remote session client.
+                    format: uuid
+            description: An upstream OAuth client (remote session client) in a consolidation preview.
+            required:
+                - remote_session_client_id
+                - client_id
+                - provider_issuer
+        UserSessionIssuerMigrationServerImpact:
+            type: object
+            properties:
+                clients_after:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuerMigrationClient'
+                    description: The clients the server would use after consolidation.
+                clients_before:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuerMigrationClient'
+                    description: The clients the server uses today.
+                impact_severity:
+                    type: string
+                    description: How a consolidation's change to one MCP server ranks.
+                    enum:
+                        - blocker
+                        - warning
+                        - info
+                mcp_server_id:
+                    type: string
+                    description: The MCP server.
+                    format: uuid
+                mcp_server_name:
+                    type: string
+                    description: The MCP server's display name.
+                mcp_server_slug:
+                    type: string
+                    description: The MCP server's slug.
+                pinned_client_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Remote session clients consolidation associates with the server before the move.
+                project_id:
+                    type: string
+                    description: The MCP server's project.
+                    format: uuid
+                project_name:
+                    type: string
+                    description: The MCP server's project name.
+                reasons:
+                    type: array
+                    items:
+                        type: string
+                        description: Why a consolidation preview lists an MCP server.
+                        enum:
+                            - multiple_clients_for_provider
+                            - provider_not_in_metadata
+                            - gains_client
+                            - loses_client
+                            - changes_provider
+                            - changes_clients
+                            - pinned
+                    description: 'Why the server is listed. multiple_clients_for_provider (blocker): it would use two or more clients of one provider. provider_not_in_metadata (blocker): it would gain a client whose provider its upstream''s protected resource metadata does not list. gains_client: it uses no client today and would use some. loses_client: it would use none. changes_provider: the providers it uses would change. changes_clients: the same providers, different clients. pinned: consolidation associates it with the clients its current configuration proves it uses, so they stay its own after the move.'
+            description: 'How consolidation changes the upstream OAuth clients one MCP server uses. A server''s clients are the ones its callers must have connected: on an organization enforcing upstream auth, the clients its auth clients offer; otherwise, for a server on a user session issuer, the clients serving requires of it, and for any other server, its associated clients.'
+            required:
+                - mcp_server_id
+                - mcp_server_name
+                - mcp_server_slug
+                - project_id
+                - project_name
+                - impact_severity
+                - reasons
+                - clients_before
+                - clients_after
+                - pinned_client_ids
         UserSessionUpstream:
             type: object
             properties:

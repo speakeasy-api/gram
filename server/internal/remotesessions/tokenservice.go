@@ -624,6 +624,40 @@ func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, 
 	return own, association, nil
 }
 
+// BoundUserSessionIssuerClients lists the clients bound to userSessionIssuerID
+// that serving admits for a server in projectID. A hosted server resolves
+// every one of them; a proxied server narrows them with RequiredServerClients.
+// It reads through dbtx, so a caller holding a transaction sees its own
+// uncommitted writes.
+func BoundUserSessionIssuerClients(ctx context.Context, dbtx remotesessions_repo.DBTX, organizationID string, projectID, userSessionIssuerID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := remotesessions_repo.New(dbtx).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		ProjectID:           conv.ToNullUUID(projectID),
+		OrganizationID:      conv.ToPGText(organizationID),
+		OrganizationWide:    false,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list bound remote session clients: %w", err)
+	}
+	ids := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ClientID)
+	}
+	return ids, nil
+}
+
+// RequiredServerClients reports which of boundClientIDs, the clients
+// BoundUserSessionIssuerClients lists for the server's project, a proxied MCP
+// server's callers need, by the rule serving applies. It reads through dbtx,
+// so a caller holding a transaction sees its own uncommitted writes.
+func RequiredServerClients(ctx context.Context, dbtx remotesessions_repo.DBTX, organizationID string, userSessionIssuerID, mcpServerID uuid.UUID, boundClientIDs []uuid.UUID) ([]uuid.UUID, error) {
+	required, _, err := requiredServerClients(ctx, remotesessions_repo.New(dbtx), organizationID, userSessionIssuerID, mcpServerID, boundClientIDs)
+	if err != nil {
+		return nil, err
+	}
+	return required, nil
+}
+
 // clientUnclaimed reports that nothing says whether a bound client is the
 // configured server's: it has no association, no other server has one, and the
 // server has not explicitly detached it.

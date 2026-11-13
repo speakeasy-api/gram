@@ -267,6 +267,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 		rows, err := q.ListUpstreamClientBackfillCandidates(ctx, ListUpstreamClientBackfillCandidatesParams{
 			Cursor:         cursor,
 			OrganizationID: opts.OrganizationID,
+			McpServerIds:   nil,
 			PageSize:       int32(pageSize), // #nosec G115 -- bounded by defaultPageSize or an operator flag
 		})
 		if err != nil {

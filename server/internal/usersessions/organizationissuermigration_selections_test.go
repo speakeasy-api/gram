@@ -134,7 +134,7 @@ func TestOrganizationUserSessionIssuerMigrateReconcilesCredentialChoices(t *test
 			}
 			_, err = authclientsrepo.New(ti.conn).DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{OrganizationID: auth.ActiveOrganizationID, McpServerID: servers[0], AuthClientID: firstAuthClient})
 			require.NoError(t, err)
-			_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: thirdID.String(), TargetID: target.ID})
+			_, err = ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, thirdID.String(), target.ID))
 			require.NoError(t, err)
 			explicit, err := fixtures.GetSelectionAuthClientFixture(ctx, selectionbackfill.GetSelectionAuthClientFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentials[0], McpServerID: servers[0]})
 			require.NoError(t, err)
@@ -197,7 +197,7 @@ func TestOrganizationUserSessionIssuerMigrateScopesExistingTargetButNotMovedCred
 	require.NoError(t, err)
 	moved, err := seedUserSession(t, ctx, ti.conn, sourceID, urn.NewUserSubject("bounded-moved"))
 	require.NoError(t, err)
-	result, err := ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID})
+	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), target.ID))
 	require.NoError(t, err)
 	require.Equal(t, 1, result.SessionsMigrated)
 	fixtures := selectionbackfill.New(ti.conn)
@@ -243,7 +243,7 @@ func TestOrganizationUserSessionIssuerMigrateMaintainsMovedGatewayMembers(t *tes
 			require.True(t, row.NeedsSync, "a gateway move creates reach even without transferring its registration")
 		}
 	}
-	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	_, err = ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 	existingChoices, err := fixtures.ListSelectionsFixture(ctx, selectionbackfill.ListSelectionsFixtureParams{CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: migrationCredentialID(existing)})
 	require.NoError(t, err)
@@ -309,7 +309,7 @@ func TestOrganizationUserSessionIssuerMigrateKeepsExistingTargetChoice(t *testin
 			require.NoError(t, err)
 			require.True(t, typedBefore.AuthClientID.Valid)
 
-			_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+			_, err = ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 			require.NoError(t, err)
 
 			after, err := fixtures.ListSelectionsFixture(ctx, list)
@@ -358,7 +358,7 @@ func TestOrganizationUserSessionIssuerMigrateDecidesChoicesBeforeMergingBindings
 			moved, err := seedUserSession(t, ctx, ti.conn, sourceID, urn.NewUserSubject("premerge-moved"))
 			require.NoError(t, err)
 
-			_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+			_, err = ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 			require.NoError(t, err)
 
 			choices := func(session usersessionsrepo.UserSession) map[uuid.UUID]uuid.UUID {

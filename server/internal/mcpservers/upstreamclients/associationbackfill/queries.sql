@@ -24,6 +24,13 @@
 --
 -- offers_own_oauth_client reports that the server offers an OAuth-backed auth
 -- client an administrator or a server-only identity commit configured for it.
+--
+-- upstream_auth_not_required reports that the server is explicitly recorded
+-- as needing no upstream authentication. client_provider_id is the bound
+-- client's remote session issuer.
+--
+-- A non-empty mcp_server_ids limits the page to those servers, for a caller
+-- deciding a known set inside its own transaction.
 WITH page AS (
     SELECT s.id,
            s.project_id,
@@ -31,6 +38,7 @@ WITH page AS (
            s.user_session_issuer_id,
            s.remote_mcp_server_id,
            s.toolset_id,
+           s.requires_upstream_auth,
            s.remote_session_issuer_id AS derived_issuer_id,
            rms.url AS remote_url,
            EXISTS (
@@ -59,6 +67,7 @@ WITH page AS (
     WHERE s.deleted IS FALSE
       AND s.id > @cursor::uuid
       AND (@organization_id::text = '' OR p.organization_id = @organization_id::text)
+      AND (COALESCE(cardinality(@mcp_server_ids::uuid[]), 0) = 0 OR s.id = ANY(@mcp_server_ids::uuid[]))
     ORDER BY s.id
     LIMIT @page_size::int
 )
@@ -108,7 +117,9 @@ SELECT page.id AS mcp_server_id,
            AND offer.source = 'admin'
            AND offer.deleted IS FALSE
        )::boolean AS offers_own_oauth_client,
+       (page.requires_upstream_auth IS FALSE)::boolean AS upstream_auth_not_required,
        c.id AS remote_session_client_id,
+       c.remote_session_issuer_id AS client_provider_id,
        COALESCE((
          SELECT i.issuer = ANY (rpr.authorization_servers)
          FROM remote_session_issuers AS i

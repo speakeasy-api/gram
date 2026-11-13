@@ -2248,6 +2248,8 @@ trackedFiles:
   src/models/components/usersessionissuercimdclient.ts: {}
   src/models/components/usersessionissuerfieldmismatch.ts: {}
   src/models/components/usersessionissuermcpserver.ts: {}
+  src/models/components/usersessionissuermigrationclient.ts: {}
+  src/models/components/usersessionissuermigrationserverimpact.ts: {}
   src/models/components/usersessionupstream.ts: {}
   src/models/components/usersessionworkload.ts: {}
   src/models/components/usersessionworkloadadmission.ts: {}
@@ -8363,7 +8365,7 @@ examples:
           target_id: "6dcbb5e1-5161-4baf-ac8d-f4611f29834a"
       responses:
         "200":
-          application/json: {"can_migrate": true, "cimd_client_count": 501939, "client_count": 28777, "conflicting_client_ids": [], "consent_count": 553825, "ema_binding_conflict_count": 650417, "platform_owned": false, "principal_binding_conflict_count": 90292, "remote_session_count": 748407, "session_count": 154481, "warnings": [], "warnings_fingerprint": "<value>"}
+          application/json: {"can_migrate": true, "cimd_client_count": 501939, "client_count": 28777, "conflicting_client_ids": [], "consent_count": 553825, "dropped_client_links": [{"client_id": "<id>", "provider_issuer": "<value>", "remote_session_client_id": "bd44363c-387f-486b-9146-621930e2721a"}], "ema_binding_conflict_count": 650417, "impact_previewed": false, "newly_reachable_server_count": 797368, "platform_owned": false, "principal_binding_conflict_count": 90292, "remote_session_count": 748407, "server_impacts": [{"clients_after": [{"client_id": "<id>", "provider_issuer": "<value>", "remote_session_client_id": "5e15161b-afc8-4df4-a611-f29834a92803"}], "clients_before": [{"client_id": "<id>", "provider_issuer": "<value>", "remote_session_client_id": "a1b27d67-0e10-43c2-8fef-2beea2330485"}], "impact_severity": "warning", "mcp_server_id": "44113244-67b7-479c-bc49-ac1642d7dd9d", "mcp_server_name": "<value>", "mcp_server_slug": "<value>", "pinned_client_ids": ["<value 1>"], "project_id": "ef256ab6-d880-4357-9fdf-2eeffadc0cf6", "project_name": "<value>", "reasons": ["loses_client"]}], "session_count": 154481, "unscoped_session_count": 189931, "warnings": [], "warnings_fingerprint": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -11750,7 +11752,7 @@ examples:
         application/json: {"source_id": "e6e798ef-b3af-41cf-963e-c799cc6df56c", "target_id": "052b3241-8b56-44dc-aaa7-ec7ee1fab372"}
       responses:
         "200":
-          application/json: {"cimd_clients_migrated": 436711, "clients_migrated": 717791, "consents_migrated": 36514, "issuer": {"authn_challenge_mode": "<value>", "authorization_server_mode": "shared", "client_id_metadata_admission_mode": "reporting", "created_at": "2025-12-10T22:14:34.707Z", "id": "1c313d20-a4cc-4899-ae06-4992f3d9fcbb", "issuer_url_pinned": true, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 104789, "slug": "<value>", "updated_at": "2026-10-27T16:05:32.217Z", "use_authentication_host": false}, "remote_sessions_migrated": 501217, "sessions_migrated": 924699, "source_deleted": true}
+          application/json: {"cimd_clients_migrated": 436711, "clients_migrated": 717791, "consents_migrated": 36514, "dropped_client_links": [{"client_id": "<id>", "provider_issuer": "<value>", "remote_session_client_id": "6e798efb-3af1-4cf6-83ec-799cc6df56c5"}], "issuer": {"authn_challenge_mode": "<value>", "authorization_server_mode": "shared", "client_id_metadata_admission_mode": "reporting", "created_at": "2025-12-10T22:14:34.707Z", "id": "1c313d20-a4cc-4899-ae06-4992f3d9fcbb", "issuer_url_pinned": true, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 104789, "slug": "<value>", "updated_at": "2026-10-27T16:05:32.217Z", "use_authentication_host": false}, "remote_sessions_migrated": 501217, "server_impacts": [], "sessions_migrated": 924699, "source_deleted": true}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

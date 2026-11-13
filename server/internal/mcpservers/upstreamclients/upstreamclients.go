@@ -74,6 +74,21 @@ func Reconcile(ctx context.Context, dbtx repo.DBTX, organizationID string, proje
 // ReconcileInLockedTransaction captures and prunes associations atomically.
 // The caller must hold LockEMAWriterScope before its first mutation or row lock.
 func ReconcileInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) error {
+	return reconcileInLockedTransaction(ctx, tx, organizationID, projectID, userIssuerIDs, true)
+}
+
+// ReconcileWithoutGatewayCaptureInLockedTransaction is
+// ReconcileInLockedTransaction without the gateway capture. Issuer
+// consolidation uses it: it writes the associations configuration proves
+// before the move, and the gateway capture would instead decide from the
+// authorization server it derives from the merged bindings, which can name a
+// client of another server's provider. The caller must hold
+// LockEMAWriterScope before its first mutation or row lock.
+func ReconcileWithoutGatewayCaptureInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) error {
+	return reconcileInLockedTransaction(ctx, tx, organizationID, projectID, userIssuerIDs, false)
+}
+
+func reconcileInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID, captureGateway bool) error {
 	if organizationID == "" || projectID == uuid.Nil || tx == nil {
 		return errors.New("reconcile mcp server upstream clients: no transaction or tenant scope")
 	}
@@ -104,15 +119,18 @@ func ReconcileInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID
 		if err != nil {
 			return fmt.Errorf("capture mcp server upstream clients: %w", err)
 		}
-		gateway, err := q.CaptureGatewayDerivedAssociations(ctx, repo.CaptureGatewayDerivedAssociationsParams{
-			ProjectID:            projectID,
-			OrganizationID:       organizationID,
-			UserSessionIssuerIds: userIssuerIDs,
-		})
-		if err != nil {
-			return fmt.Errorf("capture gateway upstream clients: %w", err)
+		captured = sole
+		if captureGateway {
+			gateway, err := q.CaptureGatewayDerivedAssociations(ctx, repo.CaptureGatewayDerivedAssociationsParams{
+				ProjectID:            projectID,
+				OrganizationID:       organizationID,
+				UserSessionIssuerIds: userIssuerIDs,
+			})
+			if err != nil {
+				return fmt.Errorf("capture gateway upstream clients: %w", err)
+			}
+			captured = slices.Concat(sole, gateway)
 		}
-		captured = slices.Concat(sole, gateway)
 	}
 	pruned, err := prune(ctx, q, organizationID, projectID)
 	if err != nil {

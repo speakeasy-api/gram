@@ -58,7 +58,11 @@ type Service interface {
 	// Requires org:admin.
 	MoveIssuer(context.Context, *MoveIssuerPayload) (res *types.UserSessionIssuer, err error)
 	// Report the impact, blockers, and configuration warnings for consolidating
-	// one user_session_issuer onto another. Requires org:read.
+	// one user_session_issuer onto another. When no hard blocker is present, it
+	// runs the consolidation in a transaction it rolls back and reports how each
+	// affected MCP server's upstream OAuth clients would change. That run takes
+	// the same locks a consolidation does, and returns 409 when another writer
+	// holds them for too long. Requires org:admin.
 	GetIssuerMigratePreflight(context.Context, *GetIssuerMigratePreflightPayload) (res *OrganizationUserSessionIssuerMigratePreflight, err error)
 	// Consolidate a source user_session_issuer onto a target issuer, preserving
 	// clients, sessions, attachments, and remote-session credentials before
@@ -276,7 +280,8 @@ type MigrateIssuerPayload struct {
 	// The surviving user_session_issuer.
 	TargetID string
 	// The exact warnings_fingerprint returned by the latest preflight. Required
-	// when that preflight reports warnings.
+	// when that preflight reports warnings, server impacts, or dropped client
+	// links.
 	ConfirmedWarningsFingerprint *string
 	SessionToken                 *string
 }
@@ -298,6 +303,11 @@ type MigrateOrganizationUserSessionIssuerResult struct {
 	RemoteSessionsMigrated int
 	// True when the source issuer was soft-deleted.
 	SourceDeleted bool
+	// How consolidation changed each affected MCP server's upstream OAuth clients,
+	// read in its transaction just before it committed.
+	ServerImpacts []*UserSessionIssuerMigrationServerImpact
+	// Clients the source bound that consolidation did not carry to the target.
+	DroppedClientLinks []*UserSessionIssuerMigrationClient
 }
 
 // MoveIssuerPayload is the payload type of the organizationUserSessionIssuers
@@ -371,11 +381,34 @@ type OrganizationUserSessionIssuerMigratePreflight struct {
 	// values, such as an identity provider or a federated platform, must be
 	// updated.
 	Warnings []*UserSessionIssuerFieldMismatch
-	// Stable fingerprint of the current warnings. Empty when there are no
-	// warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+	// Stable fingerprint of the current warnings, server impacts, and dropped
+	// client links. Empty when there are none; otherwise pass this exact value to
+	// migrateIssuer to confirm them. Counts that change on their own, such as
+	// unscoped_session_count, are not part of it.
 	WarningsFingerprint string
-	// True when no hard blocker is present.
+	// True when no hard blocker is present, including no server impact with
+	// blocker impact_severity.
 	CanMigrate bool
+	// True when the consolidation was run and rolled back to compute
+	// server_impacts and dropped_client_links. False when a hard blocker stopped
+	// it, in which case both are empty.
+	ImpactPreviewed bool
+	// The MCP servers whose upstream OAuth clients consolidation would change, and
+	// those it would pin. A server whose clients do not change and that is not
+	// pinned is not listed.
+	ServerImpacts []*UserSessionIssuerMigrationServerImpact
+	// Clients the source binds that consolidation would not carry to the target
+	// because nothing signs in through them afterwards. A deleted client is never
+	// carried and not listed. Users' grants for them still move to the target, so
+	// attaching a client to the target later makes its grants usable again.
+	DroppedClientLinks []*UserSessionIssuerMigrationClient
+	// Live sign-ins on the source with no tool selection. Every MCP server on
+	// their issuer accepts them, so after consolidation they also reach the
+	// target's servers. Informational; not part of the fingerprint.
+	UnscopedSessionCount int
+	// Live MCP servers already on the target that the source's unscoped sign-ins
+	// would reach for the first time. Informational; not part of the fingerprint.
+	NewlyReachableServerCount int
 }
 
 // A live project resource that references an organization-owned
@@ -474,6 +507,59 @@ type UserSessionIssuerMcpServer struct {
 	ProjectID string
 	// The owning project name.
 	ProjectName string
+}
+
+// An upstream OAuth client (remote session client) in a consolidation preview.
+type UserSessionIssuerMigrationClient struct {
+	// The remote session client.
+	RemoteSessionClientID string
+	// The client's OAuth client_id at its provider.
+	ClientID string
+	// The issuer URL of the client's provider. Empty when the provider is unknown.
+	ProviderIssuer string
+}
+
+// Why a consolidation preview lists an MCP server.
+type UserSessionIssuerMigrationImpactReason string
+
+// How a consolidation's change to one MCP server ranks.
+type UserSessionIssuerMigrationImpactSeverity string
+
+// How consolidation changes the upstream OAuth clients one MCP server uses. A
+// server's clients are the ones its callers must have connected: on an
+// organization enforcing upstream auth, the clients its auth clients offer;
+// otherwise, for a server on a user session issuer, the clients serving
+// requires of it, and for any other server, its associated clients.
+type UserSessionIssuerMigrationServerImpact struct {
+	// The MCP server.
+	McpServerID string
+	// The MCP server's display name.
+	McpServerName string
+	// The MCP server's slug.
+	McpServerSlug string
+	// The MCP server's project.
+	ProjectID string
+	// The MCP server's project name.
+	ProjectName string
+	// blocker stops the consolidation; warning needs confirming through the
+	// fingerprint; info only reports a pinned association.
+	ImpactSeverity UserSessionIssuerMigrationImpactSeverity
+	// Why the server is listed. multiple_clients_for_provider (blocker): it would
+	// use two or more clients of one provider. provider_not_in_metadata (blocker):
+	// it would gain a client whose provider its upstream's protected resource
+	// metadata does not list. gains_client: it uses no client today and would use
+	// some. loses_client: it would use none. changes_provider: the providers it
+	// uses would change. changes_clients: the same providers, different clients.
+	// pinned: consolidation associates it with the clients its current
+	// configuration proves it uses, so they stay its own after the move.
+	Reasons []UserSessionIssuerMigrationImpactReason
+	// The clients the server uses today.
+	ClientsBefore []*UserSessionIssuerMigrationClient
+	// The clients the server would use after consolidation.
+	ClientsAfter []*UserSessionIssuerMigrationClient
+	// Remote session clients consolidation associates with the server before the
+	// move.
+	PinnedClientIds []string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

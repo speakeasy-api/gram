@@ -20,7 +20,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { invalidateIssuers } from "./invalidateIssuers";
-import { changesIssuerUrl, describeMismatch } from "./issuerDisplay";
+import {
+  changesIssuerUrl,
+  describeMismatch,
+  describeServerImpact,
+  impactServerName,
+  providersLabel,
+} from "./issuerDisplay";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 /**
@@ -53,10 +59,21 @@ export function ConsolidateIssuerDialog({
   const queryClient = useQueryClient();
   const [targetId, setTargetId] = useState("");
 
+  // The preview runs the consolidation and rolls it back under the
+  // consolidation's locks, so it refreshes only when asked: on a new target,
+  // a retry, "Check again", or a refused confirmation. It is never kept once
+  // the dialog closes, so reopening it after fixing a server checks afresh.
   const preflight = useOrganizationUserSessionIssuerMigratePreflight(
     { sourceId: source.id, targetId },
     undefined,
-    { enabled: targetId !== "", throwOnError: false, retry: false },
+    {
+      enabled: targetId !== "",
+      throwOnError: false,
+      retry: false,
+      refetchOnWindowFocus: false,
+      staleTime: Infinity,
+      gcTime: 0,
+    },
   );
 
   const migrate = useMigrateOrganizationUserSessionIssuerMutation({
@@ -148,7 +165,12 @@ export function ConsolidateIssuerDialog({
             preflight={current}
             isLoading={preflight.isFetching}
             hasFailed={preflight.isError}
+            error={preflight.error}
             onRetry={() => void preflight.refetch()}
+            onCheckAgain={() => {
+              migrate.reset();
+              void preflight.refetch();
+            }}
           />
         )}
 
@@ -179,7 +201,8 @@ export function ConsolidateIssuerDialog({
                   migrateIssuerRequestBody2: {
                     sourceId: source.id,
                     targetId,
-                    // Confirms the warnings shown above, exactly.
+                    // Confirms the warnings and server changes shown above,
+                    // exactly.
                     confirmedWarningsFingerprint:
                       current.warningsFingerprint || undefined,
                   },
@@ -229,19 +252,27 @@ function ConsolidateImpact({
   preflight,
   isLoading,
   hasFailed,
+  error,
   onRetry,
+  onCheckAgain,
 }: {
   preflight: OrganizationUserSessionIssuerMigratePreflight | undefined;
   isLoading: boolean;
   hasFailed: boolean;
+  /** Why the preview failed, when known: a 409 means another writer holds its locks. */
+  error: unknown;
   onRetry: () => void;
+  /** Runs the preview again, for after the admin fixed what blocks it. */
+  onCheckAgain: () => void;
 }): JSX.Element {
   if (hasFailed && !isLoading) {
     return (
       <Alert variant="error" dismissible={false}>
         <Stack direction="horizontal" align="center" gap={3}>
           <span className="text-sm">
-            Couldn't check what consolidating changes.
+            {error instanceof GramError && error.statusCode === 409
+              ? "Another change to these authorization servers is in progress. Try again in a moment."
+              : "Couldn't check what consolidating changes."}
           </span>
           <Button variant="secondary" size="sm" onClick={onRetry}>
             <Button.Text>Retry</Button.Text>
@@ -268,12 +299,29 @@ function ConsolidateImpact({
       `${plural(preflight.principalBindingConflictCount, "person is", "people are")} linked to an identity provider account through both. Contact Speakeasy support to consolidate these.`,
     preflight.emaBindingConflictCount > 0 &&
       `The target already has ${plural(preflight.emaBindingConflictCount, "enterprise-managed authorization link", "enterprise-managed authorization links")}. Contact Speakeasy support to consolidate these.`,
+    ...preflight.serverImpacts
+      .filter((impact) => impact.impactSeverity === "blocker")
+      .map(
+        (impact) =>
+          `${impactServerName(impact)} (${impact.projectName}): ${describeServerImpact(impact)} Set its OAuth client in its authentication settings, then try again.`,
+      ),
   ].filter((blocker): blocker is string => typeof blocker === "string");
+
+  const changed = preflight.serverImpacts.filter(
+    (impact) => impact.impactSeverity === "warning",
+  );
+  const kept = preflight.serverImpacts.filter(
+    (impact) => impact.impactSeverity === "info",
+  );
+  const dropped = preflight.droppedClientLinks;
 
   return (
     <Stack gap={3}>
       <Text small muted>
         {moves(preflight)} move to the target.
+        {preflight.unscopedSessionCount > 0 &&
+          preflight.newlyReachableServerCount > 0 &&
+          ` ${plural(preflight.unscopedSessionCount, "sign-in", "sign-ins")} will also work on the target's ${plural(preflight.newlyReachableServerCount, "MCP server", "MCP servers")}.`}
       </Text>
 
       {blockers.length > 0 && (
@@ -283,6 +331,14 @@ function ConsolidateImpact({
               <li key={blocker}>{blocker}</li>
             ))}
           </ul>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-2"
+            onClick={onCheckAgain}
+          >
+            <Button.Text>Check again</Button.Text>
+          </Button>
         </Alert>
       )}
 
@@ -304,6 +360,47 @@ function ConsolidateImpact({
             })}
           </ul>
         </Alert>
+      )}
+
+      {(changed.length > 0 || dropped.length > 0) && (
+        <Alert variant="warning" dismissible={false}>
+          {changed.length > 0 && (
+            <>
+              <p className="mb-2 text-sm">
+                These MCP servers would change which accounts people connect.
+              </p>
+              <ul className="mb-2 space-y-1">
+                {changed.map((impact) => (
+                  <li key={impact.mcpServerId} className="text-sm break-words">
+                    <span className="font-medium">
+                      {impactServerName(impact)}
+                    </span>{" "}
+                    <span className="text-muted-foreground">
+                      · {impact.projectName}
+                    </span>
+                    : {describeServerImpact(impact)}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {dropped.length > 0 && (
+            <p className="text-sm break-words">
+              {plural(dropped.length, "OAuth client", "OAuth clients")} for{" "}
+              {providersLabel(dropped)} won't move, because nothing signs in
+              through {dropped.length === 1 ? "it" : "them"} afterwards. Linked
+              accounts work again if you add{" "}
+              {dropped.length === 1 ? "it" : "them"} to the target later.
+            </p>
+          )}
+        </Alert>
+      )}
+
+      {kept.length > 0 && (
+        <Text small muted>
+          {kept.map(impactServerName).join(", ")}{" "}
+          {kept.length === 1 ? "keeps its" : "keep their"} current OAuth client.
+        </Text>
       )}
     </Stack>
   );
