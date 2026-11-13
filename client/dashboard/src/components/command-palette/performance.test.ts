@@ -15,7 +15,7 @@ describe("CommandPalettePerformanceTracker", () => {
     tracker.ranking(1.5);
 
     expect(tracker.close(600, "project")).toEqual({
-      schema_version: 1,
+      schema_version: 4,
       scope: "project",
       cache_state: "cold",
       candidate_count_at_open: 4,
@@ -29,6 +29,19 @@ describe("CommandPalettePerformanceTracker", () => {
       ranking_invocation_count: 2,
       ranking_duration_ms: 4,
       ranking_max_duration_ms: 2.5,
+      inventory_call_baseline: 17,
+      searched_resource_kind_count: 4,
+      net_eliminated_inventory_call_baseline: 3,
+      remaining_inventory_call_baseline: 14,
+      search_request_count: 0,
+      modeled_no_fallback_call_count: 14,
+      search_candidate_count: 0,
+      search_complete: false,
+      search_truncated: false,
+      search_payload_byte_bucket: null,
+      time_to_search_ready_ms: null,
+      parse_search_duration_ms: null,
+      fallback_used: false,
     });
     expect(tracker.close(700, "project")).toBeNull();
   });
@@ -47,6 +60,36 @@ describe("CommandPalettePerformanceTracker", () => {
     tracker.open(10, { total: 0, pages: 0, resources: 0 });
     tracker.candidates(35, 2, 2, 0);
     expect(tracker.close(40, "project")?.time_to_page_actions_ms).toBe(25);
+  });
+
+  it("records complete search semantics without high-cardinality values", () => {
+    const tracker = new CommandPalettePerformanceTracker();
+    tracker.open(100, { total: 2, pages: 2, resources: 0 });
+    tracker.search(125, {
+      state: "ready",
+      searchRequestCount: 1,
+      candidateCount: 418,
+      complete: true,
+      truncated: false,
+      payloadByteBucket: "50k_to_250k",
+      parseSearchDurationMs: 3.5,
+    });
+    const payload = tracker.close(150, "project");
+    expect(payload).toMatchObject({
+      inventory_call_baseline: 17,
+      searched_resource_kind_count: 4,
+      net_eliminated_inventory_call_baseline: 3,
+      remaining_inventory_call_baseline: 14,
+      search_request_count: 1,
+      modeled_no_fallback_call_count: 15,
+      search_candidate_count: 418,
+      search_complete: true,
+      search_truncated: false,
+      search_payload_byte_bucket: "50k_to_250k",
+      time_to_search_ready_ms: 25,
+      parse_search_duration_ms: 3.5,
+      fallback_used: false,
+    });
   });
 
   it("captures a fixed privacy-safe payload without query or candidate fields", () => {

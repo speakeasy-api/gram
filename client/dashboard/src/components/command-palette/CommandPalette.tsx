@@ -16,6 +16,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -24,6 +25,7 @@ import {
 import { requestAskAi } from "./askAiBridge";
 import { useLauncherCandidates } from "./candidates";
 import type { LauncherCandidate } from "./candidates/types";
+import type { ResourceSearchMetrics } from "./candidates/useResourceSearchCandidates";
 import {
   captureCommandPalettePerformance,
   CommandPalettePerformanceTracker,
@@ -273,6 +275,14 @@ export function CommandPalette(): JSX.Element {
   const tracker = performanceTracker.current;
   const wasOpen = useRef(false);
   const recordedRanking = useRef<object | null>(null);
+  const searchMetrics = useRef<ResourceSearchMetrics | null>(null);
+  const recordSearchMetrics = useCallback(
+    (metrics: ResourceSearchMetrics) => {
+      searchMetrics.current = metrics;
+      tracker.search(performance.now(), metrics);
+    },
+    [tracker],
+  );
 
   // Project Assistant and resource search are project-scoped. At the org level
   // (no project in the URL) the palette still works for navigating org pages.
@@ -284,6 +294,22 @@ export function CommandPalette(): JSX.Element {
   // history. Gate the session lookup on `isOpen` so we don't poll auth.info on
   // every page (it 401s when unauthenticated).
   const recentsUserId = useRecentsUserId(isOpen);
+  const trimmedQuery = query.trim();
+  const [debouncedResourceQuery, setDebouncedResourceQuery] = useState("");
+  useEffect(() => {
+    if (!isOpen || trimmedQuery.length < 2) {
+      setDebouncedResourceQuery("");
+      return;
+    }
+    const timeout = window.setTimeout(
+      () => setDebouncedResourceQuery(trimmedQuery),
+      200,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [isOpen, trimmedQuery]);
+  // Hide the previous response immediately while the next query is debouncing.
+  const resourceQuery =
+    debouncedResourceQuery === trimmedQuery ? debouncedResourceQuery : "";
 
   const candidates = useLauncherCandidates({
     enabled: isOpen,
@@ -291,8 +317,9 @@ export function CommandPalette(): JSX.Element {
     recentsUserId: recentsUserId ?? null,
     orgSlug,
     projectSlug,
+    query: resourceQuery,
+    onSearchMetrics: recordSearchMetrics,
   });
-  const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
 
   const ranked = useMemo(() => {
@@ -320,6 +347,7 @@ export function CommandPalette(): JSX.Element {
         pages,
         resources,
       });
+      if (searchMetrics.current) tracker.search(now, searchMetrics.current);
     }
     if (isOpen) {
       tracker.candidates(now, candidates.length, pages, resources);

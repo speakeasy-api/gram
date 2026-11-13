@@ -1,7 +1,7 @@
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { LauncherCandidate } from "./types";
 import { useAccessRequestCandidates } from "./useAccessRequestCandidates";
 import { useInferenceSetupCandidate } from "./useInferenceSetupCandidate";
@@ -22,7 +22,15 @@ import { usePluginCandidates } from "./usePluginCandidates";
 import { usePolicyCandidates } from "./usePolicyCandidates";
 import { useProjectCandidates } from "./useProjectCandidates";
 import { useRecentCandidates } from "./useRecentCandidates";
-import { useRuleCandidates } from "./useRuleCandidates";
+import {
+  useBuiltinRuleCandidates,
+  useRuleCandidates,
+} from "./useRuleCandidates";
+import {
+  createGrantFingerprint,
+  type ResourceSearchMetrics,
+  useResourceSearchCandidates,
+} from "./useResourceSearchCandidates";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useSourceCandidates } from "./useSourceCandidates";
 
@@ -55,16 +63,20 @@ export function useLauncherCandidates({
   recentsUserId,
   orgSlug,
   projectSlug,
+  query,
+  onSearchMetrics,
 }: {
   enabled: boolean;
   inProject: boolean;
   recentsUserId: string | null;
   orgSlug: string | undefined;
   projectSlug: string | undefined;
+  query: string;
+  onSearchMetrics?: (metrics: ResourceSearchMetrics) => void;
 }): LauncherCandidate[] {
   const organization = useOrganization();
   const project = useProject();
-  const { hasAnyScope, hasScope } = useRBAC();
+  const { grants, hasAnyScope, hasScope } = useRBAC();
   // Every org-level check names the organization: without a resource id
   // hasScope is existential (a grant on any org passes), so a member who is
   // an admin elsewhere would otherwise fire this tenant's forbidden calls.
@@ -103,6 +115,25 @@ export function useLauncherCandidates({
   const canReadSkills = hasScope("skill:read", project.id);
 
   const projectEnabled = enabled && inProject;
+  // Row-level assistant and MCP grants can change without changing any coarse
+  // page gate. Keep the canonical grant fingerprint local to the query cache; it
+  // is never included in palette telemetry.
+  const accessKey = useMemo(() => createGrantFingerprint(grants), [grants]);
+  const resourceSearch = useResourceSearchCandidates({
+    enabled: projectEnabled,
+    accessKey,
+    query,
+  });
+  useEffect(() => {
+    onSearchMetrics?.(resourceSearch.metrics);
+  }, [onSearchMetrics, resourceSearch.metrics]);
+  // A partial response identifies exactly which inventories need legacy
+  // coverage. Successful remote kinds never re-enable their old list calls.
+  const fallback = useCallback(
+    (kind: string) =>
+      projectEnabled && resourceSearch.fallbackKinds.has(kind as never),
+    [projectEnabled, resourceSearch.fallbackKinds],
+  );
 
   const gatewayConnections = useGatewayConnectionCandidates({
     enabled,
@@ -116,17 +147,19 @@ export function useLauncherCandidates({
     projectSlug,
   });
   const marketplace = useMarketplaceCandidate({ enabled, inProject });
+  // Assistants, skills, and MCP servers require exact per-row authorization,
+  // so they remain on their established local sources rather than remote search.
   const mcpServers = useMcpServerCandidates({
     enabled: projectEnabled && canListMcp,
   });
   const gateways = useGatewayCandidates({
-    enabled: projectEnabled && canListGateways,
+    enabled: fallback("gateway") && canListGateways,
   });
   const catalog = useCatalogCandidates({
     enabled: projectEnabled && canBrowseCatalog,
   });
   const plugins = usePluginCandidates({
-    enabled: projectEnabled && canListPlugins,
+    enabled: fallback("plugin") && canListPlugins,
   });
   const assistants = useAssistantCandidates({
     enabled: projectEnabled && canReadAssistants,
@@ -137,15 +170,27 @@ export function useLauncherCandidates({
   const inferenceSetup = useInferenceSetupCandidate({ enabled, inProject });
   const platformSetups = usePlatformSetupCandidates({ enabled, inProject });
   const agentIdentities = useAgentIdentityCandidates({ enabled });
-  const environments = useEnvironmentCandidates({ enabled: projectEnabled });
+  const environments = useEnvironmentCandidates({
+    enabled: fallback("environment"),
+  });
   const sources = useSourceCandidates({
     enabled: projectEnabled && canListMcp,
   });
-  const deployments = useDeploymentCandidates({ enabled: projectEnabled });
+  // Deployment rows are synthetic history entries, not durable named
+  // resources, so they remain on their existing independent source.
+  const deployments = useDeploymentCandidates({
+    enabled: projectEnabled,
+  });
   const policies = usePolicyCandidates({
     enabled: projectEnabled && isAdmin,
   });
-  const rules = useRuleCandidates({ enabled: projectEnabled && isAdmin });
+  const rules = useRuleCandidates({
+    enabled: fallback("rule") && isAdmin,
+    includeBuiltins: false,
+  });
+  const builtinRules = useBuiltinRuleCandidates({
+    enabled: projectEnabled && isAdmin,
+  });
   const accessRequests = useAccessRequestCandidates({
     enabled: projectEnabled && canReadApprovals,
   });
@@ -167,21 +212,23 @@ export function useLauncherCandidates({
       ...recents,
       ...marketplace,
       ...(inProject && canListMcp ? mcpServers : []),
-      ...(inProject && canListGateways ? gateways : []),
+      ...(inProject ? resourceSearch.candidates : []),
+      ...(fallback("gateway") && canListGateways ? gateways : []),
       // Directly below the project's own servers: when a name matches both,
       // what you already run should read first and the catalog offer second.
       ...(inProject && canBrowseCatalog ? catalog : []),
-      ...(inProject && canListPlugins ? plugins : []),
+      ...(fallback("plugin") && canListPlugins ? plugins : []),
       ...(inProject && canReadAssistants ? assistants : []),
       ...(inProject && canReadSkills ? skills : []),
       ...agentIdentities,
       ...inferenceSetup,
       ...platformSetups,
-      ...projectOnly(environments),
+      ...(fallback("environment") ? projectOnly(environments) : []),
       ...(inProject && canListMcp ? sources : []),
       ...projectOnly(deployments),
       ...adminOnly(policies),
-      ...adminOnly(rules),
+      ...adminOnly(builtinRules),
+      ...(fallback("rule") ? adminOnly(rules) : []),
       ...(inProject && canReadApprovals ? accessRequests : []),
       ...(canReadPeople ? people : []),
       ...(canReadDevices ? devices : []),
@@ -199,6 +246,8 @@ export function useLauncherCandidates({
     canBrowseCatalog,
     canReadAssistants,
     canReadSkills,
+    resourceSearch.candidates,
+    fallback,
     skills,
     agentIdentities,
     inferenceSetup,
@@ -217,6 +266,7 @@ export function useLauncherCandidates({
     deployments,
     policies,
     rules,
+    builtinRules,
     accessRequests,
     people,
     devices,

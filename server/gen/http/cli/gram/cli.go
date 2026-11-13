@@ -34,6 +34,7 @@ import (
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
 	chatsessionsc "github.com/speakeasy-api/gram/server/gen/http/chat_sessions/client"
 	cliauthc "github.com/speakeasy-api/gram/server/gen/http/cli_auth/client"
+	commandsearchc "github.com/speakeasy-api/gram/server/gen/http/command_search/client"
 	dashboardsc "github.com/speakeasy-api/gram/server/gen/http/dashboards/client"
 	dataexportsc "github.com/speakeasy-api/gram/server/gen/http/data_exports/client"
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
@@ -137,6 +138,7 @@ func UsageCommands() []string {
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|count-by-user|list-session-links)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
+		"command-search search",
 		"dashboards (list-dashboards|get-dashboard|create-dashboard|update-dashboard|save-dashboard-layout|add-dashboard-widget|remove-dashboard-widget|save-dashboard-filters|duplicate-dashboard|duplicate-built-in-dashboard|delete-dashboard)",
 		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs|evaluate-open-ap-iv3|get-deployment-evaluation)",
@@ -1033,6 +1035,14 @@ func ParseEndpoint(
 
 		cliAuthRedeemFlags    = flag.NewFlagSet("redeem", flag.ExitOnError)
 		cliAuthRedeemBodyFlag = cliAuthRedeemFlags.String("body", "REQUIRED", "")
+
+		commandSearchFlags = flag.NewFlagSet("command-search", flag.ContinueOnError)
+
+		commandSearchSearchFlags                = flag.NewFlagSet("search", flag.ExitOnError)
+		commandSearchSearchQFlag                = commandSearchSearchFlags.String("q", "REQUIRED", "")
+		commandSearchSearchSessionTokenFlag     = commandSearchSearchFlags.String("session-token", "", "")
+		commandSearchSearchApikeyTokenFlag      = commandSearchSearchFlags.String("apikey-token", "", "")
+		commandSearchSearchProjectSlugInputFlag = commandSearchSearchFlags.String("project-slug-input", "", "")
 
 		dashboardsFlags = flag.NewFlagSet("dashboards", flag.ContinueOnError)
 
@@ -5810,6 +5820,9 @@ func ParseEndpoint(
 	cliAuthAuthorizeFlags.Usage = cliAuthAuthorizeUsage
 	cliAuthRedeemFlags.Usage = cliAuthRedeemUsage
 
+	commandSearchFlags.Usage = commandSearchUsage
+	commandSearchSearchFlags.Usage = commandSearchSearchUsage
+
 	dashboardsFlags.Usage = dashboardsUsage
 	dashboardsListDashboardsFlags.Usage = dashboardsListDashboardsUsage
 	dashboardsGetDashboardFlags.Usage = dashboardsGetDashboardUsage
@@ -6873,6 +6886,8 @@ func ParseEndpoint(
 			svcf = chatSessionsFlags
 		case "cli-auth":
 			svcf = cliAuthFlags
+		case "command-search":
+			svcf = commandSearchFlags
 		case "dashboards":
 			svcf = dashboardsFlags
 		case "data-exports":
@@ -7538,6 +7553,13 @@ func ParseEndpoint(
 
 			case "redeem":
 				epf = cliAuthRedeemFlags
+
+			}
+
+		case "command-search":
+			switch epn {
+			case "search":
+				epf = commandSearchSearchFlags
 
 			}
 
@@ -10950,6 +10972,13 @@ func ParseEndpoint(
 			case "redeem":
 				endpoint = c.Redeem()
 				data, err = cliauthc.BuildRedeemPayload(*cliAuthRedeemBodyFlag)
+			}
+		case "command-search":
+			c := commandsearchc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "search":
+				endpoint = c.Search()
+				data, err = commandsearchc.BuildSearchPayload(*commandSearchSearchQFlag, *commandSearchSearchSessionTokenFlag, *commandSearchSearchApikeyTokenFlag, *commandSearchSearchProjectSlugInputFlag)
 			}
 		case "dashboards":
 			c := dashboardsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -17377,6 +17406,41 @@ func cliAuthRedeemUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cli-auth redeem --body '{\n      \"code\": \"abc123\",\n      \"code_verifier\": \"aaa\"\n   }'")
+}
+
+// commandSearchUsage displays the usage of the command-search command and its
+// subcommands.
+func commandSearchUsage() {
+	fmt.Fprintln(os.Stderr, `Searches authorized project resources for Command K.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] command-search COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    search: Returns compact openable resources matching a bounded server-side query.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s command-search COMMAND --help\n", os.Args[0])
+}
+func commandSearchSearchUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] command-search search", os.Args[0])
+	fmt.Fprint(os.Stderr, " -q STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns compact openable resources matching a bounded server-side query.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -q STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "command-search search --q \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // dashboardsUsage displays the usage of the dashboards command and its

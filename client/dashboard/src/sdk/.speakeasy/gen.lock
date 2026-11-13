@@ -232,6 +232,7 @@ trackedFiles:
   src/funcs/chatSummarizeToolCall.ts: {}
   src/funcs/cliAuthAuthorize.ts: {}
   src/funcs/cliAuthRedeem.ts: {}
+  src/funcs/commandSearchSearchResources.ts: {}
   src/funcs/dashboardsAddWidget.ts: {}
   src/funcs/dashboardsCreate.ts: {}
   src/funcs/dashboardsDelete.ts: {}
@@ -1095,6 +1096,8 @@ trackedFiles:
   src/models/components/cloneenvironmentrequestbody.ts: {}
   src/models/components/codexhookpayload.ts: {}
   src/models/components/codexhookresult.ts: {}
+  src/models/components/commandresourceindex.ts: {}
+  src/models/components/commandresourceindexitem.ts: {}
   src/models/components/commitserveridentityconfigurationform.ts: {}
   src/models/components/commitserveridentityconfigurationresult.ts: {}
   src/models/components/completebindingrefreshrequestbody.ts: {}
@@ -2996,6 +2999,7 @@ trackedFiles:
   src/models/operations/saveriskevalreview.ts: {}
   src/models/operations/searchbusinessmemories.ts: {}
   src/models/operations/searchchats.ts: {}
+  src/models/operations/searchcommandresources.ts: {}
   src/models/operations/searchlogs.ts: {}
   src/models/operations/searchtoolcalls.ts: {}
   src/models/operations/searchusers.ts: {}
@@ -4132,6 +4136,8 @@ trackedFiles:
   src/react-query/searchBusinessMemories.ts: {}
   src/react-query/searchChats.core.ts: {}
   src/react-query/searchChats.ts: {}
+  src/react-query/searchCommandResources.core.ts: {}
+  src/react-query/searchCommandResources.ts: {}
   src/react-query/searchLogs.ts: {}
   src/react-query/searchToolCalls.ts: {}
   src/react-query/searchUsers.core.ts: {}
@@ -4438,6 +4444,7 @@ trackedFiles:
   src/sdk/chat.ts: {}
   src/sdk/chatsessions.ts: {}
   src/sdk/cliauth.ts: {}
+  src/sdk/commandsearch.ts: {}
   src/sdk/customrules.ts: {}
   src/sdk/dashboards.ts: {}
   src/sdk/dataexports.ts: {}
@@ -13040,6 +13047,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  searchCommandResources:
+    speakeasy-default-search-command-resources:
+      parameters:
+        query:
+          q: "<value>"
+      responses:
+        "200":
+          application/json: {"failed_kinds": ["<value 1>", "<value 2>", "<value 3>"], "generated_at": "2026-12-28T14:32:17.946Z", "items": [{"id": "7ee9684a-cbd6-49b5-ba5a-8f725a5c32a2", "kind": "rule", "name": "<value>", "route_selector": "<value>"}], "partial": true, "schema_version": "1", "timed_out": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   searchLogs:
     speakeasy-default-search-logs:
       requestBody:

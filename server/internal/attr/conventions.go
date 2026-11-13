@@ -12,6 +12,25 @@ import (
 type Key = attribute.Key
 
 const (
+	// CommandSearchKindKey identifies one resource kind searched by Command K.
+	CommandSearchKindKey = attribute.Key("gram.command_search.kind")
+	// CommandSearchDurationMSKey records one adapter's elapsed milliseconds.
+	CommandSearchDurationMSKey = attribute.Key("gram.command_search.duration_ms")
+	// CommandSearchItemCountKey counts returned search items.
+	CommandSearchItemCountKey = attribute.Key("gram.command_search.item_count")
+	// CommandSearchFailedKey reports whether one search adapter failed.
+	CommandSearchFailedKey = attribute.Key("gram.command_search.failed")
+	// CommandSearchPayloadEstimateBytesKey estimates the compact response size.
+	CommandSearchPayloadEstimateBytesKey = attribute.Key("gram.command_search.payload_estimate_bytes")
+	// CommandSearchAdapterCountKey counts adapters started for one search.
+	CommandSearchAdapterCountKey = attribute.Key("gram.command_search.adapter_count")
+	// CommandSearchPartialKey reports whether the response omitted unfinished kinds.
+	CommandSearchPartialKey = attribute.Key("gram.command_search.partial")
+	// CommandSearchTimedOutKey reports whether the shared deadline elapsed.
+	CommandSearchTimedOutKey = attribute.Key("gram.command_search.timed_out")
+	// CommandSearchFailedKindCountKey counts resource kinds unfinished at the deadline.
+	CommandSearchFailedKindCountKey = attribute.Key("gram.command_search.failed_kind_count")
+
 	// SigintSensorIDKey identifies the sensor configuration responsible for an evaluation.
 	SigintSensorIDKey = attribute.Key("gram.sigint.sensor.id")
 
@@ -2065,6 +2084,47 @@ func SlogFlyOrgSlug(v string) slog.Attr      { return slog.String(string(FlyOrgS
 
 func FlyMachineIDs(v []string) attribute.KeyValue { return FlyMachineIDsKey.StringSlice(v) }
 func SlogFlyMachineIDs(v []string) slog.Attr      { return slog.Any(string(FlyMachineIDsKey), v) }
+
+func CommandSearchKind(v string) attribute.KeyValue { return CommandSearchKindKey.String(v) }
+func SlogCommandSearchKind(v string) slog.Attr {
+	return slog.String(string(CommandSearchKindKey), v)
+}
+func CommandSearchDurationMS(v int64) attribute.KeyValue { return CommandSearchDurationMSKey.Int64(v) }
+func SlogCommandSearchDurationMS(v int64) slog.Attr {
+	return slog.Int64(string(CommandSearchDurationMSKey), v)
+}
+func CommandSearchItemCount(v int) attribute.KeyValue { return CommandSearchItemCountKey.Int(v) }
+func SlogCommandSearchItemCount(v int) slog.Attr {
+	return slog.Int(string(CommandSearchItemCountKey), v)
+}
+func CommandSearchFailed(v bool) attribute.KeyValue { return CommandSearchFailedKey.Bool(v) }
+func SlogCommandSearchFailed(v bool) slog.Attr {
+	return slog.Bool(string(CommandSearchFailedKey), v)
+}
+func CommandSearchPayloadEstimateBytes(v int) attribute.KeyValue {
+	return CommandSearchPayloadEstimateBytesKey.Int(v)
+}
+func SlogCommandSearchPayloadEstimateBytes(v int) slog.Attr {
+	return slog.Int(string(CommandSearchPayloadEstimateBytesKey), v)
+}
+func CommandSearchAdapterCount(v int) attribute.KeyValue { return CommandSearchAdapterCountKey.Int(v) }
+func SlogCommandSearchAdapterCount(v int) slog.Attr {
+	return slog.Int(string(CommandSearchAdapterCountKey), v)
+}
+func CommandSearchPartial(v bool) attribute.KeyValue { return CommandSearchPartialKey.Bool(v) }
+func SlogCommandSearchPartial(v bool) slog.Attr {
+	return slog.Bool(string(CommandSearchPartialKey), v)
+}
+func CommandSearchTimedOut(v bool) attribute.KeyValue { return CommandSearchTimedOutKey.Bool(v) }
+func SlogCommandSearchTimedOut(v bool) slog.Attr {
+	return slog.Bool(string(CommandSearchTimedOutKey), v)
+}
+func CommandSearchFailedKindCount(v int) attribute.KeyValue {
+	return CommandSearchFailedKindCountKey.Int(v)
+}
+func SlogCommandSearchFailedKindCount(v int) slog.Attr {
+	return slog.Int(string(CommandSearchFailedKindCountKey), v)
+}
 
 func ValueAny(v any) attribute.KeyValue       { return ValueKey.String(fmt.Sprintf("%v", v)) }
 func SlogValueAny(v any) slog.Attr            { return slog.Any(string(ValueKey), v) }

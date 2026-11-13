@@ -3,7 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   scopes: [] as string[],
+  grants: [] as unknown[],
   gatewayCandidateOptions: [] as Array<{ enabled: boolean }>,
+  indexFallback: true,
+  failedKinds: [] as string[],
+  indexCandidates: [] as unknown[],
+  indexOptions: [] as Array<{
+    enabled: boolean;
+    accessKey: string;
+    query: string;
+  }>,
   includeNewResourceFixtures: false,
   /**
    * When set, the mcp:write grant is selector-scoped to these server ids:
@@ -51,6 +60,34 @@ const mocks = vi.hoisted(() => ({
   // Every SDK list hook records the options it was called with so the test can
   // prove nothing fetches while the palette is closed.
   calls: {} as Record<string, unknown[]>,
+}));
+
+vi.mock("./useResourceSearchCandidates", () => ({
+  createGrantFingerprint: (grants: unknown[]) => JSON.stringify(grants),
+  useResourceSearchCandidates: (options: {
+    enabled: boolean;
+    accessKey: string;
+    query: string;
+  }) => {
+    mocks.indexOptions.push(options);
+    return {
+      candidates: mocks.indexCandidates,
+      fallbackKinds: new Set(
+        mocks.indexFallback
+          ? ["environment", "gateway", "plugin", "rule"]
+          : mocks.failedKinds,
+      ),
+      metrics: {
+        state: mocks.indexFallback ? "fallback" : "ready",
+        searchRequestCount: options.enabled ? 1 : 0,
+        candidateCount: mocks.indexCandidates.length,
+        complete: !mocks.indexFallback,
+        truncated: false,
+        payloadByteBucket: "under_10k",
+        parseSearchDurationMs: 1,
+      },
+    };
+  },
 }));
 
 vi.mock("./useGatewayConnectionCandidates", () => ({
@@ -232,6 +269,7 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
+    grants: mocks.grants,
     hasAnyScope: (scopes: string[], resourceId?: string) => {
       mocks.rbacCalls.push({ fn: "hasAnyScope", scopes, resourceId });
       return scopes.some((scope) => mocks.scopes.includes(scope));
@@ -247,8 +285,13 @@ vi.mock("@/hooks/useRBAC", () => ({
 // The source hooks have their own query/navigation tests. Keep this suite
 // focused on launcher wiring and permission gates.
 vi.mock("./useSkillCandidates", () => ({
-  useSkillCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
-    enabled && mocks.includeNewResourceFixtures
+  useSkillCandidates: vi.fn(({ enabled }: { enabled: boolean }) => {
+    record("useSkillsInfinite", [
+      {},
+      undefined,
+      { enabled, throwOnError: false },
+    ]);
+    return enabled && mocks.includeNewResourceFixtures
       ? [
           {
             id: "skill:test",
@@ -261,8 +304,8 @@ vi.mock("./useSkillCandidates", () => ({
             run: () => {},
           },
         ]
-      : [],
-  ),
+      : [];
+  }),
 }));
 vi.mock("./useAgentIdentityCandidates", () => ({
   useAgentIdentityCandidates: vi.fn(({ enabled }: { enabled: boolean }) =>
@@ -391,6 +434,7 @@ function renderCandidates(
       recentsUserId: "user_1",
       orgSlug: "acme",
       projectSlug: mocks.inProject ? "default" : undefined,
+      query: "resource",
       ...overrides,
     }),
   );
@@ -415,6 +459,11 @@ function acme(projects: ReturnType<typeof project>[]) {
 
 beforeEach(() => {
   mocks.scopes = [];
+  mocks.grants = [];
+  mocks.indexFallback = true;
+  mocks.failedKinds = [];
+  mocks.indexCandidates = [];
+  mocks.indexOptions = [];
   mocks.includeNewResourceFixtures = false;
   mocks.mcpWriteResourceIds = null;
   mocks.inProject = true;
@@ -1675,6 +1724,121 @@ describe("useLauncherCandidates", () => {
       "person",
       "project",
     ]);
+  });
+
+  it("changes the search access key for row grants with identical coarse gates", () => {
+    mocks.scopes = ["assistant:read"];
+    mocks.grants = [
+      { scope: "assistant:read", selectors: [{ resourceId: "assistant-a" }] },
+    ];
+    const hook = renderCandidates();
+    const firstKey = mocks.indexOptions.at(-1)?.accessKey;
+
+    mocks.grants = [
+      { scope: "assistant:read", selectors: [{ resourceId: "assistant-b" }] },
+    ];
+    hook.rerender();
+    const secondKey = mocks.indexOptions.at(-1)?.accessKey;
+
+    expect(secondKey).not.toBe(firstKey);
+    expect(mocks.indexOptions.at(-1)?.enabled).toBe(true);
+  });
+
+  it("keeps assistants, skills, and MCP servers on legacy sources", () => {
+    mocks.indexFallback = false;
+    mocks.scopes = ["assistant:read", "skill:read", "mcp:read"];
+    renderCandidates();
+
+    for (const name of [
+      "useAssistantsList",
+      "useSkillsInfinite",
+      "useMcpServers",
+    ]) {
+      expect(optionsOf(mocks.calls[name]?.at(-1)).enabled, name).toBe(true);
+    }
+  });
+
+  it("enables legacy inventory only for failed remote kinds", () => {
+    mocks.indexFallback = false;
+    mocks.failedKinds = ["plugin"];
+    mocks.scopes = [
+      "org:read",
+      "org:admin",
+      "mcp:read",
+      "project:read",
+      "assistant:read",
+      "skill:read",
+    ];
+    renderCandidates();
+
+    expect(optionsOf(mocks.calls.usePlugins?.at(-1)).enabled).toBe(true);
+    for (const name of [
+      "useMetaMcpServers",
+      "useListEnvironments",
+      "useRiskListCustomDetectionRules",
+    ]) {
+      expect(optionsOf(mocks.calls[name]?.at(-1)).enabled, name).toBe(false);
+    }
+    for (const name of [
+      "useAssistantsList",
+      "useSkillsInfinite",
+      "useMcpServers",
+    ]) {
+      expect(optionsOf(mocks.calls[name]?.at(-1)).enabled, name).toBe(true);
+    }
+  });
+
+  it("uses remote search only for the four exact-authorized kinds", () => {
+    mocks.indexFallback = false;
+    mocks.indexCandidates = [
+      {
+        id: "environment:later",
+        kind: "environment",
+        title: "Later environment",
+        detail: "Environment",
+        keywords: ["environment", "later"],
+        verbs: ["open"],
+        group: "Skills",
+        run: vi.fn(),
+      },
+    ];
+    mocks.scopes = [
+      "org:read",
+      "org:admin",
+      "mcp:read",
+      "project:read",
+      "assistant:read",
+      "skill:read",
+    ];
+
+    const { result } = renderCandidates();
+
+    expect(mocks.indexOptions).toHaveLength(1);
+    expect(mocks.indexOptions[0]?.enabled).toBe(true);
+    expect(
+      result.current.some((candidate) => candidate.id === "environment:later"),
+    ).toBe(true);
+    for (const name of [
+      "useMetaMcpServers",
+      "usePlugins",
+      "useListEnvironments",
+      "useRiskListCustomDetectionRules",
+    ]) {
+      const calls = mocks.calls[name] ?? [];
+      expect(calls.length, name).toBeGreaterThan(0);
+      for (const args of calls)
+        expect(optionsOf(args).enabled, name).toBe(false);
+    }
+    for (const name of [
+      "useMcpServers",
+      "useAssistantsList",
+      "useSkillsInfinite",
+      "useListDeployments",
+    ]) {
+      for (const args of mocks.calls[name] ?? []) {
+        expect(optionsOf(args).enabled, name).toBe(true);
+      }
+    }
   });
 
   it("passes enabled:false to every SDK query while the palette is closed", () => {

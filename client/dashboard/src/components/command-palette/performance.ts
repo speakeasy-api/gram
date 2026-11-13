@@ -1,4 +1,5 @@
 import type { Telemetry } from "@/contexts/Telemetry";
+import type { ResourceSearchMetrics } from "./candidates/useResourceSearchCandidates";
 
 export const COMMAND_PALETTE_PERFORMANCE_EVENT =
   "command_palette_open_performance";
@@ -6,7 +7,7 @@ export const COMMAND_PALETTE_PERFORMANCE_EVENT =
 const RESOURCE_QUIET_WINDOW_MS = 300;
 
 export interface CommandPalettePerformancePayload {
-  schema_version: 1;
+  schema_version: 4;
   scope: "organization" | "project";
   cache_state: "cold" | "warm";
   candidate_count_at_open: number;
@@ -20,6 +21,19 @@ export interface CommandPalettePerformancePayload {
   ranking_invocation_count: number;
   ranking_duration_ms: number;
   ranking_max_duration_ms: number;
+  inventory_call_baseline: 17;
+  searched_resource_kind_count: 4;
+  net_eliminated_inventory_call_baseline: 3;
+  remaining_inventory_call_baseline: 14;
+  search_request_count: number;
+  modeled_no_fallback_call_count: number;
+  search_candidate_count: number;
+  search_complete: boolean;
+  search_truncated: boolean;
+  search_payload_byte_bucket: ResourceSearchMetrics["payloadByteBucket"];
+  time_to_search_ready_ms: number | null;
+  parse_search_duration_ms: number | null;
+  fallback_used: boolean;
 }
 
 interface Session {
@@ -34,6 +48,14 @@ interface Session {
   rankingInvocationCount: number;
   rankingDuration: number;
   rankingMaxDuration: number;
+  searchRequestCount: number;
+  searchCandidateCount: number;
+  searchComplete: boolean;
+  searchTruncated: boolean;
+  searchPayloadByteBucket: ResourceSearchMetrics["payloadByteBucket"];
+  searchReadyAt: number | null;
+  parseSearchDuration: number | null;
+  fallbackUsed: boolean;
 }
 
 /**
@@ -69,6 +91,14 @@ export class CommandPalettePerformanceTracker {
       rankingInvocationCount: 0,
       rankingDuration: 0,
       rankingMaxDuration: 0,
+      searchRequestCount: 0,
+      searchCandidateCount: 0,
+      searchComplete: false,
+      searchTruncated: false,
+      searchPayloadByteBucket: null,
+      searchReadyAt: null,
+      parseSearchDuration: null,
+      fallbackUsed: false,
     };
   }
 
@@ -92,6 +122,25 @@ export class CommandPalettePerformanceTracker {
     }
   }
 
+  search(now: number, metrics: ResourceSearchMetrics): void {
+    const session = this.session;
+    if (!session) return;
+    session.searchRequestCount = Math.max(
+      session.searchRequestCount,
+      metrics.searchRequestCount,
+    );
+    session.fallbackUsed ||= metrics.state === "fallback";
+    // Partial searches are classified as fallback but still contain useful
+    // successful-kind rows and parse measurements.
+    if (metrics.state !== "ready" && metrics.candidateCount === 0) return;
+    session.searchCandidateCount = metrics.candidateCount;
+    session.searchComplete = metrics.complete;
+    session.searchTruncated = metrics.truncated;
+    session.searchPayloadByteBucket = metrics.payloadByteBucket;
+    session.parseSearchDuration = metrics.parseSearchDurationMs;
+    session.searchReadyAt ??= now;
+  }
+
   ranking(durationMs: number): void {
     const session = this.session;
     if (!session) return;
@@ -112,7 +161,7 @@ export class CommandPalettePerformanceTracker {
     const quietAt = session.lastCandidateChangeAt + RESOURCE_QUIET_WINDOW_MS;
     const quiet = quietAt <= now;
     return {
-      schema_version: 1,
+      schema_version: 4,
       scope,
       cache_state: session.warm ? "warm" : "cold",
       candidate_count_at_open: session.candidateCountAtOpen,
@@ -134,6 +183,25 @@ export class CommandPalettePerformanceTracker {
       ranking_invocation_count: session.rankingInvocationCount,
       ranking_duration_ms: session.rankingDuration,
       ranking_max_duration_ms: session.rankingMaxDuration,
+      // Four exact-authorized kinds are searched. Gateway registration still
+      // needs its shared inventory, so three list requests are net eliminated.
+      // This is an explicit no-fallback model, not a measured total.
+      inventory_call_baseline: 17,
+      searched_resource_kind_count: 4,
+      net_eliminated_inventory_call_baseline: 3,
+      remaining_inventory_call_baseline: 14,
+      search_request_count: session.searchRequestCount,
+      modeled_no_fallback_call_count: 14 + session.searchRequestCount,
+      search_candidate_count: session.searchCandidateCount,
+      search_complete: session.searchComplete,
+      search_truncated: session.searchTruncated,
+      search_payload_byte_bucket: session.searchPayloadByteBucket,
+      time_to_search_ready_ms:
+        session.searchReadyAt === null
+          ? null
+          : Math.max(0, session.searchReadyAt - session.startedAt),
+      parse_search_duration_ms: session.parseSearchDuration,
+      fallback_used: session.fallbackUsed,
     };
   }
 }

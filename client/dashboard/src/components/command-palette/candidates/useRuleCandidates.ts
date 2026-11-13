@@ -16,8 +16,10 @@ import type { LauncherCandidate } from "./types";
  */
 export function useRuleCandidates({
   enabled,
+  includeBuiltins = true,
 }: {
   enabled: boolean;
+  includeBuiltins?: boolean;
 }): LauncherCandidate[] {
   const routes = useRoutes();
   const navigate = useNavigate();
@@ -47,22 +49,34 @@ export function useRuleCandidates({
       title: rule.title,
       severity: rule.severity as string,
     }));
-    return [...builtin, ...custom].map((rule): LauncherCandidate => ({
-      id: `rule:${rule.id}`,
-      kind: "rule",
-      title: rule.title,
-      detail: `Detection rule · ${rule.severity}`,
-      keywords: ["detection", "rule", rule.id],
-      verbs: ["open"],
-      icon: "scan-search",
-      group: "Detection Rules",
-      // No per-rule route; the deep link opens the rule's sheet on the
-      // Guardrails page's Detection Rules tab.
-      run: () => {
-        void navigate(
-          `${routes.policyCenter.href()}?tab=detection-rules&rule=${encodeURIComponent(rule.id)}`,
-        );
-      },
-    }));
-  }, [data, routes, navigate]);
+    return [...(includeBuiltins ? builtin : []), ...custom].map(
+      (rule): LauncherCandidate => ({
+        id: `rule:${rule.id}`,
+        kind: "rule",
+        title: rule.title,
+        detail: `Detection rule · ${rule.severity}`,
+        keywords: ["detection", "rule", rule.id],
+        verbs: ["open"],
+        icon: "scan-search",
+        group: "Detection Rules",
+        // No per-rule route; the deep link opens the rule's sheet on the
+        // Guardrails page's Detection Rules tab.
+        run: () => {
+          void navigate(
+            `${routes.policyCenter.href()}?tab=detection-rules&rule=${encodeURIComponent(rule.id)}`,
+          );
+        },
+      }),
+    );
+  }, [data, includeBuiltins, routes, navigate]);
+}
+
+/** Static built-ins stay local; the server index intentionally stores rows only. */
+export function useBuiltinRuleCandidates({
+  enabled,
+}: {
+  enabled: boolean;
+}): LauncherCandidate[] {
+  const candidates = useRuleCandidates({ enabled: false });
+  return enabled ? candidates : [];
 }

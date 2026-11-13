@@ -1244,6 +1244,10 @@ CREATE INDEX IF NOT EXISTS plugins_project_id_idx
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_id_key ON plugins (project_id, id);
 
+CREATE INDEX IF NOT EXISTS plugins_organization_project_lower_name_idx
+  ON plugins (organization_id, project_id, lower(name))
+  WHERE deleted IS FALSE;
+
 -- Only one plugin per project may be the default (fallback) target that new
 -- servers land in absent explicit routing to a named plugin.
 CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_is_default_key
@@ -2520,6 +2524,10 @@ COMMENT ON COLUMN environments.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS environments_project_id_slug_key
 ON environments (project_id, slug)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS environments_project_id_lower_name_idx
+ON environments (project_id, lower(name))
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS trigger_instances (
@@ -11041,6 +11049,10 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS meta_mcp_servers_project_id_id_key
 ON meta_mcp_servers (project_id, id);
 
+CREATE INDEX IF NOT EXISTS meta_mcp_servers_organization_project_lower_name_idx
+ON meta_mcp_servers (organization_id, project_id, lower(name))
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS meta_mcp_server_members (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -11896,6 +11908,10 @@ COMMENT ON COLUMN risk_custom_detection_rules.deleted IS '@access: confidential'
 
 CREATE UNIQUE INDEX IF NOT EXISTS risk_custom_detection_rules_project_rule_id_key
 ON risk_custom_detection_rules (project_id, rule_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_custom_rules_org_project_lower_title_idx
+ON risk_custom_detection_rules (organization_id, project_id, lower(title))
 WHERE deleted IS FALSE;
 
 -- Exclusions suppress false-positive risk findings. They are applied going
