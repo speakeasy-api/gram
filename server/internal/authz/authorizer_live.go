@@ -13,9 +13,10 @@ import (
 
 const authorizerWouldRefuseLog = "authz check passes the credential's policies but not the live policy of the user it acts for"
 
-// authorizerRefuses reports whether the live policy of the user the credential
-// acts for refuses a check. Auth-client checks are left out: that policy
-// already decides them.
+// authorizerRefuses reports whether a policy of the user the credential acts
+// for refuses a check: that user's live policy and, under an admission
+// boundary, the one admitted with it. These are the policies an auth-client
+// check must already pass, which is why auth-client checks are left out.
 func (a grantAuthorization) authorizerRefuses(check Check) (bool, error) {
 	if len(a.representedPolicies) == 0 || check.isAuthClientCheck() {
 		return false, nil
@@ -32,35 +33,40 @@ func (a grantAuthorization) authorizerRefuses(check Check) (bool, error) {
 	return false, nil
 }
 
-// authorizerWouldRefuse returns the allowed checks the authorizer's live
-// policy refuses. With anyOf it returns them only when that policy refuses
-// every allowed alternative, since one surviving alternative keeps the
-// request allowed.
-func (a grantAuthorization) authorizerWouldRefuse(allowed []Check, anyOf bool) []Check {
+// authorizerWouldRefuse returns the allowed checks the authorizer's policies
+// refuse. With anyOf it returns them only when those policies refuse every
+// allowed alternative, since one surviving alternative keeps the request
+// allowed. A check that cannot be evaluated is not proven refused: it is left
+// out, it counts as a surviving alternative, and its error is returned.
+func (a grantAuthorization) authorizerWouldRefuse(allowed []Check, anyOf bool) ([]Check, error) {
 	if len(a.representedPolicies) == 0 {
-		return nil
+		return nil, nil
 	}
 	var refused []Check
+	var firstErr error
 	for _, check := range allowed {
 		refuses, err := a.authorizerRefuses(check)
-		if err != nil {
-			continue
+		if err != nil && firstErr == nil {
+			firstErr = err
 		}
-		if !refuses && anyOf {
-			return nil
+		if (err != nil || !refuses) && anyOf {
+			return nil, firstErr
 		}
-		if refuses {
+		if err == nil && refuses {
 			refused = append(refused, check)
 		}
 	}
-	return refused
+	return refused, firstErr
 }
 
-// reportAuthorizerRefusals logs, once per request, that a request was allowed
-// checks the authorizer's live policy refuses, naming the first of them. The
-// decision is unchanged.
+// reportAuthorizerRefusals logs, once per engine call, that the call was
+// allowed checks the authorizer's policies refuse, naming the first of them.
+// The decision is unchanged.
 func (e *Engine) reportAuthorizerRefusals(ctx context.Context, authorization grantAuthorization, allowed []Check, anyOf bool) {
-	refused := authorization.authorizerWouldRefuse(allowed, anyOf)
+	refused, err := authorization.authorizerWouldRefuse(allowed, anyOf)
+	if err != nil {
+		e.logger.ErrorContext(ctx, "authz check could not be evaluated against the policy of the user the credential acts for", attr.SlogUserID(authorization.representedUser), attr.SlogError(err))
+	}
 	if len(refused) == 0 {
 		return
 	}

@@ -108,7 +108,7 @@ go test ./internal/agents/runtimepolicy -run TestStoredPolicyFixtures -args -wri
 
 The flag refuses to overwrite a fixture. Never regenerate an existing one, because those fixtures are what old stored policies are decoded against.
 
-A credential that acts for a user also carries that user's live policy. Today it decides auth-client checks only. The engine logs a warning (`authz check passes the credential's policies but not the live policy of the user it acts for`) for every other check that policy would refuse, and after the logging window it will refuse them. A workload session acts for nobody and is bounded by its owner only.
+A credential that acts for a user also carries that user's live policy. Today it decides auth-client checks only. For every other check, the engine logs one warning per engine call (`authz check passes the credential's policies but not the live policy of the user it acts for`) when the call is allowed a check that policy would refuse. `RequireAny` and `Can(AnyOf(...))` log only when it refuses every allowed alternative. After the logging window those checks will be refused. A workload session acts for nobody and is bounded by its owner only.
 
 ## Never
 
