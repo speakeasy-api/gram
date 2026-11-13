@@ -64,6 +64,10 @@ type Service struct {
 	// features chooses the runtime of a new ingress
 	// (feature.FlagPrivateNetworkGateway); nil means the operator.
 	features feature.Provider
+
+	// namer turns requested hostnames into stored ones, so a local
+	// development stack's stay apart from production's on a shared tailnet.
+	namer Namer
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -90,6 +94,7 @@ func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerP
 		publicationRequester: publicationRequester,
 		health:               health,
 		features:             nil,
+		namer:                ProductionNamer{},
 	}
 }
 
@@ -116,6 +121,11 @@ func (s *Service) newIngressRuntime(ctx context.Context, authCtx *contextvalues.
 		return pgtype.Text{String: "", Valid: false}
 	}
 	return conv.ToPGText(RuntimeGateway)
+}
+
+// UseNamer replaces the ProductionNamer, as a local development stack does.
+func (s *Service) UseNamer(namer Namer) {
+	s.namer = namer
 }
 
 func Attach(mux goahttp.Muxer, service *Service, enabled bool) {
@@ -224,7 +234,13 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	}
 	// Decided before the transaction: the flag can need a network call.
 	runtime := s.newIngressRuntime(ctx, authCtx)
-	hostname := conv.PtrValOr(payload.Hostname, DefaultHostname)
+	hostname, err := s.namer.Hostname(ctx, conv.PtrValOr(payload.Hostname, DefaultHostname))
+	if errors.Is(err, ErrReservedHostname) {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "name network ingress hostname").LogError(ctx, s.logger)
+	}
 	if err := validateHostname(hostname); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}
@@ -315,6 +331,14 @@ func (s *Service) UpdateIngress(ctx context.Context, payload *gen.UpdateIngressP
 		return nil, oops.E(oops.CodeBadRequest, nil, "provide at least one ingress setting")
 	}
 	if payload.Hostname != nil {
+		hostname, err := s.namer.Hostname(ctx, *payload.Hostname)
+		if errors.Is(err, ErrReservedHostname) {
+			return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "name network ingress hostname").LogError(ctx, s.logger)
+		}
+		payload.Hostname = &hostname
 		if err := validateHostname(*payload.Hostname); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 		}

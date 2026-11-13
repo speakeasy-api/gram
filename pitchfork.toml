@@ -24,7 +24,22 @@ daemons = [
   "assistant-relay",
   "tunnel-gateway",
   "tailnet-gateway",
+  "network-ingress-server",
+  "network-ingress-worker",
   "code-runtime",
+]
+
+# Opt-in local private network: `pitchfork start --group private-network`.
+# The listener, its reconciler and the tailnet gateway run without Kubernetes;
+# the gateway attests with a local HMAC-signed token. It needs a real tailnet
+# and an organization with the network_ingress entitlement, so it is not in
+# the default group. Its daemons are also in the application group, so pausing
+# the stack stops them with Postgres.
+[groups.private-network]
+daemons = [
+  "network-ingress-server",
+  "network-ingress-worker",
+  "tailnet-gateway",
 ]
 
 [groups.default]
@@ -137,13 +152,20 @@ ready_output = "Assistant relay ready:"
 run = "mise run start:tunnel-gateway"
 ready_cmd = "mise run check:daemon --name {{name}}"
 
-# Opt-in: hosts private network ingresses on a real customer tailnet, so it is
-# not in the default group. Start it with `pitchfork start tailnet-gateway`
-# after setting the GRAM_TAILNET_GATEWAY_* listener settings in mise.local.toml.
-# It is in the application group so pausing the stack stops it with Postgres.
+# Private network group (opt-in). The listener comes first: it creates the
+# attestation key and token the gateway presents, and the gateway forwards to it.
+[daemons.network-ingress-server]
+run = "mise run start:network-ingress-server"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
+[daemons.network-ingress-worker]
+run = "mise run start:network-ingress-worker"
+ready_cmd = "mise run check:daemon --name {{name}}"
+
 [daemons.tailnet-gateway]
 run = "mise run start:tailnet-gateway"
 ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["network-ingress-server"]
 
 # Started by start only when the local code provider is configured.
 [daemons.code-runtime]

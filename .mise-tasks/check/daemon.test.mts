@@ -95,3 +95,28 @@ for (const [name, hostVar, portVar] of viteDaemons) {
     });
   }
 }
+
+const loopbackDaemons = [
+  ["network-ingress-server", "GRAM_NETINGRESS_CONTROL_PORT"],
+  ["network-ingress-worker", "GRAM_NETWORK_INGRESS_WORKER_CONTROL_PORT"],
+] as const;
+
+for (const [name, portVar] of loopbackDaemons) {
+  test(`${name} probes its loopback control port`, () => {
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        'mise() { printf "%s" "$4"; }; source "$1"',
+        "check-daemon-test",
+        task,
+      ],
+      {
+        env: { ...process.env, usage_name: name, [portVar]: "23456" },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "http://127.0.0.1:23456/healthz");
+  });
+}

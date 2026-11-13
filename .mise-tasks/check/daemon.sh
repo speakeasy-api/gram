@@ -63,6 +63,14 @@ case "$usage_name" in
   tailnet-gateway)
     mise run check:http --url "http://$(probe_address "${GRAM_TAILNET_GATEWAY_CONTROL_ADDRESS:-localhost:${GRAM_TAILNET_GATEWAY_CONTROL_PORT:-8093}}")/readyz"
     ;;
+  # Both bind loopback at their control ports (see their start tasks). The
+  # listener's /healthz also reviews the gateway's local attestation token.
+  network-ingress-server)
+    mise run check:http --url "http://127.0.0.1:$GRAM_NETINGRESS_CONTROL_PORT/healthz"
+    ;;
+  network-ingress-worker)
+    mise run check:http --url "http://127.0.0.1:$GRAM_NETWORK_INGRESS_WORKER_CONTROL_PORT/healthz"
+    ;;
   *)
     echo "error: unknown daemon name: $usage_name" >&2
     exit 1
