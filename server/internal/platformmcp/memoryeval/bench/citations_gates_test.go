@@ -86,7 +86,9 @@ func gateStatuses(result GateResult) map[string]GateStatus {
 func TestEvaluateGatesComparesCandidatesWithTheBaseline(t *testing.T) {
 	t.Parallel()
 	hard := func(correct, total int) map[memoryeval.QuestionKind]KindScore {
-		return map[memoryeval.QuestionKind]KindScore{memoryeval.QuestionSynthesis: {Correct: correct, Total: total}}
+		byKind := make(map[memoryeval.QuestionKind]KindScore)
+		byKind[memoryeval.QuestionSynthesis] = KindScore{Correct: correct, Total: total}
+		return byKind
 	}
 	base := ArmScore{Model: "m/one", Arm: BaselineArm, HasTools: true, AccuracyByRun: []float64{0.83}, Accuracy: 0.83, ByKind: hard(10, 15), Answerable: 45, CitationCredit: 23, ToolTokensPerQuestion: 3691, Negatives: 5, NotFound: 5}
 	good := ArmScore{Model: "m/one", Arm: "D: recall", HasTools: true, AccuracyByRun: []float64{0.9}, Accuracy: 0.9, ByKind: hard(13, 15), Answerable: 45, CitationCredit: 43, ToolTokensPerQuestion: 5000, Negatives: 5, NotFound: 4, Leaks: nil, IsolationViolations: nil}
