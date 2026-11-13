@@ -475,12 +475,13 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 	if status, rejected := rt.rejection(); rejected {
 		// As on a direct server: only a rejected credential the final request still carried is recorded.
 		answer := rt.rejectedBy()
-		code, ok := remotemcp.UpstreamFailureHappened(status, remotemcp.CredentialRejected(status, answer.challenges), dial.sentCredential(answer), dial.tunneled, "", errors.Join(err, exchangeErr))
+		credentialRejected, sent := remotemcp.CredentialRejected(status, answer.challenges), dial.sentCredential(answer)
+		code, ok := remotemcp.UpstreamFailureHappened(status, credentialRejected, sent, dial.tunneled, "", errors.Join(err, exchangeErr))
 		if !ok && dial.anonymous && !dial.configuredHeaders {
 			// Nothing could be sent, so the caller has no connection to it.
 			code = mcpconnectionattempts.CodeInvalidRemoteSession
 		}
-		return memberConnectionError{memberAuthFailure(member, dial, status), code}
+		return memberConnectionError{memberAuthFailure(member, dial, status, sent.Configured, credentialRejected), code}
 	}
 	status := rt.status()
 	if upstreamStatusOK(status) {
