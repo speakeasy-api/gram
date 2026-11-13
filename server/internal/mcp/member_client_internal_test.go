@@ -439,20 +439,24 @@ func TestMemberClientFailureClassifiesUnansweredExchanges(t *testing.T) {
 func TestMemberClientFailureRetriesOnlyTransportFailuresARetryCanChange(t *testing.T) {
 	t.Parallel()
 
+	const noAnswer = `server "fixture" did not answer: upstream unreachable or timed out`
 	for name, tc := range map[string]struct {
 		err       error
 		retryable bool
+		text      string
 	}{
-		"connection reset": {err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, retryable: true},
-		"i/o timeout":      {err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}, retryable: false},
-		"blocked address":  {err: fmt.Errorf("dial member: %w", guardian.ErrBlockedIP), retryable: false},
+		"connection reset": {err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, retryable: true, text: noAnswer},
+		"i/o timeout":      {err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}, retryable: false, text: noAnswer},
+		"blocked address":  {err: fmt.Errorf("dial member: %w", guardian.ErrBlockedIP), retryable: false, text: `server "fixture" has an address that is not allowed by network policy`},
+		"no such host":     {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "member.example.invalid", IsNotFound: true}}, retryable: true, text: `server "fixture" has an address that could not be found`},
+		"lookup timeout":   {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "timeout", Name: "member.example.com", IsTimeout: true, IsTemporary: true}}, retryable: false, text: noAnswer},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			attempt := newMemberAttempt(nil)
 			attempt.recordFailure(true, false, tc.err)
 			got := memberClientFailure(t.Context(), testenv.NewLogger(t), attempt, memberDial{}, metaMember{slug: "fixture"}, tc.err)
-			require.EqualError(t, got, `server "fixture" did not answer: upstream unreachable or timed out`)
+			require.EqualError(t, got, tc.text)
 			failure, ok := errors.AsType[memberDiscoveryError](got)
 			require.True(t, ok, "%v", got)
 			require.Equal(t, tc.retryable, failure.retryable)

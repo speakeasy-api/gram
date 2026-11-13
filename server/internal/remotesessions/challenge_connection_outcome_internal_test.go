@@ -3,15 +3,20 @@ package remotesessions
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestProviderErrorHappened(t *testing.T) {
@@ -38,6 +43,27 @@ func TestExchangeRequestConfigurationIsNotProviderFailure(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, exchangeHappened(err, false))
 }
 
+// A token endpoint egress policy refuses is never dialed, so it is the admin's and says so.
+func TestExchangeToBlockedAddressIsNotProviderFailure(t *testing.T) {
+	t.Parallel()
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("a blocked address must not be dialed")
+	}))
+	t.Cleanup(tokenServer.Close)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{"127.0.0.0/8", "::1/128"})
+	require.NoError(t, err)
+
+	manager := &ChallengeManager{}
+	_, err = manager.exchangeCode(t.Context(), policy.Client(), RemoteLoginState{TokenEndpoint: tokenServer.URL}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodNone}, "", "code")
+	require.Error(t, err)
+	require.Equal(t, mcpconnectionattempts.CodeAddressNotAllowed, exchangeHappened(err, false))
+
+	failure := exchangeFailure(t.Context(), testenv.NewLogger(t), err, false)
+	require.Equal(t, oops.CodeGatewayError, failure.Code, "the status is unchanged")
+	require.Equal(t, "token exchange with the identity provider failed: the identity provider's address is not allowed by network policy", failure.Error())
+}
+
 func TestExchangeHappened(t *testing.T) {
 	t.Parallel()
 
@@ -59,6 +85,8 @@ func TestExchangeHappened(t *testing.T) {
 		"503":             {oauth(http.StatusServiceUnavailable, ""), false, mcpconnectionattempts.CodeProviderUnavailable},
 		"500":             {oauth(http.StatusInternalServerError, ""), false, mcpconnectionattempts.CodeProviderServerError},
 		"unreachable":     {&tokenExchangeUnavailableError{err: errors.New("dial")}, false, mcpconnectionattempts.CodeProviderUnreachable},
+		"no such host":    {&tokenExchangeUnavailableError{err: &net.DNSError{Err: "no such host", Name: "idp.example.invalid", IsNotFound: true}}, false, mcpconnectionattempts.CodeAddressNotFound},
+		"lookup timeout":  {&tokenExchangeUnavailableError{err: &net.DNSError{Err: "timeout", Name: "idp.example.com", IsTimeout: true, IsTemporary: true}}, false, mcpconnectionattempts.CodeProviderUnreachable},
 		"no tunnel route": {&tokenExchangeUnavailableError{err: fmt.Errorf("post: %w", tunnelrouting.ErrNoTunnelRoute)}, true, mcpconnectionattempts.CodeTunnelUnavailable},
 		"tunnel answered": {&tokenEndpointError{statusCode: http.StatusBadGateway, tunnelError: "unreachable", err: errors.New("x")}, true, mcpconnectionattempts.CodeTunnelUnavailable},
 		"signing":         {&tokenEndpointSigningError{err: errors.New("kms")}, false, mcpconnectionattempts.CodeInternalError},

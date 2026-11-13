@@ -10,6 +10,9 @@ import (
 // A refresh deferred because another request holds the lock gets the zero code: that request's row covers it.
 // An unclassified outage is ours, not evidence that the provider failed.
 func ConnectionOutageHappened(err error) mcpconnectionattempts.Code {
+	if code, ok := OutageAddressHappened(err); ok {
+		return code
+	}
 	if TokenEndpointCausedOutage(err) {
 		return mcpconnectionattempts.CodeRemoteSessionUnavailable
 	}
@@ -28,4 +31,17 @@ func ConnectionOutageHappened(err error) mcpconnectionattempts.Code {
 	case RefreshOutageNone:
 	}
 	return mcpconnectionattempts.CodeInternalError
+}
+
+// OutageAddressHappened names an outage whose provider address Speakeasy did not dial:
+// a refresh or client credential request egress policy refused, or a name that does not exist.
+func OutageAddressHappened(err error) (mcpconnectionattempts.Code, bool) {
+	if endpoint, ok := errors.AsType[*TokenEndpointError](err); ok && !endpoint.Signing {
+		return mcpconnectionattempts.AddressHappened(endpoint.sendFailure)
+	}
+	if refreshErr, ok := errors.AsType[*RefreshError](err); ok && refreshErr.outageCause == RefreshOutageProvider {
+		return mcpconnectionattempts.AddressHappened(refreshErr.err)
+	}
+	var none mcpconnectionattempts.Code
+	return none, false
 }

@@ -134,6 +134,9 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 	case remotesessionmetrics.RefreshOutcomeRateLimited:
 		return mcpconnectionattempts.CodeProviderRateLimited, true
 	case remotesessionmetrics.RefreshOutcomeUnreachable:
+		if code, ok := mcpconnectionattempts.AddressHappened(err); ok {
+			return code, true
+		}
 		return mcpconnectionattempts.CodeProviderUnreachable, true
 	case remotesessionmetrics.RefreshOutcomeInternalError:
 		if errors.Is(err, errStoredTokenUnreadable) {

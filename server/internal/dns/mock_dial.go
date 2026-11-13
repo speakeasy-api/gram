@@ -3,6 +3,7 @@ package dns
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -66,7 +67,8 @@ func (m *MockResolver) serveDNS(ctx context.Context, conn net.Conn) {
 }
 
 // handleQuery parses a raw DNS query, calls the matching mock function, and
-// returns a packed DNS response.
+// returns a packed DNS response. A *net.DNSError with IsNotFound answers NXDOMAIN;
+// any other error answers SERVFAIL.
 func (m *MockResolver) handleQuery(ctx context.Context, raw []byte) []byte {
 	var query dnsmessage.Message
 	if err := query.Unpack(raw); err != nil {
@@ -80,6 +82,9 @@ func (m *MockResolver) handleQuery(ctx context.Context, raw []byte) []byte {
 	q := query.Questions[0]
 
 	answers, err := m.answersForQuestion(ctx, q)
+	if dnsErr, ok := errors.AsType[*net.DNSError](err); ok && dnsErr.IsNotFound {
+		return m.buildResponse(query.Header, &q, dnsmessage.RCodeNameError)
+	}
 	if err != nil {
 		return m.buildSERVFAIL(query.Header, &q, err)
 	}
@@ -302,6 +307,11 @@ func (m *MockResolver) answersForQuestion(ctx context.Context, q dnsmessage.Ques
 // buildSERVFAIL builds a minimal SERVFAIL DNS response. The error is silently
 // discarded since DNS wire format cannot carry error messages.
 func (m *MockResolver) buildSERVFAIL(reqHeader dnsmessage.Header, q *dnsmessage.Question, _ error) []byte {
+	return m.buildResponse(reqHeader, q, dnsmessage.RCodeServerFailure)
+}
+
+// buildResponse builds a minimal answerless DNS response with rcode.
+func (m *MockResolver) buildResponse(reqHeader dnsmessage.Header, q *dnsmessage.Question, rcode dnsmessage.RCode) []byte {
 	resp := dnsmessage.Message{
 		Header: dnsmessage.Header{
 			ID:                 reqHeader.ID,
@@ -313,7 +323,7 @@ func (m *MockResolver) buildSERVFAIL(reqHeader dnsmessage.Header, q *dnsmessage.
 			RecursionAvailable: false,
 			AuthenticData:      false,
 			CheckingDisabled:   false,
-			RCode:              dnsmessage.RCodeServerFailure,
+			RCode:              rcode,
 		},
 		Questions:   nil,
 		Answers:     nil,

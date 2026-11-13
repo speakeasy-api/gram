@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
@@ -54,6 +55,10 @@ func (p *Proxy) classifyForwardError(ctx context.Context, err error, timedOut bo
 		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").LogError(ctx, p.Logger)
 	case errors.Is(err, context.Canceled):
 		return oops.E(oops.CodeBadRequest, err, "client cancelled request").LogError(ctx, p.Logger)
+	case errors.Is(err, guardian.ErrBlockedIP):
+		return oops.E(oops.CodeGatewayError, err, "remote mcp server address is not allowed by network policy").LogError(ctx, p.Logger)
+	case guardian.IsAddressNotFound(err):
+		return oops.E(oops.CodeGatewayError, err, "remote mcp server address could not be found").LogError(ctx, p.Logger)
 	default:
 		return oops.E(oops.CodeGatewayError, err, "remote mcp server unreachable").LogError(ctx, p.Logger)
 	}

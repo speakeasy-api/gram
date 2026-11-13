@@ -141,6 +141,19 @@ func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
 	return clientCredentialMisconfiguredError(err)
 }
 
+// signInAddressWords finishes a sentence about a sign-in provider address Speakeasy did not dial.
+func signInAddressWords(err error) (string, bool) {
+	code, ok := remotesessions.OutageAddressHappened(err)
+	switch {
+	case !ok:
+		return "", false
+	case code == mcpconnectionattempts.CodeAddressNotFound:
+		return "could not be found", true
+	default:
+		return "is not allowed by network policy", true
+	}
+}
+
 // metaMemberClientCredentialError is the member-scoped answer for a gateway
 // member whose credential could not be obtained. An outage is a discovery
 // failure that is not retryable: a request resolves its token map once, so an
@@ -154,6 +167,9 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		if _, session := errors.AsType[*remotesessions.SessionOutageError](err); session {
 			return linkedMemberOutage(member, err, "")
+		}
+		if words, ok := signInAddressWords(err); ok {
+			return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential because its sign-in provider's address %s. Ask your administrator to check it", member.slug, words), nil)
 		}
 		if remotesessions.TokenEndpointCausedOutage(err) {
 			return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential because its provider isn't available right now. Retry shortly. If it keeps happening, ask your administrator", member.slug), nil)
@@ -214,6 +230,9 @@ func outageWaitWords(wait time.Duration) string {
 
 // linkedMemberOutage offers reconnecting only when the connect page has a Reconnect button for it.
 func linkedMemberOutage(member metaMember, err error, connectURL string) error {
+	if words, ok := signInAddressWords(err); ok {
+		return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in because its sign-in provider's address %s. Ask your administrator to check it", member.slug, words), err)
+	}
 	retry := "Retry " + outageWaitWords(remotesessions.RetryAfter(err)) + "."
 	switch remotesessions.OutageKindOf(err) {
 	case remotesessions.RefreshOutageTunnel:

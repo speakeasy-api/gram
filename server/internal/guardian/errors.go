@@ -19,3 +19,10 @@ func IsDeadPeerDialError(err error) bool {
 		errors.Is(opErr, syscall.EHOSTUNREACH) ||
 		errors.Is(opErr, syscall.ENETUNREACH)
 }
+
+// IsAddressNotFound reports a lookup that said the name does not exist. A
+// temporary or timed-out lookup is not one.
+func IsAddressNotFound(err error) bool {
+	dnsErr, ok := errors.AsType[*net.DNSError](err)
+	return ok && dnsErr.IsNotFound
+}

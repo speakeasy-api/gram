@@ -308,6 +308,26 @@ func TestProviderHealth_BlockedStopIsNotAFailure(t *testing.T) {
 	require.Empty(t, report.Abandoned)
 }
 
+// A sign-in provider address Speakeasy refused or could not find is the admin's: the row names no provider, so it is never an outage.
+func TestProviderHealth_AddressSpeakeasyDidNotDialIsNotCounted(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "account.box.com")
+	orgs := []string{"org-" + uuid.NewString(), "org-" + uuid.NewString(), "org-" + uuid.NewString()}
+	for i := range 6 {
+		code := CodeAddressNotAllowed
+		if i%2 == 1 {
+			code = CodeAddressNotFound
+		}
+		f.write(f.attempt(orgs[i%len(orgs)], 10*time.Minute), f.step(StepProviderRefresh, code, true))
+	}
+
+	report := f.read(time.Hour, 0)
+	require.Equal(t, ProviderQuiet, report.Status)
+	require.Equal(t, noProviderCounts, report.Counts)
+	require.Empty(t, report.Failures)
+}
+
 func TestProviderHealth_RelabelsStoredDailyProviders(t *testing.T) {
 	t.Parallel()
 

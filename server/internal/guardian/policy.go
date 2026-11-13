@@ -278,6 +278,15 @@ func WithResolver(resolver dns.Resolver) func(*Policy) {
 	}
 }
 
+// WithBlockedCIDRBlocks adds blocks the Policy refuses to dial on top of its
+// blocklist. This is intended for tests that need one address refused while
+// the rest of a fixture stays reachable.
+func WithBlockedCIDRBlocks(blocks ...*net.IPNet) func(*Policy) {
+	return func(p *Policy) {
+		p.blockedCIDRBlocks = append(slices.Clone(p.blockedCIDRBlocks), blocks...)
+	}
+}
+
 // WithTLSRootCAs is a functional option that replaces the root CA pool used
 // by clients built from this Policy. This is intended for tests that fetch
 // from httptest.NewTLSServer instances (whose certificates are self-signed);

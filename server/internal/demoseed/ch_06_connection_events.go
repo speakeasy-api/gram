@@ -112,6 +112,7 @@ var connectionRequestEndings = []connectionEnding{
 	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.ResultRenewed},
 	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeReauthenticationRequired},
 	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeRenewalRetryable},
+	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeAddressNotAllowed},
 }
 
 // connectionRequestRows seeds single-row outcomes each day, each its own attempt.

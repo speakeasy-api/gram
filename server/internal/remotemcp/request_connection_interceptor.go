@@ -244,6 +244,11 @@ func UpstreamFailureHappened(status int, credentialRejected bool, credential Ups
 			}
 		}
 	}
+	if status == 0 && !tunneled {
+		if code, ok := mcpconnectionattempts.AddressHappened(errors.Join(causes...)); ok {
+			return code, true
+		}
+	}
 	// The gateway strips this header from what the server sends, so it is the gateway's own.
 	if tunneled && (status == http.StatusBadGateway || status == 0 || tunnelError != "") {
 		if code, ok := tunnelrouting.FailureHappened(tunnelError, causes...); ok {

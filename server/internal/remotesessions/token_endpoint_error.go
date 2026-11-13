@@ -36,6 +36,9 @@ type TokenEndpointError struct {
 	// Signing reports that the private_key_jwt client assertion could not be
 	// signed, so nothing was sent.
 	Signing bool
+
+	// sendFailure is why the request was not sent, kept for classification and never unwrapped.
+	sendFailure error
 }
 
 func (e *TokenEndpointError) Error() string {

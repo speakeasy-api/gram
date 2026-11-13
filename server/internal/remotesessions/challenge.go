@@ -2306,6 +2306,9 @@ func exchangeHappened(err error, tunneled bool) mcpconnectionattempts.Code {
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			return mcpconnectionattempts.CodeTunnelUnavailable
 		}
+		if code, ok := mcpconnectionattempts.AddressHappened(err); ok && !tunneled {
+			return code
+		}
 		return mcpconnectionattempts.CodeProviderUnreachable
 	}
 	endpointErr, ok := errors.AsType[*tokenEndpointError](err)
@@ -2577,6 +2580,13 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 	}
 	if _, ok := errors.AsType[*tokenExchangeUnavailableError](err); ok {
 		reason := "the identity provider could not be reached"
+		switch code, _ := mcpconnectionattempts.AddressHappened(err); {
+		case tunneled:
+		case code == mcpconnectionattempts.CodeAddressNotAllowed:
+			reason = "the identity provider's address is not allowed by network policy"
+		case code == mcpconnectionattempts.CodeAddressNotFound:
+			reason = "the identity provider's address could not be found"
+		}
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			reason = "the MCP tunnel is not connected"
 		}

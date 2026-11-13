@@ -425,6 +425,18 @@ type memberDiscoveryError struct {
 
 func (e memberDiscoveryError) Unwrap() error { return e.metaMemberError }
 
+// memberNoAnswerMessage says why a member call got no answer: an address Speakeasy did not dial, or no reply.
+func memberNoAnswerMessage(slug string, code mcpconnectionattempts.Code) string {
+	switch code {
+	case mcpconnectionattempts.CodeAddressNotAllowed:
+		return fmt.Sprintf("server %q has an address that is not allowed by network policy", slug)
+	case mcpconnectionattempts.CodeAddressNotFound:
+		return fmt.Sprintf("server %q has an address that could not be found", slug)
+	default:
+		return fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", slug)
+	}
+}
+
 // sdkTransportRejected is the text the SDK gives a call it did not get answered, for
 // transient HTTP statuses included. The member never said it.
 const sdkTransportRejected = "rejected by transport"
@@ -519,7 +531,7 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		_, untrusted := errors.AsType[*tls.CertificateVerificationError](exchangeErr)
 		refused := untrusted || errors.Is(exchangeErr, guardian.ErrBlockedIP) || errors.Is(exchangeErr, guardian.ErrBadHost)
 		code, _ := remotemcp.UpstreamFailureHappened(0, false, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
-		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), !spent && !refused), code}
+		return memberConnectionError{upstreamFailure(memberNoAnswerMessage(member.slug, code), !spent && !refused), code}
 	}
 	rpcErr, isRPC := errors.AsType[*jsonrpc.Error](err)
 	message := fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status)

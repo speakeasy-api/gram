@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -124,6 +125,33 @@ func TestRefreshNow_RecordsEachEndState(t *testing.T) {
 
 		})
 	}
+}
+
+// A token endpoint our egress policy refuses is the admin's to fix and names no provider, so provider health never counts it.
+func TestRefreshNow_BlockedTokenEndpointIsNotTheProviders(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newSyntheticExpiryEnv(t, "refresh-blocked", tokenAnswer(http.StatusOK, `{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}`))
+	rec := mcpconnectionattemptstest.New(t)
+	blocked, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{"127.0.0.0/8", "::1/128"})
+	require.NoError(t, err)
+	refresher := remotesessions.NewRefreshService(testenv.NewLogger(t), testenv.NewMeterProvider(t), env.db, env.enc, blocked, nil, cache.NoopCache, remotesessions.WithRefreshConnectionRecorder(rec.Recorder))
+
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+
+	scope := mcpconnectionattempts.ServerScope(env.organizationID, env.projectID, uuid.New(), mcpconnectionattempts.AppDCR)
+	_, refreshErr := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope))
+	require.ErrorIs(t, refreshErr, remotesessions.ErrRemoteSessionUnavailable, "retry behaviour is unchanged")
+	require.Equal(t, mcpconnectionattempts.CodeAddressNotAllowed, remotesessions.ConnectionOutageHappened(refreshErr))
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeAddressNotAllowed)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+	require.Empty(t, row.ProviderHost)
+
+	active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	require.True(t, active.RefreshTokenEncrypted.Valid, "a refused dial keeps the refresh grant")
 }
 
 // Nothing guesses a home for a row: a caller that names no scope gets no row.
