@@ -242,7 +242,7 @@ func compileAgentPlugin(p PluginInfo, cfg GenerateConfig, mode agentPluginCreden
 	emitPluginSkills(files, "", p)
 
 	if mode == agentPluginCredentialsPackage {
-		cursorJSON, err := marshalJSON(cursorPluginMeta{Name: p.Slug + "-cursor", DisplayName: p.Name + " (Cursor)", Description: p.Description, Version: pluginManifestVersion(cfg), Author: cursorAuthor{Name: cfg.OrgName, Email: ""}, Homepage: "https://getgram.ai"})
+		cursorJSON, err := marshalJSON(cursorPluginMeta{Name: p.Slug + "-cursor", DisplayName: p.Name + " (Cursor)", Description: p.Description, Version: pluginManifestVersion(cfg), Author: cursorAuthor{Name: cfg.OrgName, Email: ""}, Homepage: speakeasyHomepageURL})
 		if err != nil {
 			return nil, fmt.Errorf("marshal shared Cursor plugin.json: %w", err)
 		}
