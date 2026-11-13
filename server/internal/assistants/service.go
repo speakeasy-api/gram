@@ -296,7 +296,7 @@ func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistan
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
-		ReasoningEffort: row.ReasoningEffort,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -320,7 +320,7 @@ func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRe
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
-		ReasoningEffort: row.ReasoningEffort,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -344,7 +344,7 @@ func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecor
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
-		ReasoningEffort: row.ReasoningEffort,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -368,7 +368,7 @@ func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
-		ReasoningEffort: row.ReasoningEffort,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -392,7 +392,7 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
-		ReasoningEffort: row.ReasoningEffort,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -1941,7 +1941,7 @@ func (s *ServiceCore) UpdateAssistant(
 		if err != nil {
 			return assistantRecord{}, fmt.Errorf("read assistant reasoning snapshot: %w", err)
 		}
-		reasoningBefore = &audit.AssistantReasoningSnapshot{ReasoningEffort: before.ReasoningEffort}
+		reasoningBefore = &audit.AssistantReasoningSnapshot{ReasoningEffort: reasoningEffortFromPGText(before.ReasoningEffort)}
 	}
 
 	// Compare canonical persisted attachments inside this transaction, after
@@ -3869,7 +3869,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
-		ReasoningEffort: row.ReasoningEffort,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -4289,7 +4289,7 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
-		ReasoningEffort: row.ReasoningEffort,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,
@@ -4762,6 +4762,11 @@ func validateReasoningEffort(effort string) error {
 	default:
 		return assistantValidationError("reasoning_effort must be none, low, medium, or high")
 	}
+}
+
+// reasoningEffortFromPGText preserves the effective default for legacy NULL rows.
+func reasoningEffortFromPGText(effort pgtype.Text) string {
+	return normalizeReasoningEffort(conv.FromPGTextOrEmpty[string](effort))
 }
 
 func normalizeReasoningEffort(effort string) string {

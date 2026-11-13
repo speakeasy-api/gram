@@ -55,10 +55,15 @@ func TestEnableManagedAssistantIsIdempotent(t *testing.T) {
 	require.Equal(t, managedAssistantInstructions, first.Instructions)
 	require.NotEmpty(t, first.Instructions, "managed instructions must be embedded, not empty")
 
+	// Nullable expansion rows retain the effective default on both managed reads.
+	_, err = conn.Exec(ctx, `UPDATE assistants SET reasoning_effort = NULL WHERE project_id = $1 AND id = $2`, projectID, first.ID)
+	require.NoError(t, err)
+
 	// A second enable (even by a different user) returns the same assistant.
 	second, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-2", true)
 	require.NoError(t, err)
 	require.Equal(t, first.ID, second.ID, "enable must be idempotent")
+	require.Equal(t, "medium", second.ReasoningEffort)
 
 	all, err := core.ListAssistants(ctx, projectID)
 	require.NoError(t, err)

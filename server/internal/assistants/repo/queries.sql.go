@@ -905,7 +905,7 @@ type CreateAssistantRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
-	ReasoningEffort string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -1184,7 +1184,7 @@ type GetAssistantRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
-	ReasoningEffort string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -1273,7 +1273,7 @@ type GetAssistantForDispatchRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
-	ReasoningEffort string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -1326,7 +1326,7 @@ type GetAssistantIgnoringDeletedRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
-	ReasoningEffort string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -1893,7 +1893,7 @@ type GetManagedAssistantByProjectRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
-	ReasoningEffort string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -2456,7 +2456,7 @@ type ListAssistantsRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
-	ReasoningEffort string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64
@@ -3418,7 +3418,7 @@ type LoadAssistantThreadForBootstrapRow struct {
 	CreatedByUserID         pgtype.Text
 	Name                    string
 	Model                   string
-	ReasoningEffort         string
+	ReasoningEffort         pgtype.Text
 	Instructions            string
 	WarmTtlSeconds          int64
 	MaxConcurrency          int64
@@ -3618,7 +3618,7 @@ type LoadThreadContextRow struct {
 	CreatedByUserID          pgtype.Text
 	Name                     string
 	Model                    string
-	ReasoningEffort          string
+	ReasoningEffort          pgtype.Text
 	Instructions             string
 	WarmTtlSeconds           int64
 	MaxConcurrency           int64
@@ -3752,7 +3752,7 @@ type LoadThreadContextV2Row struct {
 	CreatedByUserID          pgtype.Text
 	Name                     string
 	Model                    string
-	ReasoningEffort          string
+	ReasoningEffort          pgtype.Text
 	Instructions             string
 	WarmTtlSeconds           int64
 	MaxConcurrency           int64
@@ -5309,7 +5309,7 @@ type UpdateAssistantRow struct {
 	CreatedByUserID pgtype.Text
 	Name            string
 	Model           string
-	ReasoningEffort string
+	ReasoningEffort pgtype.Text
 	Instructions    string
 	WarmTtlSeconds  int64
 	MaxConcurrency  int64

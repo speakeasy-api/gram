@@ -82,8 +82,8 @@ func (s *AssistantIdentityService) setReasoningEffort(ctx context.Context, princ
 	if !input.Confirmed {
 		return SetAssistantReasoningEffortOutput{ProjectID: current.ProjectID, AssistantID: current.ID, ReasoningEffort: current.ReasoningEffort}, nil
 	}
-	// The authorized service performs the locked compare-and-set and audits the
-	// persisted change. No frontend flag grants access.
+	// The authorized service locks the assistant and audits the persisted
+	// change. No frontend flag grants access.
 	assistant, err := management.UpdateAssistant(ctx, &genassistants.UpdateAssistantPayload{
 		ID: assistantID.String(), ReasoningEffort: &input.ReasoningEffort, RuntimeVersion: nil, ExpectedRuntimeVersion: nil,
 		SessionToken: nil, ProjectSlugInput: nil, Name: nil, Model: nil, Instructions: nil, Toolsets: nil, McpServers: nil,

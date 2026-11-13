@@ -378,7 +378,7 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
-		ReasoningEffort: row.ReasoningEffort,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,

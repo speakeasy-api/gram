@@ -71,7 +71,7 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 	if err != nil {
 		return nil, fmt.Errorf("read runtime selection: %w", err)
 	}
-	effectiveVersion, effectiveEffort := current.RuntimeVersion, current.ReasoningEffort
+	effectiveVersion, effectiveEffort := current.RuntimeVersion, reasoningEffortFromPGText(current.ReasoningEffort)
 	if change.Version != nil {
 		if int(current.RuntimeVersion) != *change.ExpectedVersion {
 			return nil, errRuntimeSwitchConflict
