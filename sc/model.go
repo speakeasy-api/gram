@@ -192,6 +192,11 @@ const (
 	// stepRelease gives back a resource while its state stays active.
 	stepRelease stepKind = "release"
 
+	// stepSpawn starts a run of a spawned service, and stepStop stops
+	// one.
+	stepSpawn stepKind = "spawn"
+	stepStop  stepKind = "stop"
+
 	// stepSend sends an event to a running service of the chart.
 	stepSend stepKind = "send"
 
@@ -351,8 +356,13 @@ type transition[S comparable, C any] struct {
 	// raiseDelays holds, by step index, how long a RaiseAfter waits.
 	raiseDelays map[int]time.Duration
 
-	// sendTargets holds, by step index, the service a SendTo sends to.
+	// sendTargets holds, by step index, the service a SendTo sends to, or
+	// a Spawn or StopSpawned step starts or stops a run of.
 	sendTargets map[int]string
+
+	// keys holds, by step index, the function that names the spawned run a
+	// step is about.
+	keys map[int]func(C, any) string
 }
 
 // invocation is a service that runs while its state is active.
@@ -377,6 +387,10 @@ type invocation[S comparable, C any] struct {
 
 	// retry is the service's retry policy, or nil for none.
 	retry *Retry
+
+	// spawned marks a service whose runs are started by Spawn steps, any
+	// number at once, instead of one on entering the state.
+	spawned bool
 }
 
 // resourceSpec is what makes an invocation a resource.

@@ -56,6 +56,10 @@ type pendingTimer[S comparable] struct {
 	// raised is a delayed raise's event, and eventName its name.
 	raised    any
 	eventName string
+
+	// key and saved are what a retried run keeps from the one that failed.
+	key   string
+	saved json.RawMessage
 }
 
 // runningInvocation is a service run that has not reported a result.
@@ -302,6 +306,11 @@ type RawTimer struct {
 	// EventName and Event are a delayed raise's event.
 	EventName string          `json:"event_name,omitempty"`
 	Event     json.RawMessage `json:"event,omitempty"`
+
+	// Key and Saved are, for a retry, the spawn key and the recorded
+	// progress of the run that failed.
+	Key   string          `json:"key,omitempty"`
+	Saved json.RawMessage `json:"saved,omitempty"`
 }
 
 // RawInvocation is the stored form of an unfinished service run.
@@ -364,7 +373,7 @@ func (s Snapshot[S, C]) MarshalJSON() ([]byte, error) {
 	}
 
 	for _, t := range s.timers {
-		rt := RawTimer{ID: t.id, State: fmt.Sprint(t.state), Index: t.index, DelayNanos: int64(t.delay), Due: t.due, Seq: t.seq, Kind: string(t.kind), Name: "", Attempt: t.attempt, Jitter: 0, EventName: "", Event: nil}
+		rt := RawTimer{ID: t.id, State: fmt.Sprint(t.state), Index: t.index, DelayNanos: int64(t.delay), Due: t.due, Seq: t.seq, Kind: string(t.kind), Name: "", Attempt: t.attempt, Jitter: 0, EventName: "", Event: nil, Key: t.key, Saved: t.saved}
 
 		switch t.kind {
 		case timerAfter:
@@ -681,12 +690,12 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 				return fmt.Errorf("unmarshal delayed event %q: %w", rt.EventName, err)
 			}
 
-			r.timers = append(r.timers, timer[S, C]{id: rt.ID, kind: timerRaise, t: nil, retry: nil, attempt: 0, source: n, label: rt.Name, raised: ev.Elem().Interface(), delay: time.Duration(rt.DelayNanos), due: rt.Due, seq: rt.Seq, jitter: 0})
+			r.timers = append(r.timers, timer[S, C]{id: rt.ID, kind: timerRaise, t: nil, retry: nil, attempt: 0, source: n, label: rt.Name, raised: ev.Elem().Interface(), delay: time.Duration(rt.DelayNanos), due: rt.Due, seq: rt.Seq, jitter: 0, key: "", saved: nil})
 			kept = true
 		case timerKind(rt.Kind) == timerRetry && ok && r.config[n] && !r.done:
 			for _, inv := range n.invocations {
 				if inv.name == rt.Name && inv.retry != nil {
-					r.timers = append(r.timers, timer[S, C]{id: rt.ID, kind: timerRetry, t: nil, retry: inv, attempt: rt.Attempt, source: nil, label: "", raised: nil, delay: time.Duration(rt.DelayNanos), due: rt.Due, seq: rt.Seq, jitter: rt.Jitter})
+					r.timers = append(r.timers, timer[S, C]{id: rt.ID, kind: timerRetry, t: nil, retry: inv, attempt: rt.Attempt, source: nil, label: "", raised: nil, delay: time.Duration(rt.DelayNanos), due: rt.Due, seq: rt.Seq, jitter: rt.Jitter, key: rt.Key, saved: rt.Saved})
 					kept = true
 				}
 			}
@@ -746,7 +755,9 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 		}
 
 		for _, inv := range n.invocations {
-			r.startService(inv)
+			if !inv.spawned {
+				r.startService(inv)
+			}
 		}
 	}
 

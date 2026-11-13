@@ -116,6 +116,7 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 		sends:    nil,
 		emits:    false,
 		releases: nil,
+		spawns:   nil,
 	}
 	def(&Builder[S, C]{b: b, parent: root})
 
@@ -154,6 +155,17 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	for _, name := range b.releases {
 		if resource, ok := b.kinds[name]; !ok || !resource {
 			b.errorf("Release names %q, which is not a resource of the chart", name)
+		}
+	}
+	for _, name := range b.spawns {
+		spawned := false
+		for _, n := range m.ordered {
+			for _, inv := range n.invocations {
+				spawned = spawned || (inv.name == name && inv.spawned)
+			}
+		}
+		if !spawned {
+			b.errorf("Spawn or StopSpawned names %q, which is not a service declared Spawned", name)
 		}
 	}
 	m.messaging = len(b.sends) > 0 || b.emits
@@ -512,7 +524,7 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 		write("exit run %q if=%t\n", name, n.exitConds[k] != nil)
 	}
 	for _, inv := range n.invocations {
-		write("invoke %q %s resource=%t", inv.name, inv.doneType, inv.resource != nil)
+		write("invoke %q %s resource=%t spawned=%t", inv.name, inv.doneType, inv.resource != nil, inv.spawned)
 		if p := inv.retry; p != nil {
 			write(" retry=%d first=%d cap=%d jitter=%v if=%t", p.Max, p.First, p.Cap, p.Jitter, p.If != nil)
 		}

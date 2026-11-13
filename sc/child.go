@@ -44,9 +44,33 @@ func (s *StateBuilder[S, C]) InvokeMachine[S2 comparable, C2, R any](name string
 		state:    s.n,
 		name:     name,
 		doneType: reflect.TypeFor[Done[R]](),
+		run:      runChild(child, func(c C, _ string) C2 { return input(c) }, output, opts),
+		resource: nil,
+		retry:    nil,
+		spawned:  false,
+	}
+	s.n.invocations = append(s.n.invocations, inv)
+
+	return &Invocation[S, C, R]{b: s.b, n: s.n, inv: inv}
+}
+
+// SpawnMachine declares a child machine like [StateBuilder.InvokeMachine],
+// spawned as [Invocation.Spawned] describes: any number run at once, each
+// under the key its [Transition.Spawn] gives, which input receives so that
+// each child can start with its own context. The parent sends to one child
+// with [Transition.SendToKey], and tells the children's results apart with
+// [SpawnKey] on their IDs. An event a child emits arrives as a plain event,
+// so a child that must be told apart puts its identity, which input gave
+// it, in the events it emits.
+func (s *StateBuilder[S, C]) SpawnMachine[S2 comparable, C2, R any](name string, child *Machine[S2, C2], input func(c C, key string) C2, output func(Snapshot[S2, C2]) (R, error), opts ...RunOption) *Invocation[S, C, R] {
+	inv := &invocation[S, C]{
+		state:    s.n,
+		name:     name,
+		doneType: reflect.TypeFor[Done[R]](),
 		run:      runChild(child, input, output, opts),
 		resource: nil,
 		retry:    nil,
+		spawned:  true,
 	}
 	s.n.invocations = append(s.n.invocations, inv)
 
@@ -54,7 +78,7 @@ func (s *StateBuilder[S, C]) InvokeMachine[S2 comparable, C2, R any](name string
 }
 
 // runChild is the service that runs child for a parent.
-func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input func(C) C2, output func(Snapshot[S2, C2]) (R, error), opts []RunOption) func(context.Context, C, string) iter.Seq[any] {
+func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input func(C, string) C2, output func(Snapshot[S2, C2]) (R, error), opts []RunOption) func(context.Context, C, string) iter.Seq[any] {
 	return func(ctx context.Context, c C, id string) iter.Seq[any] {
 		return func(yield func(any) bool) {
 			// The child's events queue here, so that neither machine waits
@@ -64,7 +88,7 @@ func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input fun
 			settings := append([]RunOption{WithClock(clockFrom(ctx))}, opts...)
 			settings = append(settings, OnEmit(func(_ context.Context, ev any) { up.put(ev) }))
 
-			inst, resumed, err := startChild(ctx, child, input(c), settings)
+			inst, resumed, err := startChild(ctx, child, input(c, keyOf(id)), settings)
 			if err != nil {
 				yield(Failed{ID: id, Err: err})
 				return

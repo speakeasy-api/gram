@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"iter"
 	"math/rand/v2"
+	"net/url"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -65,6 +67,11 @@ type timer[S comparable, C any] struct {
 
 	// jitter is the fraction by which drivers vary the wait.
 	jitter float64
+
+	// key and saved are, for a timerRetry timer, the spawn key and the
+	// recorded progress of the run that failed, which the next run keeps.
+	key   string
+	saved json.RawMessage
 }
 
 // owner is the state whose exit cancels the timer. A raised event belongs
@@ -126,7 +133,7 @@ func restoredTimer[S comparable, C any](id string, t *transition[S, C], delay ti
 		due = now.Add(delay)
 	}
 
-	return timer[S, C]{id: id, kind: timerAfter, t: t, retry: nil, attempt: 0, source: nil, label: "", raised: nil, delay: delay, due: due, seq: seq, jitter: t.jitter}
+	return timer[S, C]{id: id, kind: timerAfter, t: t, retry: nil, attempt: 0, source: nil, label: "", raised: nil, delay: delay, due: due, seq: seq, jitter: t.jitter, key: "", saved: nil}
 }
 
 // service is a run of an invocation that has not finished.
@@ -522,11 +529,11 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 		case timerRetry:
 			for _, inv := range n.invocations {
 				if inv.name == pt.name && inv.retry != nil {
-					r.timers = append(r.timers, timer[S, C]{id: pt.id, kind: timerRetry, t: nil, retry: inv, attempt: pt.attempt, source: nil, label: "", raised: nil, delay: pt.delay, due: pt.due, seq: pt.seq, jitter: pt.jitter})
+					r.timers = append(r.timers, timer[S, C]{id: pt.id, kind: timerRetry, t: nil, retry: inv, attempt: pt.attempt, source: nil, label: "", raised: nil, delay: pt.delay, due: pt.due, seq: pt.seq, jitter: pt.jitter, key: pt.key, saved: pt.saved})
 				}
 			}
 		case timerRaise:
-			r.timers = append(r.timers, timer[S, C]{id: pt.id, kind: timerRaise, t: nil, retry: nil, attempt: 0, source: n, label: pt.name, raised: pt.raised, delay: pt.delay, due: pt.due, seq: pt.seq, jitter: 0})
+			r.timers = append(r.timers, timer[S, C]{id: pt.id, kind: timerRaise, t: nil, retry: nil, attempt: 0, source: n, label: pt.name, raised: pt.raised, delay: pt.delay, due: pt.due, seq: pt.seq, jitter: 0, key: "", saved: nil})
 		}
 	}
 
@@ -599,6 +606,7 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 			id: t.id, kind: t.kind, state: t.state().id, index: index, name: t.name(),
 			delay: t.delay, due: t.due, seq: t.seq, jitter: t.jitter,
 			attempt: t.attempt, raised: t.raised, eventName: "",
+			key: t.key, saved: t.saved,
 		})
 		if t.kind == timerRaise {
 			snap.timers[len(snap.timers)-1].eventName = r.m.EventName(t.raised)
@@ -688,7 +696,8 @@ func (r *run[S, C]) accept(ev any) (stimulus[S, C], bool) {
 			return none, false
 		}
 
-		inv, attempt := r.services[i].inv, r.services[i].attempt
+		ended := r.services[i]
+		inv, attempt := ended.inv, ended.attempt
 		r.services = slices.Delete(r.services, i, i+1)
 		r.changed = true
 
@@ -697,7 +706,7 @@ func (r *run[S, C]) accept(ev any) (stimulus[S, C], bool) {
 			// A failure the service's retry policy covers is not the
 			// chart's to see: the service runs again after a wait.
 			if r.retries(inv, attempt, failed.Err) {
-				r.startRetry(inv, attempt+1)
+				r.startRetry(ended, attempt+1)
 				return on[S, C](triggerNone), true
 			}
 
@@ -1065,9 +1074,43 @@ func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
 				return true
 			})
 			r.endServices(ending)
+		case stepSpawn:
+			key := t.keys[k](r.ctx, stim.event)
+			for _, inv := range r.spawnable(t.sendTargets[k]) {
+				if !slices.ContainsFunc(r.services, func(running service[S, C]) bool { return running.inv == inv && keyOf(running.id) == key }) {
+					r.startRun(inv, 0, key, nil)
+				}
+			}
+		case stepStop:
+			key := t.keys[k](r.ctx, stim.event)
+
+			var ending []service[S, C]
+			r.services = slices.DeleteFunc(r.services, func(running service[S, C]) bool {
+				if !running.inv.spawned || running.inv.name != t.sendTargets[k] || keyOf(running.id) != key {
+					return false
+				}
+				ending = append(ending, running)
+
+				return true
+			})
+			r.endServices(ending)
+
+			// A run waiting to be retried is stopped as well.
+			r.timers = slices.DeleteFunc(r.timers, func(tm timer[S, C]) bool {
+				if tm.kind != timerRetry || !tm.retry.spawned || tm.retry.name != t.sendTargets[k] || tm.key != key {
+					return false
+				}
+				r.effects = append(r.effects, r.bare(EffectCancelTimer, tm.id, tm.retry.state, ""))
+
+				return true
+			})
 		case stepSend:
 			ev := s.raise(r.ctx, stim.event)
 			for _, running := range r.services {
+				if keyFn, keyed := t.keys[k]; keyed && keyOf(running.id) != keyFn(r.ctx, stim.event) {
+					continue
+				}
+
 				if running.inv.resource == nil && running.inv.name == t.sendTargets[k] {
 					e := r.bare(EffectSend, running.id, running.inv.state, running.inv.name)
 					e.Event = ev
@@ -1173,6 +1216,8 @@ func (r *run[S, C]) startTimer(t *transition[S, C]) {
 		due:     time.Time{},
 		seq:     0,
 		jitter:  t.jitter,
+		key:     "",
+		saved:   nil,
 	}
 	tm.seq = r.counter
 
@@ -1267,7 +1312,7 @@ func (r *run[S, C]) fire(tm timer[S, C]) stimulus[S, C] {
 
 		return stim
 	case timerRetry:
-		r.startRun(tm.retry, tm.attempt)
+		r.startRun(tm.retry, tm.attempt, tm.key, tm.saved)
 	case timerRaise:
 		stim := on[S, C](triggerEvent)
 		stim.event = tm.raised
@@ -1293,10 +1338,12 @@ func (r *run[S, C]) retries(inv *invocation[S, C], attempt int, err error) bool 
 	return deadline.IsZero() || r.now.Add(p.wait(attempt+1)).Before(deadline)
 }
 
-// startRetry starts the wait before inv runs again after its failures-th
-// failure.
-func (r *run[S, C]) startRetry(inv *invocation[S, C], failures int) {
+// startRetry starts the wait before the service of the run that ended runs
+// again after its failures-th failure, keeping the run's key and progress.
+func (r *run[S, C]) startRetry(ended service[S, C], failures int) {
+	inv := ended.inv
 	p := inv.retry
+	key, _ := SpawnKey(ended.id)
 
 	// Under Forever the count stops growing once the wait has, so the
 	// snapshot takes finitely many values.
@@ -1317,6 +1364,8 @@ func (r *run[S, C]) startRetry(inv *invocation[S, C], failures int) {
 		due:     time.Time{},
 		seq:     0,
 		jitter:  p.Jitter,
+		key:     key,
+		saved:   ended.saved,
 	}
 	tm.seq = r.counter
 	tm.due = r.now.Add(tm.delay)
@@ -1345,6 +1394,8 @@ func (r *run[S, C]) startRaise(source *node[S, C], name string, ev any, delay ti
 		due:     time.Time{},
 		seq:     0,
 		jitter:  0,
+		key:     "",
+		saved:   nil,
 	}
 	tm.seq = r.counter
 	tm.due = r.now.Add(delay)
@@ -1354,13 +1405,18 @@ func (r *run[S, C]) startRaise(source *node[S, C], name string, ev any, delay ti
 }
 
 func (r *run[S, C]) startService(inv *invocation[S, C]) {
-	r.startRun(inv, 0)
+	r.startRun(inv, 0, "", nil)
 }
 
 // startRun starts a run of inv that follows attempt failed ones.
-func (r *run[S, C]) startRun(inv *invocation[S, C], attempt int) {
+// key is the key of a spawned run, and saved the progress it carries on from.
+func (r *run[S, C]) startRun(inv *invocation[S, C], attempt int, key string, saved json.RawMessage) {
 	id := r.nextID(inv.state, inv.name)
-	r.services = append(r.services, service[S, C]{id: id, inv: inv, acquired: false, attempt: attempt, saved: nil})
+	if inv.spawned {
+		id += "/" + url.PathEscape(key)
+	}
+
+	r.services = append(r.services, service[S, C]{id: id, inv: inv, acquired: false, attempt: attempt, saved: saved})
 	r.effects = append(r.effects, r.serviceEffect(id, inv))
 }
 
@@ -1594,7 +1650,7 @@ func (r *run[S, C]) startServices() {
 		}
 
 		for _, inv := range n.invocations {
-			if inv.resource == nil && !r.running(inv) {
+			if inv.resource == nil && !inv.spawned && !r.running(inv) {
 				r.startService(inv)
 			}
 		}
@@ -1657,4 +1713,44 @@ func (r *run[S, C]) dropShortLivedTimers() {
 	r.effects = slices.DeleteFunc(r.effects, func(e Effect[C]) bool {
 		return (e.Kind == EffectStartTimer || e.Kind == EffectCancelTimer) && cancelled[e.ID]
 	})
+}
+
+// spawnable returns the spawned services named name whose states are
+// active.
+func (r *run[S, C]) spawnable(name string) []*invocation[S, C] {
+	var out []*invocation[S, C]
+	for _, n := range r.active() {
+		for _, inv := range n.invocations {
+			if inv.spawned && inv.name == name {
+				out = append(out, inv)
+			}
+		}
+	}
+
+	return out
+}
+
+// keyOf is SpawnKey for a run known to be spawned, and "" for any other.
+func keyOf(id string) string {
+	key, _ := SpawnKey(id)
+	return key
+}
+
+// SpawnKey returns the key of the spawned service run with the given ID,
+// the one its [Transition.Spawn] gave it, and reports whether the ID is a
+// spawned run's at all. A transition reads it from the ID of the [Done],
+// [Failed] or [Emitted] event it handles, and a service from
+// [RunID].
+func SpawnKey(id string) (string, bool) {
+	slash := strings.LastIndex(id, "/")
+	if slash < 0 || slash < strings.LastIndex(id, "#") {
+		return "", false
+	}
+
+	key, err := url.PathUnescape(id[slash+1:])
+	if err != nil {
+		return "", false
+	}
+
+	return key, true
 }

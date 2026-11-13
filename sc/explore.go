@@ -667,6 +667,9 @@ func (m *Machine[S, C]) candidates(snap Snapshot[S, C], now time.Time, x Explora
 		}
 
 		service := m.nodes[inv.state].name + "." + inv.name
+		if key, spawned := SpawnKey(inv.id); spawned {
+			service += fmt.Sprintf("[%q]", key)
+		}
 
 		// A service under a Within budget can only report before the
 		// deadline, and fails with the deadline at it.
@@ -824,7 +827,7 @@ func (m *Machine[S, C]) timerLabel(t pendingTimer[S]) string {
 	switch t.kind {
 	case timerAfter:
 	case timerRetry:
-		return fmt.Sprintf("%q retry %q attempt=%d", state, t.name, t.attempt)
+		return fmt.Sprintf("%q retry %q %q attempt=%d", state, t.name, t.key, t.attempt)
 	case timerRaise:
 		// A raised event that does not marshal is caught when the
 		// snapshot is stored; here its text form is enough.
@@ -871,7 +874,7 @@ func (m *Machine[S, C]) stateKey(snap Snapshot[S, C], now time.Time, key func(C,
 
 	for _, inv := range snap.invocations {
 		// Quoting keeps a name that ends like the marker apart from it.
-		id.Services = append(id.Services, fmt.Sprintf("%q %q held=%t attempt=%d", m.nodes[inv.state].name, inv.name, inv.acquired, inv.attempt))
+		id.Services = append(id.Services, fmt.Sprintf("%q %q %q held=%t attempt=%d", m.nodes[inv.state].name, inv.name, keyOf(inv.id), inv.acquired, inv.attempt))
 	}
 	slices.Sort(id.Services)
 

@@ -122,7 +122,7 @@ var ErrNoCheckpoint = errors.New("context does not belong to a service run")
 //
 // Call it from the service function itself, on the goroutine the function
 // was called on. A run started by [Invocation.Retry] after a failure starts
-// without the failed run's progress.
+// from the failed run's progress.
 func Checkpoint(ctx context.Context, v any) error {
 	record, ok := ctx.Value(progressRecorder{}).(func(json.RawMessage))
 	if !ok {

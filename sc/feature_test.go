@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -774,4 +775,170 @@ func TestAServiceRunKnowsItsIDAndWaitsOnTheThrottle(t *testing.T) {
 		require.Equal(t, int32(1), throttle.waits.Load())
 		require.Empty(t, sc.RunID(t.Context()))
 	})
+}
+
+type (
+	add       struct{ Key string }
+	remove    struct{ Key string }
+	finishOne struct{ Key string }
+)
+
+// uploadsChart runs one upload per key it is told to add, and collects the
+// keys of those that finish.
+func uploadsChart(t *testing.T) *sc.Machine[string, order] {
+	t.Helper()
+
+	m, err := sc.New("uploads", func(b *sc.Builder[string, order]) {
+		b.Initial("open")
+		open := b.State("open")
+
+		upload := open.Invoke("upload", func(ctx context.Context, _ order) (string, error) {
+			key, _ := sc.SpawnKey(sc.RunID(ctx))
+			for range sc.Inbox(ctx) {
+				return "sent " + key, nil
+			}
+
+			return "", context.Cause(ctx)
+		}).Spawned()
+		upload.OnDone().Assign("collect", func(o order, d sc.Done[string]) order {
+			key, _ := sc.SpawnKey(d.ID)
+			o.Items = append(slices.Clone(o.Items), key+"="+d.Result)
+
+			return o
+		})
+		upload.OnError().Stay()
+
+		open.On[add]().Spawn("start", "upload", func(_ order, ev add) string { return ev.Key })
+		open.On[remove]().StopSpawned("stop", "upload", func(_ order, ev remove) string { return ev.Key })
+		open.On[finishOne]().SendToKey("finish", "upload",
+			func(_ order, ev finishOne) string { return ev.Key },
+			func(_ order, ev finishOne) any { return ev },
+		)
+		open.On[leave]().To("closed")
+		b.Final("closed")
+	})
+	require.NoError(t, err)
+
+	return m
+}
+
+func TestSpawnRunsOneServicePerKey(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		m := uploadsChart(t)
+
+		inst, err := m.Instance(t.Context(), order{})
+		require.NoError(t, err)
+		defer inst.Close()
+
+		// Nothing runs until something is spawned, and a key runs once.
+		require.Empty(t, inst.Snapshot().Services())
+		for _, key := range []string{"a", "b/c", "a"} {
+			_, err = inst.Send(t.Context(), add{Key: key})
+			require.NoError(t, err)
+		}
+		require.Len(t, inst.Snapshot().Services(), 2)
+
+		// One run is stopped, and the other finishes when it is told to.
+		step, err := inst.Send(t.Context(), remove{Key: "a"})
+		require.NoError(t, err)
+		require.Equal(t, []sc.EffectKind{sc.EffectStopInvocation}, kinds(step.Effects))
+
+		_, err = inst.Send(t.Context(), finishOne{Key: "b/c"})
+		require.NoError(t, err)
+
+		snap, err := inst.Await(t.Context(), func(s sc.Snapshot[string, order]) bool { return len(s.Context.Items) == 1 })
+		require.NoError(t, err)
+		require.Equal(t, []string{"b/c=sent b/c"}, snap.Context.Items)
+		require.Empty(t, snap.Services())
+
+		// Leaving the state stops whatever is still running.
+		_, err = inst.Send(t.Context(), add{Key: "d"})
+		require.NoError(t, err)
+		step, err = inst.Send(t.Context(), leave{})
+		require.NoError(t, err)
+		require.Equal(t, []sc.EffectKind{sc.EffectStopInvocation}, kinds(step.Effects))
+	})
+}
+
+func TestSpawnMachineRunsOneChildPerKey(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		child := downloadChart(t)
+
+		m, err := sc.New("fleet", func(b *sc.Builder[string, order]) {
+			b.Initial("open")
+			open := b.State("open")
+			download := open.SpawnMachine("download", child,
+				func(_ order, key string) counter { return counter{N: len(key)} },
+				func(snap sc.Snapshot[string, counter]) (int, error) { return snap.Context.N, nil },
+			)
+			download.OnDone().Assign("collect", func(o order, d sc.Done[int]) order {
+				key, _ := sc.SpawnKey(d.ID)
+				o.Items = append(slices.Clone(o.Items), fmt.Sprintf("%s=%d", key, d.Result))
+
+				return o
+			})
+			download.OnError().Stay()
+			open.On[add]().Spawn("start", "download", func(_ order, ev add) string { return ev.Key })
+			open.On[finishOne]().SendToKey("finish", "download",
+				func(_ order, ev finishOne) string { return ev.Key },
+				func(order, finishOne) any { return finish{Fail: false} },
+			)
+		})
+		require.NoError(t, err)
+
+		inst, err := m.Instance(t.Context(), order{})
+		require.NoError(t, err)
+		defer inst.Close()
+
+		for _, key := range []string{"one", "three"} {
+			_, err = inst.Send(t.Context(), add{Key: key})
+			require.NoError(t, err)
+		}
+		synctest.Wait()
+
+		// Each child started from its own key, and only the one that is
+		// told to finish does.
+		_, err = inst.Send(t.Context(), finishOne{Key: "three"})
+		require.NoError(t, err)
+
+		snap, err := inst.Await(t.Context(), func(s sc.Snapshot[string, order]) bool { return len(s.Context.Items) == 1 })
+		require.NoError(t, err)
+		require.Equal(t, []string{"three=5"}, snap.Context.Items)
+		require.Len(t, snap.Services(), 1)
+	})
+
+	_, err := sc.New("unspawned", func(b *sc.Builder[string, counter]) {
+		b.Initial("a")
+		a := b.State("a")
+		inv := a.Invoke("work", func(context.Context, counter) (int, error) { return 0, nil })
+		inv.OnDone().To("b")
+		inv.OnError().To("b")
+		a.On[tick]().Spawn("start", "work", func(counter, tick) string { return "k" })
+		b.Final("b")
+	})
+	require.ErrorContains(t, err, "not a service declared Spawned")
+}
+
+func TestARetriedRunKeepsTheProgressOfTheOneThatFailed(t *testing.T) {
+	t.Parallel()
+
+	m := retryChart(t, nil, sc.Retry{Max: 1, First: time.Minute, Cap: 0, Jitter: 0, If: nil})
+
+	snap, effects := m.Start(counter{N: 0}, epoch)
+	run := effect(t, effects, sc.EffectStartInvocation)
+	require.Nil(t, run.Saved)
+
+	snap, _ = m.Transition(snap, sc.Checkpointed{ID: run.ID, Data: json.RawMessage(`{"page":7}`)}, epoch)
+	require.JSONEq(t, `{"page":7}`, string(snap.Checkpoint(run.ID)))
+
+	snap, _ = m.Transition(snap, sc.Failed{ID: run.ID, Err: errFlaky}, epoch)
+	_, effects = m.Advance(snap, epoch.Add(time.Minute))
+
+	again := effect(t, effects, sc.EffectStartInvocation)
+	require.NotEqual(t, run.ID, again.ID)
+	require.JSONEq(t, `{"page":7}`, string(again.Saved))
 }

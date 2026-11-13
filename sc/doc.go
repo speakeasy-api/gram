@@ -59,7 +59,12 @@
 // the chart sends it from [Inbox]. The child's snapshot is kept inside the
 // parent's, so a stored parent resumes its child where it was. Any service
 // can do the same for its own progress with [Checkpoint] and [Resumed], and
-// [RunID] gives it an idempotency key that survives being run again. Each machine is explored on its own, the
+// [RunID] gives it an idempotency key that survives being run again.
+//
+// A service or child machine declared [Invocation.Spawned], or with
+// [StateBuilder.SpawnMachine], runs any number of times at once, each run
+// started under a key by [Transition.Spawn]: one per upload, per host, per
+// job. [Group] does the same for whole instances from outside a chart. Each machine is explored on its own, the
 // child standing in the parent's exploration as a service with outcomes.
 //
 // A state can hold a live resource, such as a connection, for as long as it

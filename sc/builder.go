@@ -42,6 +42,9 @@ type build[S comparable, C any] struct {
 
 	// releases holds the resources Release names.
 	releases []string
+
+	// spawns holds the services Spawn and StopSpawned name.
+	spawns []string
 }
 
 func (b *build[S, C]) errorf(format string, args ...any) {
@@ -421,6 +424,7 @@ func (s *StateBuilder[S, C]) Invoke[R any](name string, fn func(context.Context,
 		run:      adaptService(fn),
 		resource: nil,
 		retry:    nil,
+		spawned:  false,
 	}
 	s.n.invocations = append(s.n.invocations, inv)
 
@@ -440,6 +444,7 @@ func (s *StateBuilder[S, C]) Requires[R any](name string) *Invocation[S, C, R] {
 		run:      nil,
 		resource: nil,
 		retry:    nil,
+		spawned:  false,
 	}
 	s.n.invocations = append(s.n.invocations, inv)
 
@@ -498,7 +503,9 @@ func (s *StateBuilder[S, C]) HoldsRequired[R any](name string) *Resource[S, C, R
 		name:     name,
 		doneType: reflect.TypeFor[Acquired[R]](),
 		run:      nil,
-		resource: &resourceSpec[S]{key: s.n.name + "\x00" + name, release: nil}, retry: nil,
+		resource: &resourceSpec[S]{key: s.n.name + "\x00" + name, release: nil},
+		retry:    nil,
+		spawned:  false,
 	}
 	s.n.invocations = append(s.n.invocations, inv)
 
@@ -639,6 +646,7 @@ func (s *StateBuilder[S, C]) Stream(name string, fn func(context.Context, C) ite
 		run:      adaptStream(fn),
 		resource: nil,
 		retry:    nil,
+		spawned:  false,
 	}
 	s.n.invocations = append(s.n.invocations, inv)
 
@@ -682,6 +690,20 @@ func (i *Invocation[S, C, R]) Retry(policy Retry) *Invocation[S, C, R] {
 	return i
 }
 
+// Spawned makes the service one that runs any number of times at once
+// while its state is active, each run under a key: one per upload, per
+// host, per job. Nothing starts when the state is entered. A transition
+// starts a run with [Transition.Spawn] and stops one with
+// [Transition.StopSpawned]; leaving the state stops them all.
+//
+// The service's OnDone and OnError transitions are taken for every run, and
+// tell the runs apart with [SpawnKey] on the event's ID. The service reads
+// its own key with SpawnKey on [RunID].
+func (i *Invocation[S, C, R]) Spawned() *Invocation[S, C, R] {
+	i.inv.spawned = true
+	return i
+}
+
 // OnDone declares a transition taken when the service succeeds.
 func (i *Invocation[S, C, R]) OnDone() *Transition[S, C, Done[R]] {
 	t := newTransition[S, C, Done[R]](i.b, i.n, triggerInvokeDone)
@@ -714,6 +736,8 @@ func newTransition[S comparable, C, Ev any](b *build[S, C], source *node[S, C], 
 	t := new(transition[S, C])
 	t.source = source
 	t.trigger = trigger
+	t.sendTargets = map[int]string{}
+	t.keys = map[int]func(C, any) string{}
 	source.transitions = append(source.transitions, t)
 
 	return &Transition[S, C, Ev]{b: b, t: t}
@@ -914,6 +938,41 @@ func (t *Transition[S, C, Ev]) Release(name string) *Transition[S, C, Ev] {
 	return t
 }
 
+// Spawn starts a run of the spawned service named service under the key
+// that key returns, with the context as it is at this step. It does nothing
+// when a run with that key is already going, or when the service's state is
+// not active: a transition that enters the state cannot spawn in the same
+// step.
+func (t *Transition[S, C, Ev]) Spawn(name, service string, key func(C, Ev) string) *Transition[S, C, Ev] {
+	return t.keyed(stepSpawn, name, service, key)
+}
+
+// StopSpawned stops the run of the spawned service named service that has
+// the key that key returns, and drops what it reports from then on. It does
+// nothing when there is none.
+func (t *Transition[S, C, Ev]) StopSpawned(name, service string, key func(C, Ev) string) *Transition[S, C, Ev] {
+	return t.keyed(stepStop, name, service, key)
+}
+
+// SendToKey is [Transition.SendTo] for one run of a spawned service: the
+// one with the key that key returns.
+func (t *Transition[S, C, Ev]) SendToKey(name, service string, key func(C, Ev) string, f func(C, Ev) any) *Transition[S, C, Ev] {
+	t.SendTo(name, service, f)
+	t.t.keys[len(t.t.steps)-1] = func(c C, ev any) string { return key(c, event[Ev](ev)) }
+
+	return t
+}
+
+// keyed adds a step about one run of a spawned service.
+func (t *Transition[S, C, Ev]) keyed(kind stepKind, name, service string, key func(C, Ev) string) *Transition[S, C, Ev] {
+	t.t.sendTargets[len(t.t.steps)] = service
+	t.t.keys[len(t.t.steps)] = func(c C, ev any) string { return key(c, event[Ev](ev)) }
+	t.b.spawns = append(t.b.spawns, service)
+	t.t.steps = append(t.t.steps, step[C]{kind: kind, name: name, assign: nil, do: nil, raise: nil})
+
+	return t
+}
+
 // SendTo sends the event f returns to the running service named service,
 // which reads it from [Inbox]. It is how a chart talks to work in progress:
 // a child machine declared with [StateBuilder.InvokeMachine], or a service
@@ -925,9 +984,6 @@ func (t *Transition[S, C, Ev]) Release(name string) *Transition[S, C, Ev] {
 // Only the [Instance] and [Actor] drivers deliver such events; pgdriver
 // rejects a chart that sends them.
 func (t *Transition[S, C, Ev]) SendTo(name, service string, f func(C, Ev) any) *Transition[S, C, Ev] {
-	if t.t.sendTargets == nil {
-		t.t.sendTargets = map[int]string{}
-	}
 	t.t.sendTargets[len(t.t.steps)] = service
 	t.b.sends = append(t.b.sends, service)
 
