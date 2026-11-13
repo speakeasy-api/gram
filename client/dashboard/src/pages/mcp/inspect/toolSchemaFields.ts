@@ -179,6 +179,50 @@ function isScalarOrNull(
   return value === null || isScalar(value);
 }
 
+const JSON_TYPE_NAMES: Record<string, string> = {
+  array: "a list",
+  object: "an object",
+  string: "text",
+  number: "a number",
+  integer: "a whole number",
+  boolean: "true or false",
+  null: "null",
+};
+
+/**
+ * What a JSON field's value should have been, when its top-level type doesn't
+ * match the schema's `type`; undefined when it matches or the schema names no
+ * type. Deeper rules are the server's to check.
+ */
+function jsonTypeMismatch(schema: unknown, value: unknown): string | undefined {
+  if (!schema || typeof schema !== "object") return undefined;
+  const declared = (schema as { type?: unknown }).type;
+  const types = (Array.isArray(declared) ? declared : [declared]).filter(
+    (t): t is string => typeof t === "string" && t in JSON_TYPE_NAMES,
+  );
+  if (types.length === 0) return undefined;
+  const matches = (type: string): boolean => {
+    switch (type) {
+      case "array":
+        return Array.isArray(value);
+      case "object":
+        return isRecord(value);
+      case "string":
+        return typeof value === "string";
+      case "number":
+        return typeof value === "number";
+      case "integer":
+        return typeof value === "number" && Number.isInteger(value);
+      case "boolean":
+        return typeof value === "boolean";
+      default:
+        return value === null;
+    }
+  };
+  if (types.some(matches)) return undefined;
+  return types.map((type) => JSON_TYPE_NAMES[type]).join(" or ");
+}
+
 function labelOf(value: unknown): string {
   return typeof value === "string" ? value : optionKey(value);
 }
@@ -198,7 +242,10 @@ export function toArguments(
       args[field.name] = field.value;
       continue;
     }
-    const raw = values[field.name] ?? "";
+    // Own keys only: a field named `__proto__` must not read the prototype.
+    const raw = Object.hasOwn(values, field.name)
+      ? (values[field.name] ?? "")
+      : "";
     if (field.kind === "arguments") {
       if (raw.trim() === "") {
         if (field.required)
@@ -235,16 +282,22 @@ export function toArguments(
         args[field.name] = number;
         break;
       }
-      case "json":
+      case "json": {
+        let parsed: unknown;
         try {
-          args[field.name] = JSON.parse(raw);
+          parsed = JSON.parse(raw);
         } catch {
           return {
             ok: false,
             error: `${field.name} must be valid JSON${field.example ? `, like ${field.example}` : ""}.`,
           };
         }
+        const expected = jsonTypeMismatch(field.schema, parsed);
+        if (expected)
+          return { ok: false, error: `${field.name} must be ${expected}.` };
+        args[field.name] = parsed;
         break;
+      }
       case "text-or-json": {
         // Lists and objects arrive as JSON; anything else is the text itself.
         const trimmed = raw.trim();

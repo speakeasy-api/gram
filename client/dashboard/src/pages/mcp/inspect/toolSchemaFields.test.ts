@@ -462,3 +462,34 @@ describe("jsonFieldError", () => {
     expect(jsonFieldError(config!, '{"a": 1}')).toBeUndefined();
   });
 });
+
+describe("toArguments JSON checks", () => {
+  it("rejects a JSON value whose type doesn't match the schema", () => {
+    const fields = extractFields({
+      type: "object",
+      properties: { ids: { type: "array", items: { type: "object" } } },
+    });
+    const field = fields[0]!;
+    expect(field.kind).toBe("json");
+    expect(toArguments(fields, { ids: "{}" })).toEqual({
+      ok: false,
+      error: "ids must be a list.",
+    });
+    expect(toArguments(fields, { ids: '[{"a":1}]' })).toEqual({
+      ok: true,
+      args: { ids: [{ a: 1 }] },
+    });
+  });
+
+  it("reads only own form values, so __proto__ is just a field name", () => {
+    // Parsed, not a literal: `{ __proto__: ... }` in source sets the prototype.
+    const fields = extractFields(
+      JSON.parse(
+        '{"type":"object","properties":{"__proto__":{"type":"string"}}}',
+      ),
+    );
+    expect(fields.map((f) => f.name)).toEqual(["__proto__"]);
+    expect(() => toArguments(fields, {})).not.toThrow();
+    expect(toArguments(fields, {})).toEqual({ ok: true, args: {} });
+  });
+});
