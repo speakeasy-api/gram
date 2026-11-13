@@ -306,11 +306,11 @@ func (c *Core) filterByAudience(ctx context.Context, organizationID string, prin
 	applicable := make([]repo.RiskPolicy, 0, len(rows))
 	policyIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
-		application, err := authz.RiskPolicyApplies(row.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		application, err := authz.EvaluateRiskPolicy(grants, row.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""})
 		if err != nil {
-			return nil, nil, fmt.Errorf("evaluate risk policy application: %w", err)
+			return nil, nil, fmt.Errorf("risk policy %s: %w", row.ID, err)
 		}
-		if application.Satisfied {
+		if application.Applies() {
 			applicable = append(applicable, row)
 			policyIDs = append(policyIDs, row.ID.String())
 		}
