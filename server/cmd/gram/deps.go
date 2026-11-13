@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1882,24 +1883,57 @@ func newKMSEncryptionClients(ctx context.Context, logger *slog.Logger, c *cli.Co
 		}, nil
 }
 
+// orgEncryptionOptionalEnvironments are the only environments where a process
+// may start without organization encryption configured. Everywhere else, every
+// process that reads or writes organization-encrypted data requires it: a
+// process without it cannot open data sealed under an organization key, so it
+// fails at startup instead of at the first request. Listing the exemptions
+// means a new or misspelled environment fails safe. Previews run with
+// environment dev and opt out explicitly.
+var orgEncryptionOptionalEnvironments = []string{"local", "test"}
+
+// orgEncryptionDeps is a process's organization encryption. Both fields are nil
+// when organization encryption is off, and every consumer then fails closed.
+type orgEncryptionDeps struct {
+	// Service encrypts and decrypts organization data.
+	Service *orgencryption.Service
+
+	// Provisioner mints, switches and retires organization keys.
+	Provisioner *orgencryption.Provisioner
+}
+
 // newOrgEncryption builds the organization encryption service and
-// provisioner, or nils when no platform credential is configured: the feature
-// is then off and every consumer fails closed.
-func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, auditLogger *audit.Logger) (*orgencryption.Service, *orgencryption.Provisioner, error) {
+// provisioner. It returns the zero value when organization encryption is off,
+// and an error when it is misconfigured or required but not configured.
+func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, auditLogger *audit.Logger) (orgEncryptionDeps, error) {
+	environment := c.String("environment")
 	rawCredentialID := strings.TrimSpace(c.String(orgEncryptionCredentialIDFlag))
-	if rawCredentialID == "" {
-		logger.WarnContext(ctx, "organization encryption is unavailable: no platform credential configured")
-		return nil, nil, nil
+
+	if c.Bool(orgEncryptionDisabledFlag) {
+		if rawCredentialID != "" {
+			return orgEncryptionDeps{}, errors.New("organization encryption is disabled but a platform credential is configured: unset GRAM_ORG_ENCRYPTION_DISABLED or GRAM_ORG_ENCRYPTION_CREDENTIAL_ID")
+		}
+		logger.WarnContext(ctx, "organization encryption is disabled by configuration")
+		return orgEncryptionDeps{Service: nil, Provisioner: nil}, nil
 	}
+
+	if rawCredentialID == "" {
+		if !slices.Contains(orgEncryptionOptionalEnvironments, environment) {
+			return orgEncryptionDeps{}, fmt.Errorf("organization encryption is required in the %q environment: set GRAM_ORG_ENCRYPTION_CREDENTIAL_ID, or set GRAM_ORG_ENCRYPTION_DISABLED to run without it", environment)
+		}
+		logger.WarnContext(ctx, "organization encryption is unavailable: no platform credential configured")
+		return orgEncryptionDeps{Service: nil, Provisioner: nil}, nil
+	}
+
 	credentialID, err := uuid.Parse(rawCredentialID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse organization encryption credential id: %w", err)
+		return orgEncryptionDeps{}, fmt.Errorf("parse organization encryption credential id: %w", err)
 	}
 
 	keyRing := strings.TrimSpace(c.String(orgEncryptionKMSKeyRingFlag))
 	if keyRing == "" {
-		if c.String("environment") != "local" {
-			return nil, nil, errors.New("organization encryption kms key ring is required when a credential is configured")
+		if environment != "local" {
+			return orgEncryptionDeps{}, errors.New("organization encryption kms key ring is required when a credential is configured")
 		}
 		keyRing = orgEncryptionKMSKeyRingLocalDefault
 	}
@@ -1912,12 +1946,12 @@ func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, 
 
 	clients, provisioning, err := newKMSEncryptionClients(ctx, logger, c)
 	if err != nil {
-		return nil, nil, err
+		return orgEncryptionDeps{}, err
 	}
 
 	service, err := orgencryption.NewService(logger, db, gcpIdentity, clients, keys)
 	if err != nil {
-		return nil, nil, fmt.Errorf("build organization encryption service: %w", err)
+		return orgEncryptionDeps{}, fmt.Errorf("build organization encryption service: %w", err)
 	}
 
 	provisioner, err := orgencryption.NewProvisioner(logger, db, gcpIdentity, clients, provisioning, auditLogger, service, orgencryption.ProvisionerConfig{
@@ -1926,10 +1960,12 @@ func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, 
 		ManagedKeyRetention: c.Duration(orgEncryptionManagedKeyRetention),
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("build organization encryption provisioner: %w", err)
+		return orgEncryptionDeps{}, fmt.Errorf("build organization encryption provisioner: %w", err)
 	}
 
-	return service, provisioner, nil
+	logger.InfoContext(ctx, "organization encryption is enabled")
+
+	return orgEncryptionDeps{Service: service, Provisioner: provisioner}, nil
 }
 
 // orgEncryptionSweeper keeps a nil provisioner a nil interface.

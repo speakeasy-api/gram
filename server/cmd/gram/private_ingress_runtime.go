@@ -293,6 +293,10 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+	orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+	if err != nil {
+		return nil, err
+	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
 	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
@@ -308,7 +312,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		defer cancel()
 		return connectionRecorder.ShutdownAndWait(drainCtx)
 	})
-	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
+	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder, orgEncryption)
 	if err != nil {
 		return nil, err
 	}
