@@ -247,3 +247,52 @@ func TestPostgresStateStoreLeasesCertificateIssuance(t *testing.T) {
 	_, _, err = slot1.ReadTLSCertAndKey("issuance-lease")
 	require.ErrorIs(t, err, ipn.ErrStateNotExist, "the lease is never mistaken for a certificate")
 }
+
+// lapseCertificateLease ages the connection's issuance lease past its
+// duration, as if its holder died or stalled.
+func lapseCertificateLease(t *testing.T, db *pgxpool.Pool, ingressID uuid.UUID) {
+	t.Helper()
+	require.NoError(t, testrepo.New(db).LapseNetworkIngressCertificateLease(t.Context(), ingressID))
+}
+
+func TestPostgresStateStoreReleasesOnlyItsOwnLease(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "tailnetstatecertleaseown")
+	require.NoError(t, err)
+	ingressID, orgID := seedIngress(t, db, "state-cert-lease-own")
+	slot0 := newStateStore(t, db, ingressID, orgID, 0)
+	slot1 := newStateStore(t, db, ingressID, orgID, 1)
+	slot2 := newStateStore(t, db, ingressID, orgID, 2)
+
+	staleRelease, claimed, err := slot0.ClaimCertificateIssuance(t.Context())
+	require.NoError(t, err)
+	require.True(t, claimed)
+	lapseCertificateLease(t, db, ingressID)
+	_, claimed, err = slot1.ClaimCertificateIssuance(t.Context())
+	require.NoError(t, err)
+	require.True(t, claimed, "a lapsed lease can be claimed")
+
+	staleRelease()
+	_, claimed, err = slot2.ClaimCertificateIssuance(t.Context())
+	require.NoError(t, err)
+	require.False(t, claimed, "a late release from the lapsed holder leaves the new holder's lease in place")
+}
+
+func TestPostgresStateStoreLeaseIsScopedToItsOrganization(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "tailnetstatecertleaseorg")
+	require.NoError(t, err)
+	ingressID, orgID := seedIngress(t, db, "state-cert-lease-org")
+	_, otherOrgID := seedIngress(t, db, "state-cert-lease-other")
+	holder := newStateStore(t, db, ingressID, orgID, 0)
+	intruder := newStateStore(t, db, ingressID, otherOrgID, 0)
+
+	_, claimed, err := holder.ClaimCertificateIssuance(t.Context())
+	require.NoError(t, err)
+	require.True(t, claimed)
+	lapseCertificateLease(t, db, ingressID)
+
+	_, claimed, err = intruder.ClaimCertificateIssuance(t.Context())
+	require.NoError(t, err)
+	require.False(t, claimed, "another organization cannot take over a connection's lease, even a lapsed one")
+}

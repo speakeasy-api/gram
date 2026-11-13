@@ -530,6 +530,12 @@ func (t *certificateTracker) log(ctx context.Context, before, after certState, o
 	if o.err == nil {
 		return
 	}
+	if errors.Is(o.err, errCertificateIssuing) {
+		// Waiting for another slot's lease is expected, and retried every
+		// few seconds; it is not worth a warning each time.
+		t.logger.DebugContext(ctx, "waiting for another gateway slot to obtain the tailnet service certificate", attr.SlogHostName(t.domain))
+		return
+	}
 	switch o.action {
 	case actionCheckStore:
 		t.logger.WarnContext(ctx, "could not read the stored tailnet service certificate", attr.SlogHostName(t.domain), attr.SlogError(o.err))

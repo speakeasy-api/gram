@@ -18,7 +18,8 @@ VALUES ($1, $2, $3, $4)
 ON CONFLICT (network_ingress_id, state_key) DO UPDATE
 SET value_encrypted = EXCLUDED.value_encrypted,
     updated_at = clock_timestamp()
-WHERE network_ingress_certificate_states.updated_at < clock_timestamp() - make_interval(secs => $5::float8)
+WHERE network_ingress_certificate_states.organization_id = $2
+  AND network_ingress_certificate_states.updated_at < clock_timestamp() - make_interval(secs => $5::float8)
 `
 
 type ClaimNetworkIngressCertificateIssuanceParams struct {
@@ -630,16 +631,25 @@ DELETE FROM network_ingress_certificate_states
 WHERE network_ingress_id = $1
   AND organization_id = $2
   AND state_key = $3
+  AND value_encrypted = $4
 `
 
 type ReleaseNetworkIngressCertificateIssuanceParams struct {
 	NetworkIngressID uuid.UUID
 	OrganizationID   string
 	StateKey         string
+	ValueEncrypted   string
 }
 
+// Releases only the caller's own claim: a holder whose lease lapsed and was
+// claimed by another slot must not delete that slot's lease.
 func (q *Queries) ReleaseNetworkIngressCertificateIssuance(ctx context.Context, arg ReleaseNetworkIngressCertificateIssuanceParams) error {
-	_, err := q.db.Exec(ctx, releaseNetworkIngressCertificateIssuance, arg.NetworkIngressID, arg.OrganizationID, arg.StateKey)
+	_, err := q.db.Exec(ctx, releaseNetworkIngressCertificateIssuance,
+		arg.NetworkIngressID,
+		arg.OrganizationID,
+		arg.StateKey,
+		arg.ValueEncrypted,
+	)
 	return err
 }
 

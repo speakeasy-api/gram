@@ -238,10 +238,14 @@ VALUES (@network_ingress_id, @organization_id, @state_key, @value_encrypted)
 ON CONFLICT (network_ingress_id, state_key) DO UPDATE
 SET value_encrypted = EXCLUDED.value_encrypted,
     updated_at = clock_timestamp()
-WHERE network_ingress_certificate_states.updated_at < clock_timestamp() - make_interval(secs => @lease_seconds::float8);
+WHERE network_ingress_certificate_states.organization_id = @organization_id
+  AND network_ingress_certificate_states.updated_at < clock_timestamp() - make_interval(secs => @lease_seconds::float8);
 
 -- name: ReleaseNetworkIngressCertificateIssuance :exec
+-- Releases only the caller's own claim: a holder whose lease lapsed and was
+-- claimed by another slot must not delete that slot's lease.
 DELETE FROM network_ingress_certificate_states
 WHERE network_ingress_id = @network_ingress_id
   AND organization_id = @organization_id
-  AND state_key = @state_key;
+  AND state_key = @state_key
+  AND value_encrypted = @value_encrypted;

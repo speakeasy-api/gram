@@ -307,7 +307,8 @@ const (
 // issuing another. Claiming holds no database connection. It reports false
 // when another slot holds a live lease; otherwise release ends the lease.
 func (s *PostgresStateStore) ClaimCertificateIssuance(ctx context.Context) (func(), bool, error) {
-	marker, err := s.enc.Encrypt(ctx, nodeStateColumn, []byte("issuing"))
+	// The marker identifies this claim, so release deletes only its own.
+	marker, err := s.enc.Encrypt(ctx, nodeStateColumn, []byte("issuing:"+uuid.NewString()))
 	if err != nil {
 		return nil, false, fmt.Errorf("encrypt tailnet certificate lease: %w", err)
 	}
@@ -326,7 +327,7 @@ func (s *PostgresStateStore) ClaimCertificateIssuance(ctx context.Context) (func
 		defer cancel()
 		// A lease left behind lapses after certificateLeaseDuration.
 		_ = repo.New(s.db).ReleaseNetworkIngressCertificateIssuance(releaseCtx, repo.ReleaseNetworkIngressCertificateIssuanceParams{
-			NetworkIngressID: s.ingressID, OrganizationID: s.orgID, StateKey: certificateLeaseStateKey,
+			NetworkIngressID: s.ingressID, OrganizationID: s.orgID, StateKey: certificateLeaseStateKey, ValueEncrypted: marker,
 		})
 	}, true, nil
 }
