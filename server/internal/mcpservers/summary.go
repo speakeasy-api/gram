@@ -10,7 +10,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -34,9 +33,6 @@ func EnrichViews(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ser
 	for i, server := range servers {
 		serverIDs[i] = server.ID
 		serverIDStrings[i] = server.ID.String()
-		// Readiness detail, so only views of servers the caller may read carry
-		// it: an organization listing builds every server's base view.
-		views[i].SetupGuideCompletedAt = conv.PtrEmpty(conv.FromPGTimestamptz(server.SetupGuideCompletedAt))
 		projectSet[server.ProjectID] = struct{}{}
 		if server.ToolsetID.Valid {
 			toolsetSet[server.ToolsetID.UUID] = struct{}{}
