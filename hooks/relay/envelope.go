@@ -22,6 +22,10 @@ func adapterSlug(p agenthooks.Provider) string {
 	switch p {
 	case agenthooks.ProviderClaudeCode:
 		return "claude"
+	case agenthooks.ProviderCopilotCLI:
+		// The server keys Copilot on the slug it had before agenthooks split
+		// Copilot CLI from VS Code.
+		return "copilot"
 	default:
 		return string(p)
 	}

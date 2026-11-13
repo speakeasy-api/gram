@@ -46,9 +46,11 @@ const configFileName = "speakeasy.json"
 
 // WritePlugin renders a provider hook package under dir that drives the
 // speakeasy-hooks binary. provider is the agenthooks slug (claude-code,
-// cursor, codex, opencode, copilot, openclaw) or "pi". For claude-code, cursor
-// and copilot, dir is a plugin directory; for codex, which has no plugin
-// layout for hooks, dir is the Codex home the config installs into; for
+// cursor, codex, opencode, copilot, openclaw, antigravity) or "pi". For
+// claude-code, cursor and copilot, dir is a plugin directory; for codex, which
+// has no plugin layout for hooks, dir is the Codex home the config installs
+// into; for antigravity, dir is the Antigravity config home
+// (~/.gemini/config) whose hooks.json is merged; for
 // opencode, dir receives an .opencode/plugin shim usable either as a project
 // directory or referenced from an OpenCode config's plugin list; for openclaw,
 // dir is a native OpenClaw plugin package installed with `openclaw plugins
@@ -78,9 +80,11 @@ func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) er
 	case "opencode":
 		target = install.Target{Provider: agenthooks.ProviderOpenCode, Scope: install.ScopeProject, Dir: dir}
 	case "copilot":
-		target = install.Target{Provider: agenthooks.ProviderCopilot, Scope: install.ScopePlugin, Dir: dir}
+		target = install.Target{Provider: agenthooks.ProviderCopilotCLI, Scope: install.ScopePlugin, Dir: dir}
 	case "openclaw":
 		target = install.Target{Provider: agenthooks.ProviderOpenClaw, Scope: install.ScopeProject, Dir: dir}
+	case "antigravity", "agy":
+		target = install.Target{Provider: agenthooks.ProviderAntigravity, Scope: install.ScopeUser, Dir: dir}
 	default:
 		return fmt.Errorf("unknown provider %q", provider)
 	}
@@ -136,7 +140,7 @@ func manifest(provider agenthooks.Provider, cfg PluginConfig, dir string) instal
 		observe(agenthooks.KindNotification),
 		observe(agenthooks.KindModelResponse),
 	}
-	if provider == agenthooks.ProviderCodex || provider == agenthooks.ProviderOpenCode || provider == agenthooks.ProviderCopilot {
+	if provider == agenthooks.ProviderCodex || provider == agenthooks.ProviderOpenCode || provider == agenthooks.ProviderCopilotCLI {
 		hooks = append(hooks, gate(agenthooks.KindPermission, 60*time.Second))
 	}
 	// OpenClaw's Codex app-server harness fires llm_input but no

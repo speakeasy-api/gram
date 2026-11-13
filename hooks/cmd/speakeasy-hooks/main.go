@@ -71,7 +71,7 @@ func main() {
 // backs local end-to-end testing; production distribution is wired separately.
 func runInstall(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
-	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex, opencode, openclaw, pi")
+	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex, opencode, copilot, openclaw, antigravity, pi")
 	dir := fs.String("dir", "", "output directory for the plugin package")
 	serverURL := fs.String("server-url", relay.DefaultServerURL, "Speakeasy server URL to bake into the plugin")
 	siteURL := fs.String("site-url", "", "dashboard origin for browser sign-in when it differs from the server URL (local dev)")

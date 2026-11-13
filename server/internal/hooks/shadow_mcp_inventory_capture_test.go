@@ -69,6 +69,32 @@ func TestCanonicalClaudeSessionStartUpsertsShadowMCPInventoryURLs(t *testing.T) 
 	require.Equal(t, "external", rows[0].ServerName)
 }
 
+func TestAntigravityMCPInventoryUpsertsShadowMCPInventoryURLs(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	payload := canonicalIngestPayload("antigravity", "mcp.inventory", uuid.NewString())
+	payload.Source.RawEventName = new("MCPInventory")
+	payload.Data = &gen.HookIngestData{
+		McpInventory: []*gen.HookMCPData{
+			{ServerName: new("linear"), URL: new("https://mcp.linear.app/mcp?token=%2A%2A%2A")},
+			{ServerName: new("local"), Command: new("node server.js")},
+		},
+		McpInventoryCollected: new(true),
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	rows := requireShadowMCPInventoryURLsFromHooks(ctx, t, ti, chClient, authCtx.ProjectID.String(), 1)
+	require.Equal(t, "https://mcp.linear.app/mcp", rows[0].CanonicalServerURL)
+	require.Equal(t, "mcp.linear.app", rows[0].URLHost)
+	require.Equal(t, "linear", rows[0].ServerName)
+}
+
 func TestClaudeSessionStartSkipsHostedMCPInventoryURLs(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
