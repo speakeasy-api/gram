@@ -61,3 +61,12 @@ func TestIDs_EqualsFailsOnAnAbsentID(t *testing.T) {
 	require.Empty(t, ProjectIDOf(uuid.Nil).String())
 	require.Equal(t, id.String(), ProjectIDOf(id).String())
 }
+
+func TestIDs_StringsThatCannotNameAResourceAreAbsent(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{"", "*", "$represented_user", "project 1", "project\t1", "project 1", "project 1"} {
+		require.Empty(t, ProjectIDFrom(raw).String(), "%q", raw)
+	}
+	require.Equal(t, "project-1", ProjectIDFrom("project-1").String())
+}
