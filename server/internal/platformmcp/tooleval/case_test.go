@@ -73,6 +73,7 @@ func TestAttachIdentityProviderCaseAcceptsReadinessFirst(t *testing.T) {
 		{tool: "get_mcp_network_traffic", hit: false, onPath: false},
 	} {
 		t.Run(tc.tool, func(t *testing.T) {
+			t.Parallel()
 			require.False(t, c.orients(tc.tool), "each call ends the attempt, rather than becoming an orientation read")
 			o := Outcome{Case: c, Selected: &Call{Tool: tc.tool, Arguments: json.RawMessage(`{}`)}}
 			score(&o, nil, nil)
