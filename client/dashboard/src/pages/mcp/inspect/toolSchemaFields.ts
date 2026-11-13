@@ -41,7 +41,7 @@ export function extractFields(inputSchema: unknown): ToolField[] {
   const schema = readJsonSchema(inputSchema);
   if (!schema) return [];
   const properties = isRecord(schema.properties) ? schema.properties : {};
-  if (isComposed(schema, properties)) {
+  if (isComposed(schema)) {
     return [
       {
         name: "arguments",
@@ -68,10 +68,7 @@ export function extractFields(inputSchema: unknown): ToolField[] {
  * True when the top level can't be read as a plain property list: a root
  * allOf/anyOf/oneOf/$ref, or arbitrary keys described by a schema.
  */
-function isComposed(
-  schema: Record<string, unknown>,
-  properties: Record<string, unknown>,
-): boolean {
+function isComposed(schema: Record<string, unknown>): boolean {
   if (
     Array.isArray(schema.allOf) ||
     Array.isArray(schema.anyOf) ||
@@ -79,10 +76,9 @@ function isComposed(
     typeof schema.$ref === "string"
   )
     return true;
+  // Dynamic keys can't be entered as named fields, even next to named ones.
   return (
-    Object.keys(properties).length === 0 &&
-    (isRecord(schema.additionalProperties) ||
-      isRecord(schema.patternProperties))
+    isRecord(schema.additionalProperties) || isRecord(schema.patternProperties)
   );
 }
 
@@ -103,10 +99,7 @@ function fieldFor(name: string, def: unknown, required: boolean): ToolField {
 
   // null stays a choice, so a required nullable enum can still send null.
   const enumValues: unknown[] = Array.isArray(def.enum) ? def.enum : [];
-  if (
-    enumValues.some((value) => value !== null) &&
-    enumValues.every((value) => value === null || isScalar(value))
-  ) {
+  if (enumValues.length > 0 && enumValues.every(isScalarOrNull)) {
     return {
       ...base,
       kind: "enum",
@@ -121,10 +114,14 @@ function fieldFor(name: string, def: unknown, required: boolean): ToolField {
     if (variants.length === 1) {
       const { anyOf: _anyOf, oneOf: _oneOf, ...rest } = def;
       const field = fieldFor(name, { ...rest, ...variants[0] }, required);
-      return { ...field, description: base.description ?? field.description };
+      return {
+        ...field,
+        description: base.description ?? field.description,
+        schema: def,
+      };
     }
     // A union of fixed values is a list of choices.
-    if (variants.every((v) => "const" in v && isScalar(v.const))) {
+    if (variants.every((v) => "const" in v && isScalarOrNull(v.const))) {
       return {
         ...base,
         kind: "enum",
@@ -176,6 +173,12 @@ function isScalar(value: unknown): value is string | number | boolean {
   );
 }
 
+function isScalarOrNull(
+  value: unknown,
+): value is string | number | boolean | null {
+  return value === null || isScalar(value);
+}
+
 function labelOf(value: unknown): string {
   return typeof value === "string" ? value : optionKey(value);
 }
@@ -188,7 +191,8 @@ export function toArguments(
   fields: ToolField[],
   values: Record<string, string>,
 ): { ok: true; args: Record<string, unknown> } | { ok: false; error: string } {
-  const args: Record<string, unknown> = {};
+  // No prototype, so an argument named `__proto__` is kept as a plain key.
+  const args: Record<string, unknown> = Object.create(null);
   for (const field of fields) {
     if (field.kind === "const") {
       args[field.name] = field.value;
