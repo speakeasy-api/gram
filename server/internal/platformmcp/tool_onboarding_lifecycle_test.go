@@ -12,7 +12,7 @@ func TestIdentityProviderAttachmentOutputPresentsExactAuthorizationLink(t *testi
 
 	output := identityProviderAttachmentOutput(
 		"project",
-		"registration",
+		"mcp",
 		CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: "https://provider.example"},
 		"https://dashboard.example/organization/projects/project/mcp/server/inspect",
 	)

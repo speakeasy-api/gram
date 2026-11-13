@@ -111,6 +111,7 @@ func newAnalyticsTestHarness(t *testing.T, evaluation feature.Evaluation, budget
 	require.NotNil(t, service)
 
 	reg := newRegistrar(newTestMCPServer())
+	reg.withProjects(slugProjects{project.Slug: project.ID})
 	registerAnalyticsTools(reg, service)
 	return &analyticsTestHarness{reg: reg, engine: engine, projects: projects, flags: flags, project: project, logs: logs, service: service}
 }
@@ -128,15 +129,15 @@ func (h *analyticsTestHarness) invokeWithGrants(t *testing.T, tool, arguments st
 }
 
 func (h *analyticsTestHarness) projectArguments() string {
-	return `{"project_id":"` + h.project.ID.String() + `"}`
+	return `{"project_slug":"` + h.project.Slug + `"}`
 }
 
 func (h *analyticsTestHarness) valuesArguments(extra string) string {
-	return `{"project_id":"` + h.project.ID.String() + `","dataset":"tool_calls","dimension":"tool_name",` + analyticsTestWindow + extra + `}`
+	return `{"project_slug":"` + h.project.Slug + `","dataset":"tool_calls","dimension":"tool_name",` + analyticsTestWindow + extra + `}`
 }
 
 func (h *analyticsTestHarness) queryArguments(extra string) string {
-	return `{"project_id":"` + h.project.ID.String() + `","dataset":"tool_calls",` + analyticsTestWindow + extra + `}`
+	return `{"project_slug":"` + h.project.Slug + `","dataset":"tool_calls",` + analyticsTestWindow + extra + `}`
 }
 
 // validArguments is one well-formed call per tool.
@@ -177,9 +178,9 @@ func TestAnalyticsToolsDeclareTheirContract(t *testing.T) {
 			Properties map[string]json.RawMessage `json:"properties"`
 		}
 		require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
-		require.Contains(t, schema.Required, "project_id", name)
-		require.Contains(t, schema.Properties, "project_id", name)
-		require.NotContains(t, schema.Properties, "project_slug", "an explicit-project tool names the project by ID: %s", name)
+		require.Contains(t, schema.Required, "project_slug", name)
+		require.Contains(t, schema.Properties, "project_slug", name)
+		require.NotContains(t, schema.Properties, "project_id", "an explicit-project tool names the project by slug: %s", name)
 	}
 
 	var query struct {
@@ -218,7 +219,7 @@ func TestAnalyticsToolsDeclareTheirContract(t *testing.T) {
 		} `json:"properties"`
 	}
 	require.NoError(t, json.Unmarshal(descriptorByName(t, h.reg, runAnalyticsQueryToolName).InputSchema, &query))
-	require.Equal(t, []string{"project_id", "dataset", "from", "to"}, query.Required)
+	require.Equal(t, []string{"project_slug", "dataset", "from", "to"}, query.Required)
 	require.Empty(t, query.Properties.Grain.Enum, "API interval values are discovered and validated by the engine")
 	require.Equal(t, analytics.MaxDimensions, query.Properties.Dimensions.MaxItems)
 	require.Equal(t, analytics.MaxLimit, query.Properties.Limit.Maximum)
@@ -235,16 +236,17 @@ func TestAnalyticsToolsDeclareTheirContract(t *testing.T) {
 		} `json:"properties"`
 	}
 	require.NoError(t, json.Unmarshal(descriptorByName(t, h.reg, listAnalyticsDimensionValuesToolName).InputSchema, &values))
-	require.Equal(t, []string{"project_id", "dataset", "dimension", "from", "to"}, values.Required)
+	require.Equal(t, []string{"project_slug", "dataset", "dimension", "from", "to"}, values.Required)
 	require.Equal(t, analytics.MaxValuesLimit, values.Properties.Limit.Maximum)
 }
 
 func TestAnalyticsToolsStubWithoutAService(t *testing.T) {
 	t.Parallel()
 
-	reg := newRegistrar(newTestMCPServer())
-	registerAnalyticsTools(reg, nil)
 	live := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
+	reg := newRegistrar(newTestMCPServer())
+	reg.withProjects(slugProjects{live.project.Slug: live.project.ID})
+	registerAnalyticsTools(reg, nil)
 	for name, arguments := range live.validArguments() {
 		descriptor := descriptorByName(t, reg, name)
 		require.Contains(t, descriptor.Description, "unavailable in this deployment", name)
@@ -377,13 +379,22 @@ func TestAnalyticsToolsRequireProjectReadBeforeAnythingElse(t *testing.T) {
 	require.Empty(t, h.flags.flag, "the flag is evaluated only for a project the caller may read")
 	require.Zero(t, h.engine.calls)
 
-	// A project ID that is not an ID never reaches the resolver.
+	// A blank project slug names no project and never reaches the resolver.
 	h = newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
-	_, err := h.invoke(t, describeAnalyticsCatalogToolName, `{"project_id":"not-an-id"}`)
+	_, err := h.invoke(t, describeAnalyticsCatalogToolName, `{"project_slug":" "}`)
 	refusal := requireAnalyticsRefusal(t, err)
 	require.Equal(t, "invalid_request", refusal.Code)
 	require.Contains(t, refusal.Message, "list_projects")
 	require.Empty(t, h.projects.inputs)
+
+	// An unknown slug reaches the resolver as a project no caller can find,
+	// so it is answered as any project the caller may not read.
+	h = newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
+	h.projects.err = ErrForbidden
+	_, err = h.invoke(t, describeAnalyticsCatalogToolName, `{"project_slug":"no-such-project"}`)
+	require.Equal(t, "forbidden", requireAnalyticsRefusal(t, err).Code)
+	require.Len(t, h.projects.inputs, 1)
+	require.Equal(t, unknownProjectID.String(), h.projects.inputs[0].ProjectID)
 }
 
 func TestAnalyticsToolsChargeTheDiagnosticsBudget(t *testing.T) {
@@ -469,7 +480,7 @@ func TestRunAnalyticsQueryRefusesWhatTheEngineRefusesByName(t *testing.T) {
 	require.Equal(t, 1, h.engine.calls)
 
 	// A window the engine could never run is refused before it is asked.
-	_, err = h.invoke(t, runAnalyticsQueryToolName, `{"project_id":"`+h.project.ID.String()+`","dataset":"tool_calls","from":"1500-01-01T00:00:00Z","to":"2026-09-08T00:00:00Z","measures":[{"op":"count"}]}`)
+	_, err = h.invoke(t, runAnalyticsQueryToolName, `{"project_slug":"`+h.project.Slug+`","dataset":"tool_calls","from":"1500-01-01T00:00:00Z","to":"2026-09-08T00:00:00Z","measures":[{"op":"count"}]}`)
 	refusal := requireAnalyticsRefusal(t, err)
 	require.Equal(t, "invalid_request", refusal.Code)
 	require.Equal(t, "invalid_time_range", refusal.Reason)
@@ -545,7 +556,7 @@ func TestAnalyticsToolSchemasRejectWhatTheCompilerWouldRefuse(t *testing.T) {
 		"a filter with no values":               {runAnalyticsQueryToolName, h.queryArguments(`,"filters":[{"field":"status","operator":"in","values":[]}]`)},
 		"an argument the tool does not take":    {runAnalyticsQueryToolName, h.queryArguments(`,"sql":"select 1"`)},
 		"a values limit past the maximum":       {listAnalyticsDimensionValuesToolName, h.valuesArguments(`,"limit":201`)},
-		"a values call without a dimension":     {listAnalyticsDimensionValuesToolName, `{"project_id":"` + h.project.ID.String() + `","dataset":"tool_calls",` + analyticsTestWindow + `}`},
+		"a values call without a dimension":     {listAnalyticsDimensionValuesToolName, `{"project_slug":"` + h.project.Slug + `","dataset":"tool_calls",` + analyticsTestWindow + `}`},
 	} {
 		_, err := h.invoke(t, call.tool, call.arguments)
 		require.ErrorContains(t, err, "arguments do not match the tool schema", name)
@@ -589,8 +600,8 @@ func TestAnalyticsToolsRefuseRiskFindingsToMembers(t *testing.T) {
 	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
 	member := authz.NewGrant(authz.ScopeProjectRead, h.project.ID.String())
 	for tool, arguments := range map[string]string{
-		runAnalyticsQueryToolName:            `{"project_id":"` + h.project.ID.String() + `","dataset":"risk_findings",` + analyticsTestWindow + `,"measures":[{"op":"count"}]}`,
-		listAnalyticsDimensionValuesToolName: `{"project_id":"` + h.project.ID.String() + `","dataset":"risk_findings","dimension":"category",` + analyticsTestWindow + `}`,
+		runAnalyticsQueryToolName:            `{"project_slug":"` + h.project.Slug + `","dataset":"risk_findings",` + analyticsTestWindow + `,"measures":[{"op":"count"}]}`,
+		listAnalyticsDimensionValuesToolName: `{"project_slug":"` + h.project.Slug + `","dataset":"risk_findings","dimension":"category",` + analyticsTestWindow + `}`,
 	} {
 		_, err := h.invokeWithGrants(t, tool, arguments, member)
 		require.Error(t, err, tool)

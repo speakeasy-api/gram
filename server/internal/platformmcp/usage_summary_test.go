@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -349,7 +350,7 @@ func TestGetToolUsageSummary_RequiresAProject(t *testing.T) {
 	service := unitUsageSummaryService(&recordingToolUsageReader{})
 
 	_, err := service.GetToolUsageSummary(t.Context(), testPrincipal(), GetToolUsageSummaryInput{})
-	require.ErrorContains(t, err, "project_id is required")
+	require.ErrorContains(t, err, "project_slug is required")
 
 	_, err = service.GetToolUsageSummary(t.Context(), testPrincipal(), GetToolUsageSummaryInput{ProjectID: "not-a-uuid"})
 	require.ErrorContains(t, err, "parse project id")
@@ -388,6 +389,7 @@ func TestToolUsageSummaryStubRefuses(t *testing.T) {
 
 	stubbed := newRegistrar(newTestMCPServer())
 	registerUnavailableToolUsageSummaryTool(stubbed)
+	stubbed.withProjects(slugProjects{"usage-project": uuid.MustParse("00000000-0000-0000-0000-000000000001")})
 	live := newRegistrar(newTestMCPServer())
 	registerToolUsageSummaryTool(live, nil)
 
@@ -401,7 +403,7 @@ func TestToolUsageSummaryStubRefuses(t *testing.T) {
 	require.Equal(t, discoveryProjectRead, stub.Meta.DiscoveryScopes)
 	require.True(t, stub.Annotations.ReadOnlyHint)
 
-	_, err := stub.Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001"}`))
+	_, err := stub.Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"project_slug":"usage-project"}`))
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.JSONEq(t, `{"code":"feature_unavailable","feature":"tool_usage_summary","message":"This is not switched on for your organization yet."}`, refusal.Payload)
@@ -409,8 +411,9 @@ func TestToolUsageSummaryStubRefuses(t *testing.T) {
 	// A deployment with no telemetry at all registers the stub, not the live
 	// tool, so the catalogue never advertises a breakdown it cannot serve.
 	_, deployment := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	deployment.withProjects(slugProjects{"usage-project": uuid.MustParse("00000000-0000-0000-0000-000000000001")})
 	descriptor := descriptorByName(t, deployment, toolUsageSummaryToolName)
-	_, err = descriptor.Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"project_id":"00000000-0000-0000-0000-000000000001"}`))
+	_, err = descriptor.Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"project_slug":"usage-project"}`))
 	require.ErrorAs(t, err, &refusal)
 	require.Contains(t, refusal.Payload, `"tool_usage_summary"`)
 }

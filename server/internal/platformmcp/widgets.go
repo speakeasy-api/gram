@@ -179,7 +179,9 @@ type widgetDefinition struct {
 }
 
 type listWidgetsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 }
 
 type listWidgetsOutput struct {
@@ -189,7 +191,9 @@ type listWidgetsOutput struct {
 }
 
 type getWidgetInput struct {
-	ProjectID string `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	WidgetID  string `json:"widget_id" jsonschema:"exact widget UUID from list_widgets"`
 }
 
@@ -201,7 +205,9 @@ type getWidgetOutput struct {
 // saveWidgetInput creates a widget when widget_id is omitted and replaces
 // every field of an existing one when it is given.
 type saveWidgetInput struct {
-	ProjectID       string         `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string         `json:"-"`
 	WidgetID        string         `json:"widget_id,omitempty" jsonschema:"widget to replace, from list_widgets; omit to create a new widget"`
 	Name            string         `json:"name" jsonschema:"display name, 1 to 200 characters"`
 	Description     *string        `json:"description,omitempty" jsonschema:"what the widget is for, at most 2000 characters"`
@@ -215,7 +221,9 @@ type saveWidgetInput struct {
 }
 
 type widgetTargetInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string `json:"-"`
 	WidgetID        string `json:"widget_id" jsonschema:"exact widget UUID from list_widgets"`
 	Confirmed       bool   `json:"confirmed" jsonschema:"false previews without changing anything; true only after the user confirmed the returned preview"`
 	ExpectedVersion string `json:"expected_version,omitempty" jsonschema:"version the preview returned; required to confirm"`
@@ -496,7 +504,7 @@ func (s *WidgetService) scope(ctx context.Context, principal Principal, projectI
 
 	id, err := uuid.Parse(projectID)
 	if err != nil || id == uuid.Nil {
-		return ctx, project, widgetInvalid("project_id", "Name exactly one project by its ID, as list_projects returns it.")
+		return ctx, project, widgetInvalid("project_slug", "Name one project by its slug, as list_projects returns it.")
 	}
 
 	auth, ok := contextvalues.GetAuthContext(ctx)

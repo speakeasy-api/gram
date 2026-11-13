@@ -45,6 +45,19 @@ func (s *stubGatewayActivityReader) GetTelemetryWatermark(context.Context, telem
 	return time.Now().UnixNano(), nil
 }
 
+type stubGatewayActivityAuthorizer struct {
+	stubOrgReadAuthorizer
+	readableProjects map[string]bool
+}
+
+func (s *stubGatewayActivityAuthorizer) FindMatched(_ context.Context, checks []authz.Check) ([]bool, error) {
+	matched := make([]bool, len(checks))
+	for i, check := range checks {
+		matched[i] = check.Scope == authz.ScopeProjectRead && s.readableProjects[check.ResourceID]
+	}
+	return matched, nil
+}
+
 func seedGatewayActivityServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, name string) uuid.UUID {
 	t.Helper()
 	remote := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
@@ -71,12 +84,14 @@ func TestOrganizationGatewayActivitySpansProjects(t *testing.T) {
 	})
 	require.NoError(t, err)
 	projectIDs := make([]uuid.UUID, 0, 2)
+	projectSlugs := make([]string, 0, 2)
 	for range 2 {
 		project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
 			Name: "Gateway activity project", Slug: "project-" + uuid.NewString()[:8], OrganizationID: organizationID,
 		})
 		require.NoError(t, err)
 		projectIDs = append(projectIDs, project.ID)
+		projectSlugs = append(projectSlugs, project.Slug)
 	}
 	first := seedGatewayActivityServer(t, ctx, conn, projectIDs[0], "Alpha")
 	second := seedGatewayActivityServer(t, ctx, conn, projectIDs[1], "Beta")
@@ -89,7 +104,7 @@ func TestOrganizationGatewayActivitySpansProjects(t *testing.T) {
 			{McpServerID: first.String(), ToolCalls: 1, ErrorCount: 0, LastCalledUnixNano: 1},
 		},
 	}}
-	authorizer := &stubOrgReadAuthorizer{}
+	authorizer := &stubGatewayActivityAuthorizer{readableProjects: map[string]bool{projectIDs[1].String(): true}}
 	service := NewOrganizationGatewayActivityService(conn, reader, authorizer, allowingBudget())
 	require.NotNil(t, service)
 
@@ -109,9 +124,9 @@ func TestOrganizationGatewayActivitySpansProjects(t *testing.T) {
 	require.EqualValues(t, 2, out.FailedCalls)
 	require.Equal(t, OrganizationGatewayDiscovery{ListServers: 3, DescribeServer: 2, DescribeTools: 1}, out.Discovery)
 	require.Equal(t, []OrganizationGatewayServer{
-		{Name: "Beta", MCPID: second.String(), ProjectID: projectIDs[1].String(), ToolCalls: 3, ErrorCount: 2},
-		{Name: "Alpha", MCPID: first.String(), ProjectID: projectIDs[0].String(), ToolCalls: 1, ErrorCount: 0},
-	}, out.TopServers, "servers no longer in the organization are left unnamed")
+		{Name: "Beta", MCPID: second.String(), ProjectID: projectIDs[1].String(), ProjectSlug: projectSlugs[1], ToolCalls: 3, ErrorCount: 2},
+		{Name: "Alpha", MCPID: first.String(), ProjectID: projectIDs[0].String(), ProjectSlug: "", ToolCalls: 1, ErrorCount: 0},
+	}, out.TopServers, "servers no longer in the organization are left unnamed, and an unreadable project's slug stays hidden")
 	require.False(t, out.Envelope.NoObservations)
 }
 
@@ -124,7 +139,7 @@ func TestOrganizationGatewayActivityRefusesWithoutLiveOrgRead(t *testing.T) {
 	require.NoError(t, err)
 	denied := errors.New("forbidden")
 	reader := &stubGatewayActivityReader{}
-	service := NewOrganizationGatewayActivityService(conn, reader, &stubOrgReadAuthorizer{err: denied}, allowingBudget())
+	service := NewOrganizationGatewayActivityService(conn, reader, &stubGatewayActivityAuthorizer{stubOrgReadAuthorizer: stubOrgReadAuthorizer{err: denied}}, allowingBudget())
 	require.NotNil(t, service)
 
 	for _, window := range []string{"", "1y"} {

@@ -12,7 +12,7 @@ import (
 )
 
 type RegisterCatalogMCPToolInput struct {
-	ProjectSlug     string                     `json:"project_slug,omitempty" jsonschema:"optional owning project slug; defaults to the organization's default project (a project assistant always uses its own)"`
+	ProjectSlug     string                     `json:"project_slug,omitempty" jsonschema:"the project's slug, as list_projects returns it; omit it to use the organization's Default project"`
 	ProviderKey     string                     `json:"provider_key" jsonschema:"server-issued catalogue source identity returned by search_mcp_catalog"`
 	CatalogRef      string                     `json:"catalog_ref" jsonschema:"exact catalogue reference returned by search_mcp_catalog"`
 	NonSecretConfig CatalogConfigurationValues `json:"non_secret_config,omitempty" jsonschema:"only declared non-secret configuration values keyed by inspect_mcp_candidate configuration field key; do not include API keys, tokens, passwords, OAuth codes, client secrets, or secret headers"`
@@ -25,7 +25,7 @@ type RegisterCatalogMCPToolOutput struct {
 	CatalogRef          string                      `json:"catalog_ref"`
 	SetupIntent         string                      `json:"setup_intent"`
 	ReceiptID           string                      `json:"receipt_id"`
-	RegistrationID      string                      `json:"registration_id"`
+	MCPID               string                      `json:"mcp_id" jsonschema:"the added server's ID; other tools take it as mcp_id"`
 	Replayed            bool                        `json:"replayed"`
 	AlreadyRegistered   bool                        `json:"already_registered"`
 	NextAction          string                      `json:"next_action"`
@@ -35,7 +35,7 @@ type RegisterCatalogMCPToolOutput struct {
 }
 
 type RegisterRemoteMCPToolInput struct {
-	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional owning project slug; defaults to the organization's default project (a project assistant always uses its own)"`
+	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"the project's slug, as list_projects returns it; omit it to use the organization's Default project"`
 	RemoteURL      string `json:"remote_url" jsonschema:"HTTPS Streamable HTTP MCP URL; safe endpoint query parameters are supported, but fragments, userinfo, headers, credentials, and credential-like query parameters are not accepted"`
 	DisplayName    string `json:"display_name,omitempty" jsonschema:"optional project-local display name for the MCP; maximum 256 bytes; when omitted, the name the server reports for itself is used, or else the URL's host name; a new server's slug and address are derived from this name"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry the same project and canonical remote URL"`
@@ -45,7 +45,7 @@ type RegisterRemoteMCPToolOutput struct {
 	ProjectSlug                 string `json:"project_slug"`
 	CanonicalURL                string `json:"canonical_url"`
 	ReceiptID                   string `json:"receipt_id"`
-	RegistrationID              string `json:"registration_id"`
+	MCPID                       string `json:"mcp_id" jsonschema:"the added server's ID; other tools take it as mcp_id"`
 	Replayed                    bool   `json:"replayed"`
 	AlreadyRegistered           bool   `json:"already_registered"`
 	AutomaticClientRegistration string `json:"automatic_client_registration,omitempty" jsonschema:"for a server that requires sign-in, the automatic OAuth client setup its provider offers: dynamic_client_registration, client_id_metadata_document, or none when it offers neither or OAuth discovery is incomplete; next_action says whether sign-in can be connected in chat (connect_sign_in) or needs the dashboard setup"`
@@ -131,7 +131,7 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 			CatalogRef:          result.CatalogRef,
 			SetupIntent:         result.SetupIntent,
 			ReceiptID:           result.Receipt.ID.String(),
-			RegistrationID:      result.Registration,
+			MCPID:               result.MCPID,
 			Replayed:            result.Receipt.Replayed,
 			AlreadyRegistered:   result.Receipt.AlreadyRegistered,
 			NextAction:          nextAction,
@@ -196,7 +196,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 			ProjectSlug:                 result.Project.Slug,
 			CanonicalURL:                result.RemoteURL,
 			ReceiptID:                   result.Receipt.ID.String(),
-			RegistrationID:              result.Registration,
+			MCPID:                       result.MCPID,
 			Replayed:                    result.Receipt.Replayed,
 			AlreadyRegistered:           result.Receipt.AlreadyRegistered,
 			AutomaticClientRegistration: result.AutomaticClientRegistration,

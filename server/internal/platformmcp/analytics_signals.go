@@ -15,7 +15,9 @@ var ErrAnalyticsDefinitionNotFound = errors.New("signal definition not captured"
 // GetSignalDefinitionInput names a fingerprint returned by a measured result.
 type GetSignalDefinitionInput struct {
 	// ProjectID is the exact project to inspect.
-	ProjectID string `json:"project_id"`
+	ProjectSlug string `json:"project_slug"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 
 	// SensorID is the contributing sensor.
 	SensorID string `json:"sensor_id"`

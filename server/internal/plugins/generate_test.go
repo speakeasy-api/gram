@@ -3949,6 +3949,48 @@ func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T
 	require.NotContains(t, workflow, "when inspection reported `authentication_required`, ask for explicit confirmation")
 }
 
+// Agents name an MCP server only by its mcp_id. The registration ID and the
+// nested registration object are no longer part of any tool contract, so a
+// skill that still tells the agent to read or pass them would fail at runtime.
+func TestGeneratePlatformMCPSkillsNameServersByMCPID(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	for _, name := range []string{
+		"add-mcp-from-catalog",
+		"add-mcp-from-remote-url",
+		"add-existing-mcp-servers",
+		"migrate-mcp-between-projects",
+		"review-shadow-mcp",
+		"enable-enterprise-issuer",
+	} {
+		path := "skills/" + name + "/SKILL.md"
+		content := files["speakeasy/"+path]
+		require.NotEmpty(t, content, path)
+		workflow := string(content)
+		for _, forbidden := range []string{
+			"registration_id", "registration ID", "registration.id",
+			"registration.status", "components_complete",
+		} {
+			require.NotContains(t, workflow, forbidden, path)
+		}
+	}
+	for _, name := range []string{"add-mcp-from-catalog", "add-mcp-from-remote-url"} {
+		workflow := string(files["speakeasy/skills/"+name+"/SKILL.md"])
+		require.Contains(t, workflow, "Keep the `mcp_id` it returns", name)
+		require.Contains(t, workflow, "Pass the server as the `mcp_id` setup returned", name)
+	}
+	migrate := string(files["speakeasy/skills/migrate-mcp-between-projects/SKILL.md"])
+	for _, required := range []string{
+		"An `added_by_another_member` refusal (another administrator added it) or a `not_added_through_setup` refusal on the source",
+		"report that attribute as unreadable and hand off to the AICP dashboard",
+		"Continue only when it returns `model: platform_managed`, `operations` that include `update_mcp_metadata`",
+		"select only the entry whose `id` equals the `mcp_id` registration returned",
+	} {
+		require.Contains(t, migrate, required)
+	}
+}
+
 // A first-run conversation has no project to choose from, so the onboarding
 // workflows must offer to create one through the Platform MCP instead of
 // stopping. The offer is gated on the tool being present, because a managed
@@ -4063,7 +4105,8 @@ func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 		"process side effects",
 		"If discovery succeeds but returns no entries", "normal catalogue path",
 		"Do not claim import completion for an empty inventory",
-		"`registration.status: registered`", "`registration.components_complete: true`",
+		"require the entry's `id` to equal the exact `mcp_id` registration returned",
+		"has another `model`, lacks `update_mcp_metadata` in `operations` (setup pending or incomplete), or whose `id` does not match the returned `mcp_id` means blocked/unverified",
 		"`model: dashboard_managed`", "Do not require or invent a registration record",
 		"pending or incomplete registration", "must not be reported as already present or complete",
 		"Skip provider attachment for anonymous servers",
@@ -4240,7 +4283,7 @@ func TestGeneratePlatformMCPExistingServersCatalogPreference(t *testing.T) {
 		{"two configurations of one catalogue reference require persisted evidence", []string{
 			"Two configurations of one catalogue reference are not the same target",
 			"source/reference alone cannot prove configuration equivalence",
-			"match fresh inventory `registration.id` to the receipt's returned `registration_id`",
+			"match the fresh inventory entry's `id` to the receipt's returned `mcp_id`",
 			"Receipt-ID correlation alone is not persisted configuration proof",
 			"do not invent fields or claim current configuration was read back",
 			"configuration equivalence remains unverified and requires manual resolution, not automatic reuse",
@@ -4250,7 +4293,7 @@ func TestGeneratePlatformMCPExistingServersCatalogPreference(t *testing.T) {
 			"reuse an existing registration for the same source/reference with different configuration unchanged",
 			"Neither a new receipt nor `replayed: false` proves that the submitted configuration took effect",
 			"Require server-backed evidence of the registration's exact effective confirmed configuration",
-			"even when the returned ID matches the receipt and live status is registered with complete components",
+			"even when the entry's `id` matches the receipt's `mcp_id` and the entry reports `model: platform_managed`",
 		}},
 		{"race or unknown existing registration cannot prove creation", []string{
 			"A concurrent registration after preflight, an unknown existing registration or an uncertain write outcome",

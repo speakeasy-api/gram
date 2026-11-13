@@ -339,10 +339,10 @@ func TestXAAReadinessToolReportsConnectionScopes(t *testing.T) {
 		{ProjectID: f.projectID.String(), McpServerID: f.serverID.String(), State: "connected", IssuerID: &issuerID, ResourceIndicator: upstream},
 	}}}
 	inspector := &postgresXAAIdentityInspector{db: conn, governor: nil, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
-	session := xaaTestSession(t, &xaaReadinessService{connections: reader, enabled: func(context.Context, string) (bool, error) { return true, nil }, identity: fixtureOrgInspector{inner: inspector, organizationID: f.organizationID}}, false)
+	session := xaaTestSessionWithProjects(t, &xaaReadinessService{connections: reader, enabled: func(context.Context, string) (bool, error) { return true, nil }, identity: fixtureOrgInspector{inner: inspector, organizationID: f.organizationID}}, false, slugProjects{"xaa-fixture": f.projectID})
 	call := func() (XAAIdentityChainingBinding, map[string]any) {
 		t.Helper()
-		result := xaaCall(t, session, f.projectID.String(), f.serverID.String())
+		result := xaaCall(t, session, "xaa-fixture", f.serverID.String())
 		if result.IsError {
 			text, _ := result.Content[0].(*mcp.TextContent)
 			require.FailNow(t, "tool error", "%+v", text)

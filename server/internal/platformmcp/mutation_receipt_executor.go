@@ -78,6 +78,28 @@ func executeChargedMutationReceipt[T any](ctx context.Context, charge func(conte
 	return executeMutationReceipt(ctx, execution)
 }
 
+// checkPreviewReceipt refuses a preview whose idempotency key the confirmed
+// call would refuse: a key already used with different input, or a receipt
+// with no usable result. It is the unlocked lookup alone, so it stores and
+// charges nothing. A replay or a miss passes: the confirmed call answers the
+// first from its receipt and decides the second under the lock.
+func checkPreviewReceipt[T any](ctx context.Context, execution mutationReceiptExecution[T]) error {
+	_, check, err := completedMutationReceipt(ctx, execution)
+	if err != nil {
+		return execution.Unavailable(err)
+	}
+	switch check {
+	case receiptKeyReused:
+		return execution.Conflict(receiptKeyReusedMessage)
+	case receiptIncomplete:
+		return execution.Conflict(receiptIncompleteMessage)
+	case receiptUnreadable:
+		return execution.Unavailable(errStoredReceiptInvalid)
+	case receiptMiss, receiptReplay:
+	}
+	return nil
+}
+
 // chargeRerun charges the work that follows a committed receipt: a provider
 // reconciliation, a publish or index signal. A first attempt already paid for
 // it with its own charge, so it returns nil at once. A replay answers free, but

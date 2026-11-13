@@ -16,7 +16,9 @@ import (
 )
 
 type AssignMCPAccessRoleInput struct {
-	ProjectID           string `json:"project_id" jsonschema:"explicit project ID for the access workflow"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID           string `json:"-"`
 	MemberReference     string `json:"member_reference" jsonschema:"opaque member reference returned by list_access_members"`
 	RoleReference       string `json:"role_reference" jsonschema:"opaque custom role reference returned by list_access_roles or get_mcp_access"`
 	ExpectedVersion     string `json:"expected_version" jsonschema:"opaque member role version returned by list_access_members immediately before this write"`

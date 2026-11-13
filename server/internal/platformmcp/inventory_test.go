@@ -294,7 +294,6 @@ func TestMCPInventoryOutputProjectsOnlyAllowlistedFields(t *testing.T) {
 		"mcps", "next_cursor",
 		"id", "project_id", "project_name", "project_slug", "name", "slug", "version", "visibility", "effective_enabled", "enabled_state", "model", "backend_kind", "upstream_url",
 		"source", "kind", "provider", "reference",
-		"registration", "id", "status", "components_complete",
 		"readiness", "state", "checked_at", "expires_at",
 		"distributions", "plugin_id", "plugin_name", "plugin_slug", "state", "publication_state",
 		"operations", "dashboard_path",

@@ -22,7 +22,9 @@ type MCPNetworkTrafficReader interface {
 }
 
 type MCPNetworkTrafficInput struct {
-	ProjectID  string `json:"project_id" jsonschema:"exact project ID"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID  string `json:"-"`
 	TargetKind string `json:"target_kind" jsonschema:"mcp or gateway"`
 	TargetID   string `json:"target_id" jsonschema:"exact MCP server or gateway ID"`
 	Window     string `json:"window,omitempty" jsonschema:"24h or 7d (default)"`

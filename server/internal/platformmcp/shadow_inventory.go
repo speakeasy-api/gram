@@ -41,13 +41,17 @@ type shadowReviewReader interface {
 }
 
 type ListShadowMCPInventoryInput struct {
-	ProjectID string `json:"project_id" jsonschema:"explicit project ID returned by list_projects"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by the preceding list_shadow_mcp_inventory page"`
 	Limit     int    `json:"limit,omitempty" jsonschema:"maximum targets to return; server clamps this to 50"`
 }
 
 type GetShadowMCPReviewInput struct {
-	ProjectID       string `json:"project_id" jsonschema:"explicit project ID used to list this target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID       string `json:"-"`
 	TargetReference string `json:"target_reference" jsonschema:"short-lived opaque target reference returned by list_shadow_mcp_inventory"`
 }
 

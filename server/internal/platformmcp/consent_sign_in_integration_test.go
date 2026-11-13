@@ -109,12 +109,7 @@ func newConsentSignInHarness(t *testing.T, ctx context.Context, conn *pgxpool.Po
 	card, ok := result.Meta[cardMetaKey].(string)
 	require.True(t, ok)
 
-	registration, err := platformrepo.New(conn).GetPlatformMCPCatalogRegistrationByID(ctx, platformrepo.GetPlatformMCPCatalogRegistrationByIDParams{
-		ID:             uuid.MustParse(output.RegistrationID),
-		OrganizationID: principal.OrganizationID,
-		ProjectID:      project.ID,
-	})
-	require.NoError(t, err)
+	registration := registrationOfMCP(t, ctx, conn, principal, project, output.MCPID)
 
 	return consentSignInHarness{
 		principal:     principal,
@@ -140,7 +135,7 @@ func TestCatalogRegistrationCardConnectOpensTheConsentPage(t *testing.T) {
 	h := newConsentSignInHarness(t, ctx, conn)
 
 	slug, err := platformrepo.New(conn).GetPlatformMCPRegistrationConnectSlug(ctx, platformrepo.GetPlatformMCPRegistrationConnectSlugParams{
-		RegistrationID: uuid.MustParse(h.output.RegistrationID),
+		RegistrationID: h.registration.ID,
 		OrganizationID: h.principal.OrganizationID,
 		ProjectID:      h.project.ID,
 	})
@@ -165,7 +160,7 @@ func TestConsentSignInConnectorConnectsOnlyAPendingServerForAnAdmin(t *testing.T
 	require.NoError(t, err)
 	h := newConsentSignInHarness(t, ctx, conn)
 	mcpServerID := h.registration.McpServerID.UUID
-	registrationID := uuid.MustParse(h.output.RegistrationID)
+	registrationID := h.registration.ID
 
 	denied := NewConsentSignInConnector(conn, h.registrations, orgAdminAuthorizer{err: ErrForbidden})
 	require.NoError(t, denied.ConnectPendingSignIn(ctx, h.principal.UserID, h.principal.OrganizationID, h.project.ID, mcpServerID))

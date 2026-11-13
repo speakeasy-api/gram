@@ -24,7 +24,9 @@ type assistantRuntimeManagement interface {
 }
 
 type SelectAssistantRuntimeInput struct {
-	ProjectID              string `json:"project_id" jsonschema:"exact project UUID; never inferred"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID              string `json:"-"`
 	AssistantID            string `json:"assistant_id" jsonschema:"exact assistant UUID"`
 	RuntimeVersion         int    `json:"runtime_version" jsonschema:"2 for legacy runtime or 3 to opt into Kit"`
 	ExpectedRuntimeVersion int    `json:"expected_runtime_version,omitempty" jsonschema:"persisted version from a fresh assistant read: 2 or 3; omit for preview; on conflict read again and reconfirm"`
@@ -130,7 +132,7 @@ func assistantRuntimeToolResult(err error) (*mcp.CallToolResult, bool) {
 	} else if shared, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shared.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
-			result.Code, result.Message = "invalid_request", "Provide exact project and assistant UUIDs, a supported runtime, its freshly read expected version and explicit confirmation."
+			result.Code, result.Message = "invalid_request", "Provide the project_slug, the exact assistant UUID, a supported runtime, its freshly read expected version and explicit confirmation."
 		case oops.CodeForbidden, oops.CodeUnauthorized:
 			result.Code, result.Message = "permission_denied", "Runtime selection requires organization administrator access, assistant:write on the selected assistant and a user identity."
 		case oops.CodeNotFound:

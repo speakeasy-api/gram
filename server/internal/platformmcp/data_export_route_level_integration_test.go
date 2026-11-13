@@ -144,6 +144,7 @@ func TestSetDataExportMinSeverityUnavailableManifestMatchesLive(t *testing.T) {
 	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_level_manifest")
 	describe := func(service *DataExportRouteToggleService) Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "data-export-level", Version: "0.0.1"}, nil))
+		registrar.withProjects(&RegistrationStore{db: f.conn, icons: nil})
 		registerDataExportLevelTool(registrar, service)
 		descriptors := registrar.Descriptors()
 		require.Len(t, descriptors, 1)
@@ -166,10 +167,10 @@ func TestSetDataExportMinSeverityUnavailableManifestMatchesLive(t *testing.T) {
 		Required []string `json:"required"`
 	}
 	require.NoError(t, json.Unmarshal(live.InputSchema, &schema))
-	require.Subset(t, schema.Required, []string{"project_id", "route_id", "min_severity", "idempotency_key", "confirmed"})
+	require.Subset(t, schema.Required, []string{"project_slug", "route_id", "min_severity", "idempotency_key", "confirmed"})
 
-	refusal := invokeUnavailable(t, unavailable, map[string]any{
-		"project_id": f.project.ID.String(), "route_id": uuid.NewString(), "min_severity": "warn", "idempotency_key": "stub", "confirmed": true,
+	refusal := invokeUnavailable(t, ContextWithPrincipal(ctx, f.principal), unavailable, map[string]any{
+		"project_slug": f.project.Slug, "route_id": uuid.NewString(), "min_severity": "warn", "idempotency_key": "stub", "confirmed": true,
 	})
 	require.Contains(t, refusal, `"feature":"data_export_min_severity"`)
 

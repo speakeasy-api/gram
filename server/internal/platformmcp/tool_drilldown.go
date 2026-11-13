@@ -57,7 +57,7 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "query_mcp_traces",
 		Title:       "Recent MCP Calls",
-		Description: drilldownPreamble + "List individual calls, newest first, each reduced to a reference you can quote when escalating, plus when it happened, which tool it called, and how it ended. Narrow by outcome. Requires log:read on the project. Constraints: this is not a log reader — no arguments, results, bodies, headers, URLs, or identities are returned, and references expire and are bound to this session.",
+		Description: drilldownPreamble + "List that one server's individual calls, newest first, each reduced to a reference you can quote when escalating to the server's vendor; to search calls across every server by tool name, error text or attribute, use search_tool_calls. Each call carries its reference, when it happened, which tool it called, and how it ended. Narrow by outcome. Requires log:read on the project. Constraints: this is not a log reader — no arguments, results, bodies, headers, URLs, or identities are returned, and references expire and are bound to this session.",
 		Annotations: readOnlyAnnotations(),
 	}, queryMCPTracesMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input QueryMCPTracesInput) (*mcp.CallToolResult, QueryMCPTracesOutput, error) {
 		principal, err := principalFromToolContext(ctx)

@@ -46,7 +46,7 @@ func registerDataExportRouteToggleTools(reg *Registrar, service *DataExportRoute
 		Name:  pauseDataExportToolName,
 		Title: "Pause a Data Export",
 		Description: "Stop one data export route from sending data to its destination, leaving the route and its destination configured so it can be resumed later. " +
-			"Supply the project ID and the exact route ID from list_data_exports, an idempotency key, and confirmed: true only after the user confirms the exact project and route. " +
+			"Supply the project's slug, the exact route ID from list_data_exports, and an idempotency key. Call first with confirmed: false: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the route (project, data source, destination) and its current and requested on/off state; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the same idempotency key, and confirmed: true once they confirm. " +
 			dataExportToggleScopeNote + dataExportToggleDataNote +
 			"The pause reaches the export relays within about a minute, so data can keep flowing briefly; for a destination that includes sensitive fields it stops on the next batch.",
 		// Pausing discards the data produced while the route is paused, which
@@ -57,7 +57,7 @@ func registerDataExportRouteToggleTools(reg *Registrar, service *DataExportRoute
 		Name:  resumeDataExportToolName,
 		Title: "Resume a Data Export",
 		Description: "Start a paused data export route sending data to its destination again. " +
-			"Supply the project ID and the exact route ID from list_data_exports, the route's data_source and destination_id from that same read as expected_data_source and expected_destination_id, an idempotency key, and confirmed: true only after the user confirms the exact project, route, data source, and destination. " +
+			"Supply the project's slug, the exact route ID from list_data_exports, the route's data_source and destination_id from that same read as expected_data_source and expected_destination_id, and an idempotency key. Call first with confirmed: false: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the route (project, data source, destination) and its current and requested on/off state; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the same idempotency key, and confirmed: true once they confirm. " +
 			"If the route's destination or data source changed after that read, the resume is refused as route_changed and nothing is changed; read the data exports again and confirm what the route now points at. " +
 			dataExportToggleScopeNote + dataExportToggleDataNote +
 			"The resume reaches the export relays within about a minute for every destination, so the first batches after it can still be dropped. " +
@@ -80,6 +80,9 @@ type dataExportToggleRefusal struct {
 	Code    string `json:"code"`
 	Feature string `json:"feature"`
 	Message string `json:"message"`
+	// Preview is set only on the confirmation_required refusal of an
+	// unconfirmed pause or resume.
+	Preview *DataExportTogglePreview `json:"preview,omitempty"`
 }
 
 func dataExportToggleToolResult(err error) (*mcp.CallToolResult, bool) {
@@ -96,7 +99,10 @@ func dataExportRouteToolResult(err error, feature, unavailableMessage string) (*
 	}
 	result := dataExportToggleRefusal{Feature: feature}
 	var toggle *DataExportToggleError
+	var preview *dataExportTogglePreviewError
 	switch {
+	case errors.As(err, &preview):
+		result.Code, result.Message, result.Preview = "confirmation_required", preview.Error(), &preview.Preview
 	case errors.As(err, &toggle):
 		result.Code, result.Message = toggle.Code, toggle.Message
 	case errors.Is(err, ErrUnavailable):
@@ -134,7 +140,7 @@ func registerDataExportLevelTool(reg *Registrar, service *DataExportRouteToggleS
 		Name:  setDataExportMinSeverityToolName,
 		Title: "Set a Data Export's Level",
 		Description: "Change which MCP connections an existing mcp_connection_logs export sends, by setting its lowest level: error sends failed connections, warn adds blocked connections, and info adds declined connections. " +
-			"Supply the project ID and the exact route ID from list_data_exports, the new min_severity, an idempotency key, and confirmed: true only after the user confirms the exact project, route, its current level from list_data_exports, and the new level. " +
+			"Supply the project's slug and the exact route ID from list_data_exports, the new min_severity, and an idempotency key. Call first with confirmed: false: nothing is written, and the confirmation_required refusal asks you to show the user the exact project, route, its current level from list_data_exports, and the new level. Once they confirm, call again with the same input, the same idempotency key, and confirmed: true. " +
 			"Only the level changes: the route's data source, destination, and on/off state stay as they are. Other data sources have no level and are refused as invalid_input. A route already at the requested level is reported as unchanged. " +
 			"The result reports the previous level and the route's committed state. The change reaches the export relays within about a minute; for a destination that includes sensitive fields it applies on the next batch.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},

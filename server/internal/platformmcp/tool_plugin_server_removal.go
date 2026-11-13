@@ -18,7 +18,9 @@ import (
 )
 
 type RemovePluginServerInput struct {
-	ProjectID    string `json:"project_id" jsonschema:"explicit project ID owning the plugin"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID    string `json:"-"`
 	PluginID     string `json:"plugin_id" jsonschema:"exact plugin ID; no default or name fallback"`
 	MembershipID string `json:"membership_id" jsonschema:"exact plugin server membership ID, not the backing MCP server ID; obtain from a fresh plugin read"`
 	Confirmed    bool   `json:"confirmed" jsonschema:"true only after the user confirms removal of this exact membership"`
@@ -47,7 +49,7 @@ func registerRemovePluginServerTool(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name: "remove_plugin_server", Title: "Remove Any Server from a Plugin",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true, OpenWorldHint: new(false)},
-		Description: "Remove one exact server membership from an existing plugin, including manually or automatically added entries. First read the plugin, explain which membership will be removed, and ask the user to confirm. Supply the exact project, plugin and membership IDs; never substitute a backing server ID. Requires organization administration or delegated plugin write permission. This changes distribution only: it does not delete the server or plugin, change audiences, or grant or revoke server access. The existing publication-update flow runs; this does not prove installed clients have refreshed. Unlike remove_mcp_from_plugin, this is not limited to undoing a membership distribute_mcp_to_plugin created. Re-read the plugin after removal.",
+		Description: "Remove one exact server membership from an existing plugin, including manually or automatically added entries. First read the plugin, explain which membership will be removed, and ask the user to confirm. Supply the project_slug and the exact plugin and membership IDs; never substitute a backing server ID. Requires organization administration or delegated plugin write permission. This changes distribution only: it does not delete the server or plugin, change audiences, or grant or revoke server access. The existing publication-update flow runs; this does not prove installed clients have refreshed. Unlike remove_mcp_from_plugin, this is not limited to undoing a membership distribute_mcp_to_plugin created. Re-read the plugin after removal.",
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: []authz.Scope{authz.ScopePluginWrite, authz.ScopeOrgAdmin}}, func(ctx context.Context, _ *mcp.CallToolRequest, input RemovePluginServerInput) (*mcp.CallToolResult, RemovePluginServerOutput, error) {
 		return principalToolCall(ctx, pluginServerRemovalResult, func(principal Principal) (RemovePluginServerOutput, error) {
 			if plugins == nil || plugins.serverRemoval == nil {
@@ -58,7 +60,7 @@ func registerRemovePluginServerTool(reg *Registrar, plugins *PluginsService) {
 			}
 			projectID, err := uuid.Parse(input.ProjectID)
 			if err != nil {
-				return RemovePluginServerOutput{}, &PluginAssignmentMutationError{Code: "invalid_request", Message: "An exact project ID is required."}
+				return RemovePluginServerOutput{}, &PluginAssignmentMutationError{Code: "invalid_request", Message: "The project's slug is required."}
 			}
 			// Membership IDs identify immutable attachment rows. A replay cannot remove
 			// a later re-addition, which has a different ID; a missing row is not_found.

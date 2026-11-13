@@ -88,10 +88,20 @@
   prompt: Go ahead and add a policy in Default from the API keys and secrets preset, set it to block. I've already reviewed it.
   expect: [create_risk_policy]
   allow: [list_risk_presets, list_risk_policies]
+  args:
+    project_slug: default
+    preset: secrets_and_credentials
+    action: block
 - id: risk-create-policy-prompt-guardrail
   prompt: Create a block policy in Payments called "No refunds over 10k" that stops the assistant from approving refunds above $10,000.
   expect: [create_risk_policy]
   allow: [list_risk_presets, suggest_risk_policy, list_risk_policies]
+  args:
+    project_slug: payments
+    policy_type: prompt_based
+    name: No refunds over 10k
+    prompt: refund
+    action: block
 
 # Policy changes.
 - id: risk-update-policy-to-flag
@@ -121,6 +131,10 @@
   prompt: Our docs use the fake key sk_test_EXAMPLE123 everywhere and Secrets in chats keeps firing on it in Default. Stop flagging that exact value.
   expect: [create_risk_exclusion]
   allow: [list_risk_exclusions, get_risk_policy]
+  args:
+    project_slug: default
+    match_type: exact
+    match_value: sk_test_EXAMPLE123
 - id: risk-disable-exclusion
   prompt: Turn off exclusion 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d in Default for now, but keep it around so we can switch it back on.
   expect: [update_risk_exclusion]
@@ -198,18 +212,18 @@
   prompt: Which unapproved MCP servers are people in Default connecting to on their own, outside the gateway?
   expect: [list_shadow_mcp_inventory]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: risk-shadow-mcp-pending-requests
   prompt: Anyone waiting on me to approve an MCP server they asked for in Payments?
   expect: [list_shadow_mcp_inventory]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    project_slug: payments
 - id: risk-shadow-mcp-review
   prompt: Open the evidence for the unsanctioned MCP target with reference smr_7f3a9c21 in Default before I decide on it.
   expect: [get_shadow_mcp_review]
   allow: [list_shadow_mcp_inventory]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     target_reference: smr_7f3a9c21
 - id: risk-shadow-mcp-decide
   prompt: Deny the unsanctioned MCP target smr_7f3a9c21 in Default - we haven't vetted it. Reason is "not security reviewed".
@@ -217,7 +231,7 @@
   allow: [list_shadow_mcp_inventory, get_shadow_mcp_review]
   args:
     decision: deny
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     target_reference: smr_7f3a9c21
 - id: risk-shadow-ai-inventory
   prompt: What AI apps like ChatGPT desktop or Cursor have we detected on employee machines, and are they allowed?
@@ -261,60 +275,60 @@
   prompt: Before I build a new one, is there already a reusable "frustration" criterion defined in Default?
   expect: [find_signals]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     query: frustrat
 - id: risk-find-sensors
   prompt: List the conversation sensors we have in Default and whether they're ready.
   expect: [find_sensors]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: risk-get-sensor
   prompt: Show me the full definition of sensor 7d6c5b4a-3e2f-4a1b-9c8d-7e6f5a4b3c2d in Default, with its signals in order.
   expect: [get_sensor]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     sensor_id: 7d6c5b4a-3e2f-4a1b-9c8d-7e6f5a4b3c2d
 - id: risk-create-sensor
   prompt: In Default, I want to classify every user message for churn intent, looking at the last 5 messages for context. Set that up.
   expect: [create_sensor]
   allow: [find_sensors, find_signals]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: risk-create-signal
   prompt: Add a standalone reusable criterion in Default called "mentions competitor" that other sensors can share. Don't attach it to anything yet.
   expect: [create_signal]
   allow: [find_signals]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: risk-update-sensor-pause
   prompt: Pause the churn intent sensor in Default. Keep its config, just stop evaluating new messages.
   expect: [update_sensor]
   allow: [find_sensors, get_sensor]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: risk-update-signal
   prompt: Reword the "mentions competitor" criterion in Default so it also counts Acme's old product names. Every sensor that uses it should pick that up.
   expect: [update_signal]
   allow: [find_signals]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: risk-preview-sensor-match
   prompt: Before I save it, check whether the expression message.role == "user" would match an assistant message and a user message in Default.
   expect: [preview_sensor_match]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
 - id: risk-get-signal-definition
   prompt: This measurement came back with definition hash 3f9a2b7c4d1e8f6a0b5c9d2e7f4a1b8c3d6e9f2a5b8c1d4e7f0a3b6c9d2e5f8a for sensor 7d6c5b4a-3e2f-4a1b-9c8d-7e6f5a4b3c2d in Default. What exact question was it asking at the time?
   expect: [get_signal_definition]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     sensor_id: 7d6c5b4a-3e2f-4a1b-9c8d-7e6f5a4b3c2d
     definition_hash: 3f9a2b7c4d1e
 - id: risk-find-signal-sessions
   prompt: How many conversations in Default showed churn intent from sensor 7d6c5b4a-3e2f-4a1b-9c8d-7e6f5a4b3c2d during October 2026, and is that up from September?
   expect: [find_signal_sessions]
   args:
-    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    project_slug: default
     compare_previous: true
     from: "2026-10-01"
     to: "2026-11-01"

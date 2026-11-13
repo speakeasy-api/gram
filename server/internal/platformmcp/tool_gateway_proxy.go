@@ -219,7 +219,7 @@ func proxiedResultText(result proxiedToolResult) string {
 // does not exist: connecting the server to the app directly.
 const gatewayProxyOff = "Running tools on your MCP servers through this Speakeasy connection (list_my_servers, search_my_tools, describe_tools and execute_tool) is not available for your organization right now. " +
 	"Speakeasy controls whether it is available; it is not an organization setting, so an administrator cannot switch it on. " +
-	"Your servers still work when connected to this app directly: call get_my_install_instructions with the server's project_id, its mcp_id or the registration_id setup returned, and client_family set to this app (claude_code, claude_cowork, codex, cursor, opencode, or other), then show the user each step's link and snippet as written."
+	"Your servers still work when connected to this app directly: find the server with find_mcp, then call get_my_install_instructions with the id find_mcp returned as mcp_id and client_family set to this app (claude_code, claude_cowork, codex, cursor, opencode, or other), then show the user each step's link and snippet as written."
 
 func gatewayProxyUnavailable(message string) error {
 	payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: gatewayProxyFeature, Message: message})
@@ -364,7 +364,8 @@ func registerGatewayProxyTools(reg *Registrar, service *GatewayProxyService) {
 		Description: "List the MCP servers this user can reach through Speakeasy: every server in their organization that their access reaches, across all projects, including ones just added here. " +
 			"Returns each server's slug, name and status (available, unavailable, or unknown), the servers the user hid, and a link to manage them. " +
 			"Read-only: it reads the user's server list and does not contact the servers or run any of their tools. " +
-			"Call it when the user asks for data or an action in another system (a CRM, tickets, docs, a database, an internal API) before saying you cannot help, and after adding a server.",
+			"Call it when the user asks about their connected MCP servers or their tools, when they ask for data or an action that one of those servers might hold (a CRM, tickets, a database, an internal API), and after adding a server. " +
+			"Do not call it for general questions unrelated to the organization's MCP servers, such as weather, writing code, or reminders in an app no server covers.",
 		Annotations: readOnlyAnnotations(),
 	}
 	searchTool := &mcp.Tool{
@@ -372,7 +373,8 @@ func registerGatewayProxyTools(reg *Registrar, service *GatewayProxyService) {
 		Title: "Search Tools in My MCP Servers",
 		Description: "Search the tool listings of the user's MCP servers for a task described in plain words (for example: create a ticket, look up a customer by email). " +
 			"Returns ranked matches, each with its server slug, tool name, description and input_schema. " +
-			"Read-only: it reads the servers' tool listings and runs no tool. Narrow with server when you already know which server to search.",
+			"Read-only: it reads the servers' tool listings and runs no tool. Narrow with server when you already know which server to search. " +
+			"Use it only for tasks the user wants done through their organization's MCP servers; do not call it for general questions unrelated to those servers, such as weather or writing code.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), OpenWorldHint: new(true)},
 	}
 	describeTool := &mcp.Tool{

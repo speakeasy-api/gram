@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -59,10 +60,12 @@ func (e *DataExportToggleError) Error() string { return e.Message }
 func (e *DataExportToggleError) Unwrap() error { return e.Cause }
 
 type ToggleDataExportRouteInput struct {
-	ProjectID      string `json:"project_id" jsonschema:"project ID that owns the route, from list_data_exports"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID      string `json:"-"`
 	RouteID        string `json:"route_id" jsonschema:"exact route ID from list_data_exports"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-chosen key that makes a retry of this exact change safe"`
-	Confirmed      bool   `json:"confirmed" jsonschema:"true only after the user confirmed this exact project and route"`
+	Confirmed      bool   `json:"confirmed" jsonschema:"false to preview the change without writing; true only after the user confirms the exact project and route the preview shows"`
 }
 
 // ResumeDataExportRouteInput adds the route configuration the user was shown.
@@ -70,12 +73,14 @@ type ToggleDataExportRouteInput struct {
 // what was confirmed: if the route was repointed or re-sourced after it was
 // read, the resume is refused instead of exporting somewhere nobody saw.
 type ResumeDataExportRouteInput struct {
-	ProjectID             string `json:"project_id" jsonschema:"project ID that owns the route, from list_data_exports"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID             string `json:"-"`
 	RouteID               string `json:"route_id" jsonschema:"exact route ID from list_data_exports"`
 	ExpectedDataSource    string `json:"expected_data_source" jsonschema:"the route's data_source exactly as list_data_exports returned it and the user confirmed"`
 	ExpectedDestinationID string `json:"expected_destination_id" jsonschema:"the route's destination_id exactly as list_data_exports returned it and the user confirmed; empty only when the list showed no destination"`
 	IdempotencyKey        string `json:"idempotency_key" jsonschema:"caller-chosen key that makes a retry of this exact change safe"`
-	Confirmed             bool   `json:"confirmed" jsonschema:"true only after the user confirmed this exact project, route, data source, and destination"`
+	Confirmed             bool   `json:"confirmed" jsonschema:"false to preview the change without writing; true only after the user confirms the exact project, route, data source, and destination the preview shows"`
 }
 
 // ToggleDataExportRouteOutput lets a caller tell the outcomes apart: the route
@@ -98,6 +103,35 @@ type ToggleDataExportRouteOutput struct {
 	TakesEffect string                  `json:"takes_effect"`
 	Receipt     RiskMutationToolReceipt `json:"receipt"`
 }
+
+// DataExportTogglePreview is what an unconfirmed pause or resume reports: the
+// route as it stands and the change a confirmed call with the same input would
+// make. Nothing is written for it.
+type DataExportTogglePreview struct {
+	// Route is the route as it stands now, before the change.
+	Route DataExportRoute `json:"route"`
+	// EnabledBefore and EnabledAfter are the route's on/off state now and after
+	// a confirmed call.
+	EnabledBefore bool `json:"enabled_before"`
+	EnabledAfter  bool `json:"enabled_after"`
+	// Outcome is what a confirmed call would report: paused, resumed, or
+	// unchanged.
+	Outcome     string `json:"outcome"`
+	WhilePaused string `json:"while_paused"`
+	TakesEffect string `json:"takes_effect"`
+}
+
+// dataExportTogglePreviewError is the confirmation_required refusal of an
+// unconfirmed pause or resume.
+type dataExportTogglePreviewError struct {
+	Preview DataExportTogglePreview
+}
+
+func (e *dataExportTogglePreviewError) Error() string {
+	return "Nothing was changed. Show the user the exact project, route, data source, destination, and the change in this preview, then call again with the same input, the same idempotency key, and confirmed: true once they confirm."
+}
+
+func (e *dataExportTogglePreviewError) Unwrap() error { return ErrDataExportToggleInvalid }
 
 const (
 	// dataExportWhilePaused is the relay behaviour, stated once so the tool
@@ -155,7 +189,7 @@ func (s *DataExportRouteToggleService) Pause(ctx context.Context, principal Prin
 }
 
 func (s *DataExportRouteToggleService) Resume(ctx context.Context, principal Principal, input ResumeDataExportRouteInput) (ToggleDataExportRouteOutput, error) {
-	common := ToggleDataExportRouteInput{ProjectID: input.ProjectID, RouteID: input.RouteID, IdempotencyKey: input.IdempotencyKey, Confirmed: input.Confirmed}
+	common := ToggleDataExportRouteInput{ProjectSlug: "", ProjectID: input.ProjectID, RouteID: input.RouteID, IdempotencyKey: input.IdempotencyKey, Confirmed: input.Confirmed}
 	expect, err := validateResumeExpectation(input)
 	if err != nil {
 		return ToggleDataExportRouteOutput{}, s.boundaryError(ctx, operationResumeDataExport, err)
@@ -197,6 +231,9 @@ func (s *DataExportRouteToggleService) boundaryError(ctx context.Context, operat
 		return nil
 	}
 	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
+		return err
+	}
+	if _, ok := errors.AsType[*dataExportTogglePreviewError](err); ok {
 		return err
 	}
 	if refusal, ok := errors.AsType[*DataExportToggleError](err); ok && refusal.Code != unavailableCode {
@@ -283,7 +320,7 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 		}
 		return nil
 	}
-	receipt, err := executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[dataExportToggleReceipt]{
+	execution := mutationReceiptExecution[dataExportToggleReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
 		IdempotencyKey: key, InputHash: inputHash, Label: "data export " + operation,
 		Invalid: func(error) error { return dataExportToggleInvalid("The request is invalid.") },
@@ -321,7 +358,20 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 			}
 			return result, nil
 		},
-	})
+	}
+	if !input.Confirmed {
+		// A preview refuses the key the confirmed call would refuse, and it
+		// spends the same allowance, since it takes the same row lock and
+		// writes the same audit entry before rolling back. It stores nothing.
+		if err := checkPreviewReceipt(ctx, execution); err != nil {
+			return ToggleDataExportRouteOutput{}, err
+		}
+		if err := charge(ctx); err != nil {
+			return ToggleDataExportRouteOutput{}, err
+		}
+		return ToggleDataExportRouteOutput{}, s.preview(ctx, principal, project, routeID, enabled, expect)
+	}
+	receipt, err := executeChargedMutationReceipt(ctx, charge, execution)
 	if err != nil {
 		return ToggleDataExportRouteOutput{}, err
 	}
@@ -362,11 +412,63 @@ func (s *DataExportRouteToggleService) finish(ctx context.Context, principal Pri
 	return output, nil
 }
 
+// preview returns a preview only when the confirmed write would succeed now: it
+// runs that write in a transaction it rolls back, so the preview and the
+// confirmed call refuse the same changes. Nothing is stored.
+func (s *DataExportRouteToggleService) preview(ctx context.Context, principal Principal, project ResolvedProject, routeID uuid.UUID, enabled bool, expect *dataexports.RouteExpectation) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return dataExportToggleUnavailable(fmt.Errorf("begin data export toggle preview: %w", err))
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	changed, err := s.core.SetEnabled(ctx, tx, dataexports.SetRouteEnabledParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID,
+		RouteID:          routeID,
+		Enabled:          enabled,
+		Expect:           expect,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+		ActorDisplayName: nil,
+	})
+	if err != nil {
+		return classifyDataExportToggleError(err)
+	}
+	route := readRouteWith(ctx, tx, principal, project, routeID)
+	if route == nil {
+		return dataExportToggleUnavailable(errors.New("read data export route for preview"))
+	}
+	// The read runs after the rolled-back write, so the state before it comes
+	// from the locked row.
+	route.Enabled = changed.Before.Enabled
+	preview := DataExportTogglePreview{
+		Route:         *route,
+		EnabledBefore: changed.Before.Enabled,
+		EnabledAfter:  enabled,
+		Outcome:       dataExportOutcomeUnchanged,
+		WhilePaused:   dataExportWhilePaused,
+		TakesEffect:   dataExportPauseTakesEffect,
+	}
+	if enabled {
+		preview.TakesEffect = dataExportResumeTakesEffect
+	}
+	if changed.Changed {
+		preview.Outcome = dataExportOutcomePaused
+		if enabled {
+			preview.Outcome = dataExportOutcomeResumed
+		}
+	}
+	return &dataExportTogglePreviewError{Preview: preview}
+}
+
 // readRoute is the post-commit verification read, nil when it cannot be taken.
-// A project holds at most one live route per data source, so listing them is
-// a bounded read.
 func (s *DataExportRouteToggleService) readRoute(ctx context.Context, principal Principal, project ResolvedProject, routeID uuid.UUID) *DataExportRoute {
-	rows, err := dataexportsrepo.New(s.db).ListDataExportRoutes(ctx, dataexportsrepo.ListDataExportRoutesParams{
+	return readRouteWith(ctx, s.db, principal, project, routeID)
+}
+
+// readRouteWith reads one route, nil when it cannot be read. A project holds at
+// most one live route per data source, so listing them is a bounded read.
+func readRouteWith(ctx context.Context, db dataexportsrepo.DBTX, principal Principal, project ResolvedProject, routeID uuid.UUID) *DataExportRoute {
+	rows, err := dataexportsrepo.New(db).ListDataExportRoutes(ctx, dataexportsrepo.ListDataExportRoutesParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      project.ID,
 	})
@@ -393,16 +495,13 @@ func (s *DataExportRouteToggleService) readRoute(ctx context.Context, principal 
 }
 
 func validateDataExportToggle(input ToggleDataExportRouteInput) (uuid.UUID, uuid.UUID, string, error) {
-	if !input.Confirmed {
-		return uuid.Nil, uuid.Nil, "", dataExportToggleInvalid("Confirm the exact project and route with the user before pausing or resuming it.")
-	}
 	key := strings.TrimSpace(input.IdempotencyKey)
 	if key == "" || len(key) > 128 {
 		return uuid.Nil, uuid.Nil, "", dataExportToggleInvalid("Provide a stable idempotency key of at most 128 characters so retrying this exact change is safe.")
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
 	if err != nil {
-		return uuid.Nil, uuid.Nil, "", dataExportToggleInvalid("Provide the explicit project ID that owns the route.")
+		return uuid.Nil, uuid.Nil, "", dataExportToggleInvalid("Provide the slug of the project that owns the route.")
 	}
 	routeID, err := uuid.Parse(strings.TrimSpace(input.RouteID))
 	if err != nil {
@@ -460,7 +559,7 @@ func dataExportToggleInvalid(message string) error {
 func dataExportToggleMissing() error {
 	return &DataExportToggleError{
 		Code:    "not_found",
-		Message: "No data export route with that ID exists in that project. Read the current data exports and use a route ID and project ID from that list.",
+		Message: "No data export route with that ID exists in that project. Read the current data exports and use a route ID and project slug from that list.",
 		Cause:   ErrDataExportToggleMissing,
 	}
 }

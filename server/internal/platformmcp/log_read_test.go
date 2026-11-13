@@ -85,7 +85,7 @@ func TestQueryMCPTracesValidatesTargetBeforeAuthorizing(t *testing.T) {
 
 	_, err := service.QueryMCPTraces(t.Context(), testPrincipal(), QueryMCPTracesInput{ProjectID: toolCallSearchTestProject})
 
-	require.ErrorContains(t, err, "project_id and mcp_id are required")
+	require.ErrorContains(t, err, "project_slug and mcp_id are required")
 }
 
 // The tools that list individual calls are discoverable by every member, who

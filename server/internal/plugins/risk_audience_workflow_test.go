@@ -31,6 +31,7 @@ func TestGeneratePlatformMCPRiskAudienceWorkflow(t *testing.T) {
 		"Do not bypass this refusal",
 		"before database transactions or receipt replay",
 		"obtain confirmation again",
+		"`confirmed: false`",
 		"`confirmed: true`",
 		"stable `idempotency_key`",
 		"`confirm: true`",

@@ -31,18 +31,25 @@ type OrganizationGatewayActivityReader interface {
 	GetTelemetryWatermark(ctx context.Context, arg telemetryrepo.GetTelemetryWatermarkParams) (int64, error)
 }
 
+// organizationGatewayActivityAuthorizer gates the read on org:read and names
+// a top server's project only to callers who can read that project.
+type organizationGatewayActivityAuthorizer interface {
+	Require(ctx context.Context, checks ...authz.Check) error
+	FindMatched(ctx context.Context, checks []authz.Check) ([]bool, error)
+}
+
 // OrganizationGatewayActivityService reports calls dispatched through the
 // organization gateway across every project in the organization, as the
 // dashboard's Organization Gateway Activity tab does.
 type OrganizationGatewayActivityService struct {
 	db         *pgxpool.Pool
 	telemetry  OrganizationGatewayActivityReader
-	authorizer deviceCoverageAuthorizer
+	authorizer organizationGatewayActivityAuthorizer
 	budget     OperationBudget
 	now        func() time.Time
 }
 
-func NewOrganizationGatewayActivityService(db *pgxpool.Pool, telemetry OrganizationGatewayActivityReader, authorizer deviceCoverageAuthorizer, budget OperationBudget) *OrganizationGatewayActivityService {
+func NewOrganizationGatewayActivityService(db *pgxpool.Pool, telemetry OrganizationGatewayActivityReader, authorizer organizationGatewayActivityAuthorizer, budget OperationBudget) *OrganizationGatewayActivityService {
 	if db == nil || telemetry == nil || authorizer == nil || !budget.valid() {
 		return nil
 	}
@@ -67,11 +74,14 @@ type OrganizationGatewayDiscovery struct {
 
 // OrganizationGatewayServer is one MCP server's share of the dispatched calls.
 type OrganizationGatewayServer struct {
-	Name       string `json:"name"`
-	MCPID      string `json:"mcp_id"`
-	ProjectID  string `json:"project_id"`
-	ToolCalls  int64  `json:"tool_calls"`
-	ErrorCount int64  `json:"error_count"`
+	Name      string `json:"name"`
+	MCPID     string `json:"mcp_id"`
+	ProjectID string `json:"project_id"`
+	// ProjectSlug names the server's project to get_mcp and the diagnostics
+	// tools. It is empty when the caller cannot read that project.
+	ProjectSlug string `json:"project_slug"`
+	ToolCalls   int64  `json:"tool_calls"`
+	ErrorCount  int64  `json:"error_count"`
 }
 
 // GetOrganizationGatewayActivityOutput carries no users, clients, or tokens:
@@ -105,8 +115,10 @@ func (s *OrganizationGatewayActivityService) Get(ctx context.Context, principal 
 		return GetOrganizationGatewayActivityOutput{}, fmt.Errorf("list organization projects: %w", err)
 	}
 	projectIDs := make([]string, 0, len(projects)+1)
+	projectSlugs := make(map[uuid.UUID]string, len(projects))
 	for _, project := range projects {
 		projectIDs = append(projectIDs, project.ID.String())
+		projectSlugs[project.ID] = project.Slug
 	}
 	// Discovery rows carry no project; the gateway id keeps them to this
 	// organization.
@@ -174,12 +186,17 @@ func (s *OrganizationGatewayActivityService) Get(ctx context.Context, principal 
 			name = server.Slug.String
 		}
 		top = append(top, OrganizationGatewayServer{
-			Name:       name,
-			MCPID:      row.McpServerID,
-			ProjectID:  server.ProjectID.String(),
-			ToolCalls:  boundedCount(row.ToolCalls),
-			ErrorCount: boundedCount(row.ErrorCount),
+			Name:        name,
+			MCPID:       row.McpServerID,
+			ProjectID:   server.ProjectID.String(),
+			ProjectSlug: "",
+			ToolCalls:   boundedCount(row.ToolCalls),
+			ErrorCount:  boundedCount(row.ErrorCount),
 		})
+	}
+
+	if err := s.nameReadableProjects(ctx, top, projectSlugs); err != nil {
+		return GetOrganizationGatewayActivityOutput{}, err
 	}
 
 	discovery := OrganizationGatewayDiscovery{
@@ -200,4 +217,32 @@ func (s *OrganizationGatewayActivityService) Get(ctx context.Context, principal 
 		Discovery:       discovery,
 		TopServers:      top,
 	}, nil
+}
+
+// nameReadableProjects fills in each top server's project slug only where the
+// caller holds project:read on that project. org:read alone admits this
+// overview, so it must not name projects list_projects would hide.
+func (s *OrganizationGatewayActivityService) nameReadableProjects(ctx context.Context, top []OrganizationGatewayServer, projectSlugs map[uuid.UUID]string) error {
+	if len(top) == 0 {
+		return nil
+	}
+	checks := make([]authz.Check, 0, len(top))
+	for _, server := range top {
+		checks = append(checks, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: server.ProjectID, Dimensions: nil})
+	}
+	allowed, err := s.authorizer.FindMatched(ctx, checks)
+	if err != nil {
+		return fmt.Errorf("filter organization gateway server projects: %w", err)
+	}
+	for i := range top {
+		if i >= len(allowed) || !allowed[i] {
+			continue
+		}
+		projectID, err := uuid.Parse(top[i].ProjectID)
+		if err != nil {
+			continue
+		}
+		top[i].ProjectSlug = projectSlugs[projectID]
+	}
+	return nil
 }
