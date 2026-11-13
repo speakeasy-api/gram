@@ -2,6 +2,7 @@ package mcpservers_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -46,6 +47,15 @@ func TestSetSetupGuideCompleted(t *testing.T) {
 	afterUpdates, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeUpdates+1, afterUpdates)
+
+	// The audit entry shows the change: absent before, set after.
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionMcpServerUpdate, fixture.server.ID)
+	require.NoError(t, err)
+	var before, after map[string]any
+	require.NoError(t, json.Unmarshal(record.BeforeSnapshot, &before))
+	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
+	require.Nil(t, before["SetupGuideCompletedAt"])
+	require.NotNil(t, after["SetupGuideCompletedAt"])
 
 	fetched, err := getMcpServerByID(ctx, ti, fixture.server.ID)
 	require.NoError(t, err)

@@ -372,6 +372,13 @@ func TestListMcpServersForOrg_SummariesOnlyForReadableServers(t *testing.T) {
 	seedSummaryEndpoint(t, ctx, ti, projectID, readable.ID, uuid.NullUUID{})
 	seedSummaryEndpoint(t, ctx, ti, projectID, hidden.ID, uuid.NullUUID{})
 
+	for _, server := range []mcpserversrepo.McpServer{readable, hidden} {
+		_, err := mcpserversrepo.New(ti.conn).SetMCPServerSetupGuideCompleted(ctx, mcpserversrepo.SetMCPServerSetupGuideCompletedParams{
+			Completed: true, ID: server.ID, ProjectID: projectID,
+		})
+		require.NoError(t, err)
+	}
+
 	scoped := withExactAuthzGrants(t, ctx, ti.conn,
 		authz.NewGrant(authz.ScopeOrgRead, orgID),
 		authz.NewGrant(authz.ScopeMCPRead, readableToolset.ID.String()),
@@ -380,7 +387,9 @@ func TestListMcpServersForOrg_SummariesOnlyForReadableServers(t *testing.T) {
 	require.Len(t, byID, 2, "org:read still lists every server")
 	require.NotNil(t, byID[readable.ID.String()].Toolset)
 	require.NotNil(t, byID[readable.ID.String()].PrimaryEndpointID)
+	require.NotNil(t, byID[readable.ID.String()].SetupGuideCompletedAt)
 	requireNoEnrichment(t, byID[hidden.ID.String()])
+	require.Nil(t, byID[hidden.ID.String()].SetupGuideCompletedAt, "setup readiness is a server detail")
 }
 
 func TestMcpServerSummary_PrimaryEndpointRanking(t *testing.T) {
