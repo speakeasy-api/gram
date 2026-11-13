@@ -746,8 +746,9 @@ func TestGatewayProxiesWithIdentityAndAttestation(t *testing.T) {
 	require.NotNil(t, handler)
 
 	request := httptest.NewRequest(http.MethodGet, "https://speakeasy.example.ts.net/mcp/demo", nil)
-	request.RemoteAddr = "127.0.0.1:40001"
-	request.Header.Set("X-Forwarded-For", "100.64.0.9")
+	// The listener has replaced the loopback address with the peer the PROXY
+	// header names.
+	request.RemoteAddr = "100.64.0.9:40001"
 	request.Header.Set(netingress.TailscaleUserLoginHeader, "spoofed@example.com")
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
@@ -762,8 +763,7 @@ func TestGatewayProxiesWithIdentityAndAttestation(t *testing.T) {
 
 	// A request for another host is refused before reaching the listener.
 	other := httptest.NewRequest(http.MethodGet, "https://other.example.ts.net/mcp/demo", nil)
-	other.RemoteAddr = "127.0.0.1:40002"
-	other.Header.Set("X-Forwarded-For", "100.64.0.9")
+	other.RemoteAddr = "100.64.0.9:40002"
 	recorder = httptest.NewRecorder()
 	handler.ServeHTTP(recorder, other)
 	require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -773,8 +773,7 @@ func TestGatewayProxiesWithIdentityAndAttestation(t *testing.T) {
 	node.who = nil
 	node.mu.Unlock()
 	unknown := httptest.NewRequest(http.MethodGet, "https://speakeasy.example.ts.net/mcp/demo", nil)
-	unknown.RemoteAddr = "127.0.0.1:40003"
-	unknown.Header.Set("X-Forwarded-For", "100.64.0.10")
+	unknown.RemoteAddr = "100.64.0.10:40003"
 	recorder = httptest.NewRecorder()
 	handler.ServeHTTP(recorder, unknown)
 	require.Equal(t, http.StatusForbidden, recorder.Code)

@@ -22,8 +22,10 @@ per-ingress attestor pods.
   a `tsnet.Server` whose `ipn.StateStore` is backed by
   `network_ingress_node_states`. Restarts reconnect as the same device, so
   customers never see registration churn.
-- The node advertises the service with `ListenService`. Requests arrive over
-  tsnet's loopback proxy; the gateway resolves the peer with `WhoIs`, replaces
+- The node advertises the service with `ListenService` in TCP mode: tsnet
+  forwards each connection over loopback with a PROXY protocol header naming
+  the tailnet peer, and the gateway terminates TLS itself. It resolves the
+  peer with `WhoIs`, replaces
   every `Tailscale-*` header with the resolved identity and forwards to the
   private listener with the pod's projected service-account token, exactly as
   the attestor did.
@@ -47,10 +49,15 @@ per-ingress attestor pods.
 - An approved slot is `online` only once it also holds the TLS certificate
   for `svc:<label>`: without it every client handshake fails. Tailscale gets
   the certificate from Let's Encrypt, which allows a tailnet 50 new
-  certificates a week, shared with everything else on that tailnet. tsnet
-  only asks for one when a client connects or in an hourly refresh, so the
+  certificates a week, shared with everything else on that tailnet. The
   gateway requests it as soon as the node is approved, waits briefly for it
-  at start, and retries at Let's Encrypt's stated retry time when refused.
+  at start, retries at Let's Encrypt's stated retry time when refused, and
+  asks again hourly to pick up renewals. Handshakes are served only with the
+  certificate the gateway obtained, and fail until it has one. If tsnet
+  terminated TLS it would order a certificate for any client that connects
+  before one is stored, outside the lease below, so each slot a client
+  reached would spend one; `issuancetest` reproduces that against a real
+  tsnet node and a Pebble ACME server.
   Until it is issued the slot reports `awaiting_certificate`: its message says
   the request is in progress or, after a refusal, why and when it retries.
   The ingress shows `provider_certificate_unavailable`. A slot reuses a

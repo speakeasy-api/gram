@@ -178,7 +178,9 @@ func approveWhenSeen(t *testing.T, control *testcontrol.Server, addrs map[string
 				if err != nil {
 					panic(err)
 				}
-				control.SetNodeCapMap(node.Key, tailcfg.NodeCapMap{nodecap.ServiceHost: {tailcfg.RawMessage(mapping)}})
+				caps := make(tailcfg.NodeCapMap, 1)
+				caps[nodecap.ServiceHost] = []tailcfg.RawMessage{tailcfg.RawMessage(mapping)}
+				control.SetNodeCapMap(node.Key, caps)
 				control.SetSubnetRoutes(node.Key, []netip.Prefix{netip.PrefixFrom(addr, 32)})
 				approved[hostname] = true
 			}
@@ -224,6 +226,50 @@ func startClient(t *testing.T, controlURL string) *tsnet.Server {
 	return client
 }
 
+// peerEcho answers with the tailnet peer the gateway resolves for the
+// request, as its handler does before asking WhoIs.
+func peerEcho() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		peer, err := tailnetgateway.PeerAddr(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		_, _ = io.WriteString(w, peer.String())
+	})
+}
+
+// request sends one HTTPS request to a slot's service address over the
+// tailnet and returns the negotiated protocol and the response body.
+func request(ctx context.Context, client *tsnet.Server, addr netip.Addr) (string, string, error) {
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return client.Dial(ctx, "tcp", net.JoinHostPort(addr.String(), "443"))
+		},
+		// Pebble's root is not trusted; the name is what matters here.
+		TLSClientConfig:   &tls.Config{ServerName: serviceFQDN, InsecureSkipVerify: true},
+		ForceAttemptHTTP2: true,
+	}
+	defer transport.CloseIdleConnections()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+serviceFQDN+"/", nil)
+	if err != nil {
+		return "", "", fmt.Errorf("build request: %w", err)
+	}
+	res, err := transport.RoundTrip(req)
+	if err != nil {
+		return "", "", fmt.Errorf("round trip: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", "", fmt.Errorf("read body: %w", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		return res.Proto, "", fmt.Errorf("status %d: %s", res.StatusCode, body)
+	}
+	return res.Proto, string(body), nil
+}
+
 // heartbeat polls a slot's status as the gateway does, which is what starts
 // a certificate request when the slot was approved after it started.
 func heartbeat(ctx context.Context, node tailnetgateway.Node) {
@@ -246,9 +292,9 @@ func handshake(ctx context.Context, client *tsnet.Server, addr netip.Addr) error
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
-	defer raw.Close()
+	defer func() { _ = raw.Close() }()
 	// Pebble's root is not trusted; the name is what matters here.
-	conn := tls.Client(raw, &tls.Config{ServerName: serviceFQDN, InsecureSkipVerify: true}) //nolint:gosec // Pebble's test root
+	conn := tls.Client(raw, &tls.Config{ServerName: serviceFQDN, InsecureSkipVerify: true})
 	if err := conn.HandshakeContext(ctx); err != nil {
 		return fmt.Errorf("handshake: %w", err)
 	}
@@ -261,7 +307,10 @@ func handshake(ctx context.Context, client *tsnet.Server, addr netip.Addr) error
 // asks Let's Encrypt for a certificate outside the issuance lease, as tsnet
 // does when it terminates TLS for a client and has no certificate stored,
 // spends an extra certificate from the customer's tailnet allowance.
-func TestOneCertificatePerConnection(t *testing.T) {
+//
+// It sets process-wide state, the ACME directory and the default transport's
+// roots, so it does not run in parallel.
+func TestOneCertificatePerConnection(t *testing.T) { //nolint:paralleltest // sets process-wide state
 	ctx := t.Context()
 	acme := startACME(t)
 	control := startControl(t)
@@ -298,7 +347,7 @@ func TestOneCertificatePerConnection(t *testing.T) {
 				return
 			}
 			t.Cleanup(func() { _ = node.Close(context.Background()) })
-			if err := node.Serve(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })); err != nil {
+			if err := node.Serve(peerEcho()); err != nil {
 				t.Errorf("serve slot %d: %v", slot, err)
 			}
 			nodes[slot] = node
@@ -337,8 +386,15 @@ func TestOneCertificatePerConnection(t *testing.T) {
 		return true
 	}, 2*time.Minute, 250*time.Millisecond, "every slot comes online with the shared certificate")
 
+	clientStatus, err := client.Up(ctx)
+	require.NoError(t, err)
+	clientAddr := clientStatus.TailscaleIPs[0]
 	for hostname, addr := range addrs {
 		require.NoError(t, handshake(ctx, client, addr), "a client completes the handshake with %s once the certificate is stored", hostname)
+		proto, peer, err := request(ctx, client, addr)
+		require.NoError(t, err, "a request to %s is served", hostname)
+		require.Equal(t, "HTTP/2.0", proto, "%s offers HTTP/2", hostname)
+		require.Equal(t, clientAddr.String(), peer, "%s learns the client's tailnet address from tsnet's PROXY header", hostname)
 	}
 	assert.Equal(t, int32(1), ordersWhileHeld, "no slot asks for a second certificate while the first is being issued")
 	assert.Equal(t, int32(1), acme.finalized.Load(), "the connection gets exactly one certificate")

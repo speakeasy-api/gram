@@ -2,6 +2,7 @@ package tailnetgateway
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -16,12 +17,16 @@ import (
 // A node serves its Tailscale Service over HTTPS with a certificate Tailscale
 // obtains from Let's Encrypt for the service name. Approval alone does not
 // make a host usable: until the certificate is issued every TLS handshake
-// fails. tsnet only asks for one when a client connects, or in an hourly
-// refresh, and reports a refusal nowhere but in its logs. Let's Encrypt
-// allows a tailnet 50 new certificates a week, shared with everything else on
-// that tailnet, so a refusal is ordinary. The node therefore requests the
-// certificate itself as soon as it is approved, keeps retrying, and reports a
-// host without one as awaiting a certificate rather than online.
+// fails. Let's Encrypt allows a tailnet 50 new certificates a week, shared
+// with everything else on that tailnet, so a refusal is ordinary. The node
+// therefore requests the certificate itself as soon as it is approved, keeps
+// retrying, and reports a host without one as awaiting a certificate rather
+// than online.
+//
+// The node, not tsnet, terminates TLS, and serves only the certificate this
+// tracker obtained. Left to terminate TLS, tsnet orders a certificate for any
+// client that connects before one is stored, without the issuance lease, so
+// every slot a client reached spent one from the tailnet's allowance.
 const (
 	// certificateStartWait is how long Start waits for the certificate after
 	// approval. First issuance usually takes a few seconds, so a normal start
@@ -46,9 +51,15 @@ const (
 	// issuance lease; first issuance usually takes a few seconds.
 	certificateIssuingRetry = 5 * time.Second
 
+	// certificateRefreshInterval is how often a node holding the certificate
+	// asks tsnet for it again, which picks up a renewal, whichever slot made
+	// it, and lets tsnet start one when it is due. It matches the hourly
+	// refresh tsnet runs when it terminates TLS itself.
+	certificateRefreshInterval = time.Hour
+
 	// certificateRetryMin and certificateRetryMax bound the backoff after any
-	// other failure. The maximum stays under tsnet's hourly refresh so the
-	// node, not that refresh, is what notices a recovered issuer.
+	// other failure. The maximum stays under an hour, so a slot notices a
+	// recovered issuer within the hour.
 	certificateRetryMin = 30 * time.Second
 	certificateRetryMax = 30 * time.Minute
 )
@@ -70,12 +81,16 @@ type certificateIssuer interface {
 // stored; it is not a failure.
 var errCertificateIssuing = errors.New("another gateway slot is obtaining the certificate")
 
-// certificateFetcher obtains the certificate for the node's service name.
-type certificateFetcher func(ctx context.Context) error
+// errCertificateNotObtained fails a TLS handshake that arrives before the node
+// holds its certificate.
+var errCertificateNotObtained = errors.New("the gateway has not obtained its TLS certificate yet")
 
-// certificateTracker requests a node's service certificate in the background
-// and remembers whether it is held. Once obtained it stays obtained: tsnet
-// renews it on its own, from the account that issued it.
+// certificateFetcher obtains the certificate for the node's service name.
+type certificateFetcher func(ctx context.Context) (*tls.Certificate, error)
+
+// certificateTracker requests a node's service certificate in the background,
+// holds it for the node's TLS handshakes, and asks again every
+// certificateRefreshInterval so a renewal reaches the node.
 type certificateTracker struct {
 	domain string
 	fetch  certificateFetcher
@@ -93,8 +108,8 @@ type certificateTracker struct {
 	// mu guards every field below.
 	mu sync.Mutex
 
-	// ready is true once a certificate is held.
-	ready bool
+	// cert is the certificate the node serves, nil until one is obtained.
+	cert *tls.Certificate
 
 	// attempting is true while a request is in flight; at most one is.
 	attempting bool
@@ -105,7 +120,8 @@ type certificateTracker struct {
 	// lastErr is why the latest request failed.
 	lastErr error
 
-	// retryAt is when the next request may start.
+	// retryAt is when the next request may start: a retry while no
+	// certificate is held, a refresh once one is.
 	retryAt time.Time
 
 	// failures counts consecutive failed requests that back off: refusals
@@ -117,26 +133,39 @@ func newCertificateTracker(domain string, fetch certificateFetcher, logger *slog
 	return &certificateTracker{
 		domain: domain, fetch: fetch, logger: logger, now: now,
 		stop: make(chan struct{}), stopOnce: sync.Once{}, attempts: sync.WaitGroup{},
-		mu: sync.Mutex{}, ready: false, attempting: false, attempted: false,
+		mu: sync.Mutex{}, cert: nil, attempting: false, attempted: false,
 		lastErr: nil, retryAt: time.Time{}, failures: 0,
 	}
 }
 
-// Poll reports whether the certificate is held and, when it is not, why. It
-// never blocks: when no request is in flight and the retry time has passed,
-// it starts one in the background.
+// Poll reports whether a valid certificate is held and, when it is not, why.
+// It never blocks: when no request is in flight and the retry or refresh time
+// has passed, it starts one in the background.
 func (t *certificateTracker) Poll() (bool, string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.ready {
-		return true, ""
-	}
-	if !t.attempting && !t.now().Before(t.retryAt) && !t.stopped() {
+	now := t.now()
+	if !t.attempting && !now.Before(t.retryAt) && !t.stopped() {
 		t.attempting = true
 		t.attempts.Go(t.request)
 	}
+	if t.cert != nil && now.Before(t.cert.Leaf.NotAfter) {
+		return true, ""
+	}
 	return false, t.reasonLocked()
+}
+
+// Certificate returns the certificate for a TLS handshake, failing the
+// handshake until one is obtained. It never asks for one: only the tracker's
+// own requests, which take the issuance lease, do.
+func (t *certificateTracker) Certificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.cert == nil {
+		return nil, errCertificateNotObtained
+	}
+	return t.cert, nil
 }
 
 // Await polls until the certificate is held, wait elapses, ctx is done, or
@@ -201,22 +230,25 @@ func (t *certificateTracker) request() {
 		case <-stopWatch:
 		}
 	}()
-	err := t.fetch(ctx)
+	cert, err := t.fetch(ctx)
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.attempting = false
 	t.attempted = true
+	now := t.now()
 	if err == nil {
-		t.ready, t.lastErr, t.failures = true, nil, 0
-		t.logger.InfoContext(ctx, "obtained tailnet service certificate", attr.SlogHostName(t.domain))
+		if t.cert == nil || !t.cert.Leaf.Equal(cert.Leaf) {
+			t.logger.InfoContext(ctx, "obtained tailnet service certificate", attr.SlogHostName(t.domain))
+		}
+		t.cert, t.lastErr, t.failures = cert, nil, 0
+		t.retryAt = now.Add(certificateRefreshInterval)
 		return
 	}
 	if t.stopped() {
 		return
 	}
 
-	now := t.now()
 	if !isCertificateRateLimited(err) && !isCertificateDomainPending(err) && !errors.Is(err, errCertificateIssuing) {
 		t.failures++
 	}
@@ -228,6 +260,9 @@ func (t *certificateTracker) request() {
 }
 
 func (t *certificateTracker) reasonLocked() string {
+	if t.cert != nil && t.lastErr == nil {
+		return "the TLS certificate for " + t.domain + " has expired"
+	}
 	if t.lastErr == nil {
 		return "obtaining a TLS certificate for " + t.domain
 	}

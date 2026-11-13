@@ -2,6 +2,7 @@ package tailnetgateway
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pires/go-proxyproto"
 	"tailscale.com/client/local"
 	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/ipn"
@@ -43,8 +45,13 @@ const (
 	// does not limit.
 	defaultRequestReadTimeout = 2 * time.Minute
 
-	// requestHeaderTimeout bounds reading request headers.
+	// requestHeaderTimeout bounds reading request headers, and the PROXY
+	// header tsnet sends ahead of each connection.
 	requestHeaderTimeout = 10 * time.Second
+
+	// proxyProtocolVersion is the PROXY protocol header tsnet prefixes each
+	// service connection with, carrying the tailnet peer's address.
+	proxyProtocolVersion = 2
 
 	// idleConnTimeout keeps idle keep-alive connections a little longer than
 	// the ten-minute MCP session keep-alive so clients are not cut mid-session.
@@ -165,7 +172,7 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 		return nil, fmt.Errorf("bring tsnet node up: %w", err)
 	}
 
-	ln, err := srv.ListenService(spec.ServiceName, tsnet.ServiceModeHTTP{Port: servicePort, HTTPS: true, AcceptAppCaps: nil, PROXYProtocol: 0})
+	ln, err := srv.ListenService(spec.ServiceName, serviceMode())
 	if err != nil {
 		_ = srv.Close()
 		return nil, fmt.Errorf("advertise tailscale service: %w", err)
@@ -181,27 +188,7 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 	approved := waitForApproval(ctx, lc, tailcfg.ServiceName(spec.ServiceName))
 
 	fqdn := ln.FQDN
-	cert := newCertificateTracker(fqdn, func(ctx context.Context) error {
-		// A stored certificate is reused without the lease: that is every
-		// start after the first issuance, so restarting a pod with many
-		// connections takes no leases.
-		if issuer, ok := spec.Store.(certificateIssuer); ok {
-			if _, _, err := issuer.ReadTLSCertAndKey(fqdn); err != nil {
-				release, claimed, err := issuer.ClaimCertificateIssuance(ctx)
-				if err != nil {
-					return fmt.Errorf("claim tailnet service certificate lease: %w", err)
-				}
-				if !claimed {
-					return errCertificateIssuing
-				}
-				defer release()
-			}
-		}
-		if _, _, err := lc.CertPair(ctx, fqdn); err != nil {
-			return fmt.Errorf("obtain tailnet service certificate: %w", err)
-		}
-		return nil
-	}, hostLogger, time.Now)
+	cert := newCertificateTracker(fqdn, leasedCertificateFetch(spec.Store, fqdn, lc.CertPair), hostLogger, time.Now)
 	if approved {
 		cert.Await(ctx, certificateStartWait)
 	}
@@ -221,6 +208,50 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 		mu:                 sync.Mutex{},
 		serveErr:           nil,
 	}, nil
+}
+
+// serviceMode is how a node opens its service: tsnet forwards raw TCP and the
+// node terminates TLS itself, with only the certificate its tracker obtained
+// under the issuance lease. In HTTPS mode, or with TerminateTLS, tsnet would
+// order a certificate for any client that connects before one is stored,
+// outside the lease.
+func serviceMode() tsnet.ServiceModeTCP {
+	return tsnet.ServiceModeTCP{Port: servicePort, TerminateTLS: false, PROXYProtocolVersion: proxyProtocolVersion}
+}
+
+// certPairFunc asks tsnet for the certificate for domain, ordering one if
+// none is stored; it is local.Client.CertPair.
+type certPairFunc func(ctx context.Context, domain string) (certPEM, keyPEM []byte, err error)
+
+// leasedCertificateFetch obtains the certificate for fqdn through certPair.
+// When the store shares certificates across the connection's slots, a stored
+// one is reused without the lease: that is every start after the first
+// issuance, so restarting a pod with many connections takes no leases. A
+// missing one is ordered only by the slot holding the issuance lease.
+func leasedCertificateFetch(store ipn.StateStore, fqdn string, certPair certPairFunc) certificateFetcher {
+	return func(ctx context.Context) (*tls.Certificate, error) {
+		if issuer, ok := store.(certificateIssuer); ok {
+			if _, _, err := issuer.ReadTLSCertAndKey(fqdn); err != nil {
+				release, claimed, err := issuer.ClaimCertificateIssuance(ctx)
+				if err != nil {
+					return nil, fmt.Errorf("claim tailnet service certificate lease: %w", err)
+				}
+				if !claimed {
+					return nil, errCertificateIssuing
+				}
+				defer release()
+			}
+		}
+		certPEM, keyPEM, err := certPair(ctx, fqdn)
+		if err != nil {
+			return nil, fmt.Errorf("obtain tailnet service certificate: %w", err)
+		}
+		pair, err := tls.X509KeyPair(certPEM, keyPEM)
+		if err != nil {
+			return nil, fmt.Errorf("parse tailnet service certificate: %w", err)
+		}
+		return &pair, nil
+	}
 }
 
 // waitForApproval gives the tailnet a moment to approve the node as a host
@@ -323,10 +354,22 @@ func (n *tsnetNode) Serve(handler http.Handler) error {
 		ReadTimeout:       n.requestReadTimeout,
 		IdleTimeout:       idleConnTimeout,
 		BaseContext:       func(net.Listener) context.Context { return context.Background() },
+		TLSConfig:         serviceTLSConfig(n.cert),
+	}
+	// Every connection comes from tsnet's forwarder, which names the tailnet
+	// peer in a PROXY header; a connection without one is refused.
+	listener := &proxyproto.Listener{
+		Listener:          n.ln,
+		Policy:            nil,
+		ConnPolicy:        func(proxyproto.ConnPolicyOptions) (proxyproto.Policy, error) { return proxyproto.REQUIRE, nil },
+		ValidateHeader:    nil,
+		ReadHeaderTimeout: requestHeaderTimeout,
+		ReadBufferSize:    0,
 	}
 
 	go func() {
-		err := n.server.Serve(n.ln)
+		// ServeTLS takes the certificate from TLSConfig and offers HTTP/2.
+		err := n.server.ServeTLS(listener, "", "")
 		if err == nil || errors.Is(err, http.ErrServerClosed) {
 			return
 		}
@@ -341,6 +384,15 @@ func (n *tsnetNode) Serve(handler http.Handler) error {
 	}()
 
 	return nil
+}
+
+// serviceTLSConfig serves the tracker's certificate, so a handshake before
+// the node holds one fails instead of ordering one.
+func serviceTLSConfig(cert *certificateTracker) *tls.Config {
+	return &tls.Config{
+		MinVersion:     tls.VersionTLS12,
+		GetCertificate: cert.Certificate,
+	}
 }
 
 func (n *tsnetNode) Status(ctx context.Context) (NodeState, error) {

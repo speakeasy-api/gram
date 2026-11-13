@@ -20,12 +20,11 @@ func TestPeerAddr(t *testing.T) {
 	}{
 		{name: "direct tailnet peer", remoteAddr: "100.64.0.7:51234", forwarded: "", want: "100.64.0.7", wantErr: false},
 		{name: "direct ipv6 peer", remoteAddr: "[fd7a:115c:a1e0::7]:443", forwarded: "", want: "fd7a:115c:a1e0::7", wantErr: false},
-		{name: "loopback with forwarded peer", remoteAddr: "127.0.0.1:40000", forwarded: "100.64.0.9", want: "100.64.0.9", wantErr: false},
-		{name: "loopback with forwarded chain", remoteAddr: "[::1]:40000", forwarded: "100.64.0.9, 10.0.0.1", want: "100.64.0.9", wantErr: false},
-		{name: "loopback without forwarded header", remoteAddr: "127.0.0.1:40000", forwarded: "", want: "", wantErr: true},
-		{name: "loopback with garbage forwarded header", remoteAddr: "127.0.0.1:40000", forwarded: "not-an-ip", want: "", wantErr: true},
+		{name: "ipv4-mapped peer", remoteAddr: "[::ffff:100.64.0.7]:443", forwarded: "", want: "100.64.0.7", wantErr: false},
+		{name: "loopback without a PROXY header", remoteAddr: "127.0.0.1:40000", forwarded: "", want: "", wantErr: true},
+		{name: "forwarded header never names the peer", remoteAddr: "127.0.0.1:40000", forwarded: "100.64.0.9", want: "", wantErr: true},
 		{name: "invalid remote", remoteAddr: "nope", forwarded: "", want: "", wantErr: true},
-		{name: "forwarded header ignored for direct peers", remoteAddr: "100.64.0.7:1", forwarded: "100.64.0.9", want: "100.64.0.7", wantErr: false},
+		{name: "forwarded header ignored", remoteAddr: "100.64.0.7:1", forwarded: "100.64.0.9", want: "100.64.0.7", wantErr: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
