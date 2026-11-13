@@ -256,7 +256,16 @@ func TestResumeDataExportRefusesWithoutAUsableDestination(t *testing.T) {
 	require.Zero(t, auditCount(t, ctx, f.conn, audit.ActionDataExportRouteResume))
 }
 
-func TestPauseDataExportRequiresExplicitConfirmation(t *testing.T) {
+func requireDataExportTogglePreview(t *testing.T, err error) DataExportTogglePreview {
+	t.Helper()
+	text := requireDataExportToggleCode(t, err, "confirmation_required")
+	var refusal dataExportToggleRefusal
+	require.NoError(t, json.Unmarshal([]byte(text), &refusal))
+	require.NotNil(t, refusal.Preview, text)
+	return *refusal.Preview
+}
+
+func TestPauseDataExportUnconfirmedPreviewsWithoutWriting(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -266,9 +275,59 @@ func TestPauseDataExportRequiresExplicitConfirmation(t *testing.T) {
 	input := f.input(created.ID, "pause-unconfirmed")
 	input.Confirmed = false
 	_, err := f.service.Pause(ctx, f.principal, input)
-	requireDataExportToggleCode(t, err, "invalid_request")
+	preview := requireDataExportTogglePreview(t, err)
+	require.Equal(t, created.ID.String(), preview.Route.ID)
+	require.Equal(t, f.project.Slug, preview.Route.ProjectSlug)
+	require.Equal(t, "product_telemetry", preview.Route.DataSource)
+	require.Equal(t, f.destination.String(), preview.Route.DestinationID)
+	require.True(t, preview.Route.Enabled)
+	require.True(t, preview.EnabledBefore)
+	require.False(t, preview.EnabledAfter)
+	require.Equal(t, dataExportOutcomePaused, preview.Outcome)
+	require.Equal(t, dataExportWhilePaused, preview.WhilePaused)
 	require.True(t, f.route(t, ctx, created.ID).Enabled)
 	require.False(t, f.receiptStored(t, ctx, operationPauseDataExport, "pause-unconfirmed"))
+	require.Zero(t, auditCount(t, ctx, f.conn, audit.ActionDataExportRoutePause))
+
+	input.Confirmed = true
+	paused, err := f.service.Pause(ctx, f.principal, input)
+	require.NoError(t, err)
+	require.Equal(t, dataExportOutcomePaused, paused.Outcome)
+	require.False(t, f.route(t, ctx, created.ID).Enabled)
+	require.True(t, f.receiptStored(t, ctx, operationPauseDataExport, "pause-unconfirmed"))
+}
+
+func TestResumeDataExportUnconfirmedPreviewsAndRefusesLikeTheConfirmedCall(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	f := newDataExportToggleFixture(t, ctx, "platform_mcp_data_export_resume_preview")
+	created := f.createRoute(t, ctx, "risk_findings", false, uuid.NullUUID{UUID: f.destination, Valid: true})
+
+	input := f.resumeInput(t, ctx, created.ID, "resume-unconfirmed")
+	input.Confirmed = false
+	_, err := f.service.Resume(ctx, f.principal, input)
+	preview := requireDataExportTogglePreview(t, err)
+	require.False(t, preview.EnabledBefore)
+	require.True(t, preview.EnabledAfter)
+	require.Equal(t, dataExportOutcomeResumed, preview.Outcome)
+	require.Equal(t, dataExportResumeTakesEffect, preview.TakesEffect)
+	require.False(t, f.route(t, ctx, created.ID).Enabled)
+	require.False(t, f.receiptStored(t, ctx, operationResumeDataExport, "resume-unconfirmed"))
+	require.Zero(t, auditCount(t, ctx, f.conn, audit.ActionDataExportRouteResume))
+
+	// A route with no destination cannot be resumed, so its preview is that refusal.
+	bare := f.createRoute(t, ctx, "tool_call_logs", false, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	bareInput := f.resumeInput(t, ctx, bare.ID, "resume-bare-unconfirmed")
+	bareInput.Confirmed = false
+	_, err = f.service.Resume(ctx, f.principal, bareInput)
+	requireDataExportToggleCode(t, err, "no_destination")
+
+	input.Confirmed = true
+	resumed, err := f.service.Resume(ctx, f.principal, input)
+	require.NoError(t, err)
+	require.Equal(t, dataExportOutcomeResumed, resumed.Outcome)
+	require.True(t, f.route(t, ctx, created.ID).Enabled)
 }
 
 func TestPauseDataExportRefusesANonAdminIdenticallyForRealAndInventedRoutes(t *testing.T) {

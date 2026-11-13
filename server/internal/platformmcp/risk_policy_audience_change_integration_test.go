@@ -120,6 +120,41 @@ func TestRiskPolicyAudienceChangeTransaction(t *testing.T) {
 		require.Len(t, grants, 1)
 		require.Equal(t, other.String(), grants[0].PrincipalUrn)
 	})
+	t.Run("unconfirmed previews the delta without writing", func(t *testing.T) {
+		id, version := create(t, []string{self.String(), other.String()})
+		updates := auditCount(t, ctx, conn, audit.ActionRiskPolicyUpdate)
+		args := arguments(id, version, []string{role.String()}, []string{other.String()})
+		args["confirmed"] = false
+		_, _, err := handlers.ChangeAudience(ctx, nil, args)
+		requireRiskMutationRefusal(t, err, "confirmation_required")
+		var refusal *ToolRefusalError
+		require.ErrorAs(t, err, &refusal)
+		var result riskPolicyAudiencePreviewResult
+		require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &result))
+		require.Equal(t, id, result.Preview.Policy.ID)
+		require.Equal(t, project.Slug, result.Preview.Project.Slug)
+		require.Equal(t, version, result.Preview.ExpectedVersion)
+		require.ElementsMatch(t, []string{self.String(), other.String()}, result.Preview.AudienceBefore)
+		require.Equal(t, []string{role.String()}, result.Preview.AddPrincipals)
+		require.Equal(t, []string{other.String()}, result.Preview.RemovePrincipals)
+		require.ElementsMatch(t, []string{self.String(), role.String()}, result.Preview.AudienceAfter)
+		live := read(t, id)
+		require.Equal(t, version, live.Version)
+		require.ElementsMatch(t, []string{self.String(), other.String()}, live.Audience.PrincipalURNs)
+		require.Equal(t, updates, auditCount(t, ctx, conn, audit.ActionRiskPolicyUpdate))
+
+		// A preview of a change the confirmed call would refuse is that refusal.
+		present := arguments(id, version, []string{other.String()}, nil)
+		present["confirmed"] = false
+		_, _, err = handlers.ChangeAudience(ctx, nil, present)
+		require.NotContains(t, requireRiskMutationRefusal(t, err, "invalid_request"), "Nothing was changed. Show the user")
+
+		args["confirmed"] = true
+		_, changed, err := handlers.ChangeAudience(ctx, nil, args)
+		require.NoError(t, err)
+		require.False(t, changed.Receipt.Replayed)
+		require.ElementsMatch(t, []string{self.String(), role.String()}, read(t, id).Audience.PrincipalURNs)
+	})
 	t.Run("stale replay and key conflict", func(t *testing.T) {
 		id, version := create(t, []string{self.String()})
 		args := arguments(id, version, []string{other.String()}, nil)

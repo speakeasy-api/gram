@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -64,7 +65,7 @@ type ToggleDataExportRouteInput struct {
 	ProjectID      string `json:"-"`
 	RouteID        string `json:"route_id" jsonschema:"exact route ID from list_data_exports"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-chosen key that makes a retry of this exact change safe"`
-	Confirmed      bool   `json:"confirmed" jsonschema:"true only after the user confirmed this exact project and route"`
+	Confirmed      bool   `json:"confirmed" jsonschema:"false to preview the change without writing; true only after the user confirms the exact project and route the preview shows"`
 }
 
 // ResumeDataExportRouteInput adds the route configuration the user was shown.
@@ -79,7 +80,7 @@ type ResumeDataExportRouteInput struct {
 	ExpectedDataSource    string `json:"expected_data_source" jsonschema:"the route's data_source exactly as list_data_exports returned it and the user confirmed"`
 	ExpectedDestinationID string `json:"expected_destination_id" jsonschema:"the route's destination_id exactly as list_data_exports returned it and the user confirmed; empty only when the list showed no destination"`
 	IdempotencyKey        string `json:"idempotency_key" jsonschema:"caller-chosen key that makes a retry of this exact change safe"`
-	Confirmed             bool   `json:"confirmed" jsonschema:"true only after the user confirmed this exact project, route, data source, and destination"`
+	Confirmed             bool   `json:"confirmed" jsonschema:"false to preview the change without writing; true only after the user confirms the exact project, route, data source, and destination the preview shows"`
 }
 
 // ToggleDataExportRouteOutput lets a caller tell the outcomes apart: the route
@@ -102,6 +103,35 @@ type ToggleDataExportRouteOutput struct {
 	TakesEffect string                  `json:"takes_effect"`
 	Receipt     RiskMutationToolReceipt `json:"receipt"`
 }
+
+// DataExportTogglePreview is what an unconfirmed pause or resume reports: the
+// route as it stands and the change a confirmed call with the same input would
+// make. Nothing is written for it.
+type DataExportTogglePreview struct {
+	// Route is the route as it stands now, before the change.
+	Route DataExportRoute `json:"route"`
+	// EnabledBefore and EnabledAfter are the route's on/off state now and after
+	// a confirmed call.
+	EnabledBefore bool `json:"enabled_before"`
+	EnabledAfter  bool `json:"enabled_after"`
+	// Outcome is what a confirmed call would report: paused, resumed, or
+	// unchanged.
+	Outcome     string `json:"outcome"`
+	WhilePaused string `json:"while_paused"`
+	TakesEffect string `json:"takes_effect"`
+}
+
+// dataExportTogglePreviewError is the confirmation_required refusal of an
+// unconfirmed pause or resume.
+type dataExportTogglePreviewError struct {
+	Preview DataExportTogglePreview
+}
+
+func (e *dataExportTogglePreviewError) Error() string {
+	return "Nothing was changed. Show the user the exact project, route, data source, destination, and the change in this preview, then call again with the same input, the same idempotency key, and confirmed: true once they confirm."
+}
+
+func (e *dataExportTogglePreviewError) Unwrap() error { return ErrDataExportToggleInvalid }
 
 const (
 	// dataExportWhilePaused is the relay behaviour, stated once so the tool
@@ -203,6 +233,9 @@ func (s *DataExportRouteToggleService) boundaryError(ctx context.Context, operat
 	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
 		return err
 	}
+	if _, ok := errors.AsType[*dataExportTogglePreviewError](err); ok {
+		return err
+	}
 	if refusal, ok := errors.AsType[*DataExportToggleError](err); ok && refusal.Code != unavailableCode {
 		return err
 	}
@@ -263,6 +296,9 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 		return ToggleDataExportRouteOutput{}, dataExportToggleUnavailable(fmt.Errorf("resolve data export route project: %w", err))
 	}
 	project := ResolvedProject{ID: row.ID, Name: row.Name, Slug: row.Slug}
+	if !input.Confirmed {
+		return ToggleDataExportRouteOutput{}, s.preview(ctx, principal, project, routeID, enabled, expect)
+	}
 
 	request := dataExportToggleRequest{Operation: operation, ProjectID: project.ID.String(), RouteID: routeID.String(), ExpectedDataSource: "", ExpectedDestinationID: ""}
 	if expect != nil {
@@ -366,11 +402,63 @@ func (s *DataExportRouteToggleService) finish(ctx context.Context, principal Pri
 	return output, nil
 }
 
+// preview returns a preview only when the confirmed write would succeed now: it
+// runs that write in a transaction it rolls back, so the preview and the
+// confirmed call refuse the same changes. Nothing is charged or stored.
+func (s *DataExportRouteToggleService) preview(ctx context.Context, principal Principal, project ResolvedProject, routeID uuid.UUID, enabled bool, expect *dataexports.RouteExpectation) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return dataExportToggleUnavailable(fmt.Errorf("begin data export toggle preview: %w", err))
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	changed, err := s.core.SetEnabled(ctx, tx, dataexports.SetRouteEnabledParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID,
+		RouteID:          routeID,
+		Enabled:          enabled,
+		Expect:           expect,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+		ActorDisplayName: nil,
+	})
+	if err != nil {
+		return classifyDataExportToggleError(err)
+	}
+	route := readRouteWith(ctx, tx, principal, project, routeID)
+	if route == nil {
+		return dataExportToggleUnavailable(errors.New("read data export route for preview"))
+	}
+	// The read runs after the rolled-back write, so the state before it comes
+	// from the locked row.
+	route.Enabled = changed.Before.Enabled
+	preview := DataExportTogglePreview{
+		Route:         *route,
+		EnabledBefore: changed.Before.Enabled,
+		EnabledAfter:  enabled,
+		Outcome:       dataExportOutcomeUnchanged,
+		WhilePaused:   dataExportWhilePaused,
+		TakesEffect:   dataExportPauseTakesEffect,
+	}
+	if enabled {
+		preview.TakesEffect = dataExportResumeTakesEffect
+	}
+	if changed.Changed {
+		preview.Outcome = dataExportOutcomePaused
+		if enabled {
+			preview.Outcome = dataExportOutcomeResumed
+		}
+	}
+	return &dataExportTogglePreviewError{Preview: preview}
+}
+
 // readRoute is the post-commit verification read, nil when it cannot be taken.
-// A project holds at most one live route per data source, so listing them is
-// a bounded read.
 func (s *DataExportRouteToggleService) readRoute(ctx context.Context, principal Principal, project ResolvedProject, routeID uuid.UUID) *DataExportRoute {
-	rows, err := dataexportsrepo.New(s.db).ListDataExportRoutes(ctx, dataexportsrepo.ListDataExportRoutesParams{
+	return readRouteWith(ctx, s.db, principal, project, routeID)
+}
+
+// readRouteWith reads one route, nil when it cannot be read. A project holds at
+// most one live route per data source, so listing them is a bounded read.
+func readRouteWith(ctx context.Context, db dataexportsrepo.DBTX, principal Principal, project ResolvedProject, routeID uuid.UUID) *DataExportRoute {
+	rows, err := dataexportsrepo.New(db).ListDataExportRoutes(ctx, dataexportsrepo.ListDataExportRoutesParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      project.ID,
 	})
@@ -397,9 +485,6 @@ func (s *DataExportRouteToggleService) readRoute(ctx context.Context, principal 
 }
 
 func validateDataExportToggle(input ToggleDataExportRouteInput) (uuid.UUID, uuid.UUID, string, error) {
-	if !input.Confirmed {
-		return uuid.Nil, uuid.Nil, "", dataExportToggleInvalid("Confirm the exact project and route with the user before pausing or resuming it.")
-	}
 	key := strings.TrimSpace(input.IdempotencyKey)
 	if key == "" || len(key) > 128 {
 		return uuid.Nil, uuid.Nil, "", dataExportToggleInvalid("Provide a stable idempotency key of at most 128 characters so retrying this exact change is safe.")

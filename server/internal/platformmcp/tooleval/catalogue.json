@@ -1992,7 +1992,7 @@
     },
     {
       "name": "change_risk_policy_audience",
-      "description": "Atomically add and remove exact organization user/ROLE principal URNs on one targeted risk policy, preserving settings and unrelated grants. Read get_risk_policy first and confirm the delta. Both arrays are required (empty allowed), max 100 each, with at least one change; duplicates, overlap, already-present additions and absent removals are refused. The resulting audience must contain 1–100 principals. Everyone deltas are refused. Removal changes only explicit positive grants, not role-derived or inherited coverage, and never creates an exclusion or proves effective non-membership. For removal of the authenticated user use remove_self_from_risk_policy; do not bypass its refusal. Reuse the idempotency key only for the same confirmed request; re-read after writing.",
+      "description": "Atomically add and remove exact organization user/ROLE principal URNs on one targeted risk policy, preserving settings and unrelated grants. Read get_risk_policy first. Call first with confirmed: false: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the policy, its current audience, the principals added and removed, and the resulting audience; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the same idempotency key, and confirmed: true once they confirm. Both arrays are required (empty allowed), max 100 each, with at least one change; duplicates, overlap, already-present additions and absent removals are refused. The resulting audience must contain 1–100 principals. Everyone deltas are refused. Removal changes only explicit positive grants, not role-derived or inherited coverage, and never creates an exclusion or proves effective non-membership. For removal of the authenticated user use remove_self_from_risk_policy; do not bypass its refusal. Reuse the idempotency key only for the same confirmed request; re-read after writing.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -2009,7 +2009,7 @@
           },
           "confirmed": {
             "type": "boolean",
-            "enum": [true]
+            "description": "false to preview the delta without writing; true only after the user confirms the exact change the preview shows."
           },
           "expected_version": {
             "type": "string",
@@ -4035,7 +4035,7 @@
     },
     {
       "name": "pause_data_export",
-      "description": "Stop one data export route from sending data to its destination, leaving the route and its destination configured so it can be resumed later. Supply the project's slug and the exact route ID from list_data_exports, an idempotency key, and confirmed: true only after the user confirms the exact project and route. Only the route's on/off state changes: its data source and destination stay exactly as they are, and destinations, headers, and routes cannot be edited or deleted from here. A route already in the requested state is reported as unchanged rather than refused. The result reports the route's committed state; Speakeasy does not record when a route last delivered, so the result says that rather than giving a time. While a route is paused, the data it would have exported is dropped, not buffered: resuming does not send anything produced in between. The pause reaches the export relays within about a minute, so data can keep flowing briefly; for a destination that includes sensitive fields it stops on the next batch.",
+      "description": "Stop one data export route from sending data to its destination, leaving the route and its destination configured so it can be resumed later. Supply the project's slug, the exact route ID from list_data_exports, and an idempotency key. Call first with confirmed: false: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the route (project, data source, destination) and its current and requested on/off state; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the same idempotency key, and confirmed: true once they confirm. Only the route's on/off state changes: its data source and destination stay exactly as they are, and destinations, headers, and routes cannot be edited or deleted from here. A route already in the requested state is reported as unchanged rather than refused. The result reports the route's committed state; Speakeasy does not record when a route last delivered, so the result says that rather than giving a time. While a route is paused, the data it would have exported is dropped, not buffered: resuming does not send anything produced in between. The pause reaches the export relays within about a minute, so data can keep flowing briefly; for a destination that includes sensitive fields it stops on the next batch.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -4053,7 +4053,7 @@
           },
           "confirmed": {
             "type": "boolean",
-            "description": "true only after the user confirmed this exact project and route"
+            "description": "false to preview the change without writing; true only after the user confirms the exact project and route the preview shows"
           }
         },
         "required": [
@@ -4074,7 +4074,7 @@
     },
     {
       "name": "resume_data_export",
-      "description": "Start a paused data export route sending data to its destination again. Supply the project's slug and the exact route ID from list_data_exports, the route's data_source and destination_id from that same read as expected_data_source and expected_destination_id, an idempotency key, and confirmed: true only after the user confirms the exact project, route, data source, and destination. If the route's destination or data source changed after that read, the resume is refused as route_changed and nothing is changed; read the data exports again and confirm what the route now points at. Only the route's on/off state changes: its data source and destination stay exactly as they are, and destinations, headers, and routes cannot be edited or deleted from here. A route already in the requested state is reported as unchanged rather than refused. The result reports the route's committed state; Speakeasy does not record when a route last delivered, so the result says that rather than giving a time. While a route is paused, the data it would have exported is dropped, not buffered: resuming does not send anything produced in between. The resume reaches the export relays within about a minute for every destination, so the first batches after it can still be dropped. A route cannot be resumed, and nothing is changed, when it has no destination, when its destination was deleted, or when its destination's stored configuration (endpoint, sensitive-data setting, or headers) can no longer be used; this applies even if the route is already on. The refusal names which, and the destination has to be repaired in the dashboard.",
+      "description": "Start a paused data export route sending data to its destination again. Supply the project's slug, the exact route ID from list_data_exports, the route's data_source and destination_id from that same read as expected_data_source and expected_destination_id, and an idempotency key. Call first with confirmed: false: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the route (project, data source, destination) and its current and requested on/off state; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the same idempotency key, and confirmed: true once they confirm. If the route's destination or data source changed after that read, the resume is refused as route_changed and nothing is changed; read the data exports again and confirm what the route now points at. Only the route's on/off state changes: its data source and destination stay exactly as they are, and destinations, headers, and routes cannot be edited or deleted from here. A route already in the requested state is reported as unchanged rather than refused. The result reports the route's committed state; Speakeasy does not record when a route last delivered, so the result says that rather than giving a time. While a route is paused, the data it would have exported is dropped, not buffered: resuming does not send anything produced in between. The resume reaches the export relays within about a minute for every destination, so the first batches after it can still be dropped. A route cannot be resumed, and nothing is changed, when it has no destination, when its destination was deleted, or when its destination's stored configuration (endpoint, sensitive-data setting, or headers) can no longer be used; this applies even if the route is already on. The refusal names which, and the destination has to be repaired in the dashboard.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -4100,7 +4100,7 @@
           },
           "confirmed": {
             "type": "boolean",
-            "description": "true only after the user confirmed this exact project, route, data source, and destination"
+            "description": "false to preview the change without writing; true only after the user confirms the exact project, route, data source, and destination the preview shows"
           }
         },
         "required": [

@@ -301,10 +301,10 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 	}
 
 	var committed *policycore.MutationResult
-	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
-		Operation: operation, IdempotencyKey: input.IdempotencyKey,
-		Input: map[string]any{"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": input.ExpectedVersion, "patch": normalizedPatch},
-	}, s.controls.Charge(principal), func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+	// audienceBefore is the locked audience the delta applies to, kept for the
+	// preview of an unconfirmed audience change.
+	var audienceBefore []string
+	mutate := func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
 			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy update: %w", err)
 		}
@@ -334,6 +334,7 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 				if err := validateRiskPolicyAudienceDeltaTarget(locked.AudienceType, locked.AudiencePrincipalURNs, delta); err != nil {
 					return policycore.Policy{}, err
 				}
+				audienceBefore = locked.AudiencePrincipalURNs
 			}
 			// Include removals; validating only the final audience misses them.
 			for _, target := range append(deltaPrincipals, mutation.AudiencePrincipals...) {
@@ -365,7 +366,25 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 			return ChangeRiskPolicyAudienceReceiptResult{UpdateRiskPolicyReceiptResult: receiptResult}, nil
 		}
 		return receiptResult, nil
-	})
+	}
+	if changeAudience && !delta.Confirmed {
+		preview, err := s.previewAudienceChange(ctx, input.IdempotencyKey, mutate, func() ChangeRiskPolicyAudiencePreview {
+			return ChangeRiskPolicyAudiencePreview{
+				Project: riskReceiptProject(project), Policy: riskPolicyReceiptSummary(committed.Row), PolicyName: committed.Row.Name,
+				ExpectedVersion: input.ExpectedVersion, AudienceBefore: canonicalStrings(audienceBefore),
+				AddPrincipals: canonicalStrings(delta.AddPrincipals), RemovePrincipals: canonicalStrings(delta.RemovePrincipals),
+				AudienceAfter: canonicalStrings(committed.AudiencePrincipalURNs),
+			}
+		})
+		if err != nil {
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
+		}
+		return riskPolicyAudiencePreviewRefusal(preview)
+	}
+	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
+		Operation: operation, IdempotencyKey: input.IdempotencyKey,
+		Input: map[string]any{"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": input.ExpectedVersion, "patch": normalizedPatch},
+	}, s.controls.Charge(principal), mutate)
 	if err != nil {
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
 	}

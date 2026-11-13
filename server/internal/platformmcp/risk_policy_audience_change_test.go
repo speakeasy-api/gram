@@ -23,7 +23,6 @@ func TestRiskPolicyAudienceDeltaValidation(t *testing.T) {
 		name   string
 		change func(*changeRiskPolicyAudienceInput)
 	}{
-		{"unconfirmed", func(v *changeRiskPolicyAudienceInput) { v.Confirmed = false }},
 		{"missing add", func(v *changeRiskPolicyAudienceInput) { v.AddPrincipals = nil }},
 		{"missing remove", func(v *changeRiskPolicyAudienceInput) { v.RemovePrincipals = nil }},
 		{"empty delta", func(v *changeRiskPolicyAudienceInput) { v.AddPrincipals = []string{}; v.RemovePrincipals = []string{} }},
@@ -104,8 +103,9 @@ func TestRiskPolicyAudienceChangeToolContract(t *testing.T) {
 			require.Error(t, resolved.Validate(args))
 			args[field] = value
 		}
+		// confirmed: false is a preview, so the schema accepts it.
 		args["confirmed"] = false
-		require.Error(t, resolved.Validate(args))
+		require.NoError(t, resolved.Validate(args))
 		args["confirmed"] = true
 		// An empty delta fits the flat schema (Anthropic rejects a top-level
 		// anyOf); validateRiskPolicyAudienceDelta refuses it.
