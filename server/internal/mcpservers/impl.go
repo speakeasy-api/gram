@@ -715,7 +715,11 @@ func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcp
 		if _, ok := allowedSet[grantResourceID(server.ID, server.ToolsetID)]; ok {
 			readable = append(readable, server)
 			readableViews = append(readableViews, views[i])
+			continue
 		}
+		// Setup readiness is a server detail, so organization readers without
+		// mcp:read don't see it.
+		views[i].SetupGuideCompletedAt = nil
 	}
 	EnrichViews(ctx, logger, s.db, s.serverURL, authCtx.ActiveOrganizationID, readable, readableViews)
 
