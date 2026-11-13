@@ -5,6 +5,7 @@ package memoryeval_test
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -94,6 +95,8 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	if value := os.Getenv("MEMORYEVAL_MAX_COST_USD"); value != "" {
 		parsed, err := strconv.ParseFloat(value, 64)
 		require.NoError(t, err, "MEMORYEVAL_MAX_COST_USD")
+		// Zero, negative or NaN would turn the cap off rather than set it.
+		require.True(t, parsed > 0 && !math.IsInf(parsed, 1), "MEMORYEVAL_MAX_COST_USD must be a positive dollar amount, got %q", value)
 		costCap = parsed
 	}
 	ctx, capped, stop := bench.WithSpendCap(t.Context(), client, costCap)

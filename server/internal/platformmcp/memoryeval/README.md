@@ -53,10 +53,11 @@ Planned rollout criterion, once arm D lands: Organizational Memory is enabled fo
 customers (the staff admin Organizational Memory toggle) only when arm D meets every
 gate. The report ends with a "Rollout gates" table per candidate arm (every
 arm with tools other than B) and answer model, marking each gate PASS, FAIL
-or UNKNOWN (UNKNOWN when the run has no arm B to compare with); the same
+or UNKNOWN (`pass`, `fail` and `unknown` in JSON) (UNKNOWN when the run has no arm B to compare with); the same
 results are in the report JSON under `gates`.
 
-- **Complete run**: the judge graded every answer. An answer that errors (a
+- **Complete run**: every answer has a grade, in the candidate arm and in
+  arm B. An answer that errors (a
   timeout, an API failure, no final answer within the tool-round limit) is
   retried once and, if it errors again, graded wrong, so one arm's errors
   lower its own scores instead of failing another arm's gate.

@@ -86,12 +86,19 @@ func EvaluateGates(r *Report) []GateResult {
 func evaluateGates(s ArmScore, base *ArmScore) []Gate {
 	gates := make([]Gate, 0, 7)
 
-	gates = append(gates, Gate{
+	// Errored answers are graded wrong in both arms, so only judge failures
+	// leave answers out; in either arm they make the comparison uneven.
+	complete := Gate{
 		Name:   "Complete run",
-		Bar:    "every answer graded",
+		Bar:    "every answer has a grade, in this arm and B",
 		Value:  fmt.Sprintf("%d ungraded (%d errored twice, graded wrong)", s.Ungraded, s.Errors),
 		Status: status(s.Ungraded == 0),
-	})
+	}
+	if base != nil {
+		complete.Value += fmt.Sprintf("; B %d ungraded", base.Ungraded)
+		complete.Status = status(s.Ungraded == 0 && base.Ungraded == 0)
+	}
+	gates = append(gates, complete)
 
 	hard := Gate{Name: "Hard-set lift", Bar: fmt.Sprintf("at least B + %.0f points", 100*gateHardSetLift), Value: pct(s.HardAccuracy()) + " (no baseline)", Status: GateUnknown}
 	if base != nil {

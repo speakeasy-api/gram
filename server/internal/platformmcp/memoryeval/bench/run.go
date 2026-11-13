@@ -292,6 +292,9 @@ func retryErrored(ctx context.Context, concurrency int, answers []answer, retry 
 			second.run = first.run
 			second.retried = true
 			second.usage.addUsage(first.usage)
+			// What the failed attempt's tools returned still counts for leak,
+			// isolation and tool-token checks.
+			second.toolOutput = first.toolOutput + second.toolOutput
 			answers[i] = second
 			return nil
 		})

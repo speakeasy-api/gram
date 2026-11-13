@@ -77,7 +77,7 @@ func TestRetryErroredAsksOnceMore(t *testing.T) {
 	t.Parallel()
 	answers := []answer{
 		{arm: "B", run: 0, text: "fine", usage: usage{costUSD: 1}},
-		{arm: "B", run: 2, err: errors.New("timeout"), usage: usage{costUSD: 0.5, promptTokens: 10}},
+		{arm: "B", run: 2, err: errors.New("timeout"), toolOutput: "first look\n", usage: usage{costUSD: 0.5, promptTokens: 10}},
 		{arm: "B", run: 1, err: errors.New("timeout"), usage: usage{costUSD: 0.25}},
 	}
 	calls := 0
@@ -89,7 +89,7 @@ func TestRetryErroredAsksOnceMore(t *testing.T) {
 		if first.run == 1 {
 			return answer{arm: first.arm, err: errors.New("timeout again"), usage: usage{costUSD: 0.25}}
 		}
-		return answer{arm: first.arm, text: "recovered", usage: usage{costUSD: 0.5, promptTokens: 5}}
+		return answer{arm: first.arm, text: "recovered", toolOutput: "second look\n", usage: usage{costUSD: 0.5, promptTokens: 5}}
 	})
 	require.Equal(t, 2, calls)
 	require.False(t, answers[0].retried)
@@ -99,6 +99,7 @@ func TestRetryErroredAsksOnceMore(t *testing.T) {
 	require.Equal(t, 2, answers[1].run)
 	require.InDelta(t, 1.0, answers[1].usage.costUSD, 1e-9)
 	require.Equal(t, 15, answers[1].usage.promptTokens)
+	require.Equal(t, "first look\nsecond look\n", answers[1].toolOutput, "the failed attempt's tool output still counts")
 	require.Error(t, answers[2].err, "a second error stays an error")
 	require.True(t, answers[2].retried)
 	require.Equal(t, 1, answers[2].run)

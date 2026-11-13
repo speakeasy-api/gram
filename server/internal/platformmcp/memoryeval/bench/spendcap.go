@@ -20,10 +20,13 @@ func (e *SpendCapError) Error() string {
 
 // WithSpendCap wraps client so a run stops once the cost its completions
 // report reaches capUSD. Reaching the cap cancels the returned context with a
-// *SpendCapError cause, and later calls fail without reaching the model.
-// Calls already in flight finish, so spend can pass the cap by up to one call
-// per concurrent question. Unpriced calls add nothing. A cap of zero or less
-// disables it. Call stop to release the context.
+// *SpendCapError cause, which also cancels calls still in flight on it, and
+// later calls fail without reaching the model. A cancelled call can still be
+// billed without its cost being reported, so true spend can pass the cap by
+// up to one call per concurrent question. Unpriced calls add nothing, and
+// embeddings report no cost, so they are refused once the cap is reached but
+// never count toward it. A cap of zero or less disables it. Call stop to
+// release the context.
 func WithSpendCap(ctx context.Context, client openrouter.CompletionClient, capUSD float64) (capped context.Context, cappedClient openrouter.CompletionClient, stop context.CancelFunc) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	stop = func() { cancel(nil) }
@@ -44,12 +47,29 @@ type spendCapClient struct {
 	reached *SpendCapError
 }
 
-func (c *spendCapClient) GetCompletion(ctx context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+func (c *spendCapClient) capReached() error {
 	c.mu.Lock()
-	reached := c.reached
-	c.mu.Unlock()
-	if reached != nil {
-		return nil, reached
+	defer c.mu.Unlock()
+	if c.reached == nil {
+		return nil
+	}
+	return c.reached
+}
+
+func (c *spendCapClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...openrouter.EmbeddingOption) ([][]float32, error) {
+	if err := c.capReached(); err != nil {
+		return nil, err
+	}
+	embeddings, err := c.CompletionClient.CreateEmbeddings(ctx, orgID, model, inputs, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("capped embeddings: %w", err)
+	}
+	return embeddings, nil
+}
+
+func (c *spendCapClient) GetCompletion(ctx context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+	if err := c.capReached(); err != nil {
+		return nil, err
 	}
 	response, err := c.CompletionClient.GetCompletion(ctx, request)
 	if err != nil {
