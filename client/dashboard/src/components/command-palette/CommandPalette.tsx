@@ -25,7 +25,7 @@ import {
 import { requestAskAi } from "./askAiBridge";
 import { useLauncherCandidates } from "./candidates";
 import type { LauncherCandidate } from "./candidates/types";
-import type { ResourceSearchMetrics } from "./candidates/useResourceSearchCandidates";
+import type { ProjectResourceIndexMetrics } from "./candidates/useProjectResourceIndexCandidates";
 import {
   captureCommandPalettePerformance,
   CommandPalettePerformanceTracker,
@@ -275,11 +275,11 @@ export function CommandPalette(): JSX.Element {
   const tracker = performanceTracker.current;
   const wasOpen = useRef(false);
   const recordedRanking = useRef<object | null>(null);
-  const searchMetrics = useRef<ResourceSearchMetrics | null>(null);
-  const recordSearchMetrics = useCallback(
-    (metrics: ResourceSearchMetrics) => {
-      searchMetrics.current = metrics;
-      tracker.search(performance.now(), metrics);
+  const indexMetrics = useRef<ProjectResourceIndexMetrics | null>(null);
+  const recordIndexMetrics = useCallback(
+    (metrics: ProjectResourceIndexMetrics) => {
+      indexMetrics.current = metrics;
+      tracker.index(performance.now(), metrics);
     },
     [tracker],
   );
@@ -295,30 +295,14 @@ export function CommandPalette(): JSX.Element {
   // every page (it 401s when unauthenticated).
   const recentsUserId = useRecentsUserId(isOpen);
   const trimmedQuery = query.trim();
-  const [debouncedResourceQuery, setDebouncedResourceQuery] = useState("");
-  useEffect(() => {
-    if (!isOpen || trimmedQuery.length < 2) {
-      setDebouncedResourceQuery("");
-      return;
-    }
-    const timeout = window.setTimeout(
-      () => setDebouncedResourceQuery(trimmedQuery),
-      200,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [isOpen, trimmedQuery]);
-  // Hide the previous response immediately while the next query is debouncing.
-  const resourceQuery =
-    debouncedResourceQuery === trimmedQuery ? debouncedResourceQuery : "";
-
   const candidates = useLauncherCandidates({
     enabled: isOpen,
     inProject,
     recentsUserId: recentsUserId ?? null,
     orgSlug,
     projectSlug,
-    query: resourceQuery,
-    onSearchMetrics: recordSearchMetrics,
+    query: trimmedQuery,
+    onIndexMetrics: recordIndexMetrics,
   });
   const hasQuery = trimmedQuery.length > 0;
 
@@ -347,7 +331,7 @@ export function CommandPalette(): JSX.Element {
         pages,
         resources,
       });
-      if (searchMetrics.current) tracker.search(now, searchMetrics.current);
+      if (indexMetrics.current) tracker.index(now, indexMetrics.current);
     }
     if (isOpen) {
       tracker.candidates(now, candidates.length, pages, resources);

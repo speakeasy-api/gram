@@ -22,7 +22,6 @@ import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
-import { CommandSearch } from "./commandsearch.js";
 import { Dashboards } from "./dashboards.js";
 import { DataExports } from "./dataexports.js";
 import { Deployments } from "./deployments.js";
@@ -68,6 +67,7 @@ import { Packages } from "./packages.js";
 import { PlatformKillswitches } from "./platformkillswitches.js";
 import { PlatformMcp } from "./platformmcp.js";
 import { Plugins } from "./plugins.js";
+import { ProjectResourceIndex } from "./projectresourceindex.js";
 import { Projects } from "./projects.js";
 import { RegistryDiscovery } from "./registrydiscovery.js";
 import { RemoteMcp } from "./remotemcp.js";
@@ -202,11 +202,6 @@ export class Gram extends ClientSDK {
   private _cliAuth?: CliAuth;
   get cliAuth(): CliAuth {
     return (this._cliAuth ??= new CliAuth(this._options));
-  }
-
-  private _commandSearch?: CommandSearch;
-  get commandSearch(): CommandSearch {
-    return (this._commandSearch ??= new CommandSearch(this._options));
   }
 
   private _dashboards?: Dashboards;
@@ -443,6 +438,13 @@ export class Gram extends ClientSDK {
   private _features?: Features;
   get features(): Features {
     return (this._features ??= new Features(this._options));
+  }
+
+  private _projectResourceIndex?: ProjectResourceIndex;
+  get projectResourceIndex(): ProjectResourceIndex {
+    return (this._projectResourceIndex ??= new ProjectResourceIndex(
+      this._options,
+    ));
   }
 
   private _projects?: Projects;

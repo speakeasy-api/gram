@@ -3,4 +3,4 @@
 "server": patch
 ---
 
-Search authorized project resources through one bounded request so Command K avoids redundant inventory requests while preserving per-resource fallbacks and local actions.
+Load the complete authorized project resource index in one request so Command K can match locally without missing later-page resources.

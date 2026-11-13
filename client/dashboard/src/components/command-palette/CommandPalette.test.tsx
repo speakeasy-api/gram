@@ -1,10 +1,4 @@
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -156,23 +150,11 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("CommandPalette", () => {
-  it("debounces two-character resource queries for 200ms", async () => {
-    vi.useFakeTimers();
-    try {
-      render(<CommandPalette />);
-      fireEvent.change(input(), { target: { value: "ab" } });
-      expect(mocks.launcherOptions.at(-1)?.query).toBe("");
-      await act(async () => {
-        vi.advanceTimersByTime(199);
-      });
-      expect(mocks.launcherOptions.at(-1)?.query).toBe("");
-      await act(async () => {
-        vi.advanceTimersByTime(1);
-      });
-      expect(mocks.launcherOptions.at(-1)?.query).toBe("ab");
-    } finally {
-      vi.useRealTimers();
-    }
+  it("ranks queries immediately without network debounce", () => {
+    render(<CommandPalette />);
+    fireEvent.change(input(), { target: { value: "ab" } });
+    expect(mocks.launcherOptions.at(-1)?.query).toBe("ab");
+    expect(mocks.prefilter).toHaveBeenLastCalledWith("ab", mocks.candidates);
   });
 
   it("captures one performance event per open under StrictMode", () => {

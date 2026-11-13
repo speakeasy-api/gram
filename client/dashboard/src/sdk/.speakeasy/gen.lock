@@ -232,7 +232,6 @@ trackedFiles:
   src/funcs/chatSummarizeToolCall.ts: {}
   src/funcs/cliAuthAuthorize.ts: {}
   src/funcs/cliAuthRedeem.ts: {}
-  src/funcs/commandSearchSearchResources.ts: {}
   src/funcs/dashboardsAddWidget.ts: {}
   src/funcs/dashboardsCreate.ts: {}
   src/funcs/dashboardsDelete.ts: {}
@@ -577,6 +576,7 @@ trackedFiles:
   src/funcs/pluginsUpdateMarketplaceSettings.ts: {}
   src/funcs/pluginsUpdatePlugin.ts: {}
   src/funcs/pluginsUpdatePluginServer.ts: {}
+  src/funcs/projectResourceIndexGet.ts: {}
   src/funcs/projectsCreate.ts: {}
   src/funcs/projectsDeleteById.ts: {}
   src/funcs/projectsList.ts: {}
@@ -1096,8 +1096,6 @@ trackedFiles:
   src/models/components/cloneenvironmentrequestbody.ts: {}
   src/models/components/codexhookpayload.ts: {}
   src/models/components/codexhookresult.ts: {}
-  src/models/components/commandresourceindex.ts: {}
-  src/models/components/commandresourceindexitem.ts: {}
   src/models/components/commitserveridentityconfigurationform.ts: {}
   src/models/components/commitserveridentityconfigurationresult.ts: {}
   src/models/components/completebindingrefreshrequestbody.ts: {}
@@ -1771,6 +1769,9 @@ trackedFiles:
   src/models/components/projectmcptoolusage.ts: {}
   src/models/components/projectmcpusage.ts: {}
   src/models/components/projectoverviewsummary.ts: {}
+  src/models/components/projectresourceindex.ts: {}
+  src/models/components/projectresourceindexitem.ts: {}
+  src/models/components/projectresourceindexkind.ts: {}
   src/models/components/projectsummary.ts: {}
   src/models/components/promoterequestbody.ts: {}
   src/models/components/promptguardrailevalresult.ts: {}
@@ -2621,6 +2622,7 @@ trackedFiles:
   src/models/operations/getproject.ts: {}
   src/models/operations/getprojectmetricssummary.ts: {}
   src/models/operations/getprojectoverview.ts: {}
+  src/models/operations/getprojectresourceindex.ts: {}
   src/models/operations/getpublishstatus.ts: {}
   src/models/operations/getremotemcpserver.ts: {}
   src/models/operations/getremotemcpserverheader.ts: {}
@@ -2999,7 +3001,6 @@ trackedFiles:
   src/models/operations/saveriskevalreview.ts: {}
   src/models/operations/searchbusinessmemories.ts: {}
   src/models/operations/searchchats.ts: {}
-  src/models/operations/searchcommandresources.ts: {}
   src/models/operations/searchlogs.ts: {}
   src/models/operations/searchtoolcalls.ts: {}
   src/models/operations/searchusers.ts: {}
@@ -3927,6 +3928,8 @@ trackedFiles:
   src/react-query/productFeatures.ts: {}
   src/react-query/project.core.ts: {}
   src/react-query/project.ts: {}
+  src/react-query/projectResourceIndex.core.ts: {}
+  src/react-query/projectResourceIndex.ts: {}
   src/react-query/projectsSetOrganizationWhitelist.ts: {}
   src/react-query/promoteMcpApprovalRequest.ts: {}
   src/react-query/publishJsonWebKey.ts: {}
@@ -4136,8 +4139,6 @@ trackedFiles:
   src/react-query/searchBusinessMemories.ts: {}
   src/react-query/searchChats.core.ts: {}
   src/react-query/searchChats.ts: {}
-  src/react-query/searchCommandResources.core.ts: {}
-  src/react-query/searchCommandResources.ts: {}
   src/react-query/searchLogs.ts: {}
   src/react-query/searchToolCalls.ts: {}
   src/react-query/searchUsers.core.ts: {}
@@ -4444,7 +4445,6 @@ trackedFiles:
   src/sdk/chat.ts: {}
   src/sdk/chatsessions.ts: {}
   src/sdk/cliauth.ts: {}
-  src/sdk/commandsearch.ts: {}
   src/sdk/customrules.ts: {}
   src/sdk/dashboards.ts: {}
   src/sdk/dataexports.ts: {}
@@ -4502,6 +4502,7 @@ trackedFiles:
   src/sdk/policybypassrequests.ts: {}
   src/sdk/policychallenges.ts: {}
   src/sdk/presets.ts: {}
+  src/sdk/projectresourceindex.ts: {}
   src/sdk/projects.ts: {}
   src/sdk/registrydiscovery.ts: {}
   src/sdk/remotemcp.ts: {}
@@ -8488,6 +8489,15 @@ examples:
       responses:
         "200":
           application/json: {"summary": {"active_servers_count": 388744, "failed_tool_calls": 182365, "top_servers": [{"server_name": "<value>", "tool_call_count": 935494}], "total_chats": 611955, "total_tool_calls": 679341}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getProjectResourceIndex:
+    speakeasy-default-get-project-resource-index:
+      responses:
+        "200":
+          application/json: {"generated_at": "2026-12-25T09:51:32.785Z", "items": [], "kinds": [{"complete": true, "item_count": 345393, "kind": "assistant", "overflow": false}], "schema_version": "1"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

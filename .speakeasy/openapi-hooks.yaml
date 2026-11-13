@@ -891,8 +891,6 @@ tags:
     description: Manages chat session tokens for client-side authentication
   - name: cliAuth
     description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for an API key of the scope requested at authorize, which is the device agent's per-user key by default or the Speakeasy CLI's organization-wide producer key.
-  - name: commandSearch
-    description: Searches authorized project resources for Command K.
   - name: dashboards
     description: 'Dashboards: a project''s layouts of saved widgets. Any member can make one; editing someone else''s needs project write access.'
   - name: dataExports
@@ -977,6 +975,8 @@ tags:
     description: Manage distributable plugin bundles of MCP servers and hooks.
   - name: features
     description: Manage product level feature controls.
+  - name: projectResourceIndex
+    description: Returns the complete authorized, openable resource inventory for a project.
   - name: projects
     description: Manages projects in Speakeasy.
   - name: remoteMcp

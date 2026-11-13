@@ -28,9 +28,9 @@ import {
 } from "./useRuleCandidates";
 import {
   createGrantFingerprint,
-  type ResourceSearchMetrics,
-  useResourceSearchCandidates,
-} from "./useResourceSearchCandidates";
+  type ProjectResourceIndexMetrics,
+  useProjectResourceIndexCandidates,
+} from "./useProjectResourceIndexCandidates";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useSourceCandidates } from "./useSourceCandidates";
 
@@ -63,8 +63,8 @@ export function useLauncherCandidates({
   recentsUserId,
   orgSlug,
   projectSlug,
-  query,
-  onSearchMetrics,
+  query: _query,
+  onIndexMetrics,
 }: {
   enabled: boolean;
   inProject: boolean;
@@ -72,7 +72,7 @@ export function useLauncherCandidates({
   orgSlug: string | undefined;
   projectSlug: string | undefined;
   query: string;
-  onSearchMetrics?: (metrics: ResourceSearchMetrics) => void;
+  onIndexMetrics?: (metrics: ProjectResourceIndexMetrics) => void;
 }): LauncherCandidate[] {
   const organization = useOrganization();
   const project = useProject();
@@ -119,20 +119,19 @@ export function useLauncherCandidates({
   // page gate. Keep the canonical grant fingerprint local to the query cache; it
   // is never included in palette telemetry.
   const accessKey = useMemo(() => createGrantFingerprint(grants), [grants]);
-  const resourceSearch = useResourceSearchCandidates({
+  const resourceIndex = useProjectResourceIndexCandidates({
     enabled: projectEnabled,
     accessKey,
-    query,
   });
   useEffect(() => {
-    onSearchMetrics?.(resourceSearch.metrics);
-  }, [onSearchMetrics, resourceSearch.metrics]);
+    onIndexMetrics?.(resourceIndex.metrics);
+  }, [onIndexMetrics, resourceIndex.metrics]);
   // A partial response identifies exactly which inventories need legacy
   // coverage. Successful remote kinds never re-enable their old list calls.
   const fallback = useCallback(
     (kind: string) =>
-      projectEnabled && resourceSearch.fallbackKinds.has(kind as never),
-    [projectEnabled, resourceSearch.fallbackKinds],
+      projectEnabled && resourceIndex.fallbackKinds.has(kind as never),
+    [projectEnabled, resourceIndex.fallbackKinds],
   );
 
   const gatewayConnections = useGatewayConnectionCandidates({
@@ -211,7 +210,7 @@ export function useLauncherCandidates({
     const localMcpRouteIDs = new Set(
       mcpServers.map((candidate) => candidate.id.replace(/^mcp:/, "")),
     );
-    const indexedCandidates = resourceSearch.candidates.filter((candidate) => {
+    const indexedCandidates = resourceIndex.candidates.filter((candidate) => {
       if (candidate.kind !== "mcp_server") return true;
       const identity = candidate.resourceIdentity;
       return (
@@ -260,7 +259,7 @@ export function useLauncherCandidates({
     canBrowseCatalog,
     canReadAssistants,
     canReadSkills,
-    resourceSearch.candidates,
+    resourceIndex.candidates,
     fallback,
     skills,
     agentIdentities,

@@ -30131,112 +30131,6 @@ paths:
             tags:
                 - cliAuth
             x-speakeasy-name-override: redeem
-    /rpc/commandSearch.search:
-        get:
-            description: Returns compact openable resources matching a bounded server-side query.
-            operationId: searchCommandResources
-            parameters:
-                - allowEmptyValue: true
-                  description: Case-insensitive resource name or alias query. Whitespace is trimmed and the normalized value must contain 2–128 characters.
-                  in: query
-                  name: q
-                  required: true
-                  schema:
-                    description: Case-insensitive resource name or alias query. Whitespace is trimmed and the normalized value must contain 2–128 characters.
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Commandresourceindex'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-            summary: search commandSearch
-            tags:
-                - commandSearch
-            x-speakeasy-name-override: searchResources
-            x-speakeasy-react-hook:
-                name: SearchCommandResources
     /rpc/dashboards.addWidget:
         post:
             description: Place a saved widget on a dashboard, as a new card at the bottom, sized for its chart type.
@@ -63206,6 +63100,104 @@ paths:
             x-speakeasy-name-override: setRemoteSessionAutoRefreshPolicy
             x-speakeasy-react-hook:
                 name: SetRemoteSessionAutoRefreshPolicy
+    /rpc/projectResourceIndex.get:
+        get:
+            description: Returns a complete snapshot of authorized project resources for local discovery.
+            operationId: getProjectResourceIndex
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Projectresourceindex'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: get projectResourceIndex
+            tags:
+                - projectResourceIndex
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: ProjectResourceIndex
     /rpc/projects.create:
         post:
             description: Create a new project.
@@ -106666,81 +106658,6 @@ components:
                     type: string
                     description: Reason for the decision, shown to the user
             description: Result for Codex hook events
-        Commandresourceindex:
-            type: object
-            properties:
-                failed_kinds:
-                    type: array
-                    items:
-                        type: string
-                    description: Resource kinds that did not finish before the deadline.
-                generated_at:
-                    type: string
-                    description: RFC 3339 snapshot generation time.
-                    format: date-time
-                items:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/Commandresourceindexitem'
-                partial:
-                    type: boolean
-                    description: Whether the deadline prevented one or more resource kinds from completing.
-                schema_version:
-                    type: string
-                    description: Version of the compact candidate schema.
-                    enum:
-                        - "1"
-                timed_out:
-                    type: boolean
-                    description: Whether the shared search deadline expired.
-                truncated:
-                    type: boolean
-                    description: Whether per-kind or global result caps omitted matching resources.
-                truncated_kinds:
-                    type: array
-                    items:
-                        type: string
-                    description: Resource kinds with matching resources omitted by a result cap.
-            required:
-                - schema_version
-                - generated_at
-                - items
-                - partial
-                - timed_out
-                - failed_kinds
-                - truncated
-                - truncated_kinds
-        Commandresourceindexitem:
-            type: object
-            properties:
-                id:
-                    type: string
-                    format: uuid
-                keywords:
-                    type: array
-                    items:
-                        type: string
-                    description: Compact alternate names used for local matching.
-                kind:
-                    type: string
-                    enum:
-                        - assistant
-                        - environment
-                        - gateway
-                        - mcp
-                        - plugin
-                        - rule
-                        - skill
-                name:
-                    type: string
-                route_selector:
-                    type: string
-                    description: Canonical selector used by the dashboard route for this resource kind.
-            required:
-                - kind
-                - id
-                - name
-                - route_selector
         CommitServerIdentityConfigurationForm:
             type: object
             properties:
@@ -124459,6 +124376,91 @@ components:
                 - distinct_providers
                 - models
                 - tools
+        Projectresourceindex:
+            type: object
+            properties:
+                generated_at:
+                    type: string
+                    description: RFC 3339 snapshot generation time.
+                    format: date-time
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Projectresourceindexitem'
+                kinds:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Projectresourceindexkind'
+                    description: Completeness metadata for every supported resource kind.
+                schema_version:
+                    type: string
+                    description: Version of the project resource index schema.
+                    enum:
+                        - "1"
+            required:
+                - schema_version
+                - generated_at
+                - items
+                - kinds
+        Projectresourceindexitem:
+            type: object
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                keywords:
+                    type: array
+                    items:
+                        type: string
+                    description: Compact alternate names used for local matching.
+                kind:
+                    type: string
+                    enum:
+                        - assistant
+                        - environment
+                        - gateway
+                        - mcp
+                        - plugin
+                        - rule
+                        - skill
+                name:
+                    type: string
+                route_selector:
+                    type: string
+                    description: Canonical selector used by the dashboard route for this resource kind.
+            required:
+                - kind
+                - id
+                - name
+                - route_selector
+        Projectresourceindexkind:
+            type: object
+            properties:
+                complete:
+                    type: boolean
+                    description: Whether all authorized and openable resources of this kind are present.
+                item_count:
+                    type: integer
+                    description: Number of returned resources of this kind.
+                    format: int64
+                kind:
+                    type: string
+                    enum:
+                        - assistant
+                        - environment
+                        - gateway
+                        - mcp
+                        - plugin
+                        - rule
+                        - skill
+                overflow:
+                    type: boolean
+                    description: Whether a safety boundary omitted resources. This endpoint currently has no count boundary and always returns false.
+            required:
+                - kind
+                - complete
+                - overflow
+                - item_count
         PromoteRegistryCandidateRequestBody:
             type: object
             properties:
@@ -141830,8 +141832,6 @@ tags:
       description: Manages chat session tokens for client-side authentication
     - name: cliAuth
       description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for an API key of the scope requested at authorize, which is the device agent's per-user key by default or the Speakeasy CLI's organization-wide producer key.
-    - name: commandSearch
-      description: Searches authorized project resources for Command K.
     - name: dashboards
       description: 'Dashboards: a project''s layouts of saved widgets. Any member can make one; editing someone else''s needs project write access.'
     - name: dataExports
@@ -141916,6 +141916,8 @@ tags:
       description: Manage distributable plugin bundles of MCP servers and hooks.
     - name: features
       description: Manage product level feature controls.
+    - name: projectResourceIndex
+      description: Returns the complete authorized, openable resource inventory for a project.
     - name: projects
       description: Manages projects in Speakeasy.
     - name: remoteMcp

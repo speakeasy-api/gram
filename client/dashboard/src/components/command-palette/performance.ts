@@ -1,5 +1,5 @@
 import type { Telemetry } from "@/contexts/Telemetry";
-import type { ResourceSearchMetrics } from "./candidates/useResourceSearchCandidates";
+import type { ProjectResourceIndexMetrics } from "./candidates/useProjectResourceIndexCandidates";
 
 export const COMMAND_PALETTE_PERFORMANCE_EVENT =
   "command_palette_open_performance";
@@ -22,18 +22,18 @@ export interface CommandPalettePerformancePayload {
   ranking_duration_ms: number;
   ranking_max_duration_ms: number;
   inventory_call_baseline: 17;
-  searched_resource_kind_count: number;
+  indexed_resource_kind_count: number;
   net_eliminated_inventory_call_baseline: number;
   remaining_inventory_call_baseline: number;
-  search_request_count: number;
+  index_request_count: number;
   modeled_no_fallback_call_count: number;
-  search_candidate_count: number;
-  search_complete: boolean;
-  search_truncated: boolean;
-  search_truncated_kind_count: number;
-  search_payload_byte_bucket: ResourceSearchMetrics["payloadByteBucket"];
-  time_to_search_ready_ms: number | null;
-  parse_search_duration_ms: number | null;
+  index_item_count: number;
+  index_complete: boolean;
+  index_cache_hit: boolean;
+  index_incomplete_kind_count: number;
+  index_payload_byte_bucket: ProjectResourceIndexMetrics["payloadByteBucket"];
+  time_to_index_ready_ms: number | null;
+  index_mapping_duration_ms: number | null;
   fallback_used: boolean;
 }
 
@@ -49,14 +49,14 @@ interface Session {
   rankingInvocationCount: number;
   rankingDuration: number;
   rankingMaxDuration: number;
-  searchRequestCount: number;
-  searchCandidateCount: number;
-  searchComplete: boolean;
-  searchTruncated: boolean;
-  searchTruncatedKindCount: number;
-  searchPayloadByteBucket: ResourceSearchMetrics["payloadByteBucket"];
-  searchReadyAt: number | null;
-  parseSearchDuration: number | null;
+  indexRequestCount: number;
+  indexItemCount: number;
+  indexComplete: boolean;
+  indexCacheHit: boolean;
+  indexIncompleteKindCount: number;
+  indexPayloadByteBucket: ProjectResourceIndexMetrics["payloadByteBucket"];
+  indexReadyAt: number | null;
+  mappingDuration: number | null;
   fallbackUsed: boolean;
 }
 
@@ -93,14 +93,14 @@ export class CommandPalettePerformanceTracker {
       rankingInvocationCount: 0,
       rankingDuration: 0,
       rankingMaxDuration: 0,
-      searchRequestCount: 0,
-      searchCandidateCount: 0,
-      searchComplete: false,
-      searchTruncated: false,
-      searchTruncatedKindCount: 0,
-      searchPayloadByteBucket: null,
-      searchReadyAt: null,
-      parseSearchDuration: null,
+      indexRequestCount: 0,
+      indexItemCount: 0,
+      indexComplete: false,
+      indexCacheHit: false,
+      indexIncompleteKindCount: 0,
+      indexPayloadByteBucket: null,
+      indexReadyAt: null,
+      mappingDuration: null,
       fallbackUsed: false,
     };
   }
@@ -125,25 +125,25 @@ export class CommandPalettePerformanceTracker {
     }
   }
 
-  search(now: number, metrics: ResourceSearchMetrics): void {
+  index(now: number, metrics: ProjectResourceIndexMetrics): void {
     const session = this.session;
     if (!session) return;
-    session.searchRequestCount = Math.max(
-      session.searchRequestCount,
-      metrics.searchRequestCount,
+    session.indexRequestCount = Math.max(
+      session.indexRequestCount,
+      metrics.indexRequestCount,
     );
     session.fallbackUsed ||= metrics.state === "fallback";
     // Cached rows can coexist with an issued refetch. Only a settled response
     // may finalize result metadata, including valid zero-candidate outcomes.
-    if (metrics.searchInFlight) return;
+    if (metrics.indexInFlight) return;
     if (metrics.state !== "ready" && metrics.state !== "fallback") return;
-    session.searchCandidateCount = metrics.candidateCount;
-    session.searchComplete = metrics.complete;
-    session.searchTruncated = metrics.truncated;
-    session.searchTruncatedKindCount = metrics.truncatedKindCount;
-    session.searchPayloadByteBucket = metrics.payloadByteBucket;
-    session.parseSearchDuration = metrics.parseSearchDurationMs;
-    session.searchReadyAt ??= now;
+    session.indexItemCount = metrics.itemCount;
+    session.indexComplete = metrics.complete;
+    session.indexCacheHit = metrics.cacheHit;
+    session.indexIncompleteKindCount = metrics.incompleteKindCount;
+    session.indexPayloadByteBucket = metrics.payloadByteBucket;
+    session.mappingDuration = metrics.mappingDurationMs;
+    session.indexReadyAt ??= now;
   }
 
   ranking(durationMs: number): void {
@@ -192,22 +192,22 @@ export class CommandPalettePerformanceTracker {
       // need their shared inventory, so six list requests are net eliminated.
       // This is an explicit no-fallback model, not a measured total.
       inventory_call_baseline: 17,
-      searched_resource_kind_count: scope === "project" ? 7 : 0,
+      indexed_resource_kind_count: scope === "project" ? 7 : 0,
       net_eliminated_inventory_call_baseline: scope === "project" ? 6 : 0,
       remaining_inventory_call_baseline: scope === "project" ? 11 : 17,
-      search_request_count: session.searchRequestCount,
+      index_request_count: session.indexRequestCount,
       modeled_no_fallback_call_count:
-        (scope === "project" ? 11 : 17) + session.searchRequestCount,
-      search_candidate_count: session.searchCandidateCount,
-      search_complete: session.searchComplete,
-      search_truncated: session.searchTruncated,
-      search_truncated_kind_count: session.searchTruncatedKindCount,
-      search_payload_byte_bucket: session.searchPayloadByteBucket,
-      time_to_search_ready_ms:
-        session.searchReadyAt === null
+        (scope === "project" ? 11 : 17) + session.indexRequestCount,
+      index_item_count: session.indexItemCount,
+      index_complete: session.indexComplete,
+      index_cache_hit: session.indexCacheHit,
+      index_incomplete_kind_count: session.indexIncompleteKindCount,
+      index_payload_byte_bucket: session.indexPayloadByteBucket,
+      time_to_index_ready_ms:
+        session.indexReadyAt === null
           ? null
-          : Math.max(0, session.searchReadyAt - session.startedAt),
-      parse_search_duration_ms: session.parseSearchDuration,
+          : Math.max(0, session.indexReadyAt - session.startedAt),
+      index_mapping_duration_ms: session.mappingDuration,
       fallback_used: session.fallbackUsed,
     };
   }

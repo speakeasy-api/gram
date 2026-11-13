@@ -62,9 +62,9 @@ const mocks = vi.hoisted(() => ({
   calls: {} as Record<string, unknown[]>,
 }));
 
-vi.mock("./useResourceSearchCandidates", () => ({
+vi.mock("./useProjectResourceIndexCandidates", () => ({
   createGrantFingerprint: (grants: unknown[]) => JSON.stringify(grants),
-  useResourceSearchCandidates: (options: {
+  useProjectResourceIndexCandidates: (options: {
     enabled: boolean;
     accessKey: string;
     query: string;
@@ -87,14 +87,14 @@ vi.mock("./useResourceSearchCandidates", () => ({
       ),
       metrics: {
         state: mocks.indexFallback ? "fallback" : "ready",
-        searchRequestCount: options.enabled ? 1 : 0,
-        searchInFlight: false,
-        candidateCount: mocks.indexCandidates.length,
+        indexRequestCount: options.enabled ? 1 : 0,
+        indexInFlight: false,
+        cacheHit: false,
+        itemCount: mocks.indexCandidates.length,
         complete: !mocks.indexFallback,
-        truncated: false,
-        truncatedKindCount: 0,
+        incompleteKindCount: 0,
         payloadByteBucket: "under_10k",
-        parseSearchDurationMs: 1,
+        mappingDurationMs: 1,
       },
     };
   },
@@ -1771,7 +1771,6 @@ describe("useLauncherCandidates", () => {
 
     expect(mocks.indexOptions.at(-1)).toMatchObject({
       enabled: true,
-      query: "😀",
     });
     expect(optionsOf(mocks.calls.useAssistantsList?.at(-1)).enabled).toBe(true);
     expect(optionsOf(mocks.calls.useSkillsInfinite?.at(-1)).enabled).toBe(true);
