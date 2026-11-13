@@ -337,6 +337,7 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 		}
 		matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 	}
+	e.reportAuthorizerRefusals(ctx, authorization, checks, false)
 
 	challengeLogger{
 		Operation:            authzrepo.OperationRequire,
@@ -410,6 +411,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, err)
 	}
 	if decision.allowed() {
+		e.reportAuthorizerRefusals(ctx, authorization, authorization.allowedAlternatives(checks), true)
 		challengeLogger{
 			Operation:            authzrepo.OperationRequireAny,
 			Outcome:              authzrepo.OutcomeAllow,
@@ -563,6 +565,7 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 			return false, nil
 		}
 	}
+	e.reportAuthorizerRefusals(ctx, authorization, checks, false)
 
 	return true, nil
 }
@@ -612,6 +615,9 @@ func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, erro
 	decision, err := authorization.decideAnyOf(alternatives)
 	if err != nil {
 		return false, e.mapError(ctx, err)
+	}
+	if decision.allowed() {
+		e.reportAuthorizerRefusals(ctx, authorization, authorization.allowedAlternatives(alternatives), true)
 	}
 	return decision.allowed(), nil
 }
@@ -685,6 +691,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	allowed := make([]string, 0, len(checks))
 	matches := make([]grantMatch, 0, len(checks))
 	anyDenied := false
+	var allowedChecks []Check
 	for _, c := range checks {
 		if err := validateInput(c); err != nil {
 			focus := c
@@ -723,9 +730,11 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 		}
 		if evaluation.Grant != nil {
 			allowed = append(allowed, c.ResourceID)
+			allowedChecks = append(allowedChecks, c)
 			matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 		}
 	}
+	e.reportAuthorizerRefusals(ctx, authorization, allowedChecks, false)
 
 	if len(checks) > 0 {
 		outcome := authzrepo.OutcomeDeny
@@ -796,6 +805,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 	matches := make([]grantMatch, 0, len(checks))
 	allowedCount := 0
 	anyDenied := false
+	var allowedChecks []Check
 	for i, c := range checks {
 		if err := validateInput(c); err != nil {
 			focus := c
@@ -834,10 +844,12 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 		}
 		if evaluation.Grant != nil {
 			matched[i] = true
+			allowedChecks = append(allowedChecks, c)
 			matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 			allowedCount++
 		}
 	}
+	e.reportAuthorizerRefusals(ctx, authorization, allowedChecks, false)
 
 	if len(checks) > 0 {
 		outcome := authzrepo.OutcomeDeny
