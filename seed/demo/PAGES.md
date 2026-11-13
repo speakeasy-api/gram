@@ -476,6 +476,13 @@ step left: **Settings → Identity → User Identity → Auto-Configure → Save
 discovers the fixture's authorization server and registers a client with it,
 as an admin would with a real vendor; its rows then offer **Connect account**.
 
+Linear (`<org>-linear`) is set up the same way: its own endpoint and user
+session issuer, pointing at the real `https://mcp.linear.app/mcp`, with no
+client in the shared seed. In the public demo org an admin sets up its
+sign-in from the server's page. Locally, `local_linear.go` registers a client
+at Linear, so a developer signs in to their own Linear account right after
+`mise run seed`.
+
 No agent is granted it by name; an agent with a project-wide `mcp:connect`
 wildcard (such as the identity-bound assistant's) reaches it. Add it to any
 other agent from its MCP sign-in tab. The organization gateway sign-ins record

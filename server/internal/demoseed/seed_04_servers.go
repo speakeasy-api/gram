@@ -456,12 +456,12 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}
 	// Organization authorizations include the Per-User OAuth Server, the
 	// Service Account Server, the Pass-Through Token Server, the Tunnelled
-	// Private Server, the Enterprise Sign-In (ID-JAG) Server and the
-	// Auto-Configured OAuth Server,
+	// Private Server, the Enterprise Sign-In (ID-JAG) Server, the
+	// Auto-Configured OAuth Server and Linear,
 	// including on the expired history row. An organization sign-in reaches
 	// every server in the organization, including one with a sign-in of its own.
 	for i := 1; i <= 3; i++ {
-		for _, server := range []string{"linear", "slack", "github", "private-inventory", "enterprise-sign-in", "notion"} {
+		for _, server := range []string{"linear", "slack", "github", "private-inventory", "enterprise-sign-in", "notion", "linear-app"} {
 			client := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 			switch server {
 			case "linear":
@@ -921,7 +921,7 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 	return nil
 }
 
-// seedSignInExampleServers adds the Auto-Configured OAuth Server, whose
+// seedSignInExampleServers adds the Auto-Configured OAuth Server and Linear, whose
 // callers each sign in to their own account once an admin sets up its
 // sign-in.
 func (s *seeder) seedSignInExampleServers(ctx context.Context) error {
@@ -955,6 +955,17 @@ func (s *seeder) seedSignInExampleServers(ctx context.Context) error {
 		NotionSlug:       s.spec.OrgSlug + "-auto-configured-oauth",
 	}); err != nil {
 		return fmt.Errorf("insert demo auto-configured oauth endpoint: %w", err)
+	}
+	if err := s.q.ServersInsertLinearAppServer(ctx, repo.ServersInsertLinearAppServerParams{
+		RemoteID:   s.det("remotemcp-linear-app"),
+		IssuerID:   s.det("issuer-linear-app"),
+		ServerID:   s.det("mcpserver-linear-app"),
+		EndpointID: s.det("endpoint-linear-app"),
+		Slug:       s.spec.OrgSlug + "-linear",
+		ProjectID:  proj,
+		OrgID:      org,
+	}); err != nil {
+		return fmt.Errorf("insert demo linear server: %w", err)
 	}
 	return nil
 }

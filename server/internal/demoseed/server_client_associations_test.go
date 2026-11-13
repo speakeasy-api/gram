@@ -27,8 +27,8 @@ func TestLocalServerClientAssociations(t *testing.T) {
 // The Pass-Through Token Server has its own issuer with no bound client, so
 // it uses none. The Enterprise Sign-In
 // (ID-JAG) Server has its own issuer and uses its authorization server's
-// client. The Auto-Configured OAuth Server has its own issuer and no seeded
-// client.
+// client. The Auto-Configured OAuth Server and Linear have their own issuers
+// and no seeded client.
 func testServerClientAssociations(t *testing.T, spec Spec) {
 	t.Helper()
 	ctx := t.Context()

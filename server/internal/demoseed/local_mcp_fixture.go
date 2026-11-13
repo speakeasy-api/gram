@@ -45,6 +45,12 @@ type LocalMCPFixtureOptions struct {
 	DevIDPClientID string
 	// HTTPClient reaches the dev-idp's management API.
 	HTTPClient *guardian.HTTPClient
+	// Policy is the egress policy the seed registers its Linear client
+	// through (local_linear.go). Nil leaves Linear for an admin to set up.
+	Policy *guardian.Policy
+	// CacheDir keeps the Linear client the seed registered, so a reseed
+	// reuses it rather than registering another. Empty registers every run.
+	CacheDir string
 }
 
 // Fixed values for the servers wired to the fixture.
@@ -73,6 +79,7 @@ const (
 //     left for an admin to set up;
 //   - the Tunnelled Private Server: the fixture daemon's tunnel agent key.
 //
+// Linear, the one real vendor server, is wired by wireLocalLinear.
 // The Enterprise Sign-In (ID-JAG) Server is wired by wireLocalEMA. The shared
 // seed already gives every server its name. The public demo org keeps the
 // placeholder hosts: prod cannot reach a developer's localhost.
@@ -285,6 +292,11 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 	// dev-idp, it reaches the fixture's EMA endpoint with a token Speakeasy
 	// obtains by exchanging that identity for an ID-JAG.
 	if err := wireLocalEMA(ctx, logger, tx, opts, base); err != nil {
+		return err
+	}
+
+	// 9. Linear: the real vendor, with a client the seed registers there.
+	if err := wireLocalLinear(ctx, logger, s, opts); err != nil {
 		return err
 	}
 

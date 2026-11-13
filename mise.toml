@@ -250,6 +250,9 @@ GRAM_MCP_FIXTURE_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_MCP_FIXTURE_PORT}}"
 GRAM_MCP_FIXTURE_URL = "{{env.GRAM_HTTP_SCHEME}}://{{env.GRAM_HOST}}:{{env.GRAM_MCP_FIXTURE_PORT}}"
 ## Short access tokens make expiry and refresh visible; refresh tokens last 30 days.
 GRAM_MCP_FIXTURE_ACCESS_TOKEN_TTL = "1h"
+## The local seed keeps the client it registers with Linear here (gitignored),
+## so reseeding reuses it.
+GRAM_DEMOSEED_CACHE_DIR = "{{ config_root }}/local/cache"
 ## The fixture reads TUNNEL_GATEWAY_PUBLIC_PORT (its tunnel agent serves the
 ## open endpoint as the seeded Tunnelled Private Server) and
 ## GRAM_DEVIDP_EXTERNAL_URL (its /mcp/ema endpoint takes the dev-idp's tokens)

@@ -434,6 +434,43 @@ SET resource = @resource::text, updated_at = clock_timestamp()
 WHERE remote_session_client_id = @remote_session_client_id::uuid
   AND organization_id = @organization_id::text AND deleted IS FALSE;
 
+-- Linear's authorization server, as its metadata document describes it
+-- (https://mcp.linear.app/.well-known/oauth-authorization-server).
+-- name: LocalLinearInsertIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
+   token_endpoint, registration_endpoint, revocation_endpoint,
+   scopes_supported, grant_types_supported, response_types_supported,
+   token_endpoint_auth_methods_supported, code_challenge_methods_supported,
+   client_id_metadata_document_supported, name, metadata_fetched_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @organization_id::text, 'linear',
+   @issuer::text, @issuer::text || '/authorize', @issuer::text || '/token',
+   @issuer::text || '/register', @issuer::text || '/token',
+   ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['code'], ARRAY['client_secret_basic', 'client_secret_post', 'none'],
+   ARRAY['S256'], TRUE, 'Linear', clock_timestamp());
+
+-- A public client registered with Linear by dynamic client registration. Its
+-- callback origin is the one the registration listed.
+-- name: LocalLinearInsertClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_id_issued_at, token_endpoint_auth_method, callback_base_url)
+VALUES
+  (@id::uuid, @project_id::uuid, @organization_id::text,
+   @remote_session_issuer_id::uuid, @client_id::text, clock_timestamp(),
+   'none', @callback_base_url::text);
+
+-- name: LocalLinearInsertProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @organization_id::text, @resource::text,
+   @metadata_url::text, ARRAY[@issuer::text], ARRAY['read', 'write'],
+   clock_timestamp());
+
 -- Provisions the developer in the local org's directory, linked to their
 -- user, the way directory sync would. Federated sign-in (the Enterprise
 -- Sign-In server) admits only directory-provisioned people.

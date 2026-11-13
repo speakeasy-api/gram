@@ -856,6 +856,105 @@ func (q *Queries) LocalGrantToolLogVisibility(ctx context.Context, arg LocalGran
 	return err
 }
 
+const localLinearInsertClient = `-- name: LocalLinearInsertClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_id_issued_at, token_endpoint_auth_method, callback_base_url)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   $4::uuid, $5::text, clock_timestamp(),
+   'none', $6::text)
+`
+
+type LocalLinearInsertClientParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	RemoteSessionIssuerID uuid.UUID
+	ClientID              string
+	CallbackBaseUrl       string
+}
+
+// A public client registered with Linear by dynamic client registration. Its
+// callback origin is the one the registration listed.
+func (q *Queries) LocalLinearInsertClient(ctx context.Context, arg LocalLinearInsertClientParams) error {
+	_, err := q.db.Exec(ctx, localLinearInsertClient,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RemoteSessionIssuerID,
+		arg.ClientID,
+		arg.CallbackBaseUrl,
+	)
+	return err
+}
+
+const localLinearInsertIssuer = `-- name: LocalLinearInsertIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
+   token_endpoint, registration_endpoint, revocation_endpoint,
+   scopes_supported, grant_types_supported, response_types_supported,
+   token_endpoint_auth_methods_supported, code_challenge_methods_supported,
+   client_id_metadata_document_supported, name, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, 'linear',
+   $4::text, $4::text || '/authorize', $4::text || '/token',
+   $4::text || '/register', $4::text || '/token',
+   ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['code'], ARRAY['client_secret_basic', 'client_secret_post', 'none'],
+   ARRAY['S256'], TRUE, 'Linear', clock_timestamp())
+`
+
+type LocalLinearInsertIssuerParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Issuer         string
+}
+
+// Linear's authorization server, as its metadata document describes it
+// (https://mcp.linear.app/.well-known/oauth-authorization-server).
+func (q *Queries) LocalLinearInsertIssuer(ctx context.Context, arg LocalLinearInsertIssuerParams) error {
+	_, err := q.db.Exec(ctx, localLinearInsertIssuer,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Issuer,
+	)
+	return err
+}
+
+const localLinearInsertProtectedResource = `-- name: LocalLinearInsertProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::text,
+   $5::text, ARRAY[$6::text], ARRAY['read', 'write'],
+   clock_timestamp())
+`
+
+type LocalLinearInsertProtectedResourceParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Resource       string
+	MetadataUrl    string
+	Issuer         string
+}
+
+func (q *Queries) LocalLinearInsertProtectedResource(ctx context.Context, arg LocalLinearInsertProtectedResourceParams) error {
+	_, err := q.db.Exec(ctx, localLinearInsertProtectedResource,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Resource,
+		arg.MetadataUrl,
+		arg.Issuer,
+	)
+	return err
+}
+
 const localLinkWorkOSOrg = `-- name: LocalLinkWorkOSOrg :exec
 
 UPDATE organization_metadata

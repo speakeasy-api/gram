@@ -216,6 +216,37 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
   (@notion_endpoint_id::uuid, @project_id::uuid, NULL,
    @notion_server_id::uuid, @notion_slug::text);
 
+-- Linear: the real vendor's MCP server, with its own endpoint and sign-in.
+-- The shared seed holds no client or credential, so in the public demo org
+-- an admin sets up its sign-in from the server's page, as with any vendor.
+-- The local seed registers a client with Linear itself (local_linear.go), so
+-- a developer signs in to their own Linear account right after seeding.
+-- name: ServersInsertLinearAppServer :exec
+WITH remote AS (
+  INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
+  VALUES (@remote_id::uuid, @project_id::uuid, 'Linear', 'linear',
+          'streamable-http', 'https://mcp.linear.app/mcp')
+  RETURNING id
+), issuer AS (
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                    authn_challenge_mode, session_duration,
+                                    authorization_server_mode)
+  VALUES (@issuer_id::uuid, @project_id::uuid, @org_id::text, 'linear',
+          'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
+  RETURNING id
+), server AS (
+  INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                           remote_mcp_server_id, user_session_issuer_id,
+                           visibility)
+  SELECT @server_id::uuid, @project_id::uuid, 'Linear', 'linear', NULL,
+         remote.id, issuer.id, 'private'
+  FROM remote, issuer
+  RETURNING id
+)
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug)
+SELECT @endpoint_id::uuid, @project_id::uuid, NULL, server.id, @slug::text
+FROM server;
+
 -- name: ServersInsertLinearRemoteSessionIssuer :exec
 INSERT INTO remote_session_issuers
   (id, project_id, organization_id, slug, issuer, authorization_endpoint,

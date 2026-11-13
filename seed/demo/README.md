@@ -136,8 +136,8 @@ needs and the shared demo org must never have:
   Playground's MCP App: a Speakeasy Function zipped in-memory from
   `server/internal/demoseed/mcpapp/` and hung off the seeded deployment, so the
   demo org never gets a functions deployment production would have to run.
-- **Working upstream servers.** The seed has ten MCP servers (keep it at ten
-  or fewer). Each is named for the configuration it tests, and in the local
+- **Working upstream servers.** The seed has eleven MCP servers: ten named
+  for the configuration they test, plus Linear, a real vendor. In the local
   org each one works right after `mise run seed`. The stack starts a throwaway MCP fixture server
   (`mcp-fixture/`, pitchfork daemon `mcp-fixture`, `GRAM_MCP_FIXTURE_URL`): an
   OAuth 2.1 server (sign in by picking an email; dynamic registration, client
@@ -160,6 +160,7 @@ needs and the shared demo org must never have:
   | Auto-Configured OAuth Server       | An admin sets up sign-in through discovery and client registration                                   | `/mcp/auto`, with no client until an admin saves Auto-Configure                                 |
   | Tunnelled Private Server           | A server on a private network, reached through a tunnel                                              | The fixture's tunnel agent connects with `fixtureauth.TunnelKey` and serves `/mcp/open`         |
   | Enterprise Sign-In (ID-JAG) Server | Sign-in through the company identity provider, exchanged for an ID-JAG                               | `/mcp/ema`, through the dev-idp (below)                                                         |
+  | Linear                             | A real vendor's MCP server; each person signs in to their own Linear account                         | `https://mcp.linear.app/mcp`, with a client the seed registers at Linear (below)                |
 
   The Enterprise Sign-In (ID-JAG) Server is wired by `local_ema.go`. The
   dev-idp plays the company identity provider: the seed creates its EMA app,
@@ -172,6 +173,17 @@ needs and the shared demo org must never have:
   fixture's `/mcp/ema` checks by introspection. One client id
   (`GRAM_IDP_CLIENT_ID`) serves all three legs, with a checked-in local
   secret. A dev-idp that cannot be reached leaves the server display-only.
+
+  Linear is wired by `local_linear.go`. Linear supports client ID metadata
+  documents, but it fetches the document from Speakeasy and cannot reach
+  localhost, so the seed registers a public client at Linear's `/register`
+  (as an admin's Auto-Configure would) and records the provider, client and
+  links. The client id is cached in `GRAM_DEMOSEED_CACHE_DIR`
+  (`local/cache/demoseed-linear-client.json`, gitignored) per callback URL, so
+  reseeding reuses it. Signing in needs your own Linear account, and the tools
+  return your real Linear data: mask it in any recording. Offline, the seed
+  warns and leaves Linear for an admin to set up. The public demo org has no
+  Linear client: an admin there sets up its sign-in from the server's page.
 
   The shared seed uses the placeholder host `mcp-fixture.example.com`; the
   public demo org keeps those display-only values because prod cannot reach

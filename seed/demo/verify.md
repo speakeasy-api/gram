@@ -717,8 +717,9 @@ open their effective assignments; the dropdown always offers compact member sear
       Read-Only Tool Subset, Server-Specific Sign-In, External OAuth Server
       (each toolset's canonical wrapper), Per-User OAuth Server, Service
       Account Server, Pass-Through Token Server, Auto-Configured OAuth Server,
-      Tunnelled Private Server and Enterprise Sign-In (ID-JAG) Server: ten in
-      all. No server is named for a vendor it does not reach.
+      Tunnelled Private Server and Enterprise Sign-In (ID-JAG) Server, plus
+      Linear: eleven in all. No server is named for a vendor it does not
+      reach.
     - Locally, with the `mcp-fixture` daemon up (`pitchfork status
       mcp-fixture`), connect an MCP client to each `GRAM_SERVER_URL/mcp/<org>-<slug>`
       endpoint and call a tool:
@@ -752,6 +753,12 @@ open their effective assignments; the dropdown always offers compact member sear
         After **Give access**, `whoami` returns the developer's email with
         `auth: ema`: Speakeasy got the upstream token through the ID-JAG
         exchange.
+      - `linear` (needs your own Linear account and internet access): the
+        seed log says `registered the seeded Linear server's client with
+        Linear`. The consent page lists **Linear**; **Connect** opens Linear's
+        own sign-in and consent page. After **Give access**, a Linear tool
+        (for example `list_teams`) returns your workspace's data. Its server
+        page reads **Connected** under **Settings → Identity**.
     - The demo org keeps display-only upstreams: the Per-User OAuth Server's
       **Connect account** goes to `mcp-fixture.example.com` and fails, by
       design.

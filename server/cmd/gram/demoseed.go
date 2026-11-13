@@ -97,6 +97,11 @@ func newDemoSeedCommand() *cli.Command {
 				EnvVars: []string{"GRAM_IDP_CLIENT_ID"},
 			},
 			&cli.StringFlag{
+				Name:    "local-cache-dir",
+				Usage:   "Directory that keeps the Linear client the local seed registers, so reseeding reuses it",
+				EnvVars: []string{"GRAM_DEMOSEED_CACHE_DIR"},
+			},
+			&cli.StringFlag{
 				Name:    "server-url",
 				Usage:   "Speakeasy's own URL, which the local MCP fixture redirects sign-ins back to",
 				EnvVars: []string{"GRAM_SERVER_URL"},
@@ -261,7 +266,7 @@ func newDemoSeedCommand() *cli.Command {
 // localMCPFixtureOptions reads the local MCP fixture settings. Without a
 // fixture URL the seeded servers stay display-only.
 func localMCPFixtureOptions(c *cli.Context) (demoseed.LocalMCPFixtureOptions, error) {
-	opts := demoseed.LocalMCPFixtureOptions{BaseURL: "", ServerURL: nil, AccessTokenTTL: c.Duration("local-mcp-fixture-access-token-ttl"), Encryption: nil, DevIDPURL: "", DevIDPClientID: "", HTTPClient: nil}
+	opts := demoseed.LocalMCPFixtureOptions{BaseURL: "", ServerURL: nil, AccessTokenTTL: c.Duration("local-mcp-fixture-access-token-ttl"), Encryption: nil, DevIDPURL: "", DevIDPClientID: "", HTTPClient: nil, Policy: nil, CacheDir: ""}
 	base := c.String("local-mcp-fixture-url")
 	if base == "" || base == "unset" {
 		return opts, nil
@@ -290,6 +295,8 @@ func localMCPFixtureOptions(c *cli.Context) (demoseed.LocalMCPFixtureOptions, er
 	}
 	opts.HTTPClient = policy.Client()
 	opts.HTTPClient.Timeout = 10 * time.Second
+	opts.Policy = policy
+	opts.CacheDir = c.String("local-cache-dir")
 	return opts, nil
 }
 
