@@ -396,20 +396,16 @@ func BuildMoveIssuerPayload(organizationUserSessionIssuersMoveIssuerBody string,
 // BuildGetIssuerMigratePreflightPayload builds the payload for the
 // organizationUserSessionIssuers getIssuerMigratePreflight endpoint from CLI
 // flags.
-func BuildGetIssuerMigratePreflightPayload(organizationUserSessionIssuersGetIssuerMigratePreflightSourceID string, organizationUserSessionIssuersGetIssuerMigratePreflightTargetID string, organizationUserSessionIssuersGetIssuerMigratePreflightSessionToken string) (*organizationusersessionissuers.GetIssuerMigratePreflightPayload, error) {
+func BuildGetIssuerMigratePreflightPayload(organizationUserSessionIssuersGetIssuerMigratePreflightBody string, organizationUserSessionIssuersGetIssuerMigratePreflightSessionToken string) (*organizationusersessionissuers.GetIssuerMigratePreflightPayload, error) {
 	var err error
-	var sourceID string
+	var body GetIssuerMigratePreflightRequestBody
 	{
-		sourceID = organizationUserSessionIssuersGetIssuerMigratePreflightSourceID
-		err = goa.MergeErrors(err, goa.ValidateFormat("source_id", sourceID, goa.FormatUUID))
+		err = json.Unmarshal([]byte(organizationUserSessionIssuersGetIssuerMigratePreflightBody), &body)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
-	}
-	var targetID string
-	{
-		targetID = organizationUserSessionIssuersGetIssuerMigratePreflightTargetID
-		err = goa.MergeErrors(err, goa.ValidateFormat("target_id", targetID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_id", body.SourceID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.target_id", body.TargetID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
@@ -420,9 +416,10 @@ func BuildGetIssuerMigratePreflightPayload(organizationUserSessionIssuersGetIssu
 			sessionToken = &organizationUserSessionIssuersGetIssuerMigratePreflightSessionToken
 		}
 	}
-	v := &organizationusersessionissuers.GetIssuerMigratePreflightPayload{}
-	v.SourceID = sourceID
-	v.TargetID = targetID
+	v := &organizationusersessionissuers.GetIssuerMigratePreflightPayload{
+		SourceID: body.SourceID,
+		TargetID: body.TargetID,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

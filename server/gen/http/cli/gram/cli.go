@@ -5200,8 +5200,7 @@ func ParseEndpoint(
 		organizationUserSessionIssuersMoveIssuerSessionTokenFlag = organizationUserSessionIssuersMoveIssuerFlags.String("session-token", "", "")
 
 		organizationUserSessionIssuersGetIssuerMigratePreflightFlags            = flag.NewFlagSet("get-issuer-migrate-preflight", flag.ExitOnError)
-		organizationUserSessionIssuersGetIssuerMigratePreflightSourceIDFlag     = organizationUserSessionIssuersGetIssuerMigratePreflightFlags.String("source-id", "REQUIRED", "")
-		organizationUserSessionIssuersGetIssuerMigratePreflightTargetIDFlag     = organizationUserSessionIssuersGetIssuerMigratePreflightFlags.String("target-id", "REQUIRED", "")
+		organizationUserSessionIssuersGetIssuerMigratePreflightBodyFlag         = organizationUserSessionIssuersGetIssuerMigratePreflightFlags.String("body", "REQUIRED", "")
 		organizationUserSessionIssuersGetIssuerMigratePreflightSessionTokenFlag = organizationUserSessionIssuersGetIssuerMigratePreflightFlags.String("session-token", "", "")
 
 		organizationUserSessionIssuersMigrateIssuerFlags            = flag.NewFlagSet("migrate-issuer", flag.ExitOnError)
@@ -13581,7 +13580,7 @@ func ParseEndpoint(
 				data, err = organizationusersessionissuersc.BuildMoveIssuerPayload(*organizationUserSessionIssuersMoveIssuerBodyFlag, *organizationUserSessionIssuersMoveIssuerSessionTokenFlag)
 			case "get-issuer-migrate-preflight":
 				endpoint = c.GetIssuerMigratePreflight()
-				data, err = organizationusersessionissuersc.BuildGetIssuerMigratePreflightPayload(*organizationUserSessionIssuersGetIssuerMigratePreflightSourceIDFlag, *organizationUserSessionIssuersGetIssuerMigratePreflightTargetIDFlag, *organizationUserSessionIssuersGetIssuerMigratePreflightSessionTokenFlag)
+				data, err = organizationusersessionissuersc.BuildGetIssuerMigratePreflightPayload(*organizationUserSessionIssuersGetIssuerMigratePreflightBodyFlag, *organizationUserSessionIssuersGetIssuerMigratePreflightSessionTokenFlag)
 			case "migrate-issuer":
 				endpoint = c.MigrateIssuer()
 				data, err = organizationusersessionissuersc.BuildMigrateIssuerPayload(*organizationUserSessionIssuersMigrateIssuerBodyFlag, *organizationUserSessionIssuersMigrateIssuerSessionTokenFlag)
@@ -36025,7 +36024,7 @@ func organizationUserSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    get-issuer-delete-preflight: Report the clients, live sessions, MCP servers, and toolsets affected by deleting an organization-owned user_session_issuer. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    delete-issuer: Soft-delete an organization-owned user_session_issuer. Refuses while a live MCP server or toolset references it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a user_session_issuer in the caller's organization. Provide a project_id to make it project-specific, or omit it to make it organization-owned. Existing clients and sessions move with the issuer. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    get-issuer-migrate-preflight: Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-issuer-migrate-preflight: Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. When no hard blocker is present, it runs the consolidation in a transaction it rolls back and reports how each affected MCP server's upstream OAuth clients would change. That run takes the same locks a consolidation does, and returns 409 when another writer holds them for too long. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate a source user_session_issuer onto a target issuer, preserving clients, sessions, attachments, and remote-session credentials before soft-deleting the source. The target must be in the same project or a broader organization scope. Access tokens issued through the authorization_code and refresh_token grants are audience-bound to the issuer, so once a repointed MCP server verifies bearers against the target, outstanding access tokens minted under the source are rejected until the client refreshes. Migrated sessions and refresh tokens keep working, so the refresh succeeds without re-authorization. Tokens from the jwt-bearer (ID-JAG) grant are bound to the resource URL and are unaffected. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    create-cimd-client: Allow an additional CIMD document URL on an organization-owned user_session_issuer. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    list-cimd-clients: List custom CIMD document URLs on an organization-owned user_session_issuer. Requires org:read.`)
@@ -36248,23 +36247,21 @@ func organizationUserSessionIssuersMoveIssuerUsage() {
 func organizationUserSessionIssuersGetIssuerMigratePreflightUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] organization-user-session-issuers get-issuer-migrate-preflight", os.Args[0])
-	fmt.Fprint(os.Stderr, " -source-id STRING")
-	fmt.Fprint(os.Stderr, " -target-id STRING")
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. When no hard blocker is present, it runs the consolidation in a transaction it rolls back and reports how each affected MCP server's upstream OAuth clients would change. That run takes the same locks a consolidation does, and returns 409 when another writer holds them for too long. Requires org:admin.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -source-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers get-issuer-migrate-preflight --source-id \"550e8400-e29b-41d4-a716-446655440000\" --target-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers get-issuer-migrate-preflight --body '{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func organizationUserSessionIssuersMigrateIssuerUsage() {
