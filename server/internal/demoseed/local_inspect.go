@@ -20,6 +20,10 @@ const localTasksKey = "local-tasks"
 // so the Inspect tab shows its connection error state.
 const localUnreachableURL = "http://127.0.0.1:9/mcp"
 
+// localGuideOnlyURL is an upstream whose provider has a published setup guide
+// and no guided setup flow. Nothing calls it during seeding.
+const localGuideOnlyURL = "https://mcp.asana.com/v2/mcp"
+
 // localTasksProfile is the seeded call shape of each mock tool over the last
 // seven days: calls, error rate, median seconds. list_labels has no calls.
 var localTasksProfile = map[string]struct {
@@ -69,7 +73,12 @@ func runLocalInspectFixtures(ctx context.Context, logger *slog.Logger, q *repo.Q
 	s := &seeder{spec: LocalSpec(), enc: nil, assistantIssuer: "", q: q, logger: logger, now: now, signalSequences: nil}
 	proj := s.projectID()
 
-	servers := []localInspectServer{{key: "local-unreachable", name: "Unreachable server (local)", url: localUnreachableURL, visibility: "private"}}
+	servers := []localInspectServer{
+		{key: "local-unreachable", name: "Unreachable server (local)", url: localUnreachableURL, visibility: "private"},
+		// A provider with a published setup guide but no guided flow, so the
+		// Setup tab shows its written guide and readiness lists the step.
+		{key: "local-asana", name: "Asana (setup guide)", url: localGuideOnlyURL, visibility: "private"},
+	}
 	if mockURL != "" {
 		servers = append(servers,
 			localInspectServer{key: localTasksKey, name: "Acme Tasks (local mock)", url: mockURL, visibility: "private"},
