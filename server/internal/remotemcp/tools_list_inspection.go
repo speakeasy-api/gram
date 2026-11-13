@@ -37,8 +37,9 @@ const (
 	ToolUnavailableReasonBlocked ToolUnavailableReason = "blocked"
 
 	// ToolUnavailableReasonReadOnly marks a tool denied only by its
-	// disposition: the caller's access covers other dispositions, such as
-	// read-only tools, but not this one.
+	// disposition where the caller's access covers read-only tools. A tool
+	// denied by a grant limited to another disposition, such as idempotent,
+	// reports [ToolUnavailableReasonNotGranted].
 	ToolUnavailableReasonReadOnly ToolUnavailableReason = "read_only"
 
 	// ToolUnavailableReasonNotGranted marks a tool no grant allows.
@@ -52,9 +53,9 @@ func toolUnavailableReason(reason authz.DenialReason) ToolUnavailableReason {
 	switch reason {
 	case authz.DenialReasonBlocked:
 		return ToolUnavailableReasonBlocked
-	case authz.DenialReasonDisposition:
+	case authz.DenialReasonReadOnly:
 		return ToolUnavailableReasonReadOnly
-	case authz.DenialReasonNone, authz.DenialReasonNotGranted:
+	case authz.DenialReasonNone, authz.DenialReasonDisposition, authz.DenialReasonNotGranted:
 		return ToolUnavailableReasonNotGranted
 	default:
 		return ToolUnavailableReasonNotGranted
