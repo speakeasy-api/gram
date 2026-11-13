@@ -244,7 +244,12 @@ async fn thread_turn_inner(
             if let Some(key) = &idempotency_key {
                 host.seen.remove(key);
             }
-            return Err((StatusCode::SERVICE_UNAVAILABLE, error.to_string()));
+            let status = if matches!(error, RunnerError::InvocationBusy) {
+                StatusCode::TOO_MANY_REQUESTS
+            } else {
+                StatusCode::SERVICE_UNAVAILABLE
+            };
+            return Err((status, error.to_string()));
         }
     };
 
@@ -377,6 +382,7 @@ mod tests {
         let warm = Arc::new(ConfiguredThread {
             thread_id: "T".into(),
             chat_id: "chat".into(),
+            reasoning_effort: "medium".into(),
             idle_since: Arc::new(std::sync::Mutex::new(Some(std::time::Instant::now()))),
             inbox_tx: tx,
             task_handle: std::sync::Mutex::new(None),

@@ -1,3 +1,4 @@
+import type { ReasoningEffort } from "./ReasoningEffortSelect";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
 import {
   invalidateAllAssistantsGet,
@@ -38,6 +39,8 @@ export function AssistantDraftProvider({
   const [assistantEnv, setAssistantEnvState] = useState<AssistantEnv | null>(
     null,
   );
+  const [reasoningEffort, setReasoningEffort] =
+    useState<ReasoningEffort>("medium");
   const pendingRef = useRef(new Map<string, PendingResolver>());
 
   const { data: assistant, refetch } = useAssistantsGet(
@@ -123,6 +126,8 @@ export function AssistantDraftProvider({
 
   const value = useMemo<DraftContextValue>(
     () => ({
+      reasoningEffort,
+      setReasoningEffort,
       assistantId,
       setAssistantId,
       setAssistant,
@@ -136,6 +141,8 @@ export function AssistantDraftProvider({
       setAssistantEnv,
     }),
     [
+      reasoningEffort,
+      setReasoningEffort,
       assistantId,
       setAssistantId,
       setAssistant,

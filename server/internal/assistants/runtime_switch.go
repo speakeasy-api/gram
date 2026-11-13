@@ -18,9 +18,11 @@ var (
 	errRuntimeSwitchUnavailable = errors.New("runtime switching is unavailable until the destination and complete activity state can be verified")
 )
 
-// runtimeSelectionChange is independent of frontend rollout flags. Supplying
-// either field requires both, including on a retry of a previously applied write.
+// runtimeSelectionChange carries optional assistant configuration changes.
+// Runtime version changes are independent of frontend rollout flags and require
+// both version fields, including on a retry of a previously applied write.
 type runtimeSelectionChange struct {
+	ReasoningEffort *string
 	Version         *int
 	ExpectedVersion *int
 }
@@ -65,6 +67,25 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 	if err := validateRuntimeSelection(change); err != nil {
 		return nil, err
 	}
+	current, err := queries.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: projectID, AssistantID: assistantID})
+	if err != nil {
+		return nil, fmt.Errorf("read runtime selection: %w", err)
+	}
+	effectiveVersion, effectiveEffort := current.RuntimeVersion, current.ReasoningEffort
+	if change.Version != nil {
+		if int(current.RuntimeVersion) != *change.ExpectedVersion {
+			return nil, errRuntimeSwitchConflict
+		}
+		effectiveVersion = int16(*change.Version)
+	}
+	if change.ReasoningEffort != nil {
+		effectiveEffort = *change.ReasoningEffort
+	}
+	// Validate before preparing a switch: preparation can retire runtime
+	// authority and cannot be undone by rolling back this transaction.
+	if err := validateRuntimeReasoningEffort(effectiveVersion, effectiveEffort); err != nil {
+		return nil, err
+	}
 	if change.Version == nil {
 		return nil, nil
 	}
@@ -76,13 +97,6 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 	expectedVersion := int16(2)
 	if *change.ExpectedVersion == 3 {
 		expectedVersion = 3
-	}
-	current, err := queries.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: projectID, AssistantID: assistantID})
-	if err != nil {
-		return nil, fmt.Errorf("read runtime selection: %w", err)
-	}
-	if int(current.RuntimeVersion) != *change.ExpectedVersion {
-		return nil, errRuntimeSwitchConflict
 	}
 	if int(current.RuntimeVersion) == *change.Version {
 		return nil, nil
@@ -215,6 +229,15 @@ func (s *ServiceCore) finishRuntimeSwitchRetirement(ctx context.Context, runtime
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit runtime retirement: %w", err)
+	}
+	return nil
+}
+
+// Pinned Kit supports low/medium/high, but has no disabled-reasoning mode.
+// Keep "none" available on runtime v2 without substituting a provider default.
+func validateRuntimeReasoningEffort(version int16, effort string) error {
+	if version == 3 && effort == "none" {
+		return assistantValidationError("Kit runtime does not support reasoning effort none; select low, medium or high, or use runtime v2")
 	}
 	return nil
 }

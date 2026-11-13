@@ -4,9 +4,17 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AssistantDraftPanel } from "./AssistantDraftPanel";
 
-const state = vi.hoisted(() => ({ tab: "overview" }));
+const state = vi.hoisted(() => ({
+  tab: "overview",
+  assistantId: "assistant" as string | null,
+  canWrite: true,
+  setReasoningEffort: vi.fn(),
+}));
 beforeEach(() => {
   state.tab = "overview";
+  state.assistantId = "assistant";
+  state.canWrite = true;
+  state.setReasoningEffort.mockReset();
 });
 
 vi.mock("nuqs", async () => {
@@ -21,7 +29,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true }),
+  useRBAC: () => ({ hasScope: () => state.canWrite }),
 }));
 vi.mock("@/components/require-scope", () => ({ RequireScope: () => null }));
 vi.mock("@gram/client/react-query/triggers.js", () => ({
@@ -32,7 +40,9 @@ vi.mock("@gram/client/react-query/assistantsDelete.js", () => ({
 }));
 vi.mock("./useAssistantDraft", () => ({
   useAssistantDraft: () => ({
-    assistantId: "assistant",
+    assistantId: state.assistantId,
+    reasoningEffort: "medium",
+    setReasoningEffort: state.setReasoningEffort,
     assistant: { id: "assistant", name: "Example assistant", instructions: "" },
   }),
 }));
@@ -79,4 +89,39 @@ it("keeps identity settings out of Overview and places them in Identity", () => 
     ctrlKey: false,
   });
   expect(screen.getByText("Identity settings content")).toBeTruthy();
+});
+
+function renderPanel() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <AssistantDraftPanel />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+it("defaults new assistants to Medium and lets onboarding select Off", () => {
+  state.assistantId = null;
+  renderPanel();
+  const selector = screen.getByRole("combobox", { name: "Reasoning effort" });
+  expect(selector.textContent).toContain("Medium");
+  fireEvent.pointerDown(selector, {
+    button: 0,
+    ctrlKey: false,
+    pointerType: "mouse",
+  });
+  fireEvent.click(screen.getByRole("option", { name: "Off" }));
+  expect(state.setReasoningEffort).toHaveBeenCalledWith("none");
+});
+it("disables the onboarding selector without write permission", () => {
+  state.assistantId = null;
+  state.canWrite = false;
+  renderPanel();
+  expect(
+    (
+      screen.getByRole("combobox", {
+        name: "Reasoning effort",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
 });

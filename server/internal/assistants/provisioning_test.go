@@ -51,6 +51,7 @@ func TestEnableManagedAssistantIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, managedAssistantName("managed-idempotent"), first.Name)
 	require.Equal(t, managedAssistantModel, first.Model)
+	require.Equal(t, "medium", first.ReasoningEffort)
 	require.Equal(t, managedAssistantInstructions, first.Instructions)
 	require.NotEmpty(t, first.Instructions, "managed instructions must be embedded, not empty")
 
@@ -66,6 +67,7 @@ func TestEnableManagedAssistantIsIdempotent(t *testing.T) {
 	got, err := core.GetManagedAssistant(ctx, projectID)
 	require.NoError(t, err)
 	require.Equal(t, first.ID, got.ID)
+	require.Equal(t, "medium", got.ReasoningEffort)
 
 	triggers, err := triggerrepo.New(conn).ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{
 		ProjectID:      projectID,

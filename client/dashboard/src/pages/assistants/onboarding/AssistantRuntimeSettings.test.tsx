@@ -26,6 +26,7 @@ const assistant: Assistant = {
   projectId: "22222222-2222-4222-8222-222222222222",
   name: "Example assistant",
   model: "example/model",
+  reasoningEffort: "medium",
   instructions: "",
   toolsets: [],
   mcpServers: [],
@@ -101,5 +102,54 @@ describe("assistant runtime selection", () => {
         },
       },
     });
+  });
+});
+
+it("blocks switching to Kit while reasoning is Off and explains how to proceed", () => {
+  render(
+    <AssistantRuntimeSettings
+      assistant={{ ...assistant, reasoningEffort: "none" }}
+      canWrite
+    />,
+  );
+  const toggle = screen.getByRole("switch", { name: "Use Kit runtime" });
+  expect((toggle as HTMLButtonElement).disabled).toBe(true);
+  const feedback = screen.getByText(
+    /Set reasoning effort to Low, Medium, or High and save/,
+  );
+  expect(
+    screen
+      .getByRole("group", { name: "Kit runtime selection" })
+      .getAttribute("aria-describedby"),
+  ).toBe(feedback.parentElement?.id);
+  fireEvent.click(toggle);
+  expect(mocks.mutate).not.toHaveBeenCalled();
+});
+
+it("enables switching to Kit after a compatible effort is persisted", () => {
+  const { rerender } = render(
+    <AssistantRuntimeSettings
+      assistant={{ ...assistant, reasoningEffort: "none" }}
+      canWrite
+    />,
+  );
+  rerender(
+    <AssistantRuntimeSettings
+      assistant={{ ...assistant, reasoningEffort: "low" }}
+      canWrite
+    />,
+  );
+  expect(screen.queryByText(/Kit does not support Off/)).toBeNull();
+  const toggle = screen.getByRole("switch", { name: "Use Kit runtime" });
+  expect((toggle as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(toggle);
+  expect(mocks.mutate).toHaveBeenCalledWith({
+    request: {
+      updateAssistantForm: {
+        id: assistant.id,
+        runtimeVersion: 3,
+        expectedRuntimeVersion: 2,
+      },
+    },
   });
 });

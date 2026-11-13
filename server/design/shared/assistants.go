@@ -47,6 +47,7 @@ var Assistant = Type("Assistant", func() {
 	Attribute("agent_id", String, "The assistant's dedicated agent ID, when it has one.", func() { Format(FormatUUID) })
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
+	Attribute("reasoning_effort", String, "The reasoning effort used by the assistant.", func() { Enum("none", "low", "medium", "high") })
 	Attribute("instructions", String, "The system instructions for the assistant.")
 	Attribute("toolsets", ArrayOf(AssistantToolsetRef), "Hosted (toolset-backed) MCP servers attached to the assistant, by toolset slug.")
 	Attribute("mcp_servers", ArrayOf(AssistantMCPServerRef), "MCP servers attached to the assistant that are not hosted (toolset-backed); hosted servers are listed under toolsets.")
@@ -71,6 +72,7 @@ var Assistant = Type("Assistant", func() {
 		"project_id",
 		"name",
 		"model",
+		"reasoning_effort",
 		"instructions",
 		"toolsets",
 		"mcp_servers",

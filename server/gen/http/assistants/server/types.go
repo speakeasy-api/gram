@@ -22,6 +22,8 @@ type CreateAssistantRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
@@ -49,6 +51,8 @@ type UpdateAssistantRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string `form:"reasoning_effort,omitempty" json:"reasoning_effort,omitempty" xml:"reasoning_effort,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
@@ -150,6 +154,8 @@ type GetAssistantResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -194,6 +200,8 @@ type CreateAssistantResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -238,6 +246,8 @@ type UpdateAssistantResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -307,6 +317,8 @@ type GetManagedAssistantResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -351,6 +363,8 @@ type EnsureManagedAssistantResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -2466,6 +2480,8 @@ type AssistantResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
 	Model string `form:"model" json:"model" xml:"model"`
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string `form:"reasoning_effort" json:"reasoning_effort" xml:"reasoning_effort"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
@@ -2635,6 +2651,7 @@ func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody
 		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
@@ -2693,6 +2710,7 @@ func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantRespon
 		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
@@ -2751,6 +2769,7 @@ func NewUpdateAssistantResponseBody(res *types.Assistant) *UpdateAssistantRespon
 		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
@@ -2831,6 +2850,7 @@ func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssista
 		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
@@ -2889,6 +2909,7 @@ func NewEnsureManagedAssistantResponseBody(res *types.Assistant) *EnsureManagedA
 		AgentID:         res.AgentID,
 		Name:            res.Name,
 		Model:           res.Model,
+		ReasoningEffort: res.ReasoningEffort,
 		Instructions:    res.Instructions,
 		WarmTTLSeconds:  res.WarmTTLSeconds,
 		MaxConcurrency:  res.MaxConcurrency,
@@ -4604,6 +4625,12 @@ func NewCreateAssistantPayload(body *CreateAssistantRequestBody, sessionToken *s
 		MaxConcurrency: body.MaxConcurrency,
 		Status:         body.Status,
 	}
+	if body.ReasoningEffort != nil {
+		v.ReasoningEffort = *body.ReasoningEffort
+	}
+	if body.ReasoningEffort == nil {
+		v.ReasoningEffort = "medium"
+	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
 		if val == nil {
@@ -4635,6 +4662,7 @@ func NewUpdateAssistantPayload(body *UpdateAssistantRequestBody, sessionToken *s
 		ID:                     *body.ID,
 		Name:                   body.Name,
 		Model:                  body.Model,
+		ReasoningEffort:        body.ReasoningEffort,
 		Instructions:           body.Instructions,
 		WarmTTLSeconds:         body.WarmTTLSeconds,
 		MaxConcurrency:         body.MaxConcurrency,
@@ -4788,6 +4816,11 @@ func ValidateCreateAssistantRequestBody(body *CreateAssistantRequestBody) (err e
 	if body.Toolsets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
 	}
+	if body.ReasoningEffort != nil {
+		if !(*body.ReasoningEffort == "none" || *body.ReasoningEffort == "low" || *body.ReasoningEffort == "medium" || *body.ReasoningEffort == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasoning_effort", *body.ReasoningEffort, []any{"none", "low", "medium", "high"}))
+		}
+	}
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefRequestBody(e); err2 != nil {
@@ -4818,6 +4851,11 @@ func ValidateUpdateAssistantRequestBody(body *UpdateAssistantRequestBody) (err e
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ReasoningEffort != nil {
+		if !(*body.ReasoningEffort == "none" || *body.ReasoningEffort == "low" || *body.ReasoningEffort == "medium" || *body.ReasoningEffort == "high") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasoning_effort", *body.ReasoningEffort, []any{"none", "low", "medium", "high"}))
+		}
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {

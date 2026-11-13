@@ -28,5 +28,6 @@ func NewAssistantIdentityService(management AssistantIdentityManagement, project
 
 func registerAssistantIdentityTool(reg *Registrar, service *AssistantIdentityService) {
 	registerAssistantRuntimeTool(reg, service)
+	registerAssistantReasoningEffortTool(reg, service)
 	registerAssistantUpstreamCredentialTool(reg, service)
 }

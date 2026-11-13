@@ -103,6 +103,9 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if req.Model == "" {
 		return errors.New("kit turn requires the persisted assistant model")
 	}
+	if _, err := kitReasoningEffort(req.ReasoningEffort); err != nil {
+		return err
+	}
 	key := kitSessionKey(r, req.ThreadID)
 	session, found, err := p.config.Core.LoadKitRuntimeSession(ctx, key)
 	if err != nil {
@@ -255,6 +258,21 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	}
 	if current != selection {
 		return errors.New("kit did not apply the persisted assistant model")
+	}
+	effort, _, err := kitProtocolReasoningOption(configured, req.ReasoningEffort)
+	if err != nil {
+		return err
+	}
+	configured, err = c.Call(work, "session/set_config_option", map[string]string{"sessionId": session.SessionID, "configId": "reasoning_effort", "type": "id", "value": effort}, session.SessionID)
+	if err != nil {
+		return fmt.Errorf("kit reasoning session/set_config_option: %w", err)
+	}
+	_, appliedEffort, err := kitProtocolReasoningOption(configured, req.ReasoningEffort)
+	if err != nil {
+		return err
+	}
+	if appliedEffort != effort {
+		return errors.New("Kit did not apply the persisted assistant reasoning effort")
 	}
 	// The same-stream configuration response follows startup replay. Drain all
 	// queued history before reserving the single live prompt echo slot. Unknown
@@ -695,4 +713,56 @@ func validateKitPromptEcho(pending *kitacp.Notification, acknowledgedID string) 
 		return errors.New("kit prompt echo does not match acknowledgement")
 	}
 	return nil
+}
+
+// Check the advertised selector, not display names or provider defaults. This
+// runs after model selection on every new/resumed turn so durable session state
+// cannot override a changed assistant setting.
+func kitProtocolReasoningOption(raw json.RawMessage, effort string) (selection, current string, err error) {
+	selection, err = kitReasoningEffort(effort)
+	if err != nil {
+		return "", "", err
+	}
+	type option struct {
+		Value   string `json:"value"`
+		Options []struct {
+			Value string `json:"value"`
+		} `json:"options"`
+	}
+	var result struct {
+		ConfigOptions []struct {
+			ID      string   `json:"configId"`
+			Type    string   `json:"type"`
+			Current string   `json:"currentValue"`
+			Options []option `json:"options"`
+		} `json:"configOptions"`
+	}
+	if json.Unmarshal(raw, &result) != nil {
+		return "", "", errors.New("invalid Kit reasoning effort catalog")
+	}
+	configs, matches := 0, 0
+	for _, config := range result.ConfigOptions {
+		if config.ID != "reasoning_effort" {
+			continue
+		}
+		configs++
+		if config.Type != "select" {
+			return "", "", errors.New("unsupported Kit reasoning effort configuration type")
+		}
+		current = config.Current
+		for _, choice := range config.Options {
+			if choice.Value == selection {
+				matches++
+			}
+			for _, nested := range choice.Options {
+				if nested.Value == selection {
+					matches++
+				}
+			}
+		}
+	}
+	if configs != 1 || matches != 1 {
+		return "", "", errors.New("persisted assistant reasoning effort is not uniquely offered by Kit")
+	}
+	return selection, current, nil
 }

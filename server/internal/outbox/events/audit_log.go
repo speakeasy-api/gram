@@ -17,6 +17,7 @@ var AuditLogCreated = outbox.NewEventDef[AuditLogCreatedPayloadV1](
 )
 
 var (
+	AssistantConfigurationV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_configuration_event_v1", "Emitted when an assistant reasoning preference is configured")
 	CatalogPromotionV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.catalog_promotion_event_v1", "Emitted when staff curate catalogue promotion candidates or retry setup documentation")
 	AccessChallengeV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_challenge_event_v1", "Emitted when changes to access challenges are made")
 	AIIntegrationV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_integration_event_v1", "Emitted when changes to AI integration configs are made")

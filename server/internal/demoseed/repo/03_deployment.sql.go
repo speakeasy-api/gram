@@ -61,10 +61,10 @@ func (q *Queries) DeployInsertAsset(ctx context.Context, arg DeployInsertAssetPa
 
 const deployInsertAssistant = `-- name: DeployInsertAssistant :exec
 INSERT INTO assistants
-  (id, organization_id, project_id, created_by_user_id, name, model, instructions)
+  (id, organization_id, project_id, created_by_user_id, name, model, reasoning_effort, instructions)
 VALUES
   ($1, $2::text, $3::uuid, $4::text,
-   $5, 'anthropic/claude-sonnet-4.6', 'Help summarize project activity.')
+   $5, 'anthropic/claude-sonnet-4.6', 'medium', 'Help summarize project activity.')
 `
 
 type DeployInsertAssistantParams struct {

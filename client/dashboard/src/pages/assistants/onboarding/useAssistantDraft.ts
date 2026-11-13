@@ -1,4 +1,5 @@
 import type { Assistant } from "@gram/client/models/components/assistant.js";
+import type { ReasoningEffort } from "./ReasoningEffortSelect";
 import { createContext, useContext } from "react";
 
 type PendingResolver = (result: unknown) => void;
@@ -6,6 +7,8 @@ type PendingResolver = (result: unknown) => void;
 export type AssistantEnv = { id: string; slug: string };
 
 export type DraftContextValue = {
+  reasoningEffort: ReasoningEffort;
+  setReasoningEffort: (value: ReasoningEffort) => void;
   assistantId: string | null;
   setAssistantId: (id: string) => void;
   setAssistant: (assistant: Assistant) => void;
