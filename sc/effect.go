@@ -164,6 +164,17 @@ type Emitted struct {
 	Event any
 }
 
+// Checkpointed is the event a service run sends, through [Checkpoint], to
+// record its progress in the snapshot. A run started again after a restart
+// reads the last one with [Resumed].
+type Checkpointed struct {
+	// ID identifies the run of the service that recorded the progress.
+	ID string
+
+	// Data is the progress, encoded as JSON.
+	Data json.RawMessage
+}
+
 // TimerFired is the event a driver sends when a timer started by an
 // [EffectStartTimer] effect is due.
 type TimerFired struct {
@@ -268,6 +279,11 @@ type Effect[C any] struct {
 	// acquisition runs inside. A driver resuming an instance waits for them
 	// to be acquired again before it runs the effect. It is not persisted.
 	Needs []string
+
+	// Saved is, for an EffectStartInvocation, the progress the service
+	// last recorded with [Checkpoint], which this run reads with
+	// [Resumed]; nil when it recorded none.
+	Saved json.RawMessage
 }
 
 // Budget returns how long an EffectStartInvocation service or an
@@ -359,6 +375,8 @@ func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)
 			if run == nil {
 				return fmt.Errorf("%w: service %q in state %q", ErrNotBound, e.Name, e.State)
 			}
+
+			ctx = context.WithValue(context.WithValue(ctx, savedProgress{}, e.Saved), runID{}, e.ID)
 
 			for ev := range run(ctx, e.Context, e.ID) {
 				guardedSend(send, ev)
@@ -502,6 +520,9 @@ type effectJSON struct {
 
 	// To names the states active after it.
 	To []string `json:"to,omitempty"`
+
+	// Saved is the progress a service run starts from.
+	Saved json.RawMessage `json:"saved,omitempty"`
 }
 
 // EncodeEffect serialises an effect so a driver can store it and carry it
@@ -520,6 +541,7 @@ func (m *Machine[S, C]) EncodeEffect(e Effect[C]) ([]byte, error) {
 		Event:      nil,
 		From:       e.From,
 		To:         e.To,
+		Saved:      e.Saved,
 	}
 
 	if e.Kind == EffectAction || e.Kind == EffectStartInvocation || e.Kind == EffectAcquire {
@@ -574,6 +596,7 @@ func (m *Machine[S, C]) DecodeEffect(data []byte) (Effect[C], error) {
 		From:    raw.From,
 		To:      raw.To,
 		Needs:   nil,
+		Saved:   raw.Saved,
 	}
 
 	if len(raw.Context) > 0 {

@@ -2,15 +2,19 @@ package sc
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"iter"
 	"reflect"
 )
 
-// childEnded is what the goroutine waiting for a child machine puts in the
-// queue of its events once the child is done or the wait is over.
-type childEnded struct {
-	err error
-}
+// childEnded is what the goroutine watching a child machine puts in the
+// queue of its events once the child is done or the watch is over, and
+// childMoved what it puts there when the child's snapshot has changed.
+type (
+	childEnded struct{ err error }
+	childMoved struct{}
+)
 
 // InvokeMachine declares a service that runs another machine as a child for
 // as long as the state is active. The child starts with the context input
@@ -25,11 +29,16 @@ type childEnded struct {
 // any other. Leaving the state closes the child.
 //
 // The child runs under an [Instance] with the parent driver's clock and
-// opts. Its snapshot is not part of the parent's: when the parent is resumed
-// from a stored snapshot, the child starts again from input, so its work
-// must be safe to repeat. In an exploration of the parent the child is a
-// service like any other, with the outcomes given for name; explore the
-// child on its own.
+// opts. Its snapshot is kept inside the parent's, as the service's
+// [Checkpoint], and replaced whenever the child moves, so each step of the
+// child is also a step of the parent. A parent resumed from a stored
+// snapshot continues its child from where the child was: the child's timers
+// and unfinished services start again, and it does not run its entry
+// actions a second time. An event the child emitted just before a crash may
+// be emitted again.
+//
+// In an exploration of the parent the child is a service like any other,
+// with the outcomes given for name; explore the child on its own.
 func (s *StateBuilder[S, C]) InvokeMachine[S2 comparable, C2, R any](name string, child *Machine[S2, C2], input func(C) C2, output func(Snapshot[S2, C2]) (R, error), opts ...RunOption) *Invocation[S, C, R] {
 	inv := &invocation[S, C]{
 		state:    s.n,
@@ -55,12 +64,18 @@ func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input fun
 			settings := append([]RunOption{WithClock(clockFrom(ctx))}, opts...)
 			settings = append(settings, OnEmit(func(_ context.Context, ev any) { up.put(ev) }))
 
-			inst, err := child.Instance(ctx, input(c), settings...)
+			inst, resumed, err := startChild(ctx, child, input(c), settings)
 			if err != nil {
 				yield(Failed{ID: id, Err: err})
 				return
 			}
 			defer inst.Close()
+
+			// A new child's first snapshot is saved at once, so that a
+			// resumed parent does not start it a second time.
+			if !resumed {
+				up.put(childMoved{})
+			}
 
 			ctx, stop := context.WithCancel(ctx)
 			defer stop()
@@ -74,14 +89,43 @@ func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input fun
 			}()
 
 			go func() {
-				_, err := inst.Await(ctx, func(snap Snapshot[S2, C2]) bool { return snap.Done() })
-				up.put(childEnded{err: err})
+				last := inst.Snapshot().Seq()
+
+				for {
+					snap, err := inst.Await(ctx, func(snap Snapshot[S2, C2]) bool { return snap.Seq() != last || snap.Done() })
+					if err != nil {
+						up.put(childEnded{err: err})
+						return
+					}
+
+					if snap.Seq() != last {
+						last = snap.Seq()
+						up.put(childMoved{})
+					}
+
+					if snap.Done() {
+						up.put(childEnded{err: nil})
+						return
+					}
+				}
 			}()
 
 			for ev := range up.events(ctx) {
+				var next any = Emitted{ID: id, Event: ev}
+
+				if _, moved := ev.(childMoved); moved {
+					data, err := json.Marshal(inst.Snapshot())
+					if err != nil {
+						yield(Failed{ID: id, Err: fmt.Errorf("save child machine: %w", err)})
+						return
+					}
+
+					next = Checkpointed{ID: id, Data: data}
+				}
+
 				ended, ok := ev.(childEnded)
 				if !ok {
-					if !yield(Emitted{ID: id, Event: ev}) {
+					if !yield(next) {
 						return
 					}
 
@@ -105,4 +149,24 @@ func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input fun
 			}
 		}
 	}
+}
+
+// startChild starts the child, or continues it from the snapshot an earlier
+// run of the service saved, and reports which.
+func startChild[S2 comparable, C2 any](ctx context.Context, child *Machine[S2, C2], c C2, settings []RunOption) (*Instance[S2, C2], bool, error) {
+	saved, _ := ctx.Value(savedProgress{}).(json.RawMessage)
+	if len(saved) == 0 {
+		inst, err := child.Instance(ctx, c, settings...)
+
+		return inst, false, err
+	}
+
+	snap, _, err := child.Restore(saved, clockFrom(ctx)())
+	if err != nil {
+		return nil, false, fmt.Errorf("restore child machine: %w", err)
+	}
+
+	inst, err := child.InstanceFrom(ctx, snap, settings...)
+
+	return inst, true, err
 }

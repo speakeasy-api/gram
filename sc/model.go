@@ -189,6 +189,9 @@ const (
 	// that are still waiting.
 	stepCancel stepKind = "cancel"
 
+	// stepRelease gives back a resource while its state stays active.
+	stepRelease stepKind = "release"
+
 	// stepSend sends an event to a running service of the chart.
 	stepSend stepKind = "send"
 

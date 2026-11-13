@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"iter"
 	"reflect"
 	"slices"
 	"strings"
@@ -279,6 +280,37 @@ type Report[S comparable, C any] struct {
 	Trapped []Trace[S, C]
 
 	reached map[S]bool
+
+	// paths yields the shortest trace to every explored state.
+	paths iter.Seq[Trace[S, C]]
+}
+
+// Paths yields a shortest trace to every state the exploration found, the
+// nearest first. Each is a ready-made test: start an instance with the
+// trace's Initial context at its Start time, feed it the trace's events,
+// with [Machine.Fold] or through a driver with fakes for its services, and
+// check that it arrives at the trace's Snapshot. Together the traces visit
+// everything the chart can do within the exploration's bounds.
+func (r Report[S, C]) Paths() iter.Seq[Trace[S, C]] {
+	if r.paths == nil {
+		return func(func(Trace[S, C]) bool) {}
+	}
+
+	return r.paths
+}
+
+// PathTo returns a shortest trace to a state for which cond holds, and
+// reports whether the exploration found one.
+func (r Report[S, C]) PathTo(cond func(Snapshot[S, C]) bool) (Trace[S, C], bool) {
+	for tr := range r.Paths() {
+		if cond(tr.Snapshot) {
+			return tr, true
+		}
+	}
+
+	var none Trace[S, C]
+
+	return none, false
 }
 
 // FormatTrace describes a trace as numbered steps, one per event, naming
@@ -359,7 +391,7 @@ type edge struct {
 // The search is breadth-first, so every reported trace is a shortest one. It
 // continues past violations, reporting each invariant once.
 func (m *Machine[S, C]) Explore(c C, x Exploration[S, C]) (Report[S, C], error) {
-	report := Report[S, C]{States: 0, Violations: nil, Stuck: nil, Truncated: false, Trapped: nil, reached: map[S]bool{}}
+	report := Report[S, C]{States: 0, Violations: nil, Stuck: nil, Truncated: false, Trapped: nil, reached: map[S]bool{}, paths: nil}
 
 	limit := x.MaxStates
 	if limit <= 0 {
@@ -521,6 +553,13 @@ func (m *Machine[S, C]) Explore(c C, x Exploration[S, C]) (Report[S, C], error) 
 	}
 
 	report.States = len(found)
+	report.paths = func(yield func(Trace[S, C]) bool) {
+		for i := range found {
+			if !yield(trace(i)) {
+				return
+			}
+		}
+	}
 
 	// canReach marks the states from which some path, using no event of an
 	// ignored type, leads to a state where target holds.

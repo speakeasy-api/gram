@@ -48,6 +48,10 @@ type Actor[S comparable, C any] struct {
 	// emit receives the events the chart emits, when set.
 	emit func(context.Context, any)
 
+	// throttle is what each service run waits on before it starts, when
+	// set.
+	throttle Waiter
+
 	// stopped is closed when Run returns.
 	stopped chan struct{}
 
@@ -106,6 +110,7 @@ func (m *Machine[S, C]) newActor(snap Snapshot[S, C], effects []Effect[C], o run
 		services: o.services,
 		now:      o.now,
 		emit:     o.emit,
+		throttle: o.throttle,
 		stopped:  make(chan struct{}),
 		started:  atomic.Bool{},
 		initial:  effects,
@@ -215,6 +220,12 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 							return
 						}
 						defer a.services.Release(1)
+					}
+
+					if a.throttle != nil {
+						if err := a.throttle.Wait(serviceCtx); err != nil {
+							return
+						}
 					}
 
 					if err := a.hooks.Exec(serviceCtx, a.m, e, a.now(), send); err != nil {

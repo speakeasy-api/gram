@@ -4,6 +4,7 @@ import (
 	"cmp"
 	crand "crypto/rand"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"iter"
 	"math/rand/v2"
@@ -139,6 +140,9 @@ type service[S comparable, C any] struct {
 	// attempt is how many times a service with a retry policy has failed
 	// before this run.
 	attempt int
+
+	// saved is the progress the run last recorded with Checkpoint.
+	saved json.RawMessage
 }
 
 // endEffect is the effect that ends the run: a release for a resource, a
@@ -533,7 +537,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 	for _, ri := range snap.invocations {
 		for _, inv := range m.nodes[ri.state].invocations {
 			if inv.name == ri.name {
-				r.services = append(r.services, service[S, C]{id: ri.id, inv: inv, acquired: ri.acquired, attempt: ri.attempt})
+				r.services = append(r.services, service[S, C]{id: ri.id, inv: inv, acquired: ri.acquired, attempt: ri.attempt, saved: ri.saved})
 			}
 		}
 	}
@@ -602,7 +606,7 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 	}
 
 	for _, s := range r.services {
-		snap.invocations = append(snap.invocations, runningInvocation[S]{id: s.id, state: s.inv.state.id, name: s.inv.name, resource: s.inv.resource != nil, acquired: s.acquired, attempt: s.attempt})
+		snap.invocations = append(snap.invocations, runningInvocation[S]{id: s.id, state: s.inv.state.id, name: s.inv.name, resource: s.inv.resource != nil, acquired: s.acquired, attempt: s.attempt, saved: s.saved})
 	}
 
 	return snap
@@ -649,6 +653,16 @@ func (r *run[S, C]) accept(ev any) (stimulus[S, C], bool) {
 		stim.event = e.Event
 
 		return stim, true
+	case Checkpointed:
+		i := slices.IndexFunc(r.services, func(s service[S, C]) bool { return s.id == e.ID })
+		if i < 0 {
+			return none, false
+		}
+
+		r.services[i].saved = e.Data
+		r.changed = true
+
+		return on[S, C](triggerNone), true
 	case acquisition:
 		id, _ := e.acquisition()
 		i := slices.IndexFunc(r.services, func(s service[S, C]) bool { return s.id == id })
@@ -961,7 +975,7 @@ func (r *run[S, C]) emitRun(source *node[S, C], name string, event any, cond fun
 
 // chartActionEffect is the effect of running a chart action.
 func (r *run[S, C]) chartActionEffect(source *node[S, C], name string, event any) Effect[C] {
-	return Effect[C]{Kind: EffectAction, ID: "", State: source.name, Name: name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: event, From: nil, To: nil, Needs: nil}
+	return Effect[C]{Kind: EffectAction, ID: "", State: source.name, Name: name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: event, From: nil, To: nil, Needs: nil, Saved: nil}
 }
 
 // record returns what history state h must remember about its parent.
@@ -985,7 +999,7 @@ func (r *run[S, C]) record(h *node[S, C]) []*node[S, C] {
 
 func (r *run[S, C]) exit(n *node[S, C], event any) {
 	for _, a := range n.exit {
-		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: nil})
+		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: nil, Saved: nil})
 	}
 	for k, name := range n.exitRuns {
 		r.emitRun(n, name, event, n.exitConds[k])
@@ -1018,7 +1032,7 @@ func (r *run[S, C]) exit(n *node[S, C], event any) {
 // bare builds an effect that carries no context or event.
 func (r *run[S, C]) bare(kind EffectKind, id string, n *node[S, C], name string) Effect[C] {
 	var zero C
-	return Effect[C]{Kind: kind, ID: id, State: n.name, Name: name, Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil, Needs: nil}
+	return Effect[C]{Kind: kind, ID: id, State: n.name, Name: name, Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil, Needs: nil, Saved: nil}
 }
 
 func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
@@ -1027,7 +1041,7 @@ func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
 		case stepAssign:
 			r.ctx = s.assign(r.ctx, stim.event, r.now, r.random())
 		case stepDo:
-			r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: t.source.name, Name: s.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: stim.event, From: nil, To: nil, Needs: nil})
+			r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: t.source.name, Name: s.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: stim.event, From: nil, To: nil, Needs: nil, Saved: nil})
 		case stepRun:
 			r.emitRun(t.source, s.name, stim.event, t.runConds[k])
 		case stepRaise:
@@ -1040,6 +1054,17 @@ func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
 			raised := on[S, C](triggerEvent)
 			raised.event = ev
 			r.queue = append(r.queue, raised)
+		case stepRelease:
+			var ending []service[S, C]
+			r.services = slices.DeleteFunc(r.services, func(held service[S, C]) bool {
+				if held.inv.resource == nil || held.inv.name != s.name {
+					return false
+				}
+				ending = append(ending, held)
+
+				return true
+			})
+			r.endServices(ending)
 		case stepSend:
 			ev := s.raise(r.ctx, stim.event)
 			for _, running := range r.services {
@@ -1075,7 +1100,7 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 	r.passed = append(r.passed, n)
 
 	for _, a := range n.entry {
-		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: nil})
+		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: nil, Saved: nil})
 	}
 	for k, name := range n.entryRuns {
 		r.emitRun(n, name, event, n.entryConds[k])
@@ -1183,6 +1208,7 @@ func timerEffect[S comparable, C any](tm timer[S, C]) Effect[C] {
 		From:    nil,
 		To:      nil,
 		Needs:   nil,
+		Saved:   nil,
 	}
 }
 
@@ -1334,17 +1360,24 @@ func (r *run[S, C]) startService(inv *invocation[S, C]) {
 // startRun starts a run of inv that follows attempt failed ones.
 func (r *run[S, C]) startRun(inv *invocation[S, C], attempt int) {
 	id := r.nextID(inv.state, inv.name)
-	r.services = append(r.services, service[S, C]{id: id, inv: inv, acquired: false, attempt: attempt})
+	r.services = append(r.services, service[S, C]{id: id, inv: inv, acquired: false, attempt: attempt, saved: nil})
 	r.effects = append(r.effects, r.serviceEffect(id, inv))
 }
 
 // serviceEffect is the effect that starts a run of inv, carrying the
 // deadline of the budgets around it.
 func (r *run[S, C]) serviceEffect(id string, inv *invocation[S, C]) Effect[C] {
+	// A run that is being started again carries the progress it recorded.
+	var saved json.RawMessage
+
 	// A service or acquisition runs inside every held resource of its
 	// state and the states around it.
 	var needs []string
 	for _, s := range r.services {
+		if s.id == id {
+			saved = s.saved
+		}
+
 		if !s.acquired || s.inv == inv || !inv.state.within(s.inv.state) {
 			continue
 		}
@@ -1360,10 +1393,10 @@ func (r *run[S, C]) serviceEffect(id string, inv *invocation[S, C]) Effect[C] {
 	}
 
 	if inv.resource != nil {
-		return Effect[C]{Kind: EffectAcquire, ID: id, State: inv.state.name, Name: inv.name, Delay: 0, At: r.deadlineFor(inv.state), Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: needs}
+		return Effect[C]{Kind: EffectAcquire, ID: id, State: inv.state.name, Name: inv.name, Delay: 0, At: r.deadlineFor(inv.state), Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: needs, Saved: saved}
 	}
 
-	return Effect[C]{Kind: EffectStartInvocation, ID: id, State: inv.state.name, Name: inv.name, Delay: 0, At: r.deadlineFor(inv.state), Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: needs}
+	return Effect[C]{Kind: EffectStartInvocation, ID: id, State: inv.state.name, Name: inv.name, Delay: 0, At: r.deadlineFor(inv.state), Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: needs, Saved: saved}
 }
 
 // deadlineFor returns the earliest deadline among the budgets of n and the

@@ -380,6 +380,18 @@ func (d *Driver[S, C]) Perform(ctx context.Context, instance string, data []byte
 		return fmt.Errorf("perform effect: %w", err)
 	}
 
+	// A service that is run again starts from the progress it has recorded
+	// since the effect was written.
+	if e.Kind == sc.EffectStartInvocation {
+		snap, err := d.Load(ctx, instance)
+		if err != nil {
+			return fmt.Errorf("perform effect: %w", err)
+		}
+		if saved := snap.Checkpoint(e.ID); saved != nil {
+			e.Saved = saved
+		}
+	}
+
 	var sendErr error
 	err = d.hooks.Exec(ctx, d.m, e, now, func(evCtx context.Context, ev any) {
 		if sendErr == nil {

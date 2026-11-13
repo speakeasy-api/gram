@@ -39,6 +39,9 @@ type build[S comparable, C any] struct {
 	// transition emits.
 	sends []string
 	emits bool
+
+	// releases holds the resources Release names.
+	releases []string
 }
 
 func (b *build[S, C]) errorf(format string, args ...any) {
@@ -584,13 +587,15 @@ func adaptRelease[S comparable, R any](fn func(context.Context, R, Leave[S])) fu
 func adaptService[C, R any](fn func(context.Context, C) (R, error)) func(context.Context, C, string) iter.Seq[any] {
 	return func(ctx context.Context, c C, id string) iter.Seq[any] {
 		return func(yield func(any) bool) {
+			ctx, emit := recording(ctx, id, yield)
+
 			res, err := fn(ctx, c)
 			if err != nil {
-				yield(Failed{ID: id, Err: err})
+				emit(Failed{ID: id, Err: err})
 				return
 			}
 
-			yield(Done[R]{ID: id, Result: res})
+			emit(Done[R]{ID: id, Result: res})
 		}
 	}
 }
@@ -599,18 +604,24 @@ func adaptService[C, R any](fn func(context.Context, C) (R, error)) func(context
 func adaptStream[C any](fn func(context.Context, C) iter.Seq2[any, error]) func(context.Context, C, string) iter.Seq[any] {
 	return func(ctx context.Context, c C, id string) iter.Seq[any] {
 		return func(yield func(any) bool) {
+			stopped := false
+			ctx, emit := recording(ctx, id, func(ev any) bool {
+				stopped = !yield(ev)
+				return !stopped
+			})
+
 			for ev, err := range fn(ctx, c) {
 				if err != nil {
-					yield(Failed{ID: id, Err: err})
+					emit(Failed{ID: id, Err: err})
 					return
 				}
 
-				if !yield(Emitted{ID: id, Event: ev}) {
+				if emit(Emitted{ID: id, Event: ev}); stopped {
 					return
 				}
 			}
 
-			yield(Done[struct{}]{ID: id, Result: struct{}{}})
+			emit(Done[struct{}]{ID: id, Result: struct{}{}})
 		}
 	}
 }
@@ -884,6 +895,21 @@ func (t *Transition[S, C, Ev]) Raise(name string, f func(C, Ev) any) *Transition
 		do:     nil,
 		raise:  func(c C, ev any) any { return f(c, event[Ev](ev)) },
 	})
+
+	return t
+}
+
+// Release gives back the resource named name now, although the state that
+// holds it stays active: a secret that is only needed for the first step
+// inside the state, a lock that later steps must not keep. Its release
+// function runs as it would on leaving the state, [Resource.From] reports
+// false from then on, and the resource is not acquired again until the
+// state is entered again. It does nothing when the resource is not held; an
+// acquisition still in flight is released when it arrives, without its
+// OnAcquired being taken.
+func (t *Transition[S, C, Ev]) Release(name string) *Transition[S, C, Ev] {
+	t.b.releases = append(t.b.releases, name)
+	t.t.steps = append(t.t.steps, step[C]{kind: stepRelease, name: name, assign: nil, do: nil, raise: nil})
 
 	return t
 }

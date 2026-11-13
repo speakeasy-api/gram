@@ -37,6 +37,7 @@ type Instance[S comparable, C any] struct {
 	now      func() time.Time
 	manual   bool
 	emit     func(context.Context, any)
+	throttle Waiter
 
 	// base carries the values of the context the instance was started
 	// with, for the steps a timer starts, which have no sender.
@@ -140,6 +141,7 @@ func (m *Machine[S, C]) newInstance(ctx context.Context, snap Snapshot[S, C], ef
 		now:       o.now,
 		manual:    o.manualTimers,
 		emit:      o.emit,
+		throttle:  o.throttle,
 		base:      context.WithoutCancel(ctx),
 		turn:      make(chan struct{}, 1),
 		res:       nil,
@@ -507,6 +509,12 @@ func (i *Instance[S, C]) startService(ctx context.Context, e Effect[C]) {
 				return
 			}
 			defer i.services.Release(1)
+		}
+
+		if i.throttle != nil && e.Kind == EffectStartInvocation {
+			if err := i.throttle.Wait(execCtx); err != nil {
+				return
+			}
 		}
 
 		if err := i.hooks.Exec(execCtx, i.m, e, i.now(), deliver); err != nil {

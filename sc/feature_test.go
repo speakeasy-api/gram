@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math/rand/v2"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -513,5 +516,262 @@ func TestAServiceReadsWhatTheChartSendsIt(t *testing.T) {
 		snap, err := inst.Await(t.Context(), func(s sc.Snapshot[string, counter]) bool { return s.Done() })
 		require.NoError(t, err)
 		require.Equal(t, 3, snap.Context.N)
+	})
+}
+
+func TestAServiceCarriesOnFromItsCheckpointAfterARestart(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		// The service counts to three, saving each number, and waits for
+		// the gate before each step.
+		gate := make(chan struct{})
+		var starts []int
+
+		m, err := sc.New("resumable", func(b *sc.Builder[string, counter]) {
+			b.Initial("working")
+			inv := b.State("working").Invoke("count", func(ctx context.Context, _ counter) (int, error) {
+				n := 0
+				if _, err := sc.Resumed(ctx, &n); err != nil {
+					return 0, fmt.Errorf("resume count: %w", err)
+				}
+				starts = append(starts, n)
+
+				for n < 3 {
+					select {
+					case <-gate:
+					case <-ctx.Done():
+						return 0, context.Cause(ctx)
+					}
+
+					n++
+					if err := sc.Checkpoint(ctx, n); err != nil {
+						return 0, fmt.Errorf("save count: %w", err)
+					}
+				}
+
+				return n, nil
+			})
+			inv.OnDone().Assign("keep", func(c counter, d sc.Done[int]) counter { c.N = d.Result; return c }).To("done")
+			inv.OnError().To("done")
+			b.Final("done")
+		})
+		require.NoError(t, err)
+
+		inst, err := m.Instance(t.Context(), counter{N: 0})
+		require.NoError(t, err)
+
+		gate <- struct{}{}
+		gate <- struct{}{}
+		synctest.Wait()
+
+		// The process stops with two steps done and saved.
+		inst.Close()
+		data, err := json.Marshal(inst.Snapshot())
+		require.NoError(t, err)
+
+		snap, _, err := m.Restore(data, time.Now())
+		require.NoError(t, err)
+		inst, err = m.InstanceFrom(t.Context(), snap)
+		require.NoError(t, err)
+		defer inst.Close()
+
+		gate <- struct{}{}
+
+		done, err := inst.Await(t.Context(), func(s sc.Snapshot[string, counter]) bool { return s.Done() })
+		require.NoError(t, err)
+		require.Equal(t, 3, done.Context.N)
+		require.Equal(t, []int{0, 2}, starts)
+	})
+}
+
+func TestAResumedParentContinuesItsChildMachine(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		m := parentChart(t, downloadChart(t))
+
+		inst, err := m.Instance(t.Context(), counter{N: 0})
+		require.NoError(t, err)
+
+		_, err = inst.Send(t.Context(), start{})
+		require.NoError(t, err)
+		synctest.Wait()
+
+		_, err = inst.Send(t.Context(), tick{})
+		require.NoError(t, err)
+		_, err = inst.Await(t.Context(), func(s sc.Snapshot[string, counter]) bool { return s.Context.N == 50 })
+		require.NoError(t, err)
+		synctest.Wait()
+
+		// The process stops with the child half way.
+		inst.Close()
+		data, err := json.Marshal(inst.Snapshot())
+		require.NoError(t, err)
+
+		snap, _, err := m.Restore(data, time.Now())
+		require.NoError(t, err)
+		inst, err = m.InstanceFrom(t.Context(), snap)
+		require.NoError(t, err)
+		defer inst.Close()
+		synctest.Wait()
+
+		// The child carries on from 50 instead of starting at the
+		// parent's input again.
+		_, err = inst.Send(t.Context(), tick{})
+		require.NoError(t, err)
+		_, err = inst.Await(t.Context(), func(s sc.Snapshot[string, counter]) bool { return s.Context.N == 100 })
+		require.NoError(t, err)
+
+		_, err = inst.Send(t.Context(), finish{Fail: false})
+		require.NoError(t, err)
+		done, err := inst.Await(t.Context(), func(s sc.Snapshot[string, counter]) bool { return s.Done() })
+		require.NoError(t, err)
+		require.Equal(t, 100, done.Context.N)
+	})
+}
+
+func TestPathsGiveAShortestTraceToEveryStateAsATest(t *testing.T) {
+	t.Parallel()
+
+	m := retryChart(t, nil, sc.Retry{Max: 1, First: time.Minute, Cap: 0, Jitter: 0, If: nil})
+
+	report, err := m.Explore(counter{N: 0}, sc.Exploration[string, counter]{
+		Outcomes: map[string][]sc.Outcome{"work": {sc.Succeeds(1), sc.Fails(errFlaky)}},
+		Events:   []any{leave{}},
+	})
+	require.NoError(t, err)
+
+	// Every path replays to the state it claims to reach.
+	paths := 0
+	for path := range report.Paths() {
+		paths++
+
+		snap, _ := m.Start(path.Initial, path.Start)
+		for _, ev := range path.Events {
+			snap, _ = m.Transition(snap, ev.Event, ev.At)
+		}
+		require.Equal(t, path.Snapshot.Active(), snap.Active())
+	}
+	require.Equal(t, report.States, paths)
+
+	// The shortest way to the failure the policy does not cover is two
+	// failures with the wait between them.
+	path, ok := report.PathTo(func(s sc.Snapshot[string, counter]) bool { return s.In("failed") && len(s.Timers()) == 0 })
+	require.True(t, ok)
+	require.LessOrEqual(t, len(path.Events), 3)
+}
+
+func TestWithSeedGivesAPlacedInstanceDrawsOfItsOwn(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("drawing", func(b *sc.Builder[string, counter]) {
+		b.Initial("a")
+		b.State("a").On[tick]().AssignRand("draw", func(c counter, _ tick, _ time.Time, rnd *rand.Rand) counter {
+			c.N = rnd.IntN(1_000_000)
+			return c
+		})
+	})
+	require.NoError(t, err)
+
+	draw := func(seed uint64) int {
+		snap, _, err := m.StartIn(counter{N: 0}, epoch, "a")
+		require.NoError(t, err)
+		snap, _ = m.Transition(snap.WithSeed(sc.Seed(seed)), tick{}, epoch)
+
+		return snap.Context.N
+	}
+
+	first, again, other := draw(1), draw(1), draw(2)
+	require.Equal(t, first, again)
+	require.NotEqual(t, first, other)
+}
+
+func TestReleaseGivesAResourceBackWhileItsStateStaysActive(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		var released []string
+		var token *sc.Resource[string, counter, string]
+
+		m, err := sc.New("secret", func(b *sc.Builder[string, counter]) {
+			b.Initial("session")
+			session := b.State("session", func(b *sc.Builder[string, counter]) {
+				b.Initial("starting")
+				b.State("starting")
+				b.State("using").On[tick]().Release("token").To("finishing")
+				b.State("finishing").On[tick]().To("closed")
+			})
+			token = session.Holds("token",
+				func(context.Context, counter) (string, error) { return "s3cret", nil },
+				func(_ context.Context, value string, why sc.Leave[string]) {
+					released = append(released, value+" at "+why.Move.To[len(why.Move.To)-1])
+				},
+			)
+			token.OnAcquired().To("using")
+			token.OnError().To("closed")
+			b.Final("closed")
+		})
+		require.NoError(t, err)
+
+		inst, err := m.Instance(t.Context(), counter{N: 0})
+		require.NoError(t, err)
+		defer inst.Close()
+
+		snap, err := inst.Await(t.Context(), func(s sc.Snapshot[string, counter]) bool { return s.In("using") })
+		require.NoError(t, err)
+		require.Len(t, snap.Resources(), 1)
+
+		// The token is given back on the way to the next step, while the
+		// session that held it goes on.
+		step, err := inst.Send(t.Context(), tick{})
+		require.NoError(t, err)
+		require.True(t, step.To.In("session"))
+		require.Empty(t, step.To.Resources())
+		require.Equal(t, []string{"s3cret at finishing"}, released)
+
+		// Leaving the session does not release it a second time.
+		_, err = inst.Send(t.Context(), tick{})
+		require.NoError(t, err)
+		require.Len(t, released, 1)
+	})
+
+	_, err := sc.New("wrong", func(b *sc.Builder[string, counter]) {
+		b.Initial("a")
+		b.State("a").On[tick]().Release("nothing").To("b")
+		b.State("b")
+	})
+	require.ErrorContains(t, err, "not a resource of the chart")
+}
+
+// countingWaiter lets every run through and counts them.
+type countingWaiter struct{ waits atomic.Int32 }
+
+func (w *countingWaiter) Wait(context.Context) error {
+	w.waits.Add(1)
+	return nil
+}
+
+func TestAServiceRunKnowsItsIDAndWaitsOnTheThrottle(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		var seen string
+		m := workChart(t, func(ctx context.Context, _ counter) (int, error) {
+			seen = sc.RunID(ctx)
+			return 1, nil
+		})
+
+		throttle := &countingWaiter{waits: atomic.Int32{}}
+		inst, err := m.Instance(t.Context(), counter{N: 0}, sc.ThrottleServices(throttle))
+		require.NoError(t, err)
+		defer inst.Close()
+
+		step, err := inst.SendAndSettle(t.Context(), tick{})
+		require.NoError(t, err)
+
+		require.Equal(t, effect(t, step.Effects, sc.EffectStartInvocation).ID, seen)
+		require.Equal(t, int32(1), throttle.waits.Load())
+		require.Empty(t, sc.RunID(t.Context()))
 	})
 }

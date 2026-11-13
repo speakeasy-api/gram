@@ -70,6 +70,9 @@ type runningInvocation[S comparable] struct {
 
 	// attempt is how many times a retried service failed before this run.
 	attempt int
+
+	// saved is the progress the run last recorded with Checkpoint.
+	saved json.RawMessage
 }
 
 // PendingTimer is a timer that has started and not yet fired or been
@@ -145,6 +148,18 @@ func (s Snapshot[S, C]) Services() []RunningService[S] {
 	return out
 }
 
+// Checkpoint returns the progress the service run id last recorded with
+// [Checkpoint], or nil when it recorded none or is not running.
+func (s Snapshot[S, C]) Checkpoint(id string) json.RawMessage {
+	for _, inv := range s.invocations {
+		if inv.id == id {
+			return inv.saved
+		}
+	}
+
+	return nil
+}
+
 // HeldResource is a resource of an active state.
 type HeldResource[S comparable] struct {
 	// ID is the ID of the effect that acquires the resource.
@@ -180,6 +195,16 @@ func (s Snapshot[S, C]) Active() []S { return slices.Clone(s.active) }
 // In reports whether state is active, either as a leaf or as an ancestor of
 // one.
 func (s Snapshot[S, C]) In(state S) bool { return slices.Contains(s.active, state) }
+
+// WithSeed returns the snapshot with the seed opt gives, from which the
+// random numbers [Transition.AssignRand] receives are derived. It is how an
+// instance placed with [Machine.StartIn] gets draws of its own:
+//
+//	snap = snap.WithSeed(sc.RandomSeed())
+func (s Snapshot[S, C]) WithSeed(opt StartOption) Snapshot[S, C] {
+	s.seed = seedFor(time.Time{}, []StartOption{opt})
+	return s
+}
 
 // HasTag reports whether any active state was declared with tag, with
 // [StateBuilder.Tag].
@@ -298,6 +323,9 @@ type RawInvocation struct {
 
 	// Attempt is how many times a retried service failed before this run.
 	Attempt int `json:"attempt,omitempty"`
+
+	// Saved is the progress the run last recorded with Checkpoint.
+	Saved json.RawMessage `json:"saved,omitempty"`
 }
 
 // MarshalJSON encodes the snapshot in the [RawSnapshot] format.
@@ -354,7 +382,7 @@ func (s Snapshot[S, C]) MarshalJSON() ([]byte, error) {
 	}
 
 	for _, inv := range s.invocations {
-		raw.Invocations = append(raw.Invocations, RawInvocation{ID: inv.id, State: fmt.Sprint(inv.state), Name: inv.name, Resource: inv.resource, Acquired: inv.acquired, Attempt: inv.attempt})
+		raw.Invocations = append(raw.Invocations, RawInvocation{ID: inv.id, State: fmt.Sprint(inv.state), Name: inv.name, Resource: inv.resource, Acquired: inv.acquired, Attempt: inv.attempt, Saved: inv.saved})
 	}
 
 	for state, deadline := range s.scopes {
@@ -557,8 +585,8 @@ func (r *run[S, C]) checkConfig() error {
 // when the states are not a legal configuration of the chart.
 //
 // The instance's random seed is derived from now, so instances placed at
-// the same instant make the same [Transition.AssignRand] draws. Use
-// [Machine.Start] with [Seed] or [RandomSeed] when they must differ.
+// the same instant make the same [Transition.AssignRand] draws. Give each
+// its own with [Snapshot.WithSeed] when they must differ.
 func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C], []Effect[C], error) {
 	var zero Snapshot[S, C]
 
@@ -673,7 +701,7 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 
 		if !kept {
 			var zero C
-			r.effects = append(r.effects, Effect[C]{Kind: EffectCancelTimer, ID: rt.ID, State: rt.State, Name: "", Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil, Needs: nil})
+			r.effects = append(r.effects, Effect[C]{Kind: EffectCancelTimer, ID: rt.ID, State: rt.State, Name: "", Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil, Needs: nil, Saved: nil})
 		}
 	}
 
@@ -684,7 +712,7 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 		if ok && r.config[n] && !r.done {
 			for _, inv := range n.invocations {
 				if inv.name == ri.Name && (inv.resource != nil) == ri.Resource {
-					r.services = append(r.services, service[S, C]{id: ri.ID, inv: inv, acquired: ri.Acquired, attempt: ri.Attempt})
+					r.services = append(r.services, service[S, C]{id: ri.ID, inv: inv, acquired: ri.Acquired, attempt: ri.Attempt, saved: ri.Saved})
 					kept = true
 				}
 			}
@@ -694,7 +722,7 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 		// held its value is gone.
 		if !kept && !ri.Resource {
 			var zero C
-			r.effects = append(r.effects, Effect[C]{Kind: EffectStopInvocation, ID: ri.ID, State: ri.State, Name: ri.Name, Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil, Needs: nil})
+			r.effects = append(r.effects, Effect[C]{Kind: EffectStopInvocation, ID: ri.ID, State: ri.State, Name: ri.Name, Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil, Needs: nil, Saved: nil})
 		}
 	}
 

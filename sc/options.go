@@ -20,6 +20,8 @@ type runOptions struct {
 	manualTimers bool
 
 	emit func(ctx context.Context, ev any)
+
+	throttle Waiter
 }
 
 // RunOption configures a driver in this package: an [Actor] or an
@@ -28,7 +30,7 @@ type RunOption func(*runOptions)
 
 // runSettings applies opts over the defaults.
 func runSettings(opts []RunOption) runOptions {
-	o := runOptions{hooks: nil, services: nil, now: time.Now, manualTimers: false, emit: nil}
+	o := runOptions{hooks: nil, services: nil, now: time.Now, manualTimers: false, emit: nil, throttle: nil}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -95,4 +97,19 @@ func ManualTimers() RunOption {
 // event that caused the step.
 func OnEmit(fn func(ctx context.Context, ev any)) RunOption {
 	return func(o *runOptions) { o.emit = fn }
+}
+
+// Waiter is something a service run waits on before it starts, such as a
+// *rate.Limiter from golang.org/x/time/rate. Wait returns once the run may
+// go ahead, or an error when ctx ended first.
+type Waiter interface {
+	Wait(ctx context.Context) error
+}
+
+// ThrottleServices makes each service run wait on w before it starts.
+// Sharing one rate limiter between drivers bounds how often services start
+// across all of them, which [LimitServices] does for how many run at once. A
+// run still waiting when its state is left never starts.
+func ThrottleServices(w Waiter) RunOption {
+	return func(o *runOptions) { o.throttle = w }
 }

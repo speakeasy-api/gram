@@ -56,7 +56,10 @@
 // snapshot becomes the service's result. The parent sends it events with
 // [Transition.SendTo], and the child reports back with [Transition.Emit],
 // which the parent handles like any other event. A plain service reads what
-// the chart sends it from [Inbox]. Each machine is explored on its own, the
+// the chart sends it from [Inbox]. The child's snapshot is kept inside the
+// parent's, so a stored parent resumes its child where it was. Any service
+// can do the same for its own progress with [Checkpoint] and [Resumed], and
+// [RunID] gives it an idempotency key that survives being run again. Each machine is explored on its own, the
 // child standing in the parent's exploration as a service with outcomes.
 //
 // A state can hold a live resource, such as a connection, for as long as it
@@ -65,7 +68,8 @@
 // actions inside the state read it with [Resource.From].
 // [StateBuilder.HoldsPermit] is a resource that takes one unit of a shared
 // budget without waiting, which caps how many instances are in a state at
-// once.
+// once. [Transition.Release] gives a resource back early, while its state
+// stays active.
 //
 // Every guard, assignment, action, and service has a name. Names identify
 // actions inside persisted effects and label the chart in [Machine.Definition],
@@ -94,7 +98,8 @@
 // own, and checks invariants on each, the way a model checker walks a
 // specification. It reports the shortest timed event sequence to each broken
 // rule, the states nothing moves out of, and the states from which the chart
-// can no longer finish. [Machine.StartIn] places an instance directly in
+// can no longer finish. [Report.Paths] turns the walk into tests: a shortest
+// event sequence to every state found. [Machine.StartIn] places an instance directly in
 // given states, for tests and for adopting work already under way.
 //
 // # Observability

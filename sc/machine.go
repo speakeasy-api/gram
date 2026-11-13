@@ -105,16 +105,17 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	root.root = true
 
 	b := &build[S, C]{
-		root:    root,
-		nodes:   map[S]*node[S, C]{},
-		ordered: nil,
-		errs:    nil,
-		actions: map[string]chartAction[S, C]{},
-		kinds:   map[string]bool{},
-		raises:  map[string]bool{},
-		cancels: nil,
-		sends:   nil,
-		emits:   false,
+		root:     root,
+		nodes:    map[S]*node[S, C]{},
+		ordered:  nil,
+		errs:     nil,
+		actions:  map[string]chartAction[S, C]{},
+		kinds:    map[string]bool{},
+		raises:   map[string]bool{},
+		cancels:  nil,
+		sends:    nil,
+		emits:    false,
+		releases: nil,
 	}
 	def(&Builder[S, C]{b: b, parent: root})
 
@@ -148,6 +149,11 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	for _, name := range b.sends {
 		if resource, ok := b.kinds[name]; !ok || resource {
 			b.errorf("SendTo names %q, which is not a service of the chart", name)
+		}
+	}
+	for _, name := range b.releases {
+		if resource, ok := b.kinds[name]; !ok || !resource {
+			b.errorf("Release names %q, which is not a resource of the chart", name)
 		}
 	}
 	m.messaging = len(b.sends) > 0 || b.emits
