@@ -719,7 +719,11 @@ function OpencodeInstallContent({
 
   const slug = pluginSlug ?? "<plugin-slug>";
   const cloneCommand = `git clone https://github.com/${repoOwner}/${repoName}.git speakeasy-marketplace`;
-  const copyCommand = `cp -R speakeasy-marketplace/opencode-plugins/${slug}/. ~/.config/opencode/`;
+  const copyCommand = `# All projects
+cp -R speakeasy-marketplace/opencode-plugins/${slug}/. ~/.config/opencode/
+
+# One project
+cp -R speakeasy-marketplace/opencode-plugins/${slug}/. .opencode/`;
 
   return (
     <div className="min-w-0 space-y-6">
