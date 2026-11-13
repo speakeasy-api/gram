@@ -422,14 +422,17 @@ func completeWithRetry(ctx context.Context, client openrouter.CompletionClient, 
 	wait := rateLimitWait
 	for try := 0; ; try++ {
 		response, err := client.GetCompletion(ctx, request)
-		if err == nil || !errors.Is(err, openrouter.ErrRateLimited) || try == rateLimitRetries {
-			return response, err
+		if err == nil {
+			return response, nil
+		}
+		if !errors.Is(err, openrouter.ErrRateLimited) || try == rateLimitRetries {
+			return nil, fmt.Errorf("get completion: %w", err)
 		}
 		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return nil, err
+			return nil, fmt.Errorf("get completion: %w", err)
 		case <-timer.C:
 		}
 		wait = min(2*wait, rateLimitMaxWait)
