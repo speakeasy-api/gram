@@ -51,8 +51,8 @@ minimumReleaseAgeExclude:
   - "@chromatic-com/storybook"
 
 overrides:
-  ai: 7.0.162
-  "@ai-sdk/react": 4.0.166
+  ai: 7.0.163
+  "@ai-sdk/react": 4.0.167
   glob@>=10.0 <10.5.0: 10.5.0
   fast-uri@<3.1.8: 3.1.8
   # monaco-editor pins dompurify exactly; 3.4.15 has open XSS advisories.
