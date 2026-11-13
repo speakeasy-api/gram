@@ -232,12 +232,13 @@ type RedactedEntry struct {
 	updatedAt pgtype.Timestamptz
 }
 
-// redactEntry builds the management-read form of entry from its plaintext. For
-// a secret entry, only whether the plaintext is empty is kept.
-func redactEntry(entry repo.EnvironmentEntry, plaintext string) RedactedEntry {
-	hasValue := plaintext != ""
-
-	value := plaintext
+// redactEntry builds the management-read form of a stored entry. A non-secret
+// entry keeps its stored cleartext; a secret entry keeps only a mask chosen by
+// hasValue. hasValue applies to both kinds and must say whether the entry's
+// plaintext is non-empty; for a stored secret the caller works it out without
+// decrypting the ciphertext.
+func redactEntry(entry repo.EnvironmentEntry, hasValue bool) RedactedEntry {
+	value := entry.Value
 	if entry.IsSecret {
 		value = secretmask.Empty
 		if hasValue {
@@ -271,7 +272,10 @@ func (e *EnvironmentEntries) ListEnvironmentEntries(ctx context.Context, project
 }
 
 // ListRedactedEnvironmentEntries lists an environment's entries for management
-// reads, with every secret value replaced by a fixed mask.
+// reads, with every secret value replaced by a fixed mask. It never decrypts:
+// whether a secret has a value comes from its ciphertext length, so a secret
+// sealed under another key or tampered with still reads as masked here and
+// fails only where its value is used.
 func (e *EnvironmentEntries) ListRedactedEnvironmentEntries(ctx context.Context, projectID uuid.UUID, environmentID uuid.UUID) ([]RedactedEntry, error) {
 	entries, err := e.repo.ListEnvironmentEntries(ctx, repo.ListEnvironmentEntriesParams{
 		ProjectID:     projectID,
@@ -283,20 +287,19 @@ func (e *EnvironmentEntries) ListRedactedEnvironmentEntries(ctx context.Context,
 
 	redacted := make([]RedactedEntry, len(entries))
 	for i, entry := range entries {
-		plaintext := entry.Value
+		hasValue := entry.Value != ""
 		if entry.IsSecret {
-			// TODO(AIM-968): empty secrets are stored as ciphertext, so the
-			// only way to tell whether one has a value is to decrypt it. The
-			// plaintext goes no further than redactEntry. Storing empty
-			// secrets as NULL removes this decryption.
-			decrypted, err := e.enc.Decrypt(entry.Value)
+			// TODO(AIM-968): empty secrets are stored as an encrypted empty
+			// string, so emptiness comes from the ciphertext length. Storing
+			// empty secrets as NULL turns this into a NULL check.
+			empty, err := encryption.IsEmptyCiphertext(entry.Value)
 			if err != nil {
-				return nil, fmt.Errorf("decrypt entry %s: %w", entry.Name, err)
+				return nil, fmt.Errorf("inspect entry %s: %w", entry.Name, err)
 			}
-			plaintext = decrypted
+			hasValue = !empty
 		}
 
-		redacted[i] = redactEntry(entry, plaintext)
+		redacted[i] = redactEntry(entry, hasValue)
 	}
 
 	return redacted, nil
@@ -370,7 +373,7 @@ func (e *EnvironmentEntries) CreateEnvironmentEntries(ctx context.Context, param
 
 	redacted := make([]RedactedEntry, len(createdEntries))
 	for i, entry := range createdEntries {
-		redacted[i] = redactEntry(entry, originalValues[entry.Name])
+		redacted[i] = redactEntry(entry, originalValues[entry.Name] != "")
 	}
 
 	return redacted, nil
