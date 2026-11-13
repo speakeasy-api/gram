@@ -48,8 +48,10 @@ type Score struct {
 
 	MeanTurns           float64
 	PromptTokensPerCase float64
-	CostUSD             float64
-	MeanLatencySeconds  float64
+	// CachedShare is the share of prompt tokens read from the prompt cache.
+	CachedShare        float64
+	CostUSD            float64
+	MeanLatencySeconds float64
 }
 
 func newReport(cfg Config, surfaces []Surface, outcomes []Outcome) *Report {
@@ -63,8 +65,8 @@ func newReport(cfg Config, surfaces []Surface, outcomes []Outcome) *Report {
 }
 
 func scoreOf(model, surface string, outcomes []Outcome) Score {
-	s := Score{Model: model, Surface: surface, Attempts: 0, Errors: 0, Selection: 0, ExpectedFirst: 0, SchemaValid: 0, ArgsMatch: 0, NegativesRight: 0, Negatives: 0, ConfirmedFirst: 0, MeanTurns: 0, PromptTokensPerCase: 0, CostUSD: 0, MeanLatencySeconds: 0}
-	var graded, hits, onPath, positives, valid, withArgs, matched, turns, prompt int
+	s := Score{Model: model, Surface: surface, Attempts: 0, Errors: 0, Selection: 0, ExpectedFirst: 0, SchemaValid: 0, ArgsMatch: 0, NegativesRight: 0, Negatives: 0, ConfirmedFirst: 0, MeanTurns: 0, PromptTokensPerCase: 0, CachedShare: 0, CostUSD: 0, MeanLatencySeconds: 0}
+	var graded, hits, onPath, positives, valid, withArgs, matched, turns, prompt, cached int
 	var latency float64
 	for _, o := range outcomes {
 		if o.Model != model || o.Surface != surface {
@@ -79,6 +81,7 @@ func scoreOf(model, surface string, outcomes []Outcome) Score {
 		graded++
 		turns += o.Turns
 		prompt += o.PromptTokens
+		cached += o.CachedTokens
 		latency += o.Latency.Seconds()
 		if o.ConfirmedFirst {
 			s.ConfirmedFirst++
@@ -119,6 +122,7 @@ func scoreOf(model, surface string, outcomes []Outcome) Score {
 	s.ArgsMatch = ratio(matched, withArgs)
 	s.MeanTurns = ratio(turns, graded)
 	s.PromptTokensPerCase = ratio(prompt, graded)
+	s.CachedShare = ratio(cached, prompt)
 	s.MeanLatencySeconds = latency / float64(max(graded, 1))
 	return s
 }
@@ -194,12 +198,12 @@ func (r *Report) Markdown() string {
 	for _, note := range r.Notes {
 		b.WriteString("> " + note + "\n\n")
 	}
-	b.WriteString("| Model | Surface | Selection | Expected tool first | Valid args | Expected args | Negatives | Confirmed before preview | Turns | Prompt tokens/case | Cost | Errors |\n")
-	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|\n")
+	b.WriteString("| Model | Surface | Selection | Expected tool first | Valid args | Expected args | Negatives | Confirmed before preview | Turns | Prompt tokens/case | Cached | Cost | Errors |\n")
+	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, s := range r.Scores {
-		fmt.Fprintf(&b, "| %s | %s | %.0f%% | %.0f%% | %.0f%% | %.0f%% | %d/%d | %d | %.1f | %.0f | $%.2f | %d/%d |\n",
+		fmt.Fprintf(&b, "| %s | %s | %.0f%% | %.0f%% | %.0f%% | %.0f%% | %d/%d | %d | %.1f | %.0f | %.0f%% | $%.2f | %d/%d |\n",
 			s.Model, s.Surface, 100*s.Selection, 100*s.ExpectedFirst, 100*s.SchemaValid, 100*s.ArgsMatch, s.NegativesRight, s.Negatives,
-			s.ConfirmedFirst, s.MeanTurns, s.PromptTokensPerCase, s.CostUSD, s.Errors, s.Attempts)
+			s.ConfirmedFirst, s.MeanTurns, s.PromptTokensPerCase, 100*s.CachedShare, s.CostUSD, s.Errors, s.Attempts)
 	}
 	r.writeErrors(&b)
 	r.writeUnexpectedAnswers(&b)

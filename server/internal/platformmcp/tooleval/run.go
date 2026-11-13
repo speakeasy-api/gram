@@ -143,8 +143,11 @@ type Outcome struct {
 	// skipping the preview every write tool asks for.
 	ConfirmedFirst bool
 
-	Turns            int
-	PromptTokens     int
+	Turns        int
+	PromptTokens int
+	// CachedTokens is the part of PromptTokens read from the provider's
+	// prompt cache.
+	CachedTokens     int
 	CompletionTokens int
 	CostUSD          float64
 	Latency          time.Duration
@@ -192,17 +195,34 @@ func Run(ctx context.Context, client openrouter.CompletionClient, cases []Case, 
 			}
 		}
 	}
+	// The first case of each model and surface runs before the rest, so it
+	// writes the prompt cache for the tool list and instructions that every
+	// later case reads. Started together, they would all miss and each write.
 	outcomes := make([]Outcome, len(jobs))
-	group, groupCtx := errgroup.WithContext(ctx)
-	group.SetLimit(cfg.Concurrency)
+	warmed := make(map[string]bool)
+	var first, rest []int
 	for i, j := range jobs {
-		group.Go(func() error {
-			outcomes[i] = attempt(groupCtx, client, j.model, j.surface, j.run, j.c, tools, validators)
-			return nil
-		})
+		key := j.model + "/" + j.surface.Name
+		if warmed[key] {
+			rest = append(rest, i)
+			continue
+		}
+		warmed[key] = true
+		first = append(first, i)
 	}
-	if err := group.Wait(); err != nil {
-		return nil, fmt.Errorf("run cases: %w", err)
+	for _, batch := range [][]int{first, rest} {
+		group, groupCtx := errgroup.WithContext(ctx)
+		group.SetLimit(cfg.Concurrency)
+		for _, i := range batch {
+			j := jobs[i]
+			group.Go(func() error {
+				outcomes[i] = attempt(groupCtx, client, j.model, j.surface, j.run, j.c, tools, validators)
+				return nil
+			})
+		}
+		if err := group.Wait(); err != nil {
+			return nil, fmt.Errorf("run cases: %w", err)
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("run cases: %w", err)
@@ -248,13 +268,20 @@ func attempt(parent context.Context, client openrouter.CompletionClient, model s
 	ctx, cancel := context.WithTimeout(parent, caseTimeout)
 	defer cancel()
 	started := time.Now()
-	outcome := Outcome{Model: model, Surface: surface.Name, Run: run, Case: c, Selected: nil, Reads: nil, Answer: "", Unfinished: false, Hit: false, OnPath: false, SchemaValid: false, SchemaError: "", ArgsMatch: false, ConfirmedFirst: false, Turns: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Latency: 0, Err: nil}
+	outcome := Outcome{Model: model, Surface: surface.Name, Run: run, Case: c, Selected: nil, Reads: nil, Answer: "", Unfinished: false, Hit: false, OnPath: false, SchemaValid: false, SchemaError: "", ArgsMatch: false, ConfirmedFirst: false, Turns: 0, PromptTokens: 0, CachedTokens: 0, CompletionTokens: 0, CostUSD: 0, Latency: 0, Err: nil}
 
 	listed := make([]openrouter.Tool, 0, len(surface.Tools))
 	for _, tool := range surface.Tools {
 		listed = append(listed, openrouter.Tool{Type: "function", Function: &openrouter.FunctionDefinition{Name: tool.Name, Description: tool.Description, Parameters: tool.InputSchema}, CacheControl: nil})
 	}
-	messages := []or.ChatMessages{openrouter.CreateMessageSystem(SystemPrompt(surface)), openrouter.CreateMessageUser(c.Prompt)}
+	if strings.HasPrefix(model, "anthropic/") && len(listed) > 0 {
+		// The request-level breakpoint below caches the end of each case's
+		// own conversation, which no other case shares. A breakpoint on the
+		// last tool caches the tool list, the bulk of every request, across
+		// cases.
+		listed[len(listed)-1].CacheControl = &or.ChatContentCacheControl{Type: or.ChatContentCacheControlTypeEphemeral, TTL: nil}
+	}
+	messages := []or.ChatMessages{systemMessage(model, SystemPrompt(surface)), openrouter.CreateMessageUser(c.Prompt)}
 
 turns:
 	for turn := range maxAgentTurns {
@@ -271,6 +298,9 @@ turns:
 			break
 		}
 		outcome.PromptTokens += response.Usage.PromptTokens
+		if response.Usage.PromptTokensDetails != nil {
+			outcome.CachedTokens += response.Usage.PromptTokensDetails.CachedTokens
+		}
 		outcome.CompletionTokens += response.Usage.CompletionTokens
 		if response.Usage.Cost != nil {
 			outcome.CostUSD += *response.Usage.Cost
@@ -350,6 +380,26 @@ func nonEmpty(arguments json.RawMessage) json.RawMessage {
 		return json.RawMessage(`{}`)
 	}
 	return arguments
+}
+
+// systemMessage is the system prompt. For Anthropic models it ends in a cache
+// breakpoint, because the server instructions it carries are the same for
+// every case on a surface.
+func systemMessage(model, prompt string) or.ChatMessages {
+	if !strings.HasPrefix(model, "anthropic/") {
+		return openrouter.CreateMessageSystem(prompt)
+	}
+	return or.CreateChatMessagesSystem(or.ChatSystemMessage{
+		ConfigurationUpdate: nil,
+		Role:                or.ChatSystemMessageRoleSystem,
+		Content: or.CreateChatSystemMessageContentArrayOfChatContentText([]or.ChatContentText{{
+			PromptCacheBreakpoint: nil,
+			Type:                  or.ChatContentTextTypeText,
+			Text:                  prompt,
+			CacheControl:          &or.ChatContentCacheControl{Type: or.ChatContentCacheControlTypeEphemeral, TTL: nil},
+		}}),
+		Name: nil,
+	})
 }
 
 func completionRequest(model string, messages []or.ChatMessages, tools []openrouter.Tool) openrouter.CompletionRequest {
