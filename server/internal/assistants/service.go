@@ -4784,10 +4784,27 @@ func (s *ServiceCore) auditAssistantReasoning(ctx context.Context, tx pgx.Tx, re
 	if s.audit == nil {
 		return nil
 	}
-	actor := assistantActor(ctx, record.CreatedByUserID)
+
+	actor, authenticated := contextvalues.AuthenticatedActor(ctx)
+	var displayName *string
+	switch {
+	case authenticated:
+		if actor.Type == urn.PrincipalTypeUser {
+			if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+				displayName = authCtx.Email
+			}
+		}
+	case record.CreatedByUserID != "":
+		// Provisioning can carry the initiating user explicitly without a request context.
+		actor = urn.NewPrincipal(urn.PrincipalTypeUser, record.CreatedByUserID)
+	default:
+		actor = urn.NewSystemPrincipal("assistant-configuration")
+		displayName = new("Assistant configuration")
+		ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
+	}
 	if err := s.audit.LogAssistantReasoningUpdate(ctx, tx, audit.LogAssistantReasoningUpdateEvent{
 		OrganizationID: record.OrganizationID, ProjectID: record.ProjectID,
-		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, actor.UserID), ActorDisplayName: actor.Email,
+		Actor: actor, ActorDisplayName: displayName,
 		AssistantURN: urn.NewAssistant(record.ID), AssistantName: record.Name,
 		AssistantReasoningSnapshotBefore: before,
 		AssistantReasoningSnapshotAfter:  &audit.AssistantReasoningSnapshot{ReasoningEffort: record.ReasoningEffort},

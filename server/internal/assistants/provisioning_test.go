@@ -1,6 +1,7 @@
 package assistants
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,7 +13,9 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -207,4 +210,60 @@ func TestEnableManagedAssistantFailsWhenNameTaken(t *testing.T) {
 	// The feature stays off — no mapping was created.
 	_, err = core.GetManagedAssistant(ctx, projectID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestManagedAssistantReasoningAuditAttribution(t *testing.T) {
+	t.Parallel()
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
+	for _, tc := range []struct {
+		name    string
+		creator string
+		context func(context.Context) context.Context
+		actor   urn.Principal
+		display string
+		surface audit.Surface
+	}{
+		{"system", "", func(ctx context.Context) context.Context { return ctx }, urn.NewSystemPrincipal("assistant-configuration"), "Assistant configuration", audit.SurfaceSystem},
+		{"human", "user-1", func(ctx context.Context) context.Context {
+			ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{UserID: "user-2", Email: new("user-2@example.invalid")}, urn.NewPrincipal(urn.PrincipalTypeUser, "user-2"))
+			return contextvalues.SetActingSurface(ctx, string(audit.SurfaceDashboard))
+		}, urn.NewPrincipal(urn.PrincipalTypeUser, "user-2"), "user-2@example.invalid", audit.SurfaceDashboard},
+		{"admitted_agent", "user-1", func(ctx context.Context) context.Context {
+			// Public user provenance must not replace the admitted agent or label it as a human.
+			ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{UserID: "user-2", Email: new("user-2@example.invalid")}, agent)
+			return contextvalues.SetActingSurface(ctx, string(audit.SurfacePlatformMCP))
+		}, agent, "", audit.SurfacePlatformMCP},
+		{"explicit_creator", "user-1", func(ctx context.Context) context.Context { return ctx }, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), "", audit.SurfaceUnknown},
+		{"untrusted_user_provenance", "", func(ctx context.Context) context.Context {
+			return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: "user-2", Email: new("user-2@example.invalid")})
+		}, urn.NewSystemPrincipal("assistant-configuration"), "Assistant configuration", audit.SurfaceSystem},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			conn, err := assistantsInfra.CloneTestDatabase(t, "managed_reasoning_actor_"+tc.name)
+			require.NoError(t, err)
+			core := newProvisioningCore(t, conn)
+			projectID := newProvisioningProject(t, conn, "managed-attribution")
+			ctx := tc.context(t.Context())
+			record, err := core.EnableManagedAssistant(ctx, "org-test", projectID, tc.creator, false)
+			require.NoError(t, err)
+			log, err := audittest.LatestAuditLogByActionAndSubject(ctx, conn, audit.ActionAssistantReasoningUpdate, record.ID.String())
+			require.NoError(t, err)
+			require.Equal(t, string(tc.actor.Type), log.ActorType)
+			require.Equal(t, tc.actor.ID, log.ActorID)
+			require.Equal(t, tc.display, log.ActorDisplay)
+			_, err = urn.ParsePrincipal(log.ActorType + ":" + log.ActorID)
+			require.NoError(t, err, "audit actor must be a valid principal, never user with an empty ID")
+			require.Equal(t, new(string(tc.surface)), log.ActingSurface)
+			internal, err := auditrepo.New(conn).GetAuditLogInternalBySubject(ctx, record.ID.String())
+			require.NoError(t, err)
+			require.False(t, internal, "customer configuration stays visible even when a system component provisions it")
+			again, err := core.EnableManagedAssistant(ctx, "org-test", projectID, tc.creator, false)
+			require.NoError(t, err)
+			require.Equal(t, record.ID, again.ID)
+			count, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAssistantReasoningUpdate)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, count)
+		})
+	}
 }
