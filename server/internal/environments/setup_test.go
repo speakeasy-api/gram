@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -52,6 +53,11 @@ type testInstance struct {
 	entries        *environments.EnvironmentEntries
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+
+	// newService builds another service over the same database and auth
+	// setup with a different encryption client, so tests can read stored
+	// entries through a key that cannot decrypt them.
+	newService func(enc *encryption.Client) (*environments.Service, *environments.EnvironmentEntries)
 }
 
 func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
@@ -73,18 +79,24 @@ func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	enc := testenv.NewEncryptionClient(t)
-
 	auditLogger := audit.NewLogger()
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, authzEngine, auditLogger)
+
+	newService := func(enc *encryption.Client) (*environments.Service, *environments.EnvironmentEntries) {
+		svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, authzEngine, auditLogger)
+		entries := environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadata_repo.New(conn))
+		return svc, entries
+	}
+
+	svc, entries := newService(testenv.NewEncryptionClient(t))
 
 	return ctx, &testInstance{
 		service:        svc,
-		entries:        environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadata_repo.New(conn)),
+		entries:        entries,
 		conn:           conn,
 		sessionManager: sessionManager,
+		newService:     newService,
 	}
 }
 
