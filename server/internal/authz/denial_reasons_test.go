@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
-func TestDenialReasons_RejectsAnInvalidCheckWhenRBACIsNotEnforced(t *testing.T) {
+func TestDenialReasons_SkipsValidationWhenRBACIsNotEnforced(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
@@ -21,11 +21,9 @@ func TestDenialReasons_RejectsAnInvalidCheckWhenRBACIsNotEnforced(t *testing.T) 
 
 	valid := MCPCheck(ScopeMCPConnect, "toolset_1", authProjectP)
 	invalid := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "", Dimensions: nil}
+	authClient := MCPAuthClientCheck("ac_1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: ""})
 
-	_, err = engine.DenialReasons(ctx, []Check{valid, invalid})
-	require.Error(t, err)
-
-	reasons, err := engine.DenialReasons(ctx, []Check{valid})
-	require.NoError(t, err)
-	require.Equal(t, []DenialReason{DenialReasonNone}, reasons)
+	reasons, err := engine.DenialReasons(ctx, []Check{valid, invalid, authClient})
+	require.NoError(t, err, "unenforced callers get the unenforced result, like FindMatched")
+	require.Equal(t, []DenialReason{DenialReasonNone, DenialReasonNone, DenialReasonNotGranted}, reasons)
 }

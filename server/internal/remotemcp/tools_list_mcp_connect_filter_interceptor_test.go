@@ -529,6 +529,15 @@ func TestToolsListMCPConnectFilterInterceptor_InspectionReasons(t *testing.T) {
 			wantReason:   remotemcp.ToolUnavailableReasonReadOnly,
 		},
 		{
+			name: "a grant limited to another disposition reports not_granted",
+			grants: []authz.Grant{
+				authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID}),
+				authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID, "disposition": "idempotent"}),
+			},
+			dispositions: map[string]string{"open_tool": "idempotent", "locked_tool": "destructive"},
+			wantReason:   remotemcp.ToolUnavailableReasonNotGranted,
+		},
+		{
 			name: "no grant covering the tool reports not_granted",
 			grants: []authz.Grant{
 				authz.NewGrantWithSelector(authz.ScopeMCPRead, authz.Selector{"resource_kind": "mcp", "resource_id": testServerID}),

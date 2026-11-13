@@ -16,10 +16,15 @@ const (
 	// withdraws.
 	DenialReasonBlocked DenialReason = "blocked"
 
+	// DenialReasonReadOnly marks a check no grant allows only because of its
+	// disposition dimension, where the caller's access covers read_only: a
+	// grant would allow the same check if it named the read_only disposition.
+	DenialReasonReadOnly DenialReason = "read_only"
+
 	// DenialReasonDisposition marks a check no grant allows only because of
-	// its disposition dimension: a grant would allow it if the check did not
-	// name a disposition, so the caller's access is limited to other
-	// dispositions (for example read_only tools).
+	// its disposition dimension, where the caller's access is limited to other
+	// dispositions than read_only (for example idempotent or open_world): a
+	// grant would allow it if the check did not name a disposition.
 	DenialReasonDisposition DenialReason = "disposition"
 
 	// DenialReasonNotGranted marks a check no grant allows.
@@ -33,15 +38,10 @@ const (
 // context.
 //
 // When RBAC is not enforced every check is authorized except auth-client
-// checks, which are not granted.
+// checks, which are not granted, and checks are not validated, matching
+// [Engine.FindMatched] and [Engine.Require].
 func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialReason, error) {
 	reasons := make([]DenialReason, len(checks))
-	for _, c := range checks {
-		if err := validateInput(c); err != nil {
-			return nil, e.mapError(ctx, err)
-		}
-	}
-
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
@@ -61,6 +61,9 @@ func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialRea
 	}
 
 	for i, c := range checks {
+		if err := validateInput(c); err != nil {
+			return nil, e.mapError(ctx, err)
+		}
 		evaluation, err := authorization.evaluate(c)
 		if err != nil {
 			return nil, e.mapError(ctx, err)
@@ -77,9 +80,25 @@ func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialRea
 			continue
 		}
 
-		if _, hasDisposition := c.Dimensions[SelectorKeyDisposition]; !hasDisposition {
+		disposition, hasDisposition := c.Dimensions[SelectorKeyDisposition]
+		if !hasDisposition {
 			continue
 		}
+
+		if disposition != DispositionReadOnly {
+			asReadOnly := c
+			asReadOnly.Dimensions = maps.Clone(c.Dimensions)
+			asReadOnly.Dimensions[SelectorKeyDisposition] = DispositionReadOnly
+			evaluation, err = authorization.evaluate(asReadOnly)
+			if err != nil {
+				return nil, e.mapError(ctx, err)
+			}
+			if evaluation.Grant != nil {
+				reasons[i] = DenialReasonReadOnly
+				continue
+			}
+		}
+
 		withoutDisposition := c
 		withoutDisposition.Dimensions = maps.Clone(c.Dimensions)
 		delete(withoutDisposition.Dimensions, SelectorKeyDisposition)
