@@ -38,9 +38,11 @@ import (
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // mockGitHubPublisher records calls for testing. Set the *Err fields to
@@ -1919,6 +1921,81 @@ func TestPluginsService_PublishPlugins_GrantsMCPKeyItsPluginServers(t *testing.T
 	for _, clientType := range []string{authz.AuthClientTypeRemoteSession, authz.AuthClientTypeEMA} {
 		require.False(t, allows(authz.MCPAuthClientCheck(clientID, authz.MCPAuthClientDimensions{ClientType: clientType, ProjectID: project, ConnectionOwner: "", UpstreamClient: ""})), "the key never uses %s clients", clientType)
 	}
+}
+
+func TestPluginsService_PublishProject_MCPKeyFollowsServerSignIn(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	project := authCtx.ProjectID.String()
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Sign In Test"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "sign-in-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Sign In Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+	issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          *authCtx.ProjectID,
+		Slug:               "sign-in-test-issuer",
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true},
+	})
+	require.NoError(t, err)
+
+	// publish runs the automatic publish and reports whether the key it minted
+	// connects to the server, and whether the pushed config presents a key.
+	seen := map[uuid.UUID]bool{}
+	publish := func() (connects, presentsKey bool) {
+		t.Helper()
+		outcome, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+			ProjectID:       *authCtx.ProjectID,
+			CreatedByUserID: authCtx.UserID,
+			CommitMessage:   "Update plugin packages",
+			SkipIfUnchanged: true,
+		})
+		require.NoError(t, err)
+		require.False(t, outcome.Skipped, "a sign-in change republishes the plugin")
+
+		keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+		require.NoError(t, err)
+		var minted []keysrepo.ApiKey
+		for _, key := range keys {
+			if strings.HasPrefix(key.Name, "plugins-mcp-") && !seen[key.ID] {
+				seen[key.ID] = true
+				minted = append(minted, key)
+			}
+		}
+		require.Len(t, minted, 1, "the republish mints one MCP key")
+		grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{urn.NewAPIKeyPrincipal(minted[0].ID)})
+		require.NoError(t, err)
+		check := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), project)
+		connects = slices.ContainsFunc(grants, func(grant authz.Grant) bool { return authz.GrantAllows(grant, check) })
+		return connects, strings.Contains(string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]), minted[0].KeyPrefix)
+	}
+
+	connects, presentsKey := publish()
+	require.True(t, connects, "the key connects to a server it is presented to")
+	require.True(t, presentsKey)
+
+	testenv.SetHostedMCP(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "", UserSessionIssuerID: &uuid.NullUUID{UUID: issuer.ID, Valid: true}, Slug: "", CustomDomainID: uuid.NullUUID{}})
+	connects, presentsKey = publish()
+	require.False(t, connects, "the key does not reach a server people sign in to")
+	require.False(t, presentsKey)
+
+	testenv.SetHostedMCP(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "", UserSessionIssuerID: &uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Slug: "", CustomDomainID: uuid.NullUUID{}})
+	connects, presentsKey = publish()
+	require.True(t, connects, "the key connects again once the server takes it")
+	require.True(t, presentsKey)
 }
 
 func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.T) {
