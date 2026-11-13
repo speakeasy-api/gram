@@ -22,8 +22,8 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
+    shadowMCP: { href: () => "/org/projects/p/shadow-mcp" },
     shadowAI: {
-      href: () => "/org/projects/p/shadow-ai",
       mcps: {
         detail: {
           href: (slug: string) => `/org/projects/p/shadow-ai/mcps/${slug}`,
@@ -129,7 +129,7 @@ describe("useShadowMCPServerCandidates", () => {
     );
   });
 
-  it("opens the MCP servers tab for a local command, which has no page", async () => {
+  it("opens the Shadow MCP page for a local command, which has no page", async () => {
     mocks.pages[""] = {
       servers: [server("npx-foo", { targetKind: "stdio_command" })],
     };
@@ -138,9 +138,7 @@ describe("useShadowMCPServerCandidates", () => {
     await waitFor(() => expect(result.current).toHaveLength(1));
     expect(result.current[0]?.detail).toBe("Shadow MCP · local command");
     void result.current[0]?.run("open");
-    expect(mocks.navigate).toHaveBeenCalledWith(
-      "/org/projects/p/shadow-ai?tab=mcp-servers",
-    );
+    expect(mocks.navigate).toHaveBeenCalledWith("/org/projects/p/shadow-mcp");
   });
 
   it("keeps the pages it has when a later page fails, and stops there", async () => {

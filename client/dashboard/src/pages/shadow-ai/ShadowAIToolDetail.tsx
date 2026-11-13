@@ -9,10 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
-import {
-  shadowAIBreadcrumbSubstitutions,
-  shadowAIBreadcrumbUrlSubstitutions,
-} from "@/pages/shadow-ai/tabs";
+import { shadowAIBreadcrumbSubstitutions } from "@/pages/shadow-ai/tabs";
 import type { AIDetectionUser } from "@gram/client/models/components/aidetectionuser.js";
 import { useAiDetectionUsers } from "@gram/client/react-query/aiDetectionUsers.js";
 import { useState } from "react";
@@ -109,7 +106,6 @@ function ShadowAIToolDetailPage(): JSX.Element {
             ...shadowAIBreadcrumbSubstitutions,
             [targetId]: crumb,
           }}
-          urlSubstitutions={shadowAIBreadcrumbUrlSubstitutions}
         />
       </Page.Header>
       <Page.Body fullHeight className="pb-8">

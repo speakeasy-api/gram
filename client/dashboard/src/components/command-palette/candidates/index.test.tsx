@@ -1658,7 +1658,7 @@ describe("useRuleCandidates", () => {
 });
 
 describe("useLauncherCandidates", () => {
-  // The Shadow AI page's own gate: org admins, inside a project, palette open.
+  // The Shadow MCP page's own gate: org admins, inside a project, palette open.
   it.each([
     { scopes: ["org:admin", "project:read"], enabled: true, expected: true },
     { scopes: ["org:read", "project:read"], enabled: true, expected: false },

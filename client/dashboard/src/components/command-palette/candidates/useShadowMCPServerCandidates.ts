@@ -1,6 +1,5 @@
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { shadowAITabSearch } from "@/pages/shadow-ai/tabs";
 import { useRoutes } from "@/routes";
 import { buildShadowMCPInventoryQuery } from "@gram/client/react-query/shadowMCPInventory.core.js";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -12,9 +11,9 @@ const INVENTORY_PAGE_SIZE = 200;
 
 /**
  * The project's Shadow MCP inventory: every MCP server its agents used or
- * asked for, so a server name opens its page on Shadow AI. A local command
- * has no page; it opens the MCP servers tab, where its row reviews it.
- * Org-admin only, the same gate as the Shadow AI page; the caller gates
+ * asked for, so a server name opens its page. A local command has no page;
+ * it opens the Shadow MCP page, where its row reviews it.
+ * Org-admin only, the same gate as the Shadow MCP page; the caller gates
  * `enabled`.
  */
 export function useShadowMCPServerCandidates({
@@ -77,7 +76,7 @@ export function useShadowMCPServerCandidates({
     return servers.map((server): LauncherCandidate => {
       const isLocalCommand = server.targetKind === "stdio_command";
       const href = isLocalCommand
-        ? `${routes.shadowAI.href()}${shadowAITabSearch("mcp-servers")}`
+        ? routes.shadowMCP.href()
         : routes.shadowAI.mcps.detail.href(server.serverSlug);
       return {
         id: `shadow_mcp_server:${server.serverSlug}`,

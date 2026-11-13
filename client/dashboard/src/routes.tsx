@@ -721,17 +721,17 @@ const ROUTE_STRUCTURE = {
     url: "risk-events",
     icon: "flag",
   },
-  // Shadow AI: the MCP servers and AI tools in use, as two tabs of one page.
-  // The category indexes below have no page of their own and redirect to the
-  // matching tab; the tool and server detail pages beneath them render, and
-  // tickets, bookmarks and block messages link to all of these URLs.
+  // Shadow AI lives in Guardrails (the Shadow AI policy and its targets tab)
+  // and is not in the nav. Its section URLs stay because tickets, bookmarks
+  // and block messages link to them: every index page redirects to
+  // Guardrails, and the tool and server detail pages beneath keep rendering.
   //
   // Project-level placement with organization-scoped reads behind it, the
   // same shape as identities above and for the same reason.
   shadowAI: {
     title: "Shadow AI",
     url: "shadow-ai",
-    icon: "eye-off",
+    icon: "shield",
     subPages: {
       // A tool's detail is nested under its category, as the server detail
       // is under MCPs, so the breadcrumb says which kind a pasted link is.
@@ -768,8 +768,8 @@ const ROUTE_STRUCTURE = {
       mcps: {
         title: "MCPs",
         url: "mcps",
-        // The MCPs index was the approvals queue; it lands on the MCP
-        // servers tab of the Shadow AI page.
+        // The MCPs index was the approvals queue; it lands on the Shadow MCP
+        // page below. The server detail pages beneath it render.
         subPages: {
           detail: {
             title: "Shadow MCP Server",
@@ -779,14 +779,17 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  // The Shadow MCP paths predate the section and are sitting in bookmarks and
-  // tickets, so they redirect permanently rather than 404. The end-user
-  // request URLs (/shadow-mcp/request, /risk-policy-bypass/request) are
-  // top-level routes in App.tsx, are quoted verbatim in block messages
-  // already in people's terminals, and are deliberately left alone.
+  // Shadow MCP: the MCP server inventory and its approvals, beside
+  // Guardrails in the nav. Server detail pages live under the Shadow AI
+  // section above; the older /shadow-mcp/:serverSlug links redirect there.
+  // The end-user request URLs (/shadow-mcp/request,
+  // /risk-policy-bypass/request) are top-level routes in App.tsx, are quoted
+  // verbatim in block messages already in people's terminals, and are
+  // deliberately left alone.
   shadowMCP: {
     title: "Shadow MCP",
     url: "shadow-mcp",
+    icon: "eye-off",
     subPages: {
       detail: {
         title: "Shadow MCP Server",

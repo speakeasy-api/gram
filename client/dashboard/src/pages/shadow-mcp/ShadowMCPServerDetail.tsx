@@ -7,10 +7,6 @@ import {
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
-import {
-  shadowAIBreadcrumbSubstitutions,
-  shadowAIBreadcrumbUrlSubstitutions,
-} from "@/pages/shadow-ai/tabs";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -691,14 +687,18 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   return (
     <Page>
       <Page.Header>
-        {/* The page is opened from the MCP servers tab of Shadow AI, so the
-            trail walks back to that tab. */}
+        {/* The page is opened from the Shadow MCP page, where the sidebar
+            puts it too, so the trail leads back there rather than through
+            the Shadow AI section its URL still carries. */}
         <Page.Header.Breadcrumbs
+          skipSegments={["shadow-ai"]}
           substitutions={{
-            ...shadowAIBreadcrumbSubstitutions,
+            mcps: routes.shadowMCP.title,
             [serverSlug]: server?.serverName || server?.urlHost,
           }}
-          urlSubstitutions={shadowAIBreadcrumbUrlSubstitutions}
+          urlSubstitutions={{
+            "/shadow-ai/mcps": `/${routes.shadowMCP.url}`,
+          }}
         />
       </Page.Header>
       <Page.Body fullHeight className="pb-8">

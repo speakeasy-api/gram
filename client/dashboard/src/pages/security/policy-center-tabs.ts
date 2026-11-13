@@ -1,4 +1,3 @@
-import type { ShadowAITab } from "@/pages/shadow-ai/tabs";
 import type { PageTab } from "@/components/page-templates";
 
 // Suppressed findings used to be a third tab here; they now live in the
@@ -8,6 +7,7 @@ import type { PageTab } from "@/components/page-templates";
 export const POLICY_CENTER_TABS = [
   "policies",
   "detection-rules",
+  "shadow-ai-targets",
   "tool-approvals",
   "exclusions",
   "quarantines",
@@ -15,25 +15,10 @@ export const POLICY_CENTER_TABS = [
 
 export type PolicyCenterTab = (typeof POLICY_CENTER_TABS)[number];
 
-/** Tabs that moved to the Shadow AI page, and the tab each now opens there.
- *  Slack, block messages and bookmarks still carry these `?tab=` values. */
-const MOVED_TO_SHADOW_AI = {
-  "mcp-approvals": "mcp-servers",
-  "shadow-ai-targets": "ai-tools",
-} as const satisfies Record<string, ShadowAITab>;
-
-type MovedToShadowAITab = keyof typeof MOVED_TO_SHADOW_AI;
-
-export function movedToShadowAITab(
-  tab: string | null,
-): ShadowAITab | undefined {
-  if (tab === null || !Object.hasOwn(MOVED_TO_SHADOW_AI, tab)) return undefined;
-  return MOVED_TO_SHADOW_AI[tab as MovedToShadowAITab];
-}
-
 const TAB_LABEL: Record<PolicyCenterTab, string> = {
   policies: "Policies",
   "detection-rules": "Detection Rules",
+  "shadow-ai-targets": "Shadow AI targets",
   "tool-approvals": "Tool approvals",
   exclusions: "Exclusion Rules",
   quarantines: "Quarantines",
@@ -41,6 +26,12 @@ const TAB_LABEL: Record<PolicyCenterTab, string> = {
 
 export function policyCenterTabLabel(tab: PolicyCenterTab): string {
   return TAB_LABEL[tab];
+}
+
+/** The MCP approvals tab moved to the Shadow MCP page. Slack, block
+ *  messages and bookmarks still carry its `?tab=` value. */
+export function movedToShadowMCP(tab: string | null): boolean {
+  return tab === "mcp-approvals";
 }
 
 /** The query string that selects a tab, for links that land on one from

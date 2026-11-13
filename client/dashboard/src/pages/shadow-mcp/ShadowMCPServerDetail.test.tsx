@@ -525,23 +525,20 @@ describe("ShadowMCPServerDetail", () => {
     );
   });
 
-  // The page is opened from the MCP servers tab of Shadow AI, so the trail
-  // leads back to that tab.
-  it("leads the breadcrumb back to the MCP servers tab of Shadow AI", () => {
+  // The page is opened from the Shadow MCP page, and the sidebar highlights
+  // Shadow MCP, so the trail leads back there rather than through the Shadow
+  // AI section its URL still carries.
+  it("leads the breadcrumb back to the Shadow MCP page", () => {
     renderDetailPage();
 
     const trail = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(
       within(trail)
-        .getByRole("link", { name: "Shadow AI" })
+        .getByRole("link", { name: "Shadow MCP" })
         .getAttribute("href"),
-    ).toBe("/acme/projects/default/shadow-ai");
-    expect(
-      within(trail)
-        .getByRole("link", { name: "MCP servers" })
-        .getAttribute("href"),
-    ).toBe("/acme/projects/default/shadow-ai?tab=mcp-servers");
+    ).toBe("/acme/projects/default/shadow-mcp");
     expect(within(trail).getByText("GitHub MCP")).toBeTruthy();
+    expect(within(trail).queryByText("Shadow AI")).toBeNull();
     expect(within(trail).queryByText("MCPs")).toBeNull();
   });
 

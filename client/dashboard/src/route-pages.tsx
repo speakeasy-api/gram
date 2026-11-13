@@ -154,13 +154,14 @@ import RiskOverviewRedirect from "./pages/security/RiskOverviewRedirect";
 import Watchdog, { WatchdogRoot } from "./pages/security/watchdog/Watchdog";
 import SignalDetail from "./pages/security/watchdog/SignalDetail";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
-import ShadowAI, {
+import {
   ShadowAIRoot,
-  ShadowAIToolsIndexRedirect,
+  ShadowAISectionRedirect,
   ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
 import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
+import ShadowMCP from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
@@ -590,11 +591,11 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
   },
   shadowAI: {
     component: ShadowAIRoot,
-    indexComponent: ShadowAI,
+    indexComponent: ShadowAISectionRedirect,
     subPages: {
       harnesses: {
         component: ShadowAIRoot,
-        indexComponent: ShadowAIToolsIndexRedirect,
+        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             component: ShadowAIToolDetail,
@@ -603,7 +604,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       },
       assistants: {
         component: ShadowAIRoot,
-        indexComponent: ShadowAIToolsIndexRedirect,
+        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             component: ShadowAIToolDetail,
@@ -612,7 +613,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       },
       models: {
         component: ShadowAIRoot,
-        indexComponent: ShadowAIToolsIndexRedirect,
+        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             component: ShadowAIToolDetail,
@@ -632,7 +633,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
   },
   shadowMCP: {
     component: ShadowAIRoot,
-    indexComponent: ShadowMCPIndexRedirect,
+    indexComponent: ShadowMCP,
     subPages: {
       detail: {
         component: ShadowMCPServerLegacyRedirect,

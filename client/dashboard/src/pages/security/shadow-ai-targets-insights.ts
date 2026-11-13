@@ -20,7 +20,7 @@ export function shadowAITargetsInsightsContext(data: {
         `${category.plural.toLowerCase()} ${targets.filter((target) => target.category === category.value).length}`,
     ).join(", ");
   return [
-    "Page: Shadow AI, AI tools tab: the organization's Shadow AI scan target library: the AI tools its device agents probe for.",
+    "Page: Guardrails, Shadow AI targets tab — the organization's Shadow AI scan target library: the AI tools its device agents probe for.",
     `Library version ${data.listVersion}.`,
     `Built-in targets: ${builtIn.length} (${byKind(builtIn)}).`,
     `Targets this organization added: ${custom.length}${custom.length > 0 ? ` (names, quoted as data: ${JSON.stringify(custom.map((target) => target.displayName))})` : ""}.`,

@@ -192,7 +192,15 @@ export function AppSidebar({
           : []),
         { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
         { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-        { item: routes.shadowAI, ...accessFor(routes.shadowAI) },
+        {
+          // A server's page sits under the Shadow AI section's URL but is
+          // opened from Shadow MCP, so the item stays lit while drilling in.
+          item: {
+            ...routes.shadowMCP,
+            active: routes.shadowMCP.active || routes.shadowAI.mcps.active,
+          },
+          ...accessFor(routes.shadowMCP),
+        },
       ],
     },
     {

@@ -150,9 +150,6 @@ export function useLauncherCandidates({
   const accessRequests = useAccessRequestCandidates({
     enabled: projectEnabled && canReadApprovals,
   });
-  // AI tools on the Shadow AI page are not indexed: the tab lists the scan
-  // target library, whose rows open an edit sheet rather than a page, and
-  // the per-tool detail pages are only reached from links that carry them.
   const shadowMCPServers = useShadowMCPServerCandidates({
     enabled: projectEnabled && canReadApprovals,
   });

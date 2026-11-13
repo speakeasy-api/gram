@@ -179,14 +179,14 @@ describe("useProjectNavRoutes", () => {
     );
   });
 
-  it("lists Shadow AI after Guardrails, and keeps the old Shadow MCP path out", () => {
+  it("lists Shadow MCP after Guardrails, and keeps Shadow AI out", () => {
     const { result } = renderNav();
 
     const titles = result.current.map((entry) => entry.route.title);
-    expect(titles.indexOf("Shadow AI")).toBe(titles.indexOf("Guardrails") + 1);
-    expect(titles).not.toContain("Shadow MCP");
+    expect(titles.indexOf("Shadow MCP")).toBe(titles.indexOf("Guardrails") + 1);
+    expect(titles).not.toContain("Shadow AI");
     expect(
-      result.current.find((entry) => entry.route.title === "Shadow AI")?.scope,
+      result.current.find((entry) => entry.route.title === "Shadow MCP")?.scope,
     ).toEqual(["org:admin"]);
   });
 

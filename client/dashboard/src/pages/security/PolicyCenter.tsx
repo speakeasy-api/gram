@@ -90,7 +90,6 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { Navigate, Outlet } from "react-router";
-import { shadowAITabSearch } from "@/pages/shadow-ai/tabs";
 import {
   ACTION_OPTIONS,
   categoriesToPayload,
@@ -105,8 +104,8 @@ import {
 import { DetectionRulesTab } from "./DetectionRules";
 import {
   POLICY_CENTER_TABS,
+  movedToShadowMCP,
   policyCenterTabLabel,
-  movedToShadowAITab,
   policyCenterTabs,
   resolvePolicyCenterTab,
   type PolicyCenterTab,
@@ -117,6 +116,7 @@ import {
   memberDisplayName,
 } from "./audience-principals";
 import { ToolApprovalsTab } from "./tool-approvals/ToolApprovalsTab";
+import { ShadowAITargetsTab } from "./ShadowAITargetsTab";
 import { detectionRulesTabRuleIds } from "./detection-rules-data";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
@@ -589,6 +589,9 @@ function policyCenterHeaderAction(
         label: "Custom Detection Rule",
         onClick: actions.newDetectionRule,
       };
+    // The targets library carries its own add button in its toolbar.
+    case "shadow-ai-targets":
+      return null;
     // Requests come from held calls; approval policies are created from the
     // Policies tab.
     case "tool-approvals":
@@ -604,16 +607,9 @@ function policyCenterHeaderAction(
 export default function PolicyCenter(): JSX.Element {
   const routes = useRoutes();
   const [rawTab] = useQueryState("tab");
-  // MCP approvals and Shadow AI targets moved to the Shadow AI page; their
-  // old tab links land on the matching tab there.
-  const movedTo = movedToShadowAITab(rawTab);
-  if (movedTo) {
-    return (
-      <Navigate
-        to={`${routes.shadowAI.href()}${shadowAITabSearch(movedTo)}`}
-        replace
-      />
-    );
+  // MCP approvals moved to the Shadow MCP page; its old tab link lands there.
+  if (movedToShadowMCP(rawTab)) {
+    return <Navigate to={routes.shadowMCP.href()} replace />;
   }
   return (
     <RequireScope scope="org:admin" level="page">
@@ -1154,7 +1150,7 @@ function PolicyCenterContent() {
     >
       {/* The dock follows the active tab: the Detection Rules tab took over
           the standalone page whose URL used to select these suggestions, and
-          the Tool approvals tab mounts its own config from its own data. */}
+          the Shadow AI targets tab mounts its own config from its own data. */}
       {activeTab === "detection-rules" ? (
         <InsightsConfig
           contextInfo={detectionRulesInsightsContext()}
@@ -1162,7 +1158,8 @@ function PolicyCenterContent() {
           title="Detection rule insights"
           subtitle="Ask about rule activity, noisy rules, and coverage gaps. Match content is redacted before it reaches the assistant."
         />
-      ) : activeTab === "tool-approvals" ? null : (
+      ) : activeTab === "shadow-ai-targets" ||
+        activeTab === "tool-approvals" ? null : (
         <InsightsConfig
           contextInfo={insightsContext}
           suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
@@ -1177,6 +1174,7 @@ function PolicyCenterContent() {
           onCreateOpenChange={setRuleCreateOpen}
         />
       )}
+      {activeTab === "shadow-ai-targets" && <ShadowAITargetsTab />}
       {activeTab === "tool-approvals" && toolApprovalsEnabled && (
         <ToolApprovalsTab />
       )}

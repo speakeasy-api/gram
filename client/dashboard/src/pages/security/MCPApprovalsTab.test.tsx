@@ -171,7 +171,7 @@ describe("MCPApprovalsTab", () => {
       expect.objectContaining({
         title: "MCP approval insights",
         contextInfo: expect.stringContaining(
-          "Page: Shadow AI, MCP servers tab. Shadow MCP policy posture: none.",
+          "Page: Shadow MCP. Shadow MCP policy posture: none.",
         ),
       }),
     );
