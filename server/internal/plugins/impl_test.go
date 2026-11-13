@@ -1865,6 +1865,62 @@ func TestPluginsService_PublishPlugins_WithCollaborators(t *testing.T) {
 	require.Equal(t, []string{"admin", "admin", "admin"}, mock.collaboratorPermissions)
 }
 
+func TestPluginsService_PublishPlugins_GrantsMCPKeyItsPluginServers(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	project := authCtx.ProjectID.String()
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Policy Test"})
+	require.NoError(t, err)
+	distributed := createTestToolset(t, ctx, ti.conn, "policy-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(distributed.ID.String()),
+		DisplayName: conv.PtrEmpty("Policy Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+	other := createTestToolset(t, ctx, ti.conn, "undistributed-toolset")
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	policies := map[string][]authz.Grant{}
+	for _, key := range keys {
+		grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{urn.NewAPIKeyPrincipal(key.ID)})
+		require.NoError(t, err)
+		switch {
+		case strings.HasPrefix(key.Name, "plugins-mcp-"):
+			policies["mcp"] = grants
+		case strings.HasPrefix(key.Name, "plugins-hooks-"):
+			policies["hooks"] = grants
+		}
+	}
+	require.Empty(t, policies["hooks"], "a hooks key reaches no MCP server")
+	allows := func(check authz.Check) bool {
+		return slices.ContainsFunc(policies["mcp"], func(grant authz.Grant) bool { return authz.GrantAllows(grant, check) })
+	}
+
+	require.True(t, allows(authz.MCPCheck(authz.ScopeMCPConnect, distributed.ID.String(), project)), "the key connects to the server its plugin distributes")
+	require.False(t, allows(authz.MCPCheck(authz.ScopeMCPConnect, other.ID.String(), project)), "the key reaches nothing its plugins do not distribute")
+
+	clientID := uuid.NewString()
+	for _, clientType := range []string{authz.AuthClientTypeServiceAccount, authz.AuthClientTypeStaticCredential, authz.AuthClientTypePassThrough} {
+		require.True(t, allows(authz.MCPAuthClientCheck(clientID, authz.MCPAuthClientDimensions{ClientType: clientType, ProjectID: project, ConnectionOwner: "", UpstreamClient: ""})), "the key uses shared %s clients", clientType)
+	}
+	for _, clientType := range []string{authz.AuthClientTypeRemoteSession, authz.AuthClientTypeEMA} {
+		require.False(t, allows(authz.MCPAuthClientCheck(clientID, authz.MCPAuthClientDimensions{ClientType: clientType, ProjectID: project, ConnectionOwner: "", UpstreamClient: ""})), "the key never uses %s clients", clientType)
+	}
+}
+
 func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.T) {
 	t.Parallel()
 
