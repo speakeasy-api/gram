@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,9 +9,13 @@ import { RemoteMcpToolsSection } from "./RemoteMcpToolsSection";
 const mocks = vi.hoisted(() => ({
   needsAuth: true,
   open: vi.fn(),
-  tools: undefined as undefined | Record<string, { unavailable: boolean }>,
+  tools: undefined as
+    | undefined
+    | Record<string, { unavailable: boolean; unavailableReason?: string }>,
   stored: {} as Record<string, { toolName: string }>,
   canWrite: true,
+  chatError: null as Error | null,
+  chatRefetch: vi.fn(),
 }));
 
 vi.mock("@/hooks/useProxiedMcpTools", () => ({
@@ -22,6 +27,31 @@ vi.mock("@/hooks/useProxiedMcpTools", () => ({
     refetch: vi.fn(),
     error: null,
   }),
+}));
+
+vi.mock("../../inspect/useToolHealth", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../inspect/useToolHealth")
+  >("../../inspect/useToolHealth");
+  return {
+    ...actual,
+    useToolHealth: () => ({ healthFor: () => undefined, isLoading: false }),
+  };
+});
+
+vi.mock("../../inspect/useChatSessionHeaders", () => ({
+  useChatSessionHeaders: () => ({
+    headers: undefined,
+    isLoading: false,
+    error: mocks.chatError,
+    refetch: mocks.chatRefetch,
+  }),
+}));
+
+vi.mock("@/pages/playground/PlaygroundChat", () => ({
+  PlaygroundChat: ({ mcpUrl }: { mcpUrl: string }) => (
+    <div data-testid="chat" data-url={mcpUrl} />
+  ),
 }));
 
 vi.mock("@/hooks/useUserSessionToken", () => ({
@@ -61,20 +91,22 @@ function renderSection(
   props: Partial<ComponentProps<typeof RemoteMcpToolsSection>> = {},
 ): void {
   render(
-    <MemoryRouter>
-      <TooltipProvider>
-        <RemoteMcpToolsSection
-          mcpUrl="https://mcp.example/mcp/custom-slug"
-          isResolvingUrl={false}
-          mcpServerId="mcp-server-1"
-          userSessionIssuerId={undefined}
-          isDisabled={false}
-          authSettingsHref="/settings#authentication"
-          platformSlug="server"
-          {...props}
-        />
-      </TooltipProvider>
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <TooltipProvider>
+          <RemoteMcpToolsSection
+            mcpUrl="https://mcp.example/mcp/custom-slug"
+            isResolvingUrl={false}
+            mcpServerId="mcp-server-1"
+            userSessionIssuerId={undefined}
+            isDisabled={false}
+            authSettingsHref="/settings#authentication"
+            platformSlug="server"
+            {...props}
+          />
+        </TooltipProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -87,6 +119,42 @@ afterEach(() => {
   mocks.tools = undefined;
   mocks.stored = {};
   mocks.canWrite = true;
+  mocks.chatError = null;
+  mocks.chatRefetch.mockReset();
+});
+
+describe("RemoteMcpToolsSection turned off", () => {
+  it("links to the availability setting", () => {
+    renderSection({
+      isDisabled: true,
+      availabilityHref: "/settings#settings-general",
+    });
+
+    expect(
+      screen.getByText(
+        "This server is turned off, so agents can't reach its tools.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Turn on in settings" })
+        .getAttribute("href"),
+    ).toBe("/settings#settings-general");
+  });
+});
+
+describe("RemoteMcpToolsSection chat session", () => {
+  it("shows a retryable error when the chat session can't be created", () => {
+    mocks.needsAuth = false;
+    mocks.chatError = new Error("boom");
+    renderSection();
+
+    expect(
+      screen.getByText("Couldn't connect to this server to list its tools."),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mocks.chatRefetch).toHaveBeenCalled();
+  });
 });
 
 describe("RemoteMcpToolsSection tool list", () => {
@@ -96,13 +164,14 @@ describe("RemoteMcpToolsSection tool list", () => {
     mocks.needsAuth = false;
     mocks.tools = {
       search: { unavailable: false },
-      delete_all: { unavailable: true },
+      delete_all: { unavailable: true, unavailableReason: "blocked" },
     };
     renderSection(remote);
 
-    expect(screen.getByText("Available (1)")).toBeTruthy();
-    expect(screen.getByText("Not available (1)")).toBeTruthy();
+    expect(screen.getByText("Not available to you · 1")).toBeTruthy();
     expect(screen.getByText("delete_all")).toBeTruthy();
+    expect(screen.getByText("Blocked by a role rule")).toBeTruthy();
+    expect(screen.getByText(/1 of 2 tools/)).toBeTruthy();
   });
 
   it("does not separate the list when every tool is available", () => {
@@ -111,8 +180,7 @@ describe("RemoteMcpToolsSection tool list", () => {
     renderSection(remote);
 
     expect(screen.getByText("search")).toBeTruthy();
-    expect(screen.queryByText(/^Available/)).toBeNull();
-    expect(screen.queryByText(/^Not available/)).toBeNull();
+    expect(screen.queryByText(/^Not available to you/)).toBeNull();
   });
 
   it("offers sync to someone who can write once tools are stored", () => {
@@ -121,6 +189,8 @@ describe("RemoteMcpToolsSection tool list", () => {
     mocks.stored = { old_tool: { toolName: "old_tool" } };
     renderSection(remote);
 
+    // The notice is one line; the diff and Sync open from Review.
+    fireEvent.click(screen.getByRole("button", { name: /review/i }));
     expect(screen.getByRole("button", { name: /sync/i })).toBeTruthy();
   });
 
@@ -140,6 +210,86 @@ describe("RemoteMcpToolsSection tool list", () => {
     renderSection(remote);
 
     expect(screen.queryByRole("button", { name: /sync/i })).toBeNull();
+  });
+});
+
+describe("RemoteMcpToolsSection tool search", () => {
+  it("expands in place, filters, and collapses on Escape", () => {
+    mocks.needsAuth = false;
+    mocks.tools = {
+      search: { unavailable: false },
+      archive: { unavailable: false },
+    };
+    renderSection();
+
+    const field = screen.getByRole("combobox", {
+      name: "Search tools",
+      hidden: true,
+    });
+    expect(field.closest("[aria-hidden]")?.getAttribute("aria-hidden")).toBe(
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Search tools" }));
+    expect(field.closest("[aria-hidden]")?.getAttribute("aria-hidden")).toBe(
+      "false",
+    );
+    fireEvent.change(field, { target: { value: "archi" } });
+    expect(screen.getByText("1 of 2 tools")).toBeTruthy();
+    expect(screen.queryByText("search")).toBeNull();
+
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(screen.getByText("search")).toBeTruthy();
+    // Focus returns to the search button rather than dropping to the page.
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Search tools" }),
+    );
+  });
+
+  it("moves an active row with the arrow keys and picks it with Enter", () => {
+    mocks.needsAuth = false;
+    mocks.tools = {
+      archive: { unavailable: false },
+      search: { unavailable: false },
+    };
+    renderSection();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search tools" }));
+    const field = screen.getByRole("combobox", { name: "Search tools" });
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    const active = document.getElementById(
+      field.getAttribute("aria-activedescendant") ?? "",
+    );
+    expect(active?.textContent).toContain("search");
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(
+      screen.getByRole("option", { name: /search/, selected: true }),
+    ).toBeTruthy();
+    // Focus stays in the field while the arrows move.
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("collapses on blur only when the query is empty", () => {
+    mocks.needsAuth = false;
+    mocks.tools = { search: { unavailable: false } };
+    renderSection();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search tools" }));
+    const field = screen.getByRole("combobox", { name: "Search tools" });
+    fireEvent.change(field, { target: { value: "se" } });
+    fireEvent.blur(field);
+    expect(screen.queryByRole("button", { name: "Search tools" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close search" }));
+    expect(screen.getByRole("button", { name: "Search tools" })).toBeTruthy();
+  });
+
+  it("offers no search when the server lists no tools", () => {
+    mocks.needsAuth = false;
+    mocks.tools = {};
+    renderSection();
+
+    expect(screen.queryByRole("button", { name: "Search tools" })).toBeNull();
+    expect(screen.queryByPlaceholderText(/Search 0 tools/)).toBeNull();
   });
 });
 

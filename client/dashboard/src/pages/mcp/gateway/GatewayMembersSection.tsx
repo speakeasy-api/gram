@@ -1,3 +1,7 @@
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import { mcpServerTabHref } from "@/pages/mcp/x/MCPServerDetailsRouting";
+import { SETTINGS_GROUPS } from "@/components/detail/settings-groups";
+import { AUTHORIZATION_SERVERS_FIELD_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
 import { Spinner } from "@/components/ui/Spinner";
 import { Page } from "@/components/page-layout";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
@@ -25,7 +29,7 @@ import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
@@ -34,8 +38,6 @@ import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMem
 
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDown,
-  ArrowUp,
   Blocks,
   Boxes,
   Cable,
@@ -50,6 +52,11 @@ import {
 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
+import { gatewayTabHref } from "./GatewayDetailsRouting";
+import {
+  MEMBER_STATE_LABEL,
+  type MemberViewerState,
+} from "./useGatewayMemberStates";
 import { toast } from "sonner";
 import {
   type MemberClassification,
@@ -65,7 +72,6 @@ import {
   type AddBatchState,
   memberBackendKind,
   nextSortOrder,
-  planReorder,
 } from "./memberRows";
 import {
   useGatewayMemberRows,
@@ -125,7 +131,7 @@ const STATUS_BY_CLASSIFICATION: Record<
   proxied: {
     label: "Unknown",
     variant: "neutral",
-    why: "The gateway can't reach this member's upstream yet, so it reports no health. Drill-down and execution arrive with per-upstream credential routing.",
+    why: "Checked for you while the gateway is turned on.",
   },
   disabled: {
     label: "Excluded",
@@ -152,30 +158,104 @@ const STATUS_BY_CLASSIFICATION: Record<
 // A filled green dot for attested health, a hollow ring for "unobserved",
 // amber for excluded: quieter than boxed uppercase badges, and "Unknown"
 // stops reading as broken.
-const STATUS_DOT_CLASS: Record<"success" | "neutral" | "warning", string> = {
+const STATUS_DOT_CLASS: Record<
+  "success" | "neutral" | "warning" | "destructive",
+  string
+> = {
   success: "bg-emerald-500",
   neutral: "border-muted-foreground/60 border bg-transparent",
   warning: "bg-amber-500",
+  destructive: "bg-destructive",
 };
 
-function MemberStatusBadge({
+/** The viewer's own state for a servable member, as Inspect words it. */
+const VIEWER_STATUS: Record<
+  MemberViewerState["kind"],
+  { variant: keyof typeof STATUS_DOT_CLASS; why: string }
+> = {
+  checking: { variant: "neutral", why: "Checking this server for you." },
+  available: { variant: "success", why: "Its tools load for you." },
+  // Each person signs in when their own client connects, so this is the
+  // normal, working state, not a step anyone has to take here.
+  sign_in: {
+    variant: "success",
+    why: "Each person signs in with their own account when they connect.",
+  },
+  unavailable: { variant: "destructive", why: "" },
+};
+
+export function MemberStatusBadge({
   classification,
+  viewer,
+  name,
+  gatewaySignInHref,
+  credentialHref,
 }: {
   classification: MemberClassification;
+  /** What the viewer gets now; excluded members have none. */
+  viewer?: MemberViewerState;
+  name: string;
+  /** The gateway's sign-in settings, where an admin links the member's sign-in. */
+  gatewaySignInHref?: string;
+  /** The member's own sign-in settings, where an admin sets a shared credential. */
+  credentialHref?: string;
 }): JSX.Element {
-  const status = STATUS_BY_CLASSIFICATION[classification];
+  // A fix that lives in settings beats Try again, which changes nothing.
+  const fix =
+    viewer?.kind !== "unavailable"
+      ? undefined
+      : viewer.needsGatewaySignIn && gatewaySignInHref
+        ? { label: "Set up sign-in", href: gatewaySignInHref }
+        : viewer.needsCredential && credentialHref
+          ? { label: "Set credential", href: credentialHref }
+          : undefined;
+  const fixed = STATUS_BY_CLASSIFICATION[classification];
+  const status = viewer
+    ? {
+        // Each person signing in on connecting is the normal case, so it
+        // reads the same as any member that works.
+        label:
+          viewer.kind === "sign_in"
+            ? MEMBER_STATE_LABEL.available
+            : MEMBER_STATE_LABEL[viewer.kind],
+        variant: VIEWER_STATUS[viewer.kind].variant,
+        why:
+          viewer.kind === "unavailable"
+            ? viewer.why
+            : VIEWER_STATUS[viewer.kind].why,
+      }
+    : fixed;
   return (
-    <SimpleTooltip tooltip={status.why}>
-      <span className="inline-flex cursor-default items-center gap-2">
-        <span
-          className={`size-2 shrink-0 rounded-full ${STATUS_DOT_CLASS[status.variant]}`}
-          aria-hidden
-        />
-        <Text as="span" muted small>
-          {status.label}
-        </Text>
-      </span>
-    </SimpleTooltip>
+    <span className="inline-flex items-center gap-x-3 whitespace-nowrap">
+      <SimpleTooltip tooltip={status.why}>
+        <span className="inline-flex cursor-default items-center gap-2">
+          <span
+            className={`size-2 shrink-0 rounded-full ${STATUS_DOT_CLASS[status.variant]}`}
+            aria-hidden
+          />
+          <Text as="span" muted small>
+            {status.label}
+          </Text>
+        </span>
+      </SimpleTooltip>
+      {fix ? (
+        <Link
+          to={fix.href}
+          className="text-foreground text-sm underline underline-offset-2"
+        >
+          {fix.label}
+        </Link>
+      ) : viewer?.kind === "unavailable" && viewer.retry ? (
+        <button
+          type="button"
+          onClick={viewer.retry}
+          aria-label={`Check ${name} again`}
+          className="text-foreground text-sm underline underline-offset-2"
+        >
+          Try again
+        </button>
+      ) : null}
+    </span>
   );
 }
 
@@ -213,11 +293,23 @@ function MemberNameCell({ row }: { row: MemberRow }): JSX.Element {
 }
 
 /** Member management (list, reorder, add, remove) rendered on the Overview tab. */
+/** Anchors the Servers list on a gateway's Overview tab. */
+export const GATEWAY_SERVERS_SECTION_ID = "gateway-servers";
+/** Landing on the Overview with this hash opens the Add servers sheet. */
+export const GATEWAY_ADD_SERVERS_HASH = "add-servers";
+
 export function GatewayMembersSection({
   metaMcpServer,
+  memberStates,
 }: {
   metaMcpServer: MetaMcpServer;
+  /** What each member gives the viewer now, with Connect where it helps. */
+  memberStates?: {
+    stateFor: (row: MemberRow) => MemberViewerState | undefined;
+    connect: () => void;
+  };
 }): JSX.Element {
+  const routes = useRoutes();
   const client = useSdkClient();
   const queryClient = useQueryClient();
   const {
@@ -232,6 +324,11 @@ export function GatewayMembersSection({
   const toolsets = useToolsets();
 
   const [addOpen, setAddOpen] = useState(false);
+  // The header's readiness checklist links an empty gateway here.
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === `#${GATEWAY_ADD_SERVERS_HASH}`) setAddOpen(true);
+  }, [location.hash, location.key]);
   const batchState = useMemo<AddBatchState>(
     () => ({ wrappers: new Map(), orders: new Map(), completed: new Set() }),
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- reset retry caches when navigating to another gateway
@@ -282,29 +379,11 @@ export function GatewayMembersSection({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : failure);
     } finally {
-      // Always refetch: a reorder writes rows one at a time, so a failure
-      // partway through still changed the server and the table must not keep
-      // rendering the pre-move order.
+      // Always refetch, so the table shows what the server holds.
       await invalidateMembers();
       setMutating(false);
     }
   };
-
-  const handleMove = (index: number, direction: -1 | 1) =>
-    runMutation(async () => {
-      const plan = planReorder(
-        rows.map((row) => row.member),
-        index,
-        index + direction,
-      );
-      // Sequential: each call is a full sortOrder write and the plan is
-      // consistent only as a whole.
-      for (const change of plan) {
-        await client.metaMcp.updateMember({
-          updateMetaMcpMemberForm: change,
-        });
-      }
-    }, "Failed to reorder servers");
 
   const handleRemove = (row: MemberRow) =>
     runMutation(async () => {
@@ -408,60 +487,7 @@ export function GatewayMembersSection({
     }
   };
 
-  const indexByMemberId = new Map(
-    rows.map((row, index) => [row.member.id, index]),
-  );
-
-  // A single member has nothing to reorder against, so the column would be
-  // two permanently disabled arrows taking up a fifth of the row.
-  const reorderColumn: Column<MemberRow>[] =
-    rows.length < 2
-      ? []
-      : [
-          {
-            key: "order",
-            header: "",
-            width: "88px",
-            render: (row) => {
-              const index = indexByMemberId.get(row.member.id) ?? 0;
-              return (
-                <RequireScope
-                  scope="mcp:write"
-                  resourceId={metaMcpServer.id}
-                  level="component"
-                >
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="tertiary"
-                      size="sm"
-                      disabled={mutating || index === 0}
-                      onClick={() => void handleMove(index, -1)}
-                      aria-label="Move up"
-                    >
-                      <Button.Icon>
-                        <ArrowUp className="size-4" />
-                      </Button.Icon>
-                    </Button>
-                    <Button
-                      variant="tertiary"
-                      size="sm"
-                      disabled={mutating || index === rows.length - 1}
-                      onClick={() => void handleMove(index, 1)}
-                      aria-label="Move down"
-                    >
-                      <Button.Icon>
-                        <ArrowDown className="size-4" />
-                      </Button.Icon>
-                    </Button>
-                  </div>
-                </RequireScope>
-              );
-            },
-          },
-        ];
-
   const columns: Column<MemberRow>[] = [
-    ...reorderColumn,
     {
       key: "server",
       header: "Server",
@@ -471,15 +497,27 @@ export function GatewayMembersSection({
       key: "backend",
       header: "Backend",
       render: (row) => <BackendKindTag row={row} />,
-      width: "140px",
+      width: "120px",
     },
     {
       key: "status",
       header: "Status",
       render: (row) => (
-        <MemberStatusBadge classification={row.classification} />
+        <MemberStatusBadge
+          classification={row.classification}
+          viewer={memberStates?.stateFor(row)}
+          name={row.server?.name ?? row.member.mcpServerSlug ?? "this server"}
+          gatewaySignInHref={`${gatewayTabHref(routes, metaMcpServer.id, "settings")}#${AUTHORIZATION_SERVERS_FIELD_ID}`}
+          credentialHref={
+            row.server
+              ? // By id, like the header: two members can share a slug.
+                `${mcpServerTabHref(routes, row.server.id, "settings")}#${SETTINGS_GROUPS.identity.id}`
+              : undefined
+          }
+        />
       ),
-      width: "140px",
+      // Room for a state and its fix on one line, e.g. "Unavailable Set credential".
+      width: memberStates ? "300px" : "160px",
     },
     {
       key: "actions",
@@ -509,83 +547,93 @@ export function GatewayMembersSection({
 
   return (
     <>
-      <Page.Section>
-        {/* Section heading under the Overview page title: no eyebrow, smaller
+      <div id={GATEWAY_SERVERS_SECTION_ID}>
+        <Page.Section>
+          {/* Section heading under the Overview page title: no eyebrow, smaller
             serif. */}
-        <Page.Section.Title area="" className="text-display-xs">
-          Servers
-        </Page.Section.Title>
-        <Page.Section.Description>
-          The MCP servers this gateway fronts, in the order agents see them in
-          list_servers. Status reflects what the backend can attest; live
-          upstream health lands with the proxied runtime.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          <RequireScope
-            scope="mcp:write"
-            resourceId={metaMcpServer.id}
-            level="component"
-          >
-            <Button size="sm" onClick={() => setAddOpen(true)}>
-              <Button.LeftIcon>
-                <Plus />
-              </Button.LeftIcon>
-              <Button.Text>Add servers</Button.Text>
-            </Button>
-          </RequireScope>
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          {isLoading ? (
-            <SkeletonTable />
-          ) : isError ? (
-            <div role="alert" className="space-y-2">
-              <Text>Couldn't load gateway servers.</Text>
-              <Button variant="secondary" onClick={() => void refetch()}>
-                <Button.Text>Retry loading</Button.Text>
+          <Page.Section.Title area="" className="text-display-xs">
+            Servers
+          </Page.Section.Title>
+          <Page.Section.Description>
+            The MCP servers this gateway serves to agents.
+          </Page.Section.Description>
+          <Page.Section.CTA>
+            <RequireScope
+              scope="mcp:write"
+              resourceId={metaMcpServer.id}
+              level="component"
+            >
+              <Button size="sm" onClick={() => setAddOpen(true)}>
+                <Button.LeftIcon>
+                  <Plus />
+                </Button.LeftIcon>
+                <Button.Text>Add servers</Button.Text>
               </Button>
-            </div>
-          ) : (
-            <Table columns={columns}>
-              <Table.Header columns={columns} />
-              {rows.length === 0 ? (
-                <Table.NoResultsMessage>
-                  {/* No padding of its own: Table.NoResultsMessage already
+            </RequireScope>
+          </Page.Section.CTA>
+          <Page.Section.Body>
+            {isLoading ? (
+              <SkeletonTable />
+            ) : isError ? (
+              <div role="alert">
+                <InlineEmptyState
+                  icon="triangle-alert"
+                  heading="Couldn't load servers"
+                  description="Check your connection, then try again."
+                  action={
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void refetch()}
+                    >
+                      <Button.Text>Retry</Button.Text>
+                    </Button>
+                  }
+                />
+              </div>
+            ) : (
+              <Table columns={columns}>
+                <Table.Header columns={columns} />
+                {rows.length === 0 ? (
+                  <Table.NoResultsMessage>
+                    {/* No padding of its own: Table.NoResultsMessage already
                       insets the cell, and a second layer here made this empty
                       state sit lower than every other one. */}
-                  <div className="flex flex-col items-center gap-3">
-                    <Text muted>
-                      No servers yet. A gateway with no servers exposes its four
-                      tools but has nothing to route to.
-                    </Text>
-                    <RequireScope
-                      scope="mcp:write"
-                      resourceId={metaMcpServer.id}
-                      level="component"
-                    >
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setAddOpen(true)}
+                    <div className="flex flex-col items-center gap-3">
+                      <Text muted>
+                        Add servers so agents can use their tools through this
+                        gateway.
+                      </Text>
+                      <RequireScope
+                        scope="mcp:write"
+                        resourceId={metaMcpServer.id}
+                        level="component"
                       >
-                        <Button.LeftIcon>
-                          <Plus className="size-4" />
-                        </Button.LeftIcon>
-                        <Button.Text>Add servers</Button.Text>
-                      </Button>
-                    </RequireScope>
-                  </div>
-                </Table.NoResultsMessage>
-              ) : (
-                <Table.Body
-                  columns={columns}
-                  data={rows}
-                  rowKey={(row) => row.member.id}
-                />
-              )}
-            </Table>
-          )}
-        </Page.Section.Body>
-      </Page.Section>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setAddOpen(true)}
+                        >
+                          <Button.LeftIcon>
+                            <Plus className="size-4" />
+                          </Button.LeftIcon>
+                          <Button.Text>Add servers</Button.Text>
+                        </Button>
+                      </RequireScope>
+                    </div>
+                  </Table.NoResultsMessage>
+                ) : (
+                  <Table.Body
+                    columns={columns}
+                    data={rows}
+                    rowKey={(row) => row.member.id}
+                  />
+                )}
+              </Table>
+            )}
+          </Page.Section.Body>
+        </Page.Section>
+      </div>
 
       <AddServersSheet
         key={metaMcpServer.id}

@@ -4,6 +4,13 @@ import { createMCPClientWithVersionFallback } from "@/lib/mcp-client";
 
 const INSPECT_META_KEY = "com.speakeasy/inspect";
 const UNAVAILABLE_META_KEY = "com.speakeasy/unavailable";
+const UNAVAILABLE_REASON_META_KEY = "com.speakeasy/unavailable_reason";
+
+/** Why an inspected listing marked a tool unavailable to this viewer. */
+const unavailableReasonSchema = z.enum(["blocked", "read_only", "not_granted"]);
+export type ProxiedMcpToolUnavailableReason = z.infer<
+  typeof unavailableReasonSchema
+>;
 
 /**
  * Most tools an inspected listing may return, counting repeats. Real servers list
@@ -41,7 +48,12 @@ const proxiedMcpToolSchema = z.object({
   inputSchema: z.unknown().optional(),
   annotations: proxiedMcpToolAnnotationsSchema.optional(),
   _meta: z
-    .object({ [UNAVAILABLE_META_KEY]: z.boolean().optional().catch(undefined) })
+    .object({
+      [UNAVAILABLE_META_KEY]: z.boolean().optional().catch(undefined),
+      [UNAVAILABLE_REASON_META_KEY]: unavailableReasonSchema
+        .optional()
+        .catch(undefined),
+    })
     .optional()
     .catch(undefined),
 });
@@ -63,6 +75,8 @@ export interface ProxiedMcpTool {
   annotations?: ProxiedMcpToolAnnotations;
   /** The server offers this tool, but this viewer's access doesn't include it. */
   unavailable?: boolean;
+  /** Why it is unavailable, when the server says. */
+  unavailableReason?: ProxiedMcpToolUnavailableReason;
 }
 
 /** A record of tools keyed by tool name, mirroring the `tools/list` response. */
@@ -195,6 +209,7 @@ export function useProxiedMcpTools(
               inputSchema: tool.inputSchema,
               annotations: tool.annotations,
               unavailable: tool._meta?.[UNAVAILABLE_META_KEY] === true,
+              unavailableReason: tool._meta?.[UNAVAILABLE_REASON_META_KEY],
             };
           }
 

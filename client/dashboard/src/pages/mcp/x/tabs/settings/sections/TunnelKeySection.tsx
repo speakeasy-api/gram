@@ -111,7 +111,7 @@ export function TunnelKeySection({
   return (
     <SettingsSection id={MCP_TUNNEL_KEY_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Tunnel Key</SettingsSection.Title>
+        <SettingsSection.Title>Tunnel key</SettingsSection.Title>
         <SettingsSection.Description>
           Tunnel agents authenticate to this source with its key. Rotation
           replaces the key; running agents must be restarted with the

@@ -261,7 +261,7 @@ describe("MCPSkillsTab", () => {
     state.grants = [readSkills, writeServer];
     state.links.mockReturnValue(infinite([{ result: { links: [] } }]));
     renderTab();
-    expect(screen.getByText("No skills served yet")).toBeDefined();
+    expect(screen.getByText("Give connected agents skills")).toBeDefined();
     expect(screen.getByText("Add skill")).toBeDefined();
   });
 

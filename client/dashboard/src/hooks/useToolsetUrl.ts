@@ -326,3 +326,50 @@ export function customDomainMcpEndpointUrl(
 ): string {
   return `https://${domain}/mcp/${slug}`;
 }
+
+/** One address a server answers on, and what kind it is. */
+export interface McpServerAddress {
+  url: string;
+  label: string;
+}
+
+/**
+ * Every public address a server's endpoints give it: its custom domains
+ * first, then the Speakeasy one. A custom domain still resolving is left out
+ * rather than shown on the wrong host.
+ */
+export function useMcpEndpointAddresses(
+  endpoints: McpEndpoint[],
+): McpServerAddress[] {
+  const hasCustom = endpoints.some((endpoint) => endpoint.customDomainId);
+  const { domains } = useCustomDomains(hasCustom);
+  return useMemo(() => {
+    const custom: McpServerAddress[] = [];
+    const platform: McpServerAddress[] = [];
+    for (const endpoint of endpoints) {
+      if (!endpoint.slug) continue;
+      if (endpoint.customDomainId) {
+        const match = domains.find((d) => d?.id === endpoint.customDomainId);
+        if (match) {
+          // A domain-root endpoint also answers at the domain itself.
+          if (endpoint.isDomainRoot) {
+            custom.push({
+              url: `https://${match.domain}/`,
+              label: "Custom domain",
+            });
+          }
+          custom.push({
+            url: customDomainMcpEndpointUrl(match.domain, endpoint.slug),
+            label: "Custom domain",
+          });
+        }
+      } else {
+        platform.push({
+          url: `${getServerURL()}/mcp/${endpoint.slug}`,
+          label: "Speakeasy URL",
+        });
+      }
+    }
+    return [...custom, ...platform];
+  }, [endpoints, domains]);
+}

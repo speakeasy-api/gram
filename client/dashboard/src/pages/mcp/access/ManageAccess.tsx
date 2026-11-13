@@ -144,6 +144,7 @@ export function ManageAccess({
   toolSource,
   isLoading,
   rolePlugins,
+  description,
 }: {
   resourceId: string;
   resourceName?: string;
@@ -155,6 +156,8 @@ export function ManageAccess({
   toolSource?: ToolSource;
   isLoading: boolean;
   rolePlugins?: ResourceAudienceRolePlugin[];
+  /** Says who this panel controls and where the access applies. */
+  description?: React.ReactNode;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
@@ -505,6 +508,7 @@ export function ManageAccess({
       )}
       <Card.Dashboard
         title="Manage access to this server"
+        description={description}
         // Rows run edge to edge under the header.
         bodyClassName="p-0"
         action={

@@ -33,7 +33,7 @@ export function sourceDeleteSpec(
   switch (target.kind) {
     case "remote":
       return {
-        title: "Delete Remote MCP Server",
+        title: "Delete remote MCP server",
         entityDescription: "the remote MCP server",
         confirmLabel: "the server URL",
         confirmValue: target.source.url,
@@ -42,7 +42,7 @@ export function sourceDeleteSpec(
       };
     case "tunneled":
       return {
-        title: "Delete Tunneled MCP Server",
+        title: "Delete tunneled MCP server",
         entityDescription: "the tunneled MCP source",
         confirmLabel: "the source name",
         confirmValue: formatTunneledMcpDisplay(target.source),
@@ -51,7 +51,7 @@ export function sourceDeleteSpec(
       };
     case "unproxied":
       return {
-        title: "Delete Unproxied MCP Server",
+        title: "Delete unproxied MCP server",
         entityDescription: "the unproxied MCP server",
         confirmLabel: "the server URL",
         confirmValue: target.source.url,

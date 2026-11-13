@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import {
   Popover,
@@ -50,6 +51,11 @@ interface PlaygroundChatProps {
   additionalActions?: React.ReactNode;
   /** Optional warning banner rendered above the chat (e.g. missing auth). */
   banner?: React.ReactNode;
+  /**
+   * Drop the history popover, for a chat embedded in a narrow panel. Any
+   * additional actions stay; the bar goes only when there are none.
+   */
+  compact?: boolean;
 }
 
 /**
@@ -68,6 +74,7 @@ export function PlaygroundChat({
   toolset,
   additionalActions,
   banner,
+  compact = false,
 }: PlaygroundChatProps): JSX.Element {
   const session = useSession();
   const project = useProject();
@@ -179,26 +186,32 @@ export function PlaygroundChat({
           showModelPicker: false,
         },
         welcome: {
-          title: "Test Your MCP Server",
+          title: "Test your MCP server",
           subtitle:
             "This chat has access to the selected MCP server. Use it to test your tools.",
-          suggestions: [
-            {
-              title: "Explore tools",
-              label: "See what's available",
-              prompt: "What tools does this server have?",
-            },
-          ],
+          // The compact panel sits beside the tool list, which already shows
+          // what is available, so it skips the suggestion pill.
+          suggestions: compact
+            ? []
+            : [
+                {
+                  title: "Explore tools",
+                  label: "See what's available",
+                  prompt: "What tools does this server have?",
+                },
+              ],
         },
         composer: {
-          placeholder: "Send a message...",
+          placeholder: "Send a message…",
           toolMentions: true,
           requireMcpTools: true,
         },
         theme: {
           colorScheme: resolvedTheme === "dark" ? "dark" : "light",
           density: "normal",
-          radius: "soft",
+          // Square corners when embedded in a detail page, matching the
+          // dashboard around it; the full Playground keeps its own look.
+          radius: compact ? "sharp" : "soft",
         },
         components: {
           ToolFallback: PlaygroundMcpToolFallback,
@@ -212,22 +225,31 @@ export function PlaygroundChat({
         theme={resolvedTheme === "dark" ? "dark" : "light"}
         toolset={toolset}
       >
-        <div className="flex h-full min-h-0 flex-col">
-          <div className="border-b-border flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
-            <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-              <PopoverTrigger asChild>
-                <Button size="sm" variant="tertiary">
-                  <HistoryIcon className="mr-2 size-4" />
-                  Chat History
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="start"
-                className="max-h-96 min-h-fit w-72 overflow-y-scroll p-0"
-              >
-                <ChatHistory className="h-full max-h-96 min-h-fit overflow-y-auto" />
-              </PopoverContent>
-            </Popover>
+        <div className="flex h-full min-h-0 flex-1 flex-col">
+          <div
+            className={cn(
+              "border-b-border flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3",
+              compact && !additionalActions && "hidden",
+            )}
+          >
+            {compact ? (
+              <span />
+            ) : (
+              <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+                <PopoverTrigger asChild>
+                  <Button size="sm" variant="tertiary">
+                    <HistoryIcon className="mr-2 size-4" />
+                    Chat History
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className="max-h-96 min-h-fit w-72 overflow-y-scroll p-0"
+                >
+                  <ChatHistory className="h-full max-h-96 min-h-fit overflow-y-auto" />
+                </PopoverContent>
+              </Popover>
+            )}
             <div className="flex items-center gap-2">{additionalActions}</div>
           </div>
           {banner}

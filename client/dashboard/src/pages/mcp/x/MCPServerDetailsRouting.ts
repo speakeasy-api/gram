@@ -1,65 +1,56 @@
 import type { useRoutes } from "@/routes";
-
-const VALID_TABS = [
-  "setup",
-  "overview",
-  "tools",
-  "resources",
-  "prompts",
-  "inspect",
-  "skills",
-  "team-access",
-  "guardrails",
-  "sessions",
-  "settings",
-] as const;
-// Hosted servers manage their toolset on these tabs; every other server inspects its live tools.
-const HOSTED_ONLY_TABS: readonly TabValue[] = ["tools", "resources", "prompts"];
-
-// Breadcrumb `skipSegments` source. Derived from VALID_TABS rather than
-// hand-maintained alongside it, so adding a tab can't leave a stray crumb.
-export const MCP_SERVER_TAB_URLS: string[] = [...VALID_TABS];
-
-export type TabValue = (typeof VALID_TABS)[number];
-
-function isValidTab(value: string): value is TabValue {
-  return (VALID_TABS as readonly string[]).includes(value);
-}
-
-function decodePathSegment(segment: string): string {
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
-}
+import { createDetailRouting, decodePathSegment } from "../detailRouting";
 
 // Project pages sit under /:orgSlug/projects/:projectSlug, so `mcp` is segment 3.
 export const MCP_SECTION_INDEX = 3;
+
+const routing = createDetailRouting({
+  tabs: [
+    "setup",
+    "overview",
+    "tools",
+    "resources",
+    "prompts",
+    "inspect",
+    "skills",
+    "team-access",
+    "guardrails",
+    "sessions",
+    "settings",
+  ],
+  idSegmentIndex: (segments, mcpServerSlug) =>
+    segments[MCP_SECTION_INDEX] === "mcp" &&
+    segments[MCP_SECTION_INDEX + 1] === mcpServerSlug
+      ? MCP_SECTION_INDEX + 1
+      : -1,
+  tabRoutes: (routes) => ({
+    setup: routes.mcp.details.setup,
+    overview: routes.mcp.details.overview,
+    tools: routes.mcp.details.tools,
+    resources: routes.mcp.details.resources,
+    prompts: routes.mcp.details.prompts,
+    inspect: routes.mcp.details.inspect,
+    skills: routes.mcp.details.skills,
+    "team-access": routes.mcp.details.teamAccess,
+    guardrails: routes.mcp.details.guardrails,
+    sessions: routes.mcp.details.sessions,
+    settings: routes.mcp.details.settings,
+  }),
+});
+
+export const MCP_SERVER_TAB_URLS: string[] = routing.tabUrls;
+
+export type TabValue = Parameters<typeof routing.tabHref>[2];
+
+// Hosted servers manage their toolset on these tabs; every other server inspects its live tools.
+const HOSTED_ONLY_TABS: readonly TabValue[] = ["tools", "resources", "prompts"];
 
 function pathSegments(pathname: string): string[] {
   return pathname.split("/").filter(Boolean);
 }
 
 /** The segment after `/mcp/<slug>`, whether or not it names a server tab. */
-export function tabSegmentFromPath(
-  pathname: string,
-  mcpServerSlug: string,
-): string | undefined {
-  if (!mcpServerSlug) {
-    return undefined;
-  }
-
-  const segments = pathSegments(pathname).map(decodePathSegment);
-  if (
-    segments[MCP_SECTION_INDEX] !== "mcp" ||
-    segments[MCP_SECTION_INDEX + 1] !== mcpServerSlug
-  ) {
-    return undefined;
-  }
-
-  return segments[MCP_SECTION_INDEX + 2];
-}
+export const tabSegmentFromPath = routing.tabSegmentFromPath;
 
 /** The tab segment of `/toolsets/<toolsetSlug>/<tab>`. */
 export function toolsetRouteTabSegment(pathname: string): string | undefined {
@@ -82,44 +73,9 @@ export function withoutMcpXSegment(pathname: string): string | undefined {
   return `/${segments.join("/")}`;
 }
 
-export function activeTabFromPath(
-  pathname: string,
-  mcpServerSlug: string,
-): TabValue | undefined {
-  const tabSegment = tabSegmentFromPath(pathname, mcpServerSlug);
-  return tabSegment && isValidTab(tabSegment) ? tabSegment : undefined;
-}
+export const activeTabFromPath = routing.activeTabFromPath;
 
-export function mcpServerTabHref(
-  routes: ReturnType<typeof useRoutes>,
-  mcpServerSlug: string,
-  tab: TabValue,
-): string {
-  switch (tab) {
-    case "setup":
-      return routes.mcp.details.setup.href(mcpServerSlug);
-    case "overview":
-      return routes.mcp.details.overview.href(mcpServerSlug);
-    case "tools":
-      return routes.mcp.details.tools.href(mcpServerSlug);
-    case "resources":
-      return routes.mcp.details.resources.href(mcpServerSlug);
-    case "prompts":
-      return routes.mcp.details.prompts.href(mcpServerSlug);
-    case "inspect":
-      return routes.mcp.details.inspect.href(mcpServerSlug);
-    case "skills":
-      return routes.mcp.details.skills.href(mcpServerSlug);
-    case "team-access":
-      return routes.mcp.details.teamAccess.href(mcpServerSlug);
-    case "guardrails":
-      return routes.mcp.details.guardrails.href(mcpServerSlug);
-    case "sessions":
-      return routes.mcp.details.sessions.href(mcpServerSlug);
-    case "settings":
-      return routes.mcp.details.settings.href(mcpServerSlug);
-  }
-}
+export const mcpServerTabHref = routing.tabHref;
 
 // A hosted toolset's canonical wrapper shares the toolset's id; toolset writes sync onto it.
 export function isCanonicalHostedWrapper(server: {
@@ -145,7 +101,7 @@ export function standsInForToolset(server: {
 
 /** The tab to show instead of `tab` for this kind of server, or `tab` itself. */
 export function tabForServer(tab: TabValue, hosted: boolean): TabValue {
-  if (hosted) return tab === "inspect" ? "tools" : tab;
+  if (hosted) return tab;
   if (tab === "tools") return "inspect";
   return HOSTED_ONLY_TABS.includes(tab) ? "overview" : tab;
 }

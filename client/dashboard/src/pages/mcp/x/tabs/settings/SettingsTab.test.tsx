@@ -78,6 +78,21 @@ vi.mock("./sections/ToolFilteringSection", () => ({
   ToolFilteringSection: () => <h2>Tool Filtering</h2>,
 }));
 
+vi.mock("./sections/VisibilitySection", () => ({
+  MCP_VISIBILITY_SECTION_ID: "visibility",
+  AvailabilitySection: () => <h2>Availability</h2>,
+  VisibilitySection: () => <h2>Visibility</h2>,
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => true }),
+}));
+vi.mock("@/hooks/usePluginWriteAccess", () => ({
+  usePluginWriteAccess: () => true,
+}));
+vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
+  PluginStatusBanner: () => <h2>Plugins</h2>,
+}));
+
 vi.mock("./sections/NetworkAccessSection", () => ({
   NetworkAccessSection: () => <h2>Network Access</h2>,
 }));
@@ -90,7 +105,6 @@ vi.mock("./sections/CallerIdentitySection", () => ({
 }));
 vi.mock("./sections/PublicAccessSection", () => ({
   MCP_PUBLIC_ACCESS_SECTION_ID: "public-access",
-  PublicAccessSection: () => <h2>Public Access</h2>,
 }));
 vi.mock("./sections/TunnelKeySection", () => ({
   MCP_TUNNEL_KEY_SECTION_ID: "tunnel-key",
@@ -136,7 +150,31 @@ function server(overrides: Partial<McpServer>): McpServer {
   } as McpServer;
 }
 
+// The section headings, in page order. Area headings are left out.
 function renderSettings(mcpServer: McpServer): string[] {
+  renderTab(mcpServer);
+  return screen
+    .getAllByRole("heading")
+    .filter((heading) => !heading.id.endsWith("-title"))
+    .map((heading) => heading.textContent ?? "");
+}
+
+// Each area with the section headings under it.
+function renderAreas(mcpServer: McpServer): Record<string, string[]> {
+  renderTab(mcpServer);
+  return Object.fromEntries(
+    screen.getAllByRole("region").map((region) => [
+      region.getAttribute("aria-label") ??
+        document.getElementById(region.getAttribute("aria-labelledby") ?? "")
+          ?.textContent,
+      Array.from(region.querySelectorAll("h2"))
+        .filter((heading) => !heading.id.endsWith("-title"))
+        .map((heading) => heading.textContent ?? ""),
+    ]),
+  );
+}
+
+function renderTab(mcpServer: McpServer): void {
   render(
     <MemoryRouter>
       <SettingsTab
@@ -146,9 +184,6 @@ function renderSettings(mcpServer: McpServer): string[] {
       />
     </MemoryRouter>,
   );
-  return screen
-    .getAllByRole("heading")
-    .map((heading) => heading.textContent ?? "");
 }
 
 afterEach(() => {
@@ -157,51 +192,84 @@ afterEach(() => {
 });
 
 describe("SettingsTab", () => {
-  it("orders Remote MCP settings around display, identity, and sessions", () => {
+  it("groups Remote MCP settings into areas", () => {
     expect(
-      renderSettings(
+      renderAreas(
         server({
           remoteMcpServerId: "remote-source-1",
           userSessionIssuerId: "issuer-1",
         }),
       ),
-    ).toEqual([
-      "General",
-      // Upstream headers are the Identity panel's Custom Headers disclosure
+    ).toEqual({
+      // On or off is about the server itself, so it leads General and the
+      // server has no Access area.
+      General: ["Availability", "General"],
+      Plugins: ["Plugins"],
+      // Upstream headers are the Identity panel's Custom Headers disclosure,
       // not a section of their own.
-      "Identity",
-      "Identity chaining",
-      "Server URL",
-      "Network Access",
-      "Sessions",
-      "Tool Filtering",
-      "Danger Zone",
-    ]);
+      "Sign-in and identity": ["Identity", "Identity chaining"],
+      Connection: ["Server URL", "Network Access", "Sessions"],
+      Tools: ["Tool Filtering"],
+      "Danger zone": ["Danger Zone"],
+    });
   });
 
-  it("preserves tunneled MCP settings structure", () => {
+  it("groups tunneled MCP settings into areas", () => {
     expect(
-      renderSettings(server({ tunneledMcpServerId: "tunneled-source-1" })),
+      renderAreas(server({ tunneledMcpServerId: "tunneled-source-1" })),
+    ).toEqual({
+      // Every server leads with on or off; who may connect is Access.
+      General: ["Availability", "General"],
+      Access: ["Visibility", "Public Rate Limits"],
+      Plugins: ["Plugins"],
+      "Sign-in and identity": [
+        "Authentication",
+        "Resource Identifier",
+        "Caller Identity",
+      ],
+      Connection: [
+        "Server URL",
+        "Network Access",
+        "Tunnel Key",
+        "Tunnel agent setup",
+      ],
+      Tools: ["Tool Filtering"],
+      "Danger zone": ["Danger Zone"],
+    });
+  });
+
+  it("groups unproxied MCP settings into areas", () => {
+    expect(
+      renderAreas(server({ unproxiedMcpServerId: "unproxied-source-1" })),
+    ).toEqual({
+      General: ["Availability", "General"],
+      Plugins: ["Plugins"],
+      "Sign-in and identity": ["Authentication"],
+      "Danger zone": ["Danger Zone"],
+    });
+  });
+
+  it("lands old Access links on Availability when the area is gone", () => {
+    renderTab(server({ remoteMcpServerId: "remote-source-1" }));
+    expect(document.getElementById("settings-access")?.textContent).toContain(
+      "Availability",
+    );
+  });
+
+  it("indexes every area it shows, by its name while no section title registers", () => {
+    renderTab(server({ unproxiedMcpServerId: "unproxied-source-1" }));
+    const index = screen.getByRole("navigation", { name: "Settings sections" });
+    expect(
+      Array.from(index.querySelectorAll("a")).map((link) => [
+        link.textContent,
+        link.getAttribute("href"),
+      ]),
     ).toEqual([
-      "General",
-      "Server URL",
-      "Network Access",
-      "Authentication",
-      "Resource Identifier",
-      "Caller Identity",
-      "Public Access",
-      "Public Rate Limits",
-      "Tunnel Key",
-      "Tunnel agent setup",
-      "Tool Filtering",
-      "Danger Zone",
+      ["General", "#settings-general"],
+      ["Plugins", "#publishing"],
+      ["Sign-in and identity", "#settings-sign-in"],
+      ["Danger zone", "#settings-danger-zone"],
     ]);
-  });
-
-  it("preserves unproxied MCP settings structure", () => {
-    expect(
-      renderSettings(server({ unproxiedMcpServerId: "unproxied-source-1" })),
-    ).toEqual(["General", "Authentication", "Danger Zone"]);
   });
 });
 
@@ -230,7 +298,9 @@ describe("SettingsTab upstream identity gate", () => {
   it("shows only the credentials as Identity on a remote server when enforced", () => {
     setEnforcement("enforced");
     expect(renderSettings(remoteServer())).toEqual([
+      "Availability",
       "General",
+      "Plugins",
       "Identity",
       "Identity chaining",
       "Server URL",
@@ -278,10 +348,12 @@ describe("SettingsTab upstream identity gate", () => {
     const headings = renderSettings(
       server({ tunneledMcpServerId: "tunneled-source-1" }),
     );
-    expect(headings.slice(0, 5)).toEqual([
+    expect(headings.slice(0, 7)).toEqual([
+      "Availability",
       "General",
-      "Server URL",
-      "Network Access",
+      "Visibility",
+      "Public Rate Limits",
+      "Plugins",
       "Authentication",
       "Identity",
     ]);
@@ -304,7 +376,13 @@ describe("SettingsTab upstream identity gate", () => {
       setEnforcement(state);
       expect(
         renderSettings(server({ unproxiedMcpServerId: "unproxied-source-1" })),
-      ).toEqual(["General", "Authentication", "Danger Zone"]);
+      ).toEqual([
+        "Availability",
+        "General",
+        "Plugins",
+        "Authentication",
+        "Danger Zone",
+      ]);
       cleanup();
       expect(
         renderSettings(

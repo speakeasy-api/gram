@@ -55,6 +55,7 @@ import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 import { IssuerDuplicateWarning } from "./IssuerDuplicateWarning";
 import { useIssuerDuplicatePreflight } from "./useIssuerDuplicatePreflight";
+import { CONFIG_WRITE_META } from "@/lib/config-write";
 
 export function ModifyRemoteIdentityProviderSheet({
   open,
@@ -154,6 +155,7 @@ function ModifyRemoteIdentityProviderSheetBody({
   // project:write, so the button hides without it.
   const { hasAnyScope } = useRBAC();
   const migrate = useMutation({
+    meta: CONFIG_WRITE_META,
     mutationFn: async (clientId: string) => {
       await client.remoteSessionClients.update({
         updateRemoteSessionClientForm: {
@@ -294,6 +296,7 @@ function ModifyRemoteIdentityProviderSheetBody({
   };
 
   const modifyMutation = useMutation({
+    meta: CONFIG_WRITE_META,
     mutationFn: async () => {
       if (!primaryClient) {
         throw new Error("No primary remote session client to update.");

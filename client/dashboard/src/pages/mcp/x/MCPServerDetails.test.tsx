@@ -26,6 +26,10 @@ const mocks = vi.hoisted(() => ({
   hostedToolset: undefined as unknown,
 }));
 
+// The detail frame's chrome loads its own data; these tests cover routing.
+vi.mock("@/components/mcp/useMcpServerDetailChrome", () => ({
+  useMcpServerDetailChrome: () => null,
+}));
 vi.mock("@/hooks/useProviderSetupRollout", () => ({
   useProviderSetupRollout: () => mocks.providerSetup,
 }));
@@ -336,15 +340,17 @@ describe("Team access remote tool source states", () => {
     expect(retry).toHaveBeenCalledOnce();
   });
 
-  it("offers the shared first-party connect action when needed", async () => {
-    const connect = vi.fn<() => void>();
+  it("keeps the connect prompt out of the page", () => {
+    // Connecting lives on Inspect and in the tool picker, not above access.
     mocks.openNarrowing = false;
-    mocks.toolSource = { status: "needs-connect", connect };
+    mocks.toolSource = {
+      status: "needs-connect",
+      connect: vi.fn<() => void>(),
+    };
     visit("/acme/projects/default/mcp/my-server/team-access");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Connect to load tools" }),
-    );
-    expect(connect).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("button", { name: "Connect to load tools" }),
+    ).toBeNull();
   });
 
   it("explains write-gated discovery without offering connect", () => {
@@ -394,23 +400,6 @@ describe("Team access unavailable tool picker states", () => {
       }
     },
   );
-
-  it("does not instruct connecting when no connect action exists", () => {
-    mocks.openNarrowing = false;
-    mocks.toolSource = { status: "needs-connect", connect: undefined };
-    visit("/acme/projects/default/mcp/my-server/team-access");
-    expect(
-      screen.getByText(
-        "Connect isn't available for this server. Review its authentication settings.",
-      ),
-    ).toBeTruthy();
-    expect(
-      screen.queryByText("Connect to this server to load its tools."),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect to load tools" }),
-    ).toBeNull();
-  });
 });
 
 describe("MCPServerDetails setup authorization", () => {

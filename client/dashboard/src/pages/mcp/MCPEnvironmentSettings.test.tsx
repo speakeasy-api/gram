@@ -56,8 +56,9 @@ vi.mock("@gram/client/react-query/updateEnvironment.js", () => ({
     isPending: false,
   }),
 }));
+const loadedVars = vi.hoisted(() => ({ current: [] as unknown[] }));
 vi.mock("./useEnvironmentVariables", () => ({
-  useEnvironmentVariables: () => [],
+  useEnvironmentVariables: () => loadedVars.current,
 }));
 vi.mock("./PageSection", () => ({
   PageSection: ({
@@ -127,6 +128,7 @@ import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 afterEach(() => {
   cleanup();
   oauthState.status = "configured";
+  loadedVars.current = [];
 });
 
 describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
@@ -254,4 +256,38 @@ describe("unknown external MCP authentication", () => {
       }
     },
   );
+});
+
+describe("environment variables on load", () => {
+  it("reports no unsaved changes before any edit, even for an unmapped required variable", () => {
+    const required = [
+      {
+        id: "var-1",
+        key: "ACME_SERVER_URL",
+        environmentValues: [],
+        state: "system",
+        isRequired: true,
+      },
+    ];
+    loadedVars.current = required;
+    const toolset = {
+      slug: "server",
+      mcpSlug: "server",
+      mcpEnabled: true,
+      mcpIsPublic: true,
+      oauthEnablementMetadata: { oauth2SecurityCount: 0 },
+    } as unknown as Parameters<typeof MCPAuthenticationTab>[0]["toolset"];
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <MCPAuthenticationTab toolset={toolset} showOAuth={false} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(screen.getByText("ACME_SERVER_URL")).toBeTruthy();
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
 });

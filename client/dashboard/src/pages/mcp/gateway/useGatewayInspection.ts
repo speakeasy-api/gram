@@ -20,14 +20,6 @@ const toolSchema = z
 type GatewayTool = z.infer<typeof toolSchema>;
 type GatewayListedServer = z.infer<typeof listedServerSchema>;
 
-/** One member's catalog as returned by describe_server. */
-export interface GatewayServerDescription {
-  server: string;
-  /** The tool's structured result, or the error a client would receive. */
-  result: unknown;
-  error?: string;
-}
-
 export interface GatewayInspection {
   discoveryMode: "direct" | "progressive" | "code_mode";
   /** Sent to every client on connect; the runtime generates it. */
@@ -46,8 +38,11 @@ const PROTOCOL_VERSION = "2026-07-28";
  * the bearer itself in the query key (react-query keys are readable in
  * devtools, and a rotating token would also accumulate cache entries).
  */
-function authCacheKey(headers: Record<string, string> | undefined): string {
-  const auth = headers?.["Authorization"];
+export function authCacheKey(
+  headers: Record<string, string> | undefined,
+): string {
+  // Either credential the dashboard sends: a bearer, or a chat session token.
+  const auth = headers?.["Authorization"] ?? headers?.["Gram-Chat-Session"];
   if (!auth) return "anon";
   let hash = 0;
   for (let i = 0; i < auth.length; i += 1) {
@@ -78,6 +73,15 @@ const rpcErrorSchema = z.object({
   message: z.string(),
 });
 
+/** What the HTTP exchange behind one JSON-RPC call looked like. */
+export interface GatewayRPCExchange {
+  request: unknown;
+  status: number;
+  headers: Headers;
+  /** The decoded JSON-RPC envelope, when the body was readable. */
+  response: unknown;
+}
+
 // The endpoint speaks streamable HTTP and answers stateless requests, so one
 // fetch per JSON-RPC call is enough — no session to establish or carry.
 export async function gatewayRPC(
@@ -86,8 +90,15 @@ export async function gatewayRPC(
   method: string,
   params: unknown,
   signal?: AbortSignal,
-  requestId: string = crypto.randomUUID(),
+  /** `null` sends a notification: no id, and no result to wait for. */
+  requestId: string | null = crypto.randomUUID(),
+  /** Sees the raw exchange, for callers that show the wire to the user. */
+  observe?: (exchange: GatewayRPCExchange) => void,
 ): Promise<unknown> {
+  const requestBody =
+    requestId === null
+      ? { jsonrpc: "2.0", method, params }
+      : { jsonrpc: "2.0", id: requestId, method, params };
   const response = await fetch(url, {
     method: "POST",
     signal,
@@ -96,19 +107,23 @@ export async function gatewayRPC(
       Accept: "application/json, text/event-stream",
       ...headers,
     },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: requestId,
-      method,
-      params,
-    }),
+    body: JSON.stringify(requestBody),
   });
+  const report = (decoded: unknown) =>
+    observe?.({
+      request: requestBody,
+      status: response.status,
+      headers: response.headers,
+      response: decoded,
+    });
 
   if (response.status === 401 || response.status === 403) {
+    report(undefined);
     throw new UnauthorizedError("unauthorized", response.status);
   }
   if (!response.ok) {
     const failure: unknown = await response.json().catch(() => undefined);
+    report(failure);
     const message = z.object({ error: rpcErrorSchema }).safeParse(failure);
     if (message.success)
       throw new GatewayRPCError(
@@ -123,6 +138,11 @@ export async function gatewayRPC(
   }
 
   const body = await response.text();
+  // A notification is acknowledged with an empty 202.
+  if (requestId === null) {
+    report(undefined);
+    return undefined;
+  }
   // A streamable-HTTP server may answer either as JSON or as a one-event SSE
   // stream; the payload is the same either way.
   const payload = response.headers
@@ -135,7 +155,14 @@ export async function gatewayRPC(
         .trim()
     : body;
 
-  const parsed: unknown = JSON.parse(payload ?? "{}");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload ?? "{}");
+  } catch (error) {
+    report(undefined);
+    throw error;
+  }
+  report(parsed);
   const envelope = z
     .object({
       result: z.unknown().optional(),
@@ -269,77 +296,5 @@ export function useGatewayInspection(
     needsAuth: query.error instanceof UnauthorizedError,
     error: query.error,
     refetch: () => void query.refetch(),
-  };
-}
-
-/**
- * describe_server for one member — the drill-down step the instructions tell
- * an agent to take after list_servers. Kept separate from the handshake so
- * switching members re-runs only this call. A member the runtime can't
- * describe yet (proxied members, until their upstream sessions land) answers
- * with an error, which is itself what a client would see.
- */
-export function useGatewayDescribeServer(
-  mcpUrl: string | undefined,
-  serverSlug: string | undefined,
-  options?: { headers?: Record<string, string>; enabled?: boolean },
-): {
-  data: GatewayServerDescription | undefined;
-  isLoading: boolean;
-} {
-  const { headers, enabled = true } = options ?? {};
-  const headersKey = authCacheKey(headers);
-
-  const query = useQuery<GatewayServerDescription, Error>({
-    queryKey: ["gatewayDescribeServer", mcpUrl, serverSlug, headersKey],
-    queryFn: async () => {
-      if (!mcpUrl || !serverSlug) throw new Error("No member selected");
-      try {
-        const described = await gatewayRPC(mcpUrl, headers, "tools/call", {
-          name: "describe_server",
-          arguments: { server: serverSlug },
-        });
-        const { structuredContent, content, isError } = z
-          .object({
-            structuredContent: z.unknown().optional(),
-            content: z
-              .array(z.object({ text: z.string().optional() }))
-              .optional(),
-            isError: z.boolean().optional(),
-          })
-          .parse(described);
-        // A tool-level failure answers 200 with isError and a text body, so
-        // without this branch it would render as a normal catalog.
-        if (isError) {
-          return {
-            server: serverSlug,
-            result: undefined,
-            error: content?.[0]?.text ?? "describe_server reported an error",
-          };
-        }
-        return {
-          server: serverSlug,
-          result: structuredContent ?? content?.[0]?.text,
-        };
-      } catch (describeError) {
-        return {
-          server: serverSlug,
-          result: undefined,
-          error:
-            describeError instanceof Error
-              ? describeError.message
-              : "describe_server failed",
-        };
-      }
-    },
-    enabled: enabled && !!mcpUrl && !!serverSlug,
-    retry: false,
-    staleTime: 5 * 60 * 1000,
-    throwOnError: false,
-  });
-
-  return {
-    data: query.data,
-    isLoading: query.isLoading && query.fetchStatus !== "idle",
   };
 }

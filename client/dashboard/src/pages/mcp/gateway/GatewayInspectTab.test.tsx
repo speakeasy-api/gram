@@ -1,4 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { useState } from "react";
 import type { GatewayInspection } from "./useGatewayInspection";
 import { afterEach, expect, it, vi } from "vitest";
@@ -7,6 +14,22 @@ import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { GatewayInspectTab } from "./GatewayInspectTab";
+
+type MintInput = {
+  target: { discoveryMode?: string; connectionVersion?: string };
+};
+
+/** The main session's latest mint, skipping the Code Mode catalog session. */
+function lastMainMint(): MintInput | undefined {
+  return (state.mint.mock.calls as [MintInput][])
+    .map(([input]) => input)
+    .filter(
+      (input) =>
+        !input.target.connectionVersion?.endsWith(":catalog") &&
+        input.target.connectionVersion !== "member-status",
+    )
+    .at(-1);
+}
 
 vi.mock("@/lib/utils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/utils")>()),
@@ -19,9 +42,20 @@ vi.mock("@/components/ui/CodeSnippet", () => ({
 
 const state = vi.hoisted(() => ({
   mint: vi.fn(),
+  catalogMintRefetch: vi.fn(),
   data: undefined as GatewayInspection | undefined,
   loading: false,
   accessToken: undefined as string | undefined,
+  members: [] as {
+    slug: string;
+    name: string;
+    tools: never[];
+    error?: string;
+    isLoading: boolean;
+    refetch: () => void;
+  }[],
+  unconnected: [] as string[],
+  connect: vi.fn(),
 }));
 vi.mock("./GatewayCodeExecution", () => ({
   GatewayCodeExecution: ({
@@ -43,25 +77,59 @@ vi.mock("./GatewayCodeExecution", () => ({
     );
   },
 }));
+vi.mock("../inspect/useToolHealth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../inspect/useToolHealth")>()),
+  useToolHealth: () => ({ healthFor: () => undefined, isLoading: false }),
+}));
+vi.mock("./useGatewayMemberTools", () => ({
+  useGatewayMemberTools: () => state.members,
+}));
+vi.mock("./useGatewayMemberStates", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./useGatewayMemberStates")>()),
+  useGatewayMemberStates: () => ({
+    stateFor: () => undefined,
+    signIn: {
+      needsSignIn: (slug: string | undefined) =>
+        !!slug && state.unconnected.includes(slug),
+      connect: state.connect,
+    },
+  }),
+}));
+vi.mock("@/pages/playground/PlaygroundChat", () => ({
+  PlaygroundChat: () => <div data-testid="playground-chat" />,
+}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-test" }),
   useSession: () => ({ user: { id: "user-test" } }),
 }));
 vi.mock("@/hooks/useUserSessionToken", () => ({
-  useUserSessionToken: (input: { target: { discoveryMode?: string } }) => {
+  useUserSessionToken: (input: {
+    target: { discoveryMode?: string; connectionVersion?: string };
+    userSessionIssuerId?: string;
+  }) => {
     state.mint(input);
+    // Like the real hook, the catalog session only mints (and so can only
+    // fail) for an issuer-gated gateway.
+    const catalog = input.target.connectionVersion?.endsWith(":catalog");
+    const fails =
+      !!input.target.discoveryMode && (!catalog || !!input.userSessionIssuerId);
     return {
       accessToken: state.accessToken,
       isLoading: false,
-      isError: !!input.target.discoveryMode,
-      error: input.target.discoveryMode
+      isError: fails,
+      error: fails
         ? new Error("Gateway discovery settings are not available")
         : null,
-      refetch: vi.fn(),
+      refetch: (
+        input.target as { connectionVersion?: string }
+      ).connectionVersion?.endsWith(":catalog")
+        ? state.catalogMintRefetch
+        : vi.fn(),
     };
   },
 }));
 vi.mock("@/hooks/useToolsetUrl", () => ({
+  platformEndpointSlug: () => undefined,
   useResolvedMcpServerUrl: () => ({
     mcpUrl: "https://example.com/mcp/gateway",
     loading: false,
@@ -73,8 +141,13 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("./GatewayDetailsRouting", () => ({
   gatewayTabHref: () => "/settings",
 }));
+vi.mock("@/components/sources/SourceCard", () => ({
+  SourceMcpIcon: () => null,
+}));
 vi.mock("./GatewaySettingsTab", () => ({
   GATEWAY_INSTRUCTIONS_SECTION_ID: "instructions",
+  GATEWAY_AUTHENTICATION_SECTION_ID: "authentication",
+  GATEWAY_DISCOVERY_SECTION_ID: "discovery",
 }));
 vi.mock("./useGatewayMemberRows", () => ({
   useGatewayMemberRows: () => ({ rows: [] }),
@@ -107,13 +180,15 @@ vi.mock("@/components/page-layout", () => {
   };
 });
 function Location() {
-  return <output aria-label="location">{useLocation().search}</output>;
+  return <span aria-label="location">{useLocation().search}</span>;
 }
 afterEach(() => {
   cleanup();
   state.data = undefined;
   state.loading = false;
   state.accessToken = undefined;
+  state.members = [];
+  state.unconnected = [];
 });
 it("applies discovery choices to the URL and the minted connection", async () => {
   state.mint.mockClear();
@@ -134,40 +209,42 @@ it("applies discovery choices to the URL and the minted connection", async () =>
       </MemoryRouter>
     </TooltipProvider>,
   );
-  fireEvent.click(
-    screen.getByRole("combobox", { name: "Inspect discovery mode" }),
-  );
-  fireEvent.click(await screen.findByRole("option", { name: "Direct" }));
-  fireEvent.click(screen.getByRole("button", { name: "Apply and reconnect" }));
-  expect(state.mint).toHaveBeenLastCalledWith(
+  const modes = screen.getByRole("group", { name: "Preview a mode" });
+  fireEvent.click(within(modes).getByRole("button", { name: /^Direct/ }));
+  expect(lastMainMint()).toEqual(
     expect.objectContaining({
       target: expect.objectContaining({ discoveryMode: "direct" }),
     }),
   );
-  expect(screen.getByLabelText("location").textContent).toBe(
-    "?keep=value&discovery_mode=direct",
+  await waitFor(() =>
+    expect(screen.getByLabelText("location").textContent).toBe(
+      "?keep=value&discovery_mode=direct",
+    ),
   );
+  expect(within(modes).getByRole("button", { pressed: true }).textContent).toBe(
+    "Direct",
+  );
+  // Picking the gateway's own mode drops the preview.
   fireEvent.click(
-    screen.getByRole("combobox", { name: "Inspect discovery mode" }),
+    within(modes).getByRole("button", { name: /gateway default/ }),
   );
-  fireEvent.click(
-    await screen.findByRole("option", { name: /^Use gateway default/ }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Apply and reconnect" }));
-  expect(state.mint).toHaveBeenLastCalledWith(
+  expect(lastMainMint()).toEqual(
     expect.objectContaining({
       target: expect.objectContaining({ discoveryMode: undefined }),
     }),
   );
-  expect(screen.getByLabelText("location").textContent).toBe("?keep=value");
+  await waitFor(() =>
+    expect(screen.getByLabelText("location").textContent).toBe("?keep=value"),
+  );
 });
 
 it.each([
   ["direct", "Direct"],
   ["progressive", "Progressive"],
-  ["future_mode", "Unknown"],
-  ["constructor", "Unknown"],
-  ["__proto__", "Unknown"],
+  ["code_mode", "Code Mode"],
+  ["future_mode", "Progressive"],
+  ["constructor", "Progressive"],
+  ["__proto__", "Progressive"],
 ])(
   "labels gateway default %s as %s without choosing an override",
   (mode, label) => {
@@ -189,11 +266,11 @@ it.each([
         </MemoryRouter>
       </TooltipProvider>,
     );
+    const modes = screen.getByRole("group", { name: "Preview a mode" });
     expect(
-      screen.getByRole("combobox", { name: "Inspect discovery mode" })
-        .textContent,
-    ).toBe(`Use gateway default (${label})`);
-    expect(state.mint).toHaveBeenLastCalledWith(
+      within(modes).getByRole("button", { pressed: true }).textContent,
+    ).toBe(`${label} (gateway default)`);
+    expect(lastMainMint()).toEqual(
       expect.objectContaining({
         target: expect.objectContaining({ discoveryMode: undefined }),
       }),
@@ -217,13 +294,15 @@ it("preserves Python source while inspection reloads for a refreshed credential"
     discoveryMode: "code_mode",
   } as MetaMcpServer;
   const view = () => (
-    <MemoryRouter>
-      <GatewayInspectTab
-        metaMcpServer={gateway}
-        endpoints={[]}
-        isLoadingEndpoints={false}
-      />
-    </MemoryRouter>
+    <TooltipProvider>
+      <MemoryRouter>
+        <GatewayInspectTab
+          metaMcpServer={gateway}
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>
+    </TooltipProvider>
   );
   const { rerender } = render(view());
   fireEvent.change(screen.getByLabelText("Persistent source"), {
@@ -266,6 +345,158 @@ it("explains Progressive fallback when the saved Code runtime is unavailable", (
     </TooltipProvider>,
   );
   expect(
-    screen.getByText(/this connection uses Progressive discovery/i),
+    screen.getByText(
+      /Code Mode isn't available for this gateway, so this connection uses Progressive/i,
+    ),
   ).toBeTruthy();
+});
+
+it("says so when the gateway couldn't list its servers", () => {
+  state.data = {
+    discoveryMode: "progressive",
+    tools: [{ name: "list_servers" }],
+    instructions: undefined,
+    protocolVersion: undefined,
+    serverName: undefined,
+    servers: undefined,
+  };
+  state.loading = false;
+  render(
+    <TooltipProvider>
+      <MemoryRouter>
+        <GatewayInspectTab
+          metaMcpServer={
+            {
+              id: "gateway-test",
+              discoveryMode: "progressive",
+            } as MetaMcpServer
+          }
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
+  );
+  expect(
+    screen.getByText(/Couldn't list this gateway's servers/i),
+  ).toBeTruthy();
+});
+
+it("names a failed Code Mode catalog sign-in and retries the mint", () => {
+  state.data = {
+    discoveryMode: "code_mode",
+    tools: [{ name: "execute_code" }],
+    instructions: undefined,
+    protocolVersion: undefined,
+    serverName: undefined,
+    servers: undefined,
+  };
+  render(
+    <TooltipProvider>
+      <MemoryRouter>
+        <GatewayInspectTab
+          metaMcpServer={
+            {
+              id: "gateway-test",
+              userSessionIssuerId: "issuer-test",
+              discoveryMode: "code_mode",
+              codeModeEnabled: true,
+            } as MetaMcpServer
+          }
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
+  );
+  expect(
+    screen.getByText(/Couldn't sign in to list this gateway's servers/i),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(state.catalogMintRefetch).toHaveBeenCalled();
+});
+
+it("links a turned-off gateway to the availability setting", () => {
+  render(
+    <TooltipProvider>
+      <MemoryRouter>
+        <GatewayInspectTab
+          metaMcpServer={
+            {
+              id: "gateway-test",
+              discoveryMode: "progressive",
+              visibility: "disabled",
+            } as MetaMcpServer
+          }
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
+  );
+  expect(screen.getByText("This gateway is turned off")).toBeTruthy();
+  expect(
+    screen
+      .getByRole("link", { name: "Turn on in settings" })
+      .getAttribute("href"),
+  ).toBe("/settings#settings-general");
+});
+
+it("offers Connect for a member that needs the viewer's account", () => {
+  state.data = {
+    discoveryMode: "progressive",
+    tools: [{ name: "list_servers" }],
+    instructions: undefined,
+    protocolVersion: undefined,
+    serverName: undefined,
+    servers: [
+      { slug: "linear", name: "Linear" },
+      { slug: "slack", name: "Slack" },
+    ],
+  } as GatewayInspection;
+  const failed = (slug: string, name: string) => ({
+    slug,
+    name,
+    tools: [],
+    error: "failed",
+    isLoading: false,
+    refetch: vi.fn(),
+  });
+  state.members = [failed("linear", "Linear"), failed("slack", "Slack")];
+  state.unconnected = ["linear"];
+  render(
+    <TooltipProvider>
+      <MemoryRouter>
+        <GatewayInspectTab
+          metaMcpServer={
+            {
+              id: "gateway-test",
+              userSessionIssuerId: "issuer-test",
+              discoveryMode: "progressive",
+            } as MetaMcpServer
+          }
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
+  );
+
+  // Connecting comes first, in place of the tool list.
+  expect(screen.getByText("Connect your accounts")).toBeTruthy();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Connect your Linear account" }),
+  );
+  expect(state.connect).toHaveBeenCalled();
+  // Slack failed for another reason: no Connect, but a retry.
+  expect(
+    screen.queryByRole("button", { name: "Connect your Slack account" }),
+  ).toBeNull();
+  expect(screen.getByText(/Couldn't read Slack's tools/)).toBeTruthy();
+  // Optional: skipping shows the tools, with a way back to connecting.
+  fireEvent.click(screen.getByRole("button", { name: /Skip for now/ }));
+  expect(screen.queryByText("Connect your accounts")).toBeNull();
+  expect(screen.getByText(/Linear isn't connected/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+  expect(screen.getByText("Connect your accounts")).toBeTruthy();
 });

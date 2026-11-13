@@ -18,6 +18,7 @@ import {
   useSeriesColors,
 } from "@/components/chart/useSeriesColors";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { formatCompact } from "@/lib/format";
 import type { TimeSeriesBucket } from "@gram/client/models/components/timeseriesbucket.js";
 import {
@@ -65,6 +66,8 @@ export interface ToolCallsTimeSeriesChartProps {
   onResetZoom?: () => void;
   /** Shown when the range has no buckets; defaults to a generic message. */
   emptyMessage?: string;
+  /** True before the first data arrives: shows a skeleton, not the empty state. */
+  isLoading?: boolean;
 }
 
 /**
@@ -84,6 +87,7 @@ export function ToolCallsTimeSeriesChart({
   isZoomed,
   onResetZoom,
   emptyMessage = "No tool calls for the selected time range",
+  isLoading = false,
 }: ToolCallsTimeSeriesChartProps): JSX.Element {
   const isExpanded = expandedChart === chartId;
   const height = isExpanded ? 420 : 260;
@@ -244,7 +248,9 @@ export function ToolCallsTimeSeriesChart({
       isZoomed={isZoomed}
       onResetZoom={onResetZoom}
     >
-      {!hasData ? (
+      {isLoading ? (
+        <Skeleton className="h-[260px] w-full" />
+      ) : !hasData ? (
         <WidgetEmptyState message={emptyMessage} className="h-[260px]" />
       ) : (
         <div style={{ height }}>

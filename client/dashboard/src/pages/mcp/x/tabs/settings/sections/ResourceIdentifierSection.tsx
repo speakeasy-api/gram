@@ -18,7 +18,7 @@ export function ResourceIdentifierSection({
   return (
     <EditableSourceFieldSection
       id={MCP_RESOURCE_IDENTIFIER_SECTION_ID}
-      title="Resource Identifier"
+      title="Resource identifier"
       description={`${RESOURCE_IDENTIFIER_EXPLAINER} Leave blank if the server has no OAuth of its own.`}
       label="Protected resource identifier"
       placeholder="https://mcp.internal.example.com/mcp"

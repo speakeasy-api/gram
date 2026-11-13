@@ -227,7 +227,7 @@ export function EndpointsFields({
       </Stack>
 
       <Stack gap={2}>
-        <Label className="text-muted-foreground text-xs">Token Endpoint</Label>
+        <Label className="text-muted-foreground text-xs">Token endpoint</Label>
         <Input
           value={tokenEndpoint}
           onChange={onTokenEndpointChange}
@@ -660,7 +660,7 @@ export function ClientTypeFields({
       <Stack gap={2}>
         {availableTypes.length > 1 && (
           <>
-            <Label className="text-muted-foreground text-xs">Client Type</Label>
+            <Label className="text-muted-foreground text-xs">Client type</Label>
             <Select
               value={clientType}
               onValueChange={(value) => onClientTypeChange(value as ClientType)}

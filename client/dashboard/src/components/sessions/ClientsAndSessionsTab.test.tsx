@@ -229,7 +229,7 @@ describe("ClientsAndSessionsTab", () => {
   it("explains why there is nothing to show when no issuer is attached", () => {
     renderTab(<ClientsAndSessionsTab issuerId={undefined} />);
 
-    expect(screen.getByText(/has no session issuer/i)).toBeDefined();
+    expect(screen.getByText(/Turn on sign-in/i)).toBeDefined();
     // Without an issuer to scope to, the listing endpoints would fall back to
     // the whole project, so both queries have to be disabled rather than
     // merely unrendered.

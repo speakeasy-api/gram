@@ -68,7 +68,7 @@ export function PromptsTabContent({
           <RequireScope scope="mcp:write" level="component">
             <Stack gap={2} direction="horizontal">
               <routes.prompts.newPrompt.Link>
-                <Button size="sm">Create Prompt</Button>
+                <Button size="sm">Create prompt</Button>
               </routes.prompts.newPrompt.Link>
             </Stack>
           </RequireScope>

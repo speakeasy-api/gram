@@ -1,7 +1,6 @@
 import { useRBAC } from "@/hooks/useRBAC";
 import { IdentityLink } from "@/components/identity-link";
 import { useHideInsightsDock } from "@/components/insights-context";
-import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Heading } from "@/components/ui/Heading";
 import type { Column } from "@/components/ui/Table";
@@ -192,123 +191,101 @@ export function MCPTeamAccessTab({
   ];
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Access</Page.Section.Title>
-      <Page.Section.Description>
-        Who can use {serverName ?? "this server"}. Access given here applies to
-        this server only.
-      </Page.Section.Description>
-      <Page.Section.Body>
-        {toolSource?.status === "loading" && (
+    <section className="flex flex-col gap-4">
+      {toolSource?.status === "loading" && (
+        <Text muted small>
+          Loading server tools…
+        </Text>
+      )}
+      {toolSource?.status === "error" && (
+        <div role="status">
           <Text muted small>
-            Loading server tools…
+            Server tools could not be loaded.
           </Text>
-        )}
-        {toolSource?.status === "error" && (
-          <div role="status">
-            <Text muted small>
-              Server tools could not be loaded.
-            </Text>
-            <Button variant="secondary" size="sm" onClick={toolSource.retry}>
-              <Button.Text>Retry loading tools</Button.Text>
-            </Button>
-          </div>
-        )}
-        {toolSource?.status === "needs-connect" && (
-          <div role="status">
-            <Text muted small>
-              {toolSourceUnavailableMessage(toolSource)}
-            </Text>
-            {toolSource.connect && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={toolSource.connect}
-              >
-                <Button.Text>Connect to load tools</Button.Text>
-              </Button>
-            )}
-          </div>
-        )}
-        {toolSource?.status === "needs-write" && (
-          <Text muted small>
-            {toolSourceUnavailableMessage(toolSource)}
-          </Text>
-        )}
-        {audienceFailed ? (
-          <Text muted small>
-            Access rules could not be loaded, so they cannot be changed here
-            yet. Reload the page to try again.
-          </Text>
-        ) : (
-          <ManageAccess
-            resourceId={resourceId}
-            resourceName={serverName}
-            entries={entries}
-            rolePlugins={canManage ? audienceData?.rolePlugins : undefined}
-            version={audienceData?.version ?? ""}
-            toolCatalog={toolCatalog}
-            toolSource={toolSource}
-            isLoading={audienceLoading}
-          />
-        )}
+          <Button variant="secondary" size="sm" onClick={toolSource.retry}>
+            <Button.Text>Retry loading tools</Button.Text>
+          </Button>
+        </div>
+      )}
+      {toolSource?.status === "needs-write" && (
+        <Text muted small>
+          {toolSourceUnavailableMessage(toolSource)}
+        </Text>
+      )}
+      {audienceFailed ? (
+        <Text muted small>
+          Access rules could not be loaded, so they cannot be changed here yet.
+          Reload the page to try again.
+        </Text>
+      ) : (
+        <ManageAccess
+          description={`Who can use ${serverName ?? "this server"}. Access given here applies to this server only.`}
+          resourceId={resourceId}
+          resourceName={serverName}
+          entries={entries}
+          rolePlugins={canManage ? audienceData?.rolePlugins : undefined}
+          version={audienceData?.version ?? ""}
+          toolCatalog={toolCatalog}
+          toolSource={toolSource}
+          isLoading={audienceLoading}
+        />
+      )}
 
-        {/* Below the rules it explains: the list above is what gets changed,
+      {/* Below the rules it explains: the list above is what gets changed,
             this is where one person's outcome is read back. */}
-        {checkAccess && (
-          <>
-            <div className="mt-10 mb-4">
-              <Heading variant="h4">Check a person&rsquo;s access</Heading>
-              <Text muted small className="mt-1">
-                Pick one person to see what they can do on{" "}
-                {serverName ?? "this server"}, and which rules decide it.
-              </Text>
-            </div>
-            <CheckAccess
-              resourceId={resourceId}
-              serverName={serverName ?? "this server"}
-            />
-          </>
-        )}
+      {checkAccess && (
+        <>
+          <div className="mt-10 mb-4">
+            <Heading variant="h4">Check a person&rsquo;s access</Heading>
+            <Text muted small className="mt-1">
+              Pick one person to see what they can do on{" "}
+              {serverName ?? "this server"}, and which rules decide it.
+            </Text>
+          </div>
+          <CheckAccess
+            resourceId={resourceId}
+            serverName={serverName ?? "this server"}
+          />
+        </>
+      )}
 
-        {/* Two rules disagreeing about the same person. Nothing on the rules
+      {/* Two rules disagreeing about the same person. Nothing on the rules
             list says why they lost access, so the pair is named here along
             with the only place either can be changed. */}
-        {!audienceFailed && conflicts.length > 0 && (
-          <>
-            <div className="mt-10 mb-4">
-              {/* The one section on this page reporting something wrong
+      {!audienceFailed && conflicts.length > 0 && (
+        <>
+          <div className="mt-10 mb-4">
+            {/* The one section on this page reporting something wrong
                   rather than something configured, so it is marked as such
                   before the heading is read. */}
-              <div className="flex items-center gap-2">
-                <TriangleAlert
-                  className="h-4 w-4 shrink-0 text-amber-500"
-                  aria-hidden
-                />
-                <Heading variant="h4">Conflicting roles</Heading>
-              </div>
-              <Text muted small className="mt-1">
-                These people are granted access through one rule and blocked by
-                another, so they cannot reach this server. To fix it, remove the
-                block: on the blocking role&rsquo;s page, or from the list above
-                when it names the person directly. When the block comes from a
-                role or everyone, giving them access to this server by name also
-                works, since that outranks it; a block on the person themselves
-                still applies.
-              </Text>
-            </div>
-            <Table columns={conflictColumns}>
-              <Table.Header columns={conflictColumns} />
-              <Table.Body
-                columns={conflictColumns}
-                data={conflicts}
-                rowKey={(row) => row.member.id}
+            <div className="flex items-center gap-2">
+              <TriangleAlert
+                className="h-4 w-4 shrink-0 text-amber-500"
+                aria-hidden
               />
-            </Table>
-          </>
-        )}
-      </Page.Section.Body>
-    </Page.Section>
+              <Heading variant="h4">Conflicting roles</Heading>
+            </div>
+            <Text muted small className="mt-1">
+              These people are granted access through one rule and blocked by
+              another, so they cannot reach this server. To fix it, remove the
+              block: on the blocking role&rsquo;s page, or from the list above
+              when it names the person directly. When the block comes from a
+              role or everyone, giving them access to this server by name also
+              works, since that outranks it; a block on the person themselves
+              still applies.
+            </Text>
+          </div>
+          <Table columns={conflictColumns}>
+            <Table.Header columns={conflictColumns} />
+            <Table.Body
+              columns={conflictColumns}
+              data={conflicts}
+              rowKey={(row) => row.member.id}
+            />
+          </Table>
+        </>
+      )}
+    </section>
   );
 }
 
