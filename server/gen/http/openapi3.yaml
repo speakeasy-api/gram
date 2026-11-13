@@ -61220,6 +61220,7 @@ paths:
                         - copilot
                         - openclaw
                         - pi
+                        - vibe
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -124666,6 +124667,9 @@ components:
                 up_to_date:
                     type: boolean
                     description: Whether the project's current plugin state matches what was last published to GitHub, including changes of plugins whose auto sync is off that wait for a manual sync. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
+                vibe_observability_plugin:
+                    type: string
+                    description: Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present only when connected, observability is enabled for the project, the org is past the phased hooks rollout, the pinned hooks binary supports the vibe provider, and the org name satisfies the Agent Plugins 1.0 name schema; absent otherwise. The marketplace repo directory is `<slug>-vibe`.
             required:
                 - configured
                 - connected
@@ -125029,6 +125033,7 @@ components:
                         - codex
                         - cursor
                         - opencode
+                        - vibe
                         - other
             required:
                 - client_family

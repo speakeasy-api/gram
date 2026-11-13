@@ -73,6 +73,10 @@ export type PublishStatusResult = {
    * Whether the project's current plugin state matches what was last published to GitHub, including changes of plugins whose auto sync is off that wait for a manual sync. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
    */
   upToDate?: boolean | undefined;
+  /**
+   * Slug of the generated Mistral Vibe observability plugin's install directory (`~/.vibe/plugins/<slug>`) — present only when connected, observability is enabled for the project, the org is past the phased hooks rollout, the pinned hooks binary supports the vibe provider, and the org name satisfies the Agent Plugins 1.0 name schema; absent otherwise. The marketplace repo directory is `<slug>-vibe`.
+   */
+  vibeObservabilityPlugin?: string | undefined;
 };
 
 /** @internal */
@@ -98,6 +102,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
     repo_owner: z.optional(z.string()),
     repo_url: z.optional(z.string()),
     up_to_date: z.optional(z.boolean()),
+    vibe_observability_plugin: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -113,6 +118,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
       "repo_owner": "repoOwner",
       "repo_url": "repoUrl",
       "up_to_date": "upToDate",
+      "vibe_observability_plugin": "vibeObservabilityPlugin",
     });
   }),
 );

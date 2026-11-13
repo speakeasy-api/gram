@@ -1574,6 +1574,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-openclaw"
 	case "pi":
 		filename = "observability-pi"
+	case "vibe":
+		filename = "observability-vibe"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
@@ -1755,6 +1757,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 		ClaudeObservabilityPlugin: nil,
 		CodexObservabilityPlugin:  nil,
 		CursorObservabilityPlugin: nil,
+		VibeObservabilityPlugin:   nil,
 		HasCollaborators:          nil,
 		UpToDate:                  nil,
 		AutomaticSyncPending:      nil,
@@ -1804,6 +1807,16 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 				result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
 				result.CursorObservabilityPlugin = conv.PtrEmpty(CursorObservabilitySlug(slugCfg))
+				// The Vibe package is only in the published repo when the
+				// pinned hooks binary carries the vibe provider, the org's
+				// name fits the Agent Plugins 1.0 schema, and the org is
+				// past the phased hooks rollout (gated orgs carry their
+				// previously published hooks subtree, which predates the
+				// Vibe package); report it only then, so install UIs never
+				// point at a package that does not exist.
+				if VibeObservabilityPluginAvailable(slugCfg) && s.hooksRolloutEligible(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug) {
+					result.VibeObservabilityPlugin = conv.PtrEmpty(naming.ObservabilitySlug(conv.Default(slugCfg.HooksOrgName, slugCfg.OrgName)))
+				}
 			}
 			// The marketplace URL contains a bearer token, not just a package location.
 			if admin && conn.MarketplaceToken.Valid && s.serverURL != "" {

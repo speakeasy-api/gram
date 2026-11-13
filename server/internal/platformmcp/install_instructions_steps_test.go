@@ -38,6 +38,13 @@ func TestClientInstallStepsGiveEachClientAWorkingPath(t *testing.T) {
 	require.Equal(t, "remote", opencodeConfig["mcp"][key]["type"])
 	require.Equal(t, endpoint, opencodeConfig["mcp"][key]["url"])
 
+	vibe := clientInstallSteps(OnboardingClientVibe, key, endpoint)
+	// `vibe mcp add` is required over a hand-written config block: it also
+	// writes the [mcp_servers.auth] oauth table, without which Vibe treats the
+	// server as static and a Speakeasy-hosted server fails to connect.
+	require.Equal(t, "vibe mcp add linear --url "+endpoint, vibe[0].Snippet)
+	require.Len(t, vibe, 1, "the /mcp login step is appended by the caller, not clientInstallSteps")
+
 	other := clientInstallSteps(OnboardingClientOther, key, endpoint)
 	require.Equal(t, endpoint, other[0].URL)
 	require.JSONEq(t, `{"mcpServers":{"linear":{"url":"`+endpoint+`"}}}`, other[0].Snippet)
@@ -45,6 +52,21 @@ func TestClientInstallStepsGiveEachClientAWorkingPath(t *testing.T) {
 	cowork := clientInstallSteps(OnboardingClientClaudeCowork, key, endpoint)
 	require.Equal(t, endpoint, cowork[0].URL)
 	require.Empty(t, cowork[0].Snippet)
+}
+
+func TestStandaloneMCPInstallInstructionsVibeLoginStep(t *testing.T) {
+	t.Parallel()
+
+	serverURL, err := url.Parse("https://mcp.example.test")
+	require.NoError(t, err)
+	service := &PluginsService{serverURL: serverURL}
+
+	output, err := service.standaloneMCPInstallInstructions(t.Context(), "", OnboardingClientVibe, "Linear", "acme-linear")
+	require.NoError(t, err)
+	require.True(t, output.Supported)
+	require.Len(t, output.Instructions, 2)
+	require.Equal(t, "vibe mcp add acme-linear --url https://mcp.example.test/mcp/acme-linear", output.Instructions[0].Snippet)
+	require.Equal(t, "/mcp login acme-linear", output.Instructions[1].Snippet)
 }
 
 func TestStandaloneMCPInstallInstructionsRejectUnsafeSlug(t *testing.T) {

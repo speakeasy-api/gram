@@ -200,6 +200,24 @@ function manualSteps(client: ClientFamily, mcpUrl: string): InstallStep[] {
             "Start an OpenCode session, ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted. Restart OpenCode first if it does not see Platform MCP.",
         },
       ];
+    case "vibe":
+      // `vibe mcp add` writes the [[mcp_servers]] entry together with its
+      // [mcp_servers.auth] oauth table; a hand-written block has no auth table,
+      // so Vibe treats the server as static and sign-in never starts.
+      return [
+        {
+          title: "Add Platform MCP with the Vibe CLI",
+          description:
+            "Run this in a terminal. It registers the server with OAuth auth in ~/.vibe/config.toml. This does not install the reviewed plugin.",
+          code: `vibe mcp add ${PLATFORM_MCP_SERVER_NAME} --url ${mcpUrl}`,
+          language: "bash",
+        },
+        {
+          title: "Sign in from Vibe, then connect",
+          description:
+            "Run /mcp login platform inside a Vibe session to open the AI Control Plane browser authorization, then ask Vibe to list your Speakeasy projects.",
+        },
+      ];
   }
 }
 

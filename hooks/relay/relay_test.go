@@ -2105,3 +2105,20 @@ func TestMCPInventoryEnvelopeReportsIncompleteSnapshot(t *testing.T) {
 	require.NotNil(t, payload.Data.McpInventoryCollected)
 	require.False(t, *payload.Data.McpInventoryCollected)
 }
+
+// TestJoinMCPServerCommandPreservesArgBoundaries: flattening argv with raw
+// spaces would let a secret argument containing whitespace leak its remaining
+// words when redactCommand re-tokenizes the command — each argument is
+// shell-quoted, and redaction masks a quoted argument whole.
+func TestJoinMCPServerCommandPreservesArgBoundaries(t *testing.T) {
+	joined := joinMCPServerCommand("npx", []string{"-y", "@example/mcp", "--token", "my secret value"})
+	// shellQuoteArg double-quotes on Windows, so build the expected quoted
+	// argument with it to stay platform-neutral; the redaction assertions
+	// below pin the masking independently of the helper.
+	require.Equal(t, "npx -y @example/mcp --token "+shellQuoteArg("my secret value"), joined)
+	redacted := redactCommand(joined)
+	require.NotContains(t, redacted, "secret")
+	require.NotContains(t, redacted, "value")
+	require.Contains(t, redacted, "--token ***")
+	require.Contains(t, redacted, "@example/mcp", "non-secret arguments keep their identity")
+}
