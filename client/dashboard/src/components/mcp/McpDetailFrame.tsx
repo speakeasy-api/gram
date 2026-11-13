@@ -585,18 +585,21 @@ function useHighlightLinkedSection(): void {
       align();
       timers.push(window.setTimeout(align, 400));
       timers.push(window.setTimeout(align, 1000));
-      // Once the scroll has landed, a hairline border settles around the
-      // section, holds, then fades. It lives only in the animation, so
-      // nothing is left behind.
-      const line = "color-mix(in oklab, var(--color-primary) 30%, transparent)";
-      const clear = "color-mix(in oklab, var(--color-primary) 0%, transparent)";
+      // Once the scroll has landed, a hairline square border settles around
+      // the section, holds, then fades. A section already showing a
+      // readiness issue is framed by it, so it gets no second border. The
+      // border lives only in the animation, so nothing is left behind.
+      const line =
+        "color-mix(in oklab, var(--color-foreground) 22%, transparent)";
+      const clear =
+        "color-mix(in oklab, var(--color-foreground) 0%, transparent)";
       const ringAt = (color: string) => ({
         outline: `1px solid ${color}`,
-        outlineOffset: "12px",
-        borderRadius: "6px",
+        outlineOffset: "8px",
       });
       timers.push(
         window.setTimeout(() => {
+          if (target.querySelector("[data-readiness-issue]")) return;
           target.animate?.(
             [
               ringAt(clear),

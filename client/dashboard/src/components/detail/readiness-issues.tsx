@@ -86,7 +86,7 @@ export function ReadinessIssueMarker({
   const { issues } = useReadinessIssuesFor(anchorId);
   if (issues.length === 0) return null;
   return (
-    <ul className={cn("space-y-1", className)}>
+    <ul data-readiness-issue="" className={cn("space-y-1", className)}>
       {issues.map((issue) => {
         const Icon = issue.broken ? CircleAlert : TriangleAlert;
         const color = issue.broken ? "text-destructive" : "text-warning";
