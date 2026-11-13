@@ -742,6 +742,8 @@ func httpToolRejectionHappened(status int, report *toolconfig.CredentialReport, 
 		return mcpconnectionattempts.CodeRemoteSessionUnavailable
 	case toolconfig.ClientGrantBlocked:
 		return mcpconnectionattempts.CodeAddressNotAllowed
+	case toolconfig.ClientGrantAddressNotFound:
+		return mcpconnectionattempts.CodeAddressNotFound
 	case toolconfig.ClientGrantMisconfigured:
 		return mcpconnectionattempts.CodeCredentialMisconfigured
 	}

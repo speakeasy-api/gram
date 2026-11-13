@@ -241,6 +241,20 @@ func TestAuthorizationErrorPageProviderOutage(t *testing.T) {
 	}
 }
 
+func TestAuthorizationErrorPageSignInAddress(t *testing.T) {
+	t.Parallel()
+
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusBadGateway, Code: "gateway_error", Reason: oauthui.ReasonSignInAddress, ClientName: "Example Client", ServerName: "example-server"}))
+	page := strings.Join(strings.Fields(response.Body.String()), " ")
+	require.Equal(t, http.StatusBadGateway, response.Code)
+	require.Contains(t, page, "because the address set for its sign-in provider can't be used. This isn't something you did.")
+	require.Contains(t, page, "Ask your IT administrators to check the sign-in provider's address for this server.")
+	require.NotContains(t, page, "isn't available right now")
+	require.NotContains(t, page, "shortly")
+	require.NotContains(t, page, "problem on our side")
+}
+
 func TestAuthorizationErrorRecoveryLink(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

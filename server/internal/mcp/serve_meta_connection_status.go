@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -310,6 +311,9 @@ func memberFailureSignIn(ctx context.Context, gate metaGateContext, member metaM
 		return signInRow(metamcp.SignInError, memberErrorMessage(err), nil)
 	}
 	name := cmp.Or(member.name, member.slug)
+	if unavailable.address != guardian.AddressFine {
+		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: signInAddressText(name+" can't connect", unavailable.address) + ".", ReconnectURL: ""})
+	}
 	if unavailable.session == nil {
 		return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: name + " isn't available right now. Try again shortly.", ReconnectURL: ""})
 	}

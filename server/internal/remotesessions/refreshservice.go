@@ -533,6 +533,37 @@ func RefreshOutageKey(sess remotesessions_repo.RemoteSession) string {
 	return "remotesession:refresh-outage:" + sess.ID.String() + ":" + strconv.FormatInt(sess.GrantGeneration, 10)
 }
 
+// RefreshAddressKey records the configured address one grant's last paced refresh could not dial.
+func RefreshAddressKey(sess remotesessions_repo.RemoteSession) string {
+	return "remotesession:refresh-address:" + sess.ID.String() + ":" + strconv.FormatInt(sess.GrantGeneration, 10)
+}
+
+// recordedAddress reads the address that last stopped sess's refresh, AddressFine when none or unreadable.
+func (s *RefreshService) recordedAddress(ctx context.Context, sess remotesessions_repo.RemoteSession) guardian.AddressFailure {
+	var address guardian.AddressFailure
+	if err := s.locks.Get(ctx, RefreshAddressKey(sess), &address); err != nil {
+		if !errors.Is(err, redisCache.ErrCacheMiss) {
+			s.logger.WarnContext(ctx, "remote session refresh address unreadable", attr.SlogError(err))
+		}
+		return guardian.AddressFine
+	}
+	switch address {
+	case guardian.AddressNotAllowed, guardian.AddressNotFound:
+		return address
+	case guardian.AddressFine:
+	}
+	return guardian.AddressFine
+}
+
+// RecordedAddress is the address that last stopped sess's refresh, for pages to render from.
+func (m *ChallengeManager) RecordedAddress(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) guardian.AddressFailure {
+	sess, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+	if err != nil {
+		return guardian.AddressFine
+	}
+	return m.refresher.recordedAddress(ctx, sess)
+}
+
 // RecordedOutage reads what last stopped sess's refresh; known is false when the record couldn't be read.
 func (s *RefreshService) RecordedOutage(ctx context.Context, sess remotesessions_repo.RemoteSession) (kind RefreshOutageKind, known bool) {
 	if err := s.locks.Get(ctx, RefreshOutageKey(sess), &kind); err != nil {
@@ -586,6 +617,9 @@ type refreshDeferredError struct {
 
 	// why says whether an outage, another request, or our own setup stopped the call.
 	why refreshDeferral
+
+	// address is the configured address a paced refresh last could not dial.
+	address guardian.AddressFailure
 }
 
 func (e *refreshDeferredError) Error() string {
@@ -626,8 +660,8 @@ func (s *RefreshService) refreshCooldownRemaining(ctx context.Context, sess remo
 	return max(time.Until(until), 0)
 }
 
-// startRefreshCooldown paces the binding after an outage answer, records the outage for the connect page, and returns the wait and whether the page can see it.
-func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotesessions_repo.RemoteSession, kind RefreshOutageKind, cause error) (time.Duration, bool) {
+// startRefreshCooldown paces the binding and records the outage, or an undialed address in its place, returning the wait and whether an outage shows.
+func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotesessions_repo.RemoteSession, kind RefreshOutageKind, address guardian.AddressFailure, cause error) (time.Duration, bool) {
 	wait := refreshOutageCooldown
 	if tokenErr, ok := errors.AsType[*TokenRefreshError](cause); ok {
 		wait = min(max(wait, tokenErr.retryAfter), refreshOutageCooldownMax)
@@ -635,9 +669,17 @@ func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotese
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
 	defer cancel()
 	recorded := true
-	if err := s.locks.Set(ctx, RefreshOutageKey(sess), kind, refreshOutageTTL); err != nil {
+	recordKey, recordValue, staleKey := RefreshOutageKey(sess), any(kind), RefreshAddressKey(sess)
+	if address != guardian.AddressFine {
+		recorded = false
+		recordKey, recordValue, staleKey = RefreshAddressKey(sess), any(address), RefreshOutageKey(sess)
+	}
+	if err := s.locks.Set(ctx, recordKey, recordValue, refreshOutageTTL); err != nil {
 		recorded = false
 		s.logger.WarnContext(ctx, "remote session refresh outage not recorded", attr.SlogError(err))
+	}
+	if err := s.locks.Delete(ctx, staleKey); err != nil {
+		s.logger.WarnContext(ctx, "remote session refresh outage not cleared", attr.SlogError(err))
 	}
 	if err := s.locks.Set(ctx, RefreshCooldownKey(sess), time.Now().Add(wait), wait); err != nil {
 		s.logger.WarnContext(ctx, "remote session refresh cooldown not stored", attr.SlogError(err))
@@ -650,7 +692,7 @@ func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotese
 func (s *RefreshService) clearRefreshOutage(ctx context.Context, sess remotesessions_repo.RemoteSession) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
 	defer cancel()
-	for _, key := range []string{RefreshCooldownKey(sess), RefreshOutageKey(sess)} {
+	for _, key := range []string{RefreshCooldownKey(sess), RefreshOutageKey(sess), RefreshAddressKey(sess)} {
 		if err := s.locks.Delete(ctx, key); err != nil {
 			s.logger.WarnContext(ctx, "remote session refresh outage not cleared", attr.SlogError(err))
 		}
@@ -773,7 +815,7 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 		if wait := s.refreshCooldownRemaining(ctx, sess); wait > 0 {
 			s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeDeferred)
 			recorded, _ := s.RecordedOutage(ctx, sess)
-			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, visibleOutage: recorded, outageCause: kind, failureRecorded: false, stepRecorded: false, err: &refreshDeferredError{wait: wait, why: refreshDeferralCooldown}}
+			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, visibleOutage: recorded, outageCause: kind, failureRecorded: false, stepRecorded: false, err: &refreshDeferredError{wait: wait, why: refreshDeferralCooldown, address: s.recordedAddress(ctx, sess)}}
 		}
 	}
 
@@ -797,7 +839,7 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 		case refreshOutagePaced(outcome, err):
 			outageCause = kind
 			var recorded bool
-			retryAfter, recorded = s.startRefreshCooldown(ctx, attempted, kind, err)
+			retryAfter, recorded = s.startRefreshCooldown(ctx, attempted, kind, guardian.AddressFailureOf(err, client.TunneledMcpServerID.Valid), err)
 			if recorded {
 				visibleOutage = kind
 			}
@@ -947,7 +989,7 @@ func (s *RefreshService) refresh(
 		case ok:
 			return winner, nil, nil, nil
 		case wait > 0:
-			return zero, nil, nil, &refreshDeferredError{wait: wait, why: refreshDeferralCooldown}
+			return zero, nil, nil, &refreshDeferredError{wait: wait, why: refreshDeferralCooldown, address: s.recordedAddress(ctx, sess)}
 		}
 		if err := ctx.Err(); err != nil {
 			return zero, nil, nil, fmt.Errorf("wait for a concurrent refresh: %w", err)
@@ -956,7 +998,7 @@ func (s *RefreshService) refresh(
 		lockAcquiredAt = time.Now()
 		held, lockErr = acquire()
 		if lockErr == nil && !held {
-			return zero, nil, nil, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralLockHeld}
+			return zero, nil, nil, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralLockHeld, address: guardian.AddressFine}
 		}
 	}
 
@@ -1045,7 +1087,7 @@ func (s *RefreshService) refresh(
 	now := time.Now()
 	postDeadline := refreshPostDeadline(lockAcquiredAt, now)
 	if !postDeadline.After(now) {
-		return zero, &client, nil, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralSetupSlow}
+		return zero, &client, nil, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralSetupSlow, address: guardian.AddressFine}
 	}
 
 	// The provider may consume the refresh token once the POST starts; keep its replacement.
@@ -1063,7 +1105,7 @@ func (s *RefreshService) refresh(
 			)
 		case !renewed:
 			// Another caller may be presenting this refresh token by now.
-			return zero, &client, nil, fmt.Errorf("%w: %w", errRefreshLeaseLost, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralSetupSlow})
+			return zero, &client, nil, fmt.Errorf("%w: %w", errRefreshLeaseLost, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralSetupSlow, address: guardian.AddressFine})
 		default:
 			// The renewed lease covers the POST and the store.
 			postDeadline = time.Now().Add(refreshUpstreamTimeout)

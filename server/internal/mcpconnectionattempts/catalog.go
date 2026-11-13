@@ -1,11 +1,5 @@
 package mcpconnectionattempts
 
-import (
-	"errors"
-
-	"github.com/speakeasy-api/gram/server/internal/guardian"
-)
-
 // Outcome is the overall result of an attempt, stored on its final step only.
 type Outcome string
 
@@ -318,23 +312,7 @@ var (
 	CodeSignInMethodNotAccepted     = define("sign_in_method_not_accepted", OutcomeFailed, WhoApp, "This server does not accept this kind of sign-in.", "Connect to a server that accepts it, or use another way to sign in.")
 	CodeCredentialChoiceInvalid     = define("credential_choice_invalid", OutcomeFailed, WhoApp, "The app's sign-in choice does not fit this server.", "Update the app, or report the problem to its makers.")
 
-	// Addresses Speakeasy did not dial. Their rows name no provider host.
-	CodeAddressNotAllowed = define("address_not_allowed", OutcomeFailed, WhoAdmin, "Speakeasy does not connect to private or reserved network addresses.", "Check the addresses set for this server and its sign-in.")
-	CodeAddressNotFound   = define("address_not_found", OutcomeFailed, WhoAdmin, "We could not find an address set for this server or its sign-in.", "Check the addresses set for this server and its sign-in.")
+	// Configured addresses Speakeasy did not dial.
+	CodeAddressNotAllowed = define("address_not_allowed", OutcomeFailed, WhoAdmin, "This server or its sign-in uses a private network address Speakeasy does not connect to.", "Check the server and sign-in addresses, or connect a private network through a tunnel.")
+	CodeAddressNotFound   = define("address_not_found", OutcomeFailed, WhoAdmin, "The address for this server or its sign-in does not point anywhere.", "Check the server and sign-in addresses.")
 )
-
-// addressCodes name an address Speakeasy never dialed, so no provider was reached.
-var addressCodes = []Code{CodeAddressNotAllowed, CodeAddressNotFound}
-
-// AddressHappened names a dial that never left Speakeasy: egress policy refused the
-// address, or the name does not exist. A temporary lookup failure is not one.
-func AddressHappened(err error) (Code, bool) {
-	if errors.Is(err, guardian.ErrBlockedIP) {
-		return CodeAddressNotAllowed, true
-	}
-	if guardian.IsAddressNotFound(err) {
-		return CodeAddressNotFound, true
-	}
-	var none Code
-	return none, false
-}

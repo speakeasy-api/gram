@@ -96,6 +96,10 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             {{else if eq .Kind "check-needs-admin"}}
             This server's connection isn't set up correctly, so Speakeasy couldn't
             check it.
+            {{else if eq .Kind "sign-in-address"}}
+            {{template "Client" .}} couldn't connect to {{template "server" .}}
+            because the address set for its sign-in provider can't be used. This
+            isn't something you did.
             {{else}}
             {{template "Client" .}} couldn't connect to {{template "server" .}}.
             The connection could not be completed.
@@ -163,6 +167,9 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           {{else if eq .Kind "check-needs-admin"}}
           Ask your IT administrators to check this server's connection settings.
           Share the technical details below with them.
+          {{else if eq .Kind "sign-in-address"}}
+          Ask your IT administrators to check the sign-in provider's address for
+          this server. Share the technical details below with them.
           {{else}}
           Try connecting again from {{template "client" .}}. If it still fails,
           share the technical details below with your IT administrators.

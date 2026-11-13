@@ -3,6 +3,7 @@ package remotemcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -61,9 +63,9 @@ func TestToolsCallConnections_BlockedAddressIsNotTheProviders(t *testing.T) {
 	shared := postToolsCallThrough(t, recordingConnections(rec, "token"), policy, upstream.URL)
 
 	require.Equal(t, oops.CodeGatewayError, shared.Code)
-	require.Equal(t, "remote mcp server address is not allowed by network policy", shared.Error())
+	require.Equal(t, "remote mcp server uses a private network address Speakeasy does not connect to. Ask your administrator to check the server's address", shared.Error())
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeAddressNotAllowed)
-	require.Empty(t, row.ProviderHost)
+	require.Equal(t, "provider.example.com", row.ProviderHost, "the configured host, never the address it resolved to")
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 }
 
@@ -75,9 +77,9 @@ func TestToolsCallConnections_HostThatDoesNotExist(t *testing.T) {
 	shared := postToolsCallThrough(t, recordingConnections(rec, "token"), resolvingPolicy(t, notFound), "http://mcp.example.invalid/mcp")
 
 	require.Equal(t, oops.CodeGatewayError, shared.Code)
-	require.Equal(t, "remote mcp server address could not be found", shared.Error())
+	require.Equal(t, "remote mcp server uses an address that does not point anywhere. Ask your administrator to check the server's address", shared.Error())
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeAddressNotFound)
-	require.Empty(t, row.ProviderHost)
+	require.Equal(t, "provider.example.com", row.ProviderHost)
 }
 
 func TestToolsCallConnections_TemporaryLookupFailureStaysUnreachable(t *testing.T) {
@@ -90,4 +92,51 @@ func TestToolsCallConnections_TemporaryLookupFailureStaysUnreachable(t *testing.
 	require.Equal(t, "remote mcp server unreachable", shared.Error())
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderUnreachable)
 	require.Equal(t, "provider.example.com", row.ProviderHost)
+}
+
+// An upstream that redirects to a refused address chose that address; the configured one is fine.
+func TestToolsCallConnections_RedirectToBlockedAddressKeepsItsReading(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://192.0.2.10/mcp", http.StatusFound)
+	}))
+	t.Cleanup(upstream.Close)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithBlockedCIDRBlocks("192.0.2.0/24"))
+	require.NoError(t, err)
+
+	rec := mcpconnectionattemptstest.New(t)
+	connections := recordingConnections(rec, "token")
+	p := newKillswitchTestProxy(t, upstream.URL, NewToolsCallKillswitchInterceptor(continueCheckpoint(), "organization-id", "server-id", testenv.NewLogger(t)))
+	p.GuardianPolicy = policy
+	connections.install(p)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(connectionToolsCall))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	err = p.Post(httptest.NewRecorder(), req)
+	shared, ok := errors.AsType[*oops.ShareableError](err)
+	require.True(t, ok, "proxy error: %v", err)
+
+	require.Equal(t, "remote mcp server unreachable", shared.Error())
+	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderUnreachable)
+}
+
+// A tunnel's dial reaches our own gateway, so a refused address there is ours, never the admin's.
+func TestUpstreamFailureHappened_TunnelDialIsNeverAnAddress(t *testing.T) {
+	t.Parallel()
+
+	refused := fmt.Errorf("dial gateway: %w", guardian.ErrBlockedIP)
+	code, ok := UpstreamFailureHappened(0, false, UpstreamCredentialSent{Attached: true, Self: false, Configured: false}, true, "", refused)
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, code)
+}
+
+// A call the phase timer gave up on stays a timeout even when a refused address is also in its chain.
+func TestUpstreamFailureHappened_TimeoutWinsOverAddress(t *testing.T) {
+	t.Parallel()
+
+	code, ok := UpstreamFailureHappened(0, false, UpstreamCredentialSent{Attached: true, Self: false, Configured: false}, false, "",
+		fmt.Errorf("forward: %w", proxy.ErrUpstreamTimedOut), fmt.Errorf("dial: %w", guardian.ErrBlockedIP))
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code)
 }

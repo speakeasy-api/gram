@@ -368,7 +368,11 @@
                   rather than hiding under it; a pending automatic verification
                   shows on it until the page refreshes with the verdict;
                   everything descriptive sits in the disclosure below. */}}
-                  {{if .Unavailable}}
+                  {{if .SignInAddress}}
+                  <span class="text-xs text-default-warning" data-validation="sign-in-address"
+                    >Sign-in provider address can't be used · ask your administrator</span
+                  >
+                  {{else if .Unavailable}}
                   <span class="text-xs text-default-warning" data-validation="unavailable"
                     >Unavailable · try again shortly</span
                   >
@@ -470,7 +474,7 @@
                 >
                   Refresh
                 </button>
-                {{end}} {{end}} {{if and .Connected .CanValidate (not (or .Rejected .Inactive .Unavailable))}}
+                {{end}} {{end}} {{if and .Connected .CanValidate (not (or .Rejected .Inactive .Unavailable .SignInAddress))}}
                 <button
                   type="submit"
                   name="action"

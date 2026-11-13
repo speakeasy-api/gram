@@ -3,6 +3,7 @@ package remotesessions
 import (
 	"errors"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
@@ -10,7 +11,7 @@ import (
 // A refresh deferred because another request holds the lock gets the zero code: that request's row covers it.
 // An unclassified outage is ours, not evidence that the provider failed.
 func ConnectionOutageHappened(err error) mcpconnectionattempts.Code {
-	if code, ok := OutageAddressHappened(err); ok {
+	if code, ok := mcpconnectionattempts.AddressCode(OutageAddress(err)); ok {
 		return code
 	}
 	if TokenEndpointCausedOutage(err) {
@@ -33,15 +34,29 @@ func ConnectionOutageHappened(err error) mcpconnectionattempts.Code {
 	return mcpconnectionattempts.CodeInternalError
 }
 
-// OutageAddressHappened names an outage whose provider address Speakeasy did not dial:
-// a refresh or client credential request egress policy refused, or a name that does not exist.
-func OutageAddressHappened(err error) (mcpconnectionattempts.Code, bool) {
+// OutageAddress is the configured sign-in provider address an outage never reached, AddressFine for any other outage.
+func OutageAddress(err error) guardian.AddressFailure {
 	if endpoint, ok := errors.AsType[*TokenEndpointError](err); ok && !endpoint.Signing {
-		return mcpconnectionattempts.AddressHappened(endpoint.sendFailure)
+		return endpoint.address
 	}
-	if refreshErr, ok := errors.AsType[*RefreshError](err); ok && refreshErr.outageCause == RefreshOutageProvider {
-		return mcpconnectionattempts.AddressHappened(refreshErr.err)
+	refreshErr, ok := errors.AsType[*RefreshError](err)
+	if !ok || refreshErr.outageCause != RefreshOutageProvider {
+		return guardian.AddressFine
 	}
-	var none mcpconnectionattempts.Code
-	return none, false
+	if deferred, ok := errors.AsType[*refreshDeferredError](refreshErr.err); ok {
+		return deferred.address
+	}
+	return guardian.AddressFailureOf(refreshErr.err, false)
+}
+
+// OutageAddressOption names the configured sign-in provider whose address an outage never reached.
+// Without one, the row's own host is marked as not where it failed.
+func OutageAddressOption(err error) mcpconnectionattempts.Option {
+	if endpoint, ok := errors.AsType[*TokenEndpointError](err); ok && endpoint.issuer != "" {
+		return mcpconnectionattempts.Provider(endpoint.issuer)
+	}
+	if refreshErr, ok := errors.AsType[*RefreshError](err); ok && refreshErr.IssuerURL != "" {
+		return mcpconnectionattempts.Provider(refreshErr.IssuerURL)
+	}
+	return mcpconnectionattempts.FailedElsewhere()
 }

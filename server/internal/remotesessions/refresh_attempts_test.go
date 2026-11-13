@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
@@ -21,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func tokenAnswer(status int, body string) http.HandlerFunc {
@@ -127,31 +130,103 @@ func TestRefreshNow_RecordsEachEndState(t *testing.T) {
 	}
 }
 
-// A token endpoint our egress policy refuses is the admin's to fix and names no provider, so provider health never counts it.
-func TestRefreshNow_BlockedTokenEndpointIsNotTheProviders(t *testing.T) {
+// addressRefresher refreshes env's grant through policy, against tokenEndpoint when set, with a real lock cache.
+func addressRefresher(t *testing.T, ctx context.Context, env syntheticExpiryEnv, policy *guardian.Policy, tokenEndpoint string) (*remotesessions.RefreshService, *mcpconnectionattemptstest.Recording) {
+	t.Helper()
+	if tokenEndpoint != "" {
+		rows, err := testrepo.New(env.db).ForceRemoteSessionIssuerTokenEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerTokenEndpointFixtureParams{
+			TokenEndpoint: conv.ToPGText(tokenEndpoint), RemoteSessionClientID: env.clientID, ProjectID: env.projectID, OrganizationID: env.organizationID,
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, rows)
+	}
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	rec := mcpconnectionattemptstest.New(t)
+	return remotesessions.NewRefreshService(testenv.NewLogger(t), testenv.NewMeterProvider(t), env.db, env.enc, policy, nil, cache.NewRedisCacheAdapter(redisClient), remotesessions.WithRefreshConnectionRecorder(rec.Recorder)), rec
+}
+
+// resolverPolicy is a policy whose lookups of host return lookupErr.
+func resolverPolicy(t *testing.T, host string, lookupErr error) *guardian.Policy {
+	t.Helper()
+	resolver := dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(ctx context.Context, network, name string) ([]net.IP, error) {
+		if name == host {
+			return nil, lookupErr
+		}
+		return net.DefaultResolver.LookupIP(ctx, network, name)
+	}})
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{}, guardian.WithResolver(resolver))
+	require.NoError(t, err)
+	return policy
+}
+
+// A token endpoint egress policy refuses is the admin's on the refresh and on every request paced behind it,
+// and is never recorded or shown as a provider outage. The refresh still reads as unavailable to callers.
+func TestRefreshNow_BlockedTokenEndpointThroughTheCooldown(t *testing.T) {
 	t.Parallel()
 
 	ctx, env := newSyntheticExpiryEnv(t, "refresh-blocked", tokenAnswer(http.StatusOK, `{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}`))
-	rec := mcpconnectionattemptstest.New(t)
 	blocked, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{"127.0.0.0/8", "::1/128"})
 	require.NoError(t, err)
-	refresher := remotesessions.NewRefreshService(testenv.NewLogger(t), testenv.NewMeterProvider(t), env.db, env.enc, blocked, nil, cache.NoopCache, remotesessions.WithRefreshConnectionRecorder(rec.Recorder))
-
+	refresher, rec := addressRefresher(t, ctx, env, blocked, "")
 	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
-
 	scope := mcpconnectionattempts.ServerScope(env.organizationID, env.projectID, uuid.New(), mcpconnectionattempts.AppDCR)
-	_, refreshErr := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope))
-	require.ErrorIs(t, refreshErr, remotesessions.ErrRemoteSessionUnavailable, "retry behaviour is unchanged")
-	require.Equal(t, mcpconnectionattempts.CodeAddressNotAllowed, remotesessions.ConnectionOutageHappened(refreshErr))
 
+	_, first := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope))
+	require.ErrorIs(t, first, remotesessions.ErrRemoteSessionUnavailable, "retry behaviour is unchanged")
+	require.Equal(t, mcpconnectionattempts.CodeAddressNotAllowed, remotesessions.ConnectionOutageHappened(first))
+	require.Equal(t, guardian.AddressNotAllowed, remotesessions.OutageAddress(first))
+	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(first), "no provider outage is shown")
 	row := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeAddressNotAllowed)
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
-	require.Empty(t, row.ProviderHost)
+	require.Equal(t, "idp.example.com", row.ProviderHost, "the configured issuer host, not the address it resolved to")
+
+	_, second := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope))
+	require.ErrorIs(t, second, remotesessions.ErrRemoteSessionUnavailable)
+	require.Positive(t, remotesessions.RetryAfter(second), "paced inside the cooldown")
+	require.Equal(t, mcpconnectionattempts.CodeAddressNotAllowed, remotesessions.ConnectionOutageHappened(second))
+	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(second))
+	require.False(t, remotesessions.RefreshBusy(second), "an address is not a busy refresh")
+	recorded, known := refresher.RecordedOutage(ctx, session)
+	require.True(t, known)
+	require.Equal(t, remotesessions.RefreshOutageNone, recorded)
 
 	active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
 	require.True(t, active.RefreshTokenEncrypted.Valid, "a refused dial keeps the refresh grant")
+}
+
+func TestRefreshNow_TokenEndpointThatDoesNotExist(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newSyntheticExpiryEnv(t, "refresh-missing", tokenAnswer(http.StatusOK, `{"access_token":"a","refresh_token":"r","expires_in":3600}`))
+	policy := resolverPolicy(t, "token.example.invalid", &net.DNSError{Err: "no such host", Name: "token.example.invalid", IsNotFound: true})
+	refresher, rec := addressRefresher(t, ctx, env, policy, "https://token.example.invalid/token")
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+
+	_, refreshErr := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(mcpconnectionattempts.ServerScope(env.organizationID, env.projectID, uuid.New(), mcpconnectionattempts.AppDCR)))
+	require.ErrorIs(t, refreshErr, remotesessions.ErrRemoteSessionUnavailable)
+	require.Equal(t, mcpconnectionattempts.CodeAddressNotFound, remotesessions.ConnectionOutageHappened(refreshErr))
+	row := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeAddressNotFound)
+	require.Equal(t, "idp.example.com", row.ProviderHost)
+}
+
+// A lookup that fails for now stays the provider's outage, as before.
+func TestRefreshNow_TokenEndpointLookupFailureStaysUnreachable(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newSyntheticExpiryEnv(t, "refresh-servfail", tokenAnswer(http.StatusOK, `{"access_token":"a","refresh_token":"r","expires_in":3600}`))
+	policy := resolverPolicy(t, "token.example.invalid", errors.New("resolver down"))
+	refresher, rec := addressRefresher(t, ctx, env, policy, "https://token.example.invalid/token")
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+
+	_, refreshErr := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(mcpconnectionattempts.ServerScope(env.organizationID, env.projectID, uuid.New(), mcpconnectionattempts.AppDCR)))
+	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, remotesessions.ConnectionOutageHappened(refreshErr))
+	require.Equal(t, remotesessions.RefreshOutageProvider, remotesessions.OutageKindOf(refreshErr))
+	rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderUnreachable)
 }
 
 // Nothing guesses a home for a row: a caller that names no scope gets no row.

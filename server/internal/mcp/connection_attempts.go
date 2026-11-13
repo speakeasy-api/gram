@@ -756,7 +756,7 @@ func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool, fa
 	if tunneled {
 		return tunneledProbeHappened(failure)
 	}
-	if code, ok := mcpconnectionattempts.AddressHappened(failure.err); ok {
+	if code, ok := mcpconnectionattempts.AddressHappened(failure.err, tunneled); ok {
 		return code
 	}
 	return mcpconnectionattempts.CodeProviderUnavailable

@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -411,6 +412,9 @@ type remoteSessionCard struct {
 	// UnavailableTunnel: the outage is on a tunnel, which reconnecting also goes through.
 	UnavailableTunnel bool
 
+	// SignInAddress: the sign-in provider's address can't be used, so an administrator must fix it.
+	SignInAddress bool
+
 	// Verified, Rejected, Inactive, Unverified: the last probe's verdict; all false when none ran.
 	Verified   bool
 	Rejected   bool
@@ -463,7 +467,7 @@ type cardPanel struct {
 
 // Panel decides the detail lines from the card's state.
 func (c remoteSessionCard) Panel() cardPanel {
-	reconnect := c.Unavailable || c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
+	reconnect := c.Unavailable || c.SignInAddress || c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
 	hasGrant := c.Connected || c.Expired || c.Unroutable
 	p := cardPanel{
 		GrantLive:            c.Connected && !reconnect,
@@ -1367,6 +1371,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 				s.refuseRemoteSessionUnavailable(ctx, t, err)
 				outage := remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+				if remotesessions.OutageAddress(err) != guardian.AddressFine {
+					return fmt.Errorf("check agent connections: %w", oops.WithBrowserReason(outage, oauthui.ReasonSignInAddress))
+				}
 				if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
 					return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
 				}
@@ -1876,7 +1883,7 @@ func isUniqueViolation(err error) bool {
 
 // needsAction reports a card with a reconnect or verification still open.
 func (c remoteSessionCard) needsAction() bool {
-	return c.Unavailable || c.ValidationNotice != "" || c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified)
+	return c.Unavailable || c.SignInAddress || c.ValidationNotice != "" || c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified)
 }
 
 // expiredConnectionOutage reads recorded state, never the provider: a page load must not spend a refresh token.
@@ -2303,9 +2310,12 @@ func (s *Service) buildRemoteSessionCards(
 		if chained {
 			chainCheck = s.consentChainCheckAtRender(ctx, chainRequests[c.ID])
 		}
-		unavailable, unavailableTunnel := false, false
+		unavailable, unavailableTunnel, signInAddress := false, false, false
 		if connected && state.AccessExpiresAt != nil && !state.AccessExpiresAt.After(renderedAt) {
-			unavailable, unavailableTunnel = s.expiredConnectionOutage(ctx, *challengeState.Subject, c.ID)
+			signInAddress = s.remoteChallengeMgr.RecordedAddress(ctx, *challengeState.Subject, c.ID) != guardian.AddressFine
+			if !signInAddress {
+				unavailable, unavailableTunnel = s.expiredConnectionOutage(ctx, *challengeState.Subject, c.ID)
+			}
 		}
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		requested = slices.Clone(requested)
@@ -2355,6 +2365,7 @@ func (s *Service) buildRemoteSessionCards(
 			TokenExpiresIn:         tokenExpiresIn,
 			Unavailable:            unavailable,
 			UnavailableTunnel:      unavailableTunnel,
+			SignInAddress:          signInAddress,
 			Verified:               state.ValidationStatus == remotesessions.ValidationOutcomeValid,
 			Rejected:               state.ValidationStatus == remotesessions.ValidationOutcomeRejectedByMember,
 			Inactive:               state.ValidationStatus == remotesessions.ValidationOutcomeInactive,

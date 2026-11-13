@@ -1961,11 +1961,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		t.At(mcpconnectionattempts.StepProviderToken)
 		t.Refuse(ctx, exchangeHappened(err, clientRow.TunneledMcpServerID.Valid))
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
-		failure := exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
-		if !exchangeFailureIsProviderOutage(failure, err) {
-			return none, failure
-		}
-		return none, providerOutageError(failure, m.providerLabel(ctx, state))
+		return none, exchangeFailureAnswer(ctx, logger, err, clientRow.TunneledMcpServerID.Valid, func() string { return m.providerLabel(ctx, state) })
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
@@ -2306,7 +2302,7 @@ func exchangeHappened(err error, tunneled bool) mcpconnectionattempts.Code {
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			return mcpconnectionattempts.CodeTunnelUnavailable
 		}
-		if code, ok := mcpconnectionattempts.AddressHappened(err); ok && !tunneled {
+		if code, ok := mcpconnectionattempts.AddressHappened(err, tunneled); ok {
 			return code
 		}
 		return mcpconnectionattempts.CodeProviderUnreachable
@@ -2388,6 +2384,19 @@ func (m *ChallengeManager) providerLabel(ctx context.Context, state RemoteLoginS
 		return ""
 	}
 	return parsed.Hostname()
+}
+
+// exchangeFailureAnswer is what a failed code exchange shows: an address an admin fixes, a provider outage, or the failure.
+func exchangeFailureAnswer(ctx context.Context, logger *slog.Logger, err error, tunneled bool, provider func() string) error {
+	failure := exchangeFailure(ctx, logger, err, tunneled)
+	if guardian.AddressFailureOf(err, tunneled) != guardian.AddressFine {
+		// Still tagged as caused outside Speakeasy, so the response headers stay as they were.
+		return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, oops.WithBrowserReason(failure, oauthui.ReasonSignInAddress))
+	}
+	if !exchangeFailureIsProviderOutage(failure, err) {
+		return failure
+	}
+	return providerOutageError(failure, provider())
 }
 
 // exchangeFailureIsProviderOutage excludes failures Speakeasy's own signing caused.
@@ -2579,14 +2588,10 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 		return oops.E(code, err, "%s: the client assertion could not be signed", message).LogError(ctx, logger)
 	}
 	if _, ok := errors.AsType[*tokenExchangeUnavailableError](err); ok {
-		reason := "the identity provider could not be reached"
-		switch code, _ := mcpconnectionattempts.AddressHappened(err); {
-		case tunneled:
-		case code == mcpconnectionattempts.CodeAddressNotAllowed:
-			reason = "the identity provider's address is not allowed by network policy"
-		case code == mcpconnectionattempts.CodeAddressNotFound:
-			reason = "the identity provider's address could not be found"
+		if address := guardian.AddressFailureOf(err, tunneled); address != guardian.AddressFine {
+			return oops.E(oops.CodeGatewayError, err, "token exchange failed: the sign-in provider %s. Ask your administrator to check the sign-in provider's address", address.Problem()).LogError(ctx, logger)
 		}
+		reason := "the identity provider could not be reached"
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			reason = "the MCP tunnel is not connected"
 		}

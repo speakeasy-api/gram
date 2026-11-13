@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -264,6 +265,9 @@ type memberUnavailableError struct {
 
 	// session is the refresh failure when the outage hit a person's connection.
 	session error
+
+	// address is a sign-in provider address Speakeasy did not dial, which no retry fixes.
+	address guardian.AddressFailure
 }
 
 func (e memberUnavailableError) Unwrap() error { return e.memberDiscoveryError }
@@ -272,6 +276,7 @@ func newMemberUnavailableError(message string, session error) memberUnavailableE
 	return memberUnavailableError{
 		memberDiscoveryError: memberDiscoveryError{metaMemberError: &metaMemberError{message: message}, status: 0, retryable: false, retryAfter: 0},
 		session:              session,
+		address:              guardian.AddressFine,
 	}
 }
 

@@ -1,15 +1,20 @@
 package remotesessions
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -59,9 +64,74 @@ func TestExchangeToBlockedAddressIsNotProviderFailure(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, mcpconnectionattempts.CodeAddressNotAllowed, exchangeHappened(err, false))
 
+	page := httptest.NewRecorder()
+	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
+		return exchangeFailureAnswer(t.Context(), testenv.NewLogger(t), err, false, func() string { return "idp.example.com" })
+	}).ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback", nil))
+	text := strings.Join(strings.Fields(page.Body.String()), " ")
+	require.Equal(t, http.StatusBadGateway, page.Code, "the status is unchanged")
+	require.Contains(t, text, "because the address set for its sign-in provider can't be used")
+	require.Contains(t, text, "Ask your IT administrators to check the sign-in provider's address")
+	require.NotContains(t, text, "isn't available right now")
+	require.NotContains(t, text, "idp.example.com isn't")
+
 	failure := exchangeFailure(t.Context(), testenv.NewLogger(t), err, false)
 	require.Equal(t, oops.CodeGatewayError, failure.Code, "the status is unchanged")
-	require.Equal(t, "token exchange with the identity provider failed: the identity provider's address is not allowed by network policy", failure.Error())
+	require.Equal(t, "token exchange failed: the sign-in provider uses a private network address Speakeasy does not connect to. Ask your administrator to check the sign-in provider's address", failure.Error())
+}
+
+// A lookup that fails for now, through the real resolver path, stays the provider's.
+func TestExchangeWhoseLookupFailsStaysUnreachable(t *testing.T) {
+	t.Parallel()
+
+	resolver := dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) {
+		return nil, errors.New("resolver down")
+	}})
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{}, guardian.WithResolver(resolver))
+	require.NoError(t, err)
+
+	manager := &ChallengeManager{}
+	_, err = manager.exchangeCode(t.Context(), policy.Client(), RemoteLoginState{TokenEndpoint: "https://token.example.invalid/token"}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodNone}, "", "code")
+	require.Error(t, err)
+	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, exchangeHappened(err, false))
+	require.Equal(t, "token exchange with the identity provider failed: the identity provider could not be reached", exchangeFailure(t.Context(), testenv.NewLogger(t), err, false).Error())
+}
+
+// A tunneled exchange dials our own gateway, so a refused address there is never the admin's.
+func TestExchangeThroughATunnelIsNeverAnAddress(t *testing.T) {
+	t.Parallel()
+
+	err := &tokenExchangeUnavailableError{err: fmt.Errorf("post token: %w", guardian.ErrBlockedIP)}
+	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, exchangeHappened(err, true))
+}
+
+// The client credential branch: the endpoint keeps what it could not reach and whose issuer it is.
+func TestClientCredentialOutageAtABlockedAddress(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("a blocked address must not be dialed")
+	}))
+	t.Cleanup(server.Close)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{"127.0.0.0/8", "::1/128"})
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name     string
+		tunneled bool
+		want     mcpconnectionattempts.Code
+	}{
+		{name: "direct", tunneled: false, want: mcpconnectionattempts.CodeAddressNotAllowed},
+		{name: "tunneled", tunneled: true, want: mcpconnectionattempts.CodeRemoteSessionUnavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			endpoint := &TokenEndpoint{endpoint: server.URL, issuer: "https://idp.example.com", issuerID: uuid.New(), doer: policy.Client(), auth: TokenEndpointClientAuth{Method: TokenEndpointAuthMethodNone, ClientID: "client"}, tunneled: tc.tunneled}
+			_, err := endpoint.Post(t.Context(), url.Values{"grant_type": {"client_credentials"}})
+			require.Error(t, err)
+			require.Equal(t, tc.want, ConnectionOutageHappened(err))
+		})
+	}
 }
 
 func TestExchangeHappened(t *testing.T) {

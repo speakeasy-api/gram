@@ -367,9 +367,6 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 			opt.apply(&row)
 		}
 	}
-	if code, ok := what.(Code); ok && slices.Contains(addressCodes, code) {
-		row.ProviderHost = ""
-	}
 	return row, nil
 }
 

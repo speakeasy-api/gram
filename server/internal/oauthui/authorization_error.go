@@ -151,6 +151,8 @@ const (
 	ReasonSignInUnavailable Reason = "sign-in-unavailable"
 	// ReasonCheckNeedsAdmin identifies a server connection check that an administrator's setup stopped.
 	ReasonCheckNeedsAdmin Reason = "check-needs-admin"
+	// ReasonSignInAddress identifies a sign-in provider address Speakeasy can't use; an administrator fixes it.
+	ReasonSignInAddress Reason = "sign-in-address"
 )
 
 // check reports a failed server connection check, rather than a failed connection.
@@ -158,7 +160,7 @@ func (r Reason) check() bool {
 	switch r {
 	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckNeedsAdmin, ReasonCheckNotAllowed:
 		return true
-	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired, ReasonSignInUnavailable, ReasonSignInFailed:
+	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired, ReasonSignInUnavailable, ReasonSignInFailed, ReasonSignInAddress:
 		return false
 	default:
 		return false

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -117,7 +118,7 @@ func (c *requestConnections) InterceptToolsCallFailure(ctx context.Context, fail
 		return
 	}
 	if code, ok := c.upstreamFailureHappened(failure.StatusCode, failure.SentHeader, failure.Header, failure.Err); ok {
-		c.record(ctx, code)
+		c.record(ctx, code, outageAddressOptions(code, failure.Err)...)
 	}
 }
 
@@ -130,8 +131,16 @@ func (c *requestConnections) InterceptRequestFailure(ctx context.Context, failur
 		return
 	}
 	if code, ok := c.upstreamFailureHappened(failure.StatusCode, failure.SentHeader, failure.Header, failure.Err); ok {
-		c.record(ctx, code, mcpconnectionattempts.RequestMethod(requestMethodDetail(failure.Method)))
+		c.record(ctx, code, append(outageAddressOptions(code, failure.Err), mcpconnectionattempts.RequestMethod(requestMethodDetail(failure.Method)))...)
 	}
+}
+
+// outageAddressOptions name the sign-in provider when its address, not the server's, stopped the call.
+func outageAddressOptions(code mcpconnectionattempts.Code, cause error) []mcpconnectionattempts.Option {
+	if mcpconnectionattempts.AddressOf(code) == guardian.AddressFine || !errors.Is(cause, remotesessions.ErrRemoteSessionUnavailable) {
+		return nil
+	}
+	return []mcpconnectionattempts.Option{remotesessions.OutageAddressOption(cause)}
 }
 
 // upstreamFailureHappened classifies by what the final request carried: a redirect off
@@ -244,19 +253,20 @@ func UpstreamFailureHappened(status int, credentialRejected bool, credential Ups
 			}
 		}
 	}
-	if status == 0 && !tunneled {
-		if code, ok := mcpconnectionattempts.AddressHappened(errors.Join(causes...)); ok {
-			return code, true
-		}
-	}
 	// The gateway strips this header from what the server sends, so it is the gateway's own.
 	if tunneled && (status == http.StatusBadGateway || status == 0 || tunnelError != "") {
 		if code, ok := tunnelrouting.FailureHappened(tunnelError, causes...); ok {
 			return code, true
 		}
 	}
+	timedOut := slices.ContainsFunc(causes, func(cause error) bool { return errors.Is(cause, proxy.ErrUpstreamTimedOut) })
+	if status == 0 && !timedOut {
+		if code, ok := mcpconnectionattempts.AddressHappened(errors.Join(causes...), tunneled); ok {
+			return code, true
+		}
+	}
 	switch {
-	case status == 0 && slices.ContainsFunc(causes, func(cause error) bool { return errors.Is(cause, proxy.ErrUpstreamTimedOut) }):
+	case status == 0 && timedOut:
 		// A slow server looks the same through a tunnel as it does directly.
 		return mcpconnectionattempts.CodeProviderUnreachable, true
 	case tunneled && status == 0:

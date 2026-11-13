@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -221,6 +222,9 @@ func (b *metaCodeBackend) VerifyConnections(ctx context.Context, servers []strin
 // connectionRouteFailure names the state of a member that could not be routed.
 func connectionRouteFailure(err error, canConnect bool) (authentication, instructions string) {
 	if outage, unavailable := errors.AsType[memberUnavailableError](err); unavailable {
+		if outage.address != guardian.AddressFine {
+			return "unreachable", signInAddressText("This server can't connect", outage.address) + "."
+		}
 		if outage.session == nil {
 			return "unreachable", "This server can't get its connection details right now. Retry shortly. If it keeps happening, ask your administrator to check its sign-in provider, then contact Speakeasy support."
 		}

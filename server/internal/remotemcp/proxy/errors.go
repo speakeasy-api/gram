@@ -55,11 +55,10 @@ func (p *Proxy) classifyForwardError(ctx context.Context, err error, timedOut bo
 		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").LogError(ctx, p.Logger)
 	case errors.Is(err, context.Canceled):
 		return oops.E(oops.CodeBadRequest, err, "client cancelled request").LogError(ctx, p.Logger)
-	case errors.Is(err, guardian.ErrBlockedIP):
-		return oops.E(oops.CodeGatewayError, err, "remote mcp server address is not allowed by network policy").LogError(ctx, p.Logger)
-	case guardian.IsAddressNotFound(err):
-		return oops.E(oops.CodeGatewayError, err, "remote mcp server address could not be found").LogError(ctx, p.Logger)
 	default:
+		if address := guardian.AddressFailureOf(err, p.Identity.TunneledMCPServerID != ""); address != guardian.AddressFine {
+			return oops.E(oops.CodeGatewayError, err, "remote mcp server %s. Ask your administrator to check the server's address", address.Problem()).LogError(ctx, p.Logger)
+		}
 		return oops.E(oops.CodeGatewayError, err, "remote mcp server unreachable").LogError(ctx, p.Logger)
 	}
 }

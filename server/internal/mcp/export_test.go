@@ -372,3 +372,4 @@ func (s *Service) SetIDJAGTrust(store idjag.Store) {
 func (s *Service) StaleNoAuthWarned(subject string, serverID uuid.UUID, reason string) bool {
 	return s.staleNoAuthLog.seen.Contains(subject + "|" + serverID.String() + "|" + reason)
 }
+
