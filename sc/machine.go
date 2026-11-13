@@ -41,6 +41,13 @@ type Machine[S comparable, C any] struct {
 
 	// eventTypes is the inverse of eventNames.
 	eventTypes map[string]reflect.Type
+
+	// actions are the chart actions declared with Builder.Action, with
+	// their implementations; nil for one not yet bound.
+	actions map[string]chartAction[S, C]
+
+	// bound holds the service implementations given to Bind, by name.
+	bound map[string]boundService[C]
 }
 
 // options holds what the Option values passed to New configure.
@@ -88,6 +95,7 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 		nodes:   map[S]*node[S, C]{},
 		ordered: nil,
 		errs:    nil,
+		actions: map[string]chartAction[S, C]{},
 	}
 	def(&Builder[S, C]{b: b, parent: root})
 
@@ -102,6 +110,8 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 		ordered:    b.ordered,
 		eventNames: map[reflect.Type]string{},
 		eventTypes: map[string]reflect.Type{},
+		actions:    b.actions,
+		bound:      map[string]boundService[C]{},
 	}
 
 	if id == "" {
@@ -192,7 +202,22 @@ func (m *Machine[S, C]) resolveBehaviour(b *build[S, C], n *node[S, C]) {
 		if actions[name] {
 			b.errorf("state %q: more than one action is named %q", n.name, name)
 		}
+		if _, ok := m.actions[name]; ok {
+			b.errorf("state %q: action %q has the name of a chart action", n.name, name)
+		}
 		actions[name] = true
+	}
+	known := func(name string) {
+		if _, ok := m.actions[name]; !ok {
+			b.errorf("state %q: runs chart action %q, which is not declared", n.name, name)
+		}
+	}
+
+	for _, name := range n.entryRuns {
+		known(name)
+	}
+	for _, name := range n.exitRuns {
+		known(name)
 	}
 
 	for _, a := range n.entry {
@@ -219,24 +244,37 @@ func (m *Machine[S, C]) resolveBehaviour(b *build[S, C], n *node[S, C]) {
 	}
 
 	for _, t := range n.transitions {
-		switch {
-		case len(t.guards) > 1:
-			b.errorf("state %q: a transition has more than one guard", n.name)
-		case len(t.guards) == 1 && t.guards[0].name == "":
-			b.errorf("state %q: a guard has no name", n.name)
+		if t.trigger == triggerAfter && (t.delayFn != nil || t.deadlineFn != nil) && t.delayName == "" {
+			b.errorf("state %q: a delay has no name", n.name)
+		}
+
+		t.inNodes = m.resolveConditions(b, n, "WhenIn", t.inIDs)
+		t.notInNodes = m.resolveConditions(b, n, "WhenNotIn", t.notInIDs)
+
+		for _, g := range t.guards {
+			if g.name == "" {
+				b.errorf("state %q: a guard has no name", n.name)
+			}
 		}
 
 		for _, s := range t.steps {
-			if s.kind == stepDo {
+			switch {
+			case s.kind == stepDo:
 				claim(s.name)
-			} else if s.name == "" {
+			case s.kind == stepRun:
+				known(s.name)
+			case s.name == "":
 				b.errorf("state %q: a transition %s has no name", n.name, s.kind)
 			}
 		}
 
+		if t.stay && (t.targetID != nil || len(t.steps) > 0) {
+			b.errorf("state %q: a transition marked Stay has a target or steps", n.name)
+		}
+
 		if t.targetID == nil {
-			if len(t.steps) == 0 {
-				b.errorf("state %q: a transition has neither a target nor any steps", n.name)
+			if len(t.steps) == 0 && !t.stay {
+				b.errorf("state %q: a transition has neither a target nor any steps; mark it Stay to drop its event on purpose", n.name)
 			}
 			if t.reenter {
 				b.errorf("state %q: a transition without a target cannot re-enter", n.name)
@@ -251,6 +289,37 @@ func (m *Machine[S, C]) resolveBehaviour(b *build[S, C], n *node[S, C]) {
 		}
 		t.target = target
 	}
+}
+
+// EventName returns the name ev is persisted and exported under: the name
+// the chart registered for its type, or the type's own name for an event
+// the chart does not handle.
+func (m *Machine[S, C]) EventName(ev any) string {
+	t := reflect.TypeOf(ev)
+	if t == nil {
+		return "<nil>"
+	}
+
+	if name, ok := m.eventNames[t]; ok {
+		return name
+	}
+
+	return eventTypeName(t)
+}
+
+// resolveConditions resolves the states a WhenIn or WhenNotIn names.
+func (m *Machine[S, C]) resolveConditions(b *build[S, C], n *node[S, C], method string, ids []S) []*node[S, C] {
+	var nodes []*node[S, C]
+	for _, id := range ids {
+		in, ok := m.nodes[id]
+		if !ok || in.kind == kindHistory {
+			b.errorf("state %q: %s names %q, which is not a state of the chart", n.name, method, fmt.Sprint(id))
+			continue
+		}
+		nodes = append(nodes, in)
+	}
+
+	return nodes
 }
 
 // eventNamer lets an event type choose the name it is exported and persisted
@@ -372,6 +441,9 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 	if n.defaultNode != nil {
 		write(" default=%q", n.defaultNode.name)
 	}
+	if n.budget != 0 {
+		write(" budget=%d", n.budget)
+	}
 	write("\n")
 
 	for _, a := range n.entry {
@@ -379,6 +451,12 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 	}
 	for _, a := range n.exit {
 		write("exit %q\n", a.name)
+	}
+	for k, name := range n.entryRuns {
+		write("entry run %q if=%t\n", name, n.entryConds[k] != nil)
+	}
+	for k, name := range n.exitRuns {
+		write("exit run %q if=%t\n", name, n.exitConds[k] != nil)
 	}
 	for _, inv := range n.invocations {
 		write("invoke %q %s\n", inv.name, inv.doneType)
@@ -395,14 +473,32 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 		if t.trigger == triggerAfter {
 			write(" delay=%d", t.delay)
 		}
+		if t.delayName != "" {
+			write(" computed=%q deadline=%t", t.delayName, t.deadlineFn != nil)
+		}
+		if t.jitter != 0 {
+			write(" jitter=%v", t.jitter)
+		}
+		for _, in := range t.inNodes {
+			write(" in=%q", in.name)
+		}
+		for _, out := range t.notInNodes {
+			write(" notin=%q", out.name)
+		}
 		for _, g := range t.guards {
 			write(" guard=%q", g.name)
 		}
-		for _, s := range t.steps {
+		for k, s := range t.steps {
 			write(" %s=%q", s.kind, s.name)
+			if t.runConds[k] != nil {
+				write(" if")
+			}
 		}
 		if t.target != nil {
 			write(" target=%q reenter=%t", t.target.name, t.reenter)
+		}
+		if t.stay {
+			write(" stay")
 		}
 		write("\n")
 	}

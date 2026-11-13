@@ -3,6 +3,7 @@ package sc_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -57,6 +58,10 @@ const retryDelay = 2 * time.Second
 const maxChargeAttempts = 2
 
 var errCardDeclined = errors.New("card declined")
+
+// epoch is the time the tests start instances at. It is before every fixed
+// date the tests use, so no deadline in them is already past.
+var epoch = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 // orderChart is the chart most tests drive. charge is the payment service.
 func orderChart(t *testing.T, charge func(context.Context, order) (string, error), opts ...sc.Option) *sc.Machine[state, order] {
@@ -149,8 +154,8 @@ func kinds[C any](effects []sc.Effect[C]) []sc.EffectKind {
 func submitted(t *testing.T, m *sc.Machine[state, order]) (sc.Snapshot[state, order], string) {
 	t.Helper()
 
-	snap, _ := m.Start(order{})
-	snap, effects := m.Transition(snap, submit{Items: []string{"book"}})
+	snap, _ := m.Start(order{}, epoch)
+	snap, effects := m.Transition(snap, submit{Items: []string{"book"}}, epoch)
 	require.Equal(t, []state{paying, charging}, snap.Active())
 
 	return snap, effect(t, effects, sc.EffectStartInvocation).ID
@@ -159,7 +164,7 @@ func submitted(t *testing.T, m *sc.Machine[state, order]) (sc.Snapshot[state, or
 func TestStartEntersInitialState(t *testing.T) {
 	t.Parallel()
 
-	snap, effects := orderChart(t, chargeOK).Start(order{})
+	snap, effects := orderChart(t, chargeOK).Start(order{}, epoch)
 
 	require.Equal(t, []state{idle}, snap.Active())
 	require.Empty(t, effects)
@@ -171,9 +176,9 @@ func TestTransitionRunsStepsInOrderAndStartsService(t *testing.T) {
 	t.Parallel()
 
 	m := orderChart(t, chargeOK)
-	snap, _ := m.Start(order{})
+	snap, _ := m.Start(order{}, epoch)
 
-	snap, effects := m.Transition(snap, submit{Items: []string{"book"}})
+	snap, effects := m.Transition(snap, submit{Items: []string{"book"}}, epoch)
 
 	require.Equal(t, []state{paying, charging}, snap.Active())
 	require.True(t, snap.In(paying))
@@ -195,12 +200,12 @@ func TestGuardBlocksTransition(t *testing.T) {
 	t.Parallel()
 
 	m := orderChart(t, chargeOK)
-	snap, _ := m.Start(order{})
+	snap, _ := m.Start(order{}, epoch)
 
-	require.False(t, m.Can(snap, submit{}))
-	require.True(t, m.Can(snap, submit{Items: []string{"book"}}))
+	require.False(t, m.Can(snap, submit{}, epoch))
+	require.True(t, m.Can(snap, submit{Items: []string{"book"}}, epoch))
 
-	next, effects := m.Transition(snap, submit{})
+	next, effects := m.Transition(snap, submit{}, epoch)
 
 	require.Equal(t, []state{idle}, next.Active())
 	require.Empty(t, effects)
@@ -210,9 +215,9 @@ func TestUnhandledEventLeavesStateUnchanged(t *testing.T) {
 	t.Parallel()
 
 	m := orderChart(t, chargeOK)
-	snap, _ := m.Start(order{})
+	snap, _ := m.Start(order{}, epoch)
 
-	next, effects := m.Transition(snap, resume{})
+	next, effects := m.Transition(snap, resume{}, epoch)
 
 	require.Equal(t, snap.Active(), next.Active())
 	require.Empty(t, effects)
@@ -224,7 +229,7 @@ func TestParentHandlesEventForEveryChild(t *testing.T) {
 	m := orderChart(t, chargeOK)
 	snap, chargeID := submitted(t, m)
 
-	snap, effects := m.Transition(snap, cancel{})
+	snap, effects := m.Transition(snap, cancel{}, epoch)
 
 	require.Equal(t, []state{cancelled}, snap.Active())
 	require.True(t, snap.Done())
@@ -242,7 +247,7 @@ func TestTargetlessTransitionKeepsActiveStatesAndService(t *testing.T) {
 	m := orderChart(t, chargeOK)
 	snap, _ := submitted(t, m)
 
-	snap, effects := m.Transition(snap, note{Text: "gift"})
+	snap, effects := m.Transition(snap, note{Text: "gift"}, epoch)
 
 	require.Equal(t, []state{paying, charging}, snap.Active())
 	require.Equal(t, []string{"gift"}, snap.Context.Notes)
@@ -255,7 +260,7 @@ func TestServiceResultIsRouted(t *testing.T) {
 	m := orderChart(t, chargeOK)
 	snap, chargeID := submitted(t, m)
 
-	snap, effects := m.Transition(snap, sc.Done[string]{ID: chargeID, Result: "rcpt-9"})
+	snap, effects := m.Transition(snap, sc.Done[string]{ID: chargeID, Result: "rcpt-9"}, epoch)
 
 	require.Equal(t, "rcpt-9", snap.Context.Receipt)
 	require.Equal(t, []state{fulfilling, packing, picking, invoicing, drafting}, snap.Active())
@@ -270,20 +275,20 @@ func TestServiceFailureRetriesAfterDelayThenCancels(t *testing.T) {
 
 	for attempt := range maxChargeAttempts {
 		var effects []sc.Effect[order]
-		snap, effects = m.Transition(snap, sc.Failed{ID: chargeID, Err: errCardDeclined})
+		snap, effects = m.Transition(snap, sc.Failed{ID: chargeID, Err: errCardDeclined}, epoch)
 		require.Equal(t, []state{paying, retrying}, snap.Active())
 
 		timer := effect(t, effects, sc.EffectStartTimer)
 		require.Equal(t, retryDelay, timer.Delay)
 
-		snap, effects = m.Transition(snap, sc.TimerFired{ID: timer.ID})
+		snap, effects = m.Transition(snap, sc.TimerFired{ID: timer.ID}, epoch)
 		require.Equal(t, []state{paying, charging}, snap.Active())
 		require.Equal(t, attempt+1, snap.Context.Attempts)
 
 		chargeID = effect(t, effects, sc.EffectStartInvocation).ID
 	}
 
-	snap, _ = m.Transition(snap, sc.Failed{ID: chargeID, Err: errCardDeclined})
+	snap, _ = m.Transition(snap, sc.Failed{ID: chargeID, Err: errCardDeclined}, epoch)
 
 	require.Equal(t, []state{cancelled}, snap.Active())
 	require.True(t, snap.Done())
@@ -294,10 +299,10 @@ func TestResultOfStoppedServiceIsIgnored(t *testing.T) {
 
 	m := orderChart(t, chargeOK)
 	snap, chargeID := submitted(t, m)
-	snap, _ = m.Transition(snap, hold{})
+	snap, _ = m.Transition(snap, hold{}, epoch)
 	require.Equal(t, []state{onHold}, snap.Active())
 
-	next, effects := m.Transition(snap, sc.Done[string]{ID: chargeID, Result: "late"})
+	next, effects := m.Transition(snap, sc.Done[string]{ID: chargeID, Result: "late"}, epoch)
 
 	require.Equal(t, snap.Seq(), next.Seq())
 	require.Equal(t, []state{onHold}, next.Active())
@@ -310,13 +315,13 @@ func TestLeavingStateCancelsTimerAndLateFireIsIgnored(t *testing.T) {
 
 	m := orderChart(t, chargeOK)
 	snap, chargeID := submitted(t, m)
-	snap, effects := m.Transition(snap, sc.Failed{ID: chargeID, Err: errCardDeclined})
+	snap, effects := m.Transition(snap, sc.Failed{ID: chargeID, Err: errCardDeclined}, epoch)
 	timerID := effect(t, effects, sc.EffectStartTimer).ID
 
-	snap, effects = m.Transition(snap, hold{})
+	snap, effects = m.Transition(snap, hold{}, epoch)
 	require.Equal(t, timerID, effect(t, effects, sc.EffectCancelTimer).ID)
 
-	next, effects := m.Transition(snap, sc.TimerFired{ID: timerID})
+	next, effects := m.Transition(snap, sc.TimerFired{ID: timerID}, epoch)
 
 	require.Equal(t, []state{onHold}, next.Active())
 	require.Empty(t, effects)
@@ -327,11 +332,11 @@ func TestDeepHistoryRestoresLeafState(t *testing.T) {
 
 	m := orderChart(t, chargeOK)
 	snap, chargeID := submitted(t, m)
-	snap, _ = m.Transition(snap, sc.Failed{ID: chargeID, Err: errCardDeclined})
+	snap, _ = m.Transition(snap, sc.Failed{ID: chargeID, Err: errCardDeclined}, epoch)
 	require.Equal(t, []state{paying, retrying}, snap.Active())
 
-	snap, _ = m.Transition(snap, hold{})
-	snap, effects := m.Transition(snap, resume{})
+	snap, _ = m.Transition(snap, hold{}, epoch)
+	snap, effects := m.Transition(snap, resume{}, epoch)
 
 	require.Equal(t, []state{paying, retrying}, snap.Active())
 	require.Equal(t, []sc.EffectKind{sc.EffectStartTimer}, kinds(effects))
@@ -342,13 +347,13 @@ func TestParallelRegionsAdvanceIndependentlyAndCompleteTogether(t *testing.T) {
 
 	m := orderChart(t, chargeOK)
 	snap, chargeID := submitted(t, m)
-	snap, _ = m.Transition(snap, sc.Done[string]{ID: chargeID, Result: "rcpt-1"})
+	snap, _ = m.Transition(snap, sc.Done[string]{ID: chargeID, Result: "rcpt-1"}, epoch)
 
-	snap, _ = m.Transition(snap, invoiceSent{})
+	snap, _ = m.Transition(snap, invoiceSent{}, epoch)
 	require.Equal(t, []state{fulfilling, packing, picking, invoicing, sent}, snap.Active())
 	require.False(t, snap.Done())
 
-	snap, _ = m.Transition(snap, itemsPicked{})
+	snap, _ = m.Transition(snap, itemsPicked{}, epoch)
 
 	require.Equal(t, []state{shipped}, snap.Active())
 	require.True(t, snap.Done())
@@ -359,14 +364,14 @@ func TestDoneMachineIgnoresEvents(t *testing.T) {
 
 	m := orderChart(t, chargeOK)
 	snap, _ := submitted(t, m)
-	snap, _ = m.Transition(snap, cancel{})
+	snap, _ = m.Transition(snap, cancel{}, epoch)
 	require.True(t, snap.Done())
 
-	next, effects := m.Transition(snap, submit{Items: []string{"book"}})
+	next, effects := m.Transition(snap, submit{Items: []string{"book"}}, epoch)
 
 	require.Equal(t, snap.Seq(), next.Seq())
 	require.Empty(t, effects)
-	require.False(t, m.Can(snap, submit{Items: []string{"book"}}))
+	require.False(t, m.Can(snap, submit{Items: []string{"book"}}, epoch))
 }
 
 func TestTransitionDoesNotModifyItsInput(t *testing.T) {
@@ -375,7 +380,7 @@ func TestTransitionDoesNotModifyItsInput(t *testing.T) {
 	m := orderChart(t, chargeOK)
 	before, _ := submitted(t, m)
 
-	_, _ = m.Transition(before, hold{})
+	_, _ = m.Transition(before, hold{}, epoch)
 
 	require.Equal(t, []state{paying, charging}, before.Active())
 	require.Equal(t, uint64(1), before.Seq())
@@ -385,18 +390,16 @@ func TestFoldReplaysEvents(t *testing.T) {
 	t.Parallel()
 
 	m := orderChart(t, chargeOK)
-	snap, _ := m.Start(order{})
+	snap, _ := m.Start(order{}, epoch)
 
-	events := func(yield func(any) bool) {
-		for _, ev := range []any{submit{Items: []string{"book"}}, hold{}, resume{}} {
-			if !yield(ev) {
-				return
-			}
-		}
+	events := []sc.Timed{
+		{At: epoch, Event: submit{Items: []string{"book"}}},
+		{At: epoch.Add(time.Minute), Event: hold{}},
+		{At: epoch.Add(2 * time.Minute), Event: resume{}},
 	}
 
 	var trail [][]state
-	for next := range m.Fold(snap, events) {
+	for next := range m.Fold(snap, slices.Values(events)) {
 		trail = append(trail, next.Active())
 	}
 

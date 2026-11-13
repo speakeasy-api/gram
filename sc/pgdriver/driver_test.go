@@ -213,7 +213,7 @@ func TestSendPersistsStateAndWorkerCarriesOutEffects(t *testing.T) {
 
 	sent, err := d.Send(t.Context(), "o1", submit{Items: []string{"book"}})
 	require.NoError(t, err)
-	require.Equal(t, []string{"charging"}, sent.Active())
+	require.Equal(t, []string{"charging"}, sent.To.Active())
 
 	// Nothing has run yet: the effects are only recorded.
 	require.Empty(t, rec.list())
@@ -288,10 +288,10 @@ func TestLeavingAStateRemovesItsTimerFromTheOutbox(t *testing.T) {
 	drain(t, d)
 	require.Equal(t, 1, outboxSize(t, "o1"))
 
-	snap, err := d.Send(t.Context(), "o1", cancel{})
+	step, err := d.Send(t.Context(), "o1", cancel{})
 	require.NoError(t, err)
 
-	require.True(t, snap.Done())
+	require.True(t, step.To.Done())
 	require.Zero(t, outboxSize(t, "o1"))
 }
 

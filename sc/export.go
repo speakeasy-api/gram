@@ -2,6 +2,7 @@ package sc
 
 import (
 	"strconv"
+	"strings"
 )
 
 // Definition describes a chart in the shape of an XState machine
@@ -41,7 +42,9 @@ type Definition struct {
 	// Always lists the eventless transitions.
 	Always []TransitionDefinition `json:"always,omitempty"`
 
-	// After maps delays in milliseconds to their transitions.
+	// After maps delays to their transitions. A fixed delay is keyed by its
+	// length in milliseconds, and a computed delay or deadline by its name,
+	// as XState keys a named delay.
 	After map[string][]TransitionDefinition `json:"after,omitempty"`
 
 	// OnDone lists the transitions taken when the state completes.
@@ -60,7 +63,11 @@ type TransitionDefinition struct {
 	// transition without a target.
 	Target string `json:"target,omitempty"`
 
-	// Guard is the guard name.
+	// Guard names the transition's conditions, joined with &&: each guard
+	// by its name, a [Transition.WhenIn] state as in(#state), and a
+	// [Transition.WhenNotIn] state as !in(#state). XState has no string
+	// form for this, so a tool reading the export sees it as one named
+	// guard.
 	Guard string `json:"guard,omitempty"`
 
 	// Actions lists the assignment, action, and raise names in order.
@@ -124,6 +131,8 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 	for _, a := range n.exit {
 		def.Exit = append(def.Exit, a.name)
 	}
+	def.Entry = append(def.Entry, n.entryRuns...)
+	def.Exit = append(def.Exit, n.exitRuns...)
 
 	invokes := map[*invocation[S, C]]int{}
 	for _, inv := range n.invocations {
@@ -136,9 +145,17 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 		if t.target != nil {
 			td.Target = "#" + t.target.name
 		}
-		if len(t.guards) > 0 {
-			td.Guard = t.guards[0].name
+		var conditions []string
+		for _, g := range t.guards {
+			conditions = append(conditions, g.name)
 		}
+		for _, in := range t.inNodes {
+			conditions = append(conditions, "in(#"+in.name+")")
+		}
+		for _, out := range t.notInNodes {
+			conditions = append(conditions, "!in(#"+out.name+")")
+		}
+		td.Guard = strings.Join(conditions, " && ")
 		for _, s := range t.steps {
 			td.Actions = append(td.Actions, s.name)
 		}
@@ -156,8 +173,11 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 			if def.After == nil {
 				def.After = map[string][]TransitionDefinition{}
 			}
-			ms := strconv.FormatInt(t.delay.Milliseconds(), 10)
-			def.After[ms] = append(def.After[ms], td)
+			key := strconv.FormatInt(t.delay.Milliseconds(), 10)
+			if t.delayName != "" {
+				key = t.delayName
+			}
+			def.After[key] = append(def.After[key], td)
 		case triggerStateDone:
 			def.OnDone = append(def.OnDone, td)
 		case triggerInvokeDone:

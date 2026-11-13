@@ -76,6 +76,16 @@ type node[S comparable, C any] struct {
 	// exit are the actions run when the state is exited.
 	exit []action[C]
 
+	// entryRuns and exitRuns name chart actions run on entry and exit,
+	// after the state's own entry and exit actions.
+	entryRuns []string
+	exitRuns  []string
+
+	// entryConds and exitConds hold, at the same positions, the condition
+	// each run needs, or nil for one that always runs.
+	entryConds []func(Move[S]) bool
+	exitConds  []func(Move[S]) bool
+
 	// invocations are the services that run while the state is active.
 	invocations []*invocation[S, C]
 
@@ -90,6 +100,10 @@ type node[S comparable, C any] struct {
 
 	// afterCount is the number of delayed transitions declared on the state.
 	afterCount int
+
+	// budget is the time budget services in the state and its descendants
+	// share, from when the state is entered; zero for none.
+	budget time.Duration
 }
 
 // states returns the children that are real states, skipping history nodes.
@@ -145,8 +159,9 @@ type guard[C any] struct {
 	// name labels the guard in exports.
 	name string
 
-	// fn is the caller's implementation with the event type erased.
-	fn func(C, any) bool
+	// fn is the caller's implementation with the event type erased. It
+	// receives the time the core is acting at.
+	fn func(C, any, time.Time) bool
 }
 
 // stepKind is the kind of work one step of a transition does.
@@ -161,7 +176,32 @@ const (
 
 	// stepRaise queues an event for the machine itself.
 	stepRaise stepKind = "raise"
+
+	// stepRun emits an action effect for a chart action declared with
+	// Builder.Action.
+	stepRun stepKind = "run"
 )
+
+// Move is the step a chart action, declared with [Builder.Action], runs in.
+type Move[S comparable] struct {
+	// Source is the state whose transition runs the action, or the state
+	// being entered or exited.
+	Source S
+
+	// From is the active states before the step.
+	From []S
+
+	// To is the active states after the step, before any eventless
+	// transition that follows it.
+	To []S
+
+	// Event is the event the step processed. It is nil for a timer, an
+	// eventless transition, and a state's completion.
+	Event any
+}
+
+// chartAction is an action declared once for the whole chart.
+type chartAction[S comparable, C any] func(ctx context.Context, c C, mv Move[S])
 
 // step is one entry in a transition's ordered list of work.
 type step[C any] struct {
@@ -171,8 +211,9 @@ type step[C any] struct {
 	// name identifies the step.
 	name string
 
-	// assign is set for stepAssign.
-	assign func(C, any) C
+	// assign is set for stepAssign. It receives the time the core is
+	// acting at.
+	assign func(C, any, time.Time) C
 
 	// do is set for stepDo.
 	do func(context.Context, C, any)
@@ -222,11 +263,38 @@ type transition[S comparable, C any] struct {
 	// afterIndex numbers the source state's delayed transitions.
 	afterIndex int
 
+	// delayName names a delay or deadline computed from the context. It is
+	// empty for a fixed delay.
+	delayName string
+
+	// delayFn computes the timer duration when the state is entered.
+	delayFn func(C) time.Duration
+
+	// deadlineFn computes when the timer fires when the state is entered.
+	deadlineFn func(C) time.Time
+
+	// jitter is the fraction by which drivers vary a delayed transition's
+	// wait.
+	jitter float64
+
+	// inIDs are the states that must all be active for the transition to
+	// be taken.
+	inIDs []S
+
+	// inNodes is inIDs resolved to nodes.
+	inNodes []*node[S, C]
+
+	// notInIDs are the states that must all be inactive for the
+	// transition to be taken.
+	notInIDs []S
+
+	// notInNodes is notInIDs resolved to nodes.
+	notInNodes []*node[S, C]
+
 	// invocation is the service a triggerInvoke* transition belongs to.
 	invocation *invocation[S, C]
 
-	// guards holds the transition's condition. More than one is a
-	// declaration error reported by New.
+	// guards are the transition's conditions; all must hold.
 	guards []guard[C]
 
 	// steps are the assignments, actions, and raises in declared order.
@@ -241,6 +309,14 @@ type transition[S comparable, C any] struct {
 	// reenter forces the source state to be exited and entered again even
 	// when the target is the source or lies inside it.
 	reenter bool
+
+	// stay marks a transition that deliberately does nothing but consume
+	// its event.
+	stay bool
+
+	// runConds holds, by step index, the condition a chart action run by
+	// RunIf needs.
+	runConds map[int]func(Move[S]) bool
 }
 
 // invocation is a service that runs while its state is active.

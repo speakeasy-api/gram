@@ -89,13 +89,16 @@ func TestExploreReportsShortestTraceToAViolation(t *testing.T) {
 	// Submit, fail the charge, wait out the retry, hold: no shorter
 	// sequence puts an order with a counted attempt on hold.
 	require.Len(t, violation.Trace.Events, 4)
-	require.IsType(t, submit{}, violation.Trace.Events[0])
-	require.IsType(t, sc.Failed{}, violation.Trace.Events[1])
-	require.IsType(t, sc.TimerFired{}, violation.Trace.Events[2])
-	require.IsType(t, hold{}, violation.Trace.Events[3])
+	require.IsType(t, submit{}, violation.Trace.Events[0].Event)
+	require.IsType(t, sc.Failed{}, violation.Trace.Events[1].Event)
+	require.IsType(t, sc.TimerFired{}, violation.Trace.Events[2].Event)
+	require.IsType(t, hold{}, violation.Trace.Events[3].Event)
+
+	// The retry timer fires when it is due.
+	require.Equal(t, retryDelay, violation.Trace.Events[2].At.Sub(violation.Trace.Start))
 
 	// The trace replays to the reported state.
-	replayed, _ := m.Start(order{})
+	replayed, _ := m.Start(order{}, violation.Trace.Start)
 	for snap := range m.Fold(replayed, slices.Values(violation.Trace.Events)) {
 		replayed = snap
 	}
@@ -117,7 +120,8 @@ func TestExploreReportsStepViolationWithTheOffendingEventLast(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, report.Violations, 1)
-	require.Equal(t, []any{submit{Items: []string{"book"}}}, report.Violations[0].Trace.Events)
+	require.Len(t, report.Violations[0].Trace.Events, 1)
+	require.Equal(t, submit{Items: []string{"book"}}, report.Violations[0].Trace.Events[0].Event)
 	require.True(t, report.Violations[0].Trace.Snapshot.In(charging))
 }
 

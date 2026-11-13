@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -20,6 +21,9 @@ func (unusedProvider) Charge(context.Context, string) (string, error) { return "
 func (unusedProvider) Refund(context.Context, string)                 {}
 
 var errTimeout = errors.New("timed out waiting for the provider")
+
+// epoch is the time the tests start instances at.
+var epoch = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 type (
 	snapshot = sc.Snapshot[payment.State, payment.Order]
@@ -132,15 +136,15 @@ func TestCancelDuringChargeRefundsAChargeThatStillSucceeds(t *testing.T) {
 
 	m := newChart(t)
 
-	snap, _ := m.Start(payment.Order{ID: "o1"})
-	snap, effects := m.Transition(snap, payment.Submit{})
+	snap, _ := m.Start(payment.Order{ID: "o1"}, epoch)
+	snap, effects := m.Transition(snap, payment.Submit{}, epoch)
 	runID, _ := chargeKey(t, effects)
 
-	snap, effects = m.Transition(snap, payment.Cancel{})
+	snap, effects = m.Transition(snap, payment.Cancel{}, epoch)
 	require.Equal(t, []payment.State{payment.Charging}, snap.Active())
 	require.Empty(t, effects)
 
-	snap, effects = m.Transition(snap, sc.Done[string]{ID: runID, Result: "rcpt-1"})
+	snap, effects = m.Transition(snap, sc.Done[string]{ID: runID, Result: "rcpt-1"}, epoch)
 
 	require.Equal(t, []payment.State{payment.Cancelled}, snap.Active())
 	require.True(t, refunds(effects))
@@ -156,11 +160,11 @@ func TestChargeWithUnknownOutcomeIsAskedAgainUnderTheSameKey(t *testing.T) {
 
 	m := newChart(t)
 
-	snap, _ := m.Start(payment.Order{ID: "o1"})
-	snap, effects := m.Transition(snap, payment.Submit{})
+	snap, _ := m.Start(payment.Order{ID: "o1"}, epoch)
+	snap, effects := m.Transition(snap, payment.Submit{}, epoch)
 	firstRun, firstKey := chargeKey(t, effects)
 
-	snap, effects = m.Transition(snap, sc.Failed{ID: firstRun, Err: errTimeout})
+	snap, effects = m.Transition(snap, sc.Failed{ID: firstRun, Err: errTimeout}, epoch)
 	require.Equal(t, []payment.State{payment.Retrying}, snap.Active())
 	require.True(t, snap.Context.Unresolved)
 
@@ -171,7 +175,7 @@ func TestChargeWithUnknownOutcomeIsAskedAgainUnderTheSameKey(t *testing.T) {
 		}
 	}
 
-	_, effects = m.Transition(snap, sc.TimerFired{ID: timer.ID})
+	_, effects = m.Transition(snap, sc.TimerFired{ID: timer.ID}, epoch)
 	secondRun, secondKey := chargeKey(t, effects)
 
 	require.NotEqual(t, firstRun, secondRun)
@@ -186,12 +190,12 @@ func TestCancelWhileOutcomeIsUnknownWaitsThenRefunds(t *testing.T) {
 
 	m := newChart(t)
 
-	snap, _ := m.Start(payment.Order{ID: "o1"})
-	snap, effects := m.Transition(snap, payment.Submit{})
+	snap, _ := m.Start(payment.Order{ID: "o1"}, epoch)
+	snap, effects := m.Transition(snap, payment.Submit{}, epoch)
 	runID, _ := chargeKey(t, effects)
 
-	snap, _ = m.Transition(snap, payment.Cancel{})
-	snap, effects = m.Transition(snap, sc.Failed{ID: runID, Err: errTimeout})
+	snap, _ = m.Transition(snap, payment.Cancel{}, epoch)
+	snap, effects = m.Transition(snap, sc.Failed{ID: runID, Err: errTimeout}, epoch)
 	require.Equal(t, []payment.State{payment.Retrying}, snap.Active())
 
 	var timer sc.Effect[payment.Order]
@@ -201,11 +205,11 @@ func TestCancelWhileOutcomeIsUnknownWaitsThenRefunds(t *testing.T) {
 		}
 	}
 
-	snap, effects = m.Transition(snap, sc.TimerFired{ID: timer.ID})
+	snap, effects = m.Transition(snap, sc.TimerFired{ID: timer.ID}, epoch)
 	runID, _ = chargeKey(t, effects)
 
 	// The provider repeats the outcome it decided the first time.
-	snap, effects = m.Transition(snap, sc.Done[string]{ID: runID, Result: "rcpt-1"})
+	snap, effects = m.Transition(snap, sc.Done[string]{ID: runID, Result: "rcpt-1"}, epoch)
 
 	require.Equal(t, []payment.State{payment.Cancelled}, snap.Active())
 	require.True(t, refunds(effects))
@@ -216,13 +220,13 @@ func TestCancelBetweenAttemptsIsImmediate(t *testing.T) {
 
 	m := newChart(t)
 
-	snap, _ := m.Start(payment.Order{ID: "o1"})
-	snap, effects := m.Transition(snap, payment.Submit{})
+	snap, _ := m.Start(payment.Order{ID: "o1"}, epoch)
+	snap, effects := m.Transition(snap, payment.Submit{}, epoch)
 	runID, _ := chargeKey(t, effects)
-	snap, _ = m.Transition(snap, sc.Failed{ID: runID, Err: payment.ErrDeclined})
+	snap, _ = m.Transition(snap, sc.Failed{ID: runID, Err: payment.ErrDeclined}, epoch)
 	require.Equal(t, []payment.State{payment.Retrying}, snap.Active())
 
-	snap, effects = m.Transition(snap, payment.Cancel{})
+	snap, effects = m.Transition(snap, payment.Cancel{}, epoch)
 
 	require.Equal(t, []payment.State{payment.Cancelled}, snap.Active())
 	require.False(t, refunds(effects))

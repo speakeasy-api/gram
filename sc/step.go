@@ -6,6 +6,7 @@ import (
 	"iter"
 	"reflect"
 	"slices"
+	"time"
 )
 
 // maxSettleSteps bounds the eventless transitions and internal events one
@@ -17,6 +18,41 @@ const maxSettleSteps = 10_000
 type timer[S comparable, C any] struct {
 	id string
 	t  *transition[S, C]
+
+	// delay is how long the timer was started for; zero for a deadline.
+	delay time.Duration
+
+	// due is when the timer fires.
+	due time.Time
+
+	// seq orders timers that are due at the same time: the one started
+	// first fires first, which within one state is declaration order.
+	seq uint64
+}
+
+// latest is the latest time the timer can fire: its due time, or for a
+// jittered timer the end of its jitter window. The core fires a timer by
+// then even if its driver has not.
+func (tm timer[S, C]) latest() time.Time {
+	if tm.t.jitter == 0 {
+		return tm.due
+	}
+
+	return tm.due.Add(time.Duration(tm.t.jitter * float64(tm.delay)))
+}
+
+// restoredTimer rebuilds a pending timer from what a snapshot recorded. A
+// snapshot that recorded no due time is treated as started at now, which is
+// how such snapshots behaved before due times were recorded.
+func restoredTimer[S comparable, C any](id string, t *transition[S, C], delay time.Duration, due time.Time, seq uint64, now time.Time) timer[S, C] {
+	if t.delayFn == nil && t.deadlineFn == nil {
+		delay = t.delay
+	}
+	if due.IsZero() {
+		due = now.Add(delay)
+	}
+
+	return timer[S, C]{id: id, t: t, delay: delay, due: due, seq: seq}
 }
 
 // service is a run of an invocation that has not finished.
@@ -67,6 +103,21 @@ type run[S comparable, C any] struct {
 	ctx  C
 	done bool
 
+	// now is the time the core is acting at: the time the driver passed
+	// in, or a timer's due time while that timer fires.
+	now time.Time
+
+	// fired lists the IDs of timers that fired during this call.
+	fired []string
+
+	// scopes holds the deadline of each active state that declared a
+	// budget with Within.
+	scopes map[*node[S, C]]time.Time
+
+	// pending holds the conditional chart action runs of the current
+	// microstep, decided once its move is known.
+	pending []pendingRun[S, C]
+
 	effects []Effect[C]
 
 	// queue holds raised events and state completions awaiting processing.
@@ -75,13 +126,27 @@ type run[S comparable, C any] struct {
 	// entered lists states entered during this call, whose services start
 	// once the machine has settled.
 	entered []*node[S, C]
+
+	// passed lists every state entered during this call, including ones
+	// left again before the machine settled.
+	passed []*node[S, C]
+
+	// changed is set once this call has changed anything: taken a
+	// transition, or consumed a timer or service result.
+	changed bool
 }
 
 func byOrder[S comparable, C any](a, b *node[S, C]) int { return cmp.Compare(a.order, b.order) }
 
-// Start returns the snapshot of a new machine instance with context c, and
-// the effects of entering its initial states.
-func (m *Machine[S, C]) Start(c C) (Snapshot[S, C], []Effect[C]) {
+// Start returns the snapshot of a new machine instance with context c,
+// started at now, and the effects of entering its initial states.
+func (m *Machine[S, C]) Start(c C, now time.Time) (Snapshot[S, C], []Effect[C]) {
+	snap, effects, _ := m.start(c, now)
+	return snap, effects
+}
+
+// start is Start, also returning every state entered on the way.
+func (m *Machine[S, C]) start(c C, now time.Time) (Snapshot[S, C], []Effect[C], []*node[S, C]) {
 	r := &run[S, C]{
 		m:        m,
 		config:   map[*node[S, C]]bool{m.root: true},
@@ -91,9 +156,15 @@ func (m *Machine[S, C]) Start(c C) (Snapshot[S, C], []Effect[C]) {
 		counter:  0,
 		ctx:      c,
 		done:     false,
+		now:      now,
+		fired:    nil,
+		scopes:   map[*node[S, C]]time.Time{},
+		pending:  nil,
 		effects:  nil,
 		queue:    nil,
 		entered:  nil,
+		passed:   nil,
+		changed:  false,
 	}
 
 	enter := new(transition[S, C])
@@ -103,62 +174,114 @@ func (m *Machine[S, C]) Start(c C) (Snapshot[S, C], []Effect[C]) {
 
 	r.microstep([]*transition[S, C]{enter}, on[S, C](triggerAlways))
 	r.settle()
+	r.fireDue()
 
-	return r.snapshot(0), r.effects
+	return r.snapshot(0), r.effects, r.passed
 }
 
-// Transition processes one event and returns the next snapshot with the
-// effects the driver must carry out, in order. The input snapshot is not
-// modified.
+// Transition processes one event at time now and returns the next snapshot
+// with the effects the driver must carry out, in order. The input snapshot
+// is not modified.
 //
-// An event no active state handles leaves the active states and context
-// unchanged. [TimerFired], [Done], [Failed], and [Emitted] events whose ID
-// does not belong to a pending timer or a running service are ignored, as is
-// any event sent to a machine that is done.
+// The core never reads a clock: now is the driver's. Guards and assignments
+// declared with [Transition.WhenAt] and [Transition.AssignAt] see it, and
+// timers count from it. Before the event, every timer due by now fires,
+// earliest first, and timers due at the same time fire in the order they
+// started; each sees now as its own due time. Timers that the event's
+// transitions start and that are already due fire before Transition
+// returns, the same way. A jittered timer normally fires when the driver
+// delivers its [TimerFired], somewhere inside its jitter window, and fires
+// here once the window has ended. A TimerFired for a pending timer fires it
+// whatever its due time, because the driver's clock is the authority.
+//
+// An event that changes nothing is ignored: Transition returns snap itself,
+// with the same [Snapshot.Seq], and no effects. That covers an event no
+// active state handles or whose guards all fail, [TimerFired], [Done],
+// [Failed], and [Emitted] events whose ID does not belong to a pending timer
+// or a running service, and any event sent to a machine that is done. A
+// service result whose transitions all have failing guards still ends the
+// service run, so it is not ignored.
 //
 // Transition panics if snap was not produced by this machine, or if the
 // chart's eventless transitions and raised events never settle.
-func (m *Machine[S, C]) Transition(snap Snapshot[S, C], ev any) (Snapshot[S, C], []Effect[C]) {
-	if snap.done {
-		return snap, nil
-	}
-
-	r := m.load(snap)
-
-	stim, ok := r.accept(ev)
-	if !ok {
-		return snap, nil
-	}
-
-	if ts := r.selectTransitions(stim); len(ts) > 0 {
-		r.microstep(ts, stim)
-	}
-	r.settle()
-
-	return r.snapshot(snap.seq + 1), r.effects
+func (m *Machine[S, C]) Transition(snap Snapshot[S, C], ev any, now time.Time) (Snapshot[S, C], []Effect[C]) {
+	next, effects, _ := m.transition(snap, ev, now)
+	return next, effects
 }
 
-// Can reports whether ev would cause at least one transition in snap.
-func (m *Machine[S, C]) Can(snap Snapshot[S, C], ev any) bool {
+// transition is Transition, also returning every state entered on the way.
+// A nil ev only advances time.
+func (m *Machine[S, C]) transition(snap Snapshot[S, C], ev any, now time.Time) (Snapshot[S, C], []Effect[C], []*node[S, C]) {
+	if snap.done {
+		return snap, nil, nil
+	}
+
+	r := m.load(snap, now)
+	r.fireDue()
+
+	if ev != nil && !r.done {
+		if stim, ok := r.accept(ev); ok {
+			if ts := r.selectTransitions(stim); len(ts) > 0 {
+				r.microstep(ts, stim)
+			}
+			r.settle()
+			r.fireDue()
+		}
+	}
+
+	if !r.changed {
+		return snap, nil, nil
+	}
+
+	return r.snapshot(snap.seq + 1), r.effects, r.passed
+}
+
+// Advance returns the snapshot as of now: every timer due by now fires, as
+// [Machine.Transition] fires them before an event. It returns snap itself
+// when nothing is due. Use it to read an instance's current state without
+// waiting for its driver, such as an invitation that expired while nothing
+// ran, or to move time on in a test.
+func (m *Machine[S, C]) Advance(snap Snapshot[S, C], now time.Time) (Snapshot[S, C], []Effect[C]) {
+	next, effects, _ := m.transition(snap, nil, now)
+	return next, effects
+}
+
+// Can reports whether ev, sent at now, would cause at least one transition
+// in snap, once the timers due by now have fired.
+func (m *Machine[S, C]) Can(snap Snapshot[S, C], ev any, now time.Time) bool {
 	if snap.done {
 		return false
 	}
 
-	r := m.load(snap)
+	r := m.load(snap, now)
+	r.fireDue()
+	if r.done {
+		return false
+	}
 
 	stim, ok := r.accept(ev)
 
 	return ok && len(r.selectTransitions(stim)) > 0
 }
 
+// Timed is an event with the time it happened.
+type Timed struct {
+	// At is when the event happened.
+	At time.Time
+
+	// Event is the event. Nil means only that time passed, which fires the
+	// timers due by At.
+	Event any
+}
+
 // Fold feeds events to the machine one at a time, starting from snap, and
 // yields the snapshot and effects after each. It executes nothing, which
 // makes it suited to replaying a recorded event log and to tests.
-func (m *Machine[S, C]) Fold(snap Snapshot[S, C], events iter.Seq[any]) iter.Seq2[Snapshot[S, C], []Effect[C]] {
+func (m *Machine[S, C]) Fold(snap Snapshot[S, C], events iter.Seq[Timed]) iter.Seq2[Snapshot[S, C], []Effect[C]] {
 	return func(yield func(Snapshot[S, C], []Effect[C]) bool) {
 		for ev := range events {
 			var effects []Effect[C]
-			snap, effects = m.Transition(snap, ev)
+			snap, effects, _ = m.transition(snap, ev.Event, ev.At)
 			if !yield(snap, effects) {
 				return
 			}
@@ -166,8 +289,8 @@ func (m *Machine[S, C]) Fold(snap Snapshot[S, C], events iter.Seq[any]) iter.Seq
 	}
 }
 
-// load builds the working state for snap.
-func (m *Machine[S, C]) load(snap Snapshot[S, C]) *run[S, C] {
+// load builds the working state for snap, acting at now.
+func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 	if snap.machine != m.id || snap.hash != m.hash {
 		panic(fmt.Sprintf("sc: snapshot of machine %q (hash %.8s) used with machine %q (hash %.8s)", snap.machine, snap.hash, m.id, m.hash))
 	}
@@ -181,9 +304,15 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C]) *run[S, C] {
 		counter:  snap.counter,
 		ctx:      snap.Context,
 		done:     snap.done,
+		now:      now,
+		fired:    nil,
+		scopes:   map[*node[S, C]]time.Time{},
+		pending:  nil,
 		effects:  nil,
 		queue:    nil,
 		entered:  nil,
+		passed:   nil,
+		changed:  false,
 	}
 
 	for _, s := range snap.active {
@@ -201,9 +330,13 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C]) *run[S, C] {
 	for _, pt := range snap.timers {
 		for _, t := range m.nodes[pt.state].transitions {
 			if t.trigger == triggerAfter && t.afterIndex == pt.index {
-				r.timers = append(r.timers, timer[S, C]{id: pt.id, t: t})
+				r.timers = append(r.timers, restoredTimer(pt.id, t, pt.delay, pt.due, pt.seq, now))
 			}
 		}
+	}
+
+	for s, deadline := range snap.scopes {
+		r.scopes[m.nodes[s]] = deadline
 	}
 
 	for _, ri := range snap.invocations {
@@ -230,7 +363,12 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 		history:     make(map[S][]S, len(r.history)),
 		timers:      make([]pendingTimer[S], 0, len(r.timers)),
 		invocations: make([]runningInvocation[S], 0, len(r.services)),
+		scopes:      make(map[S]time.Time, len(r.scopes)),
 		counter:     r.counter,
+	}
+
+	for n, deadline := range r.scopes {
+		snap.scopes[n.id] = deadline
 	}
 
 	for _, n := range r.active() {
@@ -246,7 +384,10 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 	}
 
 	for _, t := range r.timers {
-		snap.timers = append(snap.timers, pendingTimer[S]{id: t.id, state: t.t.source.id, index: t.t.afterIndex})
+		snap.timers = append(snap.timers, pendingTimer[S]{
+			id: t.id, state: t.t.source.id, index: t.t.afterIndex, name: t.t.delayName,
+			delay: t.delay, due: t.due, seq: t.seq, jitter: t.t.jitter,
+		})
 	}
 
 	for _, s := range r.services {
@@ -284,6 +425,8 @@ func (r *run[S, C]) accept(ev any) (stimulus[S, C], bool) {
 
 		t := r.timers[i].t
 		r.timers = slices.Delete(r.timers, i, i+1)
+		r.changed = true
+		r.fired = append(r.fired, e.ID)
 
 		stim := on[S, C](triggerAfter)
 		stim.timer = t
@@ -306,6 +449,7 @@ func (r *run[S, C]) accept(ev any) (stimulus[S, C], bool) {
 
 		inv := r.services[i].inv
 		r.services = slices.Delete(r.services, i, i+1)
+		r.changed = true
 
 		stim := on[S, C](triggerInvokeDone)
 		if _, failed := ev.(Failed); failed {
@@ -349,8 +493,20 @@ func (r *run[S, C]) matches(t *transition[S, C], stim stimulus[S, C]) bool {
 	case triggerAlways:
 	}
 
+	for _, in := range t.inNodes {
+		if !r.config[in] {
+			return false
+		}
+	}
+
+	for _, out := range t.notInNodes {
+		if r.config[out] {
+			return false
+		}
+	}
+
 	for _, g := range t.guards {
-		if !g.fn(r.ctx, stim.event) {
+		if !g.fn(r.ctx, stim.event, r.now) {
 			return false
 		}
 	}
@@ -467,6 +623,8 @@ func (r *run[S, C]) exitSet(t *transition[S, C]) []*node[S, C] {
 // microstep takes a set of non-conflicting transitions together: it exits
 // their states, runs their steps, and enters their targets.
 func (r *run[S, C]) microstep(ts []*transition[S, C], stim stimulus[S, C]) {
+	r.changed = true
+
 	var exits []*node[S, C]
 	for _, t := range ts {
 		for _, n := range r.exitSet(t) {
@@ -487,8 +645,12 @@ func (r *run[S, C]) microstep(ts []*transition[S, C], stim stimulus[S, C]) {
 		}
 	}
 
+	before := r.activeNames()
+	first := len(r.effects)
+	r.pending = r.pending[:0]
+
 	for _, n := range exits {
-		r.exit(n)
+		r.exit(n, stim.event)
 	}
 
 	for _, t := range ts {
@@ -496,8 +658,70 @@ func (r *run[S, C]) microstep(ts []*transition[S, C], stim stimulus[S, C]) {
 	}
 
 	for _, n := range r.entrySet(ts) {
-		r.enter(n)
+		r.enter(n, stim.event)
 	}
+
+	// Every action this step produced is told the move it belongs to.
+	after := r.activeNames()
+	for i := first; i < len(r.effects); i++ {
+		if r.effects[i].Kind == EffectAction {
+			r.effects[i].From = before
+			r.effects[i].To = after
+		}
+	}
+
+	// Conditional runs are kept only when their condition holds for it.
+	if len(r.pending) > 0 {
+		from, to := r.m.stateIDs(before), r.m.stateIDs(after)
+		drop := map[int]bool{}
+		for _, p := range r.pending {
+			if !p.cond(Move[S]{Source: p.source.id, From: from, To: to, Event: stim.event}) {
+				drop[p.index] = true
+			}
+		}
+
+		kept := r.effects[:first]
+		for i := first; i < len(r.effects); i++ {
+			if !drop[i] {
+				kept = append(kept, r.effects[i])
+			}
+		}
+		r.effects = kept
+		r.pending = r.pending[:0]
+	}
+}
+
+// activeNames returns the names of the active states in document order.
+func (r *run[S, C]) activeNames() []string {
+	active := r.active()
+	names := make([]string, 0, len(active))
+	for _, n := range active {
+		names = append(names, n.name)
+	}
+
+	return names
+}
+
+// pendingRun is a conditional chart action run whose effect is kept only if
+// its condition holds for the move it belongs to.
+type pendingRun[S comparable, C any] struct {
+	index  int
+	source *node[S, C]
+	cond   func(Move[S]) bool
+}
+
+// emitRun adds the effect of running a chart action, to be decided at the
+// end of the microstep when it has a condition.
+func (r *run[S, C]) emitRun(source *node[S, C], name string, event any, cond func(Move[S]) bool) {
+	r.effects = append(r.effects, r.chartActionEffect(source, name, event))
+	if cond != nil {
+		r.pending = append(r.pending, pendingRun[S, C]{index: len(r.effects) - 1, source: source, cond: cond})
+	}
+}
+
+// chartActionEffect is the effect of running a chart action.
+func (r *run[S, C]) chartActionEffect(source *node[S, C], name string, event any) Effect[C] {
+	return Effect[C]{Kind: EffectAction, ID: "", State: source.name, Name: name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: event, From: nil, To: nil}
 }
 
 // record returns what history state h must remember about its parent.
@@ -519,9 +743,12 @@ func (r *run[S, C]) record(h *node[S, C]) []*node[S, C] {
 	return out
 }
 
-func (r *run[S, C]) exit(n *node[S, C]) {
+func (r *run[S, C]) exit(n *node[S, C], event any) {
 	for _, a := range n.exit {
-		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, Context: r.ctx, Event: nil})
+		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil})
+	}
+	for k, name := range n.exitRuns {
+		r.emitRun(n, name, event, n.exitConds[k])
 	}
 
 	r.timers = slices.DeleteFunc(r.timers, func(t timer[S, C]) bool {
@@ -532,6 +759,8 @@ func (r *run[S, C]) exit(n *node[S, C]) {
 
 		return true
 	})
+
+	delete(r.scopes, n)
 
 	r.services = slices.DeleteFunc(r.services, func(s service[S, C]) bool {
 		if s.inv.state != n {
@@ -548,16 +777,18 @@ func (r *run[S, C]) exit(n *node[S, C]) {
 // bare builds an effect that carries no context or event.
 func (r *run[S, C]) bare(kind EffectKind, id string, n *node[S, C], name string) Effect[C] {
 	var zero C
-	return Effect[C]{Kind: kind, ID: id, State: n.name, Name: name, Delay: 0, Context: zero, Event: nil}
+	return Effect[C]{Kind: kind, ID: id, State: n.name, Name: name, Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil}
 }
 
 func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
-	for _, s := range t.steps {
+	for k, s := range t.steps {
 		switch s.kind {
 		case stepAssign:
-			r.ctx = s.assign(r.ctx, stim.event)
+			r.ctx = s.assign(r.ctx, stim.event, r.now)
 		case stepDo:
-			r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: t.source.name, Name: s.name, Delay: 0, Context: r.ctx, Event: stim.event})
+			r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: t.source.name, Name: s.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: stim.event, From: nil, To: nil})
+		case stepRun:
+			r.emitRun(t.source, s.name, stim.event, t.runConds[k])
 		case stepRaise:
 			raised := on[S, C](triggerEvent)
 			raised.event = s.raise(r.ctx, stim.event)
@@ -566,12 +797,19 @@ func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
 	}
 }
 
-func (r *run[S, C]) enter(n *node[S, C]) {
+func (r *run[S, C]) enter(n *node[S, C], event any) {
 	r.config[n] = true
+	if n.budget > 0 {
+		r.scopes[n] = r.now.Add(n.budget)
+	}
 	r.entered = append(r.entered, n)
+	r.passed = append(r.passed, n)
 
 	for _, a := range n.entry {
-		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, Context: r.ctx, Event: nil})
+		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil})
+	}
+	for k, name := range n.entryRuns {
+		r.emitRun(n, name, event, n.entryConds[k])
 	}
 
 	for _, t := range n.transitions {
@@ -625,19 +863,120 @@ func (r *run[S, C]) nextID(n *node[S, C], label string) string {
 	return fmt.Sprintf("%s.%s#%d", n.name, label, r.counter)
 }
 
+// startTimer starts the timer of a delayed transition, computing its delay
+// or deadline from the context as it is now.
 func (r *run[S, C]) startTimer(t *transition[S, C]) {
-	id := r.nextID(t.source, fmt.Sprintf("after.%d", t.afterIndex))
-	r.timers = append(r.timers, timer[S, C]{id: id, t: t})
+	tm := timer[S, C]{
+		id:    r.nextID(t.source, fmt.Sprintf("after.%d", t.afterIndex)),
+		t:     t,
+		delay: t.delay,
+		due:   time.Time{},
+		seq:   r.counter,
+	}
 
-	e := r.bare(EffectStartTimer, id, t.source, "")
-	e.Delay = t.delay
-	r.effects = append(r.effects, e)
+	switch {
+	case t.delayFn != nil:
+		tm.delay = max(t.delayFn(r.ctx), 0)
+		tm.due = r.now.Add(tm.delay)
+	case t.deadlineFn != nil:
+		tm.delay = 0
+		tm.due = t.deadlineFn(r.ctx)
+	default:
+		tm.due = r.now.Add(tm.delay)
+	}
+
+	r.timers = append(r.timers, tm)
+	r.effects = append(r.effects, timerEffect(tm))
+}
+
+// timerEffect is the effect that starts tm.
+func timerEffect[S comparable, C any](tm timer[S, C]) Effect[C] {
+	var zero C
+
+	return Effect[C]{
+		Kind:    EffectStartTimer,
+		ID:      tm.id,
+		State:   tm.t.source.name,
+		Name:    tm.t.delayName,
+		Delay:   tm.delay,
+		At:      tm.due,
+		Jitter:  tm.t.jitter,
+		Context: zero,
+		Event:   nil,
+		From:    nil,
+		To:      nil,
+	}
+}
+
+// fireDue fires, one at a time, every timer that is due by the call's time:
+// the earliest first, and among equally early ones the one started first.
+// A jittered timer counts as due at the end of its jitter window, since its
+// driver may fire it anywhere inside. Each fires with now set to that time,
+// so the transitions it takes, and the timers they start, behave as if it
+// had fired on time.
+func (r *run[S, C]) fireDue() {
+	callNow := r.now
+	defer func() { r.now = callNow }()
+
+	for steps := 0; !r.done; steps++ {
+		if steps > maxSettleSteps {
+			panic(fmt.Sprintf("sc: machine %q does not settle: its timers keep firing at %s", r.m.id, callNow))
+		}
+
+		next := -1
+		for i, tm := range r.timers {
+			if tm.latest().After(callNow) {
+				continue
+			}
+			if next < 0 || tm.latest().Before(r.timers[next].latest()) || (tm.latest().Equal(r.timers[next].latest()) && tm.seq < r.timers[next].seq) {
+				next = i
+			}
+		}
+		if next < 0 {
+			return
+		}
+
+		tm := r.timers[next]
+		r.timers = slices.Delete(r.timers, next, next+1)
+		r.changed = true
+		r.fired = append(r.fired, tm.id)
+		r.now = callNow
+		if tm.latest().Before(callNow) {
+			r.now = tm.latest()
+		}
+
+		stim := on[S, C](triggerAfter)
+		stim.timer = tm.t
+		if ts := r.selectTransitions(stim); len(ts) > 0 {
+			r.microstep(ts, stim)
+		}
+		r.settle()
+	}
 }
 
 func (r *run[S, C]) startService(inv *invocation[S, C]) {
 	id := r.nextID(inv.state, inv.name)
 	r.services = append(r.services, service[S, C]{id: id, inv: inv})
-	r.effects = append(r.effects, Effect[C]{Kind: EffectStartInvocation, ID: id, State: inv.state.name, Name: inv.name, Delay: 0, Context: r.ctx, Event: nil})
+	r.effects = append(r.effects, r.serviceEffect(id, inv))
+}
+
+// serviceEffect is the effect that starts a run of inv, carrying the
+// deadline of the budgets around it.
+func (r *run[S, C]) serviceEffect(id string, inv *invocation[S, C]) Effect[C] {
+	return Effect[C]{Kind: EffectStartInvocation, ID: id, State: inv.state.name, Name: inv.name, Delay: 0, At: r.deadlineFor(inv.state), Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil}
+}
+
+// deadlineFor returns the earliest deadline among the budgets of n and the
+// states around it, or the zero time when none declared one.
+func (r *run[S, C]) deadlineFor(n *node[S, C]) time.Time {
+	var deadline time.Time
+	for a := n; a != nil; a = a.parent {
+		if d, ok := r.scopes[a]; ok && (deadline.IsZero() || d.Before(deadline)) {
+			deadline = d
+		}
+	}
+
+	return deadline
 }
 
 // entrySet returns the states ts enters, in document order.
@@ -811,8 +1150,8 @@ func (r *run[S, C]) startServices() {
 }
 
 // dropShortLivedTimers removes the start and cancel effects of timers that
-// were started and cancelled within the same call, so drivers never see
-// them.
+// were started and then cancelled or fired within the same call, so drivers
+// never see them.
 func (r *run[S, C]) dropShortLivedTimers() {
 	started := map[string]bool{}
 	cancelled := map[string]bool{}
@@ -823,6 +1162,12 @@ func (r *run[S, C]) dropShortLivedTimers() {
 			started[e.ID] = true
 		case e.Kind == EffectCancelTimer && started[e.ID]:
 			cancelled[e.ID] = true
+		}
+	}
+
+	for _, id := range r.fired {
+		if started[id] {
+			cancelled[id] = true
 		}
 	}
 

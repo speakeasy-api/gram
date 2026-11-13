@@ -65,18 +65,7 @@ func TestNewReportsDeclarationErrors(t *testing.T) {
 				b.Initial("a")
 				b.State("a").On[tick]().When("never", func(counter, tick) bool { return false })
 			},
-			want: `state "a": a transition has neither a target nor any steps`,
-		},
-		{
-			name: "two guards",
-			def: func(b *sc.Builder[string, counter]) {
-				b.Initial("a")
-				b.State("a").On[tick]().
-					When("one", func(counter, tick) bool { return true }).
-					When("two", func(counter, tick) bool { return true }).
-					Assign("increment", increment[tick])
-			},
-			want: `state "a": a transition has more than one guard`,
+			want: `state "a": a transition has neither a target nor any steps; mark it Stay to drop its event on purpose`,
 		},
 		{
 			name: "duplicate action name",
@@ -151,19 +140,19 @@ func TestSnapshotRoundTripsThroughJSON(t *testing.T) {
 
 	m := orderChart(t, chargeOK)
 	snap, chargeID := submitted(t, m)
-	snap, _ = m.Transition(snap, sc.Failed{ID: chargeID, Err: errCardDeclined})
-	snap, _ = m.Transition(snap, hold{})
+	snap, _ = m.Transition(snap, sc.Failed{ID: chargeID, Err: errCardDeclined}, epoch)
+	snap, _ = m.Transition(snap, hold{}, epoch)
 
 	data, err := json.Marshal(snap)
 	require.NoError(t, err)
 
-	restored, effects, err := m.Restore(data)
+	restored, effects, err := m.Restore(data, epoch)
 	require.NoError(t, err)
 	require.Empty(t, effects)
 	require.Equal(t, snap, restored)
 
 	// History survived: resuming goes back to retrying, not to charging.
-	restored, _ = m.Transition(restored, resume{})
+	restored, _ = m.Transition(restored, resume{}, epoch)
 	require.Equal(t, []state{paying, retrying}, restored.Active())
 }
 
@@ -172,16 +161,16 @@ func TestRestoredSnapshotStillAcceptsItsPendingTimer(t *testing.T) {
 
 	m := orderChart(t, chargeOK)
 	snap, chargeID := submitted(t, m)
-	snap, effects := m.Transition(snap, sc.Failed{ID: chargeID, Err: errCardDeclined})
+	snap, effects := m.Transition(snap, sc.Failed{ID: chargeID, Err: errCardDeclined}, epoch)
 	timerID := effect(t, effects, sc.EffectStartTimer).ID
 
 	data, err := json.Marshal(snap)
 	require.NoError(t, err)
 
-	restored, _, err := m.Restore(data)
+	restored, _, err := m.Restore(data, epoch)
 	require.NoError(t, err)
 
-	restored, _ = m.Transition(restored, sc.TimerFired{ID: timerID})
+	restored, _ = m.Transition(restored, sc.TimerFired{ID: timerID}, epoch)
 
 	require.Equal(t, []state{paying, charging}, restored.Active())
 }
@@ -191,7 +180,7 @@ func TestResumeRestartsOutstandingTimersAndServices(t *testing.T) {
 
 	m := orderChart(t, chargeOK)
 	charging, chargeID := submitted(t, m)
-	retrying, effects := m.Transition(charging, sc.Failed{ID: chargeID, Err: errCardDeclined})
+	retrying, effects := m.Transition(charging, sc.Failed{ID: chargeID, Err: errCardDeclined}, epoch)
 	timerID := effect(t, effects, sc.EffectStartTimer).ID
 
 	service := m.Resume(charging)
@@ -208,11 +197,11 @@ func TestResumeRestartsOutstandingTimersAndServices(t *testing.T) {
 func TestRestoreRejectsSnapshotOfAnotherVersionWithoutMigration(t *testing.T) {
 	t.Parallel()
 
-	snap, _ := orderChart(t, chargeOK).Start(order{})
+	snap, _ := orderChart(t, chargeOK).Start(order{}, epoch)
 	data, err := json.Marshal(snap)
 	require.NoError(t, err)
 
-	_, _, err = orderChart(t, chargeOK, sc.Version(2)).Restore(data)
+	_, _, err = orderChart(t, chargeOK, sc.Version(2)).Restore(data, epoch)
 
 	require.ErrorIs(t, err, sc.ErrVersionMismatch)
 }
@@ -234,11 +223,11 @@ func TestRestoreRejectsChartChangedWithoutVersionChange(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	snap, _ := before.Start(counter{})
+	snap, _ := before.Start(counter{}, epoch)
 	data, err := json.Marshal(snap)
 	require.NoError(t, err)
 
-	_, _, err = after.Restore(data)
+	_, _, err = after.Restore(data, epoch)
 
 	require.ErrorIs(t, err, sc.ErrChartChanged)
 }
@@ -247,7 +236,7 @@ func TestRestoreRejectsIllegalConfiguration(t *testing.T) {
 	t.Parallel()
 
 	m := orderChart(t, chargeOK)
-	snap, _ := m.Start(order{})
+	snap, _ := m.Start(order{}, epoch)
 	data, err := json.Marshal(snap)
 	require.NoError(t, err)
 
@@ -257,7 +246,7 @@ func TestRestoreRejectsIllegalConfiguration(t *testing.T) {
 	data, err = json.Marshal(raw)
 	require.NoError(t, err)
 
-	_, _, err = m.Restore(data)
+	_, _, err = m.Restore(data, epoch)
 
 	require.ErrorIs(t, err, sc.ErrInvalidSnapshot)
 }
@@ -299,15 +288,15 @@ func TestRestoreMigratesSnapshotAndReconcilesTimersAndServices(t *testing.T) {
 	t.Parallel()
 
 	v1 := reviewChart(t, 1)
-	snap, _ := v1.Start(counter{N: 7})
-	snap, effects := v1.Transition(snap, tick{})
+	snap, _ := v1.Start(counter{N: 7}, epoch)
+	snap, effects := v1.Transition(snap, tick{}, epoch)
 	timerID := effect(t, effects, sc.EffectStartTimer).ID
 
 	data, err := json.Marshal(snap)
 	require.NoError(t, err)
 
 	v2 := reviewChart(t, 2)
-	migrated, effects, err := v2.Restore(data)
+	migrated, effects, err := v2.Restore(data, epoch)
 	require.NoError(t, err)
 
 	require.Equal(t, []string{"review"}, migrated.Active())
@@ -320,12 +309,12 @@ func TestRestoreMigratesSnapshotAndReconcilesTimersAndServices(t *testing.T) {
 	require.Equal(t, timerID, effects[0].ID)
 
 	// The migrated snapshot is a normal snapshot of the new chart.
-	migrated, _ = v2.Transition(migrated, sc.Done[int]{ID: effects[1].ID, Result: 1})
+	migrated, _ = v2.Transition(migrated, sc.Done[int]{ID: effects[1].ID, Result: 1}, epoch)
 	require.Equal(t, []string{"approved"}, migrated.Active())
 
 	again, err := json.Marshal(migrated)
 	require.NoError(t, err)
-	_, effects, err = v2.Restore(again)
+	_, effects, err = v2.Restore(again, epoch)
 	require.NoError(t, err)
 	require.Empty(t, effects)
 }
@@ -349,8 +338,8 @@ func TestEffectRoundTripsThroughJSONAndExecutes(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	snap, _ := m.Start(order{})
-	_, effects := m.Transition(snap, submit{Items: []string{"book"}})
+	snap, _ := m.Start(order{}, epoch)
+	_, effects := m.Transition(snap, submit{Items: []string{"book"}}, epoch)
 	require.Len(t, effects, 1)
 
 	data, err := m.EncodeEffect(effects[0])
@@ -376,8 +365,8 @@ func TestExecRunsServiceAndReportsItsOutcome(t *testing.T) {
 	})
 
 	run := func(items ...string) any {
-		snap, _ := m.Start(order{})
-		_, effects := m.Transition(snap, submit{Items: items})
+		snap, _ := m.Start(order{}, epoch)
+		_, effects := m.Transition(snap, submit{Items: items}, epoch)
 
 		var events []any
 		require.NoError(t, m.Exec(t.Context(), effect(t, effects, sc.EffectStartInvocation), func(ev any) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime/debug"
 	"time"
 )
 
@@ -25,9 +26,39 @@ type Failed struct {
 	// ID identifies the run of the service that failed.
 	ID string
 
-	// Err is the error the service returned. Only its message survives
-	// being stored and loaded again.
+	// Err is the error the service returned. Its message survives being
+	// stored and loaded again, and so does the code of an error that
+	// implements [Coder]; route on that with [ErrorCode] rather than on the
+	// error's type when the event may be persisted.
 	Err error
+}
+
+// Coder is implemented by errors that carry a stable code, such as
+// "rate_limited". A [Failed] event keeps the code when it is stored, so a
+// chart can route on it with [ErrorCode] under any driver.
+type Coder interface {
+	Code() string
+}
+
+// codedError is what a stored error with a code becomes when it is loaded.
+type codedError struct {
+	msg  string
+	code string
+}
+
+func (e codedError) Error() string { return e.msg }
+
+func (e codedError) Code() string { return e.code }
+
+// ErrorCode returns the code of the first error in err's tree that
+// implements [Coder], or "" when none does.
+func ErrorCode(err error) string {
+	var c Coder
+	if errors.As(err, &c) {
+		return c.Code()
+	}
+
+	return ""
 }
 
 func (f Failed) invocationID() string { return f.ID }
@@ -39,6 +70,9 @@ type failedJSON struct {
 
 	// Error is the message of the service's error.
 	Error string `json:"error"`
+
+	// Code is the error's code, when it implements Coder.
+	Code string `json:"code,omitempty"`
 }
 
 // MarshalJSON stores the error as its message.
@@ -48,7 +82,7 @@ func (f Failed) MarshalJSON() ([]byte, error) {
 		msg = f.Err.Error()
 	}
 
-	data, err := json.Marshal(failedJSON{ID: f.ID, Error: msg})
+	data, err := json.Marshal(failedJSON{ID: f.ID, Error: msg, Code: ErrorCode(f.Err)})
 	if err != nil {
 		return nil, fmt.Errorf("marshal failed event: %w", err)
 	}
@@ -65,6 +99,9 @@ func (f *Failed) UnmarshalJSON(data []byte) error {
 
 	f.ID = raw.ID
 	f.Err = errors.New(raw.Error)
+	if raw.Code != "" {
+		f.Err = codedError{msg: raw.Error, code: raw.Code}
+	}
 
 	return nil
 }
@@ -129,19 +166,72 @@ type Effect[C any] struct {
 	// State is the name of the state the effect belongs to.
 	State string
 
-	// Name is the action or service name. It is empty for timers.
+	// Name is the action or service name. For a timer it is the name of a
+	// computed delay or deadline, and empty for a fixed delay.
 	Name string
 
 	// Delay is how long an EffectStartTimer timer runs.
 	Delay time.Duration
 
+	// At is when an EffectStartTimer timer is due, measured on the clock
+	// the driver passed to the core. Drivers schedule the timer for At; a
+	// time already past fires at once. For an EffectStartInvocation it is
+	// the deadline of the budgets declared with [StateBuilder.Within] around
+	// the service, on the same clock; zero for none. [Hooks.Exec] applies
+	// it, and [Effect.Budget] turns it into a duration for other drivers.
+	At time.Time
+
+	// Jitter is the fraction by which the driver varies a timer's wait at
+	// random, in either direction. [Effect.Wait] applies it.
+	Jitter float64
+
 	// Context is the context an action or service must see.
 	Context C
 
 	// Event is the event that triggered an action declared on a
-	// transition. It is nil for entry and exit actions.
+	// transition, or the event of the step a chart action runs in. It is
+	// nil for a state's own entry and exit actions.
 	Event any
+
+	// From and To name the states active before and after the step an
+	// action belongs to. A chart action sees them as its [Move].
+	From []string
+
+	// To names the states active after the step.
+	To []string
 }
+
+// Budget returns how long an EffectStartInvocation service may run, from
+// now on the driver's clock, and false when no [StateBuilder.Within] budget
+// applies. A budget already spent is zero. Drivers turn it into a context
+// timeout rather than a deadline, because the driver's clock need not be the
+// wall clock.
+func (e Effect[C]) Budget(now time.Time) (time.Duration, bool) {
+	if e.Kind != EffectStartInvocation || e.At.IsZero() {
+		return 0, false
+	}
+
+	return max(e.At.Sub(now), 0), true
+}
+
+// Wait is how long a driver waits, from now, before an EffectStartTimer
+// timer fires: until At, varied by up to Jitter of that wait using random,
+// which returns a number in [0, 1). The result is never negative.
+func (e Effect[C]) Wait(now time.Time, random func() float64) time.Duration {
+	wait := e.At.Sub(now)
+
+	if e.Jitter > 0 && wait > 0 {
+		wait = time.Duration(float64(wait) * (1 + e.Jitter*(2*random()-1)))
+	}
+
+	return max(wait, 0)
+}
+
+// ErrPanicked is returned by [Machine.Exec] when an action or service
+// panicked. The error carries the panic value and the stack. Drivers deliver
+// a service's panic to the chart as its [Failed] event, so a chart decides
+// what a crashed service means the way it does for any other failure.
+var ErrPanicked = errors.New("action or service panicked")
 
 // ErrUnknownEffect is returned when an effect names an action or service the
 // chart does not declare, which happens when an effect outlives a chart
@@ -153,7 +243,13 @@ var ErrUnknownEffect = errors.New("effect does not match the chart")
 // send with each event the service produces; the driver passes those events
 // to [Machine.Transition]. Timer and stop effects are the driver's to handle
 // and are rejected.
-func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)) error {
+func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = fmt.Errorf("%w: %s %q in state %q: %v\n%s", ErrPanicked, e.Kind, e.Name, e.State, p, debug.Stack())
+		}
+	}()
+
 	n, ok := m.names[e.State]
 	if !ok {
 		return fmt.Errorf("%w: state %q", ErrUnknownEffect, e.State)
@@ -168,7 +264,12 @@ func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)
 				continue
 			}
 
-			for ev := range inv.run(ctx, e.Context, e.ID) {
+			run := m.serviceRunner(inv)
+			if run == nil {
+				return fmt.Errorf("%w: service %q in state %q", ErrNotBound, e.Name, e.State)
+			}
+
+			for ev := range run(ctx, e.Context, e.ID) {
 				send(ev)
 				if ctx.Err() != nil {
 					break
@@ -210,7 +311,30 @@ func (m *Machine[S, C]) execAction(ctx context.Context, n *node[S, C], e Effect[
 		}
 	}
 
+	if fn, ok := m.actions[e.Name]; ok {
+		if fn == nil {
+			return fmt.Errorf("%w: action %q in state %q", ErrNotBound, e.Name, e.State)
+		}
+
+		fn(ctx, e.Context, Move[S]{Source: n.id, From: m.stateIDs(e.From), To: m.stateIDs(e.To), Event: e.Event})
+
+		return nil
+	}
+
 	return fmt.Errorf("%w: action %q in state %q", ErrUnknownEffect, e.Name, e.State)
+}
+
+// stateIDs turns state names back into identifiers, skipping names the
+// chart no longer has.
+func (m *Machine[S, C]) stateIDs(names []string) []S {
+	ids := make([]S, 0, len(names))
+	for _, name := range names {
+		if n, ok := m.names[name]; ok {
+			ids = append(ids, n.id)
+		}
+	}
+
+	return ids
 }
 
 // effectJSON is the stored form of an Effect.
@@ -230,6 +354,12 @@ type effectJSON struct {
 	// DelayNanos is the timer duration in nanoseconds.
 	DelayNanos int64 `json:"delay_ns,omitempty"`
 
+	// At is when a deadline timer fires.
+	At time.Time `json:"at,omitzero"`
+
+	// Jitter is the fraction by which the driver varies the wait.
+	Jitter float64 `json:"jitter,omitempty"`
+
 	// Context is the context an action or service must see. Timer and
 	// stop effects carry none.
 	Context json.RawMessage `json:"context,omitempty"`
@@ -239,6 +369,12 @@ type effectJSON struct {
 
 	// Event is the triggering event.
 	Event json.RawMessage `json:"event,omitempty"`
+
+	// From names the states active before the action's step.
+	From []string `json:"from,omitempty"`
+
+	// To names the states active after it.
+	To []string `json:"to,omitempty"`
 }
 
 // EncodeEffect serialises an effect so a driver can store it and carry it
@@ -250,9 +386,13 @@ func (m *Machine[S, C]) EncodeEffect(e Effect[C]) ([]byte, error) {
 		State:      e.State,
 		Name:       e.Name,
 		DelayNanos: int64(e.Delay),
+		At:         e.At,
+		Jitter:     e.Jitter,
 		Context:    nil,
 		EventName:  "",
 		Event:      nil,
+		From:       e.From,
+		To:         e.To,
 	}
 
 	if e.Kind == EffectAction || e.Kind == EffectStartInvocation {
@@ -300,8 +440,12 @@ func (m *Machine[S, C]) DecodeEffect(data []byte) (Effect[C], error) {
 		State:   raw.State,
 		Name:    raw.Name,
 		Delay:   time.Duration(raw.DelayNanos),
+		At:      raw.At,
+		Jitter:  raw.Jitter,
 		Context: zero.Context,
 		Event:   nil,
+		From:    raw.From,
+		To:      raw.To,
 	}
 
 	if len(raw.Context) > 0 {

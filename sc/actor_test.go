@@ -173,7 +173,7 @@ func TestActorFromContinuesAPersistedInstance(t *testing.T) {
 		data, err := json.Marshal(snap)
 		require.NoError(t, err)
 
-		restored, _, err := m.Restore(data)
+		restored, _, err := m.Restore(data, epoch)
 		require.NoError(t, err)
 
 		a := m.ActorFrom(restored)

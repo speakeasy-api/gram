@@ -55,13 +55,13 @@ func TestAlwaysTransitionsRunBeforeTheNextEvent(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	snap, _ := m.Start(counter{})
+	snap, _ := m.Start(counter{}, epoch)
 	for range 2 {
-		snap, _ = m.Transition(snap, tick{})
+		snap, _ = m.Transition(snap, tick{}, epoch)
 	}
 	require.Equal(t, []string{"counting"}, snap.Active())
 
-	snap, _ = m.Transition(snap, tick{})
+	snap, _ = m.Transition(snap, tick{}, epoch)
 
 	require.Equal(t, []string{"full"}, snap.Active())
 	require.True(t, snap.Done())
@@ -78,11 +78,11 @@ func TestAlwaysCycleIsReportedInsteadOfHanging(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	snap, _ := m.Start(counter{})
+	snap, _ := m.Start(counter{}, epoch)
 
 	require.PanicsWithValue(t,
 		`sc: machine "cycle" does not settle: its Always transitions or raised events form a cycle`,
-		func() { m.Transition(snap, tick{}) },
+		func() { m.Transition(snap, tick{}, epoch) },
 	)
 }
 
@@ -108,8 +108,8 @@ func TestRaiseSignalsAnotherRegionInTheSameStep(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	snap, _ := m.Start(counter{})
-	snap, _ = m.Transition(snap, ping{})
+	snap, _ := m.Start(counter{}, epoch)
+	snap, _ = m.Transition(snap, ping{}, epoch)
 
 	require.Equal(t, []string{"both", "left", "left_done", "right", "right_done"}, snap.Active())
 	require.Equal(t, uint64(1), snap.Seq())
@@ -150,9 +150,9 @@ func TestEveryRegionHandlesTheSameEvent(t *testing.T) {
 	t.Parallel()
 
 	m := regionsChart(t)
-	snap, _ := m.Start(counter{})
+	snap, _ := m.Start(counter{}, epoch)
 
-	snap, _ = m.Transition(snap, tick{})
+	snap, _ = m.Transition(snap, tick{}, epoch)
 
 	require.Equal(t, []string{"both", "left", "l2", "right", "r2"}, snap.Active())
 	require.Equal(t, 2, snap.Context.N)
@@ -162,9 +162,9 @@ func TestTargetlessTransitionRunsAlongsideARegionLeavingTheParallelState(t *test
 	t.Parallel()
 
 	m := regionsChart(t)
-	snap, _ := m.Start(counter{})
+	snap, _ := m.Start(counter{}, epoch)
 
-	snap, effects := m.Transition(snap, leave{})
+	snap, effects := m.Transition(snap, leave{}, epoch)
 
 	require.Equal(t, []string{"outside"}, snap.Active())
 	require.Equal(t, []string{"l1/leftSaw"}, names(effects))
@@ -174,12 +174,12 @@ func TestDeepHistoryRestoresEveryRegion(t *testing.T) {
 	t.Parallel()
 
 	m := regionsChart(t)
-	snap, _ := m.Start(counter{})
-	snap, _ = m.Transition(snap, tick{})
-	snap, _ = m.Transition(snap, leave{})
+	snap, _ := m.Start(counter{}, epoch)
+	snap, _ = m.Transition(snap, tick{}, epoch)
+	snap, _ = m.Transition(snap, leave{}, epoch)
 	require.Equal(t, []string{"outside"}, snap.Active())
 
-	snap, _ = m.Transition(snap, back{})
+	snap, _ = m.Transition(snap, back{}, epoch)
 
 	require.Equal(t, []string{"both", "left", "l2", "right", "r2"}, snap.Active())
 }
@@ -202,12 +202,12 @@ func TestHistoryWithNothingRecordedUsesDefaultEntry(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	start, _ := m.Start(counter{})
+	start, _ := m.Start(counter{}, epoch)
 
-	viaInitial, _ := m.Transition(start, back{})
+	viaInitial, _ := m.Transition(start, back{}, epoch)
 	require.Equal(t, []string{"work", "first"}, viaInitial.Active())
 
-	viaDefault, _ := m.Transition(start, tick{})
+	viaDefault, _ := m.Transition(start, tick{}, epoch)
 	require.Equal(t, []string{"work", "second"}, viaDefault.Active())
 }
 
@@ -230,13 +230,13 @@ func TestShallowHistoryRestartsTheRememberedChild(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	snap, _ := m.Start(counter{})
-	snap, _ = m.Transition(snap, tick{})
-	snap, _ = m.Transition(snap, tick{})
+	snap, _ := m.Start(counter{}, epoch)
+	snap, _ = m.Transition(snap, tick{}, epoch)
+	snap, _ = m.Transition(snap, tick{}, epoch)
 	require.Equal(t, []string{"work", "review", "reading"}, snap.Active())
 
-	snap, _ = m.Transition(snap, leave{})
-	snap, _ = m.Transition(snap, back{})
+	snap, _ = m.Transition(snap, leave{}, epoch)
+	snap, _ = m.Transition(snap, back{}, epoch)
 
 	// Shallow history remembers review, not which of its children was
 	// active, so review starts from its initial state.
@@ -270,7 +270,7 @@ func reentryChart(t *testing.T) *sc.Machine[string, counter] {
 func TestStartRunsEntryActionsOuterFirstAndStartsTimer(t *testing.T) {
 	t.Parallel()
 
-	_, effects := reentryChart(t).Start(counter{})
+	_, effects := reentryChart(t).Start(counter{}, epoch)
 
 	require.Equal(t, []string{"outer/outerIn", "inner/innerIn", "inner/"}, names(effects))
 	require.Equal(t, sc.EffectStartTimer, effects[2].Kind)
@@ -280,9 +280,9 @@ func TestSelfTransitionDoesNotReenterByDefault(t *testing.T) {
 	t.Parallel()
 
 	m := reentryChart(t)
-	snap, _ := m.Start(counter{})
+	snap, _ := m.Start(counter{}, epoch)
 
-	snap, effects := m.Transition(snap, ping{})
+	snap, effects := m.Transition(snap, ping{}, epoch)
 
 	require.Equal(t, 1, snap.Context.N)
 	require.Equal(t, []string{"outer", "inner"}, snap.Active())
@@ -293,9 +293,9 @@ func TestReenterRunsExitAndEntryAndRestartsTimer(t *testing.T) {
 	t.Parallel()
 
 	m := reentryChart(t)
-	snap, _ := m.Start(counter{})
+	snap, _ := m.Start(counter{}, epoch)
 
-	snap, effects := m.Transition(snap, pong{})
+	snap, effects := m.Transition(snap, pong{}, epoch)
 
 	require.Equal(t, []string{"outer", "inner"}, snap.Active())
 	require.Equal(t,
@@ -310,9 +310,9 @@ func TestTransitionToChildKeepsParentActive(t *testing.T) {
 	t.Parallel()
 
 	m := reentryChart(t)
-	snap, _ := m.Start(counter{})
+	snap, _ := m.Start(counter{}, epoch)
 
-	snap, effects := m.Transition(snap, tick{})
+	snap, effects := m.Transition(snap, tick{}, epoch)
 
 	require.Equal(t, []string{"outer", "other"}, snap.Active())
 	require.Equal(t, []string{"inner/innerOut", "inner/"}, names(effects))
@@ -322,10 +322,10 @@ func TestSelfTargetOnCompoundStateResetsChildrenOnly(t *testing.T) {
 	t.Parallel()
 
 	m := reentryChart(t)
-	snap, _ := m.Start(counter{})
-	snap, _ = m.Transition(snap, tick{})
+	snap, _ := m.Start(counter{}, epoch)
+	snap, _ = m.Transition(snap, tick{}, epoch)
 
-	snap, effects := m.Transition(snap, reset{})
+	snap, effects := m.Transition(snap, reset{}, epoch)
 
 	require.Equal(t, []string{"outer", "inner"}, snap.Active())
 	require.Equal(t, []string{"inner/innerIn", "inner/"}, names(effects))
@@ -335,10 +335,10 @@ func TestReenterOnCompoundStateExitsAndEntersIt(t *testing.T) {
 	t.Parallel()
 
 	m := reentryChart(t)
-	snap, _ := m.Start(counter{})
-	snap, _ = m.Transition(snap, tick{})
+	snap, _ := m.Start(counter{}, epoch)
+	snap, _ = m.Transition(snap, tick{}, epoch)
 
-	_, effects := m.Transition(snap, back{})
+	_, effects := m.Transition(snap, back{}, epoch)
 
 	require.Equal(t, []string{"outer/outerOut", "outer/outerIn", "inner/innerIn", "inner/"}, names(effects))
 }
@@ -357,12 +357,12 @@ func TestChildTransitionTakesPriorityOverParent(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	snap, _ := m.Start(counter{})
-	snap, _ = m.Transition(snap, tick{})
+	snap, _ := m.Start(counter{}, epoch)
+	snap, _ = m.Transition(snap, tick{}, epoch)
 	require.Equal(t, []string{"parent", "by_child"}, snap.Active())
 
 	// by_child does not handle tick, so the parent's transition applies.
-	snap, _ = m.Transition(snap, tick{})
+	snap, _ = m.Transition(snap, tick{}, epoch)
 	require.Equal(t, []string{"by_parent"}, snap.Active())
 }
 
@@ -380,8 +380,8 @@ func TestCompoundStateOnDoneFiresWhenItReachesAFinalChild(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	snap, _ := m.Start(counter{})
-	snap, _ = m.Transition(snap, tick{})
+	snap, _ := m.Start(counter{}, epoch)
+	snap, _ = m.Transition(snap, tick{}, epoch)
 
 	require.Equal(t, []string{"after"}, snap.Active())
 	require.Equal(t, 1, snap.Context.N)
@@ -403,14 +403,14 @@ func TestStreamEventsAreDeliveredOnlyWhileTheServiceRuns(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	snap, effects := m.Start(counter{})
+	snap, effects := m.Start(counter{}, epoch)
 	id := effect(t, effects, sc.EffectStartInvocation).ID
 
-	snap, _ = m.Transition(snap, sc.Emitted{ID: id, Event: tick{}})
+	snap, _ = m.Transition(snap, sc.Emitted{ID: id, Event: tick{}}, epoch)
 	require.Equal(t, 1, snap.Context.N)
 
-	snap, _ = m.Transition(snap, leave{})
-	snap, _ = m.Transition(snap, sc.Emitted{ID: id, Event: tick{}})
+	snap, _ = m.Transition(snap, leave{}, epoch)
+	snap, _ = m.Transition(snap, sc.Emitted{ID: id, Event: tick{}}, epoch)
 
 	require.Equal(t, 1, snap.Context.N)
 }
