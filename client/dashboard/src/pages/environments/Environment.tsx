@@ -129,7 +129,7 @@ function entryActions(
       disabled: disabled,
     });
   }
-  // A secret only ever hands back a fixed mask, so copying one would
+  // A secret only ever hands back a masked placeholder, so copying one would
   // put a useless string on the clipboard. Keep the row shape steady by
   // showing the action locked rather than dropping it.
   actions.push({

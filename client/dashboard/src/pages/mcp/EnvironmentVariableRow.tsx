@@ -144,8 +144,8 @@ export function EnvironmentVariableRow({
     ? selectedEnvironmentView !== mcpAttachedEnvironmentSlug
     : false; // When no environment is attached, allow editing on any environment
 
-  // A secret only ever loads as a fixed mask, so showing it would only put a
-  // mask on screen. A non-secret value is stored in cleartext and meant
+  // A secret only ever loads as a masked placeholder, so showing it would only
+  // put a mask on screen. A non-secret value is stored in cleartext and meant
   // to be read back. A variable this environment has no entry for defaults to
   // secret, matching what the server will store, but it gets no badge: nothing
   // is stored yet to describe.
@@ -154,7 +154,7 @@ export function EnvironmentVariableRow({
   const showSensitiveBadge = isSecret && envVar.state === "system" && isStored;
 
   // Values are masked until asked for, as on the environment page. Revealing a
-  // secret shows its fixed mask, which is all the server ever returns;
+  // secret shows its masked placeholder, which is all the server ever returns;
   // revealing a non-secret shows the value itself.
   const [revealed, setRevealed] = useState(false);
   const canReveal = envVar.state === "system" && isStored;
@@ -179,7 +179,7 @@ export function EnvironmentVariableRow({
       disabled: isDisabled,
     },
   ];
-  // A secret hands back only a fixed mask, so copying one would put a
+  // A secret hands back only a masked placeholder, so copying one would put a
   // useless string on the clipboard. Keep the row shape steady by showing the
   // action locked rather than dropping it.
   actions.push({
