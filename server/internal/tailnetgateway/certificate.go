@@ -51,10 +51,10 @@ const (
 	// issuance lease; first issuance usually takes a few seconds.
 	certificateIssuingRetry = 5 * time.Second
 
-	// certificateRefreshInterval is how often a node holding the certificate
-	// asks tsnet for it again, which picks up a renewal, whichever slot made
-	// it, and lets tsnet start one when it is due. It matches the hourly
-	// refresh tsnet runs when it terminates TLS itself.
+	// certificateRefreshInterval is how often, give or take a tenth, a node
+	// holding the certificate re-reads the store, which picks up another
+	// slot's renewal, and checks whether its own is due. It never asks tsnet
+	// for the certificate then: tsnet would decide on a renewal itself.
 	certificateRefreshInterval = time.Hour
 
 	// certificateRetryMin and certificateRetryMax bound the backoff after any
@@ -70,10 +70,25 @@ var acmeRetryAfterPattern = regexp.MustCompile(`retry after (\d{4}-\d{2}-\d{2} \
 
 // certificateIssuer is implemented by state stores that share a certificate
 // across a connection's slots: a slot reads the stored certificate, and
-// claims the issuance lease before requesting a missing one.
+// claims the issuance lease before requesting a missing one or renewing it.
 type certificateIssuer interface {
 	ReadTLSCertAndKey(domain string) ([]byte, []byte, error)
 	ClaimCertificateIssuance(ctx context.Context) (func(), bool, error)
+}
+
+// certificateSource is where a node gets its certificate.
+type certificateSource interface {
+	// Stored returns the connection's stored certificate, or nil when none
+	// is stored or the store does not share certificates.
+	Stored(ctx context.Context) (*tls.Certificate, error)
+
+	// Obtain returns a certificate for a node holding none: the stored one
+	// when it is valid, otherwise a new one, ordered under the lease.
+	Obtain(ctx context.Context, now time.Time) (*tls.Certificate, error)
+
+	// Renew replaces held under the lease, or returns the certificate
+	// another slot already renewed it into.
+	Renew(ctx context.Context, held *tls.Certificate, now time.Time) (*tls.Certificate, error)
 }
 
 // errCertificateIssuing reports that another slot holds the connection's
@@ -85,75 +100,259 @@ var errCertificateIssuing = errors.New("another gateway slot is obtaining the ce
 // holds its certificate.
 var errCertificateNotObtained = errors.New("the gateway has not obtained its TLS certificate yet")
 
-// certificateFetcher obtains the certificate for the node's service name.
-type certificateFetcher func(ctx context.Context) (*tls.Certificate, error)
+// certPhase is where a node is with its certificate. Whether a held
+// certificate has expired is not a phase: it follows from the clock, and
+// certStatus works it out.
+type certPhase int
+
+const (
+	// phaseObtaining: no certificate is held and no request has failed.
+	phaseObtaining certPhase = iota
+	// phaseRetrying: no certificate is held and the last request failed.
+	phaseRetrying
+	// phaseServing: a certificate is held and nothing is failing.
+	phaseServing
+	// phaseRenewFailing: a certificate is held and the last renewal failed;
+	// the node keeps serving it.
+	phaseRenewFailing
+	// phaseStopped: the node is closing and starts no more requests.
+	phaseStopped
+)
+
+// certState is a node's certificate state. Every transition goes through
+// apply, and every choice of what to do next through decide, both pure.
+type certState struct {
+	phase certPhase
+
+	// cert is the certificate served, nil in phaseObtaining and
+	// phaseRetrying.
+	cert *tls.Certificate
+
+	// err is why the last request failed, in phaseRetrying and
+	// phaseRenewFailing.
+	err error
+
+	// failures counts consecutive failures that back off: refusals naming
+	// their own retry time do not count.
+	failures int
+
+	// retryAt holds every request back after a failure; zero otherwise.
+	retryAt time.Time
+
+	// While a certificate is held: refreshAt is when to re-read the store,
+	// windowCheckAt when to ask for the renewal window, renewAt when to
+	// renew. A zero windowCheckAt means at once.
+	refreshAt     time.Time
+	windowCheckAt time.Time
+	renewAt       time.Time
+}
+
+// certAction is the request step a node takes next.
+type certAction int
+
+const (
+	actionNone certAction = iota
+	// actionObtain gets a certificate while none is held.
+	actionObtain
+	// actionCheckStore re-reads the store for another slot's renewal.
+	actionCheckStore
+	// actionFetchWindow asks for the held certificate's renewal window.
+	actionFetchWindow
+	// actionRenew renews the held certificate under the lease.
+	actionRenew
+)
+
+// certOutcome is the result of running one action.
+type certOutcome struct {
+	action certAction
+
+	// cert is the certificate obtained, found in the store (nil for none)
+	// or renewed into.
+	cert *tls.Certificate
+
+	// renewAt and checkAgain are the window's answer, for actionFetchWindow.
+	renewAt, checkAgain time.Time
+
+	err error
+}
+
+// errRenewalUnchanged is a renewal that returned the certificate it was
+// asked to replace.
+var errRenewalUnchanged = errors.New("the renewal returned the certificate it was asked to replace")
+
+// decide is the step a node in st takes at now, or actionNone.
+func decide(st certState, now time.Time) certAction {
+	switch {
+	case st.phase == phaseStopped, now.Before(st.retryAt):
+		return actionNone
+	case st.cert == nil:
+		return actionObtain
+	case !now.Before(st.refreshAt):
+		return actionCheckStore
+	case !now.Before(st.windowCheckAt):
+		return actionFetchWindow
+	case !now.Before(st.renewAt):
+		return actionRenew
+	default:
+		return actionNone
+	}
+}
+
+// apply is the state after outcome at now. refreshIn is how long until the
+// next store read, passed in so the jitter stays out of apply.
+func apply(st certState, o certOutcome, now time.Time, refreshIn time.Duration) certState {
+	if st.phase == phaseStopped {
+		return st
+	}
+	switch o.action {
+	case actionObtain:
+		if o.err != nil {
+			return failed(st, o.err, now)
+		}
+		return serving(st, o.cert, now, refreshIn)
+	case actionCheckStore:
+		if o.err == nil && replaces(o.cert, st.cert) {
+			return serving(st, o.cert, now, refreshIn)
+		}
+		st.refreshAt = now.Add(refreshIn)
+		return st
+	case actionFetchWindow:
+		if o.err != nil {
+			st.renewAt, st.windowCheckAt = fallbackRenewAt(st.cert.Leaf), now.Add(renewalCheckMin)
+			return st
+		}
+		st.renewAt, st.windowCheckAt = o.renewAt, o.checkAgain
+		return st
+	case actionRenew:
+		if o.err == nil && o.cert.Leaf.Equal(st.cert.Leaf) {
+			o.err = errRenewalUnchanged
+		}
+		if o.err != nil {
+			return failed(st, o.err, now)
+		}
+		return serving(st, o.cert, now, refreshIn)
+	case actionNone:
+	}
+	return st
+}
+
+// serving holds cert with nothing failing; its window is asked for at once.
+func serving(st certState, cert *tls.Certificate, now time.Time, refreshIn time.Duration) certState {
+	return certState{
+		phase: phaseServing, cert: cert, err: nil, failures: 0, retryAt: time.Time{},
+		refreshAt: now.Add(refreshIn), windowCheckAt: time.Time{}, renewAt: time.Time{},
+	}
+}
+
+// failed records a failed obtain or renewal and when to retry.
+func failed(st certState, err error, now time.Time) certState {
+	if !isCertificateRateLimited(err) && !isCertificateDomainPending(err) && !errors.Is(err, errCertificateIssuing) {
+		st.failures++
+	}
+	st.err = err
+	st.retryAt = nextCertificateRetry(now, err, st.failures)
+	st.phase = phaseRetrying
+	if st.cert != nil {
+		st.phase = phaseRenewFailing
+	}
+	return st
+}
+
+// certStatus reports whether st holds a certificate valid at now and, when it
+// does not, why.
+func certStatus(st certState, domain string, now time.Time) (bool, string) {
+	switch st.phase {
+	case phaseObtaining:
+		return false, "obtaining a TLS certificate for " + domain
+	case phaseRetrying:
+		return false, certificateFailureMessage(domain, st.err, st.retryAt)
+	case phaseServing, phaseRenewFailing:
+		if now.Before(st.cert.Leaf.NotAfter) {
+			return true, ""
+		}
+		if st.phase == phaseServing {
+			return false, "the TLS certificate for " + domain + " has expired"
+		}
+		return false, fmt.Sprintf("the TLS certificate for %s has expired; %v; retrying after %s",
+			domain, st.err, st.retryAt.UTC().Format("2006-01-02 15:04 UTC"))
+	case phaseStopped:
+		return false, "the gateway node is stopping"
+	}
+	return false, ""
+}
+
+// replaces reports whether stored is a later certificate than held.
+func replaces(stored, held *tls.Certificate) bool {
+	return stored != nil && !stored.Leaf.Equal(held.Leaf) && stored.Leaf.NotAfter.After(held.Leaf.NotAfter)
+}
+
+// maxStepsPerRequest bounds one request's steps: obtain or re-read the
+// store, read the window, renew, read the new certificate's window.
+const maxStepsPerRequest = 4
 
 // certificateTracker requests a node's service certificate in the background,
-// holds it for the node's TLS handshakes, and asks again every
-// certificateRefreshInterval so a renewal reaches the node.
+// holds it for the node's TLS handshakes, and renews it when its renewal
+// window says so. It runs the actions decide picks and feeds their outcomes
+// to apply; it decides nothing itself.
 type certificateTracker struct {
-	domain string
-	fetch  certificateFetcher
-	logger *slog.Logger
-	now    func() time.Time
+	domain  string
+	source  certificateSource
+	windows renewalWindows
+	logger  *slog.Logger
+	now     func() time.Time
 
-	// stop is closed by Close, which cancels any request in flight and
-	// starts no more.
+	// requests is a pod-wide semaphore bounding concurrent requests; nil
+	// means unbounded.
+	requests chan struct{}
+
+	// events, when set, is told the outcome of each obtain, renewal and
+	// window request.
+	events func(ctx context.Context, operation CertificateOperation, result CertificateResult)
+
+	// stop is closed by Close, which cancels any request in flight.
 	stop     chan struct{}
 	stopOnce sync.Once
 
 	// attempts tracks the request goroutine so Close can wait for it.
 	attempts sync.WaitGroup
 
-	// mu guards every field below.
-	mu sync.Mutex
+	// mu guards state and attempting.
+	mu    sync.Mutex
+	state certState
 
-	// cert is the certificate the node serves, nil until one is obtained.
-	cert *tls.Certificate
-
-	// attempting is true while a request is in flight; at most one is.
+	// attempting is true while a request is in flight; at most one is. It
+	// applies on top of any phase.
 	attempting bool
-
-	// attempted is true once any request has finished.
-	attempted bool
-
-	// lastErr is why the latest request failed.
-	lastErr error
-
-	// retryAt is when the next request may start: a retry while no
-	// certificate is held, a refresh once one is.
-	retryAt time.Time
-
-	// failures counts consecutive failed requests that back off: refusals
-	// naming their own retry time do not count.
-	failures int
 }
 
-func newCertificateTracker(domain string, fetch certificateFetcher, logger *slog.Logger, now func() time.Time) *certificateTracker {
+func newCertificateTracker(domain string, source certificateSource, windows renewalWindows, requests chan struct{}, logger *slog.Logger, now func() time.Time) *certificateTracker {
 	return &certificateTracker{
-		domain: domain, fetch: fetch, logger: logger, now: now,
+		domain: domain, source: source, windows: windows, logger: logger, now: now, requests: requests, events: nil,
 		stop: make(chan struct{}), stopOnce: sync.Once{}, attempts: sync.WaitGroup{},
-		mu: sync.Mutex{}, cert: nil, attempting: false, attempted: false,
-		lastErr: nil, retryAt: time.Time{}, failures: 0,
+		mu: sync.Mutex{}, attempting: false,
+		state: certState{
+			phase: phaseObtaining, cert: nil, err: nil, failures: 0, retryAt: time.Time{},
+			refreshAt: time.Time{}, windowCheckAt: time.Time{}, renewAt: time.Time{},
+		},
 	}
 }
 
 // Poll reports whether a valid certificate is held and, when it is not, why.
-// It never blocks: when no request is in flight and the retry or refresh time
-// has passed, it starts one in the background.
+// It never blocks: when decide has a step due and no request is in flight,
+// it starts one in the background.
 func (t *certificateTracker) Poll() (bool, string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	now := t.now()
-	if !t.attempting && !now.Before(t.retryAt) && !t.stopped() {
+	if !t.attempting && decide(t.state, now) != actionNone && t.acquire() {
 		t.attempting = true
-		t.attempts.Go(t.request)
+		t.attempts.Go(func() {
+			defer t.release()
+			t.request()
+		})
 	}
-	if t.cert != nil && now.Before(t.cert.Leaf.NotAfter) {
-		return true, ""
-	}
-	return false, t.reasonLocked()
+	return certStatus(t.state, t.domain, now)
 }
 
 // Certificate returns the certificate for a TLS handshake, failing the
@@ -162,10 +361,20 @@ func (t *certificateTracker) Poll() (bool, string) {
 func (t *certificateTracker) Certificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.cert == nil {
+	if t.state.cert == nil {
 		return nil, errCertificateNotObtained
 	}
-	return t.cert, nil
+	return t.state.cert, nil
+}
+
+// ExpiresAt is when the certificate served expires, zero while none is held.
+func (t *certificateTracker) ExpiresAt() time.Time {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.state.cert == nil {
+		return time.Time{}
+	}
+	return t.state.cert.Leaf.NotAfter
 }
 
 // Await polls until the certificate is held, wait elapses, ctx is done, or
@@ -195,29 +404,44 @@ func (t *certificateTracker) Await(ctx context.Context, wait time.Duration) {
 	}
 }
 
-// nextRequestAfter reports whether a request has settled without a
-// certificate and the next one is not due until after deadline.
+// nextRequestAfter reports whether a request has failed and the retry is not
+// due until after deadline.
 func (t *certificateTracker) nextRequestAfter(deadline time.Time) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.attempted && !t.attempting && t.retryAt.After(deadline)
+	return !t.attempting && t.state.phase == phaseRetrying && t.state.retryAt.After(deadline)
 }
 
 // Close stops any request in flight and waits for it.
 func (t *certificateTracker) Close() {
+	t.mu.Lock()
+	t.state.phase = phaseStopped
+	t.mu.Unlock()
 	t.stopOnce.Do(func() { close(t.stop) })
 	t.attempts.Wait()
 }
 
-func (t *certificateTracker) stopped() bool {
+// acquire takes a pod-wide request slot without waiting.
+func (t *certificateTracker) acquire() bool {
+	if t.requests == nil {
+		return true
+	}
 	select {
-	case <-t.stop:
+	case t.requests <- struct{}{}:
 		return true
 	default:
 		return false
 	}
 }
 
+func (t *certificateTracker) release() {
+	if t.requests != nil {
+		<-t.requests
+	}
+}
+
+// request runs the steps decide picks until none is due, applying each
+// outcome before deciding again.
 func (t *certificateTracker) request() {
 	ctx, cancel := context.WithTimeout(context.Background(), certificateFetchTimeout)
 	defer cancel()
@@ -230,43 +454,98 @@ func (t *certificateTracker) request() {
 		case <-stopWatch:
 		}
 	}()
-	cert, err := t.fetch(ctx)
+	defer func() {
+		t.mu.Lock()
+		t.attempting = false
+		t.mu.Unlock()
+	}()
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.attempting = false
-	t.attempted = true
-	now := t.now()
-	if err == nil {
-		if t.cert == nil || !t.cert.Leaf.Equal(cert.Leaf) {
-			t.logger.InfoContext(ctx, "obtained tailnet service certificate", attr.SlogHostName(t.domain))
+	for range maxStepsPerRequest {
+		t.mu.Lock()
+		st, now := t.state, t.now()
+		t.mu.Unlock()
+		action := decide(st, now)
+		if action == actionNone {
+			return
 		}
-		t.cert, t.lastErr, t.failures = cert, nil, 0
-		t.retryAt = now.Add(certificateRefreshInterval)
-		return
-	}
-	if t.stopped() {
-		return
-	}
+		outcome := t.run(ctx, action, st, now)
 
-	if !isCertificateRateLimited(err) && !isCertificateDomainPending(err) && !errors.Is(err, errCertificateIssuing) {
-		t.failures++
+		t.mu.Lock()
+		before := t.state
+		t.state = apply(t.state, outcome, t.now(), jittered(certificateRefreshInterval))
+		after := t.state
+		t.mu.Unlock()
+		t.log(ctx, before, after, outcome)
 	}
-	t.lastErr = err
-	t.retryAt = nextCertificateRetry(now, err, t.failures)
-	t.logger.WarnContext(ctx, "could not obtain tailnet service certificate",
-		attr.SlogHostName(t.domain), attr.SlogError(err),
-		attr.SlogRetryAttempt(t.failures), attr.SlogRetryWait(t.retryAt.Sub(now)))
 }
 
-func (t *certificateTracker) reasonLocked() string {
-	if t.cert != nil && t.lastErr == nil {
-		return "the TLS certificate for " + t.domain + " has expired"
+// run performs action; it is the only place the tracker does I/O.
+func (t *certificateTracker) run(ctx context.Context, action certAction, st certState, now time.Time) certOutcome {
+	outcome := certOutcome{action: action, cert: nil, renewAt: time.Time{}, checkAgain: time.Time{}, err: nil}
+	switch action {
+	case actionObtain:
+		outcome.cert, outcome.err = t.source.Obtain(ctx, now)
+	case actionCheckStore:
+		outcome.cert, outcome.err = t.source.Stored(ctx)
+	case actionFetchWindow:
+		outcome.renewAt, outcome.checkAgain, outcome.err = t.windows.RenewAt(ctx, st.cert.Leaf, now)
+	case actionRenew:
+		outcome.cert, outcome.err = t.source.Renew(ctx, st.cert, now)
+	case actionNone:
 	}
-	if t.lastErr == nil {
-		return "obtaining a TLS certificate for " + t.domain
+	return outcome
+}
+
+// certificateOperation names a step counted in metrics; re-reading the store
+// is not a certificate request.
+func certificateOperation(action certAction) (CertificateOperation, bool) {
+	switch action {
+	case actionObtain:
+		return CertificateOperationObtain, true
+	case actionRenew:
+		return CertificateOperationRenew, true
+	case actionFetchWindow:
+		return CertificateOperationWindow, true
+	case actionNone, actionCheckStore:
 	}
-	return certificateFailureMessage(t.domain, t.lastErr, t.retryAt)
+	return "", false
+}
+
+// log reports what a step changed.
+func (t *certificateTracker) log(ctx context.Context, before, after certState, o certOutcome) {
+	if after.phase == phaseStopped {
+		return
+	}
+	if operation, ok := certificateOperation(o.action); ok && t.events != nil {
+		// A renewal returning the certificate it replaced fails in apply.
+		err := o.err
+		if o.action == actionRenew && err == nil && after.phase == phaseRenewFailing {
+			err = after.err
+		}
+		t.events(ctx, operation, certificateResult(err))
+	}
+	if after.cert != nil && (before.cert == nil || !before.cert.Leaf.Equal(after.cert.Leaf)) {
+		t.logger.InfoContext(ctx, "obtained tailnet service certificate", attr.SlogHostName(t.domain), attr.SlogTailnetGatewayCertificateExpiresAt(after.cert.Leaf.NotAfter))
+	}
+	if o.err == nil {
+		return
+	}
+	switch o.action {
+	case actionCheckStore:
+		t.logger.WarnContext(ctx, "could not read the stored tailnet service certificate", attr.SlogHostName(t.domain), attr.SlogError(o.err))
+	case actionFetchWindow:
+		t.logger.WarnContext(ctx, "could not read the certificate renewal window; renewing two thirds through its lifetime",
+			attr.SlogHostName(t.domain), attr.SlogError(o.err))
+	case actionRenew:
+		t.logger.WarnContext(ctx, "could not renew tailnet service certificate",
+			attr.SlogHostName(t.domain), attr.SlogError(after.err), attr.SlogTailnetGatewayCertificateExpiresAt(after.cert.Leaf.NotAfter),
+			attr.SlogRetryAttempt(after.failures), attr.SlogRetryWait(after.retryAt.Sub(t.now())))
+	case actionObtain:
+		t.logger.WarnContext(ctx, "could not obtain tailnet service certificate",
+			attr.SlogHostName(t.domain), attr.SlogError(after.err),
+			attr.SlogRetryAttempt(after.failures), attr.SlogRetryWait(after.retryAt.Sub(t.now())))
+	case actionNone:
+	}
 }
 
 // isCertificateRateLimited reports whether Let's Encrypt refused the request

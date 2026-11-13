@@ -78,6 +78,12 @@ type TsnetRuntime struct {
 	logger             *slog.Logger
 	shutdownTimeout    time.Duration
 	requestReadTimeout time.Duration
+
+	// windows and certificateRequests are shared by every node the runtime
+	// starts: one renewal window client, and one bound on concurrent
+	// certificate work.
+	windows             renewalWindows
+	certificateRequests chan struct{}
 }
 
 var _ NodeRuntime = (*TsnetRuntime)(nil)
@@ -117,9 +123,11 @@ func WithRequestReadTimeout(timeout time.Duration) TsnetRuntimeOption {
 // logger, adjusted by opts.
 func NewTsnetRuntime(opts ...TsnetRuntimeOption) *TsnetRuntime {
 	r := &TsnetRuntime{
-		logger:             slog.New(slog.DiscardHandler),
-		shutdownTimeout:    defaultShutdownTimeout,
-		requestReadTimeout: defaultRequestReadTimeout,
+		logger:              slog.New(slog.DiscardHandler),
+		shutdownTimeout:     defaultShutdownTimeout,
+		requestReadTimeout:  defaultRequestReadTimeout,
+		windows:             newARIClient(),
+		certificateRequests: make(chan struct{}, certificateRequestConcurrency),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -188,7 +196,9 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 	approved := waitForApproval(ctx, lc, tailcfg.ServiceName(spec.ServiceName))
 
 	fqdn := ln.FQDN
-	cert := newCertificateTracker(fqdn, leasedCertificateFetch(spec.Store, fqdn, lc.CertPair), hostLogger, time.Now)
+	source := &tsnetCertificateSource{store: spec.Store, fqdn: fqdn, certPair: lc.CertPair, certPairWithValidity: lc.CertPairWithValidity}
+	cert := newCertificateTracker(fqdn, source, r.windows, r.certificateRequests, hostLogger, time.Now)
+	cert.events = spec.CertificateEvents
 	if approved {
 		cert.Await(ctx, certificateStartWait)
 	}
@@ -223,35 +233,116 @@ func serviceMode() tsnet.ServiceModeTCP {
 // none is stored; it is local.Client.CertPair.
 type certPairFunc func(ctx context.Context, domain string) (certPEM, keyPEM []byte, err error)
 
-// leasedCertificateFetch obtains the certificate for fqdn through certPair.
-// When the store shares certificates across the connection's slots, a stored
-// one is reused without the lease: that is every start after the first
-// issuance, so restarting a pod with many connections takes no leases. A
-// missing one is ordered only by the slot holding the issuance lease.
-func leasedCertificateFetch(store ipn.StateStore, fqdn string, certPair certPairFunc) certificateFetcher {
-	return func(ctx context.Context) (*tls.Certificate, error) {
-		if issuer, ok := store.(certificateIssuer); ok {
-			if _, _, err := issuer.ReadTLSCertAndKey(fqdn); err != nil {
-				release, claimed, err := issuer.ClaimCertificateIssuance(ctx)
-				if err != nil {
-					return nil, fmt.Errorf("claim tailnet service certificate lease: %w", err)
-				}
-				if !claimed {
-					return nil, errCertificateIssuing
-				}
-				defer release()
-			}
-		}
-		certPEM, keyPEM, err := certPair(ctx, fqdn)
-		if err != nil {
-			return nil, fmt.Errorf("obtain tailnet service certificate: %w", err)
-		}
-		pair, err := tls.X509KeyPair(certPEM, keyPEM)
-		if err != nil {
-			return nil, fmt.Errorf("parse tailnet service certificate: %w", err)
-		}
-		return &pair, nil
+// certPairWithValidityFunc asks tsnet for a certificate for domain valid for
+// at least minValidity, renewing the stored one at once if it is not; it is
+// local.Client.CertPairWithValidity.
+type certPairWithValidityFunc func(ctx context.Context, domain string, minValidity time.Duration) (certPEM, keyPEM []byte, err error)
+
+// tsnetCertificateSource gets a node's certificate from the shared store, and
+// from tsnet only under the issuance lease. tsnet decides nothing on its own:
+// it neither terminates TLS (see serviceMode) nor is asked for a certificate
+// while one is stored, either of which would let it order or renew one
+// outside the lease.
+//
+// Outside Kubernetes tsnet keeps certificates in its state directory rather
+// than the store, so Stored finds none; local development runs one slot per
+// connection, which then asks tsnet whenever it holds no certificate.
+type tsnetCertificateSource struct {
+	store                ipn.StateStore
+	fqdn                 string
+	certPair             certPairFunc
+	certPairWithValidity certPairWithValidityFunc
+}
+
+var _ certificateSource = (*tsnetCertificateSource)(nil)
+
+func (s *tsnetCertificateSource) Stored(context.Context) (*tls.Certificate, error) {
+	issuer, ok := s.store.(certificateIssuer)
+	if !ok {
+		return nil, nil
 	}
+	certPEM, keyPEM, err := issuer.ReadTLSCertAndKey(s.fqdn)
+	if errors.Is(err, ipn.ErrStateNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read stored tailnet service certificate: %w", err)
+	}
+	return parseCertificatePair(certPEM, keyPEM)
+}
+
+// Obtain reuses a valid stored certificate without the lease: that is every
+// start after the first issuance, so restarting a pod with many connections
+// takes no leases. A store it cannot read fails the request rather than
+// ordering a replacement, which would spend the tailnet's allowance.
+func (s *tsnetCertificateSource) Obtain(ctx context.Context, now time.Time) (*tls.Certificate, error) {
+	stored, err := s.Stored(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if stored != nil && now.Before(stored.Leaf.NotAfter) {
+		return stored, nil
+	}
+	release, err := s.claim(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	certPEM, keyPEM, err := s.certPair(ctx, s.fqdn)
+	if err != nil {
+		return nil, fmt.Errorf("obtain tailnet service certificate: %w", err)
+	}
+	return parseCertificatePair(certPEM, keyPEM)
+}
+
+// Renew re-reads the store under the lease, since another slot may have just
+// renewed, and otherwise asks tsnet for a certificate valid for longer than
+// held has left, which makes tsnet renew it at once, naming held as the one
+// it replaces so Let's Encrypt counts it as a renewal.
+func (s *tsnetCertificateSource) Renew(ctx context.Context, held *tls.Certificate, now time.Time) (*tls.Certificate, error) {
+	release, err := s.claim(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	stored, err := s.Stored(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if replaces(stored, held) {
+		return stored, nil
+	}
+	certPEM, keyPEM, err := s.certPairWithValidity(ctx, s.fqdn, held.Leaf.NotAfter.Sub(now)+time.Hour)
+	if err != nil {
+		return nil, fmt.Errorf("ask tsnet for a renewal: %w", err)
+	}
+	return parseCertificatePair(certPEM, keyPEM)
+}
+
+// claim takes the connection's issuance lease when the store shares
+// certificates, failing with errCertificateIssuing while another slot holds
+// it.
+func (s *tsnetCertificateSource) claim(ctx context.Context) (func(), error) {
+	issuer, ok := s.store.(certificateIssuer)
+	if !ok {
+		return func() {}, nil
+	}
+	release, claimed, err := issuer.ClaimCertificateIssuance(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("claim tailnet service certificate lease: %w", err)
+	}
+	if !claimed {
+		return nil, errCertificateIssuing
+	}
+	return release, nil
+}
+
+func parseCertificatePair(certPEM, keyPEM []byte) (*tls.Certificate, error) {
+	pair, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("parse tailnet service certificate: %w", err)
+	}
+	return &pair, nil
 }
 
 // waitForApproval gives the tailnet a moment to approve the node as a host
@@ -401,19 +492,19 @@ func (n *tsnetNode) Status(ctx context.Context) (NodeState, error) {
 	n.mu.Unlock()
 
 	if serveErr != nil {
-		return NodeState{Online: false, BackendState: "", NeedsLogin: false, AwaitingApproval: false, AwaitingCertificate: false, CertificateStatus: "", NodeID: "", FQDN: n.fqdn}, fmt.Errorf("service listener stopped: %w", serveErr)
+		return NodeState{Online: false, BackendState: "", NeedsLogin: false, AwaitingApproval: false, AwaitingCertificate: false, CertificateStatus: "", CertificateExpiresAt: time.Time{}, NodeID: "", FQDN: n.fqdn}, fmt.Errorf("service listener stopped: %w", serveErr)
 	}
 
 	st, err := n.lc.Status(ctx)
 	if err != nil {
-		return NodeState{Online: false, BackendState: "", NeedsLogin: false, AwaitingApproval: false, AwaitingCertificate: false, CertificateStatus: "", NodeID: "", FQDN: n.fqdn}, fmt.Errorf("tsnet status: %w", err)
+		return NodeState{Online: false, BackendState: "", NeedsLogin: false, AwaitingApproval: false, AwaitingCertificate: false, CertificateStatus: "", CertificateExpiresAt: time.Time{}, NodeID: "", FQDN: n.fqdn}, fmt.Errorf("tsnet status: %w", err)
 	}
 
 	running := st.BackendState == ipn.Running.String()
 	approved, err := hostsService(st.Self, n.service)
 	if err != nil {
 		// Fail closed, but report why rather than as a plain approval wait.
-		return NodeState{Online: false, BackendState: st.BackendState, NeedsLogin: false, AwaitingApproval: false, AwaitingCertificate: false, CertificateStatus: "", NodeID: "", FQDN: n.fqdn}, err
+		return NodeState{Online: false, BackendState: st.BackendState, NeedsLogin: false, AwaitingApproval: false, AwaitingCertificate: false, CertificateStatus: "", CertificateExpiresAt: time.Time{}, NodeID: "", FQDN: n.fqdn}, err
 	}
 	certified, certificateStatus := false, ""
 	if running && approved {
@@ -421,11 +512,12 @@ func (n *tsnetNode) Status(ctx context.Context) (NodeState, error) {
 	}
 	state := NodeState{
 		Online: running && approved && certified, BackendState: st.BackendState,
-		NeedsLogin:          st.BackendState == ipn.NeedsLogin.String(),
-		AwaitingApproval:    running && !approved,
-		AwaitingCertificate: running && approved && !certified,
-		CertificateStatus:   certificateStatus,
-		NodeID:              "", FQDN: n.fqdn,
+		NeedsLogin:           st.BackendState == ipn.NeedsLogin.String(),
+		AwaitingApproval:     running && !approved,
+		AwaitingCertificate:  running && approved && !certified,
+		CertificateStatus:    certificateStatus,
+		CertificateExpiresAt: n.cert.ExpiresAt(),
+		NodeID:               "", FQDN: n.fqdn,
 	}
 	if st.Self != nil {
 		state.NodeID = string(st.Self.ID)

@@ -50,6 +50,10 @@ type NodeSpec struct {
 
 	// StartTimeout bounds how long the node may take to come online.
 	StartTimeout time.Duration
+
+	// CertificateEvents, when set, is told the outcome of every certificate
+	// request the node makes.
+	CertificateEvents func(ctx context.Context, operation CertificateOperation, result CertificateResult)
 }
 
 // NodeState is a point-in-time view of a running node.
@@ -75,6 +79,10 @@ type NodeState struct {
 	// CertificateStatus says why the certificate is missing and when the
 	// node retries; empty otherwise.
 	CertificateStatus string
+
+	// CertificateExpiresAt is when the certificate the node serves expires;
+	// zero while it holds none.
+	CertificateExpiresAt time.Time
 
 	// NodeID is the stable Tailscale node id, used to delete the device.
 	NodeID string

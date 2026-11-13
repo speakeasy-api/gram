@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -88,6 +89,33 @@ func (f *scriptedFetch) count() int {
 	return f.calls
 }
 
+// fetchSource obtains certificates from fetch, stores none and never renews.
+type fetchSource struct {
+	fetch func(context.Context) (*tls.Certificate, error)
+}
+
+func (fetchSource) Stored(context.Context) (*tls.Certificate, error) { return nil, nil }
+
+func (f fetchSource) Obtain(ctx context.Context, _ time.Time) (*tls.Certificate, error) {
+	return f.fetch(ctx)
+}
+
+func (fetchSource) Renew(context.Context, *tls.Certificate, time.Time) (*tls.Certificate, error) {
+	return nil, errors.New("this source does not renew")
+}
+
+// farWindows never asks for a renewal.
+type farWindows struct{}
+
+func (farWindows) RenewAt(_ context.Context, _ *x509.Certificate, now time.Time) (time.Time, time.Time, error) {
+	return now.Add(1000 * time.Hour), now.Add(renewalCheckMax), nil
+}
+
+func newTestTracker(t *testing.T, fetch func(context.Context) (*tls.Certificate, error), now func() time.Time) *certificateTracker {
+	t.Helper()
+	return newCertificateTracker("private.example.ts.net", fetchSource{fetch: fetch}, farWindows{}, nil, testenv.NewLogger(t), now)
+}
+
 // settle waits for the request goroutine to finish recording its result.
 func settle(t *testing.T, tracker *certificateTracker) {
 	t.Helper()
@@ -102,7 +130,7 @@ func TestCertificateTrackerWaitsForTheRetryTimeAfterARateLimit(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
 	fetch := newScriptedFetch(t, errRateLimited)
-	tracker := newCertificateTracker("private.example.ts.net", fetch.fetch, testenv.NewLogger(t), func() time.Time { return now })
+	tracker := newTestTracker(t, fetch.fetch, func() time.Time { return now })
 	t.Cleanup(tracker.Close)
 
 	ready, _ := tracker.Poll()
@@ -132,7 +160,7 @@ func TestCertificateTrackerWaitsForTheRetryTimeAfterARateLimit(t *testing.T) {
 func TestCertificateTrackerAwaitReturnsOnceTheFirstRequestSettles(t *testing.T) {
 	t.Parallel()
 	fetch := newScriptedFetch(t)
-	tracker := newCertificateTracker("private.example.ts.net", fetch.fetch, testenv.NewLogger(t), time.Now)
+	tracker := newTestTracker(t, fetch.fetch, time.Now)
 	t.Cleanup(tracker.Close)
 
 	tracker.Await(t.Context(), time.Minute)
@@ -143,7 +171,7 @@ func TestCertificateTrackerAwaitReturnsOnceTheFirstRequestSettles(t *testing.T) 
 	// A fixed clock an hour before the refusal's retry time, so the retry
 	// falls after the wait whatever the time of day.
 	before := time.Date(2026, time.November, 12, 21, 53, 0, 0, time.UTC)
-	refused := newCertificateTracker("private.example.ts.net", failing.fetch, testenv.NewLogger(t), func() time.Time { return before })
+	refused := newTestTracker(t, failing.fetch, func() time.Time { return before })
 	t.Cleanup(refused.Close)
 	started := time.Now()
 	refused.Await(t.Context(), time.Minute)
@@ -157,7 +185,7 @@ func TestCertificateTrackerWaitsThroughTheShortRetryAfterApproval(t *testing.T) 
 	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
 	pending := errors.New(`obtain tailnet service certificate: invalid domain "private.example.ts.net"; must be one of []`)
 	fetch := newScriptedFetch(t, pending, errRateLimited)
-	tracker := newCertificateTracker("private.example.ts.net", fetch.fetch, testenv.NewLogger(t), func() time.Time { return now })
+	tracker := newTestTracker(t, fetch.fetch, func() time.Time { return now })
 	t.Cleanup(tracker.Close)
 
 	_, _ = tracker.Poll()
@@ -179,7 +207,7 @@ func TestCertificateTrackerBacksOffOnlyForRealFailures(t *testing.T) {
 	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
 	reset := errors.New("acme: connection reset")
 	fetch := newScriptedFetch(t, errRateLimited, reset)
-	tracker := newCertificateTracker("private.example.ts.net", fetch.fetch, testenv.NewLogger(t), func() time.Time { return now })
+	tracker := newTestTracker(t, fetch.fetch, func() time.Time { return now })
 	t.Cleanup(tracker.Close)
 
 	_, _ = tracker.Poll()
@@ -192,15 +220,15 @@ func TestCertificateTrackerBacksOffOnlyForRealFailures(t *testing.T) {
 
 	tracker.mu.Lock()
 	defer tracker.mu.Unlock()
-	require.Equal(t, 1, tracker.failures, "the rate limit named its own retry time and does not inflate the backoff")
-	require.Equal(t, now.Add(certificateRetryMin), tracker.retryAt, "the first real failure backs off by the minimum")
+	require.Equal(t, 1, tracker.state.failures, "the rate limit named its own retry time and does not inflate the backoff")
+	require.Equal(t, now.Add(certificateRetryMin), tracker.state.retryAt, "the first real failure backs off by the minimum")
 }
 
 func TestCertificateTrackerWaitsForAnotherSlotWithoutBackingOff(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
 	fetch := newScriptedFetch(t, errCertificateIssuing)
-	tracker := newCertificateTracker("private.example.ts.net", fetch.fetch, testenv.NewLogger(t), func() time.Time { return now })
+	tracker := newTestTracker(t, fetch.fetch, func() time.Time { return now })
 	t.Cleanup(tracker.Close)
 
 	_, _ = tracker.Poll()
@@ -213,8 +241,8 @@ func TestCertificateTrackerWaitsForAnotherSlotWithoutBackingOff(t *testing.T) {
 
 	tracker.mu.Lock()
 	defer tracker.mu.Unlock()
-	require.Zero(t, tracker.failures, "waiting for another slot is not a failure")
-	require.Equal(t, now.Add(certificateIssuingRetry), tracker.retryAt)
+	require.Zero(t, tracker.state.failures, "waiting for another slot is not a failure")
+	require.Equal(t, now.Add(certificateIssuingRetry), tracker.state.retryAt)
 }
 
 func TestNextCertificateRetry(t *testing.T) {
@@ -261,7 +289,7 @@ func TestCertificateHandshakeNeverRequestsACertificate(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
 	fetch := newScriptedFetch(t)
-	tracker := newCertificateTracker("private.example.ts.net", fetch.fetch, testenv.NewLogger(t), func() time.Time { return now })
+	tracker := newTestTracker(t, fetch.fetch, func() time.Time { return now })
 	t.Cleanup(tracker.Close)
 
 	handshakes := sync.WaitGroup{}
@@ -281,81 +309,6 @@ func TestCertificateHandshakeNeverRequestsACertificate(t *testing.T) {
 	require.NoError(t, err)
 	require.Same(t, fetch.cert, cert, "a handshake serves the certificate the tracker obtained")
 	require.Equal(t, 1, fetch.count())
-}
-
-func TestCertificateTrackerRefreshesAHeldCertificate(t *testing.T) {
-	t.Parallel()
-	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
-	notAfter := now.Add(30 * 24 * time.Hour)
-	first, renewed := testCertificate(t, notAfter), testCertificate(t, notAfter.Add(60*24*time.Hour))
-	results := []struct {
-		cert *tls.Certificate
-		err  error
-	}{{cert: first}, {err: errors.New("acme: connection reset")}, {cert: renewed}}
-	var calls atomic.Int32
-	called := make(chan struct{}, 4)
-	fetch := func(context.Context) (*tls.Certificate, error) {
-		result := results[calls.Add(1)-1]
-		called <- struct{}{}
-		return result.cert, result.err
-	}
-	tracker := newCertificateTracker("private.example.ts.net", fetch, testenv.NewLogger(t), func() time.Time { return now })
-	t.Cleanup(tracker.Close)
-
-	_, _ = tracker.Poll()
-	<-called
-	settle(t, tracker)
-	ready, _ := tracker.Poll()
-	require.True(t, ready)
-
-	now = now.Add(certificateRefreshInterval)
-	ready, _ = tracker.Poll()
-	require.True(t, ready, "a refresh in flight keeps serving the held certificate")
-	<-called
-	settle(t, tracker)
-	ready, _ = tracker.Poll()
-	require.True(t, ready, "a failed refresh keeps serving the held certificate")
-	cert, err := tracker.Certificate(nil)
-	require.NoError(t, err)
-	require.Same(t, first, cert)
-
-	now = now.Add(certificateRetryMin)
-	_, _ = tracker.Poll()
-	<-called
-	settle(t, tracker)
-	cert, err = tracker.Certificate(nil)
-	require.NoError(t, err)
-	require.Same(t, renewed, cert, "a refresh picks up the renewed certificate")
-	require.Equal(t, int32(3), calls.Load())
-}
-
-func TestCertificateTrackerReportsAnExpiredCertificate(t *testing.T) {
-	t.Parallel()
-	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
-	expiring := testCertificate(t, now.Add(time.Minute))
-	var calls atomic.Int32
-	called := make(chan struct{}, 4)
-	fetch := func(context.Context) (*tls.Certificate, error) {
-		called <- struct{}{}
-		if calls.Add(1) == 1 {
-			return expiring, nil
-		}
-		return nil, errors.New("acme: connection reset")
-	}
-	tracker := newCertificateTracker("private.example.ts.net", fetch, testenv.NewLogger(t), func() time.Time { return now })
-	t.Cleanup(tracker.Close)
-
-	_, _ = tracker.Poll()
-	<-called
-	settle(t, tracker)
-	now = now.Add(certificateRefreshInterval)
-	_, _ = tracker.Poll()
-	<-called
-	settle(t, tracker)
-
-	ready, reason := tracker.Poll()
-	require.False(t, ready, "an expired certificate does not count as held")
-	require.Contains(t, reason, "acme: connection reset")
 }
 
 // fakeIssuer is a connection's shared certificate store and issuance lease,
@@ -391,72 +344,261 @@ func (f *fakeIssuer) ClaimCertificateIssuance(context.Context) (func(), bool, er
 	}, true, nil
 }
 
+func (f *fakeIssuer) isLeased() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.leased
+}
+
 func (f *fakeIssuer) store(certPEM, keyPEM []byte) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.certPEM, f.keyPEM = certPEM, keyPEM
 }
 
+// fakeTsnet stands in for tsnet's certificate handling over a fakeIssuer:
+// CertPair returns the stored certificate or orders one; CertPairWithValidity
+// renews. Each order is held open until hold is closed, and counted.
+type fakeTsnet struct {
+	t        *testing.T
+	issuer   *fakeIssuer
+	hold     chan struct{}
+	notAfter func() time.Time
+
+	orders, renewals atomic.Int32
+}
+
+func (f *fakeTsnet) order(ctx context.Context) ([]byte, []byte, error) {
+	select {
+	case <-f.hold:
+	case <-ctx.Done():
+		return nil, nil, fmt.Errorf("order held open: %w", ctx.Err())
+	}
+	certPEM, keyPEM := testCertificatePEM(f.t, f.notAfter())
+	f.issuer.store(certPEM, keyPEM)
+	return certPEM, keyPEM, nil
+}
+
+func (f *fakeTsnet) certPair(ctx context.Context, domain string) ([]byte, []byte, error) {
+	if stored, key, err := f.issuer.ReadTLSCertAndKey(domain); err == nil {
+		return stored, key, nil
+	}
+	f.orders.Add(1)
+	return f.order(ctx)
+}
+
+func (f *fakeTsnet) certPairWithValidity(ctx context.Context, _ string, _ time.Duration) ([]byte, []byte, error) {
+	f.renewals.Add(1)
+	return f.order(ctx)
+}
+
+// testClock is a clock tests move by hand.
+type testClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func (c *testClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *testClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(d)
+}
+
+// scriptedWindows answers RenewAt, counting calls: with err when set, with
+// renewAt when set, and otherwise afterIssue into the certificate's lifetime,
+// as Let's Encrypt does for a new certificate.
+type scriptedWindows struct {
+	mu         sync.Mutex
+	renewAt    time.Time
+	movedFor   string
+	afterIssue time.Duration
+	err        error
+	calls      int
+}
+
+func (w *scriptedWindows) RenewAt(_ context.Context, leaf *x509.Certificate, now time.Time) (time.Time, time.Time, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.calls++
+	if w.err != nil {
+		return time.Time{}, time.Time{}, w.err
+	}
+	if !w.renewAt.IsZero() && (w.movedFor == "" || w.movedFor == leaf.SerialNumber.String()) {
+		return w.renewAt, now.Add(renewalCheckMax), nil
+	}
+	return leaf.NotBefore.Add(w.afterIssue), now.Add(renewalCheckMax), nil
+}
+
+// moveTo moves the window of the certificate with serial to at.
+func (w *scriptedWindows) moveTo(serial string, at time.Time) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.renewAt, w.movedFor = at, serial
+}
+
+func (w *scriptedWindows) count() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.calls
+}
+
+// connection is the slots of one connection sharing a store, a fake tsnet
+// and renewal windows.
+type connection struct {
+	clock    *testClock
+	issuer   *fakeIssuer
+	tsnet    *fakeTsnet
+	windows  *scriptedWindows
+	trackers []*certificateTracker
+}
+
+func newConnection(t *testing.T, slots int) *connection {
+	t.Helper()
+	clock := &testClock{mu: sync.Mutex{}, now: time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)}
+	issuer := &fakeIssuer{StateStore: nil, mu: sync.Mutex{}, certPEM: nil, keyPEM: nil, leased: false}
+	c := &connection{
+		clock: clock, issuer: issuer,
+		tsnet:   &fakeTsnet{t: t, issuer: issuer, hold: make(chan struct{}), notAfter: func() time.Time { return clock.Now().Add(90 * 24 * time.Hour) }},
+		windows: &scriptedWindows{mu: sync.Mutex{}, renewAt: time.Time{}, movedFor: "", afterIssue: 60 * 24 * time.Hour, err: nil, calls: 0},
+	}
+	for range slots {
+		source := &tsnetCertificateSource{store: issuer, fqdn: "private.example.ts.net", certPair: c.tsnet.certPair, certPairWithValidity: c.tsnet.certPairWithValidity}
+		tracker := newCertificateTracker("private.example.ts.net", source, c.windows, nil, testenv.NewLogger(t), clock.Now)
+		t.Cleanup(tracker.Close)
+		c.trackers = append(c.trackers, tracker)
+	}
+	return c
+}
+
+// pollUntil polls every slot until each satisfies done. A slot waiting for
+// another to finish under the lease retries after certificateIssuingRetry, so
+// once the lease is free the clock moves on by that much.
+func (c *connection) pollUntil(t *testing.T, done func(*certificateTracker) bool, msg string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		all, waiting := true, false
+		for _, tracker := range c.trackers {
+			_, _ = tracker.Poll()
+			tracker.mu.Lock()
+			ok := !tracker.attempting && done(tracker)
+			waiting = waiting || (!tracker.attempting && errors.Is(tracker.state.err, errCertificateIssuing))
+			tracker.mu.Unlock()
+			all = all && ok
+		}
+		if !all && waiting && !c.issuer.isLeased() {
+			c.clock.Advance(certificateIssuingRetry)
+		}
+		return all
+	}, 5*time.Second, 5*time.Millisecond, msg)
+}
+
+// served is the serial of the certificate a slot serves, or "" for none.
+func served(tracker *certificateTracker) string {
+	if tracker.state.cert == nil {
+		return ""
+	}
+	return tracker.state.cert.Leaf.SerialNumber.String()
+}
+
+func storedSerial(t *testing.T, issuer *fakeIssuer) string {
+	t.Helper()
+	certPEM, keyPEM, err := issuer.ReadTLSCertAndKey("private.example.ts.net")
+	require.NoError(t, err)
+	pair, err := parseCertificatePair(certPEM, keyPEM)
+	require.NoError(t, err)
+	return pair.Leaf.SerialNumber.String()
+}
+
 func TestSlotsOfOneConnectionOrderOneCertificate(t *testing.T) {
 	t.Parallel()
-	issuer := &fakeIssuer{StateStore: nil, mu: sync.Mutex{}, certPEM: nil, keyPEM: nil, leased: false}
-	certPEM, keyPEM := testCertificatePEM(t, time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC))
-	var orders atomic.Int32
-	release := make(chan struct{})
-	// certPair stands in for tsnet: it returns the stored certificate, or
-	// orders one, held open until release, and stores it.
-	certPair := func(ctx context.Context, domain string) ([]byte, []byte, error) {
-		if stored, key, err := issuer.ReadTLSCertAndKey(domain); err == nil {
-			return stored, key, nil
-		}
-		orders.Add(1)
-		select {
-		case <-release:
-		case <-ctx.Done():
-			return nil, nil, ctx.Err()
-		}
-		issuer.store(certPEM, keyPEM)
-		return certPEM, keyPEM, nil
-	}
-
-	now := time.Date(2026, time.November, 12, 22, 0, 0, 0, time.UTC)
-	var clock sync.Mutex
-	nowFn := func() time.Time {
-		clock.Lock()
-		defer clock.Unlock()
-		return now
-	}
-	const slots = 4
-	trackers := make([]*certificateTracker, slots)
-	for i := range trackers {
-		trackers[i] = newCertificateTracker("private.example.ts.net", leasedCertificateFetch(issuer, "private.example.ts.net", certPair), testenv.NewLogger(t), nowFn)
-		t.Cleanup(trackers[i].Close)
-	}
+	c := newConnection(t, 4)
 
 	// Every slot is approved at once and every slot gets client handshakes
 	// while the first order is held open.
-	for _, tracker := range trackers {
+	for _, tracker := range c.trackers {
 		_, _ = tracker.Poll()
 	}
-	require.Eventually(t, func() bool { return orders.Load() == 1 }, 5*time.Second, 5*time.Millisecond)
-	for _, tracker := range trackers {
+	require.Eventually(t, func() bool { return c.tsnet.orders.Load() == 1 }, 5*time.Second, 5*time.Millisecond)
+	for _, tracker := range c.trackers {
 		for range 4 {
 			_, err := tracker.Certificate(&tls.ClientHelloInfo{ServerName: "private.example.ts.net"})
 			require.ErrorIs(t, err, errCertificateNotObtained)
 		}
 	}
-	close(release)
+	close(c.tsnet.hold)
 
-	clock.Lock()
-	now = now.Add(certificateIssuingRetry)
-	clock.Unlock()
-	require.Eventually(t, func() bool {
-		for _, tracker := range trackers {
-			if ready, _ := tracker.Poll(); !ready {
-				return false
-			}
-		}
-		return true
-	}, 5*time.Second, 5*time.Millisecond, "the other slots reuse the stored certificate")
-	require.Equal(t, int32(1), orders.Load(), "the connection orders exactly one certificate")
+	c.pollUntil(t, func(tracker *certificateTracker) bool { return tracker.state.cert != nil }, "the other slots reuse the stored certificate")
+	require.Equal(t, int32(1), c.tsnet.orders.Load(), "the connection orders exactly one certificate")
+	require.Zero(t, c.tsnet.renewals.Load())
 }
+
+func TestSlotsOfOneConnectionRenewOncePerCycle(t *testing.T) {
+	t.Parallel()
+	c := newConnection(t, 3)
+	close(c.tsnet.hold)
+	c.pollUntil(t, func(tracker *certificateTracker) bool { return tracker.state.cert != nil }, "every slot holds the first certificate")
+	first := storedSerial(t, c.issuer)
+
+	// Hourly refreshes before the renewal point read the window once and
+	// renew nothing.
+	for range 3 {
+		c.clock.Advance(pastRefresh)
+		c.pollUntil(t, func(tracker *certificateTracker) bool { return served(tracker) == first }, "slots keep the first certificate")
+	}
+	require.Zero(t, c.tsnet.renewals.Load())
+	require.Equal(t, 3, c.windows.count(), "each slot reads the window once on obtaining it, then waits for Retry-After")
+
+	// The renewal point arrives: all three slots fall due in the same hour.
+	c.clock.Advance(60 * 24 * time.Hour)
+	c.pollUntil(t, func(tracker *certificateTracker) bool {
+		return (served(tracker) != first && tracker.state.err == nil) || errors.Is(tracker.state.err, errCertificateIssuing)
+	}, "each slot has renewed or is waiting for the one that is")
+	renewed := storedSerial(t, c.issuer)
+	c.pollUntil(t, func(tracker *certificateTracker) bool { return served(tracker) == renewed }, "every slot serves the renewal")
+	require.Equal(t, int32(1), c.tsnet.renewals.Load(), "the connection renews once per cycle, not once per slot")
+	require.Equal(t, int32(1), c.tsnet.orders.Load(), "a renewal is never a new order")
+}
+
+func TestSlotRenewsWhenTheWindowMovesEarlier(t *testing.T) {
+	t.Parallel()
+	c := newConnection(t, 1)
+	close(c.tsnet.hold)
+	c.pollUntil(t, func(tracker *certificateTracker) bool { return tracker.state.cert != nil }, "the slot holds the first certificate")
+	first := storedSerial(t, c.issuer)
+	c.clock.Advance(pastRefresh)
+	c.pollUntil(t, func(*certificateTracker) bool { return true }, "the slot refreshes")
+	require.Zero(t, c.tsnet.renewals.Load())
+
+	// Let's Encrypt moves the window to now, as before a mass revocation.
+	c.windows.moveTo(first, c.clock.Now())
+	c.clock.Advance(renewalCheckMax)
+	c.pollUntil(t, func(tracker *certificateTracker) bool { return served(tracker) != first }, "the slot renews within one window check")
+	require.Equal(t, int32(1), c.tsnet.renewals.Load())
+}
+
+func TestCertificateRequestsShareAPodWideLimit(t *testing.T) {
+	t.Parallel()
+	requests := make(chan struct{}, 1)
+	requests <- struct{}{}
+	fetch := newScriptedFetch(t)
+	tracker := newCertificateTracker("private.example.ts.net", fetchSource{fetch: fetch.fetch}, farWindows{}, requests, testenv.NewLogger(t), time.Now)
+	t.Cleanup(tracker.Close)
+
+	_, _ = tracker.Poll()
+	require.Zero(t, fetch.count(), "a node whose turn has not come does not start a request")
+	<-requests
+	_, _ = tracker.Poll()
+	<-fetch.called
+	settle(t, tracker)
+	require.Empty(t, requests, "the request gives its slot back")
+}
+
+// pastRefresh is long enough for a held certificate's jittered refresh to
+// fall due.
+const pastRefresh = certificateRefreshInterval + certificateRefreshInterval/10 + time.Second

@@ -2496,6 +2496,14 @@ func SlogTailnetGatewaySlot(v int32) slog.Attr {
 	return slog.Int(string(TailnetGatewaySlotKey), int(v))
 }
 
+// TailnetGatewayCertificateExpiresAtKey is when a gateway node's TLS
+// certificate expires.
+const TailnetGatewayCertificateExpiresAtKey = attribute.Key("gram.tailnet_gateway.certificate_expires_at")
+
+func SlogTailnetGatewayCertificateExpiresAt(v time.Time) slog.Attr {
+	return slog.Time(string(TailnetGatewayCertificateExpiresAtKey), v)
+}
+
 func TailnetGatewayNodeStatus[V ~string](v V) attribute.KeyValue {
 	return TailnetGatewayNodeStatusKey.String(string(v))
 }
