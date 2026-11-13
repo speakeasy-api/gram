@@ -63,7 +63,7 @@ func TestToolsCallConnections_BlockedAddressIsNotTheProviders(t *testing.T) {
 	shared := postToolsCallThrough(t, recordingConnections(rec, "token"), policy, upstream.URL)
 
 	require.Equal(t, oops.CodeGatewayError, shared.Code)
-	require.Equal(t, "remote mcp server uses a private network address Speakeasy does not connect to. Ask your administrator to check the server's address", shared.Error())
+	require.Equal(t, "remote mcp server uses an address Speakeasy does not connect to directly. Ask your administrator to check the server's address", shared.Error())
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeAddressNotAllowed)
 	require.Equal(t, "provider.example.com", row.ProviderHost, "the configured host, never the address it resolved to")
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)

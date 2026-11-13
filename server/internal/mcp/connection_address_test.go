@@ -64,7 +64,7 @@ func TestGatewayMemberAtBlockedAddress(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeAddressNotAllowed.String(), row.Reason)
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 	require.NotEmpty(t, row.MemberID)
-	require.Equal(t, `server "member" uses a private network address Speakeasy does not connect to. Ask your administrator to check the server's address`+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
+	require.Equal(t, `server "member" uses an address Speakeasy does not connect to directly. Ask your administrator to check the server's address`+contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), text)
 	require.NotContains(t, text, "192.0.2.10")
 }
 
@@ -118,7 +118,7 @@ func TestGatewayMemberSignInProviderAtBlockedAddress(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, rows)
-	const want = "uses a private network address Speakeasy does not connect to. Ask your administrator to check the sign-in provider's address"
+	const want = "uses an address Speakeasy does not connect to directly. Ask your administrator to check the sign-in provider's address"
 
 	for _, call := range []string{"first", "inside the cooldown"} {
 		text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))

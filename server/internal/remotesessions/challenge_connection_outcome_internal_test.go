@@ -70,14 +70,14 @@ func TestExchangeToBlockedAddressIsNotProviderFailure(t *testing.T) {
 	}).ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback", nil))
 	text := strings.Join(strings.Fields(page.Body.String()), " ")
 	require.Equal(t, http.StatusBadGateway, page.Code, "the status is unchanged")
-	require.Contains(t, text, "because the address set for its sign-in provider can't be used")
-	require.Contains(t, text, "Ask your IT administrators to check the sign-in provider's address")
+	require.Contains(t, text, "because Speakeasy can't connect to an address used by its sign-in provider")
+	require.Contains(t, text, "Ask your IT administrators to check the addresses used by this server's sign-in provider")
 	require.NotContains(t, text, "isn't available right now")
 	require.NotContains(t, text, "idp.example.com isn't")
 
 	failure := exchangeFailure(t.Context(), testenv.NewLogger(t), err, false)
 	require.Equal(t, oops.CodeGatewayError, failure.Code, "the status is unchanged")
-	require.Equal(t, "token exchange failed: the sign-in provider uses a private network address Speakeasy does not connect to. Ask your administrator to check the sign-in provider's address", failure.Error())
+	require.Equal(t, "token exchange failed: the sign-in provider uses an address Speakeasy does not connect to directly. Ask your administrator to check the sign-in provider's address", failure.Error())
 }
 
 // A lookup that fails for now, through the real resolver path, stays the provider's.

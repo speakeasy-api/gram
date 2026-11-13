@@ -197,6 +197,59 @@ func TestRefreshNow_BlockedTokenEndpointThroughTheCooldown(t *testing.T) {
 	require.True(t, active.RefreshTokenEncrypted.Valid, "a refused dial keeps the refresh grant")
 }
 
+// The address cause describes only the latest attempt: one that reached the provider and failed another way clears it.
+func TestRefreshNow_LaterProviderAnswerClearsTheAddressCause(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newSyntheticExpiryEnv(t, "refresh-address-cleared", tokenAnswer(http.StatusBadRequest, `{"error":"invalid_request"}`))
+	blocked, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{"127.0.0.0/8", "::1/128"})
+	require.NoError(t, err)
+	blockedRefresher, _ := addressRefresher(t, ctx, env, blocked, "")
+	open, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	refresher, rec := addressRefresher(t, ctx, env, open, "")
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	scope := mcpconnectionattempts.ServerScope(env.organizationID, env.projectID, uuid.New(), mcpconnectionattempts.AppDCR)
+
+	_, first := blockedRefresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope))
+	require.Equal(t, guardian.AddressNotAllowed, remotesessions.OutageAddress(first))
+	require.Equal(t, guardian.AddressNotAllowed, env.mgr.RecordedAddress(ctx, env.subject, env.clientID))
+
+	_, second := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshIn(scope))
+	require.Error(t, second)
+	rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeRefreshRejected)
+	require.Equal(t, guardian.AddressFine, env.mgr.RecordedAddress(ctx, env.subject, env.clientID), "the connect card no longer blames the address")
+
+	_, third := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope))
+	require.Equal(t, guardian.AddressFine, remotesessions.OutageAddress(third))
+	require.NotEqual(t, mcpconnectionattempts.CodeAddressNotAllowed, remotesessions.ConnectionOutageHappened(third))
+}
+
+// An address cause beside a provider outage record has no known order, so neither address text is shown.
+func TestRefreshNow_AddressCauseBesideAnOutageRecordIsNotStated(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newSyntheticExpiryEnv(t, "refresh-address-pair", tokenAnswer(http.StatusOK, `{"access_token":"a","refresh_token":"r","expires_in":3600}`))
+	open, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	refresher, _ := addressRefresher(t, ctx, env, open, "")
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	locks := cache.NewRedisCacheAdapter(redisClient)
+	require.NoError(t, locks.Set(ctx, remotesessions.RefreshAddressKey(session), guardian.AddressNotAllowed, time.Minute))
+	require.NoError(t, locks.Set(ctx, remotesessions.RefreshOutageKey(session), remotesessions.RefreshOutageProvider, time.Minute))
+	require.NoError(t, locks.Set(ctx, remotesessions.RefreshCooldownKey(session), time.Now().Add(time.Minute), time.Minute))
+
+	_, deferred := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(mcpconnectionattempts.ServerScope(env.organizationID, env.projectID, uuid.New(), mcpconnectionattempts.AppDCR)))
+	require.ErrorIs(t, deferred, remotesessions.ErrRemoteSessionUnavailable)
+	require.Equal(t, guardian.AddressFine, remotesessions.OutageAddress(deferred))
+	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, remotesessions.ConnectionOutageHappened(deferred))
+	require.Equal(t, guardian.AddressFine, env.mgr.RecordedAddress(ctx, env.subject, env.clientID))
+}
+
 func TestRefreshNow_TokenEndpointThatDoesNotExist(t *testing.T) {
 	t.Parallel()
 

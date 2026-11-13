@@ -549,10 +549,25 @@ func (s *RefreshService) recordedAddress(ctx context.Context, sess remotesession
 	}
 	switch address {
 	case guardian.AddressNotAllowed, guardian.AddressNotFound:
-		return address
 	case guardian.AddressFine:
+		return guardian.AddressFine
+	default:
+		return guardian.AddressFine
 	}
-	return guardian.AddressFine
+	// An outage record beside it means an older pod wrote a later cause; neither is known to be newer, so say neither.
+	if kind, known := s.RecordedOutage(ctx, sess); !known || kind != RefreshOutageNone {
+		return guardian.AddressFine
+	}
+	return address
+}
+
+// clearRefreshAddress forgets the address cause once a later refresh attempt ended some other way.
+func (s *RefreshService) clearRefreshAddress(ctx context.Context, sess remotesessions_repo.RemoteSession) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+	defer cancel()
+	if err := s.locks.Delete(ctx, RefreshAddressKey(sess)); err != nil {
+		s.logger.WarnContext(ctx, "remote session refresh address not cleared", attr.SlogError(err))
+	}
 }
 
 // RecordedAddress is the address that last stopped sess's refresh, for pages to render from.
@@ -854,6 +869,9 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 					visibleOutage, _ = s.RecordedOutage(ctx, attempted)
 				}
 			}
+		case outcome != remotesessionmetrics.RefreshOutcomeCanceled:
+			// This attempt ended some other way, so an earlier address cause no longer describes it.
+			s.clearRefreshAddress(ctx, attempted)
 		}
 		return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: outcome, retryAfter: retryAfter, visibleOutage: visibleOutage, outageCause: outageCause, failureRecorded: failureRecorded, stepRecorded: stepRecorded, err: err}
 	}

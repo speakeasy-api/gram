@@ -447,7 +447,7 @@ func TestMemberClientFailureRetriesOnlyTransportFailuresARetryCanChange(t *testi
 	}{
 		"connection reset": {err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, retryable: true, text: noAnswer},
 		"i/o timeout":      {err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}, retryable: false, text: noAnswer},
-		"blocked address":  {err: fmt.Errorf("dial member: %w", guardian.ErrBlockedIP), retryable: false, text: `server "fixture" uses a private network address Speakeasy does not connect to. Ask your administrator to check the server's address`},
+		"blocked address":  {err: fmt.Errorf("dial member: %w", guardian.ErrBlockedIP), retryable: false, text: `server "fixture" uses an address Speakeasy does not connect to directly. Ask your administrator to check the server's address`},
 		"no such host":     {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "member.example.invalid", IsNotFound: true}}, retryable: true, text: `server "fixture" uses an address that does not point anywhere. Ask your administrator to check the server's address`},
 		"lookup timeout":   {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "timeout", Name: "member.example.com", IsTimeout: true, IsTemporary: true}}, retryable: false, text: noAnswer},
 	} {

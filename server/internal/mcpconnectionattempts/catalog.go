@@ -313,6 +313,6 @@ var (
 	CodeCredentialChoiceInvalid     = define("credential_choice_invalid", OutcomeFailed, WhoApp, "The app's sign-in choice does not fit this server.", "Update the app, or report the problem to its makers.")
 
 	// Configured addresses Speakeasy did not dial.
-	CodeAddressNotAllowed = define("address_not_allowed", OutcomeFailed, WhoAdmin, "This server or its sign-in uses a private network address Speakeasy does not connect to.", "Check the server and sign-in addresses, or connect a private network through a tunnel.")
+	CodeAddressNotAllowed = define("address_not_allowed", OutcomeFailed, WhoAdmin, "This server or its sign-in uses an address Speakeasy does not connect to directly.", "Check the server and sign-in addresses. A private network needs a tunnel.")
 	CodeAddressNotFound   = define("address_not_found", OutcomeFailed, WhoAdmin, "The address for this server or its sign-in does not point anywhere.", "Check the server and sign-in addresses.")
 )
