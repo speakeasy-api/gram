@@ -33,9 +33,12 @@ autoInstallPeers: false
 # functions workspace's @types/node 22 vite instead of its own 24 one.
 dedupePeerDependents: false
 
-# Preserve legacy Polar's Stripe dependencies alongside direct checkout's 7.0.0/10.1.0.
+# @polar-sh/checkout only supports @stripe/stripe-js <= 8 and
+# @stripe/react-stripe-js <= 5, while the dashboard checkout uses newer majors
+# directly. Give Polar its own Stripe copies. Remove once Polar supports the
+# dashboard's Stripe majors.
 packageExtensions:
-  "@polar-sh/checkout@0.4.3":
+  "@polar-sh/checkout":
     dependencies:
       "@stripe/react-stripe-js": ^5.6.1
       "@stripe/stripe-js": ^8.11.0
