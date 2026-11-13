@@ -238,9 +238,7 @@ func TestRemoteSessionRejections(t *testing.T) {
 			require.Equal(t, string(tc.who), row.WhoFixes)
 			require.Equal(t, tc.detail, row.SubReason)
 			require.Equal(t, subject.String(), row.SubjectURN)
-			if tc.want == mcpconnectionattempts.CodeRemoteSessionUnavailable {
-				require.NotEmpty(t, row.ProviderHost, "a refresh outage names its issuer")
-			}
+			require.Empty(t, row.ProviderHost, "the request row names no sign-in issuer")
 		})
 	}
 }
@@ -379,11 +377,44 @@ func TestGatewayMemberRows(t *testing.T) {
 	require.Equal(t, meta.ID.String(), row.ServerID)
 	require.NotEmpty(t, row.MemberID)
 	require.Equal(t, subject.String(), row.SubjectURN)
+	require.Empty(t, row.ProviderHost, "a member that was never reached names no upstream")
 
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-refused", deny.URL)
 	_, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
-	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	row = rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	require.Equal(t, mcpconnectionattempts.NormalizeProviderHost(deny.URL), row.ProviderHost)
+}
+
+// A member refresh outage counts once per provider, on its provider_refresh row, not again here.
+func TestGatewayMemberRefreshOutageNamesTheProviderOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-refresh-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-refresh", "", []uuid.UUID{issuerID})
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	subject := createTestUser(t, ctx, ti, "meta-refresh-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, issuerID, clientID, subject)
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, clientID, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusServiceUnavailable) })
+
+	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeRemoteSessionUnavailable)
+	require.NotEmpty(t, row.MemberID)
+	require.Empty(t, row.ProviderHost, "only the refresh service's provider_refresh row names the issuer")
 }
 
 // A busy or broken member must write its row and read true, through the real request path.

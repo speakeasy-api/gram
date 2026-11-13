@@ -198,7 +198,7 @@ func (g metaGateContext) memberReconnectAsk(member metaMember) string {
 // newMemberSignInUnreadableError asks for a new sign-in: nothing stored for the member can be read.
 func newMemberSignInUnreadableError(member metaMember, ask string, cause error) error {
 	message := fmt.Sprintf("server %q can't use its saved sign-in anymore. %s", member.slug, ask)
-	return memberSignInUnreadableError{memberConnectionError: memberConnectionError{memberCredentialError{&metaMemberError{message: message}}, mcpconnectionattempts.CodeStoredSignInUnreadable, ""}, cause: cause}
+	return memberSignInUnreadableError{memberConnectionError: memberConnectionError{memberCredentialError{&metaMemberError{message: message}}, mcpconnectionattempts.CodeStoredSignInUnreadable}, cause: cause}
 }
 
 // outageWaitWords is when to retry, in words: a provider can ask for minutes.

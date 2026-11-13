@@ -171,7 +171,7 @@ type memberDial struct {
 	// configuredHeaders marks a member sent the headers an admin configured on it.
 	configuredHeaders bool
 
-	// provider is the member's upstream URL, empty for a tunnel's internal gateway address.
+	// provider is the member's upstream URL, empty through a tunnel.
 	provider string
 }
 
@@ -180,6 +180,16 @@ func serverHeadersHaveCredential(headers []remotemcp_repo.RemoteMcpServerHeader)
 		return header.Value.String != "" && header.ValueFromRequestHeader.String == "" &&
 			proxy.IsCredentialHeader(header.Name, header.IsSecret, false)
 	})
+}
+
+// upstreamHost names the member's upstream only for a code that says the upstream itself failed.
+func (d memberDial) upstreamHost(code mcpconnectionattempts.Code) mcpconnectionattempts.Option {
+	switch code {
+	case mcpconnectionattempts.CodeProviderRejected, mcpconnectionattempts.CodeSharedCredentialRejected, mcpconnectionattempts.CodeStaticKeyRejected,
+		mcpconnectionattempts.CodeProviderRateLimited, mcpconnectionattempts.CodeProviderServerError, mcpconnectionattempts.CodeProviderUnreachable:
+		return mcpconnectionattempts.Provider(d.provider)
+	}
+	return mcpconnectionattempts.Provider("")
 }
 
 func (d memberDial) upstreamCredential() remotemcp.UpstreamCredentialSent {
@@ -286,9 +296,9 @@ func memberCredentialLoadError(member metaMember, err error) error {
 		code = resolveFailureHappened(err)
 	}
 	if oops.IsInfrastructureFailure(err) || errors.Is(err, context.Canceled) {
-		return memberConnectionError{newMemberUnavailableError(fmt.Sprintf("server %q could not load its connection credentials. Retry shortly. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug), nil), code, ""}
+		return memberConnectionError{newMemberUnavailableError(fmt.Sprintf("server %q could not load its connection credentials. Retry shortly. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug), nil), code}
 	}
-	return memberConnectionError{memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug)}, status: 0, retryable: false, retryAfter: 0}, code, ""}
+	return memberConnectionError{memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug)}, status: 0, retryable: false, retryAfter: 0}, code}
 }
 
 // chainMetaMember chains a member with no routed credential or one held without
@@ -303,7 +313,7 @@ func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMembe
 	case held:
 		routeErr = withMemberConnectLink(routeErr, member, gate.memberCallerURL(member))
 		if routeErr != nil {
-			routeErr = memberConnectionError{routeErr, resolveFailureHappened(routed.ClientCredentialErr), remotesessions.RefreshIssuerURL(routed.ClientCredentialErr)}
+			routeErr = memberConnectionError{routeErr, resolveFailureHappened(routed.ClientCredentialErr)}
 		}
 	}
 	if (routeErr != nil && !held) || (routed.Token != "") || gate.chainUpstream == nil || member.upstreamNoAuth || (member.authClient != nil && member.authClient.outcome != authClientLegacy) {
@@ -331,13 +341,12 @@ func (s *Service) recordDialFailure(ctx context.Context, gate *metaGateContext, 
 		code := mcpconnectionattempts.CodeInvalidRemoteSession
 		if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code != (mcpconnectionattempts.Code{}) {
 			code = failure.code
-			opts = append(opts, mcpconnectionattempts.Provider(failure.provider))
 		}
 		s.recordMemberFailure(ctx, gate, member, code, opts...)
 		return
 	}
 	if failure, ok := errors.AsType[memberConnectionError](err); ok {
-		s.recordMemberFailure(ctx, gate, member, failure.code, append(opts, mcpconnectionattempts.Provider(failure.provider))...)
+		s.recordMemberFailure(ctx, gate, member, failure.code, opts...)
 	}
 }
 
@@ -683,7 +692,7 @@ func (s *Service) executeProxiedMemberTool(
 	}
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code, mcpconnectionattempts.Provider(failure.provider))
+			s.recordMemberFailure(ctx, gate, member, failure.code, dial.upstreamHost(failure.code))
 		}
 		// The gateway logs this failure only when the call never reached
 		// the upstream interceptor.

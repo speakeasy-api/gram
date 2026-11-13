@@ -324,7 +324,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	toolset, hosting, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code, mcpconnectionattempts.Provider(failure.provider))
+			s.recordMemberFailure(ctx, gate, member, failure.code)
 		}
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			attempt.fail(metaMemberErrorStatus(err), memberErr.message)

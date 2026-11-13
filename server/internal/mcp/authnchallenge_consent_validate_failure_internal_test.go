@@ -58,7 +58,7 @@ func TestClassifyCheckFailure(t *testing.T) {
 		{name: "card grant lapsed", err: oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: remotesessions.ErrNoValidToken}, "x"), code: mcpconnectionattempts.CodeInvalidRemoteSession, page: oauthui.ReasonDefault},
 		{name: "card status unreadable", err: oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: redis.ErrClosed}, "x"), code: mcpconnectionattempts.CodeAuthCheckUnavailable, page: oauthui.ReasonDefault},
 		{name: "card client misconfigured", err: oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: remotesessions.ErrRemoteSessionMisconfigured}, "x"), code: mcpconnectionattempts.CodeCredentialMisconfigured, page: oauthui.ReasonDefault},
-		{name: "provider outage", err: memberConnectionError{errors.New("down"), mcpconnectionattempts.CodeProviderUnavailable, ""}, code: mcpconnectionattempts.CodeProviderUnavailable, page: oauthui.ReasonDefault},
+		{name: "provider outage", err: memberConnectionError{errors.New("down"), mcpconnectionattempts.CodeProviderUnavailable}, code: mcpconnectionattempts.CodeProviderUnavailable, page: oauthui.ReasonDefault},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

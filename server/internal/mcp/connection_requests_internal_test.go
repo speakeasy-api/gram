@@ -158,7 +158,7 @@ func TestMemberConnectionFailureKeepsTextAndType(t *testing.T) {
 	t.Parallel()
 
 	inner := memberCredentialError{&metaMemberError{message: "server is not connected"}}
-	var err error = memberConnectionError{inner, mcpconnectionattempts.CodeInvalidRemoteSession, ""}
+	var err error = memberConnectionError{inner, mcpconnectionattempts.CodeInvalidRemoteSession}
 	require.EqualError(t, err, "server is not connected")
 	_, credential := errors.AsType[memberCredentialError](err)
 	require.True(t, credential)

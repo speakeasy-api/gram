@@ -1930,13 +1930,7 @@ type GetSpentUserSessionByRefreshTokenHashRow struct {
 	Expired    bool
 }
 
-// Finds a retired session (rotated, revoked or expired) by refresh-token hash
-// for the issuer and client that presented it, so a refusal can name its
-// owner and say whether the token expired: expired is a session retired by
-// reaching its deadline; any other retired session stays "unknown or already
-// used". An expired row wins if several match. Project scoping is
-// intentionally NOT applied here -- the OAuth surface is public and the
-// issuer_id is the authoritative scope.
+// A retired session by refresh-token hash for the presenting issuer and client (issuer_id scopes it, not project).
 func (q *Queries) GetSpentUserSessionByRefreshTokenHash(ctx context.Context, arg GetSpentUserSessionByRefreshTokenHashParams) (GetSpentUserSessionByRefreshTokenHashRow, error) {
 	row := q.db.QueryRow(ctx, getSpentUserSessionByRefreshTokenHash, arg.UserSessionIssuerID, arg.UserSessionClientID, arg.RefreshTokenHash)
 	var i GetSpentUserSessionByRefreshTokenHashRow

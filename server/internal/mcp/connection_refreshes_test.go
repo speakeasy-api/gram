@@ -632,7 +632,7 @@ func TestInboundRefresh_ExpiredReplayInsideGraceIsUnknownToAnotherClient(t *test
 	require.Equal(t, other.ID.String(), row.UserSessionClientID)
 }
 
-// The cached refusal carries the owner, so a retry loop inside the grace names them without a query.
+// A replayed refusal names the owner from the cache, with no query.
 func TestInboundRefresh_UsedTokenReplayNamesTheOwner(t *testing.T) {
 	t.Parallel()
 

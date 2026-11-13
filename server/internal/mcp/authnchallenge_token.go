@@ -1463,7 +1463,7 @@ func (s *Service) rotateRefreshToken(
 				failureReason, description = "refresh_token_expired", "refresh_token has expired"
 				failureSubject = &spent.SubjectUrn
 			case spentErr == nil:
-				// Rotated or revoked: the refusal is unchanged, and only its row names the owner.
+				// Rotated or revoked: only the row names the owner.
 				failureSubject = &spent.SubjectUrn
 			case !errors.Is(spentErr, pgx.ErrNoRows):
 				logger.WarnContext(ctx, "failed to load spent refresh token session", attr.SlogError(spentErr))

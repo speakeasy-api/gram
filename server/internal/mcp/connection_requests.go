@@ -213,9 +213,6 @@ type memberConnectionError struct {
 	error
 
 	code mcpconnectionattempts.Code
-
-	// provider is the upstream or issuer the failure names, empty when unknown.
-	provider string
 }
 
 func (f memberConnectionError) Unwrap() error { return f.error }
