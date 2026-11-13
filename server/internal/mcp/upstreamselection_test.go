@@ -1,10 +1,12 @@
 package mcp_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -462,4 +465,71 @@ func TestUpstreamClientSelection_EmptyScopeRecordsNothing(t *testing.T) {
 	n, err = q.RecordUpstreamClientSelections(ctx, params)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n, "the empty scope, rather than an ineligible server, prevented recording")
+}
+
+// Recording choices locks the servers it records in UUID order before
+// anything else, the order EMA writers lock a project's servers FOR UPDATE.
+// Waiting on the lowest server, it holds none of the others, so a writer
+// walking the rest never waits on it and the two cannot deadlock.
+func TestUpstreamClientSelection_RecordingLocksServersInWriterOrder(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSelectionFixture(t)
+
+	issuerID := createUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
+	clientA := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-order-a", "", []uuid.UUID{issuerID})
+	clientB := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-order-b", "", []uuid.UUID{issuerID})
+	servers := make([]uuid.UUID, 0, 4)
+	for i := range 4 {
+		server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, "https://sel-order.example.com/mcp", "sel-order-"+uuid.NewString()[:8], "public", issuerID)
+		client := clientA
+		if i%2 == 1 {
+			client = clientB
+		}
+		f.associate(t, ctx, server.ID, client)
+		servers = append(servers, server.ID)
+	}
+	slices.SortFunc(servers, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+
+	subject := createTestUser(t, ctx, f.ti, "sel-order-user-"+uuid.NewString())
+	jti := uuid.NewString()
+	persistTestUserSession(t, f.ti, issuerID, subject, jti)
+	q := usersessions_repo.New(f.ti.conn)
+	session, err := q.GetUserSessionPolicyByJTI(ctx, usersessions_repo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuerID, Jti: jti})
+	require.NoError(t, err)
+
+	writer, err := f.ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary holds the SQLc-taken server locks
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = writer.Rollback(context.WithoutCancel(ctx)) })
+	writerPID, err := testrepo.New(writer).BackendPIDFixture(ctx)
+	require.NoError(t, err)
+	writerLocks := authclientbackfill.New(writer)
+	require.NoError(t, writerLocks.LockEMAPreparationServer(ctx, authclientbackfill.LockEMAPreparationServerParams{ServerID: servers[0], OrganizationID: f.orgID}))
+
+	recorded := make(chan error, 1)
+	go func() {
+		_, err := q.RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
+			UserSessionIssuerID: issuerID,
+			CredentialKind:      upstreamclients.CredentialKindUserSession,
+			CredentialID:        session.CredentialID,
+			Source:              upstreamclients.SelectionSourceIssuance,
+			PickedMcpServerIds:  []uuid.UUID{},
+			PickedClientIds:     []uuid.UUID{},
+			PickedAuthClientIds: nil,
+		})
+		recorded <- err
+	}()
+	require.Eventually(t, func() bool {
+		blocked, err := testrepo.New(f.ti.conn).IsQueryBlockedByFixture(ctx, testrepo.IsQueryBlockedByFixtureParams{
+			QueryPattern: "%name: RecordUpstreamClientSelections %",
+			HolderPid:    writerPID,
+		})
+		return err == nil && blocked
+	}, 10*time.Second, 10*time.Millisecond, "recording never waited on the lowest server")
+
+	for _, id := range servers[1:] {
+		_, err = writerLocks.ProbeServerLockFixture(ctx, id)
+		require.NoError(t, err, "recording holds a higher server while it waits on the lowest")
+	}
+	require.NoError(t, writer.Commit(ctx))
+	require.NoError(t, <-recorded)
 }
