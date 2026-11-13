@@ -105,9 +105,10 @@ saved list that leaves out a server's provider leaves that server with nobody
 to vouch; the dashboard flags such servers as needing attention. The MCP server's **Settings** page
 turns enterprise-managed authorization on or off for that server and shows the
 sign-in, who vouches, and what the vendor has to trust.
-Then call `get_xaa_readiness` with the exact project and MCP server IDs for
-enterprise authorization readiness. Do not substitute generic MCP readiness
-for this check.
+Then call `get_xaa_readiness` with the project's `project_slug` and the exact
+`mcp_server_id` for enterprise authorization readiness. Pass only the MCP
+server's own ID as `mcp_server_id`, never another identifier, and do not
+substitute generic MCP readiness for this check.
 An enabled issuer or a saved vendor setting does not prove live user access.
 Only a separately authorized test using the connected MCP can establish that;
 never impersonate another user or create test data without permission.

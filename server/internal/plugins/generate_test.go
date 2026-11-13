@@ -4106,7 +4106,7 @@ func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 		"If discovery succeeds but returns no entries", "normal catalogue path",
 		"Do not claim import completion for an empty inventory",
 		"require the entry's `id` to equal the exact `mcp_id` registration returned",
-		"has another `model`, or whose `id` does not match the returned `mcp_id` means blocked/unverified",
+		"has another `model`, lacks `update_mcp_metadata` in `operations` (setup pending or incomplete), or whose `id` does not match the returned `mcp_id` means blocked/unverified",
 		"`model: dashboard_managed`", "Do not require or invent a registration record",
 		"pending or incomplete registration", "must not be reported as already present or complete",
 		"Skip provider attachment for anonymous servers",

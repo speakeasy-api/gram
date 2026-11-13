@@ -1106,7 +1106,7 @@ func validateCreateRiskPolicyKind(input createRiskPolicyInput) error {
 		if len(input.Sources) == 0 {
 			return invalidRiskPolicyKind("policy_type standard needs at least one source.")
 		}
-		if input.Prompt != "" {
+		if strings.TrimSpace(input.Prompt) != "" {
 			return invalidRiskPolicyKind("prompt is only for policy_type prompt_based.")
 		}
 		return nil

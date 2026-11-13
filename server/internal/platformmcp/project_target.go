@@ -26,6 +26,10 @@ const (
 // may not see, and so tell the caller which slugs exist.
 var unknownProjectID = uuid.Max
 
+// missingProjectSlugRefusal answers a call to a tool that needs a project but
+// was sent no project_slug.
+const missingProjectSlugRefusal = `{"code":"invalid_request","message":"project_slug is required: pass the project's slug, as list_projects returns it."}`
+
 // projectSlugTarget locates the two fields of a tool input that names its
 // project by slug while its handler acts on the project's ID: the project_slug
 // argument, and a ProjectID field hidden from the schema with `json:"-"`.
@@ -67,14 +71,21 @@ func projectSlugTargetFor[In any](toolName string) (projectSlugTarget, bool) {
 // services behind them keep acting on project IDs while callers name projects
 // by slug. The slug is cleared so the input names its project exactly once.
 //
-// An omitted slug leaves both empty for the handler, which already knows what
-// an omitted project means for its tool: the schema requires the slug where
-// the tool needs one, and a tool that defaults to the organization's Default
-// project or reads the whole organization does so itself.
-func (r *Registrar) resolveProjectSlug(ctx context.Context, target projectSlugTarget, input any) error {
+// A tool that must be told its project (required) refuses an empty slug here,
+// naming project_slug: the schema marks the field required but still admits
+// "", which would otherwise reach the handler as an empty project ID and fail
+// with a message about an ID the caller never sent, or fall back to another
+// project. Otherwise an omitted slug leaves both empty for the handler, which
+// already knows what an omitted project means for its tool: a tool that
+// defaults to the organization's Default project or reads the whole
+// organization does so itself.
+func (r *Registrar) resolveProjectSlug(ctx context.Context, target projectSlugTarget, input any, required bool) error {
 	value := reflect.ValueOf(input).Elem()
 	slug := strings.TrimSpace(value.FieldByIndex(target.slug).String())
 	if slug == "" {
+		if required {
+			return &ToolRefusalError{Code: "invalid_request", Payload: missingProjectSlugRefusal}
+		}
 		return nil
 	}
 	if r.projects == nil {

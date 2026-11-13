@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -48,8 +49,9 @@ func TestProjectSlugIsTheOnlyProjectSelector(t *testing.T) {
 
 // A handler acting on a project ID receives the ID of the project the caller
 // named by slug, in place of the slug. An unknown slug reaches the handler as a project that exists
-// nowhere, so it answers as it does for any project it cannot find; an omitted
-// slug is left for the handler to default or refuse.
+// nowhere, so it answers as it does for any project it cannot find. An omitted
+// slug is refused for a tool that must be told its project, and left for the
+// handler to default otherwise.
 func TestToolsResolveTheProjectSlugBeforeTheHandler(t *testing.T) {
 	t.Parallel()
 
@@ -61,18 +63,33 @@ func TestToolsResolveTheProjectSlugBeforeTheHandler(t *testing.T) {
 	})
 	ctx := ContextWithPrincipal(t.Context(), testPrincipal())
 
-	for slug, want := range map[string]string{"payments": projectID.String(), "no-such-project": uuid.Max.String(), "": ""} {
+	for slug, want := range map[string]string{"payments": projectID.String(), "no-such-project": uuid.Max.String()} {
 		output, err := invokeTool[projectSlugTargetOutput](t, ctx, reg, "project_target", map[string]any{"project_slug": slug})
 		require.NoError(t, err, slug)
 		require.Equal(t, want, output.ProjectID, slug)
 		require.Empty(t, output.ProjectSlug, "the handler sees the project named once, by ID")
 	}
+	for _, slug := range []string{"", "  "} {
+		_, err := invokeTool[projectSlugTargetOutput](t, ctx, reg, "project_target", map[string]any{"project_slug": slug})
+		refusal, ok := errors.AsType[*ToolRefusalError](err)
+		require.True(t, ok, "an explicit-project tool refuses a missing slug: %v", err)
+		require.Contains(t, refusal.Payload, "project_slug is required")
+	}
+
+	defaultable := newRegistrar(newTestMCPServer())
+	defaultable.withProjects(slugProjects{"payments": projectID})
+	addTool(defaultable, &mcp.Tool{Name: "project_target"}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeDefaultable}, func(_ context.Context, _ *mcp.CallToolRequest, input projectSlugTargetInput) (*mcp.CallToolResult, projectSlugTargetOutput, error) {
+		return nil, projectSlugTargetOutput{ProjectID: input.ProjectID}, nil
+	})
+	output, err := invokeTool[projectSlugTargetOutput](t, ctx, defaultable, "project_target", map[string]any{"project_slug": ""})
+	require.NoError(t, err)
+	require.Empty(t, output.ProjectID, "a defaultable tool resolves an omitted project itself")
 
 	unresolved := newRegistrar(newTestMCPServer())
 	addTool(unresolved, &mcp.Tool{Name: "project_target"}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(_ context.Context, _ *mcp.CallToolRequest, input projectSlugTargetInput) (*mcp.CallToolResult, projectSlugTargetOutput, error) {
 		return nil, projectSlugTargetOutput{ProjectID: input.ProjectID}, nil
 	})
-	_, err := invokeTool[projectSlugTargetOutput](t, ctx, unresolved, "project_target", map[string]any{"project_slug": "payments"})
+	_, err = invokeTool[projectSlugTargetOutput](t, ctx, unresolved, "project_target", map[string]any{"project_slug": "payments"})
 	require.ErrorIs(t, err, ErrUnavailable)
 }
 

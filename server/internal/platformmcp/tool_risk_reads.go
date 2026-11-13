@@ -407,7 +407,7 @@ func riskGetPolicySchema() *jsonschema.Schema {
 func createRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	properties := riskPolicyCreateCommonProperties(catalog)
 	properties["policy_type"] = describedEnumSchema([]string{"standard", "prompt_based"}, "Kind of policy to build by hand; required unless preset is named, and left out when it is. One of:", func(value string) string { return policycatalog.PolicyTypeDescriptions[value] })
-	properties["preset"] = describedEnumSchema(presets.IDs(), "Use-case preset to expand into a complete policy, instead of policy_type; see list_risk_presets. With a preset, only name, enabled, action, score, user_message, presidio_entities, approved_email_domains, prompt and mcp_scope may override it. One of:", riskPresetDescription)
+	properties["preset"] = describedEnumSchema(presets.IDs(), "Use-case preset to expand into a complete policy, instead of policy_type; see list_risk_presets. With a preset, only name, enabled, action, score, user_message and mcp_scope may override it, plus presidio_entities and approved_email_domains for a standard preset or prompt for a prompt-based preset. One of:", riskPresetDescription)
 	properties["name"] = stringSchema("Policy name. Required with policy_type; with preset it defaults to the preset label.", 1, 100)
 	properties["enabled"] = &jsonschema.Schema{Type: "boolean", Description: "Whether the policy runs once created. Required with policy_type; with preset it defaults to true."}
 	properties["sources"] = describedArraySchema(describedCatalogEnumSchema(catalog, catalog.Sources, "Detector sources to enable. Required for policy_type standard, and only allowed there. One of:", func(value string) string { return policycatalog.SourceDescriptions[value] }), 0)
@@ -459,11 +459,12 @@ func createRiskExclusionSchema(catalog policycatalog.Catalog) *jsonschema.Schema
 	ruleIDFilter.Description = "Optional: limit the exclusion to one detector rule. Only for match_type exact or source."
 	sourceFilter := catalogEnumSchema(catalog, catalog.Sources)
 	sourceFilter.Description = "Optional: limit the exclusion to one detector source. Only for match_type exact or rule_id; entity_type always uses presidio."
-	matchValue := "For exact, the literal value; it is never returned or logged. For rule_id, one of the values rule_id_filter accepts. For source, one of the values source_filter accepts. For entity_type, one Presidio entity type"
+	matchValue := "For exact, the literal value; it is never returned or logged. For rule_id, one detector rule. For source, one detector source. For entity_type, one Presidio entity type."
 	if catalog.Schema != "" {
-		matchValue += ": " + strings.Join(catalog.PresidioEntities, ", ")
+		matchValue = "For exact, the literal value; it is never returned or logged. For rule_id, one detector rule: " + strings.Join(catalog.DisabledRules, ", ") +
+			". For source, one detector source: " + strings.Join(catalog.Sources, ", ") +
+			". For entity_type, one Presidio entity type: " + strings.Join(catalog.PresidioEntities, ", ") + "."
 	}
-	matchValue += "."
 	return closedObject(map[string]*jsonschema.Schema{
 		"project_slug": stringSchema(projectSlugDescription, 1, 0), "policy_id": uuidSchema("Optional policy binding."),
 		"match_type":  matchType,

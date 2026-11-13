@@ -290,9 +290,9 @@ func discoveryInstructions(mode discoveryMode) string {
 	instructions := "Speakeasy's AI Control Plane puts MCP servers and skills in front of an organization's people. " +
 		"The listed tools only find or add an MCP server, check it is ready, install it, or answer setup how-to; use one only when its description fits. " +
 		"For any other request, first find the tool with search_platform_tools in plain words, then describe_platform_tool, then call_platform_tool. " +
-		"search_speakeasy_docs is for how-to questions only, never for finding a tool; cite its pages. " +
-		"Writes with a confirmed field: call first with confirmed:false, even if the user already agreed, and show the preview; never ask before it. Send confirmed:true only after the user approves that preview. " +
-		"Never request or accept tokens or secrets in chat. Do not read tool names, IDs or error codes aloud."
+		"search_speakeasy_docs answers how-to questions only, never finds tools; cite its pages. " +
+		"Writes with a confirmed field: call first with confirmed:false, even if the user agreed, and show the preview; never ask before it. Send confirmed:true only after the user approves that preview. " +
+		"Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
 	if mode == discoveryCode {
 		instructions += " For multi-step work, execute runs Python that can search, describe and call every tool as platform--<tool name>."
 	}

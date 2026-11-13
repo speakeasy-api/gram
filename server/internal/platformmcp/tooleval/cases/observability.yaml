@@ -6,6 +6,7 @@
   prompt: Pull up the last 24 hours of calls made by agent 1d2c3b4a-0000-4000-8000-0000000000a1 in the Default project.
   expect: [list_recent_tool_calls]
   args:
+    project_slug: default
     agent_id: 1d2c3b4a-0000-4000-8000-0000000000a1
 - id: obs-search-calls-by-tool-name
   prompt: Did anyone in Default call anything that deletes a repository this month? Look for tools with "delete" in the name on any server.
@@ -102,6 +103,7 @@
   expect: [save_widget]
   allow: [get_widget, list_widgets]
   args:
+    project_slug: default
     widget_id: 8a1b2c3d-0000-4000-8000-0000000000b1
     name: Errors by tool
 - id: obs-duplicate-widget
@@ -109,12 +111,14 @@
   expect: [duplicate_widget]
   allow: [get_widget, list_widgets]
   args:
+    project_slug: default
     widget_id: 8a1b2c3d-0000-4000-8000-0000000000b2
 - id: obs-delete-widget
   prompt: Get rid of widget 8a1b2c3d-0000-4000-8000-0000000000b3 in Default entirely, we don't need it anywhere anymore.
   expect: [delete_widget]
   allow: [get_widget, list_widgets]
   args:
+    project_slug: default
     widget_id: 8a1b2c3d-0000-4000-8000-0000000000b3
 
 # Dashboards: list, read, create/rename, copy, delete, layout, filters.
@@ -128,6 +132,7 @@
   expect: [get_dashboard]
   allow: [list_dashboards]
   args:
+    project_slug: default
     dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
 - id: obs-create-dashboard
   prompt: Make a new empty dashboard in Payments called "Billing health".
@@ -141,6 +146,7 @@
   expect: [save_dashboard]
   allow: [list_dashboards, get_dashboard]
   args:
+    project_slug: default
     dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
     name: MCP usage by week
 - id: obs-duplicate-dashboard
@@ -148,18 +154,21 @@
   expect: [duplicate_dashboard]
   allow: [list_dashboards, get_dashboard]
   args:
+    project_slug: default
     dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
 - id: obs-delete-dashboard
   prompt: Remove the Weekly MCP usage dashboard from Default. Nobody looks at it.
   expect: [delete_dashboard]
   allow: [list_dashboards, get_dashboard]
   args:
+    project_slug: default
     dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
 - id: obs-add-card-to-dashboard
   prompt: Put widget 8a1b2c3d-0000-4000-8000-0000000000b1 on the Weekly MCP usage dashboard in Default, full width along the top.
   expect: [edit_dashboard_layout]
   allow: [get_dashboard, list_dashboards, list_widgets, get_widget]
   args:
+    project_slug: default
     dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
     operations:
       [{ op: add_card, widget_id: 8a1b2c3d-0000-4000-8000-0000000000b1 }]
@@ -168,6 +177,7 @@
   expect: [edit_dashboard_layout]
   allow: [get_dashboard, list_dashboards, list_widgets, get_widget]
   args:
+    project_slug: default
     dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
     operations: [{ op: remove_card }]
 - id: obs-dashboard-default-filters
@@ -175,6 +185,7 @@
   expect: [save_dashboard_filters]
   allow: [get_dashboard, list_dashboards, describe_analytics_catalog]
   args:
+    project_slug: default
     dashboard_id: 6f7a8b00-0000-4000-8000-000000000081
     filters: { range: { preset: 30d } }
 

@@ -132,7 +132,7 @@ func assistantRuntimeToolResult(err error) (*mcp.CallToolResult, bool) {
 	} else if shared, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shared.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
-			result.Code, result.Message = "invalid_request", "Provide exact project and assistant UUIDs, a supported runtime, its freshly read expected version and explicit confirmation."
+			result.Code, result.Message = "invalid_request", "Provide the project_slug, the exact assistant UUID, a supported runtime, its freshly read expected version and explicit confirmation."
 		case oops.CodeForbidden, oops.CodeUnauthorized:
 			result.Code, result.Message = "permission_denied", "Runtime selection requires organization administrator access, assistant:write on the selected assistant and a user identity."
 		case oops.CodeNotFound:

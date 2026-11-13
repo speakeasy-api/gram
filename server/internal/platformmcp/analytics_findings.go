@@ -11,7 +11,7 @@ import (
 
 // FindSignalSessionsInput selects an explicit project and observed cohort.
 type FindSignalSessionsInput struct {
-	// ProjectID is the exact project to inspect.
+	// ProjectSlug names the project to inspect, as list_projects returns it.
 	ProjectSlug string `json:"project_slug"`
 	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
 	ProjectID string `json:"-"`

@@ -58,7 +58,7 @@ func deploymentRedeployToolResult(err error) (*mcp.CallToolResult, bool) {
 		switch shared.Code {
 		case oops.CodeInvalid, oops.CodeBadRequest:
 			result.Code = "invalid_request"
-			result.Message = "Provide exact project and deployment IDs and explicitly confirm the preview."
+			result.Message = "Provide the project_slug and the exact deployment ID, and explicitly confirm the preview."
 		case oops.CodeNotFound:
 			result.Code = "not_found"
 			result.Message = "That deployment or project is not available to you."

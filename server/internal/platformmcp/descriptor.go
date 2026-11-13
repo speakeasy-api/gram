@@ -420,7 +420,7 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 	// handle resolves a project named by slug, then runs the handler.
 	handle := func(ctx context.Context, request *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
 		if resolvesProject {
-			if err := r.resolveProjectSlug(ctx, projectTarget, &input); err != nil {
+			if err := r.resolveProjectSlug(ctx, projectTarget, &input, meta.ProjectScope == ProjectScopeExplicit); err != nil {
 				var output Out
 				return nil, output, err
 			}
