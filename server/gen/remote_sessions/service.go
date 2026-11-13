@@ -97,8 +97,10 @@ type Service interface {
 	// association makes earlier no-auth choices unusable, so those people must
 	// reconnect, and other servers on the issuer stop falling back to the client.
 	// Attaching a client the server is already associated with refuses none of
-	// this and only completes the gateway bindings it can. Requires mcp:write on
-	// the server and on each gateway whose issuer gains the client.
+	// this and only completes the gateway bindings it can. Where upstream auth is
+	// enforced, attaching also restores the server's auth client link that
+	// detaching its own sign-in retired. Requires mcp:write on the server and on
+	// each gateway whose issuer gains the client.
 	AttachServerClientAssociation(context.Context, *AttachServerClientAssociationPayload) (res *AttachServerClientAssociationResult, err error)
 	// Remove one MCP server's association with an upstream OAuth client. The
 	// client and its associations with other servers are untouched. When the

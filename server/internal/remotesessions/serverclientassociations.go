@@ -256,12 +256,81 @@ func (s *Service) attachServerClient(ctx context.Context, logger *slog.Logger, a
 		if associated == 0 {
 			return nil, oops.E(oops.CodeConflict, nil, "the MCP server or its client changed while saving; retry").LogWarn(ctx, logger)
 		}
+	}
 
+	// Where typed auth clients choose upstream authentication, an explicit
+	// attach is the undo for a detach that retired the server's link to the
+	// client's backfilled auth client, which the synchronization otherwise
+	// never relinks. That retirement looks like an administrator's own typed
+	// detach, so with enforcement off, where the link changes no serving, the
+	// administrator's detach is kept.
+	authClients := authclientsrepo.New(dbtx)
+	enforced, err := authenforcement.ReadEnforced(ctx, dbtx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
+	}
+	undone := []uuid.UUID{}
+	if enforced {
+		undone, err = authClients.UndoServerBackfillAuthClientDetaches(ctx, authclientsrepo.UndoServerBackfillAuthClientDetachesParams{
+			McpServerID:           serverID,
+			ProjectID:             projectID,
+			OrganizationID:        organizationID,
+			RemoteSessionClientID: uuid.NullUUID{UUID: clientID, Valid: true},
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "undo MCP server auth client detach").LogError(ctx, logger)
+		}
+	}
+
+	if !alreadyAssociated || len(undone) > 0 {
 		if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, organizationID, serverID); err != nil {
 			if authclientbackfill.IsRetryableSync(err) {
 				return nil, oops.E(oops.CodeUnavailable, err, "this MCP server's clients changed while saving; retry").LogWarn(ctx, logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "sync mcp server auth clients").LogError(ctx, logger)
+		}
+	}
+
+	if len(undone) > 0 {
+		relinked, err := authClients.ListServerBackfillAuthClients(ctx, authclientsrepo.ListServerBackfillAuthClientsParams{
+			McpServerID:    serverID,
+			ProjectID:      projectID,
+			OrganizationID: organizationID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list MCP server auth clients").LogError(ctx, logger)
+		}
+		for _, authClient := range relinked {
+			if !slices.Contains(undone, authClient.ID) {
+				continue
+			}
+			if err := s.auditLogger.LogAuthClientAttachMcpServer(ctx, dbtx, audit.LogAuthClientMcpServerEvent{
+				OrganizationID:   organizationID,
+				ProjectID:        projectID,
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+				ActorDisplayName: authCtx.Email,
+				ActorSlug:        nil,
+				AuthClientURN:    urn.NewAuthClient(authClient.ID),
+				AuthClientName:   authClient.Name,
+				McpServerURN:     urn.NewMcpServer(server.ID),
+				McpServerName:    conv.FromPGTextOrEmpty[string](server.Name),
+			}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "log MCP server auth client attach").LogError(ctx, logger)
+			}
+		}
+	}
+
+	if !alreadyAssociated {
+		// The server's upstream issuer is derived from its associations, and the
+		// writer scope taken above covers this update.
+		if server.UserSessionIssuerID.Valid {
+			if _, err := mcpserversrepo.New(dbtx).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{
+				UserSessionIssuerIds: []uuid.UUID{server.UserSessionIssuerID.UUID},
+				OrganizationID:       organizationID,
+				ProjectID:            projectID,
+			}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "resync mcp server upstream issuer").LogError(ctx, logger)
+			}
 		}
 
 		if err := s.auditLogger.LogRemoteSessionClientAttachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientAttachMcpServerEvent{

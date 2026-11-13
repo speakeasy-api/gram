@@ -270,6 +270,73 @@ func TestAttachServerClientAssociation_KeepsAdministratorTypedDetach(t *testing.
 	require.Empty(t, offeredAuthClients(t, ctx, f.ti.conn, target))
 }
 
+// Under enforcement, detaching a server's own sign-in retires only its typed
+// link, and attaching the client again is what brings the link back.
+func TestAttachServerClientAssociation_RestoresAnEnforcedDetach(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAttachFixture(t)
+	enforceUpstreamAuth(t, ctx, f.ti.conn, f.orgID)
+
+	issuer := f.issuer(t, ctx, "attach-enforced")
+	target := f.serverAt(t, ctx, "attach-enforced", "https://example.com/mcp", issuer)
+	client, _ := f.client(t, ctx, "attach-enforced", issuer)
+
+	_, err := f.attach(ctx, target, client)
+	require.NoError(t, err)
+	links := offeredAuthClients(t, ctx, f.ti.conn, target)
+	require.Len(t, links, 1)
+
+	require.NoError(t, detachServerClient(ctx, f.ti, target, client))
+	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, target), "the sole consumer's association stays")
+	require.Empty(t, offeredAuthClients(t, ctx, f.ti.conn, target))
+
+	before, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionAuthClientAttachMcpServer)
+	require.NoError(t, err)
+
+	_, err = f.attach(ctx, target, client)
+	require.NoError(t, err)
+	require.Equal(t, links, offeredAuthClients(t, ctx, f.ti.conn, target))
+
+	after, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionAuthClientAttachMcpServer)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+	entry, err := audittest.LatestAuditLogByAction(ctx, f.ti.conn, audit.ActionAuthClientAttachMcpServer)
+	require.NoError(t, err)
+	require.Equal(t, links[0].String(), entry.SubjectID)
+
+	resync(t, ctx, f.ti.conn, f.orgID, f.projectID, issuer)
+	require.Equal(t, links, offeredAuthClients(t, ctx, f.ti.conn, target), "a reconcile keeps the restored link")
+
+	_, err = f.attach(ctx, target, client)
+	require.NoError(t, err)
+	repeated, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionAuthClientAttachMcpServer)
+	require.NoError(t, err)
+	require.Equal(t, after, repeated, "attaching a served client again records nothing")
+}
+
+func TestAttachServerClientAssociation_RefreshesTheDerivedProvider(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAttachFixture(t)
+
+	issuer := f.issuer(t, ctx, "attach-derived")
+	target := f.serverAt(t, ctx, "attach-derived-a", "https://a.example.com/mcp", issuer)
+	f.serverAt(t, ctx, "attach-derived-b", "https://b.example.com/mcp", issuer)
+	clientA, providerA := f.client(t, ctx, "attach-derived-a", issuer)
+	f.client(t, ctx, "attach-derived-b", issuer)
+	resync(t, ctx, f.ti.conn, f.orgID, f.projectID, issuer)
+
+	derived := func() uuid.NullUUID {
+		server, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: target, ProjectID: f.projectID})
+		require.NoError(t, err)
+		return server.RemoteSessionIssuerID
+	}
+	require.False(t, derived().Valid, "two providers and no association leave the provider undecided")
+
+	_, err := f.attach(ctx, target, clientA)
+	require.NoError(t, err)
+	require.Equal(t, conv.ToNullUUID(providerA), derived(), "the association makes provider A the server's")
+}
+
 func TestAttachServerClientAssociation_NotFound(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAttachFixture(t)
