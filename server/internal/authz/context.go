@@ -53,6 +53,14 @@ func GrantsFromContext(ctx context.Context) ([]Grant, bool) {
 	return grants, ok
 }
 
+// WithoutAdmittedPolicies drops the admission result a parent request
+// established, so Require evaluates only the grants stored with
+// GrantsToContext. Use it only after replacing the auth context with a user's
+// own and loading that user's grants; otherwise Require has nothing to evaluate.
+func WithoutAdmittedPolicies(ctx context.Context) context.Context {
+	return context.WithValue(ctx, admittedPoliciesContextKey, struct{}{})
+}
+
 // RefreshContext reloads authorization for a new operation within a long-lived
 // request. Immutable credential constraints remain attached to the context.
 func (e *Engine) RefreshContext(ctx context.Context) (context.Context, error) {
