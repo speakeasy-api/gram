@@ -60,5 +60,6 @@ func (e *Engine) RequireUserOrganizationScopeWithDBTX(ctx context.Context, db ac
 		probe:           false,
 		anyOf:           nil,
 		operation:       operationDefault,
+		organization:    None[OrgID](),
 	})
 }

@@ -20,7 +20,7 @@ func TestRefs_MatchTodaysChecks(t *testing.T) {
 		id      = "resource-1"
 	)
 	literal := func(scope Scope, resourceID string, dimensions map[string]string) Check {
-		return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+		return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault, organization: None[OrgID]()}
 	}
 
 	cases := map[string]struct{ ref, today Check }{
