@@ -2,9 +2,11 @@ package tooleval
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"slices"
 	"strings"
 	"time"
@@ -286,8 +288,14 @@ func attempt(parent context.Context, client openrouter.CompletionClient, model s
 turns:
 	for turn := range maxAgentTurns {
 		outcome.Turns = turn + 1
-		response, err := client.GetCompletion(ctx, completionRequest(model, messages, listed))
+		response, err := completeWithRetry(ctx, client, completionRequest(model, messages, listed))
 		if err != nil {
+			// A provider that kept rate limiting is an error, not a miss,
+			// even when the waiting ran the case out of time.
+			if errors.Is(err, openrouter.ErrRateLimited) {
+				outcome.Err = fmt.Errorf("case %s turn %d: %w", c.ID, turn, err)
+				break
+			}
 			// An agent that runs out of time has not reached a tool, like one
 			// that runs out of turns: a miss, not an error that drops out of
 			// the rates. A cancelled run is still an error.
@@ -400,6 +408,47 @@ func systemMessage(model, prompt string) or.ChatMessages {
 		}}),
 		Name: nil,
 	})
+}
+
+// rateLimitRetries is how many times one completion is retried after a rate
+// limit. The backoff starts at rateLimitWait and doubles each time, up to
+// rateLimitMaxWait, and each wait is a random time between half and all of
+// it. A pinned provider rate limits a run with many cases in flight.
+const (
+	rateLimitRetries = 6
+	rateLimitWait    = 2 * time.Second
+	rateLimitMaxWait = 30 * time.Second
+)
+
+func completeWithRetry(ctx context.Context, client openrouter.CompletionClient, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+	wait := rateLimitWait
+	for try := 0; ; try++ {
+		response, err := client.GetCompletion(ctx, request)
+		if err == nil {
+			return response, nil
+		}
+		if !errors.Is(err, openrouter.ErrRateLimited) || try == rateLimitRetries {
+			return nil, fmt.Errorf("get completion: %w", err)
+		}
+		timer := time.NewTimer(jittered(wait))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, fmt.Errorf("get completion: %w", err)
+		case <-timer.C:
+		}
+		wait = min(2*wait, rateLimitMaxWait)
+	}
+}
+
+// jittered returns a wait between half and all of d, so cases rate limited
+// together do not all retry at the same moment.
+func jittered(d time.Duration) time.Duration {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(d/2)+1))
+	if err != nil {
+		return d
+	}
+	return d/2 + time.Duration(n.Int64())
 }
 
 func completionRequest(model string, messages []or.ChatMessages, tools []openrouter.Tool) openrouter.CompletionRequest {
