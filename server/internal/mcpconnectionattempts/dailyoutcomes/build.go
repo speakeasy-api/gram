@@ -271,7 +271,8 @@ func (b *Builder) outcomes(ctx context.Context, day, now time.Time) ([]DayRow, e
 	}
 	err := mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, dayFilter, func(a mcpconnectionattempts.AttemptSummary) {
 		e := a.End(now)
-		if e.NeedsFix() && a.SubjectURN != "" {
+		// Until AIM-1027, a refused used token stays unpaired, as when it named nobody.
+		if e.NeedsFix() && a.SubjectURN != "" && e.Reason != mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed.String() {
 			failures = append(failures, a)
 			return
 		}

@@ -41,6 +41,7 @@ const (
 	daysAgoRepublishFails = 12
 	daysAgoEndingProvider = 27
 	daysAgoAdminReason    = 22
+	daysAgoUsedToken      = 17
 )
 
 const catalogApp = "https://claude.ai/oauth/claude-code-client-metadata"
@@ -551,4 +552,27 @@ func TestBuildDayCountsTheProviderThatEndedTheAttempt(t *testing.T) {
 	require.Equal(t, map[string]uint64{
 		"linear.app|dcr||provider_token|failed|provider_unavailable|": 3,
 	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
+}
+
+// A refused used token now names its owner, which must not change the stored day.
+func TestBuildDayLeavesAnAttributedUsedTokenUnpaired(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	day := f.day(daysAgoUsedToken)
+	subject := urn.NewUserSubject("user-" + uuid.NewString())
+	server := uuid.New()
+	at := day.Add(time.Hour)
+
+	refused := f.attempt(server, mcpconnectionattempts.AppDCR, at)
+	connected := f.attempt(server, mcpconnectionattempts.AppDCR, at.Add(time.Hour))
+	f.write(
+		f.row(refused, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed, true, 0, mcpconnectionattempts.Subject(&subject)),
+		f.row(connected, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, 0, mcpconnectionattempts.Subject(&subject)),
+	)
+
+	f.build(day)
+	require.Equal(t, map[string]uint64{
+		"|dcr||inbound_token|connected||":                                   1,
+		"|dcr||inbound_token|failed|refresh_token_unknown_or_already_used|": 1,
+	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day), "the same as when the row named nobody")
 }
