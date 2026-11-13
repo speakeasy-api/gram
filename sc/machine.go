@@ -209,6 +209,23 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 		return nil, fmt.Errorf("statechart %q: %w", id, errors.Join(b.errs...))
 	}
 
+	for _, n := range append([]*node[S, C]{root}, m.ordered...) {
+		n.regions = n.states()
+		n.self = []*node[S, C]{n}
+		n.handles = map[reflect.Type]bool{}
+		for _, t := range n.transitions {
+			switch {
+			case t.trigger == triggerAlways:
+				n.eventless = true
+			case t.trigger == triggerEvent && t.wildcard:
+				n.catchAll = true
+			case t.trigger == triggerEvent:
+				n.handles[t.eventType] = true
+			}
+		}
+		n.built = true
+	}
+
 	h := sha256.New()
 	m.fingerprint(h, root)
 	m.hash = hex.EncodeToString(h.Sum(nil))

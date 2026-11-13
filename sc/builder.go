@@ -942,6 +942,7 @@ func (t *Transition[S, C, Ev]) Assign(name string, f func(C, Ev) C) *Transition[
 		assign: func(c C, ev any, _ time.Time, _ *rand.Rand) C { return f(c, event[Ev](ev)) },
 		do:     nil,
 		raise:  nil,
+		random: false,
 	})
 
 	return t
@@ -957,6 +958,7 @@ func (t *Transition[S, C, Ev]) AssignAt(name string, f func(c C, ev Ev, now time
 		assign: func(c C, ev any, now time.Time, _ *rand.Rand) C { return f(c, event[Ev](ev), now) },
 		do:     nil,
 		raise:  nil,
+		random: false,
 	})
 
 	return t
@@ -976,6 +978,7 @@ func (t *Transition[S, C, Ev]) AssignRand(name string, f func(c C, ev Ev, now ti
 		assign: func(c C, ev any, now time.Time, rnd *rand.Rand) C { return f(c, event[Ev](ev), now, rnd) },
 		do:     nil,
 		raise:  nil,
+		random: true,
 	})
 
 	return t
@@ -991,6 +994,7 @@ func (t *Transition[S, C, Ev]) Do(name string, f func(context.Context, C, Ev)) *
 		assign: nil,
 		do:     func(ctx context.Context, c C, ev any) { f(ctx, c, event[Ev](ev)) },
 		raise:  nil,
+		random: false,
 	})
 
 	return t
@@ -1000,7 +1004,7 @@ func (t *Transition[S, C, Ev]) Do(name string, f func(context.Context, C, Ev)) *
 // transition, in order with its other steps.
 func (t *Transition[S, C, Ev]) Run(names ...string) *Transition[S, C, Ev] {
 	for _, name := range names {
-		t.t.steps = append(t.t.steps, step[C]{kind: stepRun, name: name, assign: nil, do: nil, raise: nil})
+		t.t.steps = append(t.t.steps, step[C]{kind: stepRun, name: name, assign: nil, do: nil, raise: nil, random: false})
 	}
 
 	return t
@@ -1015,7 +1019,7 @@ func (t *Transition[S, C, Ev]) RunIf(name string, cond func(Move[S]) bool) *Tran
 		t.t.runConds = map[int]func(Move[S]) bool{}
 	}
 	t.t.runConds[len(t.t.steps)] = cond
-	t.t.steps = append(t.t.steps, step[C]{kind: stepRun, name: name, assign: nil, do: nil, raise: nil})
+	t.t.steps = append(t.t.steps, step[C]{kind: stepRun, name: name, assign: nil, do: nil, raise: nil, random: false})
 
 	return t
 }
@@ -1030,6 +1034,7 @@ func (t *Transition[S, C, Ev]) Raise(name string, f func(C, Ev) any) *Transition
 		assign: nil,
 		do:     nil,
 		raise:  func(c C, ev any) any { return f(c, event[Ev](ev)) },
+		random: false,
 	})
 
 	return t
@@ -1045,7 +1050,7 @@ func (t *Transition[S, C, Ev]) Raise(name string, f func(C, Ev) any) *Transition
 // OnAcquired being taken.
 func (t *Transition[S, C, Ev]) Release(name string) *Transition[S, C, Ev] {
 	t.b.releases = append(t.b.releases, name)
-	t.t.steps = append(t.t.steps, step[C]{kind: stepRelease, name: name, assign: nil, do: nil, raise: nil})
+	t.t.steps = append(t.t.steps, step[C]{kind: stepRelease, name: name, assign: nil, do: nil, raise: nil, random: false})
 
 	return t
 }
@@ -1080,7 +1085,7 @@ func (t *Transition[S, C, Ev]) keyed(kind stepKind, name, service string, key fu
 	t.t.sendTargets[len(t.t.steps)] = service
 	t.t.keys[len(t.t.steps)] = func(c C, ev any) string { return key(c, event[Ev](ev)) }
 	t.b.spawns = append(t.b.spawns, service)
-	t.t.steps = append(t.t.steps, step[C]{kind: kind, name: name, assign: nil, do: nil, raise: nil})
+	t.t.steps = append(t.t.steps, step[C]{kind: kind, name: name, assign: nil, do: nil, raise: nil, random: false})
 
 	return t
 }
@@ -1106,6 +1111,7 @@ func (t *Transition[S, C, Ev]) SendTo(name, service string, f func(C, Ev) any) *
 		assign: nil,
 		do:     nil,
 		raise:  func(c C, ev any) any { return f(c, event[Ev](ev)) },
+		random: false,
 	})
 
 	return t
@@ -1135,6 +1141,7 @@ func (t *Transition[S, C, Ev]) Emit[T any](name string, f func(C, Ev) T) *Transi
 		assign: nil,
 		do:     nil,
 		raise:  func(c C, ev any) any { return f(c, event[Ev](ev)) },
+		random: false,
 	})
 
 	return t
@@ -1166,7 +1173,7 @@ func (t *Transition[S, C, Ev]) RaiseAfter(name string, d time.Duration, f func(C
 // CancelRaise drops the events that the [Transition.RaiseAfter] named name
 // raised and that are still waiting. It does nothing when none is.
 func (t *Transition[S, C, Ev]) CancelRaise(name string) *Transition[S, C, Ev] {
-	t.t.steps = append(t.t.steps, step[C]{kind: stepCancel, name: name, assign: nil, do: nil, raise: nil})
+	t.t.steps = append(t.t.steps, step[C]{kind: stepCancel, name: name, assign: nil, do: nil, raise: nil, random: false})
 	t.b.cancels = append(t.b.cancels, name)
 
 	return t

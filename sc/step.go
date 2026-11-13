@@ -206,8 +206,11 @@ func on[S comparable, C any](trigger triggerKind) stimulus[S, C] {
 type run[S comparable, C any] struct {
 	m *Machine[S, C]
 
-	// config is the set of active states.
-	config map[*node[S, C]]bool
+	// config is the set of active states, indexed by each state's position
+	// in document order. list caches them as a list while listed is set.
+	config []bool
+	list   []*node[S, C]
+	listed bool
 
 	// history maps a history state to the states it recorded.
 	history map[*node[S, C]][]*node[S, C]
@@ -341,8 +344,8 @@ func (m *Machine[S, C]) Start(c C, now time.Time, opts ...StartOption) (Snapshot
 func (m *Machine[S, C]) start(c C, now time.Time, seed uint64) (Snapshot[S, C], []Effect[C], []*node[S, C]) {
 	r := &run[S, C]{
 		m:        m,
-		config:   map[*node[S, C]]bool{m.root: true},
-		history:  map[*node[S, C]][]*node[S, C]{},
+		config:   m.rootOnly(),
+		history:  nil,
 		timers:   nil,
 		services: nil,
 		counter:  0,
@@ -353,7 +356,7 @@ func (m *Machine[S, C]) start(c C, now time.Time, seed uint64) (Snapshot[S, C], 
 		seed:     seed,
 		stream:   0,
 		rng:      nil,
-		scopes:   map[*node[S, C]]time.Time{},
+		scopes:   nil,
 		acquired: nil,
 		pending:  nil,
 		effects:  nil,
@@ -362,6 +365,8 @@ func (m *Machine[S, C]) start(c C, now time.Time, seed uint64) (Snapshot[S, C], 
 		passed:   nil,
 		changed:  false,
 		cause:    nil,
+		list:     nil,
+		listed:   false,
 	}
 
 	enter := new(transition[S, C])
@@ -411,6 +416,12 @@ func (m *Machine[S, C]) Transition(snap Snapshot[S, C], ev any, now time.Time) (
 // A nil ev only advances time.
 func (m *Machine[S, C]) transition(snap Snapshot[S, C], ev any, now time.Time) (Snapshot[S, C], []Effect[C], []*node[S, C]) {
 	if snap.done {
+		return snap, nil, nil
+	}
+
+	// Most events an instance is sent change nothing. Those are told
+	// apart here, before any working state is built for them.
+	if m.inert(snap, ev, now) {
 		return snap, nil, nil
 	}
 
@@ -496,8 +507,8 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 
 	r := &run[S, C]{
 		m:        m,
-		config:   map[*node[S, C]]bool{m.root: true},
-		history:  make(map[*node[S, C]][]*node[S, C], len(snap.history)),
+		config:   slices.Clone(snap.config),
+		history:  nil,
 		timers:   make([]timer[S, C], 0, len(snap.timers)),
 		services: make([]service[S, C], 0, len(snap.invocations)),
 		counter:  snap.counter,
@@ -508,7 +519,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 		seed:     snap.seed,
 		stream:   snap.seq + 1,
 		rng:      nil,
-		scopes:   map[*node[S, C]]time.Time{},
+		scopes:   nil,
 		acquired: nil,
 		pending:  nil,
 		effects:  nil,
@@ -517,10 +528,8 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 		passed:   nil,
 		changed:  false,
 		cause:    nil,
-	}
-
-	for _, s := range snap.active {
-		r.config[m.nodes[s]] = true
+		list:     snap.nodes,
+		listed:   true,
 	}
 
 	for h, recorded := range snap.history {
@@ -528,7 +537,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 		for _, s := range recorded {
 			nodes = append(nodes, m.nodes[s])
 		}
-		r.history[m.nodes[h]] = nodes
+		r.setHistory(m.nodes[h], nodes)
 	}
 
 	for _, pt := range snap.timers {
@@ -553,7 +562,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 	}
 
 	for s, deadline := range snap.scopes {
-		r.scopes[m.nodes[s]] = deadline
+		r.setScope(m.nodes[s], deadline)
 	}
 
 	for _, ri := range snap.invocations {
@@ -577,14 +586,19 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 		seq:         seq,
 		seed:        r.seed,
 		done:        r.done,
-		active:      make([]S, 0, len(r.config)),
-		history:     make(map[S][]S, len(r.history)),
+		active:      make([]S, 0, len(r.active())),
+		history:     nil,
 		timers:      make([]pendingTimer[S], 0, len(r.timers)),
 		invocations: make([]runningInvocation[S], 0, len(r.services)),
-		scopes:      make(map[S]time.Time, len(r.scopes)),
+		scopes:      nil,
 		counter:     r.counter,
 		tags:        nil,
+		config:      r.config,
+		nodes:       r.active(),
 	}
+
+	// The working state ends here, so the snapshot keeps its set of active
+	// states, not a copy.
 
 	for _, n := range r.active() {
 		for _, tag := range n.tags {
@@ -595,6 +609,9 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 	}
 	slices.Sort(snap.tags)
 
+	if len(r.scopes) > 0 {
+		snap.scopes = make(map[S]time.Time, len(r.scopes))
+	}
 	for n, deadline := range r.scopes {
 		snap.scopes[n.id] = deadline
 	}
@@ -603,6 +620,9 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 		snap.active = append(snap.active, n.id)
 	}
 
+	if len(r.history) > 0 {
+		snap.history = make(map[S][]S, len(r.history))
+	}
 	for h, recorded := range r.history {
 		ids := make([]S, 0, len(recorded))
 		for _, n := range recorded {
@@ -636,16 +656,40 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 }
 
 // active returns the active states, without the root, in document order.
+// The result is shared between calls until the active states change, and
+// must not be modified.
 func (r *run[S, C]) active() []*node[S, C] {
-	out := make([]*node[S, C], 0, len(r.config))
-	for n := range r.config {
-		if !n.root {
+	if r.listed {
+		return r.list
+	}
+
+	out := make([]*node[S, C], 0, 8)
+	for _, n := range r.m.ordered {
+		if r.config[n.order] {
 			out = append(out, n)
 		}
 	}
-	slices.SortFunc(out, byOrder[S, C])
+	r.list, r.listed = out, true
 
 	return out
+}
+
+// activate and deactivate change whether n is active.
+func (r *run[S, C]) activate(n *node[S, C]) {
+	r.config[n.order], r.listed = true, false
+}
+
+func (r *run[S, C]) deactivate(n *node[S, C]) {
+	r.config[n.order], r.listed = false, false
+}
+
+// rootOnly returns a set of active states that holds only the root. The set
+// is indexed by a state's position in document order.
+func (m *Machine[S, C]) rootOnly() []bool {
+	config := make([]bool, len(m.ordered)+1)
+	config[m.root.order] = true
+
+	return config
 }
 
 // accept turns an incoming event into a stimulus. It reports false for
@@ -766,13 +810,13 @@ func (r *run[S, C]) matches(t *transition[S, C], stim stimulus[S, C]) bool {
 	}
 
 	for _, in := range t.inNodes {
-		if !r.config[in] {
+		if !r.config[in.order] {
 			return false
 		}
 	}
 
 	for _, out := range t.notInNodes {
-		if r.config[out] {
+		if r.config[out.order] {
 			return false
 		}
 	}
@@ -813,6 +857,11 @@ func (r *run[S, C]) selectTransitions(stim stimulus[S, C]) []*transition[S, C] {
 				}
 			}
 		}
+	}
+
+	// One transition, or none, has nothing to conflict with.
+	if len(enabled) <= 1 {
+		return enabled
 	}
 
 	// Two transitions conflict when they would exit the same state. The
@@ -911,9 +960,17 @@ func (r *run[S, C]) domain(t *transition[S, C]) *node[S, C] {
 // again a parallel state. Targets in several regions, or a history target
 // that restores states in several, leave the domain where it is.
 func (r *run[S, C]) narrow(dom *node[S, C], declared []*node[S, C]) *node[S, C] {
-	var targets []*node[S, C]
-	for _, target := range declared {
-		targets = append(targets, r.effectiveTargets(target)...)
+	if dom.kind != kindParallel {
+		return dom
+	}
+
+	// Only a history target stands for states other than itself.
+	targets := declared
+	if slices.ContainsFunc(declared, func(n *node[S, C]) bool { return n.kind == kindHistory }) {
+		targets = nil
+		for _, target := range declared {
+			targets = append(targets, r.effectiveTargets(target)...)
+		}
 	}
 
 	for dom.kind == kindParallel {
@@ -954,7 +1011,7 @@ func (r *run[S, C]) exitSet(t *transition[S, C]) []*node[S, C] {
 	region := r.reentersRegion(t)
 
 	var out []*node[S, C]
-	for n := range r.config {
+	for _, n := range r.active() {
 		if region {
 			if n.within(t.source) {
 				out = append(out, n)
@@ -991,12 +1048,14 @@ func (r *run[S, C]) microstep(ts []*transition[S, C], stim stimulus[S, C]) {
 	for _, n := range exits {
 		for _, h := range n.children {
 			if h.kind == kindHistory {
-				r.history[h] = r.record(h)
+				r.setHistory(h, r.record(h))
 			}
 		}
 	}
 
-	before := r.activeNames()
+	// The active states before and after are named only for a step that
+	// produced something that needs them.
+	beforeNodes := r.active()
 	first := len(r.effects)
 	r.pending = r.pending[:0]
 
@@ -1012,8 +1071,16 @@ func (r *run[S, C]) microstep(ts []*transition[S, C], stim stimulus[S, C]) {
 		r.enter(n, stim.event)
 	}
 
+	moved := len(r.pending) > 0
+	for i := first; i < len(r.effects) && !moved; i++ {
+		moved = r.effects[i].Kind == EffectAction || r.effects[i].Kind == EffectRelease
+	}
+	if !moved {
+		return
+	}
+
 	// Every action this step produced is told the move it belongs to.
-	after := r.activeNames()
+	before, after := nodeNames(beforeNodes), r.activeNames()
 	for i := first; i < len(r.effects); i++ {
 		if r.effects[i].Kind == EffectAction || r.effects[i].Kind == EffectRelease {
 			r.effects[i].From = before
@@ -1047,13 +1114,31 @@ func (r *run[S, C]) microstep(ts []*transition[S, C], stim stimulus[S, C]) {
 
 // activeNames returns the names of the active states in document order.
 func (r *run[S, C]) activeNames() []string {
-	active := r.active()
-	names := make([]string, 0, len(active))
-	for _, n := range active {
+	return nodeNames(r.active())
+}
+
+func nodeNames[S comparable, C any](nodes []*node[S, C]) []string {
+	names := make([]string, 0, len(nodes))
+	for _, n := range nodes {
 		names = append(names, n.name)
 	}
 
 	return names
+}
+
+// setScope and setHistory write to maps that most runs never need.
+func (r *run[S, C]) setScope(n *node[S, C], deadline time.Time) {
+	if r.scopes == nil {
+		r.scopes = map[*node[S, C]]time.Time{}
+	}
+	r.scopes[n] = deadline
+}
+
+func (r *run[S, C]) setHistory(h *node[S, C], recorded []*node[S, C]) {
+	if r.history == nil {
+		r.history = map[*node[S, C]][]*node[S, C]{}
+	}
+	r.history[h] = recorded
 }
 
 // pendingRun is a conditional chart action run whose effect is kept only if
@@ -1131,7 +1216,7 @@ func (r *run[S, C]) exit(n *node[S, C], event any) {
 	})
 	r.endServices(ending)
 
-	delete(r.config, n)
+	r.deactivate(n)
 }
 
 // raise queues the events a state raises on entry or exit.
@@ -1153,7 +1238,14 @@ func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
 	for k, s := range t.steps {
 		switch s.kind {
 		case stepAssign:
-			r.ctx = s.assign(r.ctx, stim.event, r.now, r.random())
+			// The source of random numbers is made only for a step
+			// that draws from it.
+			var rnd *rand.Rand
+			if s.random {
+				rnd = r.random()
+			}
+
+			r.ctx = s.assign(r.ctx, stim.event, r.now, rnd)
 		case stepDo:
 			r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: t.source.name, Name: s.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: stim.event, From: nil, To: nil, Needs: nil, Saved: nil})
 		case stepRun:
@@ -1240,9 +1332,9 @@ func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
 }
 
 func (r *run[S, C]) enter(n *node[S, C], event any) {
-	r.config[n] = true
+	r.activate(n)
 	if n.budget > 0 {
-		r.scopes[n] = r.now.Add(n.budget)
+		r.setScope(n, r.now.Add(n.budget))
 	}
 	r.entered = append(r.entered, n)
 	r.passed = append(r.passed, n)
@@ -1317,11 +1409,11 @@ func (r *run[S, C]) completed(n *node[S, C]) bool {
 	}
 
 	if n.kind == kindFinal {
-		return r.config[n]
+		return r.config[n.order]
 	}
 
 	for _, c := range n.children {
-		if c.kind == kindFinal && r.config[c] {
+		if c.kind == kindFinal && r.config[c.order] {
 			return true
 		}
 	}
@@ -1609,7 +1701,7 @@ func (r *run[S, C]) running(inv *invocation[S, C]) bool {
 
 // entrySet returns the states ts enters, in document order.
 func (r *run[S, C]) entrySet(ts []*transition[S, C]) []*node[S, C] {
-	set := map[*node[S, C]]bool{}
+	set := &nodeSet[S, C]{in: make([]bool, len(r.m.ordered)+1), list: nil}
 
 	for _, t := range ts {
 		if t.target == nil {
@@ -1634,15 +1726,17 @@ func (r *run[S, C]) entrySet(ts []*transition[S, C]) []*node[S, C] {
 		// The domain stays active throughout, so it is never entered.
 		// When it is a parallel state its other regions were exited
 		// and need their default entry.
-		delete(set, dom)
+		set.in[dom.order] = false
 		if !r.reentersRegion(t) {
 			r.fillRegions(set, dom)
 		}
 	}
 
-	out := make([]*node[S, C], 0, len(set))
-	for n := range set {
-		out = append(out, n)
+	out := set.list[:0]
+	for _, n := range set.list {
+		if set.in[n.order] {
+			out = append(out, n)
+		}
 	}
 	slices.SortFunc(out, byOrder[S, C])
 
@@ -1652,7 +1746,7 @@ func (r *run[S, C]) entrySet(ts []*transition[S, C]) []*node[S, C] {
 // effectiveTargets resolves a history state to the states it stands for.
 func (r *run[S, C]) effectiveTargets(n *node[S, C]) []*node[S, C] {
 	if n.kind != kindHistory {
-		return []*node[S, C]{n}
+		return n.self
 	}
 
 	if recorded, ok := r.history[n]; ok {
@@ -1670,7 +1764,7 @@ func (r *run[S, C]) effectiveTargets(n *node[S, C]) []*node[S, C] {
 }
 
 // addDescendants adds n and the states entered along with it by default.
-func (r *run[S, C]) addDescendants(set map[*node[S, C]]bool, n *node[S, C]) {
+func (r *run[S, C]) addDescendants(set *nodeSet[S, C], n *node[S, C]) {
 	if n.kind == kindHistory {
 		targets := r.effectiveTargets(n)
 		for _, s := range targets {
@@ -1683,7 +1777,7 @@ func (r *run[S, C]) addDescendants(set map[*node[S, C]]bool, n *node[S, C]) {
 		return
 	}
 
-	set[n] = true
+	set.add(n)
 
 	if n.kind == kindState && n.initial != nil {
 		r.addDescendants(set, n.initial)
@@ -1695,32 +1789,46 @@ func (r *run[S, C]) addDescendants(set map[*node[S, C]]bool, n *node[S, C]) {
 // addAncestors adds the states between n and anc, exclusive of both. It adds
 // nothing when n is anc itself, as it is for a transition that targets its
 // own source.
-func (r *run[S, C]) addAncestors(set map[*node[S, C]]bool, n, anc *node[S, C]) {
+func (r *run[S, C]) addAncestors(set *nodeSet[S, C], n, anc *node[S, C]) {
 	if !n.below(anc) {
 		return
 	}
 
 	for a := n.parent; a != anc; a = a.parent {
-		set[a] = true
+		set.add(a)
 		r.fillRegions(set, a)
 	}
 }
 
 // fillRegions gives every region of parallel state p that has nothing in set
 // its default entry.
-func (r *run[S, C]) fillRegions(set map[*node[S, C]]bool, p *node[S, C]) {
+func (r *run[S, C]) fillRegions(set *nodeSet[S, C], p *node[S, C]) {
 	if p.kind != kindParallel {
 		return
 	}
 
 	for _, region := range p.states() {
 		covered := false
-		for s := range set {
-			covered = covered || s.within(region)
+		for _, s := range set.list {
+			covered = covered || (set.in[s.order] && s.within(region))
 		}
 		if !covered {
 			r.addDescendants(set, region)
 		}
+	}
+}
+
+// nodeSet is a set of states being collected: in says which are members,
+// by position in document order, and list holds every state ever added.
+type nodeSet[S comparable, C any] struct {
+	in   []bool
+	list []*node[S, C]
+}
+
+func (s *nodeSet[S, C]) add(n *node[S, C]) {
+	if !s.in[n.order] {
+		s.in[n.order] = true
+		s.list = append(s.list, n)
 	}
 }
 
@@ -1795,7 +1903,7 @@ func (r *run[S, C]) startServices() {
 	slices.SortFunc(r.entered, byOrder[S, C])
 
 	for _, n := range slices.Compact(r.entered) {
-		if !r.config[n] {
+		if !r.config[n.order] {
 			continue
 		}
 
@@ -1827,7 +1935,7 @@ func (r *run[S, C]) startServices() {
 		// The state may have been left and entered again since, in which
 		// case its resources are being acquired from the first again.
 		held := slices.ContainsFunc(r.services, func(s service[S, C]) bool { return s.inv == got && s.acquired })
-		if !r.config[got.state] || !held {
+		if !r.config[got.state.order] || !held {
 			continue
 		}
 
@@ -1916,4 +2024,41 @@ func SpawnKey(id string) (string, bool) {
 	}
 
 	return key, true
+}
+
+// inert reports whether ev, arriving at now, certainly changes nothing in
+// snap: no timer is due, and no active state has a transition that could be
+// taken, either for an event of its type or without an event. It errs on
+// the side of false; a false answer only costs the full step.
+func (m *Machine[S, C]) inert(snap Snapshot[S, C], ev any, now time.Time) bool {
+	if snap.machine != m.id || snap.hash != m.hash {
+		return false
+	}
+
+	for _, t := range snap.timers {
+		if !t.due.Add(time.Duration(t.jitter * float64(t.delay))).After(now) {
+			return false
+		}
+	}
+
+	var kind reflect.Type
+	if ev != nil {
+		switch ev.(type) {
+		case TimerFired, Emitted, Checkpointed, acquisition, invocationResult:
+			return false
+		}
+		kind = reflect.TypeOf(ev)
+	}
+
+	if m.root.reacts(kind) {
+		return false
+	}
+
+	for _, n := range snap.nodes {
+		if n.reacts(kind) {
+			return false
+		}
+	}
+
+	return true
 }

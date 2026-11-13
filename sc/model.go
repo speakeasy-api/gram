@@ -114,6 +114,17 @@ type node[S comparable, C any] struct {
 	// tags are the labels declared with Tag.
 	tags []string
 
+	// built is set once the chart is complete, after which self holds
+	// the state alone, regions what states returns, handles the event types the state's own
+	// transitions take, catchAll whether one of them takes any event, and
+	// eventless whether the state has an eventless transition.
+	built     bool
+	self      []*node[S, C]
+	regions   []*node[S, C]
+	handles   map[reflect.Type]bool
+	catchAll  bool
+	eventless bool
+
 	// entryRaises and exitRaises are the events the state raises for the
 	// machine itself when it is entered and exited.
 	entryRaises []stateRaise[C]
@@ -137,8 +148,28 @@ type stateRaise[C any] struct {
 	fn   func(C) any
 }
 
+// reacts reports whether the state has a transition that an event of the
+// given type could take, or one that needs no event. A nil type stands for
+// time passing without an event.
+func (n *node[S, C]) reacts(kind reflect.Type) bool {
+	if n.eventless {
+		return true
+	}
+
+	if kind == nil {
+		return false
+	}
+
+	return n.catchAll || n.handles[kind]
+}
+
 // states returns the children that are real states, skipping history nodes.
+// The result is shared once the chart is built, and must not be modified.
 func (n *node[S, C]) states() []*node[S, C] {
+	if n.built {
+		return n.regions
+	}
+
 	out := make([]*node[S, C], 0, len(n.children))
 	for _, c := range n.children {
 		if c.kind != kindHistory {
@@ -269,6 +300,9 @@ type step[C any] struct {
 
 	// raise is set for stepRaise.
 	raise func(C, any) any
+
+	// random is set for an assignment that draws random numbers.
+	random bool
 }
 
 // triggerKind is what causes a transition to be considered.

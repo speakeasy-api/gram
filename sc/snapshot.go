@@ -36,6 +36,12 @@ type Snapshot[S comparable, C any] struct {
 	// tags are the tags of the active states, sorted. They follow from
 	// active and are not stored.
 	tags []string
+
+	// config and nodes are the active states again, in the forms the core
+	// works with: a set indexed by position in document order, and a list
+	// in that order. Both are shared between snapshots and never changed.
+	config []bool
+	nodes  []*node[S, C]
 }
 
 // pendingTimer is a delayed transition whose timer has not fired.
@@ -474,8 +480,8 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 
 	r := &run[S, C]{
 		m:        m,
-		config:   map[*node[S, C]]bool{m.root: true},
-		history:  map[*node[S, C]][]*node[S, C]{},
+		config:   m.rootOnly(),
+		history:  nil,
 		timers:   nil,
 		services: nil,
 		counter:  raw.Counter,
@@ -486,7 +492,7 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 		seed:     raw.Seed,
 		stream:   raw.Seq + 1,
 		rng:      nil,
-		scopes:   map[*node[S, C]]time.Time{},
+		scopes:   nil,
 		acquired: nil,
 		pending:  nil,
 		effects:  nil,
@@ -495,6 +501,8 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 		passed:   nil,
 		changed:  false,
 		cause:    nil,
+		list:     nil,
+		listed:   false,
 	}
 
 	if err := json.Unmarshal(raw.Context, &r.ctx); err != nil {
@@ -506,8 +514,8 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 	}
 
 	for name, deadline := range raw.Scopes {
-		if n, ok := m.names[name]; ok && r.config[n] && n.budget > 0 {
-			r.scopes[n] = deadline
+		if n, ok := m.names[name]; ok && r.config[n.order] && n.budget > 0 {
+			r.setScope(n, deadline)
 		}
 	}
 
@@ -527,7 +535,7 @@ func (r *run[S, C]) restoreStates(raw RawSnapshot) error {
 		}
 
 		for a := n; a != nil; a = a.parent {
-			r.config[a] = true
+			r.activate(a)
 		}
 	}
 
@@ -551,7 +559,7 @@ func (r *run[S, C]) restoreStates(raw RawSnapshot) error {
 		}
 
 		if len(nodes) > 0 {
-			r.history[h] = nodes
+			r.setHistory(h, nodes)
 		}
 	}
 
@@ -562,10 +570,10 @@ func (r *run[S, C]) restoreStates(raw RawSnapshot) error {
 // one active child under each active compound state, and every region active
 // under each active parallel state.
 func (r *run[S, C]) checkConfig() error {
-	for n := range r.config {
+	for _, n := range append([]*node[S, C]{r.m.root}, r.active()...) {
 		activeChildren := 0
 		for _, c := range n.states() {
-			if r.config[c] {
+			if r.config[c.order] {
 				activeChildren++
 			}
 		}
@@ -602,8 +610,8 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 
 	r := &run[S, C]{
 		m:        m,
-		config:   map[*node[S, C]]bool{m.root: true},
-		history:  map[*node[S, C]][]*node[S, C]{},
+		config:   m.rootOnly(),
+		history:  nil,
 		timers:   nil,
 		services: nil,
 		counter:  0,
@@ -614,7 +622,7 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 		seed:     seedFor(now, nil),
 		stream:   0,
 		rng:      nil,
-		scopes:   map[*node[S, C]]time.Time{},
+		scopes:   nil,
 		acquired: nil,
 		pending:  nil,
 		effects:  nil,
@@ -623,6 +631,8 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 		passed:   nil,
 		changed:  false,
 		cause:    nil,
+		list:     nil,
+		listed:   false,
 	}
 
 	for _, s := range states {
@@ -632,7 +642,7 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 		}
 
 		for a := n; a != nil; a = a.parent {
-			r.config[a] = true
+			r.activate(a)
 		}
 	}
 
@@ -649,7 +659,7 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 	if !r.done {
 		for _, n := range r.active() {
 			if n.budget > 0 {
-				r.scopes[n] = now.Add(n.budget)
+				r.setScope(n, now.Add(n.budget))
 			}
 		}
 
@@ -694,14 +704,14 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 
 			r.timers = append(r.timers, timer[S, C]{id: rt.ID, kind: timerRaise, t: nil, retry: nil, attempt: 0, source: n, label: rt.Name, raised: ev.Elem().Interface(), delay: time.Duration(rt.DelayNanos), due: rt.Due, seq: rt.Seq, jitter: 0, key: "", saved: nil})
 			kept = true
-		case timerKind(rt.Kind) == timerRetry && ok && r.config[n] && !r.done:
+		case timerKind(rt.Kind) == timerRetry && ok && r.config[n.order] && !r.done:
 			for _, inv := range n.invocations {
 				if inv.name == rt.Name && inv.retry != nil {
 					r.timers = append(r.timers, timer[S, C]{id: rt.ID, kind: timerRetry, t: nil, retry: inv, attempt: rt.Attempt, source: nil, label: "", raised: nil, delay: time.Duration(rt.DelayNanos), due: rt.Due, seq: rt.Seq, jitter: rt.Jitter, key: rt.Key, saved: rt.Saved})
 					kept = true
 				}
 			}
-		case timerKind(rt.Kind) == timerAfter && ok && r.config[n] && !r.done:
+		case timerKind(rt.Kind) == timerAfter && ok && r.config[n.order] && !r.done:
 			for _, t := range n.transitions {
 				if t.trigger == triggerAfter && t.afterIndex == rt.Index {
 					r.timers = append(r.timers, restoredTimer(rt.ID, t, time.Duration(rt.DelayNanos), rt.Due, rt.Seq, r.now))
@@ -720,7 +730,7 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 		n, ok := r.m.names[ri.State]
 		kept := false
 
-		if ok && r.config[n] && !r.done {
+		if ok && r.config[n.order] && !r.done {
 			for _, inv := range n.invocations {
 				if inv.name == ri.Name && (inv.resource != nil) == ri.Resource {
 					r.services = append(r.services, service[S, C]{id: ri.ID, inv: inv, acquired: ri.Acquired, attempt: ri.Attempt, saved: ri.Saved})
@@ -747,7 +757,7 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 		}
 
 		if _, ok := r.scopes[n]; !ok && n.budget > 0 {
-			r.scopes[n] = r.now.Add(n.budget)
+			r.setScope(n, r.now.Add(n.budget))
 		}
 
 		for _, t := range n.transitions {
