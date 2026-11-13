@@ -1,4 +1,5 @@
 import { salesforceConnection, salesforceMyDomain } from "./salesforce";
+import { oktaConnection, oktaOrg } from "./okta";
 import {
   snowflakeConnection,
   publicSnowflakeHost,
@@ -10,15 +11,18 @@ import {
   users,
 } from "./snowflake";
 /** Provider setup state only. Network actions live in the page integration. */
-export type Provider = "slack" | "github" | "salesforce" | "snowflake";
+export type Provider = "slack" | "github" | "salesforce" | "snowflake" | "okta";
 export const names = {
   slack: "Slack",
   github: "GitHub",
   salesforce: "Salesforce",
   snowflake: "Snowflake",
+  okta: "Okta",
 };
 const defaultValues = {
   org: "",
+  oktaOrg: "",
+  oktaAppType: "web",
   integration: "native",
   environment: "production",
   salesforceServer: "sobject-reads",
@@ -81,6 +85,16 @@ export function initialState(provider: Provider): State {
   };
 }
 export function steps(s: State): { id: string; title: string }[] {
+  if (s.provider === "okta")
+    return [
+      { id: "begin", title: "Setup plan" },
+      { id: "enable", title: "Enable Okta MCP" },
+      { id: "organization", title: "Okta organization" },
+      { id: "app", title: "Set up your app" },
+      { id: "permissions", title: "Grant app access" },
+      { id: "credentials", title: "Enter app credentials" },
+      { id: "test", title: "Connect and test" },
+    ];
   if (s.provider === "snowflake")
     return [
       { id: "begin", title: "Setup plan" },
@@ -151,6 +165,8 @@ export function orgValid(s: State): boolean {
 export function ready(s: State): boolean {
   return (
     s.saved &&
+    (s.provider !== "okta" ||
+      (!s.configChanged && !!oktaConnection(s.values))) &&
     (s.provider !== "snowflake" ||
       (!s.configChanged &&
         !!snowflakeConnection(s.values) &&
@@ -164,7 +180,20 @@ export function ready(s: State): boolean {
 }
 export function validate(s: State): State["errors"] {
   const errors: State["errors"] = {};
-  if (s.step === "organization" && !orgValid(s))
+  if (s.provider === "okta") {
+    if (
+      ["organization", "credentials"].includes(s.step) &&
+      !oktaOrg(s.values.oktaOrg)
+    )
+      errors.oktaOrg =
+        "Enter your public Okta org URL, such as https://example.okta.com, without a path or port.";
+    if (
+      ["app", "credentials"].includes(s.step) &&
+      !["web", "native"].includes(s.values.oktaAppType)
+    )
+      errors.oktaAppType = "Choose Web app or Native app.";
+  }
+  if (s.provider === "github" && s.step === "organization" && !orgValid(s))
     errors.org = "Enter the GitHub organization name, without a URL.";
   if (
     s.provider === "salesforce" &&
@@ -191,7 +220,11 @@ export function validate(s: State): State["errors"] {
         s.provider === "salesforce"
           ? "Enter Consumer Key."
           : "Enter Client ID.";
-    if (s.provider !== "salesforce" && !s.values.clientSecret.trim())
+    if (
+      s.provider !== "salesforce" &&
+      !(s.provider === "okta" && s.values.oktaAppType === "native") &&
+      !s.values.clientSecret.trim()
+    )
       errors.clientSecret = "Enter Client Secret.";
   }
   if (s.provider === "snowflake") {
@@ -276,14 +309,18 @@ export function reduce(s: State, a: Action): State {
       return {
         ...s,
         values: {
-          ...(s.provider === "snowflake" ? defaultValues : s.values),
+          ...(["snowflake", "okta"].includes(s.provider)
+            ? defaultValues
+            : s.values),
           ...a.values,
           clientId: "",
           clientSecret: "",
         },
-        configChanged: s.provider === "snowflake" ? false : s.configChanged,
+        configChanged: ["snowflake", "okta"].includes(s.provider)
+          ? false
+          : s.configChanged,
         sourceFingerprint: a.sourceFingerprint,
-        step: s.provider === "snowflake" ? "account" : "choices",
+        step: steps(s)[1]!.id,
         screen: "setup",
         done: [],
         errors: {},
@@ -296,16 +333,18 @@ export function reduce(s: State, a: Action): State {
     case "field": {
       if (s.values[a.field] === a.value) return s;
       const connectionChange =
-        s.provider === "snowflake" &&
-        [
-          "host",
-          "database",
-          "schema",
-          "serverName",
-          "network",
-          "oauthIntegration",
-          "accessRole",
-        ].includes(a.field);
+        (s.provider === "okta" &&
+          ["oktaOrg", "oktaAppType"].includes(a.field)) ||
+        (s.provider === "snowflake" &&
+          [
+            "host",
+            "database",
+            "schema",
+            "serverName",
+            "network",
+            "oauthIntegration",
+            "accessRole",
+          ].includes(a.field));
       const credentialChange = ["clientId", "clientSecret"].includes(a.field);
       const boundary = steps(s).findIndex((t) => t.id === s.step);
       const next: State = {
@@ -342,7 +381,7 @@ export function reduce(s: State, a: Action): State {
       if (
         (s.provider === "salesforce" ||
           connectionChange ||
-          (s.provider === "snowflake" && credentialChange)) &&
+          (["snowflake", "okta"].includes(s.provider) && credentialChange)) &&
         a.source !== "configuration"
       )
         next.configChanged = true;

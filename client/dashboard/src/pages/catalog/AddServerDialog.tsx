@@ -1,21 +1,23 @@
+import {
+  accountCatalogProvider,
+  pendingAccountProvider,
+} from "./account-provider";
 import { effectiveAction } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { policyNewPrefillQuery } from "@/pages/security/policy-new-prefill";
-import { useProject } from "@/contexts/Auth";
 import { toast } from "sonner";
-import {
-  isSnowflakeCatalogServer,
-  snowflakeSetupUrl,
-} from "./snowflake-install";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
-import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
+import {
+  providerSetupInstallTarget,
+  setupProviderForUrl,
+} from "@/pages/mcp/x/setup/provider-setup";
 import { salesforceSetupInstallServer } from "./provider-setup/salesforce";
 import { useNavigate } from "react-router";
 import { CatalogLogo } from "./CatalogLogo";
 import { CatalogGuardrailsPhase } from "./CatalogGuardrailsPhase";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
 import {
@@ -239,29 +241,36 @@ export function AddServerDialog({
     [guidedSalesforce, salesforceEntry, enrichedServers],
   );
   const initialConfiguration = useMemo(() => {
-    if (providerSetupRollout !== "enabled") return undefined;
-    if (salesforceEntry)
-      return salesforceIdentity ?? { identityMode: "user" as const };
     if (
-      (openProviderSetup || attachToGatewayId) &&
-      !bulk &&
-      !headless &&
-      !autoStartInstall &&
-      enrichedServers.length === 1 &&
-      isSnowflakeCatalogServer(enrichedServers[0]!)
+      providerSetupRollout !== "enabled" ||
+      (!openProviderSetup && !attachToGatewayId) ||
+      bulk ||
+      headless ||
+      autoStartInstall ||
+      enrichedServers.length !== 1
     )
-      return { identityMode: "user" as const };
-    return undefined;
+      return undefined;
+    const server = enrichedServers[0]!;
+    const hasCustomSetup =
+      !!accountCatalogProvider(server) ||
+      server.remotes?.some(
+        (remote) =>
+          remote.transportType === "streamable-http" &&
+          !!setupProviderForUrl(remote.url),
+      );
+    if (!hasCustomSetup) return undefined;
+    if (salesforceEntry && salesforceIdentity) return salesforceIdentity;
+    return { identityMode: "user" as const };
   }, [
     providerSetupRollout,
-    salesforceEntry,
-    salesforceIdentity,
     openProviderSetup,
     attachToGatewayId,
     bulk,
     headless,
     autoStartInstall,
     enrichedServers,
+    salesforceEntry,
+    salesforceIdentity,
   ]);
 
   // Use enriched servers (with remotes) for the workflow. Callers that run
@@ -279,14 +288,14 @@ export function AddServerDialog({
     beforeInstall: async () => {
       if (
         providerSetupRollout === "loading" &&
-        enrichedServers.some(isSnowflakeCatalogServer)
+        enrichedServers.some((server) => !!accountCatalogProvider(server))
       ) {
-        toast.info("Snowflake setup is loading. Try again in a moment.");
+        toast.info("Server setup is loading. Try again in a moment.");
         return false;
       }
       return beforeInstall();
     },
-    snowflakeSetupEnabled:
+    accountSetupEnabled:
       providerSetupRollout === "enabled" &&
       !!(openProviderSetup || attachToGatewayId) &&
       !bulk &&
@@ -450,10 +459,10 @@ export function AddServerDialog({
     );
     if (!target) return;
     const status = releaseState.statuses[0]!;
-    const pendingSnowflake = status.remoteUrl === snowflakeSetupUrl;
-    if (!openProviderSetup && !(attachToGatewayId && pendingSnowflake)) return;
+    const pendingAccount = pendingAccountProvider(status.remoteUrl);
+    if (!openProviderSetup && !(attachToGatewayId && pendingAccount)) return;
     const params = new URLSearchParams();
-    if (attachToGatewayId && pendingSnowflake)
+    if (attachToGatewayId && pendingAccount)
       params.set("attachToGateway", attachToGatewayId);
     if (status.setupPolicy) {
       params.set("customizePolicy", "true");

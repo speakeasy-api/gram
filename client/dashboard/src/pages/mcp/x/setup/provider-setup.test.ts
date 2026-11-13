@@ -215,7 +215,7 @@ describe("Provider setup routing", () => {
     ])
       expect(setupProviderForUrl(url)).toBeNull();
   });
-  it.each(["https://example.okta.com/mcp"])(
+  it.each(["https://example.test/mcp"])(
     "leaves other providers on their existing path: %s",
     (url) => {
       expect(setupProviderForUrl(url)).toBeNull();
@@ -647,4 +647,69 @@ it("prefills a new Snowflake server name and retains a chosen name after reload"
   expect(loadProviderProgress("snowflake", key).values.serverName).toBe(
     "CUSTOM_MCP",
   );
+});
+
+it.each([
+  "https://app.getgram.ai/mcp/speakeasy-team-salesforce",
+  "https://api.salesforce.com/platform/mcp/v1/sandbox/data/data360",
+  "https://api.salesforce.com/platform/mcp/v1/platform/unknown",
+])(
+  "does not hand an undocumented Salesforce catalog endpoint into guided setup: %s",
+  (url) => {
+    expect(
+      providerSetupInstallTarget(
+        [{ remotes: [{ url }] }],
+        [
+          {
+            status: "completed",
+            key: "sf",
+            name: "Salesforce",
+            identityMode: "user",
+            remoteUrl: url,
+            mcpServerId: "id",
+            mcpServerParam: "installed",
+          },
+        ],
+      ),
+    ).toBeNull();
+  },
+);
+
+describe("Okta source-bound progress", () => {
+  it("keeps only non-secret configuration and resets stale org/app choices", () => {
+    const s = initialState("okta");
+    Object.assign(s.values, {
+      oktaOrg: "https://example.okta.com",
+      oktaAppType: "native",
+      clientId: "example-client",
+      clientSecret: "example-secret",
+    });
+    s.sourceFingerprint = "source-one";
+    s.step = "credentials";
+    s.configChanged = true;
+    saveProviderProgress("okta-progress", s);
+    const raw = sessionStorage.getItem("okta-progress")!;
+    expect(raw).not.toContain("oktaScopes");
+    expect(raw).not.toContain("example-secret");
+    expect(raw).not.toContain("example-client");
+    const restored = loadProviderProgress(
+      "okta",
+      "okta-progress",
+      { oktaOrg: "https://example.okta.com" },
+      "source-one",
+    );
+    expect(restored.values.oktaAppType).toBe("native");
+    expect(restored.step).toBe("credentials");
+    expect(restored.saved).toBe(false);
+    const changed = loadProviderProgress(
+      "okta",
+      "okta-progress",
+      { oktaOrg: "https://other.okta.com" },
+      "source-two",
+    );
+    expect(changed.values.oktaOrg).toBe("https://other.okta.com");
+    expect(changed.values.oktaAppType).toBe("web");
+    expect(changed.step).toBe("enable");
+    expect(changed.tested).toBe(false);
+  });
 });

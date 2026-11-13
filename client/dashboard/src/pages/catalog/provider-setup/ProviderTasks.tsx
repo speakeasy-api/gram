@@ -1,3 +1,4 @@
+import { OktaTask, OktaCredentialInstructions } from "./OktaTask";
 import { SalesforceTask } from "./SalesforceTask";
 import {
   SnowflakeTask,
@@ -131,6 +132,14 @@ function Credentials() {
   const saved = s.saved;
   return (
     <>
+      {s.provider === "okta" && (s.errors.oktaOrg || s.errors.oktaAppType) && (
+        <Alert variant="error">
+          Review your Okta configuration before saving credentials.{" "}
+          <Correction step="organization">Review organization</Correction>
+          {" · "}
+          <Correction step="app">Review app type</Correction>
+        </Alert>
+      )}
       {s.provider === "salesforce" && s.errors.salesforceServer && (
         <Alert variant="error">
           {s.errors.salesforceServer}{" "}
@@ -145,7 +154,9 @@ function Credentials() {
           </Correction>
         </Alert>
       )}
-      {s.provider === "snowflake" ? (
+      {s.provider === "okta" ? (
+        <OktaCredentialInstructions />
+      ) : s.provider === "snowflake" ? (
         <SnowflakeCredentialInstructions />
       ) : (
         <InProvider
@@ -171,15 +182,16 @@ function Credentials() {
           s.provider === "salesforce" ? "Paste Consumer Key" : "Paste Client ID"
         }
       />
-      {s.provider !== "salesforce" && (
-        <SetupField
-          field="clientSecret"
-          label="Client Secret"
-          disabled={saved}
-          value={saved ? "••••••••" : undefined}
-          placeholder="Paste Client Secret"
-        />
-      )}
+      {s.provider !== "salesforce" &&
+        !(s.provider === "okta" && s.values.oktaAppType === "native") && (
+          <SetupField
+            field="clientSecret"
+            label="Client Secret"
+            disabled={saved}
+            value={saved ? "••••••••" : undefined}
+            placeholder="Paste Client Secret"
+          />
+        )}
       {saved && (
         <div className="mt-5 flex justify-end">
           <Button
@@ -468,6 +480,7 @@ export function ProviderTask({
   const { s } = useSetup();
   if (s.step === "begin") return <Plan />;
   if (s.step === "credentials") return <Credentials />;
+  if (s.provider === "okta") return <OktaTask />;
   if (s.provider === "snowflake") return <SnowflakeTask />;
   if (s.provider === "salesforce") return <SalesforceTask />;
   if (s.provider === "github") return <GitHubTask />;

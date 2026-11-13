@@ -1,4 +1,8 @@
 import {
+  oktaConnection,
+  oktaSelectionForUrl,
+} from "@/pages/catalog/provider-setup/okta";
+import {
   snowflakeConnection,
   snowflakeSelectionForUrl,
 } from "@/pages/catalog/provider-setup/snowflake";
@@ -94,6 +98,106 @@ const providers = {
   },
 };
 
+type SelectedProviderConnection =
+  | ReturnType<typeof salesforceConnection>
+  | ReturnType<typeof snowflakeConnection>
+  | ReturnType<typeof oktaConnection>;
+function selectedProviderConnection(
+  provider: State["provider"],
+  values: State["values"],
+): SelectedProviderConnection {
+  switch (provider) {
+    case "okta":
+      return oktaConnection(values);
+    case "snowflake":
+      return snowflakeConnection(values);
+    case "salesforce":
+      return salesforceConnection(values);
+    case "github":
+    case "slack":
+      return null;
+  }
+}
+function providerOAuthConfig(
+  s: State,
+  selected: SelectedProviderConnection,
+): {
+  name: string;
+  issuer: string;
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+} {
+  if (selected) return selected;
+  switch (s.provider) {
+    case "salesforce":
+      return salesforceLogin();
+    case "okta":
+      return {
+        name: "Okta",
+        issuer: "https://okta.invalid",
+        authorizationEndpoint: "https://okta.invalid/oauth2/v1/authorize",
+        tokenEndpoint: "https://okta.invalid/oauth2/v1/token",
+      };
+    case "snowflake":
+      return {
+        name: "Snowflake",
+        issuer: "https://snowflake.invalid",
+        authorizationEndpoint: "https://snowflake.invalid/oauth/authorize",
+        tokenEndpoint: "https://snowflake.invalid/oauth/token-request",
+      };
+    case "github":
+    case "slack":
+      return providers[s.provider];
+  }
+}
+function providerScopes(provider: State["provider"], access: string): string[] {
+  switch (provider) {
+    case "okta":
+      // Leave the client unpinned so the existing sign-in flow discovers scopes.
+      return [];
+    case "slack":
+      return scopesFor({ values: { access } });
+    case "salesforce":
+      return salesforceScopes();
+    case "snowflake":
+      return ["session:role:all"];
+    case "github":
+      return [];
+  }
+}
+function providerTokenMethods(provider: State["provider"]): string[] {
+  switch (provider) {
+    case "okta":
+      return ["none", "client_secret_basic"];
+    case "salesforce":
+      return ["none", "client_secret_post"];
+    case "github":
+    case "slack":
+    case "snowflake":
+      return ["client_secret_post"];
+  }
+}
+function sourceValues(
+  provider: State["provider"],
+  source: { url: string; instanceUrl?: string },
+): Partial<State["values"]> {
+  switch (provider) {
+    case "okta":
+      return oktaSelectionForUrl(source.url) ?? {};
+    case "snowflake":
+      return snowflakeSelectionForUrl(source.url) ?? {};
+    case "salesforce":
+      return {
+        salesforceDomain: "",
+        ...salesforceSelectionForUrl(source.url),
+        instanceUrl: source.instanceUrl ?? "",
+      };
+    case "github":
+    case "slack":
+      return {};
+  }
+}
+
 export type ProviderConnection = {
   next: () => void;
   signIn: () => void;
@@ -145,37 +249,15 @@ export function useProviderConnection(
       ...source,
       instanceUrl: salesforceInstance(source.instanceUrl) ?? source.instanceUrl,
     };
-  const salesforce = useMemo(
-    () =>
-      providerKey === "salesforce" ? salesforceConnection(s.values) : null,
-    [providerKey, s.values],
+  const configurableSource = ["salesforce", "snowflake", "okta"].includes(
+    providerKey,
   );
-  const configurableSource =
-    providerKey === "salesforce" || providerKey === "snowflake";
-  const selectedConnection =
-    providerKey === "snowflake" ? snowflakeConnection(s.values) : salesforce;
-  const config =
-    providerKey === "salesforce"
-      ? (salesforce ?? salesforceLogin())
-      : providerKey === "snowflake"
-        ? (selectedConnection ?? {
-            name: "Snowflake",
-            issuer: "https://snowflake.invalid",
-            authorizationEndpoint: "https://snowflake.invalid/oauth/authorize",
-            tokenEndpoint: "https://snowflake.invalid/oauth/token-request",
-          })
-        : providers[providerKey];
+  const selectedConnection = selectedProviderConnection(providerKey, s.values);
+  const config = providerOAuthConfig(s, selectedConnection);
   const name = config.name;
   const access = s.values.access;
   const requestedScopes = useMemo(
-    () =>
-      providerKey === "slack"
-        ? scopesFor({ values: { access } })
-        : providerKey === "salesforce"
-          ? salesforceScopes()
-          : providerKey === "snowflake"
-            ? ["session:role:all"]
-            : [],
+    () => providerScopes(providerKey, access),
     [access, providerKey],
   );
   const sdk = useSdkClient();
@@ -244,14 +326,7 @@ export function useProviderConnection(
         appliedSource.current = { ...source };
         dispatch({
           type: "source",
-          values:
-            providerKey === "snowflake"
-              ? (snowflakeSelectionForUrl(source.url) ?? {})
-              : {
-                  salesforceDomain: "",
-                  ...salesforceSelectionForUrl(source.url),
-                  instanceUrl: source.instanceUrl ?? "",
-                },
+          values: sourceValues(providerKey, source),
           sourceFingerprint: providerSourceFingerprint(id, source),
         });
         return;
@@ -363,6 +438,19 @@ export function useProviderConnection(
   ]);
   useEffect(() => {
     if (!status.isSuccess || hydrated.current) return;
+    if (providerKey === "okta" && status.data && !s.configChanged) {
+      const savedAppType =
+        status.data.client.tokenEndpointAuthMethod === "none"
+          ? "native"
+          : "web";
+      dispatch({
+        type: "field",
+        field: "oktaAppType",
+        value: savedAppType,
+        source: "configuration",
+      });
+      if (s.values.oktaAppType !== savedAppType) return;
+    }
     hydrated.current = true;
     if (
       status.data &&
@@ -388,10 +476,19 @@ export function useProviderConnection(
         !sameScopes(status.data.client.scope, requestedScopes);
       dispatch({
         type: "connection",
-        saved: providerKey !== "snowflake" || !scopeMismatch,
+        saved:
+          !["snowflake", "okta"].includes(providerKey) ||
+          (!scopeMismatch &&
+            (providerKey !== "okta" ||
+              status.data.client.tokenEndpointAuthMethod ===
+                oktaConnection(s.values)?.authMethod)),
         authorized: false,
         tested: false,
-        configChanged: scopeMismatch,
+        configChanged:
+          scopeMismatch ||
+          (providerKey === "okta" &&
+            status.data.client.tokenEndpointAuthMethod !==
+              oktaConnection(s.values)?.authMethod),
       });
     }
   }, [
@@ -400,6 +497,8 @@ export function useProviderConnection(
     dispatch,
     providerKey,
     s.accessChosen,
+    s.values.oktaAppType,
+    s.values,
     requestedScopes,
     selectedConnection,
     configurableSource,
@@ -432,10 +531,7 @@ export function useProviderConnection(
       registerRollback?: (rollback: () => Promise<void>) => void,
     ) => {
       if (!configurableSource) return;
-      const selected =
-        providerKey === "snowflake"
-          ? snowflakeConnection(s.values)
-          : salesforceConnection(s.values);
+      const selected = selectedProviderConnection(providerKey, s.values);
       const selectedInstance =
         selected && "instanceUrl" in selected
           ? selected.instanceUrl
@@ -941,9 +1037,7 @@ export function useProviderConnection(
                   authorizationResponseIssParameterSupported:
                     providerKey === "github",
                   tokenEndpointAuthMethodsSupported:
-                    providerKey === "salesforce"
-                      ? ["none", "client_secret_post"]
-                      : ["client_secret_post"],
+                    providerTokenMethods(providerKey),
                   responseTypesSupported: ["code"],
                   codeChallengeMethodsSupported: ["S256"],
                   grantTypesSupported: ["authorization_code", "refresh_token"],
@@ -952,12 +1046,13 @@ export function useProviderConnection(
             clientConfiguration: {
               clientId: s.values.clientId.trim(),
               clientSecret:
-                providerKey === "salesforce"
+                providerKey === "salesforce" ||
+                (providerKey === "okta" && s.values.oktaAppType === "native")
                   ? undefined
                   : s.values.clientSecret.trim(),
               tokenEndpointAuthMethod:
-                salesforce?.authMethod ?? "client_secret_post",
-              scope: requestedScopes,
+                selectedConnection?.authMethod ?? "client_secret_post",
+              scope: providerKey === "okta" ? undefined : requestedScopes,
             },
           },
         },

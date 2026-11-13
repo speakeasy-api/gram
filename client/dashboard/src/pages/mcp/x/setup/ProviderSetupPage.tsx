@@ -5,6 +5,7 @@ import {
 import { useSdkClient } from "@/contexts/Sdk";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers";
+import { oktaSelectionForUrl } from "@/pages/catalog/provider-setup/okta";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
@@ -76,6 +77,16 @@ export function ProviderSetupPage({
     );
   const provider = setupProviderForUrl(remote.data?.url);
   if (!provider) return <Navigate to={overview} replace />;
+  if (provider === "okta")
+    return (
+      <ProviderSetupFlow
+        provider="okta"
+        serverUrl={remote.data?.url ?? ""}
+        mcpServer={mcpServer}
+        overviewHref={overview}
+        initialValues={oktaSelectionForUrl(remote.data?.url) ?? undefined}
+      />
+    );
   if (provider === "snowflake")
     return (
       <ProviderSetupFlow
@@ -241,10 +252,12 @@ function RetainedProviderSetup({
   const navigate = useNavigate();
   const routes = useRoutes();
   const [params] = useSearchParams();
-  const gatewayId =
-    provider === "snowflake" ? params.get("attachToGateway") : null;
+  const gatewayId = ["snowflake", "okta"].includes(provider)
+    ? params.get("attachToGateway")
+    : null;
   const completionHref =
-    provider === "snowflake" && params.get("customizePolicy") === "true"
+    ["snowflake", "okta"].includes(provider) &&
+    params.get("customizePolicy") === "true"
       ? routes.policyCenter.new.href() +
         policyNewPrefillQuery({
           ...parsePolicyNewPrefill(params),
@@ -258,7 +271,9 @@ function RetainedProviderSetup({
       provider,
       key,
       initialValues,
-      provider === "salesforce" || provider === "snowflake"
+      provider === "salesforce" ||
+        provider === "snowflake" ||
+        provider === "okta"
         ? providerSourceFingerprint(mcpServer.remoteMcpServerId, {
             url: serverUrl,
             instanceUrl: sourceInstance,
@@ -304,8 +319,9 @@ function LiveSetupConnection({
   const sdk = useSdkClient();
   const cache = useQueryClient();
   const [params] = useSearchParams();
-  const gatewayId =
-    s.provider === "snowflake" ? params.get("attachToGateway") : null;
+  const gatewayId = ["snowflake", "okta"].includes(s.provider)
+    ? params.get("attachToGateway")
+    : null;
   const live = useProviderConnection(
     s,
     dispatch,

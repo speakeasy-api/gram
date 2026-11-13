@@ -5,7 +5,7 @@ description: Use when adding, integrating, changing, or reviewing a provider's M
 
 # Implementing MCP provider setup
 
-Extend the approved setup from Catalog Add through verified connection. Reuse working provider code and shared actions.
+Extend the approved Catalog Add → server Setup → verified connection flow.
 
 ## Establish scope and sources
 
@@ -23,7 +23,9 @@ Approved appearance establishes presentation, not provisioning, support, authent
 
 ## Locate implementation
 
-Use the [code map](../../../client/dashboard/src/pages/catalog/provider-setup/README.md) to locate owning files and tests on the active branch. Before provider-specific changes, read the relevant [provider contract](references/provider-contracts.md): Slack permissions, GitHub registration, Salesforce app/domain/source handling, or Snowflake endpoints, SQL and OAuth. Follow `frontend` for shared components and styling.
+Use the [code map](../../../client/dashboard/src/pages/catalog/provider-setup/README.md) to locate owning files and tests on the active branch. Before provider-specific changes, read the relevant [provider contract](references/provider-contracts.md): Slack permissions, GitHub registration, Salesforce app/domain/source handling, Snowflake endpoints, SQL and OAuth, or Okta organization/app/PKCE configuration. Follow `frontend` for shared components and styling.
+
+When a second provider needs the same behavior, extend the shared implementation. Keep provider-specific contracts separate.
 
 ## Preserve first-time progression
 
@@ -33,7 +35,7 @@ Keep the Add modal’s existing name, identity and guardrail controls. Keep the 
 
 Treat creation, configuration, verification and serving as separate transitions: create the disabled MCP server, open its Setup page, then configure it. Before declaring missing endpoint details a creation blocker, inspect existing create/update APIs and disabled-state gates. A required URL need not be the final connection URL.
 
-For an approved temporary endpoint, verify that probing, OAuth, connection testing and enablement cannot use it before replacement. Cover reload, direct routes, Settings and gateway entry; a disabled wizard button alone is insufficient. Keep catalog authentication metadata accurate.
+For an approved temporary endpoint, skip probing, automatic identity configuration and icon discovery. Replace it with the validated upstream before OAuth or testing; backend guards must reject enabled creation and enablement until replacement. Cover reload, direct routes, Settings and gateway entry; a disabled wizard button alone is insufficient. Reuse the catalog installer's guardrail creation and rollback. Keep catalog authentication metadata accurate.
 
 If contracts cannot preserve this sequence safely, pause that path and ask for guidance with the exact missing behavior. Continue independent work. Modal fields or a pre-creation catalog wizard are not authorized workarounds.
 

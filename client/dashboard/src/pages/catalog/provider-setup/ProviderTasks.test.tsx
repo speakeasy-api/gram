@@ -1,7 +1,7 @@
 import { scopesFor } from "./provider-data";
 import { connectionFixture } from "./connection-fixture";
 import { useReducer } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -13,6 +13,7 @@ import {
 } from "./state";
 import { SetupContext } from "./setup-context";
 import { ProviderTask } from "./ProviderTasks";
+import { ExternalAction } from "./shared";
 
 const callback = vi.hoisted(() => ({
   data: { callbackUrl: "https://current.example/callback" },
@@ -30,6 +31,22 @@ afterEach(() => {
   callback.data.callbackUrl = "https://current.example/callback";
   callback.isError = false;
   callback.refetch.mockClear();
+});
+
+it("disables an external action even when its URL is known", () => {
+  render(
+    <ExternalAction
+      title="Open app"
+      label="Open Okta"
+      href="https://example.okta.com"
+      disabled
+    />,
+  );
+  expect(screen.queryByRole("link", { name: "Open Okta" })).toBeNull();
+  expect(
+    screen.getByRole<HTMLButtonElement>("button", { name: "Open Okta" })
+      .disabled,
+  ).toBe(true);
 });
 function SavedCredentials({ provider }: { provider: "slack" | "github" }) {
   const [s, dispatch] = useReducer(reduce, {
@@ -420,74 +437,6 @@ it.each([
   },
 );
 
-it.each([
-  ["github", "GitHub", "permission to manage OAuth apps"],
-  ["slack", "Slack", "permission to manage an app"],
-  ["salesforce", "Salesforce", "Salesforce System Administrator access"],
-] as const)(
-  "uses the shared setup-plan card with %s content",
-  (provider, name, requirement) => {
-    const s = { ...initialState(provider), step: "begin" };
-    const dispatch = vi.fn<(action: Action) => void>();
-    render(
-      <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
-        <ProviderTask serverName={name} />
-      </SetupContext>,
-    );
-    const heading = screen.getByRole("heading", {
-      name: `Let’s connect ${name} to Speakeasy.`,
-    });
-    expect(heading).toBeDefined();
-    expect(screen.getByText(requirement, { exact: false })).toBeDefined();
-    if (provider === "salesforce") {
-      expect(
-        screen.getByText("create your own External Client App", {
-          exact: false,
-        }),
-      ).toBeDefined();
-      expect(
-        screen.queryByText("Using an existing app or an IP allowlist?"),
-      ).toBeNull();
-      expect(screen.queryByText("Organization approval and SSO")).toBeNull();
-    }
-  },
-);
-
-it("renders the published installation link and support handoff details", async () => {
-  const user = userEvent.setup();
-  render(<SalesforceFixture step="choices" />);
-  await user.click(screen.getByText("Sandbox", { exact: true }));
-  await user.click(screen.getByText("Use Speakeasy’s app", { exact: true }));
-  await user.click(screen.getByRole("button", { name: "Continue" }));
-  await user.click(screen.getByRole("button", { name: "Continue" }));
-  expect(
-    screen
-      .getByRole("link", { name: "Open Salesforce installation" })
-      .getAttribute("href"),
-  ).toBe(
-    "https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2",
-  );
-  expect(
-    screen.getByText(/Installation alone does not complete OAuth/),
-  ).toBeDefined();
-  await user.click(screen.getByRole("button", { name: "Continue" }));
-  expect(
-    screen
-      .getByRole("link", { name: "Read support instructions" })
-      .getAttribute("href"),
-  ).toBe(
-    "https://www.speakeasy.com/docs/ai-control-plane/guides/salesforce#contact-speakeasy-support",
-  );
-  expect(screen.getByLabelText("Selected MCP endpoint")).toHaveProperty(
-    "value",
-    "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-reads",
-  );
-  expect(
-    screen.getByText(/Your next step is with Speakeasy support/),
-  ).toBeDefined();
-  expect(screen.queryByLabelText("Consumer Key")).toBeNull();
-});
-
 describe("Snowflake instructions", () => {
   it("keeps SQL workspace instructions on their own step without input fields", () => {
     const account = task("account");
@@ -668,3 +617,231 @@ describe("Snowflake instructions", () => {
     expect(text).toContain("OAUTH_CLIENT_TYPE = 'CONFIDENTIAL'");
   });
 });
+
+it.each([
+  ["github", "GitHub", "permission to manage OAuth apps"],
+  ["slack", "Slack", "permission to manage an app"],
+  ["salesforce", "Salesforce", "Salesforce System Administrator access"],
+] as const)(
+  "uses the shared setup-plan card with %s content",
+  (provider, name, requirement) => {
+    const s = { ...initialState(provider), step: "begin" };
+    const dispatch = vi.fn<(action: Action) => void>();
+    render(
+      <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
+        <ProviderTask serverName={name} />
+      </SetupContext>,
+    );
+    const heading = screen.getByRole("heading", {
+      name: `Let’s connect ${name} to Speakeasy.`,
+    });
+    expect(heading).toBeDefined();
+    expect(screen.getByText(requirement, { exact: false })).toBeDefined();
+    if (provider === "salesforce") {
+      expect(
+        screen.getByText("create your own External Client App", {
+          exact: false,
+        }),
+      ).toBeDefined();
+      expect(
+        screen.queryByText("Using an existing app or an IP allowlist?"),
+      ).toBeNull();
+      expect(screen.queryByText("Organization approval and SSO")).toBeNull();
+    }
+  },
+);
+
+it("renders the published installation link and support handoff details", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="choices" />);
+  await user.click(screen.getByText("Sandbox", { exact: true }));
+  await user.click(screen.getByText("Use Speakeasy’s app", { exact: true }));
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen
+      .getByRole("link", { name: "Open Salesforce installation" })
+      .getAttribute("href"),
+  ).toBe(
+    "https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2",
+  );
+  expect(
+    screen.getByText(/Installation alone does not complete OAuth/),
+  ).toBeDefined();
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen
+      .getByRole("link", { name: "Read support instructions" })
+      .getAttribute("href"),
+  ).toBe(
+    "https://www.speakeasy.com/docs/ai-control-plane/guides/salesforce#contact-speakeasy-support",
+  );
+  expect(screen.getByLabelText("Selected MCP endpoint")).toHaveProperty(
+    "value",
+    "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-reads",
+  );
+  expect(
+    screen.getByText(/Your next step is with Speakeasy support/),
+  ).toBeDefined();
+  expect(screen.queryByLabelText("Consumer Key")).toBeNull();
+});
+
+it("explains why Open Okta is disabled on hover and keyboard focus", async () => {
+  const { TooltipProvider } = await import("@/components/ui/Tooltip");
+  const dispatch = vi.fn<() => void>();
+  const s = { ...initialState("okta"), step: "app" };
+  render(
+    <TooltipProvider delayDuration={0}>
+      <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
+        <ProviderTask serverName="Okta" />
+      </SetupContext>
+    </TooltipProvider>,
+  );
+  expect(
+    screen.getByRole<HTMLButtonElement>("button", { name: "Open Okta" })
+      .disabled,
+  ).toBe(true);
+  const user = userEvent.setup();
+  const trigger = screen.getByRole("group", { name: "Open Okta unavailable" });
+  await user.hover(trigger);
+  expect((await screen.findByRole("tooltip")).textContent).toContain(
+    "Enter a valid Okta organization URL",
+  );
+  await user.unhover(trigger);
+  trigger.focus();
+  expect((await screen.findByRole("tooltip")).textContent).toContain(
+    "Okta organization step",
+  );
+});
+
+function OktaTaskFixture({
+  step,
+  appType = "web",
+  appChoice = "new",
+  saved = false,
+}: {
+  step: string;
+  appType?: string;
+  appChoice?: string;
+  saved?: boolean;
+}) {
+  const dispatch = vi.fn<() => void>();
+  const s = initialState("okta");
+  Object.assign(s.values, {
+    oktaOrg: "https://example.okta.com",
+    oktaAppType: appType,
+    appChoice,
+  });
+  return (
+    <SetupContext
+      value={{
+        s: { ...s, step, saved },
+        dispatch,
+        live: connectionFixture(dispatch),
+      }}
+    >
+      <ProviderTask serverName="Okta" />
+    </SetupContext>
+  );
+}
+
+it.each(["web", "native"])(
+  "shows only the chosen %s app creation or editing instructions",
+  (appType) => {
+    const view = render(<OktaTaskFixture step="app" appType={appType} />);
+    expect(screen.getByText("Create App Integration")).toBeDefined();
+    expect(screen.getByLabelText("Sign-in redirect URI")).toHaveProperty(
+      "value",
+      "https://current.example/callback",
+    );
+    const application =
+      appType === "web" ? "Web Application" : "Native Application";
+    const alternative =
+      appType === "web" ? "Native Application" : "Web Application";
+    const creation = within(screen.getByText("In Okta").parentElement!);
+    expect(creation.getByText(application)).toBeDefined();
+    expect(creation.queryByText(alternative)).toBeNull();
+    expect(creation.getByText("Authorization code")).toBeDefined();
+    expect(screen.getByLabelText("App integration name")).toHaveProperty(
+      "value",
+      "Speakeasy AI Control Plane – Okta MCP",
+    );
+    const fields = [...view.container.querySelectorAll<HTMLElement>("input")];
+    expect(
+      fields.indexOf(screen.getByLabelText("App integration name")),
+    ).toBeLessThan(
+      fields.indexOf(screen.getByLabelText("Sign-in redirect URI")),
+    );
+    const instructions =
+      screen.getByText("In Okta").parentElement!.textContent!;
+    expect(instructions.indexOf("In Assignments, select")).toBeGreaterThan(-1);
+    expect(instructions.indexOf("In Assignments, select")).toBeLessThan(
+      instructions.indexOf("Save the app."),
+    );
+    view.rerender(
+      <OktaTaskFixture step="app" appType={appType} appChoice="existing" />,
+    );
+    expect(screen.queryByText("Create App Integration")).toBeNull();
+    expect(screen.queryByText("App integration name")).toBeNull();
+    expect(screen.queryByLabelText("App integration name")).toBeNull();
+    expect(screen.getByText(/Keep any redirect URIs/)).toBeDefined();
+    const editing = within(screen.getByText("In Okta").parentElement!);
+    expect(editing.getByText(application)).toBeDefined();
+    expect(editing.queryByText(alternative)).toBeNull();
+    expect(screen.queryByText(/select the people or groups/)).toBeNull();
+  },
+);
+
+it("guides granting scopes in Okta without collecting or copying them", () => {
+  render(<OktaTaskFixture step="permissions" />);
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect(screen.queryByRole("button", { name: /copy/i })).toBeNull();
+  const instructions = within(screen.getByText("In Okta").parentElement!);
+  expect(
+    instructions.getAllByRole("listitem").map((item) => item.textContent),
+  ).toEqual([
+    "Select the Okta API Scopes tab.",
+    "Click Grant for the API scopes required by the tools you want to use.",
+    "Go to the General tab and confirm that Proof Key for Code Exchange (PKCE) is selected.",
+  ]);
+  expect(
+    screen
+      .getByRole("link", { name: "Find the API scopes for your tools" })
+      .getAttribute("href"),
+  ).toContain("scope-based-tool-loading");
+});
+
+it("keeps later assignment instructions only for existing Okta apps", () => {
+  const view = render(
+    <OktaTaskFixture step="permissions" appChoice="existing" />,
+  );
+  expect(screen.getByRole("heading", { name: "Assign people" })).toBeDefined();
+  expect(screen.getByText(/Assign the people or groups/)).toBeDefined();
+  view.rerender(<OktaTaskFixture step="permissions" appChoice="new" />);
+  expect(screen.queryByRole("heading", { name: "Assign people" })).toBeNull();
+  expect(screen.queryByText(/Assign the people or groups/)).toBeNull();
+});
+
+it.each(["web", "native"])(
+  "shows %s credentials and hides instructions after saving",
+  (appType) => {
+    const view = render(
+      <OktaTaskFixture step="credentials" appType={appType} />,
+    );
+    expect(screen.getByLabelText("Client ID")).toBeDefined();
+    if (appType === "web") {
+      expect(screen.getByLabelText("Client Secret")).toBeDefined();
+      expect(screen.getByText("Client Credentials")).toBeDefined();
+    } else {
+      expect(screen.queryByLabelText("Client Secret")).toBeNull();
+      expect(screen.queryByText(/client secret/i)).toBeNull();
+    }
+    view.rerender(
+      <OktaTaskFixture step="credentials" appType={appType} saved />,
+    );
+    expect(screen.queryByText("In Okta")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Update credentials" }),
+    ).toBeDefined();
+  },
+);

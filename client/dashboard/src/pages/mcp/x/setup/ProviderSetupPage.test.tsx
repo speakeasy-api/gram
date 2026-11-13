@@ -1,4 +1,4 @@
-import { snowflakeSetupUrl } from "@/pages/catalog/snowflake-install";
+import { accountSetupUrls } from "@/pages/catalog/account-provider";
 import { StrictMode, type Dispatch, type PropsWithChildren } from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   dispatch: vi.fn<Dispatch<Action>>(),
   provider: "github",
+  oktaUrl: "https://example.okta.com/mcp",
   snowflakeUrl:
     "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP",
   initiallyValidated: false,
@@ -41,12 +42,12 @@ const mocks = vi.hoisted(() => ({
   pending: "",
   error: "",
   loading: false,
-  headers: [] as RemoteMcpServerHeader[],
   loadProgress: vi.fn(),
   entry: "/setup",
   members: vi.fn(),
   addMember: vi.fn(),
   configured: undefined as (() => Promise<void>) | undefined,
+  headers: [] as RemoteMcpServerHeader[],
 }));
 vi.mock("canvas-confetti", () => ({ default: { create: mocks.create } }));
 vi.mock("@/contexts/Auth", () => ({
@@ -69,6 +70,7 @@ vi.mock("@/routes", () => ({
 vi.mock("@gram/client/react-query/getRemoteMcpServer", () => ({
   useGetRemoteMcpServer: () => {
     const urls: Record<string, string> = {
+      okta: mocks.oktaUrl,
       github: "https://api.githubcopilot.com/mcp",
       slack: "https://mcp.slack.com/mcp",
       salesforce:
@@ -246,6 +248,7 @@ beforeEach(() => {
   mocks.members.mockResolvedValue({ members: [] });
   mocks.addMember.mockResolvedValue({});
   mocks.provider = "github";
+  mocks.oktaUrl = "https://example.okta.com/mcp";
   mocks.snowflakeUrl =
     "https://example.snowflakecomputing.com/api/v2/databases/APP/schemas/PUBLIC/mcp-servers/MCP";
   mocks.initiallyValidated = false;
@@ -262,7 +265,7 @@ afterEach(() => {
 });
 
 describe("provider setup completion celebration", () => {
-  it.each(["github", "slack", "salesforce", "snowflake"] as const)(
+  it.each(["github", "slack", "salesforce", "snowflake", "okta"] as const)(
     "celebrates %s after success renders, without delaying completion",
     async (provider) => {
       mocks.provider = provider;
@@ -458,29 +461,42 @@ it("allows Salesforce installation instructions but disables Continue at the sup
   expect(next().disabled).toBe(false);
 });
 
-it("opens the installed Snowflake Setup page before its account details exist", () => {
-  mocks.provider = "snowflake";
-  mocks.snowflakeUrl = snowflakeSetupUrl;
-  mocks.initialStep = "begin";
-  render(<Setup />);
-  expect(screen.getByRole("heading", { name: "Setup plan" })).toBeDefined();
-  expect(
-    screen.getByRole("link", { name: "Read the guide" }).getAttribute("href"),
-  ).toBe("https://www.speakeasy.com/docs/ai-control-plane/guides/snowflake");
-  expect(mocks.loadProgress).toHaveBeenCalledWith(
-    "snowflake",
-    expect.any(String),
-    undefined,
-    providerSourceFingerprint(server.remoteMcpServerId!, {
-      url: snowflakeSetupUrl,
-    }),
-  );
-});
+it.each(["snowflake", "okta"] as const)(
+  "opens the installed %s Setup page before its account details exist",
+  (provider) => {
+    mocks.provider = provider;
+    mocks.snowflakeUrl = accountSetupUrls.snowflake;
+    mocks.oktaUrl = accountSetupUrls.okta;
+    mocks.initialStep = "begin";
+    render(<Setup />);
+    expect(screen.getByRole("heading", { name: "Setup plan" })).toBeDefined();
+    expect(
+      screen.getByRole("link", { name: "Read the guide" }).getAttribute("href"),
+    ).toBe(
+      provider === "okta"
+        ? "https://help.okta.com/mcp/en-us/content/topics/mcpserver/oidc-pkce-browser-based.htm"
+        : "https://www.speakeasy.com/docs/ai-control-plane/guides/snowflake",
+    );
+    expect(mocks.loadProgress).toHaveBeenCalledWith(
+      provider,
+      expect.any(String),
+      undefined,
+      providerSourceFingerprint(server.remoteMcpServerId!, {
+        url: accountSetupUrls[provider],
+      }),
+    );
+  },
+);
 
-it.each([false, true])(
-  "keeps the Snowflake server setup destination (customize=%s)",
-  async (customize) => {
-    mocks.provider = "snowflake";
+it.each([
+  ["snowflake", false],
+  ["snowflake", true],
+  ["okta", false],
+  ["okta", true],
+] as const)(
+  "keeps the %s server setup destination (customize=%s)",
+  async (provider, customize) => {
+    mocks.provider = provider;
     mocks.entry =
       "/setup?attachToGateway=gateway-id" +
       (customize

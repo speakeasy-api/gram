@@ -1,4 +1,5 @@
-import { snowflakeSetupUrl } from "@/pages/catalog/snowflake-install";
+import { pendingAccountProvider } from "@/pages/catalog/account-provider";
+import { oktaSelectionForUrl } from "@/pages/catalog/provider-setup/okta";
 import { snowflakeSelectionForUrl } from "@/pages/catalog/provider-setup/snowflake";
 import {
   salesforceSelectionForUrl,
@@ -19,7 +20,8 @@ export function setupProviderForUrl(
   value: string | undefined,
 ): SetupProvider | null {
   if (!value) return null;
-  if (value === snowflakeSetupUrl) return "snowflake";
+  const pending = pendingAccountProvider(value);
+  if (pending) return pending;
   try {
     const url = new URL(value);
     if (
@@ -38,6 +40,7 @@ export function setupProviderForUrl(
       return "github";
     if (salesforceSelectionForUrl(value)) return "salesforce";
     if (snowflakeSelectionForUrl(value)) return "snowflake";
+    if (oktaSelectionForUrl(value)) return "okta";
     return null;
   } catch {
     return null;
@@ -95,6 +98,14 @@ export function saveProviderProgress(key: string, state: State): void {
                 sourceFingerprint: state.sourceFingerprint,
               }
             : {}),
+          ...(state.provider === "okta"
+            ? {
+                oktaOrg: state.values.oktaOrg,
+                oktaAppType: state.values.oktaAppType,
+                configurationPending: state.configChanged,
+                sourceFingerprint: state.sourceFingerprint,
+              }
+            : {}),
           ...(state.provider === "snowflake"
             ? {
                 host: state.values.host,
@@ -135,7 +146,8 @@ export function loadProviderProgress(
 ): State {
   const initial = initialState(provider);
   Object.assign(initial.values, defaults);
-  if (provider === "snowflake") initial.sourceFingerprint = sourceFingerprint;
+  if (provider === "snowflake" || provider === "okta")
+    initial.sourceFingerprint = sourceFingerprint;
   if (provider === "salesforce") {
     initial.sourceFingerprint = sourceFingerprint;
     Object.assign(initial.values, {
@@ -164,7 +176,9 @@ export function loadProviderProgress(
       return initial;
     const { values } = value;
     const changedSource =
-      (provider === "salesforce" || provider === "snowflake") &&
+      (provider === "salesforce" ||
+        provider === "snowflake" ||
+        provider === "okta") &&
       !!defaults &&
       !!sourceFingerprint &&
       (!("sourceFingerprint" in values) ||
@@ -228,6 +242,26 @@ export function loadProviderProgress(
       if (!salesforceConnection(initial.values))
         initial.values.salesforceDomain = "";
     }
+    if (provider === "okta") {
+      initial.configChanged =
+        "configurationPending" in values &&
+        values.configurationPending === true;
+      for (const field of ["oktaOrg", "oktaAppType"] as const) {
+        const candidate = (values as Record<string, unknown>)[field];
+        if (
+          !changedSource &&
+          (field !== "oktaOrg" ||
+            !defaults ||
+            !sourceFingerprint ||
+            initial.configChanged) &&
+          typeof candidate === "string" &&
+          candidate.length <= 10000
+        )
+          initial.values[field] = candidate;
+      }
+      if (!["web", "native"].includes(initial.values.oktaAppType))
+        initial.values.oktaAppType = "web";
+    }
     if (provider === "snowflake") {
       initial.configChanged =
         "configurationPending" in values &&
@@ -284,8 +318,7 @@ export function loadProviderProgress(
       validSteps.includes(value.step)
     )
       initial.step = value.step;
-    if (changedSource)
-      initial.step = provider === "snowflake" ? "account" : "choices";
+    if (changedSource) initial.step = steps(initial)[1]!.id;
     if (!changedSource && "done" in value && Array.isArray(value.done))
       initial.done = value.done.filter(
         (id: unknown): id is string =>
