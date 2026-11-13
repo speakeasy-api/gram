@@ -70,8 +70,16 @@ function render(enabled: boolean) {
       <MemoryRouter>{children}</MemoryRouter>
     </QueryClientProvider>
   );
-  return renderHook(() => useShadowMCPServerCandidates({ enabled }), {
-    wrapper,
+  return renderHook(
+    ({ open }: { open: boolean }) =>
+      useShadowMCPServerCandidates({ enabled: open }),
+    { wrapper, initialProps: { open: enabled } },
+  );
+}
+
+function settle(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, 20);
   });
 }
 
@@ -87,9 +95,7 @@ describe("useShadowMCPServerCandidates", () => {
     mocks.pages[""] = { servers: [server("notion")] };
     const { result } = render(false);
 
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 20);
-    });
+    await settle();
     expect(mocks.requests).toEqual([]);
     expect(result.current).toEqual([]);
   });
@@ -143,9 +149,7 @@ describe("useShadowMCPServerCandidates", () => {
     const { result } = render(true);
 
     await waitFor(() => expect(mocks.requests).toHaveLength(2));
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 20);
-    });
+    await settle();
     expect(mocks.requests).toHaveLength(2);
     expect(result.current.map((c) => c.id)).toEqual([
       "shadow_mcp_server:notion",
@@ -157,6 +161,43 @@ describe("useShadowMCPServerCandidates", () => {
     const { result } = render(true);
 
     await waitFor(() => expect(mocks.requests).toHaveLength(1));
+    await settle();
+    expect(mocks.requests).toHaveLength(1);
     expect(result.current).toEqual([]);
+  });
+
+  it("retries a failed page the next time the palette opens", async () => {
+    mocks.pages[""] = { servers: [server("notion")], nextCursor: "page-2" };
+    mocks.pages["page-2"] = new Error("boom");
+    const { result, rerender } = render(true);
+    await waitFor(() => expect(mocks.requests).toHaveLength(2));
+    await settle();
+
+    rerender({ open: false });
+    mocks.pages["page-2"] = { servers: [server("github")] };
+    rerender({ open: true });
+
+    await waitFor(() =>
+      expect(result.current.map((c) => c.id)).toEqual([
+        "shadow_mcp_server:notion",
+        "shadow_mcp_server:github",
+      ]),
+    );
+  });
+
+  it("titles a request-only local command by its command", async () => {
+    mocks.pages[""] = {
+      servers: [
+        server("npx-foo", {
+          targetKind: "stdio_command",
+          urlHost: "",
+          canonicalServerUrl: "npx -y foo-mcp",
+        }),
+      ],
+    };
+    const { result } = render(true);
+
+    await waitFor(() => expect(result.current).toHaveLength(1));
+    expect(result.current[0]?.title).toBe("npx -y foo-mcp");
   });
 });

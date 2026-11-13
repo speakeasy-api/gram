@@ -49,30 +49,24 @@ export function useShadowMCPServerCandidates({
     retry: false,
     throwOnError: false,
   });
-  const {
-    hasNextPage,
-    isFetchingNextPage,
-    isFetchNextPageError,
-    fetchNextPage,
-  } = inventory;
+  const { hasNextPage, isFetching, isFetchNextPageError, fetchNextPage } =
+    inventory;
 
   // The palette has no pagination UI. Drain the cursor while it is open so a
-  // server stays searchable whichever page holds it, and stop after a failed
-  // page rather than retrying in a render loop.
+  // server stays searchable whichever page holds it. Wait for any fetch in
+  // flight, including the refetch of cached pages when the palette reopens,
+  // so pages never load concurrently. After a failed page, stop rather than
+  // retry in a render loop: the next open refetches, which clears the error
+  // and resumes draining.
   useEffect(() => {
-    if (
-      !queryEnabled ||
-      !hasNextPage ||
-      isFetchingNextPage ||
-      isFetchNextPageError
-    ) {
+    if (!queryEnabled || !hasNextPage || isFetching || isFetchNextPageError) {
       return;
     }
     void fetchNextPage().catch(() => undefined);
   }, [
     queryEnabled,
     hasNextPage,
-    isFetchingNextPage,
+    isFetching,
     isFetchNextPageError,
     fetchNextPage,
   ]);
@@ -88,7 +82,8 @@ export function useShadowMCPServerCandidates({
       return {
         id: `shadow_mcp_server:${server.serverSlug}`,
         kind: "shadow_mcp_server",
-        title: server.serverName || server.urlHost,
+        // A local command known only from a request has no name or host.
+        title: server.serverName || server.urlHost || server.canonicalServerUrl,
         detail: isLocalCommand ? "Shadow MCP · local command" : "Shadow MCP",
         // Server URLs and commands are data typed by agents' users; they are
         // matched locally and never sent anywhere.
