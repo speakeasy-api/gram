@@ -110,7 +110,9 @@ func TestAssistantReasoningSelection(t *testing.T) {
 		{ProjectID: "", AssistantID: input.AssistantID, ReasoningEffort: "high", Confirmed: true},
 	} {
 		_, err := service.setReasoningEffort(ctx, principal, invalid)
-		require.Error(t, err)
+		var shared *oops.ShareableError
+		require.ErrorAs(t, err, &shared)
+		require.Equal(t, oops.CodeBadRequest, shared.Code)
 	}
 	_, err = service.setReasoningEffort(t.Context(), principal, input)
 	require.Error(t, err)

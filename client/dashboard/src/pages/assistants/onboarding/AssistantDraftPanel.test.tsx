@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { ReasoningEffort } from "./reasoning-effort";
 import { AssistantDraftPanel } from "./AssistantDraftPanel";
 
 const state = vi.hoisted(() => ({
@@ -38,15 +39,29 @@ vi.mock("@gram/client/react-query/triggers.js", () => ({
 vi.mock("@gram/client/react-query/assistantsDelete.js", () => ({
   useAssistantsDeleteMutation: () => ({ isPending: false }),
 }));
-vi.mock("./useAssistantDraft", () => ({
-  useAssistantDraft: () => ({
-    assistantId: state.assistantId,
-    reasoningEffort: "medium",
-    getReasoningEffort: () => "medium",
-    setReasoningEffort: state.setReasoningEffort,
-    assistant: { id: "assistant", name: "Example assistant", instructions: "" },
-  }),
-}));
+vi.mock("./useAssistantDraft", async () => {
+  const React = await import("react");
+  return {
+    useAssistantDraft: () => {
+      const [reasoningEffort, setReasoningEffort] =
+        React.useState<ReasoningEffort>("medium");
+      return {
+        assistantId: state.assistantId,
+        reasoningEffort,
+        getReasoningEffort: () => reasoningEffort,
+        setReasoningEffort: (value: ReasoningEffort) => {
+          state.setReasoningEffort(value);
+          setReasoningEffort(value);
+        },
+        assistant: {
+          id: "assistant",
+          name: "Example assistant",
+          instructions: "",
+        },
+      };
+    },
+  };
+});
 vi.mock("./AssistantIdentitySettings", () => ({
   AssistantIdentitySettings: () => <div>Identity settings content</div>,
 }));
@@ -113,6 +128,9 @@ it("shows the draft selection and lets onboarding select Off", () => {
   });
   fireEvent.click(screen.getByRole("option", { name: "Off" }));
   expect(state.setReasoningEffort).toHaveBeenCalledWith("none");
+  expect(
+    screen.getByRole("combobox", { name: "Reasoning effort" }).textContent,
+  ).toBe("Off");
 });
 it("disables the onboarding selector without write permission", () => {
   state.assistantId = null;

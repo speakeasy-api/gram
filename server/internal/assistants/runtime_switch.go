@@ -239,6 +239,10 @@ func (s *ServiceCore) finishRuntimeSwitchRetirement(ctx context.Context, runtime
 // Pinned Kit supports low/medium/high, but has no disabled-reasoning mode.
 // Keep "none" available on runtime v2 without substituting a provider default.
 func validateRuntimeReasoningEffort(version int16, effort string) error {
+	effort = normalizeReasoningEffort(effort)
+	if err := validateReasoningEffort(effort); err != nil {
+		return err
+	}
 	if version == 3 && effort == "none" {
 		return assistantValidationError("Kit runtime does not support reasoning effort none; select low, medium or high, or use runtime v2")
 	}

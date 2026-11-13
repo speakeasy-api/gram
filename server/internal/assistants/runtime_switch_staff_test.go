@@ -15,7 +15,7 @@ import (
 
 func TestStaffSwitchToKitValidatesReasoningBeforeRetirement(t *testing.T) {
 	t.Parallel()
-	for _, effort := range []string{"none", "medium", "high", "null"} {
+	for _, effort := range []string{"none", "medium", "high", "null", "empty", "malformed"} {
 		t.Run(effort, func(t *testing.T) {
 			t.Parallel()
 			conn, err := assistantsInfra.CloneTestDatabase(t, "staff_kit_reasoning_"+effort)
@@ -24,7 +24,7 @@ func TestStaffSwitchToKitValidatesReasoningBeforeRetirement(t *testing.T) {
 			core := newProvisioningCore(t, conn)
 			projectID := newProvisioningProject(t, conn, "staff-kit-reasoning")
 			configuredEffort := effort
-			if effort == "null" {
+			if effort == "null" || effort == "empty" || effort == "malformed" {
 				configuredEffort = "medium"
 			}
 			assistant, err := core.CreateAssistant(ctx, "org-test", projectID, "user-1", "Staff switch", "test-model", "", nil, nil, 300, 1, StatusPaused, true, nil, nil, configuredEffort)
@@ -39,6 +39,15 @@ func TestStaffSwitchToKitValidatesReasoningBeforeRetirement(t *testing.T) {
 			q := assistantrepo.New(conn)
 			if effort == "null" {
 				require.NoError(t, q.ClearAssistantReasoningEffortForTest(ctx, assistantrepo.ClearAssistantReasoningEffortForTestParams{ProjectID: projectID, AssistantID: assistant.ID}))
+			}
+
+			if effort == "empty" || effort == "malformed" {
+				persistedEffort := effort
+				if effort == "empty" {
+					persistedEffort = ""
+				}
+				_, err = q.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{ProjectID: projectID, AssistantID: assistant.ID, ReasoningEffort: pgtype.Text{String: persistedEffort, Valid: true}})
+				require.NoError(t, err)
 			}
 			now, runtimeID := time.Now().UTC(), uuid.New()
 			require.NoError(t, q.CreateAssistantRuntime(ctx, assistantrepo.CreateAssistantRuntimeParams{
@@ -64,10 +73,9 @@ func TestStaffSwitchToKitValidatesReasoningBeforeRetirement(t *testing.T) {
 			require.NoError(t, err)
 			assistantAfter, err := q.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: projectID, AssistantID: assistant.ID})
 			require.NoError(t, err)
-			if effort == "none" {
-				require.ErrorIs(t, switchErr, errAssistantValidation)
-				require.ErrorContains(t, switchErr, "select low, medium or high")
-				require.Empty(t, outcome)
+			if effort == "none" || effort == "malformed" {
+				require.NoError(t, switchErr)
+				require.Equal(t, KitSwitchIneligible, outcome)
 				require.Equal(t, assistantBefore, assistantAfter)
 				require.Equal(t, runtimeBefore, runtimeAfter, "refusal must not retire or alter existing runtime authority")
 				// The same assistant is otherwise eligible: correcting only effort permits the switch.
@@ -89,4 +97,19 @@ func TestStaffSwitchToKitValidatesReasoningBeforeRetirement(t *testing.T) {
 			require.Equal(t, runtimeBefore.BackendMetadataJson, runtimeAfter.BackendMetadataJson)
 		})
 	}
+}
+
+func TestRuntimeReasoningEffortValidatesCompleteEnum(t *testing.T) {
+	t.Parallel()
+	for _, version := range []int16{2, 3} {
+		require.NoError(t, validateRuntimeReasoningEffort(version, ""), "legacy empty values mean medium")
+		for _, effort := range []string{"low", "medium", "high"} {
+			require.NoError(t, validateRuntimeReasoningEffort(version, effort))
+		}
+		for _, effort := range []string{"malformed", "HIGH", " medium", "default", "minimal"} {
+			require.ErrorIs(t, validateRuntimeReasoningEffort(version, effort), errAssistantValidation)
+		}
+	}
+	require.NoError(t, validateRuntimeReasoningEffort(2, "none"))
+	require.ErrorIs(t, validateRuntimeReasoningEffort(3, "none"), errAssistantValidation)
 }
