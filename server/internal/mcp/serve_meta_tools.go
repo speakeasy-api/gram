@@ -270,6 +270,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	if err != nil {
 		contextvalues.ReplaceConnectionReference(ctx, contextvalues.ConnectionReference(callCtx))
 	}
+	if err != nil || attempt.status != 0 {
+		mcpconnectionattempts.MarkFailed(ctx)
+	}
 	if attempt.logged || attempt.proxied || (err == nil && attempt.status == 0) {
 		return body, err
 	}
@@ -324,7 +327,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	toolset, hosting, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code)
+			s.recordMemberOutcome(ctx, gate, member, failure.code, mcpconnectionattempts.Provider(failure.provider))
 		}
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			attempt.fail(metaMemberErrorStatus(err), memberErr.message)
@@ -339,7 +342,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	// toolset's hosting publicness.
 	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, hosting.Public, inputs)
 	if err != nil || !satisfied {
-		s.recordMemberFailure(ctx, gate, member, failureCode)
+		s.recordMemberOutcome(ctx, gate, member, failureCode)
 	}
 	if err != nil {
 		return nil, err
@@ -385,8 +388,11 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 			code = mcpconnectionattempts.Code{}
 		}
 	}
-	if code != (mcpconnectionattempts.Code{}) {
-		s.recordMemberFailure(ctx, gate, member, code)
+	switch {
+	case code != (mcpconnectionattempts.Code{}):
+		s.recordMemberOutcome(ctx, gate, member, code)
+	case err == nil:
+		s.recordMemberOutcome(ctx, gate, member, mcpconnectionattempts.ResultServed)
 	}
 	if err != nil {
 		// A member's execution failure must degrade that member, not the

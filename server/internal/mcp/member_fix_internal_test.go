@@ -280,7 +280,7 @@ func TestMemberFailureSignIn_MarksRowsByErrorType(t *testing.T) {
 	}{
 		{name: "agent connection missing", gate: agent, err: agent.agentReconnectError(member), detail: agentDetailNeedsReauth, reconnects: true},
 		{name: "agent connection missing, no link", gate: agent, err: agentServerCredentialError(member.slug), detail: agentDetailNeedsReauth, reconnects: true},
-		{name: "agent connection missing, wrapped", gate: agent, err: memberConnectionError{agent.agentReconnectError(member), resolveFailureHappened(errors.New("boom"))}, detail: agentDetailNeedsReauth, reconnects: true},
+		{name: "agent connection missing, wrapped", gate: agent, err: memberConnectionError{agent.agentReconnectError(member), resolveFailureHappened(errors.New("boom")), ""}, detail: agentDetailNeedsReauth, reconnects: true},
 		{name: "agent refused", gate: agent, err: refused, detail: refused.Error(), reconnects: false},
 		{name: "agent member error", gate: agent, err: &metaMemberError{message: `server "linear" is not currently servable`}, detail: `server "linear" is not currently servable`, reconnects: false},
 		{name: "agent unknown failure", gate: agent, err: errors.New("boom"), detail: "could not check this server", reconnects: false},

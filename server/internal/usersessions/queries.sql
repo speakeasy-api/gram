@@ -1837,21 +1837,24 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE
 RETURNING *;
 
--- name: GetExpiredUserSessionByRefreshTokenHash :one
--- Finds a session retired by reaching its deadline, by refresh-token hash for
--- the issuer and client that presented it, so a refusal can say the token
--- expired. Rows retired earlier (rotated or revoked) do not match: their reuse
--- stays "unknown or already used". Project scoping is intentionally NOT
--- applied here -- the OAuth surface is public and the issuer_id is the
--- authoritative scope.
-SELECT subject_urn
+-- name: GetSpentUserSessionByRefreshTokenHash :one
+-- Finds a retired session (rotated, revoked or expired) by refresh-token hash
+-- for the issuer and client that presented it, so a refusal can name its
+-- owner and say whether the token expired: expired is a session retired by
+-- reaching its deadline; any other retired session stays "unknown or already
+-- used". An expired row wins if several match. Project scoping is
+-- intentionally NOT applied here -- the OAuth surface is public and the
+-- issuer_id is the authoritative scope.
+SELECT
+  subject_urn,
+  COALESCE(deleted_at >= refresh_expires_at, FALSE)::boolean AS expired
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
   AND user_session_client_id = @user_session_client_id::uuid
   AND refresh_token_hash = @refresh_token_hash::text
   AND refresh_token_hash IS NOT NULL
   AND deleted IS TRUE
-  AND deleted_at >= refresh_expires_at
+ORDER BY expired DESC
 LIMIT 1;
 
 -- name: GetUserSessionPolicyByJTI :one

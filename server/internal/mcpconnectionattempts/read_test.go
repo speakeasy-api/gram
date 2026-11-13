@@ -213,3 +213,30 @@ func TestReadAttemptsBreaksAProviderTieLikeSummarize(t *testing.T) {
 	}))
 	require.Equal(t, 2, seen)
 }
+
+func TestReadAttemptsLeavesOutServedRequests(t *testing.T) {
+	t.Parallel()
+	ch, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	org := "org-" + uuid.NewString()
+	day := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)
+	scope := ServerScope(org, uuid.New(), uuid.New(), AppDCR)
+	subject := urn.NewUserSubject("user-" + uuid.NewString())
+	failed, served := AttemptAt(uuid.New(), day.Add(time.Hour), scope), AttemptAt(uuid.New(), day.Add(2*time.Hour), scope)
+
+	failedRow, err := RowAt(failed, StepMCPRequest, CodeInvalidBearerToken, true, day.Add(time.Hour), Subject(&subject))
+	require.NoError(t, err)
+	servedRow, err := RowAt(served, StepMCPRequest, ResultServed, true, day.Add(2*time.Hour), Subject(&subject))
+	require.NoError(t, err)
+	require.NoError(t, AppendRows(t.Context(), ch, []Row{failedRow, servedRow}))
+
+	for _, filter := range []AttemptFilter{
+		{StartedFrom: day, StartedBefore: day.AddDate(0, 0, 1), OrganizationID: org},
+		{StartedFrom: day, StartedBefore: day.AddDate(0, 0, 1), OrganizationID: org, FixCandidatesOnly: true},
+		{StartedFrom: day, StartedBefore: day.AddDate(0, 0, 1), OrganizationID: org, PeopleFailingFrom: day, PeopleFailingBefore: day.AddDate(0, 0, 1)},
+	} {
+		var ids []uuid.UUID
+		require.NoError(t, ReadAttempts(t.Context(), ch, filter, func(s AttemptSummary) { ids = append(ids, s.AttemptID) }))
+		require.Equal(t, []uuid.UUID{failed.ID()}, ids, "a served request is not an attempt to count or a fix")
+	}
+}

@@ -99,7 +99,7 @@ const (
 	unknownTableCode = 60
 )
 
-// dropReason says why events were not written. rate_limited and queue_reserved apply only to Start rows.
+// dropReason says why events were not written. rate_limited and queue_reserved apply only to Start and Served rows.
 type dropReason string
 
 const (
@@ -426,6 +426,7 @@ type Recorder struct {
 	logger      *slog.Logger
 	conn        driver.Conn
 	limiter     *onceLimiter
+	served      *servedConnections
 	logsEnabled func(context.Context, string) (bool, error)
 	deviceKeys  DeriveKey
 	exporter    *exporter
@@ -540,6 +541,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		logger:      logger,
 		conn:        conn,
 		limiter:     newOnceLimiter(),
+		served:      newServedConnections(),
 		logsEnabled: logsEnabled,
 		deviceKeys:  nil,
 		exporter:    nil,
@@ -582,6 +584,7 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		logger:      slog.New(slog.DiscardHandler),
 		conn:        nil,
 		limiter:     nil,
+		served:      newServedConnections(),
 		logsEnabled: logsEnabled,
 		deviceKeys:  nil,
 		exporter:    nil,
@@ -630,6 +633,8 @@ const (
 	limitStart
 	// limitOnce adds the per-key limit and repeats count to limitStart.
 	limitOnce
+	// limitServed keeps one row per connection per servedInterval, within limitStart's limits, and drops the rest.
+	limitServed
 )
 
 // Start records the first step of an attempt that any caller can begin, such as /authorize.
@@ -656,11 +661,21 @@ func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Hap
 // row still leaves a reference: every row folded together is stored under one id, the first's.
 // That row holds one held request's details, so its id names the failure, not which request
 // it was; rows with no known subject leave none, since different callers fold together.
+//
+// ResultServed is sampled instead: at most one row per person, server or gateway member, and
+// app per hour in this process, none for a caller with no subject or an anonymous one, and no
+// count of the rest. Readers of attempts leave these rows out.
 func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) bool {
+	if what == ResultServed {
+		return r.record(ctx, Begin(scope), step, what, true, limitServed, opts)
+	}
 	return r.record(ctx, Begin(scope), step, what, true, limitOnce, opts)
 }
 
 func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final bool, held limit, opts []Option) (accepted bool) {
+	if _, failed := what.(Code); failed {
+		MarkFailed(ctx)
+	}
 	if r == nil || attempt.IsZero() {
 		return false
 	}
@@ -688,9 +703,24 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
 		row.TraceID = spanCtx.TraceID().String()
 	}
+	var servedAt time.Time
+	if held == limitServed {
+		if !nameable(row.SubjectURN) {
+			return false
+		}
+		servedAt = time.Now()
+		if !r.served.claim(row, servedAt) {
+			return false
+		}
+		defer func() {
+			if !accepted {
+				r.served.release(row, servedAt)
+			}
+		}()
+	}
 	switch {
 	case r.limiter == nil:
-	case held == limitStart:
+	case held == limitStart, held == limitServed:
 		if r.queueReserved() {
 			r.drop(ctx, dropQueueReserve, 1, nil)
 			return false

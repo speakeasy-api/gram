@@ -158,7 +158,7 @@ func TestMemberConnectionFailureKeepsTextAndType(t *testing.T) {
 	t.Parallel()
 
 	inner := memberCredentialError{&metaMemberError{message: "server is not connected"}}
-	var err error = memberConnectionError{inner, mcpconnectionattempts.CodeInvalidRemoteSession}
+	var err error = memberConnectionError{inner, mcpconnectionattempts.CodeInvalidRemoteSession, ""}
 	require.EqualError(t, err, "server is not connected")
 	_, credential := errors.AsType[memberCredentialError](err)
 	require.True(t, credential)
@@ -360,19 +360,19 @@ func TestRecordMemberFailure(t *testing.T) {
 	gate := &metaGateContext{organizationID: "org", projectID: uuid.New(), metaServerID: uuid.New()}
 	first, second := metaMember{serverID: uuid.New()}, metaMember{serverID: uuid.New()}
 
-	service.recordMemberFailure(t.Context(), gate, first, mcpconnectionattempts.CodeProviderServerError)
-	service.recordMemberFailure(t.Context(), gate, second, mcpconnectionattempts.CodeProviderServerError)
+	service.recordMemberOutcome(t.Context(), gate, first, mcpconnectionattempts.CodeProviderServerError)
+	service.recordMemberOutcome(t.Context(), gate, second, mcpconnectionattempts.CodeProviderServerError)
 	require.Len(t, rec.Rows(), 2, "two members with one code are two rows")
 	require.NotEqual(t, rec.Rows()[0].MemberID, rec.Rows()[1].MemberID)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	service.recordMemberFailure(ctx, gate, first, mcpconnectionattempts.CodeProviderServerError)
+	service.recordMemberOutcome(ctx, gate, first, mcpconnectionattempts.CodeProviderServerError)
 	require.Len(t, rec.Rows(), 2, "a caller that went away says nothing")
 
 	gate.request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/gateway", nil)
 	gate.request.Header.Set("User-Agent", "claude-code/2.1.0")
-	service.recordMemberFailure(t.Context(), gate, first, mcpconnectionattempts.CodeProviderServerError)
+	service.recordMemberOutcome(t.Context(), gate, first, mcpconnectionattempts.CodeProviderServerError)
 	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, rec.Rows()[2].ClientFamily)
 }
 

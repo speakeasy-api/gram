@@ -146,6 +146,7 @@ var frozenResults = map[string]Result{
 	"listed":                    ResultListed,
 	"complete":                  ResultComplete,
 	"review_shown":              ResultReviewShown,
+	"served":                    ResultServed,
 	"partial":                   resultPartial,
 	"failed":                    resultFailed,
 	"policy_blocked":            resultPolicyBlocked,

@@ -1137,7 +1137,7 @@ func (s *Service) refuseStaleChoiceCall(ctx context.Context, logger *slog.Logger
 	s.noteStaleChoiceCall(ctx, logger, gate, member, stale)
 	message, remedy := s.staleChoiceMessage(ctx, logger, gate, member)
 	if stale.saved {
-		s.recordMemberFailure(ctx, gate, member, staleChoiceHappened(remedy), mcpconnectionattempts.Detail(memberSetupChangedDetail))
+		s.recordMemberOutcome(ctx, gate, member, staleChoiceHappened(remedy), mcpconnectionattempts.Detail(memberSetupChangedDetail))
 	}
 	return message, remedy
 }

@@ -225,7 +225,7 @@ func (s *Service) resolveMemberTokensSkipping(ctx context.Context, gate *metaGat
 	if member.backend != metaMemberBackendProxied {
 		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)).NotingSkips(gate.skippedUpstreams).FromRequest(gate.request), member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
 		if err != nil {
-			return nil, nil, memberConnectionError{fmt.Errorf("resolve hosted member credentials: %w", err), resolveFailureHappened(err)}
+			return nil, nil, memberConnectionError{fmt.Errorf("resolve hosted member credentials: %w", err), resolveFailureHappened(err), remotesessions.RefreshIssuerURL(err)}
 		}
 		return tokens, nil, nil
 	}
@@ -316,7 +316,7 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 		resolved, err = s.upstreamTokenSource().ResolveClientAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)).FromRequest(gate.request), member.projectID, gate.organizationID, issuer, subject, clientID, false)
 	}
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err)}
+		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err), remotesessions.RefreshIssuerURL(err)}
 	}
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("resolve agent member credential: %w", ctx.Err())
@@ -324,18 +324,18 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	// A service account's credential is the server's, shared by every
 	// caller: the agent's sign-in step does not set it.
 	if err != nil && clientType == authClientTypeServiceAccount {
-		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err)}
+		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err), remotesessions.RefreshIssuerURL(err)}
 	}
 	if errors.Is(err, remotesessions.ErrStoredSignInUnreadable) {
 		// The cause names the remote session for the connection row.
-		return nil, memberSignInUnreadableError{memberConnectionError: memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}, cause: err}
+		return nil, memberSignInUnreadableError{memberConnectionError: memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err), remotesessions.RefreshIssuerURL(err)}, cause: err}
 	}
 	if err != nil {
-		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
+		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err), remotesessions.RefreshIssuerURL(err)}
 	}
 	resolved, err = pinAttachedSession(resolved, connection.attachedSession, false)
 	if err != nil {
-		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
+		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err), remotesessions.RefreshIssuerURL(err)}
 	}
 	return resolved, nil
 }

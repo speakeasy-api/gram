@@ -1723,6 +1723,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	body, err := s.handleRequest(ctx, mcpInputs, &req)
+	if err == nil && mcpInputs.upstreamRejection == (mcpconnectionattempts.Code{}) {
+		s.recordRequestOutcome(ctx, hostedConnectionScope(ctx, toolset, cfg), mcpconnectionattempts.ResultServed, r, callerSubject(ctx), s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug))
+	}
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)

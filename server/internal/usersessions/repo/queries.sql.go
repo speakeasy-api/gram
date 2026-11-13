@@ -1453,37 +1453,6 @@ func (q *Queries) DeleteUserSessionIssuerCimdClient(ctx context.Context, arg Del
 	return i, err
 }
 
-const getExpiredUserSessionByRefreshTokenHash = `-- name: GetExpiredUserSessionByRefreshTokenHash :one
-SELECT subject_urn
-FROM user_sessions
-WHERE user_session_issuer_id = $1
-  AND user_session_client_id = $2::uuid
-  AND refresh_token_hash = $3::text
-  AND refresh_token_hash IS NOT NULL
-  AND deleted IS TRUE
-  AND deleted_at >= refresh_expires_at
-LIMIT 1
-`
-
-type GetExpiredUserSessionByRefreshTokenHashParams struct {
-	UserSessionIssuerID uuid.UUID
-	UserSessionClientID uuid.UUID
-	RefreshTokenHash    string
-}
-
-// Finds a session retired by reaching its deadline, by refresh-token hash for
-// the issuer and client that presented it, so a refusal can say the token
-// expired. Rows retired earlier (rotated or revoked) do not match: their reuse
-// stays "unknown or already used". Project scoping is intentionally NOT
-// applied here -- the OAuth surface is public and the issuer_id is the
-// authoritative scope.
-func (q *Queries) GetExpiredUserSessionByRefreshTokenHash(ctx context.Context, arg GetExpiredUserSessionByRefreshTokenHashParams) (urn.SessionSubject, error) {
-	row := q.db.QueryRow(ctx, getExpiredUserSessionByRefreshTokenHash, arg.UserSessionIssuerID, arg.UserSessionClientID, arg.RefreshTokenHash)
-	var subject_urn urn.SessionSubject
-	err := row.Scan(&subject_urn)
-	return subject_urn, err
-}
-
 const getGatewaySessionScope = `-- name: GetGatewaySessionScope :one
 SELECT g.project_id, g.user_session_issuer_id
 FROM meta_mcp_servers g
@@ -1933,6 +1902,45 @@ func (q *Queries) GetSharedUserSessionIssuerByID(ctx context.Context, id uuid.UU
 		&i.UserSessionIssuer.Deleted,
 		&i.ResolvedOrganizationID,
 	)
+	return i, err
+}
+
+const getSpentUserSessionByRefreshTokenHash = `-- name: GetSpentUserSessionByRefreshTokenHash :one
+SELECT
+  subject_urn,
+  COALESCE(deleted_at >= refresh_expires_at, FALSE)::boolean AS expired
+FROM user_sessions
+WHERE user_session_issuer_id = $1
+  AND user_session_client_id = $2::uuid
+  AND refresh_token_hash = $3::text
+  AND refresh_token_hash IS NOT NULL
+  AND deleted IS TRUE
+ORDER BY expired DESC
+LIMIT 1
+`
+
+type GetSpentUserSessionByRefreshTokenHashParams struct {
+	UserSessionIssuerID uuid.UUID
+	UserSessionClientID uuid.UUID
+	RefreshTokenHash    string
+}
+
+type GetSpentUserSessionByRefreshTokenHashRow struct {
+	SubjectUrn urn.SessionSubject
+	Expired    bool
+}
+
+// Finds a retired session (rotated, revoked or expired) by refresh-token hash
+// for the issuer and client that presented it, so a refusal can name its
+// owner and say whether the token expired: expired is a session retired by
+// reaching its deadline; any other retired session stays "unknown or already
+// used". An expired row wins if several match. Project scoping is
+// intentionally NOT applied here -- the OAuth surface is public and the
+// issuer_id is the authoritative scope.
+func (q *Queries) GetSpentUserSessionByRefreshTokenHash(ctx context.Context, arg GetSpentUserSessionByRefreshTokenHashParams) (GetSpentUserSessionByRefreshTokenHashRow, error) {
+	row := q.db.QueryRow(ctx, getSpentUserSessionByRefreshTokenHash, arg.UserSessionIssuerID, arg.UserSessionClientID, arg.RefreshTokenHash)
+	var i GetSpentUserSessionByRefreshTokenHashRow
+	err := row.Scan(&i.SubjectUrn, &i.Expired)
 	return i, err
 }
 

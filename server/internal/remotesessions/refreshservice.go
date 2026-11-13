@@ -100,6 +100,15 @@ func (e *RefreshError) Error() string { return e.err.Error() }
 
 func (e *RefreshError) Unwrap() error { return e.err }
 
+// RefreshIssuerURL is the issuer of the refresh that failed in err, as its provider_refresh row
+// names it, or empty when err holds no refresh failure.
+func RefreshIssuerURL(err error) string {
+	if refreshErr, ok := errors.AsType[*RefreshError](err); ok {
+		return refreshErr.IssuerURL
+	}
+	return ""
+}
+
 // errRefreshFailureRecorded marks a collapsed refresh error whose row was already written.
 var errRefreshFailureRecorded = errors.New("refresh failure recorded")
 

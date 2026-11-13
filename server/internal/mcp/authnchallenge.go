@@ -1426,6 +1426,7 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 	opts := []mcpconnectionattempts.Option{
 		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject),
 		s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope),
+		mcpconnectionattempts.Provider(remotesessions.RefreshIssuerURL(errors.Join(causes...))),
 	}
 	if id, ok := remotesessions.UnreadableRemoteSessionID(errors.Join(causes...)); ok {
 		opts = append(opts, mcpconnectionattempts.RemoteSession(id))

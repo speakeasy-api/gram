@@ -360,3 +360,18 @@ func TestProviderHealth_FewSignInAbandonsStayNormal(t *testing.T) {
 	report := f.read(time.Hour, 0)
 	require.Equal(t, ProviderNormal, report.Status, "one organization's closed tabs cannot trip it")
 }
+
+func TestProviderHealth_ServedRequestsAreNotAttempts(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "mcp.supabase.com")
+	org := "org-" + uuid.NewString()
+	f.write(f.attempt(org, 10*time.Minute), f.step(StepMCPRequest, CodeProviderServerError, true))
+	for range 5 {
+		f.write(f.attempt(org, 10*time.Minute), f.step(StepMCPRequest, ResultServed, true))
+	}
+
+	report := f.read(time.Hour, 0)
+	require.Equal(t, uint64(1), report.Counts.Attempts, "a served request must not dilute the failure rate")
+	require.Equal(t, uint64(1), report.Counts.Failures)
+}

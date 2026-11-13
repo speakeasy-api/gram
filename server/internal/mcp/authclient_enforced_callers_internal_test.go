@@ -891,7 +891,7 @@ func TestEnforcedAgentKeyServiceAccountMember(t *testing.T) {
 		t.Parallel()
 		_, gate, member, _, _ := seed(t)
 		require.True(t, agentConnectionMissing(gate.withAgentMemberFix(member, agentServerCredentialError(member.slug))))
-		require.True(t, agentConnectionMissing(memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(errors.New("boom"))}))
+		require.True(t, agentConnectionMissing(memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(errors.New("boom")), ""}))
 		require.False(t, agentConnectionMissing(gate.withAgentMemberFix(member, agentServerAccessError(member.slug))))
 		require.False(t, agentConnectionMissing(gate.withAgentMemberFix(member, agentServerGapError(member.slug))))
 		require.False(t, agentConnectionMissing(agentServerAccessError(member.slug)), "the server's own endpoint sees the shared refusal")
