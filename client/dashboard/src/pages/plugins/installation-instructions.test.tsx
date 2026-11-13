@@ -13,12 +13,27 @@ vi.mock("@gram/client/react-query/marketplaceSettings", () => ({
 vi.mock("@gram/client/react-query/plugins", () => ({
   usePlugins: () => ({ data: { plugins: [] } }),
 }));
+const access = vi.hoisted(() => ({ canWritePlugin: false }));
+vi.mock("@/hooks/usePluginWriteAccess", () => ({
+  usePluginWriteAccess: () => access.canWritePlugin,
+}));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("@gram/client/react-query/publishStatus", () => ({
+  invalidateAllPublishStatus: vi.fn<() => void>(),
+}));
+vi.mock("@gram/client/react-query/publishPlugins", () => ({
+  usePublishPluginsMutation: () => ({
+    mutate: vi.fn<() => void>(),
+    isPending: false,
+  }),
+}));
 vi.mock("@/components/code", () => ({
   CodeBlock: ({ children }: { children: string }) => <pre>{children}</pre>,
 }));
 
 afterEach(() => {
   cleanup();
+  access.canWritePlugin = false;
 });
 
 function bodyText(): string {
@@ -60,6 +75,25 @@ describe("installation instructions", () => {
     expect(text).toContain("does not configure any MCP servers");
     expect(text).not.toContain("<server-name>");
     expect(text).not.toContain("speakeasy-hooks install");
+  });
+
+  it("tells OpenCode users without plugin write access who can grant repo access", () => {
+    const text = openProvider("opencode");
+    expect(text).toContain(
+      "Ask an org admin, or someone with the plugin:write scope on this project",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Add collaborators" }),
+    ).toBeNull();
+  });
+
+  it("lets OpenCode users with plugin write access add collaborators", () => {
+    access.canWritePlugin = true;
+    const text = openProvider("opencode");
+    expect(text).not.toContain("Ask an org admin");
+    expect(
+      screen.getByRole("button", { name: "Add collaborators" }),
+    ).toBeDefined();
   });
 
   it("offers Pro/Max personal marketplaces and ZIPs without claiming a vendor restriction", () => {

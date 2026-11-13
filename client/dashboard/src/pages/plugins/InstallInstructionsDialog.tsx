@@ -28,8 +28,15 @@ import {
   Download,
   ExternalLink,
   Info,
+  Users,
 } from "lucide-react";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
+import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus";
+import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
+import { PublishDialog } from "./PublishDialog";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { agentProvidersForSurface } from "@/components/agent-providers/agent-providers";
 
@@ -642,6 +649,59 @@ function CodexInstallContent({
   );
 }
 
+function MarketplaceRepoAccess(): JSX.Element {
+  const canWritePlugin = usePluginWriteAccess();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const publish = usePublishPluginsMutation({
+    onSuccess: () => {
+      setOpen(false);
+      void invalidateAllPublishStatus(queryClient);
+      toast.success("Collaborators added");
+    },
+    onError: () => {
+      toast.error("Failed to add collaborators");
+    },
+  });
+
+  if (!canWritePlugin) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        No access? Ask an org admin, or someone with the{" "}
+        <code className="bg-muted px-1 py-0.5 text-xs">plugin:write</code> scope
+        on this project, to add your GitHub username as a collaborator from the
+        Plugins page.
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-2"
+      >
+        <Users className="size-4" />
+        Add collaborators
+      </Button>
+      <PublishDialog
+        mode="manage"
+        open={open}
+        onOpenChange={setOpen}
+        isPending={publish.isPending}
+        onPublish={(githubUsernames) =>
+          publish.mutate({
+            security: { sessionHeaderGramSession: "" },
+            request: { publishPluginsRequestBody: { githubUsernames } },
+          })
+        }
+      />
+    </>
+  );
+}
+
 /**
  * OpenCode install. OpenCode has no marketplace importer, so the plugin's
  * self-contained package (opencode-plugins/<slug>/ in the published repo:
@@ -668,8 +728,9 @@ function OpencodeInstallContent({
           {
             title: "Clone your Speakeasy marketplace repository",
             description:
-              "OpenCode has no marketplace importer, so the plugin is copied out of the repository Speakeasy publishes to. You need read access to it.",
+              "OpenCode has no marketplace importer, so the plugin is copied out of the repository Speakeasy publishes to. Your GitHub account must be a collaborator on it.",
             code: cloneCommand,
+            children: <MarketplaceRepoAccess />,
           },
           {
             title: "Copy the plugin into your OpenCode config",
