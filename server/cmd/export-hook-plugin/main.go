@@ -28,7 +28,7 @@ const localClaudeManifest = `{
   "version": "0.0.1",
   "author": {
     "name": "Speakeasy",
-    "url": "https://getgram.ai"
+    "url": "https://ai.speakeasy.com"
   }
 }
 `

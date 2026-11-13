@@ -168,6 +168,56 @@ func TestGenerateClaudePluginEmitsHumanDisplayName(t *testing.T) {
 	require.Equal(t, "MoonPay Observability", obsMeta.DisplayName)
 }
 
+func TestGeneratePluginManifestsLinkToSpeakeasyAI(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name:        "Engineering Tools",
+			Slug:        "engineering-tools",
+			Description: "MCP servers for the engineering team",
+			Servers: []PluginServerInfo{
+				{DisplayName: "crm-tools", MCPURL: "https://ai.speakeasy.com/mcp/crm"},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:     "Acme",
+		OrgEmail:    "admin@example.com",
+		ServerURL:   "https://ai.speakeasy.com",
+		HooksAPIKey: "hooks-key", // triggers the synthesized observability plugin
+	})
+	require.NoError(t, err)
+
+	manifestPaths := []string{
+		"engineering-tools/.claude-plugin/plugin.json",
+		"cursor-plugins/engineering-tools-cursor/.cursor-plugin/plugin.json",
+		"acme-observability/.claude-plugin/plugin.json",
+		"cursor-plugins/acme-observability-cursor/.cursor-plugin/plugin.json",
+	}
+	for _, p := range manifestPaths {
+		raw, ok := files[p]
+		require.True(t, ok, "missing manifest: %s", p)
+
+		var manifest struct {
+			Homepage string `json:"homepage"`
+			Author   struct {
+				URL string `json:"url"`
+			} `json:"author"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &manifest), p)
+		require.Equal(t, "https://ai.speakeasy.com", manifest.Homepage, p)
+		if strings.Contains(p, ".claude-plugin/") {
+			require.Equal(t, "https://ai.speakeasy.com", manifest.Author.URL, p)
+		}
+	}
+
+	require.Contains(t, string(files["README.md"]), "[Speakeasy](https://ai.speakeasy.com)")
+	for p, content := range files {
+		require.NotContains(t, string(content), "getgram.ai", "generated file %s links to a retired host", p)
+	}
+}
+
 func TestGenerateClaudeMCPConfigAlwaysHasAuthHeaders(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
