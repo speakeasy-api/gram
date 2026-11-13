@@ -525,23 +525,18 @@ describe("ShadowMCPServerDetail", () => {
     );
   });
 
-  // The page is opened from the MCP approvals tab of Guardrails, and the
-  // sidebar highlights Guardrails, so the trail leads back there rather than
-  // through the retired Shadow AI section its URL still carries.
-  it("leads the breadcrumb back to the MCP approvals tab of Guardrails", () => {
+  // The page is opened from the Shadow MCP page, and the sidebar highlights
+  // Shadow MCP, so the trail leads back there rather than through the Shadow
+  // AI section its URL still carries.
+  it("leads the breadcrumb back to the Shadow MCP page", () => {
     renderDetailPage();
 
     const trail = screen.getByRole("navigation", { name: "Breadcrumb" });
     expect(
       within(trail)
-        .getByRole("link", { name: "Guardrails" })
+        .getByRole("link", { name: "Shadow MCP" })
         .getAttribute("href"),
-    ).toBe("/acme/projects/default/risk-policies");
-    expect(
-      within(trail)
-        .getByRole("link", { name: "MCP approvals" })
-        .getAttribute("href"),
-    ).toBe("/acme/projects/default/risk-policies?tab=mcp-approvals");
+    ).toBe("/acme/projects/default/shadow-mcp");
     expect(within(trail).getByText("GitHub MCP")).toBeTruthy();
     expect(within(trail).queryByText("Shadow AI")).toBeNull();
     expect(within(trail).queryByText("MCPs")).toBeNull();

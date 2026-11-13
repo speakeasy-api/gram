@@ -161,6 +161,7 @@ import {
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
 import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
+import ShadowMCP from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
@@ -632,7 +633,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
   },
   shadowMCP: {
     component: ShadowAIRoot,
-    indexComponent: ShadowMCPIndexRedirect,
+    indexComponent: ShadowMCP,
     subPages: {
       detail: {
         component: ShadowMCPServerLegacyRedirect,

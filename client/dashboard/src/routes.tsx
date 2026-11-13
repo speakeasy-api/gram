@@ -723,8 +723,9 @@ const ROUTE_STRUCTURE = {
   },
   // Shadow AI lives in Guardrails (the Shadow AI policy and its targets tab)
   // and is not in the nav. Its section URLs stay because tickets, bookmarks
-  // and block messages link to them: every index page redirects to
-  // Guardrails, and the tool and server detail pages beneath keep rendering.
+  // and block messages link to them: the MCPs index redirects to the Shadow
+  // MCP page, the other indexes to the Shadow AI targets tab of Guardrails,
+  // and the tool and server detail pages beneath keep rendering.
   //
   // Project-level placement with organization-scoped reads behind it, the
   // same shape as identities above and for the same reason.
@@ -768,8 +769,8 @@ const ROUTE_STRUCTURE = {
       mcps: {
         title: "MCPs",
         url: "mcps",
-        // The MCPs index was the approvals queue; it lands on the MCP
-        // approvals tab of Guardrails rather than the policies list.
+        // The MCPs index was the approvals queue; it lands on the Shadow MCP
+        // page below. The server detail pages beneath it render.
         subPages: {
           detail: {
             title: "Shadow MCP Server",
@@ -779,14 +780,17 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  // The Shadow MCP paths predate the section and are sitting in bookmarks and
-  // tickets, so they redirect permanently rather than 404. The end-user
-  // request URLs (/shadow-mcp/request, /risk-policy-bypass/request) are
-  // top-level routes in App.tsx, are quoted verbatim in block messages
-  // already in people's terminals, and are deliberately left alone.
+  // Shadow MCP: the MCP server inventory and its approvals, beside
+  // Guardrails in the nav. Server detail pages live under the Shadow AI
+  // section above; the older /shadow-mcp/:serverSlug links redirect there.
+  // The end-user request URLs (/shadow-mcp/request,
+  // /risk-policy-bypass/request) are top-level routes in App.tsx, are quoted
+  // verbatim in block messages already in people's terminals, and are
+  // deliberately left alone.
   shadowMCP: {
     title: "Shadow MCP",
     url: "shadow-mcp",
+    icon: "eye-off",
     subPages: {
       detail: {
         title: "Shadow MCP Server",

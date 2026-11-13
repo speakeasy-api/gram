@@ -1,5 +1,4 @@
 import { useSlugs } from "@/contexts/Sdk";
-import { policyCenterTabSearch } from "@/pages/security/policy-center-tabs";
 import { useRoutes } from "@/routes";
 import { useListMcpApprovalRequests } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { useMemo } from "react";
@@ -33,13 +32,13 @@ export function useAccessRequestCandidates({
         verbs: ["open"],
         icon: "inbox",
         group: "Access Requests",
-        // stdio targets have no server page; their row on the MCP approvals
-        // tab of Guardrails opens the review sheet.
+        // stdio targets have no server page; their row on the Shadow MCP
+        // page opens the review sheet.
         run: () => {
           void navigate(
             request.serverSlug
               ? routes.shadowAI.mcps.detail.href(request.serverSlug)
-              : `${routes.policyCenter.href()}${policyCenterTabSearch("mcp-approvals")}`,
+              : routes.shadowMCP.href(),
           );
         },
       })),
