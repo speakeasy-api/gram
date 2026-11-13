@@ -968,15 +968,14 @@ func (q *Queries) AdminInsertPlatformMCPFeedbackFixture(ctx context.Context, arg
 }
 
 const adminInsertPrincipalGrantFixture = `-- name: AdminInsertPrincipalGrantFixture :exec
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors, expires_at, created_at)
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at, created_at)
 VALUES (
   $1,
   $2,
   $3,
-  $4::text,
-  $5,
-  $6::timestamptz,
-  COALESCE($7::timestamptz, clock_timestamp())
+  $4,
+  $5::timestamptz,
+  COALESCE($6::timestamptz, clock_timestamp())
 )
 `
 
@@ -984,20 +983,18 @@ type AdminInsertPrincipalGrantFixtureParams struct {
 	OrganizationID string
 	PrincipalUrn   urn.Principal
 	Scope          string
-	Effect         pgtype.Text
 	Selectors      []byte
 	ExpiresAt      pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 }
 
 // Test fixture: writes a grant row as stored, including temporary, expired,
-// deny-effect and backdated rows no single writer produces together.
+// and backdated rows no single writer produces together.
 func (q *Queries) AdminInsertPrincipalGrantFixture(ctx context.Context, arg AdminInsertPrincipalGrantFixtureParams) error {
 	_, err := q.db.Exec(ctx, adminInsertPrincipalGrantFixture,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,
-		arg.Effect,
 		arg.Selectors,
 		arg.ExpiresAt,
 		arg.CreatedAt,

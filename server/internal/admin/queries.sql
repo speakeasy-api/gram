@@ -1296,13 +1296,12 @@ SELECT
 
 -- name: AdminInsertPrincipalGrantFixture :exec
 -- Test fixture: writes a grant row as stored, including temporary, expired,
--- deny-effect and backdated rows no single writer produces together.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors, expires_at, created_at)
+-- and backdated rows no single writer produces together.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at, created_at)
 VALUES (
   @organization_id,
   @principal_urn,
   @scope,
-  sqlc.narg('effect')::text,
   @selectors,
   sqlc.narg('expires_at')::timestamptz,
   COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp())
