@@ -26,7 +26,7 @@ func CheckSeedUnchangedSince(ctx context.Context, r *Runner, organizationID stri
 		return err
 	}
 	between()
-	return r.checkSeedUnchanged(ctx, organizationID, stamp)
+	return checkSeedUnchanged(ctx, r.db, organizationID, stamp)
 }
 
 // ErrReseeded is the failure a run that overlapped a reseed stores.
