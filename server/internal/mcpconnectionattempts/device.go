@@ -5,9 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
-	"net/netip"
-	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/requestip"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
@@ -31,30 +30,14 @@ func WithDeviceKeys(derive DeriveKey) RecorderOption {
 	return func(r *Recorder) { r.deviceKeys = derive }
 }
 
-// lastForwardedFor returns the end of the last X-Forwarded-For line, unparsed. A private network
-// request does not pass through our public ingress, so it has no hop we can trust.
-func lastForwardedFor(r *http.Request) string {
+// publicClientIP uses only the public listener's resolved address. Private
+// traffic has no public ingress address, even when a caller sends X-Client-IP.
+func publicClientIP(r *http.Request) string {
 	if origin, ok := requestorigin.FromContext(r.Context()); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
 		return ""
 	}
-	lines := r.Header.Values("X-Forwarded-For")
-	if len(lines) == 0 {
-		return ""
-	}
-	line := lines[len(lines)-1]
-	return strings.Clone(line[max(0, len(line)-maxForwardedForBytes):])
-}
-
-// connectionIP returns the address that connected to our public ingress, or "" when unsure. Our
-// ingress writes the last X-Forwarded-For hop, and any hop before it is caller text. RemoteAddr is
-// the ingress itself, so it never stands in.
-func connectionIP(forwardedFor string) string {
-	hop := strings.TrimSpace(forwardedFor[strings.LastIndexByte(forwardedFor, ',')+1:])
-	addr, err := netip.ParseAddr(hop)
-	if err != nil {
-		return ""
-	}
-	return addr.Unmap().WithZone("").String()
+	resolved, _ := requestip.FromContext(r.Context())
+	return resolved.String()
 }
 
 // deviceKeyFor hashes an address under the organization's key. With no address, or no usable
