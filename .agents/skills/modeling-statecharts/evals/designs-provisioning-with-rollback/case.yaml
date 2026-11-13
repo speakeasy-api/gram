@@ -1,4 +1,0 @@
-schema_version: "1.1"
-name: designs-provisioning-with-rollback
-expected_outcome: |
-  A TLA+ spec and cfg sit next to a Go chart built on sc, TLC was actually run and its result reported, the model includes the driver or outside world (external API calls running late or more than once, created resources tracked as outside-world state), the abort-during-create race that orphans a database is found or explicitly handled, the chart has tests that check the three rules against the real chart, and the hand-off lists rules, counterexamples found, and what the model leaves out.
