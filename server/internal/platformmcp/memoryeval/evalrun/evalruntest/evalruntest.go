@@ -29,7 +29,15 @@ func SeedCorpus(t *testing.T, db *pgxpool.Pool) string {
 func SeedCorpusProjects(t *testing.T, db *pgxpool.Pool, keys ...memoryeval.ProjectKey) string {
 	t.Helper()
 	spec := demoseed.LocalSpec()
-	_, err := orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{ID: spec.OrgID, Name: spec.OrgName, Slug: spec.OrgSlug})
+	_, err := orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+		ID:             spec.OrgID,
+		Name:           spec.OrgName,
+		Slug:           spec.OrgSlug,
+		WorkosID:       pgtype.Text{String: "", Valid: false},
+		Whitelisted:    pgtype.Bool{Bool: false, Valid: false},
+		CreationSource: pgtype.Text{String: "", Valid: false},
+		DefaultHost:    pgtype.Text{String: "", Valid: false},
+	})
 	require.NoError(t, err)
 	for _, key := range keys {
 		id, ok := demoseed.MemoryEvalProjectID(spec, key)
