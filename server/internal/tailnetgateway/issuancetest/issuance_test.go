@@ -3,10 +3,13 @@
 package issuancetest
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"log"
@@ -96,6 +99,37 @@ type acmeServer struct {
 	finalized atomic.Int32
 	gate      chan struct{}
 	openOnce  sync.Once
+
+	// mu guards replaces, the certificate each new order names as the one
+	// it replaces, "" for none.
+	mu       sync.Mutex
+	replaces []string
+}
+
+// orderReplaces reads the replaces field from a new-order request, which is a
+// JWS whose payload is base64url JSON.
+func orderReplaces(body []byte) string {
+	var jws struct {
+		Payload string `json:"payload"`
+	}
+	if json.Unmarshal(body, &jws) != nil {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(jws.Payload)
+	if err != nil {
+		return ""
+	}
+	var order struct {
+		Replaces string `json:"replaces"`
+	}
+	_ = json.Unmarshal(payload, &order)
+	return order.Replaces
+}
+
+func (s *acmeServer) orderReplacements() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.replaces...)
 }
 
 func startACME(t *testing.T) *acmeServer {
@@ -112,6 +146,15 @@ func startACME(t *testing.T) *acmeServer {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/order-plz":
 			server.orders.Add(1)
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			server.mu.Lock()
+			server.replaces = append(server.replaces, orderReplaces(body))
+			server.mu.Unlock()
 			select {
 			case <-server.gate:
 			case <-r.Context().Done():
@@ -398,4 +441,64 @@ func TestOneCertificatePerConnection(t *testing.T) { //nolint:paralleltest // se
 	}
 	assert.Equal(t, int32(1), ordersWhileHeld, "no slot asks for a second certificate while the first is being issued")
 	assert.Equal(t, int32(1), acme.finalized.Load(), "the connection gets exactly one certificate")
+}
+
+// TestRenewalNamesTheCertificateItReplaces holds the tsnet behaviour gateway
+// renewal relies on: asking for a certificate valid for longer than the
+// stored one has left renews it at once, returns the new certificate, stores
+// it for the connection, and names the old one as replaced, which is what
+// makes Let's Encrypt count it as a renewal exempt from its rate limits.
+func TestRenewalNamesTheCertificateItReplaces(t *testing.T) { //nolint:paralleltest // sets process-wide state
+	ctx := t.Context()
+	acme := startACME(t)
+	acme.open()
+	control := startControl(t)
+
+	db, err := infra.CloneTestDatabase(t, "tailnetrenewal")
+	require.NoError(t, err)
+	ingressID, orgID := seedIngress(t, db)
+	encryption := orgencryptiontest.New(t, db)
+	require.NoError(t, encryption.Provisioner.EnsureUseCase(ctx, orgID, tailnetgateway.EncryptionUseCase, orgencryption.SystemActor()))
+	store, err := tailnetgateway.NewPostgresStateStore(db, encryption.Service, ingressID, orgID, 0)
+	require.NoError(t, err)
+
+	node := &tsnet.Server{Dir: t.TempDir(), Hostname: "renewer", ControlURL: control.HTTPTestServer.URL, Store: store, Ephemeral: true, Logf: logger.Discard}
+	t.Cleanup(func() { _ = node.Close() })
+	_, err = node.Up(ctx)
+	require.NoError(t, err)
+	lc, err := node.LocalClient()
+	require.NoError(t, err)
+
+	firstPEM, _, err := lc.CertPair(ctx, serviceFQDN)
+	require.NoError(t, err)
+	first := leafOf(t, firstPEM)
+	require.Equal(t, []string{""}, acme.orderReplacements(), "first issuance replaces nothing")
+
+	againPEM, _, err := lc.CertPair(ctx, serviceFQDN)
+	require.NoError(t, err)
+	require.Equal(t, first.SerialNumber, leafOf(t, againPEM).SerialNumber, "a stored certificate is returned as is")
+
+	renewedPEM, _, err := lc.CertPairWithValidity(ctx, serviceFQDN, time.Until(first.NotAfter)+time.Hour)
+	require.NoError(t, err)
+	renewed := leafOf(t, renewedPEM)
+	require.NotEqual(t, first.SerialNumber, renewed.SerialNumber, "the renewal returns the new certificate")
+	require.Equal(t, []string{"", ariID(first)}, acme.orderReplacements(), "the renewal names the certificate it replaces")
+
+	storedPEM, _, err := store.ReadTLSCertAndKey(serviceFQDN)
+	require.NoError(t, err)
+	require.Equal(t, renewed.SerialNumber, leafOf(t, storedPEM).SerialNumber, "the renewal is stored for every slot")
+}
+
+func leafOf(t *testing.T, certPEM []byte) *x509.Certificate {
+	t.Helper()
+	block, _ := pem.Decode(certPEM)
+	require.NotNil(t, block)
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	require.NoError(t, err)
+	return leaf
+}
+
+// ariID names a certificate as an ACME order's replaces field does.
+func ariID(leaf *x509.Certificate) string {
+	return base64.RawURLEncoding.EncodeToString(leaf.AuthorityKeyId) + "." + base64.RawURLEncoding.EncodeToString(leaf.SerialNumber.Bytes())
 }

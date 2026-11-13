@@ -205,6 +205,11 @@ type slot struct {
 	// inFlight is set while a start goroutine owns the slot.
 	inFlight bool
 
+	// certificate is the running node's certificate as last probed, nil
+	// while none is held or the slot hosts no node. It is atomic so the
+	// metrics collector never waits on a slot that is starting or stopping.
+	certificate atomic.Pointer[CertificateObservation]
+
 	// failures counts attempts in a row that did not reach online, whether
 	// the start failed or the node died first. Once it reaches
 	// maxStartFailures the slot is held in error until retryAt.
@@ -295,6 +300,9 @@ type Gateway struct {
 
 	ready    atomic.Bool
 	lastPoll atomic.Int64
+
+	// certificates reports the certificate expiry gauge until Run returns.
+	certificates metric.Registration
 }
 
 // New builds a gateway; call Run to start it. enc decrypts auth keys and
@@ -307,7 +315,7 @@ func New(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Po
 		return nil, errors.New("tailnet gateway requires a database, organization encryption and node runtime")
 	}
 
-	return &Gateway{
+	g := &Gateway{
 		logger:    logger.With(attr.SlogComponent("tailnet_gateway"), attr.SlogTailnetGatewaySlot(cfg.Ordinal)),
 		db:        db,
 		enc:       enc,
@@ -322,7 +330,28 @@ func New(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Po
 		starts:    sync.WaitGroup{},
 		ready:     atomic.Bool{},
 		lastPoll:  atomic.Int64{},
-	}, nil
+
+		certificates: nil,
+	}
+	registration, err := g.metrics.ObserveCertificates(g.now, g.certificateObservations)
+	if err != nil {
+		return nil, err
+	}
+	g.certificates = registration
+	return g, nil
+}
+
+// certificateObservations lists the certificate of every running node.
+func (g *Gateway) certificateObservations() []CertificateObservation {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := make([]CertificateObservation, 0, len(g.slots))
+	for _, s := range g.slots {
+		if c := s.certificate.Load(); c != nil {
+			out = append(out, *c)
+		}
+	}
+	return out
 }
 
 // Ready reports whether the first reconcile pass completed.
@@ -355,6 +384,11 @@ func (g *Gateway) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			g.ready.Store(false)
 			g.drain(context.WithoutCancel(ctx))
+			if g.certificates != nil {
+				if err := g.certificates.Unregister(); err != nil {
+					g.logger.WarnContext(ctx, "unregister certificate expiry metric", attr.SlogError(err))
+				}
+			}
 			return nil
 		case <-ticker.C:
 			g.Poll(ctx)
@@ -449,6 +483,7 @@ func (g *Gateway) startable(ctx context.Context, desired map[uuid.UUID]desiredIn
 			s = &slot{
 				mu: sync.Mutex{}, ingress: want, state: "", lastError: "", node: nil, nodeID: "", dnsName: "",
 				authKeyCleared: false, inFlight: false, failures: 0, retryAt: time.Time{},
+				certificate: atomic.Pointer[CertificateObservation]{},
 			}
 			g.slots[id] = s
 		}
@@ -619,6 +654,9 @@ func (g *Gateway) start(ctx context.Context, s *slot) {
 		Hostname: NodeHostname(g.cfg.Ordinal), ServiceName: ServiceName(want.label), Tag: g.cfg.Tag,
 		AuthKey: authKey, Store: store, StateDir: filepath.Join(g.cfg.StateDir, want.id.String()),
 		ControlURL: g.cfg.ControlURL, StartTimeout: g.cfg.StartTimeout,
+		CertificateEvents: func(ctx context.Context, operation CertificateOperation, result CertificateResult) {
+			g.metrics.CertificateRequest(ctx, want.organizationSlug, operation, result)
+		},
 	})
 	if err != nil {
 		logger.ErrorContext(ctx, "start tailnet node", attr.SlogError(err))
@@ -717,6 +755,11 @@ func (g *Gateway) probe(ctx context.Context, s *slot) NodeStatus {
 	}
 
 	state, err := s.node.Status(ctx)
+	if !state.CertificateExpiresAt.IsZero() {
+		s.certificate.Store(&CertificateObservation{
+			OrganizationSlug: s.ingress.organizationSlug, IngressID: s.ingress.id, Slot: g.cfg.Ordinal, ExpiresAt: state.CertificateExpiresAt,
+		})
+	}
 	if state.NodeID != "" {
 		s.nodeID = state.NodeID
 	}
@@ -781,6 +824,7 @@ func (g *Gateway) stop(ctx context.Context, s *slot, final NodeStatus) {
 	g.metrics.Lifecycle(ctx, s.ingress.organizationSlug, OperationStop, result)
 	g.metrics.HostStatusChanged(ctx, s.ingress.organizationSlug, g.cfg.Ordinal, s.state, "")
 	s.node = nil
+	s.certificate.Store(nil)
 
 	g.move(ctx, s, hold(final, message))
 }

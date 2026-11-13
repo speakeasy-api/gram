@@ -20,6 +20,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"tailscale.com/client/tailscale/apitype"
 	"tailscale.com/ipn"
 	"tailscale.com/tailcfg"
@@ -40,14 +43,16 @@ type fakeNode struct {
 	unapproved bool
 	// uncertified, when set, is why the approved node has no TLS certificate.
 	uncertified string
-	needsLogin  bool
-	statusErr   error
-	closeDelay  time.Duration
-	fqdn        string
-	nodeID      string
-	handler     http.Handler
-	closed      bool
-	who         *apitype.WhoIsResponse
+	// certExpiresAt is when the certificate the node serves expires.
+	certExpiresAt time.Time
+	needsLogin    bool
+	statusErr     error
+	closeDelay    time.Duration
+	fqdn          string
+	nodeID        string
+	handler       http.Handler
+	closed        bool
+	who           *apitype.WhoIsResponse
 }
 
 func (n *fakeNode) Serve(handler http.Handler) error {
@@ -75,7 +80,7 @@ func (n *fakeNode) Status(context.Context) (tailnetgateway.NodeState, error) {
 	return tailnetgateway.NodeState{
 		Online: running && !n.unapproved && certified, BackendState: state, NeedsLogin: n.needsLogin,
 		AwaitingApproval:    running && n.unapproved,
-		AwaitingCertificate: running && !n.unapproved && !certified, CertificateStatus: n.uncertified,
+		AwaitingCertificate: running && !n.unapproved && !certified, CertificateStatus: n.uncertified, CertificateExpiresAt: n.certExpiresAt,
 		NodeID: n.nodeID, FQDN: n.fqdn,
 	}, nil
 }
@@ -227,6 +232,11 @@ func (u *upstreamCapture) seen() []*http.Request {
 
 func newGatewayFixture(t *testing.T, name string, ordinal int32, configure ...func(*tailnetgateway.Config, *fakeRuntime)) *gatewayFixture {
 	t.Helper()
+	return newGatewayFixtureWithMeter(t, name, ordinal, testenv.NewMeterProvider(t), configure...)
+}
+
+func newGatewayFixtureWithMeter(t *testing.T, name string, ordinal int32, meterProvider metric.MeterProvider, configure ...func(*tailnetgateway.Config, *fakeRuntime)) *gatewayFixture {
+	t.Helper()
 	db, err := infra.CloneTestDatabase(t, name)
 	require.NoError(t, err)
 
@@ -252,7 +262,7 @@ func newGatewayFixture(t *testing.T, name string, ordinal int32, configure ...fu
 	for _, apply := range configure {
 		apply(&cfg, runtime)
 	}
-	gateway, err := tailnetgateway.New(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, orgEncryption(t, db).Service, cfg, runtime)
+	gateway, err := tailnetgateway.New(testenv.NewLogger(t), meterProvider, db, orgEncryption(t, db).Service, cfg, runtime)
 	require.NoError(t, err)
 	return &gatewayFixture{db: db, runtime: runtime, gateway: gateway, upstream: capture}
 }
@@ -854,4 +864,66 @@ func TestGatewayRecordsUnavailableOrganizationKey(t *testing.T) {
 		assert.Equal(c, "organization encryption key unavailable", row.LastError.String, "the row says why the host is not serving")
 	}, 5*time.Second, 20*time.Millisecond)
 	require.Empty(t, f.runtime.started(), "a node whose state cannot be read is not started")
+}
+
+// collect reads every metric the gateway reported.
+func collect(t *testing.T, reader *sdkmetric.ManualReader) map[string]metricdata.Aggregation {
+	t.Helper()
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	out := map[string]metricdata.Aggregation{}
+	for _, scope := range rm.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			out[m.Name] = m.Data
+		}
+	}
+	return out
+}
+
+func TestGatewayReportsCertificateExpiryAndRequests(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	reader := sdkmetric.NewManualReader()
+	f := newGatewayFixtureWithMeter(t, "tailnetgatewaycertmetrics", 0, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	ingressID, orgID := seedIngress(t, f.db, "gateway-cert-metrics")
+	f.seedSlot(t, ingressID, orgID, 0, "tskey-auth-one-shot")
+
+	f.gateway.Poll(ctx)
+	f.waitForHosts(t, 1)
+	_, ok := collect(t, reader)["gram.tailnet_gateway.certificate.remaining"]
+	require.False(t, ok, "a node holding no certificate reports no expiry")
+
+	node := f.runtime.started()[0]
+	expiresAt := time.Now().Add(20 * 24 * time.Hour)
+	node.mu.Lock()
+	node.online, node.certExpiresAt = true, expiresAt
+	events := node.spec.CertificateEvents
+	node.mu.Unlock()
+	f.gateway.Poll(ctx)
+
+	gauge, ok := collect(t, reader)["gram.tailnet_gateway.certificate.remaining"].(metricdata.Gauge[float64])
+	require.True(t, ok)
+	require.Len(t, gauge.DataPoints, 1)
+	point := gauge.DataPoints[0]
+	require.InDelta(t, time.Until(expiresAt).Seconds(), point.Value, 60, "seconds until the served certificate expires")
+	id, _ := point.Attributes.Value("gram.network_ingress.id")
+	require.Equal(t, ingressID.String(), id.AsString(), "each connection is its own series")
+	slotValue, _ := point.Attributes.Value("gram.tailnet_gateway.slot")
+	require.Equal(t, int64(0), slotValue.AsInt64())
+
+	require.NotNil(t, events, "the gateway counts the node's certificate requests")
+	events(ctx, tailnetgateway.CertificateOperationRenew, tailnetgateway.CertificateResultError)
+	events(ctx, tailnetgateway.CertificateOperationRenew, tailnetgateway.CertificateResultError)
+	requests, ok := collect(t, reader)["gram.tailnet_gateway.certificate.requests"].(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, requests.DataPoints, 1)
+	require.Equal(t, int64(2), requests.DataPoints[0].Value)
+	result, _ := requests.DataPoints[0].Attributes.Value("gram.tailnet_gateway.result")
+	require.Equal(t, "error", result.AsString())
+
+	runCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	require.NoError(t, f.gateway.Run(runCtx))
+	_, ok = collect(t, reader)["gram.tailnet_gateway.certificate.remaining"]
+	require.False(t, ok, "a stopped gateway reports no expiry")
 }

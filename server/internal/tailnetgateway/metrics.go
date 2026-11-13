@@ -2,9 +2,12 @@ package tailnetgateway
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
@@ -18,7 +21,59 @@ const (
 	startDurationMetric = "gram.tailnet_gateway.host.start.duration"
 	identityMetric      = "gram.tailnet_gateway.identity"
 	pollDurationMetric  = "gram.tailnet_gateway.poll.duration"
+
+	// certificateRemainingMetric is the alerting signal for certificates:
+	// seconds until each running node's certificate expires, negative once
+	// it has. Alert on its minimum per ingress well before zero, and on no
+	// data, since a connection nobody hosts reports nothing.
+	certificateRemainingMetric = "gram.tailnet_gateway.certificate.remaining"
+
+	// certificateRequestsMetric counts certificate requests by outcome, so a
+	// renewal that keeps failing shows long before the certificate expires.
+	certificateRequestsMetric = "gram.tailnet_gateway.certificate.requests"
 )
+
+// CertificateOperation is a certificate request a node makes.
+type CertificateOperation string
+
+const (
+	CertificateOperationObtain CertificateOperation = "obtain"
+	CertificateOperationRenew  CertificateOperation = "renew"
+	CertificateOperationWindow CertificateOperation = "window"
+)
+
+// CertificateResult is how a certificate request ended.
+type CertificateResult string
+
+const (
+	CertificateResultOK             CertificateResult = "ok"
+	CertificateResultRateLimited    CertificateResult = "rate_limited"
+	CertificateResultWaitingForSlot CertificateResult = "waiting_for_slot"
+	CertificateResultError          CertificateResult = "error"
+)
+
+// certificateResult classifies a certificate request's error.
+func certificateResult(err error) CertificateResult {
+	switch {
+	case err == nil:
+		return CertificateResultOK
+	case isCertificateRateLimited(err):
+		return CertificateResultRateLimited
+	case errors.Is(err, errCertificateIssuing):
+		return CertificateResultWaitingForSlot
+	default:
+		return CertificateResultError
+	}
+}
+
+// CertificateObservation is one running node's certificate, for the expiry
+// gauge.
+type CertificateObservation struct {
+	OrganizationSlug string
+	IngressID        uuid.UUID
+	Slot             int32
+	ExpiresAt        time.Time
+}
 
 // Operation names a host lifecycle step recorded in metrics.
 type Operation string
@@ -45,12 +100,16 @@ type Metrics struct {
 	startDuration metric.Float64Histogram
 	identity      metric.Int64Counter
 	pollDuration  metric.Float64Histogram
+
+	meter                metric.Meter
+	certificateRemaining metric.Float64ObservableGauge
+	certificateRequests  metric.Int64Counter
 }
 
 // NewMetrics registers the gateway instruments. A nil provider disables them.
 func NewMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *Metrics {
 	if meterProvider == nil {
-		return &Metrics{hosts: nil, lifecycle: nil, startDuration: nil, identity: nil, pollDuration: nil}
+		return &Metrics{hosts: nil, lifecycle: nil, startDuration: nil, identity: nil, pollDuration: nil, meter: nil, certificateRemaining: nil, certificateRequests: nil}
 	}
 	meter := meterProvider.Meter(meterScope)
 	report := func(name string, err error) {
@@ -80,7 +139,18 @@ func NewMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *Metric
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10))
 	report(pollDurationMetric, err)
-	return &Metrics{hosts: hosts, lifecycle: lifecycle, startDuration: startDuration, identity: identity, pollDuration: pollDuration}
+	certificateRemaining, err := meter.Float64ObservableGauge(certificateRemainingMetric,
+		metric.WithDescription("Seconds until each running tailnet node's TLS certificate expires, by organization, ingress and slot; negative once expired."),
+		metric.WithUnit("s"))
+	report(certificateRemainingMetric, err)
+	certificateRequests, err := meter.Int64Counter(certificateRequestsMetric,
+		metric.WithDescription("Tailnet node certificate requests by organization, operation (obtain, renew, window) and result."),
+		metric.WithUnit("{request}"))
+	report(certificateRequestsMetric, err)
+	return &Metrics{
+		hosts: hosts, lifecycle: lifecycle, startDuration: startDuration, identity: identity, pollDuration: pollDuration,
+		meter: meter, certificateRemaining: certificateRemaining, certificateRequests: certificateRequests,
+	}
 }
 
 // HostStatusChanged moves one host from the previous status bucket to the next.
@@ -127,4 +197,32 @@ func (m *Metrics) Poll(ctx context.Context, duration time.Duration) {
 		return
 	}
 	m.pollDuration.Record(ctx, duration.Seconds())
+}
+
+// ObserveCertificates reports the expiry gauge from list at every collection.
+// Unregister the returned registration when the gateway stops.
+func (m *Metrics) ObserveCertificates(now func() time.Time, list func() []CertificateObservation) (metric.Registration, error) {
+	if m == nil || m.meter == nil || m.certificateRemaining == nil {
+		return nil, nil
+	}
+	registration, err := m.meter.RegisterCallback(func(_ context.Context, observer metric.Observer) error {
+		at := now()
+		for _, c := range list() {
+			observer.ObserveFloat64(m.certificateRemaining, c.ExpiresAt.Sub(at).Seconds(), metric.WithAttributes(
+				attr.OrganizationSlug(c.OrganizationSlug), attr.NetworkIngressID(c.IngressID.String()), attr.TailnetGatewaySlot(c.Slot)))
+		}
+		return nil
+	}, m.certificateRemaining)
+	if err != nil {
+		return nil, fmt.Errorf("register certificate expiry callback: %w", err)
+	}
+	return registration, nil
+}
+
+// CertificateRequest counts one certificate request.
+func (m *Metrics) CertificateRequest(ctx context.Context, orgSlug string, operation CertificateOperation, result CertificateResult) {
+	if m == nil || m.certificateRequests == nil {
+		return
+	}
+	m.certificateRequests.Add(ctx, 1, metric.WithAttributes(attr.OrganizationSlug(orgSlug), attr.TailnetGatewayOperation(operation), attr.TailnetGatewayResult(result)))
 }

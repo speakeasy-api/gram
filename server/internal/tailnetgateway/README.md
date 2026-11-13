@@ -66,6 +66,20 @@ per-ingress attestor pods.
   connection take turns and the one that waited finds the certificate
   already stored. The lease holds no database connection, so a pod
   starting hundreds of connections cannot exhaust its pool.
+- The gateway, not tsnet, renews. Each slot reads Let's Encrypt's renewal
+  window for its certificate (ARI) on `Retry-After`, at most every 6 hours,
+  and renews at a point in the window derived from the serial number, so all
+  slots agree. The due slot renews under the same lease after re-reading the
+  store; the others pick the renewal up from the store within the hour. A
+  failed renewal keeps the current certificate and backs off.
+- Alerting: `gram.tailnet_gateway.certificate.remaining` is the seconds until
+  each running node's certificate expires, by organization, ingress and slot.
+  Alert on its minimum per ingress below a sixth of the lifetime (15 days for
+  90-day certificates), page below 3 days, and alert on no data, since a
+  connection no pod hosts reports nothing. `gram.tailnet_gateway.certificate.requests`
+  counts obtain, renew and window requests by result (`ok`, `rate_limited`,
+  `waiting_for_slot`, `error`); a run of renew errors precedes a low
+  remaining time by days.
 
 ## Encryption
 
