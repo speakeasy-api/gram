@@ -75,6 +75,15 @@ type UpdateMcpServerRequestBody struct {
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 }
 
+// SetSetupGuideCompletedRequestBody is the type of the "mcpServers" service
+// "setSetupGuideCompleted" endpoint HTTP request body.
+type SetSetupGuideCompletedRequestBody struct {
+	// The ID of the MCP server
+	ID string `form:"id" json:"id" xml:"id"`
+	// true marks the setup guide as done; false clears the mark
+	Completed bool `form:"completed" json:"completed" xml:"completed"`
+}
+
 // SetToolMetadataBatchRequestBody is the type of the "mcpServers" service
 // "setToolMetadataBatch" endpoint HTTP request body.
 type SetToolMetadataBatchRequestBody struct {
@@ -169,6 +178,9 @@ type CreateMcpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -229,6 +241,9 @@ type GetMcpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -301,6 +316,72 @@ type UpdateMcpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
+	// When the MCP server was created
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the MCP server was last updated
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// SetSetupGuideCompletedResponseBody is the type of the "mcpServers" service
+// "setSetupGuideCompleted" endpoint HTTP response body.
+type SetSetupGuideCompletedResponseBody struct {
+	// The ID of the MCP server
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The project ID this MCP server belongs to
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
+	// The slug of an older Speakeasy-hosted address of this hosted server: its
+	// legacy custom-domain address, which the Speakeasy domain also answers under
+	// the same access rules. Absent when a platform endpoint or another alias
+	// holds that slug.
+	LegacyPlatformSlug *string `form:"legacy_platform_slug,omitempty" json:"legacy_platform_slug,omitempty" xml:"legacy_platform_slug,omitempty"`
+	// The ID of the environment associated with the server
+	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The ID of the remote MCP server used as the backend
+	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// The ID of the tunneled MCP server used as the backend
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	// The ID of the toolset used as the backend
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the unproxied MCP server used as the backend, if any. A server
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
+	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server, if any.
+	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// The visibility of the server
+	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -1414,6 +1495,215 @@ type UpdateMcpServerGatewayErrorResponseBody struct {
 // service "updateMcpServer" endpoint HTTP response body for the "unavailable"
 // error.
 type UpdateMcpServerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupGuideCompletedUnauthorizedResponseBody is the type of the
+// "mcpServers" service "setSetupGuideCompleted" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetSetupGuideCompletedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupGuideCompletedForbiddenResponseBody is the type of the "mcpServers"
+// service "setSetupGuideCompleted" endpoint HTTP response body for the
+// "forbidden" error.
+type SetSetupGuideCompletedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupGuideCompletedBadRequestResponseBody is the type of the "mcpServers"
+// service "setSetupGuideCompleted" endpoint HTTP response body for the
+// "bad_request" error.
+type SetSetupGuideCompletedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupGuideCompletedNotFoundResponseBody is the type of the "mcpServers"
+// service "setSetupGuideCompleted" endpoint HTTP response body for the
+// "not_found" error.
+type SetSetupGuideCompletedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupGuideCompletedConflictResponseBody is the type of the "mcpServers"
+// service "setSetupGuideCompleted" endpoint HTTP response body for the
+// "conflict" error.
+type SetSetupGuideCompletedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupGuideCompletedUnsupportedMediaResponseBody is the type of the
+// "mcpServers" service "setSetupGuideCompleted" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetSetupGuideCompletedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupGuideCompletedInvalidResponseBody is the type of the "mcpServers"
+// service "setSetupGuideCompleted" endpoint HTTP response body for the
+// "invalid" error.
+type SetSetupGuideCompletedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupGuideCompletedInvariantViolationResponseBody is the type of the
+// "mcpServers" service "setSetupGuideCompleted" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetSetupGuideCompletedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupGuideCompletedUnexpectedResponseBody is the type of the "mcpServers"
+// service "setSetupGuideCompleted" endpoint HTTP response body for the
+// "unexpected" error.
+type SetSetupGuideCompletedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupGuideCompletedGatewayErrorResponseBody is the type of the
+// "mcpServers" service "setSetupGuideCompleted" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetSetupGuideCompletedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupGuideCompletedUnavailableResponseBody is the type of the
+// "mcpServers" service "setSetupGuideCompleted" endpoint HTTP response body
+// for the "unavailable" error.
+type SetSetupGuideCompletedUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3173,6 +3463,9 @@ type McpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -3312,6 +3605,16 @@ func NewUpdateMcpServerRequestBody(p *mcpservers.UpdateMcpServerPayload) *Update
 	return body
 }
 
+// NewSetSetupGuideCompletedRequestBody builds the HTTP request body from the
+// payload of the "setSetupGuideCompleted" endpoint of the "mcpServers" service.
+func NewSetSetupGuideCompletedRequestBody(p *mcpservers.SetSetupGuideCompletedPayload) *SetSetupGuideCompletedRequestBody {
+	body := &SetSetupGuideCompletedRequestBody{
+		ID:        p.ID,
+		Completed: p.Completed,
+	}
+	return body
+}
+
 // NewSetToolMetadataBatchRequestBody builds the HTTP request body from the
 // payload of the "setToolMetadataBatch" endpoint of the "mcpServers" service.
 func NewSetToolMetadataBatchRequestBody(p *mcpservers.SetToolMetadataBatchPayload) *SetToolMetadataBatchRequestBody {
@@ -3391,6 +3694,7 @@ func NewCreateMcpServerMcpServerOK(body *CreateMcpServerResponseBody) *types.Mcp
 		PrimaryEndpointID:     body.PrimaryEndpointID,
 		PrimaryEndpointURL:    body.PrimaryEndpointURL,
 		HasEndpoint:           body.HasEndpoint,
+		SetupGuideCompletedAt: body.SetupGuideCompletedAt,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
 	}
@@ -3588,6 +3892,7 @@ func NewGetMcpServerMcpServerOK(body *GetMcpServerResponseBody) *types.McpServer
 		PrimaryEndpointID:     body.PrimaryEndpointID,
 		PrimaryEndpointURL:    body.PrimaryEndpointURL,
 		HasEndpoint:           body.HasEndpoint,
+		SetupGuideCompletedAt: body.SetupGuideCompletedAt,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
 	}
@@ -4147,6 +4452,7 @@ func NewUpdateMcpServerMcpServerOK(body *UpdateMcpServerResponseBody) *types.Mcp
 		PrimaryEndpointID:     body.PrimaryEndpointID,
 		PrimaryEndpointURL:    body.PrimaryEndpointURL,
 		HasEndpoint:           body.HasEndpoint,
+		SetupGuideCompletedAt: body.SetupGuideCompletedAt,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
 	}
@@ -4310,6 +4616,204 @@ func NewUpdateMcpServerGatewayError(body *UpdateMcpServerGatewayErrorResponseBod
 // NewUpdateMcpServerUnavailable builds a mcpServers service updateMcpServer
 // endpoint unavailable error.
 func NewUpdateMcpServerUnavailable(body *UpdateMcpServerUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupGuideCompletedMcpServerOK builds a "mcpServers" service
+// "setSetupGuideCompleted" endpoint result from a HTTP "OK" response.
+func NewSetSetupGuideCompletedMcpServerOK(body *SetSetupGuideCompletedResponseBody) *types.McpServer {
+	v := &types.McpServer{
+		ID:                    *body.ID,
+		ProjectID:             *body.ProjectID,
+		Name:                  body.Name,
+		Slug:                  body.Slug,
+		PlatformEndpointSlug:  body.PlatformEndpointSlug,
+		LegacyPlatformSlug:    body.LegacyPlatformSlug,
+		EnvironmentID:         body.EnvironmentID,
+		UserSessionIssuerID:   body.UserSessionIssuerID,
+		RemoteMcpServerID:     body.RemoteMcpServerID,
+		TunneledMcpServerID:   body.TunneledMcpServerID,
+		ToolsetID:             body.ToolsetID,
+		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
+		ToolVariationsGroupID: body.ToolVariationsGroupID,
+		Visibility:            types.McpServerVisibility(*body.Visibility),
+		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
+		PrimaryEndpointID:     body.PrimaryEndpointID,
+		PrimaryEndpointURL:    body.PrimaryEndpointURL,
+		HasEndpoint:           body.HasEndpoint,
+		SetupGuideCompletedAt: body.SetupGuideCompletedAt,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+	}
+	if body.Toolset != nil {
+		v.Toolset = unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(body.Toolset)
+	}
+
+	return v
+}
+
+// NewSetSetupGuideCompletedUnauthorized builds a mcpServers service
+// setSetupGuideCompleted endpoint unauthorized error.
+func NewSetSetupGuideCompletedUnauthorized(body *SetSetupGuideCompletedUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupGuideCompletedForbidden builds a mcpServers service
+// setSetupGuideCompleted endpoint forbidden error.
+func NewSetSetupGuideCompletedForbidden(body *SetSetupGuideCompletedForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupGuideCompletedBadRequest builds a mcpServers service
+// setSetupGuideCompleted endpoint bad_request error.
+func NewSetSetupGuideCompletedBadRequest(body *SetSetupGuideCompletedBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupGuideCompletedNotFound builds a mcpServers service
+// setSetupGuideCompleted endpoint not_found error.
+func NewSetSetupGuideCompletedNotFound(body *SetSetupGuideCompletedNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupGuideCompletedConflict builds a mcpServers service
+// setSetupGuideCompleted endpoint conflict error.
+func NewSetSetupGuideCompletedConflict(body *SetSetupGuideCompletedConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupGuideCompletedUnsupportedMedia builds a mcpServers service
+// setSetupGuideCompleted endpoint unsupported_media error.
+func NewSetSetupGuideCompletedUnsupportedMedia(body *SetSetupGuideCompletedUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupGuideCompletedInvalid builds a mcpServers service
+// setSetupGuideCompleted endpoint invalid error.
+func NewSetSetupGuideCompletedInvalid(body *SetSetupGuideCompletedInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupGuideCompletedInvariantViolation builds a mcpServers service
+// setSetupGuideCompleted endpoint invariant_violation error.
+func NewSetSetupGuideCompletedInvariantViolation(body *SetSetupGuideCompletedInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupGuideCompletedUnexpected builds a mcpServers service
+// setSetupGuideCompleted endpoint unexpected error.
+func NewSetSetupGuideCompletedUnexpected(body *SetSetupGuideCompletedUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupGuideCompletedGatewayError builds a mcpServers service
+// setSetupGuideCompleted endpoint gateway_error error.
+func NewSetSetupGuideCompletedGatewayError(body *SetSetupGuideCompletedGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupGuideCompletedUnavailable builds a mcpServers service
+// setSetupGuideCompleted endpoint unavailable error.
+func NewSetSetupGuideCompletedUnavailable(body *SetSetupGuideCompletedUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5830,6 +6334,9 @@ func ValidateCreateMcpServerResponseBody(body *CreateMcpServerResponseBody) (err
 	if body.PrimaryEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
 	}
+	if body.SetupGuideCompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.setup_guide_completed_at", *body.SetupGuideCompletedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -5904,6 +6411,9 @@ func ValidateGetMcpServerResponseBody(body *GetMcpServerResponseBody) (err error
 	}
 	if body.PrimaryEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
+	}
+	if body.SetupGuideCompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.setup_guide_completed_at", *body.SetupGuideCompletedAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -6011,6 +6521,87 @@ func ValidateUpdateMcpServerResponseBody(body *UpdateMcpServerResponseBody) (err
 	}
 	if body.PrimaryEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
+	}
+	if body.SetupGuideCompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.setup_guide_completed_at", *body.SetupGuideCompletedAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedResponseBody runs the validations defined on
+// SetSetupGuideCompletedResponseBody
+func ValidateSetSetupGuideCompletedResponseBody(body *SetSetupGuideCompletedResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Visibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
+	}
+	if body.NetworkAccessMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.EnvironmentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.RemoteMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
+	}
+	if body.TunneledMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
+	}
+	if body.ToolsetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.UnproxiedMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.unproxied_mcp_server_id", *body.UnproxiedMcpServerID, goa.FormatUUID))
+	}
+	if body.ToolVariationsGroupID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
+	}
+	if body.Visibility != nil {
+		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
+		}
+	}
+	if body.NetworkAccessMode != nil {
+		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
+		}
+	}
+	if body.Toolset != nil {
+		if err2 := ValidateMcpServerToolsetSummaryResponseBody(body.Toolset); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.PrimaryEndpointID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
+	}
+	if body.SetupGuideCompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.setup_guide_completed_at", *body.SetupGuideCompletedAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -7473,6 +8064,271 @@ func ValidateUpdateMcpServerGatewayErrorResponseBody(body *UpdateMcpServerGatewa
 // ValidateUpdateMcpServerUnavailableResponseBody runs the validations defined
 // on updateMcpServer_unavailable_response_body
 func ValidateUpdateMcpServerUnavailableResponseBody(body *UpdateMcpServerUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedUnauthorizedResponseBody runs the validations
+// defined on setSetupGuideCompleted_unauthorized_response_body
+func ValidateSetSetupGuideCompletedUnauthorizedResponseBody(body *SetSetupGuideCompletedUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedForbiddenResponseBody runs the validations
+// defined on setSetupGuideCompleted_forbidden_response_body
+func ValidateSetSetupGuideCompletedForbiddenResponseBody(body *SetSetupGuideCompletedForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedBadRequestResponseBody runs the validations
+// defined on setSetupGuideCompleted_bad_request_response_body
+func ValidateSetSetupGuideCompletedBadRequestResponseBody(body *SetSetupGuideCompletedBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedNotFoundResponseBody runs the validations
+// defined on setSetupGuideCompleted_not_found_response_body
+func ValidateSetSetupGuideCompletedNotFoundResponseBody(body *SetSetupGuideCompletedNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedConflictResponseBody runs the validations
+// defined on setSetupGuideCompleted_conflict_response_body
+func ValidateSetSetupGuideCompletedConflictResponseBody(body *SetSetupGuideCompletedConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedUnsupportedMediaResponseBody runs the
+// validations defined on setSetupGuideCompleted_unsupported_media_response_body
+func ValidateSetSetupGuideCompletedUnsupportedMediaResponseBody(body *SetSetupGuideCompletedUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedInvalidResponseBody runs the validations
+// defined on setSetupGuideCompleted_invalid_response_body
+func ValidateSetSetupGuideCompletedInvalidResponseBody(body *SetSetupGuideCompletedInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedInvariantViolationResponseBody runs the
+// validations defined on
+// setSetupGuideCompleted_invariant_violation_response_body
+func ValidateSetSetupGuideCompletedInvariantViolationResponseBody(body *SetSetupGuideCompletedInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedUnexpectedResponseBody runs the validations
+// defined on setSetupGuideCompleted_unexpected_response_body
+func ValidateSetSetupGuideCompletedUnexpectedResponseBody(body *SetSetupGuideCompletedUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedGatewayErrorResponseBody runs the validations
+// defined on setSetupGuideCompleted_gateway_error_response_body
+func ValidateSetSetupGuideCompletedGatewayErrorResponseBody(body *SetSetupGuideCompletedGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedUnavailableResponseBody runs the validations
+// defined on setSetupGuideCompleted_unavailable_response_body
+func ValidateSetSetupGuideCompletedUnavailableResponseBody(body *SetSetupGuideCompletedUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9709,6 +10565,9 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	}
 	if body.PrimaryEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
+	}
+	if body.SetupGuideCompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.setup_guide_completed_at", *body.SetupGuideCompletedAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

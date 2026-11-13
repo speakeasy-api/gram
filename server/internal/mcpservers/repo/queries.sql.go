@@ -2347,6 +2347,55 @@ func (q *Queries) SetEMABindingGatewayIssuerFixture(ctx context.Context, arg Set
 	return err
 }
 
+const setMCPServerSetupGuideCompleted = `-- name: SetMCPServerSetupGuideCompleted :one
+UPDATE mcp_servers
+SET setup_guide_completed_at = CASE
+      WHEN $1::boolean THEN COALESCE(setup_guide_completed_at, clock_timestamp())
+      ELSE NULL
+    END,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, setup_guide_completed_at, created_at, updated_at, deleted_at, deleted
+`
+
+type SetMCPServerSetupGuideCompletedParams struct {
+	Completed bool
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Marking the guide done again keeps the first completion time.
+func (q *Queries) SetMCPServerSetupGuideCompleted(ctx context.Context, arg SetMCPServerSetupGuideCompletedParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, setMCPServerSetupGuideCompleted, arg.Completed, arg.ID, arg.ProjectID)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.ToolsetID,
+		&i.UnproxiedMcpServerID,
+		&i.BuiltinBackend,
+		&i.ToolVariationsGroupID,
+		&i.Visibility,
+		&i.NetworkAccessMode,
+		&i.RequiresUpstreamAuth,
+		&i.SetupGuideCompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const setMCPServerToolMetadata = `-- name: SetMCPServerToolMetadata :many
 WITH input AS (
     SELECT

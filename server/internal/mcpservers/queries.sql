@@ -1172,3 +1172,16 @@ LEFT JOIN agents AS agent
   AND agent.organization_id = @organization_id::text AND agent.deleted IS FALSE
 ORDER BY g.last_used_at DESC NULLS LAST, g.subject_urn
 LIMIT @row_limit::int;
+
+-- name: SetMCPServerSetupGuideCompleted :one
+-- Marking the guide done again keeps the first completion time.
+UPDATE mcp_servers
+SET setup_guide_completed_at = CASE
+      WHEN @completed::boolean THEN COALESCE(setup_guide_completed_at, clock_timestamp())
+      ELSE NULL
+    END,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
