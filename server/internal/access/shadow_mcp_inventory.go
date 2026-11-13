@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -246,10 +247,55 @@ func (s *Service) ReadShadowMCPInventory(ctx context.Context, input ShadowMCPInv
 		servers = append(servers, buildShadowMCPInventoryServer(row, usageByURL[row.CanonicalServerURL], policyState.forURL(row.CanonicalServerURL), shadowMCPTargetKindServerURL))
 	}
 
+	s.attachShadowMCPOfficialServers(ctx, input.OrganizationID, input.ProjectID, servers)
+
 	return &gen.ListShadowMCPInventoryResult{
 		Servers:    servers,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// attachShadowMCPOfficialServers marks the rows whose upstream URL the
+// project already serves through Speakeasy. A failed lookup leaves the rows
+// unmarked rather than failing the inventory: the page still lists what was
+// observed, and only the onboarded state is missing.
+func (s *Service) attachShadowMCPOfficialServers(ctx context.Context, organizationID string, projectID uuid.UUID, servers []*gen.ShadowMCPInventoryServer) {
+	hasURLRow := false
+	for _, server := range servers {
+		if server != nil && conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) == shadowMCPTargetKindServerURL {
+			hasURLRow = true
+			break
+		}
+	}
+	if !hasURLRow {
+		return
+	}
+
+	official, err := shadowmcp.OfficialServers(ctx, s.db, organizationID, projectID, s.serverURL)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve official servers for shadow mcp inventory",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID.String()),
+		)
+		return
+	}
+	for _, server := range servers {
+		if server == nil || conv.PtrValOr(server.TargetKind, shadowMCPTargetKindServerURL) != shadowMCPTargetKindServerURL {
+			continue
+		}
+		match, ok := shadowmcp.OfficialServerFor(official, server.CanonicalServerURL)
+		if !ok {
+			continue
+		}
+		server.OfficialServer = &gen.ShadowMCPOfficialServer{
+			McpServerID: match.MCPServerID.String(),
+			Name:        match.Name,
+			Slug:        conv.PtrEmpty(match.Slug),
+			URL:         conv.PtrEmpty(match.URL),
+			GatewayName: conv.PtrEmpty(match.GatewayName),
+		}
+	}
 }
 
 // shadowMCPRequestOnlyTargets lists the reviews whose targets telemetry has
@@ -413,6 +459,15 @@ func (s *Service) readShadowMCPInventoryServer(ctx context.Context, organization
 
 // ReadShadowMCPInventoryTarget composes one exact observed or request-only inventory target.
 func (s *Service) ReadShadowMCPInventoryTarget(ctx context.Context, input ShadowMCPInventoryTargetInput) (*gen.ShadowMCPInventoryServer, error) {
+	server, err := s.readShadowMCPInventoryTarget(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	s.attachShadowMCPOfficialServers(ctx, input.OrganizationID, input.ProjectID, []*gen.ShadowMCPInventoryServer{server})
+	return server, nil
+}
+
+func (s *Service) readShadowMCPInventoryTarget(ctx context.Context, input ShadowMCPInventoryTargetInput) (*gen.ShadowMCPInventoryServer, error) {
 	if strings.TrimSpace(input.OrganizationID) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "organization id is required").LogError(ctx, s.logger)
 	}
@@ -1594,6 +1649,7 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		ApprovalRequest:    rowState.ApprovalRequest,
 		AllowedPolicyIds:   rowState.AllowedPolicyIDs,
 		BlockedPolicyIds:   rowState.BlockedPolicyIDs,
+		OfficialServer:     nil,
 	}
 }
 

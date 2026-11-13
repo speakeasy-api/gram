@@ -17,8 +17,9 @@ import { Stack } from "@/components/ui/Stack";
 import { useIsSpeakeasyStaff, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { AlertCircle, Plug } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
+import { SHADOW_MCP_ONBOARD_SOURCE } from "@/components/shadow-mcp/shadowMCPOfficialServer";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
 import { useCreateUnproxiedMcpSource } from "../unproxied-mcp/hooks";
@@ -65,8 +66,16 @@ function CreateRemoteMcpForm() {
   const issuerQuery = useEffectiveUserSessionIssuers();
   const newGuardrail = useNewServerGuardrail();
 
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+  // A link from the Shadow MCP page carries the server it is about, so the
+  // admin confirms a filled form instead of copying a URL across pages. Read
+  // once: the fields are the admin's to edit from then on.
+  const [searchParams] = useSearchParams();
+  const prefilledUrl = searchParams.get("url")?.trim() ?? "";
+  const fromShadowMCP =
+    searchParams.get("from") === SHADOW_MCP_ONBOARD_SOURCE &&
+    prefilledUrl !== "";
+  const [name, setName] = useState(searchParams.get("name")?.trim() ?? "");
+  const [url, setUrl] = useState(prefilledUrl);
   const [mode, setMode] = useState<ProxyMode>("proxied");
   const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
   const [identityMode, setIdentityMode] =
@@ -134,6 +143,21 @@ function CreateRemoteMcpForm() {
       );
     }
   }, [identityChoiceTouched, verify.result]);
+
+  // A prefilled URL is checked as the form opens: the next thing the admin
+  // needs is whether it connects, and pressing a button to find out is a
+  // step the link already answered the intent for. Once, on mount.
+  const verifiedPrefill = useRef(false);
+  const triggerVerify = verify.trigger;
+  useEffect(() => {
+    if (verifiedPrefill.current || prefilledUrl === "") return;
+    verifiedPrefill.current = true;
+    if (validateMcpServerUrl(prefilledUrl) !== null) return;
+    setTouched(true);
+    void triggerVerify();
+    // Runs once for the URL the link carried; later edits verify on submit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleVerify = () => {
     setTouched(true);
@@ -239,6 +263,13 @@ function CreateRemoteMcpForm() {
         noValidate
       >
         <Stack gap={4}>
+          {fromShadowMCP ? (
+            <Alert variant="info" dismissible={false} title="From Shadow MCP">
+              Your team already uses this server directly. When you save, direct
+              connections are blocked wherever a Shadow MCP policy applies, and
+              agents are sent to this official server.
+            </Alert>
+          ) : null}
           <fieldset disabled={creationLocked} className="contents">
             <Stack gap={1}>
               <label

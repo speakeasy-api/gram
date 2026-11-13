@@ -435,3 +435,20 @@ WHERE id = @project_id
   AND organization_id = @organization_id
   AND deleted IS FALSE
 FOR UPDATE;
+
+-- name: ListLiveRemoteBackedMcpServers :many
+-- Every live, enabled MCP server in the project that proxies to a remote URL.
+-- Shadow MCP reads this to tell a directly-used server URL that the project
+-- already serves through Speakeasy from one it does not.
+SELECT
+    m.id AS mcp_server_id,
+    m.name AS mcp_server_name,
+    m.slug AS mcp_server_slug,
+    rms.name AS remote_name,
+    rms.url AS remote_url
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE m.project_id = @project_id
+    AND m.deleted IS FALSE
+    AND m.visibility <> 'disabled'
+ORDER BY m.created_at, m.id;

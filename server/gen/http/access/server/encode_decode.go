@@ -10501,6 +10501,9 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 	} else {
 		res.BlockedPolicyIds = []string{}
 	}
+	if v.OfficialServer != nil {
+		res.OfficialServer = marshalAccessShadowMCPOfficialServerToShadowMCPOfficialServerResponseBody(v.OfficialServer)
+	}
 
 	return res
 }
@@ -10555,6 +10558,24 @@ func marshalAccessShadowMCPInventoryApprovalRequestToShadowMCPInventoryApprovalR
 		StandingDecision:  v.StandingDecision,
 		RequesterCount:    v.RequesterCount,
 		EvidenceChangedAt: v.EvidenceChangedAt,
+	}
+
+	return res
+}
+
+// marshalAccessShadowMCPOfficialServerToShadowMCPOfficialServerResponseBody
+// builds a value of type *ShadowMCPOfficialServerResponseBody from a value of
+// type *access.ShadowMCPOfficialServer.
+func marshalAccessShadowMCPOfficialServerToShadowMCPOfficialServerResponseBody(v *access.ShadowMCPOfficialServer) *ShadowMCPOfficialServerResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ShadowMCPOfficialServerResponseBody{
+		McpServerID: v.McpServerID,
+		Name:        v.Name,
+		Slug:        v.Slug,
+		URL:         v.URL,
+		GatewayName: v.GatewayName,
 	}
 
 	return res

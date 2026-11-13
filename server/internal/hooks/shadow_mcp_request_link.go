@@ -2,8 +2,11 @@ package hooks
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/hooks/wire"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -47,6 +50,12 @@ type shadowMCPRequestLink struct {
 func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params shadowMCPRequestLinkParams) string {
 	server := conv.PtrValOr(redactedObservedName(params.Evidence, params.ToolName), "")
 	message := renderPolicyUserMessage(params.UserMessage, params.AuditReason, params.PolicyName, server)
+	// A server with an official version is not something to ask access to:
+	// the answer is to use the official one. No request link is minted and no
+	// block effect is set, so nothing downstream offers "request access".
+	if official, ok := s.shadowMCPOfficialServer(ctx, params.OrganizationID, params.ProjectID, params.Evidence.FullURL); ok {
+		return strings.TrimSpace(message) + "\n\n" + shadowMCPOfficialServerRedirect(official)
+	}
 	link, ok := s.shadowMCPApprovalRequestURL(ctx, params)
 	if !ok {
 		return message
@@ -69,6 +78,47 @@ func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params sha
 		BlockURL:         "",
 	})
 	return strings.TrimSpace(message) + "\n\nRequest access:\n" + link.URL + "\n\n" + shadowMCPApprovalRequestPrompt
+}
+
+// shadowMCPOfficialServer finds the official, Speakeasy-served version of a
+// directly-used server URL. It answers only when that version has an address
+// to send people to: an official server without an endpoint cannot replace
+// the direct one yet. A failed lookup reads as "none", which keeps the guard
+// on its ordinary rules rather than blocking on an infrastructure blip.
+func (s *Service) shadowMCPOfficialServer(ctx context.Context, organizationID string, projectID string, fullURL string) (shadowmcp.OfficialServer, bool) {
+	none := shadowmcp.OfficialServer{MCPServerID: uuid.Nil, Name: "", Slug: "", URL: "", GatewayName: ""}
+	if s.shadowMCPClient == nil || strings.TrimSpace(fullURL) == "" {
+		return none, false
+	}
+	parsedProjectID, err := uuid.Parse(projectID)
+	if err != nil {
+		return none, false
+	}
+	official, found, err := s.shadowMCPClient.OfficialServerForURL(ctx, organizationID, parsedProjectID, fullURL)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve official server for shadow mcp url",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID),
+		)
+		return none, false
+	}
+	if !found || official.URL == "" {
+		return none, false
+	}
+	return official, true
+}
+
+// shadowMCPOfficialServerRedirect is the part of a block message that sends
+// the agent to the official server. It is written for the agent to act on:
+// the address stands on its own line so it can be copied or opened.
+func shadowMCPOfficialServerRedirect(official shadowmcp.OfficialServer) string {
+	served := fmt.Sprintf("Your organization serves an official version of this MCP server: %q.", official.Name)
+	if official.GatewayName != "" {
+		served = fmt.Sprintf("Your organization serves an official version of this MCP server, %q, through the gateway %q.", official.Name, official.GatewayName)
+	}
+	return served + " Use it instead of the direct connection:\n" + official.URL +
+		"\n\nIf that server is already connected, call its tools. If it is not, tell the user to add the URL above as an MCP server, then retry."
 }
 
 func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadowMCPRequestLinkParams) (shadowMCPRequestLink, bool) {

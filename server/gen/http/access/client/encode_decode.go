@@ -11356,6 +11356,9 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 	for i, val := range v.BlockedPolicyIds {
 		res.BlockedPolicyIds[i] = val
 	}
+	if v.OfficialServer != nil {
+		res.OfficialServer = unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer(v.OfficialServer)
+	}
 
 	return res
 }
@@ -11410,6 +11413,24 @@ func unmarshalShadowMCPInventoryApprovalRequestResponseBodyToAccessShadowMCPInve
 		StandingDecision:  v.StandingDecision,
 		RequesterCount:    *v.RequesterCount,
 		EvidenceChangedAt: v.EvidenceChangedAt,
+	}
+
+	return res
+}
+
+// unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer
+// builds a value of type *access.ShadowMCPOfficialServer from a value of type
+// *ShadowMCPOfficialServerResponseBody.
+func unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer(v *ShadowMCPOfficialServerResponseBody) *access.ShadowMCPOfficialServer {
+	if v == nil {
+		return nil
+	}
+	res := &access.ShadowMCPOfficialServer{
+		McpServerID: *v.McpServerID,
+		Name:        *v.Name,
+		Slug:        v.Slug,
+		URL:         v.URL,
+		GatewayName: v.GatewayName,
 	}
 
 	return res

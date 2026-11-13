@@ -1800,6 +1800,22 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("approval_request", ShadowMCPInventoryApprovalRequestModel)
 	Attribute("allowed_policy_ids", ArrayOf(String))
 	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
+	Attribute("official_server", ShadowMCPOfficialServerModel, func() {
+		Description("The MCP server this project serves through Speakeasy for the same upstream URL. Present once the server is onboarded: direct use is then blocked wherever a Shadow MCP policy applies, and the block points agents here.")
+	})
+})
+
+var ShadowMCPOfficialServerModel = Type("ShadowMCPOfficialServer", func() {
+	Description("The official, Speakeasy-served version of a Shadow MCP server.")
+	Required("mcp_server_id", "name")
+
+	Attribute("mcp_server_id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The official server's display name.")
+	Attribute("slug", String, "The official server's slug, when it has one.")
+	Attribute("url", String, "Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.")
+	Attribute("gateway_name", String, "The gateway that serves the official server, when url is a gateway's address.")
 })
 
 var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {

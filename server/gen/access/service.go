@@ -1739,6 +1739,10 @@ type ShadowMCPInventoryServer struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string
+	// The MCP server this project serves through Speakeasy for the same upstream
+	// URL. Present once the server is onboarded: direct use is then blocked
+	// wherever a Shadow MCP policy applies, and the block points agents here.
+	OfficialServer *ShadowMCPOfficialServer
 }
 
 // ShadowMCPInventoryURLState is the result type of the access service
@@ -1776,6 +1780,20 @@ type ShadowMCPInventoryUser struct {
 type ShadowMCPInventoryUserSource struct {
 	Source           string
 	ObservedUseCount int
+}
+
+// The official, Speakeasy-served version of a Shadow MCP server.
+type ShadowMCPOfficialServer struct {
+	McpServerID string
+	// The official server's display name.
+	Name string
+	// The official server's slug, when it has one.
+	Slug *string
+	// Where agents connect. A gateway's address when the server is a gateway
+	// member. Absent while the server has no endpoint.
+	URL *string
+	// The gateway that serves the official server, when url is a gateway's address.
+	GatewayName *string
 }
 
 // SyncDirectoryGroupsPayload is the payload type of the access service

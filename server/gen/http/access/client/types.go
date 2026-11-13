@@ -558,6 +558,10 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids,omitempty" json:"blocked_policy_ids,omitempty" xml:"blocked_policy_ids,omitempty"`
+	// The MCP server this project serves through Speakeasy for the same upstream
+	// URL. Present once the server is onboarded: direct use is then blocked
+	// wherever a Shadow MCP policy applies, and the block points agents here.
+	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
 }
 
 // ListShadowMCPInventoryUsersResponseBody is the type of the "access" service
@@ -9691,6 +9695,10 @@ type ShadowMCPInventoryServerResponseBody struct {
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids,omitempty" json:"blocked_policy_ids,omitempty" xml:"blocked_policy_ids,omitempty"`
+	// The MCP server this project serves through Speakeasy for the same upstream
+	// URL. Present once the server is onboarded: direct use is then blocked
+	// wherever a Shadow MCP policy applies, and the block points agents here.
+	OfficialServer *ShadowMCPOfficialServerResponseBody `form:"official_server,omitempty" json:"official_server,omitempty" xml:"official_server,omitempty"`
 }
 
 // ShadowMCPAccessSummaryResponseBody is used to define fields on response body
@@ -9756,6 +9764,21 @@ type ShadowMCPInventoryApprovalRequestResponseBody struct {
 	// differing from what the latest approval rested on. Absent when nothing has
 	// drifted; cleared only by a new decision.
 	EvidenceChangedAt *string `form:"evidence_changed_at,omitempty" json:"evidence_changed_at,omitempty" xml:"evidence_changed_at,omitempty"`
+}
+
+// ShadowMCPOfficialServerResponseBody is used to define fields on response
+// body types.
+type ShadowMCPOfficialServerResponseBody struct {
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The official server's display name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The official server's slug, when it has one.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Where agents connect. A gateway's address when the server is a gateway
+	// member. Absent while the server has no endpoint.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// The gateway that serves the official server, when url is a gateway's address.
+	GatewayName *string `form:"gateway_name,omitempty" json:"gateway_name,omitempty" xml:"gateway_name,omitempty"`
 }
 
 // ShadowMCPInventoryUserResponseBody is used to define fields on response body
@@ -14465,6 +14488,9 @@ func NewGetShadowMCPInventoryServerShadowMCPInventoryServerOK(body *GetShadowMCP
 	for i, val := range body.BlockedPolicyIds {
 		v.BlockedPolicyIds[i] = val
 	}
+	if body.OfficialServer != nil {
+		v.OfficialServer = unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer(body.OfficialServer)
+	}
 
 	return v
 }
@@ -18781,6 +18807,11 @@ func ValidateGetShadowMCPInventoryServerResponseBody(body *GetShadowMCPInventory
 	}
 	if body.ApprovalRequest != nil {
 		if err2 := ValidateShadowMCPInventoryApprovalRequestResponseBody(body.ApprovalRequest); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.OfficialServer != nil {
+		if err2 := ValidateShadowMCPOfficialServerResponseBody(body.OfficialServer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -30987,6 +31018,11 @@ func ValidateShadowMCPInventoryServerResponseBody(body *ShadowMCPInventoryServer
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.OfficialServer != nil {
+		if err2 := ValidateShadowMCPOfficialServerResponseBody(body.OfficialServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	return
 }
 
@@ -31098,6 +31134,21 @@ func ValidateShadowMCPInventoryApprovalRequestResponseBody(body *ShadowMCPInvent
 	}
 	if body.EvidenceChangedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.evidence_changed_at", *body.EvidenceChangedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateShadowMCPOfficialServerResponseBody runs the validations defined on
+// ShadowMCPOfficialServerResponseBody
+func ValidateShadowMCPOfficialServerResponseBody(body *ShadowMCPOfficialServerResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	return
 }

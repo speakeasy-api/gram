@@ -117445,6 +117445,8 @@ components:
         observed_use_count:
           type: integer
           format: int64
+        official_server:
+          $ref: '#/components/schemas/ShadowMCPOfficialServer'
         request_count:
           type: integer
           format: int64
@@ -117550,6 +117552,28 @@ components:
       required:
         - source
         - observed_use_count
+    ShadowMCPOfficialServer:
+      type: object
+      properties:
+        gateway_name:
+          type: string
+          description: The gateway that serves the official server, when url is a gateway's address.
+        mcp_server_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: The official server's display name.
+        slug:
+          type: string
+          description: The official server's slug, when it has one.
+        url:
+          type: string
+          description: Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.
+      description: The official, Speakeasy-served version of a Shadow MCP server.
+      required:
+        - mcp_server_id
+        - name
     ShareSkillRequestBody:
       type: object
       properties:
