@@ -3428,6 +3428,9 @@ type McpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -10677,6 +10680,9 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	}
 	if body.PrimaryEndpointID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.primary_endpoint_id", *body.PrimaryEndpointID, goa.FormatUUID))
+	}
+	if body.SetupGuideCompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.setup_guide_completed_at", *body.SetupGuideCompletedAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

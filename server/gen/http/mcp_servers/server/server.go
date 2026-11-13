@@ -24,6 +24,7 @@ type Server struct {
 	ListMcpServers          http.Handler
 	ListMcpServersForOrg    http.Handler
 	UpdateMcpServer         http.Handler
+	SetSetupGuideCompleted  http.Handler
 	ListToolFilters         http.Handler
 	SetToolMetadataBatch    http.Handler
 	AddToolMetadataBatch    http.Handler
@@ -66,6 +67,7 @@ func New(
 			{"ListMcpServers", "GET", "/rpc/mcpServers.list"},
 			{"ListMcpServersForOrg", "GET", "/rpc/mcpServers.listForOrg"},
 			{"UpdateMcpServer", "POST", "/rpc/mcpServers.update"},
+			{"SetSetupGuideCompleted", "POST", "/rpc/mcpServers.setSetupGuideCompleted"},
 			{"ListToolFilters", "GET", "/rpc/mcpServers.listToolFilters"},
 			{"SetToolMetadataBatch", "PUT", "/rpc/mcpServers.setToolMetadataBatch"},
 			{"AddToolMetadataBatch", "POST", "/rpc/mcpServers.addToolMetadataBatch"},
@@ -80,6 +82,7 @@ func New(
 		ListMcpServers:          NewListMcpServersHandler(e.ListMcpServers, mux, decoder, encoder, errhandler, formatter),
 		ListMcpServersForOrg:    NewListMcpServersForOrgHandler(e.ListMcpServersForOrg, mux, decoder, encoder, errhandler, formatter),
 		UpdateMcpServer:         NewUpdateMcpServerHandler(e.UpdateMcpServer, mux, decoder, encoder, errhandler, formatter),
+		SetSetupGuideCompleted:  NewSetSetupGuideCompletedHandler(e.SetSetupGuideCompleted, mux, decoder, encoder, errhandler, formatter),
 		ListToolFilters:         NewListToolFiltersHandler(e.ListToolFilters, mux, decoder, encoder, errhandler, formatter),
 		SetToolMetadataBatch:    NewSetToolMetadataBatchHandler(e.SetToolMetadataBatch, mux, decoder, encoder, errhandler, formatter),
 		AddToolMetadataBatch:    NewAddToolMetadataBatchHandler(e.AddToolMetadataBatch, mux, decoder, encoder, errhandler, formatter),
@@ -101,6 +104,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListMcpServers = m(s.ListMcpServers)
 	s.ListMcpServersForOrg = m(s.ListMcpServersForOrg)
 	s.UpdateMcpServer = m(s.UpdateMcpServer)
+	s.SetSetupGuideCompleted = m(s.SetSetupGuideCompleted)
 	s.ListToolFilters = m(s.ListToolFilters)
 	s.SetToolMetadataBatch = m(s.SetToolMetadataBatch)
 	s.AddToolMetadataBatch = m(s.AddToolMetadataBatch)
@@ -121,6 +125,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListMcpServersHandler(mux, h.ListMcpServers)
 	MountListMcpServersForOrgHandler(mux, h.ListMcpServersForOrg)
 	MountUpdateMcpServerHandler(mux, h.UpdateMcpServer)
+	MountSetSetupGuideCompletedHandler(mux, h.SetSetupGuideCompleted)
 	MountListToolFiltersHandler(mux, h.ListToolFilters)
 	MountSetToolMetadataBatchHandler(mux, h.SetToolMetadataBatch)
 	MountAddToolMetadataBatchHandler(mux, h.AddToolMetadataBatch)
@@ -378,6 +383,59 @@ func NewUpdateMcpServerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateMcpServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpServers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetSetupGuideCompletedHandler configures the mux to serve the
+// "mcpServers" service "setSetupGuideCompleted" endpoint.
+func MountSetSetupGuideCompletedHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/mcpServers.setSetupGuideCompleted", f)
+}
+
+// NewSetSetupGuideCompletedHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpServers" service "setSetupGuideCompleted" endpoint.
+func NewSetSetupGuideCompletedHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetSetupGuideCompletedRequest(mux, decoder)
+		encodeResponse = EncodeSetSetupGuideCompletedResponse(encoder)
+		encodeError    = EncodeSetSetupGuideCompletedError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setSetupGuideCompleted")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpServers")
 		payload, err := decodeRequest(r)
 		if err != nil {

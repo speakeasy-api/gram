@@ -162,7 +162,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"registry-discovery (discover-servers|discover-versions|discover-version)",
-		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server|get-mcp-server-usage-impact)",
+		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|set-setup-guide-completed|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server|get-mcp-server-usage-impact)",
 		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
@@ -1974,6 +1974,12 @@ func ParseEndpoint(
 		mcpServersUpdateMcpServerSessionTokenFlag     = mcpServersUpdateMcpServerFlags.String("session-token", "", "")
 		mcpServersUpdateMcpServerApikeyTokenFlag      = mcpServersUpdateMcpServerFlags.String("apikey-token", "", "")
 		mcpServersUpdateMcpServerProjectSlugInputFlag = mcpServersUpdateMcpServerFlags.String("project-slug-input", "", "")
+
+		mcpServersSetSetupGuideCompletedFlags                = flag.NewFlagSet("set-setup-guide-completed", flag.ExitOnError)
+		mcpServersSetSetupGuideCompletedBodyFlag             = mcpServersSetSetupGuideCompletedFlags.String("body", "REQUIRED", "")
+		mcpServersSetSetupGuideCompletedSessionTokenFlag     = mcpServersSetSetupGuideCompletedFlags.String("session-token", "", "")
+		mcpServersSetSetupGuideCompletedApikeyTokenFlag      = mcpServersSetSetupGuideCompletedFlags.String("apikey-token", "", "")
+		mcpServersSetSetupGuideCompletedProjectSlugInputFlag = mcpServersSetSetupGuideCompletedFlags.String("project-slug-input", "", "")
 
 		mcpServersListToolFiltersFlags                = flag.NewFlagSet("list-tool-filters", flag.ExitOnError)
 		mcpServersListToolFiltersIDFlag               = mcpServersListToolFiltersFlags.String("id", "", "")
@@ -6036,6 +6042,7 @@ func ParseEndpoint(
 	mcpServersListMcpServersFlags.Usage = mcpServersListMcpServersUsage
 	mcpServersListMcpServersForOrgFlags.Usage = mcpServersListMcpServersForOrgUsage
 	mcpServersUpdateMcpServerFlags.Usage = mcpServersUpdateMcpServerUsage
+	mcpServersSetSetupGuideCompletedFlags.Usage = mcpServersSetSetupGuideCompletedUsage
 	mcpServersListToolFiltersFlags.Usage = mcpServersListToolFiltersUsage
 	mcpServersSetToolMetadataBatchFlags.Usage = mcpServersSetToolMetadataBatchUsage
 	mcpServersAddToolMetadataBatchFlags.Usage = mcpServersAddToolMetadataBatchUsage
@@ -8165,6 +8172,9 @@ func ParseEndpoint(
 
 			case "update-mcp-server":
 				epf = mcpServersUpdateMcpServerFlags
+
+			case "set-setup-guide-completed":
+				epf = mcpServersSetSetupGuideCompletedFlags
 
 			case "list-tool-filters":
 				epf = mcpServersListToolFiltersFlags
@@ -11577,6 +11587,9 @@ func ParseEndpoint(
 			case "update-mcp-server":
 				endpoint = c.UpdateMcpServer()
 				data, err = mcpserversc.BuildUpdateMcpServerPayload(*mcpServersUpdateMcpServerBodyFlag, *mcpServersUpdateMcpServerSessionTokenFlag, *mcpServersUpdateMcpServerApikeyTokenFlag, *mcpServersUpdateMcpServerProjectSlugInputFlag)
+			case "set-setup-guide-completed":
+				endpoint = c.SetSetupGuideCompleted()
+				data, err = mcpserversc.BuildSetSetupGuideCompletedPayload(*mcpServersSetSetupGuideCompletedBodyFlag, *mcpServersSetSetupGuideCompletedSessionTokenFlag, *mcpServersSetSetupGuideCompletedApikeyTokenFlag, *mcpServersSetSetupGuideCompletedProjectSlugInputFlag)
 			case "list-tool-filters":
 				endpoint = c.ListToolFilters()
 				data, err = mcpserversc.BuildListToolFiltersPayload(*mcpServersListToolFiltersIDFlag, *mcpServersListToolFiltersSlugFlag, *mcpServersListToolFiltersSessionTokenFlag, *mcpServersListToolFiltersApikeyTokenFlag, *mcpServersListToolFiltersProjectSlugInputFlag)
@@ -21547,6 +21560,7 @@ func mcpServersUsage() {
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers-for-org: List all MCP servers across the organization`)
 	fmt.Fprintln(os.Stderr, `    update-mcp-server: Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.`)
+	fmt.Fprintln(os.Stderr, `    set-setup-guide-completed: Mark the upstream provider's manual setup guide for an MCP server as done, or clear that mark. Marking it done again keeps the original completion time. Requires the same access as updateMcpServer.`)
 	fmt.Fprintln(os.Stderr, `    list-tool-filters: List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.`)
 	fmt.Fprintln(os.Stderr, `    set-tool-metadata-batch: Authoritative batch upsert of tool metadata for an MCP server. Every tool in the payload is upserted and any stored tool absent from the payload is soft-deleted, all in one transaction.`)
 	fmt.Fprintln(os.Stderr, `    add-tool-metadata-batch: Strictly additive batch insert of tool metadata for an MCP server. Every tool in the payload is inserted; if any of them already has a live stored entry the whole batch fails with a conflict and nothing is inserted. Stored tools absent from the payload are left untouched and nothing is deleted. Callers are expected to send only tools they know are new.`)
@@ -21681,6 +21695,30 @@ func mcpServersUpdateMcpServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers update-mcp-server --body '{\n      \"clear_user_session_issuer\": false,\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"network_access_mode\": \"dual\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"unproxied_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpServersSetSetupGuideCompletedUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers set-setup-guide-completed", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Mark the upstream provider's manual setup guide for an MCP server as done, or clear that mark. Marking it done again keeps the original completion time. Requires the same access as updateMcpServer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers set-setup-guide-completed --body '{\n      \"completed\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpServersListToolFiltersUsage() {

@@ -3430,6 +3430,9 @@ type McpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated

@@ -75,6 +75,15 @@ type UpdateMcpServerRequestBody struct {
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 }
 
+// SetSetupGuideCompletedRequestBody is the type of the "mcpServers" service
+// "setSetupGuideCompleted" endpoint HTTP request body.
+type SetSetupGuideCompletedRequestBody struct {
+	// The ID of the MCP server
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// true marks the setup guide as done; false clears the mark
+	Completed *bool `form:"completed,omitempty" json:"completed,omitempty" xml:"completed,omitempty"`
+}
+
 // SetToolMetadataBatchRequestBody is the type of the "mcpServers" service
 // "setToolMetadataBatch" endpoint HTTP request body.
 type SetToolMetadataBatchRequestBody struct {
@@ -169,6 +178,9 @@ type CreateMcpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -229,6 +241,9 @@ type GetMcpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -301,6 +316,72 @@ type UpdateMcpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
+	// When the MCP server was created
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the MCP server was last updated
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// SetSetupGuideCompletedResponseBody is the type of the "mcpServers" service
+// "setSetupGuideCompleted" endpoint HTTP response body.
+type SetSetupGuideCompletedResponseBody struct {
+	// The ID of the MCP server
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this MCP server belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The slug of this server's primary platform endpoint, the oldest one. Absent
+	// when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
+	// The slug of an older Speakeasy-hosted address of this hosted server: its
+	// legacy custom-domain address, which the Speakeasy domain also answers under
+	// the same access rules. Absent when a platform endpoint or another alias
+	// holds that slug.
+	LegacyPlatformSlug *string `form:"legacy_platform_slug,omitempty" json:"legacy_platform_slug,omitempty" xml:"legacy_platform_slug,omitempty"`
+	// The ID of the environment associated with the server
+	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
+	// The ID of the user session issuer that gates OAuth-based MCP client
+	// authentication for this server, if any.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The ID of the remote MCP server used as the backend
+	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+	// The ID of the tunneled MCP server used as the backend
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	// The ID of the toolset used as the backend
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The ID of the unproxied MCP server used as the backend, if any. A server
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
+	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
+	// The ID of the tool variations group enabling MCP tool filtering for this
+	// server, if any.
+	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
+	// The visibility of the server
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// A summary of the backing toolset. Present only for toolset-backed (hosted)
+	// servers whose toolset is live.
+	Toolset *McpServerToolsetSummaryResponseBody `form:"toolset,omitempty" json:"toolset,omitempty" xml:"toolset,omitempty"`
+	// The ID of the endpoint that stands for this server when a single address
+	// must be chosen: domain-root custom-domain endpoints first, then other
+	// custom-domain endpoints, then platform endpoints. Absent when the server has
+	// no addressable endpoint.
+	PrimaryEndpointID *string `form:"primary_endpoint_id,omitempty" json:"primary_endpoint_id,omitempty" xml:"primary_endpoint_id,omitempty"`
+	// The public MCP URL of the primary endpoint. Absent when the server has no
+	// addressable endpoint.
+	PrimaryEndpointURL *string `form:"primary_endpoint_url,omitempty" json:"primary_endpoint_url,omitempty" xml:"primary_endpoint_url,omitempty"`
+	// Whether any endpoint routes to this server, including one on a custom domain
+	// that is not live yet. Absent when it could not be read.
+	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -1414,6 +1495,215 @@ type UpdateMcpServerGatewayErrorResponseBody struct {
 // service "updateMcpServer" endpoint HTTP response body for the "unavailable"
 // error.
 type UpdateMcpServerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupGuideCompletedUnauthorizedResponseBody is the type of the
+// "mcpServers" service "setSetupGuideCompleted" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetSetupGuideCompletedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupGuideCompletedForbiddenResponseBody is the type of the "mcpServers"
+// service "setSetupGuideCompleted" endpoint HTTP response body for the
+// "forbidden" error.
+type SetSetupGuideCompletedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupGuideCompletedBadRequestResponseBody is the type of the "mcpServers"
+// service "setSetupGuideCompleted" endpoint HTTP response body for the
+// "bad_request" error.
+type SetSetupGuideCompletedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupGuideCompletedNotFoundResponseBody is the type of the "mcpServers"
+// service "setSetupGuideCompleted" endpoint HTTP response body for the
+// "not_found" error.
+type SetSetupGuideCompletedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupGuideCompletedConflictResponseBody is the type of the "mcpServers"
+// service "setSetupGuideCompleted" endpoint HTTP response body for the
+// "conflict" error.
+type SetSetupGuideCompletedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupGuideCompletedUnsupportedMediaResponseBody is the type of the
+// "mcpServers" service "setSetupGuideCompleted" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetSetupGuideCompletedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupGuideCompletedInvalidResponseBody is the type of the "mcpServers"
+// service "setSetupGuideCompleted" endpoint HTTP response body for the
+// "invalid" error.
+type SetSetupGuideCompletedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupGuideCompletedInvariantViolationResponseBody is the type of the
+// "mcpServers" service "setSetupGuideCompleted" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetSetupGuideCompletedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupGuideCompletedUnexpectedResponseBody is the type of the "mcpServers"
+// service "setSetupGuideCompleted" endpoint HTTP response body for the
+// "unexpected" error.
+type SetSetupGuideCompletedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupGuideCompletedGatewayErrorResponseBody is the type of the
+// "mcpServers" service "setSetupGuideCompleted" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetSetupGuideCompletedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupGuideCompletedUnavailableResponseBody is the type of the
+// "mcpServers" service "setSetupGuideCompleted" endpoint HTTP response body
+// for the "unavailable" error.
+type SetSetupGuideCompletedUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3173,6 +3463,9 @@ type McpServerResponseBody struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool `form:"has_endpoint,omitempty" json:"has_endpoint,omitempty" xml:"has_endpoint,omitempty"`
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string `form:"setup_guide_completed_at,omitempty" json:"setup_guide_completed_at,omitempty" xml:"setup_guide_completed_at,omitempty"`
 	// When the MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP server was last updated
@@ -3290,6 +3583,7 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 		PrimaryEndpointID:     res.PrimaryEndpointID,
 		PrimaryEndpointURL:    res.PrimaryEndpointURL,
 		HasEndpoint:           res.HasEndpoint,
+		SetupGuideCompletedAt: res.SetupGuideCompletedAt,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
 	}
@@ -3321,6 +3615,7 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 		PrimaryEndpointID:     res.PrimaryEndpointID,
 		PrimaryEndpointURL:    res.PrimaryEndpointURL,
 		HasEndpoint:           res.HasEndpoint,
+		SetupGuideCompletedAt: res.SetupGuideCompletedAt,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
 	}
@@ -3390,6 +3685,39 @@ func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerRespon
 		PrimaryEndpointID:     res.PrimaryEndpointID,
 		PrimaryEndpointURL:    res.PrimaryEndpointURL,
 		HasEndpoint:           res.HasEndpoint,
+		SetupGuideCompletedAt: res.SetupGuideCompletedAt,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.Toolset != nil {
+		body.Toolset = marshalTypesMcpServerToolsetSummaryToMcpServerToolsetSummaryResponseBody(res.Toolset)
+	}
+	return body
+}
+
+// NewSetSetupGuideCompletedResponseBody builds the HTTP response body from the
+// result of the "setSetupGuideCompleted" endpoint of the "mcpServers" service.
+func NewSetSetupGuideCompletedResponseBody(res *types.McpServer) *SetSetupGuideCompletedResponseBody {
+	body := &SetSetupGuideCompletedResponseBody{
+		ID:                    res.ID,
+		ProjectID:             res.ProjectID,
+		Name:                  res.Name,
+		Slug:                  res.Slug,
+		PlatformEndpointSlug:  res.PlatformEndpointSlug,
+		LegacyPlatformSlug:    res.LegacyPlatformSlug,
+		EnvironmentID:         res.EnvironmentID,
+		UserSessionIssuerID:   res.UserSessionIssuerID,
+		RemoteMcpServerID:     res.RemoteMcpServerID,
+		TunneledMcpServerID:   res.TunneledMcpServerID,
+		ToolsetID:             res.ToolsetID,
+		UnproxiedMcpServerID:  res.UnproxiedMcpServerID,
+		ToolVariationsGroupID: res.ToolVariationsGroupID,
+		Visibility:            string(res.Visibility),
+		NetworkAccessMode:     string(res.NetworkAccessMode),
+		PrimaryEndpointID:     res.PrimaryEndpointID,
+		PrimaryEndpointURL:    res.PrimaryEndpointURL,
+		HasEndpoint:           res.HasEndpoint,
+		SetupGuideCompletedAt: res.SetupGuideCompletedAt,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
 	}
@@ -4320,6 +4648,171 @@ func NewUpdateMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *UpdateMc
 // the result of the "updateMcpServer" endpoint of the "mcpServers" service.
 func NewUpdateMcpServerUnavailableResponseBody(res *goa.ServiceError) *UpdateMcpServerUnavailableResponseBody {
 	body := &UpdateMcpServerUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupGuideCompletedUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "setSetupGuideCompleted" endpoint of the
+// "mcpServers" service.
+func NewSetSetupGuideCompletedUnauthorizedResponseBody(res *goa.ServiceError) *SetSetupGuideCompletedUnauthorizedResponseBody {
+	body := &SetSetupGuideCompletedUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupGuideCompletedForbiddenResponseBody builds the HTTP response body
+// from the result of the "setSetupGuideCompleted" endpoint of the "mcpServers"
+// service.
+func NewSetSetupGuideCompletedForbiddenResponseBody(res *goa.ServiceError) *SetSetupGuideCompletedForbiddenResponseBody {
+	body := &SetSetupGuideCompletedForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupGuideCompletedBadRequestResponseBody builds the HTTP response
+// body from the result of the "setSetupGuideCompleted" endpoint of the
+// "mcpServers" service.
+func NewSetSetupGuideCompletedBadRequestResponseBody(res *goa.ServiceError) *SetSetupGuideCompletedBadRequestResponseBody {
+	body := &SetSetupGuideCompletedBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupGuideCompletedNotFoundResponseBody builds the HTTP response body
+// from the result of the "setSetupGuideCompleted" endpoint of the "mcpServers"
+// service.
+func NewSetSetupGuideCompletedNotFoundResponseBody(res *goa.ServiceError) *SetSetupGuideCompletedNotFoundResponseBody {
+	body := &SetSetupGuideCompletedNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupGuideCompletedConflictResponseBody builds the HTTP response body
+// from the result of the "setSetupGuideCompleted" endpoint of the "mcpServers"
+// service.
+func NewSetSetupGuideCompletedConflictResponseBody(res *goa.ServiceError) *SetSetupGuideCompletedConflictResponseBody {
+	body := &SetSetupGuideCompletedConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupGuideCompletedUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setSetupGuideCompleted" endpoint of
+// the "mcpServers" service.
+func NewSetSetupGuideCompletedUnsupportedMediaResponseBody(res *goa.ServiceError) *SetSetupGuideCompletedUnsupportedMediaResponseBody {
+	body := &SetSetupGuideCompletedUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupGuideCompletedInvalidResponseBody builds the HTTP response body
+// from the result of the "setSetupGuideCompleted" endpoint of the "mcpServers"
+// service.
+func NewSetSetupGuideCompletedInvalidResponseBody(res *goa.ServiceError) *SetSetupGuideCompletedInvalidResponseBody {
+	body := &SetSetupGuideCompletedInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupGuideCompletedInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setSetupGuideCompleted" endpoint of
+// the "mcpServers" service.
+func NewSetSetupGuideCompletedInvariantViolationResponseBody(res *goa.ServiceError) *SetSetupGuideCompletedInvariantViolationResponseBody {
+	body := &SetSetupGuideCompletedInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupGuideCompletedUnexpectedResponseBody builds the HTTP response
+// body from the result of the "setSetupGuideCompleted" endpoint of the
+// "mcpServers" service.
+func NewSetSetupGuideCompletedUnexpectedResponseBody(res *goa.ServiceError) *SetSetupGuideCompletedUnexpectedResponseBody {
+	body := &SetSetupGuideCompletedUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupGuideCompletedGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "setSetupGuideCompleted" endpoint of the
+// "mcpServers" service.
+func NewSetSetupGuideCompletedGatewayErrorResponseBody(res *goa.ServiceError) *SetSetupGuideCompletedGatewayErrorResponseBody {
+	body := &SetSetupGuideCompletedGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupGuideCompletedUnavailableResponseBody builds the HTTP response
+// body from the result of the "setSetupGuideCompleted" endpoint of the
+// "mcpServers" service.
+func NewSetSetupGuideCompletedUnavailableResponseBody(res *goa.ServiceError) *SetSetupGuideCompletedUnavailableResponseBody {
+	body := &SetSetupGuideCompletedUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5710,6 +6203,20 @@ func NewUpdateMcpServerPayload(body *UpdateMcpServerRequestBody, sessionToken *s
 	return v
 }
 
+// NewSetSetupGuideCompletedPayload builds a mcpServers service
+// setSetupGuideCompleted endpoint payload.
+func NewSetSetupGuideCompletedPayload(body *SetSetupGuideCompletedRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.SetSetupGuideCompletedPayload {
+	v := &mcpservers.SetSetupGuideCompletedPayload{
+		ID:        *body.ID,
+		Completed: *body.Completed,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListToolFiltersPayload builds a mcpServers service listToolFilters
 // endpoint payload.
 func NewListToolFiltersPayload(id *string, slug *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.ListToolFiltersPayload {
@@ -5919,6 +6426,21 @@ func ValidateUpdateMcpServerRequestBody(body *UpdateMcpServerRequestBody) (err e
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 		}
+	}
+	return
+}
+
+// ValidateSetSetupGuideCompletedRequestBody runs the validations defined on
+// SetSetupGuideCompletedRequestBody
+func ValidateSetSetupGuideCompletedRequestBody(body *SetSetupGuideCompletedRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Completed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("completed", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

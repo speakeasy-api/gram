@@ -334,6 +334,50 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 	return v, nil
 }
 
+// BuildSetSetupGuideCompletedPayload builds the payload for the mcpServers
+// setSetupGuideCompleted endpoint from CLI flags.
+func BuildSetSetupGuideCompletedPayload(mcpServersSetSetupGuideCompletedBody string, mcpServersSetSetupGuideCompletedSessionToken string, mcpServersSetSetupGuideCompletedApikeyToken string, mcpServersSetSetupGuideCompletedProjectSlugInput string) (*mcpservers.SetSetupGuideCompletedPayload, error) {
+	var err error
+	var body SetSetupGuideCompletedRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpServersSetSetupGuideCompletedBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"completed\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersSetSetupGuideCompletedSessionToken != "" {
+			sessionToken = &mcpServersSetSetupGuideCompletedSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersSetSetupGuideCompletedApikeyToken != "" {
+			apikeyToken = &mcpServersSetSetupGuideCompletedApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersSetSetupGuideCompletedProjectSlugInput != "" {
+			projectSlugInput = &mcpServersSetSetupGuideCompletedProjectSlugInput
+		}
+	}
+	v := &mcpservers.SetSetupGuideCompletedPayload{
+		ID:        body.ID,
+		Completed: body.Completed,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListToolFiltersPayload builds the payload for the mcpServers
 // listToolFilters endpoint from CLI flags.
 func BuildListToolFiltersPayload(mcpServersListToolFiltersID string, mcpServersListToolFiltersSlug string, mcpServersListToolFiltersSessionToken string, mcpServersListToolFiltersApikeyToken string, mcpServersListToolFiltersProjectSlugInput string) (*mcpservers.ListToolFiltersPayload, error) {
