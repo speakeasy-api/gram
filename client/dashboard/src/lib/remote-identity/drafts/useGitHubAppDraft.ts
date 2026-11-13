@@ -60,7 +60,7 @@ export function useGitHubAppDraft(
         },
       });
       setDraft(null);
-      await Promise.all([invalidateAuthClientQueries(queryClient), retry()]);
+      await invalidateAuthClientQueries(queryClient);
       toast.success("GitHub App service account saved");
       return true;
     } catch {
@@ -81,7 +81,7 @@ export function useGitHubAppDraft(
       },
     });
     setDraft(null);
-    await Promise.all([invalidateAuthClientQueries(queryClient), retry()]);
+    await invalidateAuthClientQueries(queryClient);
   };
   return {
     value,
@@ -93,13 +93,23 @@ export function useGitHubAppDraft(
     detach,
     loading,
     error,
-    retry: () => {
+    retry: (): void => {
       void retry().catch(() => undefined);
     },
   };
 }
 
-export function useBoundGitHubApp(serverId: string, enabled: boolean) {
+type BoundGitHubAppState = {
+  bound: AuthClient | undefined;
+  loading: boolean;
+  error: boolean;
+  retry: () => Promise<unknown>;
+};
+
+export function useBoundGitHubApp(
+  serverId: string,
+  enabled: boolean,
+): BoundGitHubAppState {
   const query = useAuthClientsInfinite(
     { mcpServerId: serverId, clientType: "service_account", limit: 100 },
     undefined,
@@ -123,7 +133,8 @@ export function useBoundGitHubApp(serverId: string, enabled: boolean) {
     fetchNextPage,
   ]);
   const incomplete =
-    query.hasNextPage || query.isFetchingNextPage || query.isFetchNextPageError;
+    (query.hasNextPage && !query.isFetchNextPageError) ||
+    query.isFetchingNextPage;
   const bound = query.data?.pages
     .flatMap((page) => page.result.items)
     .find((item) => item.githubApp);
@@ -131,6 +142,7 @@ export function useBoundGitHubApp(serverId: string, enabled: boolean) {
     bound,
     loading: enabled && (query.isLoading || !!incomplete),
     error: enabled && (query.isError || query.isFetchNextPageError),
-    retry: query.refetch,
+    retry: () =>
+      query.isFetchNextPageError ? query.fetchNextPage() : query.refetch(),
   };
 }

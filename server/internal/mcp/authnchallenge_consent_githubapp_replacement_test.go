@@ -14,18 +14,26 @@ import (
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestServeConsentMCP_DetachedGitHubAppReplacement(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name        string
-		detach      bool
-		replacement bool
+		name                string
+		detach              bool
+		replacement         bool
+		remoteReplacement   bool
+		retiredRemote       bool
+		deletedRemoteClient bool
 	}{
 		{name: "detached with static replacement", detach: true, replacement: true},
+		{name: "detached with live OAuth User Identity replacement", detach: true, replacement: true, remoteReplacement: true},
+		{name: "retired OAuth replacement fails closed", detach: true, remoteReplacement: true, retiredRemote: true},
+		{name: "deleted OAuth replacement client fails closed", detach: true, remoteReplacement: true, deletedRemoteClient: true},
 		{name: "detached without replacement fails closed", detach: true},
 		{name: "disabled attached app still fails closed", replacement: true},
 	} {
@@ -51,11 +59,11 @@ func TestServeConsentMCP_DetachedGitHubAppReplacement(t *testing.T) {
 			owner := uuid.NullUUID{UUID: projectID, Valid: true}
 			appID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: owner, ClientType: "service_account", Source: "admin"})
 			require.NoError(t, err)
-			_, err = ti.conn.Exec(ctx, `INSERT INTO mcp_auth_client_github_apps
-				(auth_client_id, organization_id, instance_url, app_id, installation_id, private_key_encrypted, upstream_origin)
-				VALUES ($1, $2, 'https://git.example.com', 123, 456, 'unused-test-key', $3)`, appID, orgID, member.url)
+			err = authclientsrepo.New(ti.conn).SetGitHubAppCredential(ctx, authclientsrepo.SetGitHubAppCredentialParams{AuthClientID: appID, OrganizationID: orgID, InstanceUrl: "https://git.example.com", AppID: 123, InstallationID: 456, PrivateKeyEncrypted: "unused-test-key", UpstreamOrigin: member.url})
 			require.NoError(t, err)
 			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: server.ID, AuthClientID: appID, Source: "admin"}))
+			// Configuration retires prior OAuth associations before any replacement.
+			require.NoError(t, authclientsrepo.New(ti.conn).ReplaceServerAuthWithGitHubApp(ctx, authclientsrepo.ReplaceServerAuthWithGitHubAppParams{McpServerID: server.ID, OrganizationID: orgID, AuthClientID: appID}))
 			if tc.detach {
 				n, err := authclientsrepo.New(ti.conn).DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{OrganizationID: orgID, McpServerID: server.ID, AuthClientID: appID})
 				require.NoError(t, err)
@@ -64,7 +72,22 @@ func TestServeConsentMCP_DetachedGitHubAppReplacement(t *testing.T) {
 			} else {
 				require.NoError(t, fixtures.SetAuthClientEnabledFixture(ctx, authclientfixtures.SetAuthClientEnabledFixtureParams{ID: appID, Enabled: false}))
 			}
-			if tc.replacement {
+			if tc.remoteReplacement {
+				replacement := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "replacement-live-"+uuid.NewString(), "", []uuid.UUID{issuer.ID})
+				insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, replacement, urn.NewUserSubject(mockidp.MockUserID), "replacement-token", member.url)
+				count, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: server.ID, RemoteSessionClientID: replacement})
+				require.NoError(t, err)
+				require.EqualValues(t, 1, count)
+				if tc.retiredRemote {
+					count, err := upstreamclientsrepo.New(ti.conn).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{McpServerID: server.ID, RemoteSessionClientID: replacement, ProjectID: projectID})
+					require.NoError(t, err)
+					require.EqualValues(t, 1, count)
+				}
+				if tc.deletedRemoteClient {
+					_, err := remotesessionsrepo.New(ti.conn).DeleteRemoteSessionClient(ctx, remotesessionsrepo.DeleteRemoteSessionClientParams{ID: replacement, ProjectID: owner})
+					require.NoError(t, err)
+				}
+			} else if tc.replacement {
 				staticID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: owner, ClientType: "static_credential", Source: "admin"})
 				require.NoError(t, err)
 				value := pgtype.Text{String: "Bearer replacement-token", Valid: true}
@@ -77,9 +100,6 @@ func TestServeConsentMCP_DetachedGitHubAppReplacement(t *testing.T) {
 
 			queries := authclientsrepo.New(ti.conn)
 			wantAppRequired := !tc.detach || !tc.replacement
-			appRequired, err := queries.ServerHasGitHubAppAuthClient(ctx, authclientsrepo.ServerHasGitHubAppAuthClientParams{OrganizationID: orgID, McpServerID: server.ID})
-			require.NoError(t, err)
-			require.Equal(t, wantAppRequired, appRequired)
 			appServers, err := queries.ListGitHubAppServers(ctx, authclientsrepo.ListGitHubAppServersParams{OrganizationID: orgID, McpServerIds: []uuid.UUID{server.ID}})
 			require.NoError(t, err)
 			if wantAppRequired {

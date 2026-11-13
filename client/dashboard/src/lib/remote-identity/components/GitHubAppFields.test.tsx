@@ -51,7 +51,7 @@ describe("GitHub App configuration", () => {
     const { rerender } = render(
       <GitHubAppFields
         value={newGitHubAppDraft()}
-        onChange={vi.fn()}
+        onChange={vi.fn<() => void>()}
         replacingIdentity={false}
       />,
     );
@@ -59,7 +59,10 @@ describe("GitHub App configuration", () => {
       screen.queryByText(/existing connections must reconnect/),
     ).toBeNull();
     rerender(
-      <GitHubAppFields value={newGitHubAppDraft()} onChange={vi.fn()} />,
+      <GitHubAppFields
+        value={newGitHubAppDraft()}
+        onChange={vi.fn<() => void>()}
+      />,
     );
     expect(
       screen.getByText(/existing connections must reconnect/),

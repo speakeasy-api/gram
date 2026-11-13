@@ -63,3 +63,26 @@ export function isGitHubMcpUrl(raw: string | undefined): boolean {
     return false;
   }
 }
+
+export type GitHubAppBinding = {
+  githubAppBound: boolean;
+  githubAppEnabled: boolean;
+  githubAppRequired: boolean;
+};
+
+/** Absent metadata is unknown, not evidence that no App is configured. */
+export function gitHubAppBinding(
+  metadata: Partial<GitHubAppBinding> | undefined,
+): GitHubAppBinding | null {
+  if (
+    typeof metadata?.githubAppBound !== "boolean" ||
+    typeof metadata.githubAppEnabled !== "boolean" ||
+    typeof metadata.githubAppRequired !== "boolean"
+  )
+    return null;
+  return {
+    githubAppBound: metadata.githubAppBound,
+    githubAppEnabled: metadata.githubAppEnabled,
+    githubAppRequired: metadata.githubAppRequired,
+  };
+}

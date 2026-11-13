@@ -20,6 +20,7 @@ import type { CommitServerIdentityConfigurationForm } from "@gram/client/models/
 
 const mocks = vi.hoisted(() => ({
   githubClients: vi.fn(),
+  githubQueryState: {} as Record<string, unknown>,
   detachGitHub: vi.fn(),
   headers: vi.fn(),
   sessions: vi.fn(),
@@ -65,6 +66,7 @@ vi.mock("@gram/client/react-query/authClients.js", () => ({
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
+    ...mocks.githubQueryState,
   }),
 }));
 vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
@@ -537,9 +539,15 @@ beforeEach(() => {
           serverCount: 1,
         })),
         requiredClientIds: items.map((client) => client.id),
+        githubAppBound: mocks.githubClients().length > 0,
+        githubAppEnabled: mocks
+          .githubClients()
+          .some((client: { enabled: boolean }) => client.enabled),
+        githubAppRequired: mocks.githubClients().length > 0,
       },
     };
   });
+  mocks.githubQueryState = {};
   mocks.githubClients.mockReturnValue([]);
   mocks.detachGitHub.mockResolvedValue({});
   mocks.impact.mockReturnValue({
@@ -2396,6 +2404,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
     mocks.associations.mockReturnValue({
       data: {
         associations: [{ remoteSessionClientId: "client-1", serverCount: 2 }],
+        githubAppBound: false,
+        githubAppEnabled: false,
+        githubAppRequired: false,
         requiredClientIds: ["client-1"],
       },
     });
@@ -2450,7 +2461,13 @@ describe("RemoteMcpIdentitySectionBody", () => {
       error: null,
     });
     mocks.associations.mockReturnValue({
-      data: { associations: [], requiredClientIds: ["unclaimed-client"] },
+      data: {
+        githubAppBound: false,
+        githubAppEnabled: false,
+        githubAppRequired: false,
+        associations: [],
+        requiredClientIds: ["unclaimed-client"],
+      },
     });
     mocks.impact.mockReturnValue({
       data: {
@@ -2604,7 +2621,13 @@ describe("RemoteMcpIdentitySectionBody", () => {
       error: null,
     });
     mocks.associations.mockReturnValue({
-      data: { associations: [], requiredClientIds: [] },
+      data: {
+        githubAppBound: false,
+        githubAppEnabled: false,
+        githubAppRequired: false,
+        associations: [],
+        requiredClientIds: [],
+      },
     });
 
     renderIdentity();
@@ -2710,6 +2733,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
     mocks.associations.mockReturnValue({
       data: {
         associations: [{ remoteSessionClientId: "client-1", serverCount: 3 }],
+        githubAppBound: false,
+        githubAppEnabled: false,
+        githubAppRequired: false,
         requiredClientIds: ["client-1"],
       },
     });
@@ -3902,15 +3928,163 @@ describe("RemoteMcpIdentitySectionBody", () => {
     boundGitHubApp();
     mocks.hasScope.mockImplementation(
       (scope: string, resourceId?: string) =>
-        scope === "mcp:write" && resourceId === "mcp-server-1",
+        (scope === "mcp:write" || scope === "mcp:read") &&
+        resourceId === "mcp-server-1",
     );
     renderIdentity();
     expect(screen.getByText("Identity is unavailable.")).toBeDefined();
-    expect(screen.queryByRole("radio", { name: /Service Account/ })).toBeNull();
+    expect(
+      screen.queryByRole("radio", { name: /Shared credential/ }),
+    ).toBeNull();
     addCustomHeader("X-Team", "platform");
     confirmSave();
     await waitFor(() => expect(mocks.create).toHaveBeenCalled());
     expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(mocks.detachGitHub).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "https://proxy.example.test/mcp",
+    "https://api.githubcopilot.com/mcp",
+  ])(
+    "edits an existing static credential on %s without org:read when metadata proves no App requirement",
+    async (url) => {
+      mocks.source.mockReturnValue({
+        data: { slug: "fixture", url },
+        isLoading: false,
+        isError: false,
+      });
+      mocks.headers.mockReturnValue({
+        data: { headers: [configuredHeader()] },
+        isLoading: false,
+        isError: false,
+        refetch: mocks.refetchHeaders,
+      });
+      mocks.hasScope.mockImplementation(
+        (scope: string, resourceId?: string) =>
+          (scope === "mcp:write" || scope === "mcp:read") &&
+          resourceId === "mcp-server-1",
+      );
+      renderIdentity();
+      expect(screen.queryByText("Identity is unavailable.")).toBeNull();
+      fireEvent.change(screen.getByLabelText("Token"), {
+        target: { value: "replacement-token" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(mocks.update).toHaveBeenCalled());
+      expect(screen.queryByRole("dialog")).toBeNull();
+    },
+  );
+
+  it("keeps a disabled App on a custom host locked without org:read", () => {
+    mocks.source.mockReturnValue({
+      data: { slug: "fixture", url: "https://proxy.example.test/mcp" },
+    });
+    boundGitHubApp();
+    mocks.githubClients.mockReturnValue(
+      mocks.githubClients().map((client: Record<string, unknown>) => ({
+        ...client,
+        enabled: false,
+      })),
+    );
+    mocks.hasScope.mockImplementation(
+      (scope: string, resourceId?: string) =>
+        (scope === "mcp:write" || scope === "mcp:read") &&
+        resourceId === "mcp-server-1",
+    );
+    renderIdentity();
+    expect(
+      screen.getByText(/This server has a GitHub App identity requirement/),
+    ).toBeDefined();
+    expect(screen.getByText("Identity is unavailable.")).toBeDefined();
+    expect(screen.queryByLabelText("Token")).toBeNull();
+  });
+
+  it("treats absent binding metadata as unknown instead of no App", () => {
+    mocks.associations.mockReturnValue({
+      data: { associations: [], requiredClientIds: [] },
+    });
+    renderIdentity();
+    expect(screen.getByText("Identity is unavailable.")).toBeDefined();
+    expect(
+      screen.queryByRole("radio", { name: /Shared credential/ }),
+    ).toBeNull();
+  });
+
+  it("warns that a historical App requirement blocks callers until replacement", () => {
+    mocks.associations.mockReturnValue({
+      data: {
+        associations: [],
+        requiredClientIds: [],
+        githubAppBound: false,
+        githubAppEnabled: false,
+        githubAppRequired: true,
+      },
+    });
+    renderIdentity();
+    expect(
+      screen.getByText(
+        "Callers' requests are blocked until you save a new identity.",
+      ),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("radio", { name: /Shared credential/ }),
+    ).toBeDefined();
+  });
+
+  it("scopes a failed later page to GitHub configuration and retries that page", async () => {
+    const retryPage = vi.fn().mockResolvedValue({});
+    mocks.githubQueryState = {
+      hasNextPage: true,
+      isFetchNextPageError: true,
+      isError: true,
+      fetchNextPage: retryPage,
+    };
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      refetch: mocks.refetchHeaders,
+    });
+    renderIdentity();
+    expect(screen.queryByText("Identity is unavailable.")).toBeNull();
+    expect(
+      screen.queryByText(/Could not determine the current identity/),
+    ).toBeNull();
+    expect(
+      screen.getByText(/Previously loaded data is retained/),
+    ).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry GitHub App lookup" }),
+    );
+    expect(retryPage).toHaveBeenCalledOnce();
+    fireEvent.change(screen.getByLabelText("Token"), {
+      target: { value: "replacement-token" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.update).toHaveBeenCalled());
+  });
+
+  it("does not offer a no-op identity removal without org:read", async () => {
+    boundGitHubApp();
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+    });
+    mocks.hasScope.mockImplementation(
+      (scope: string, resourceId?: string) =>
+        (scope === "mcp:write" || scope === "mcp:read") &&
+        resourceId === "mcp-server-1",
+    );
+    renderIdentity();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    addCustomHeader("X-Team", "platform");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith("Identity removed");
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(mocks.detachGitHub).not.toHaveBeenCalled();
   });
@@ -3929,7 +4103,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
       boundGitHubApp();
       mocks.hasScope.mockImplementation(
         (scope: string, resourceId?: string) =>
-          scope === "mcp:write" && resourceId === "mcp-server-1",
+          (scope === "mcp:write" || scope === "mcp:read") &&
+          resourceId === "mcp-server-1",
       );
       renderIdentity();
       addCustomHeader("Authorization", "Bearer replacement-token");
@@ -3973,7 +4148,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
       screen.getByRole("heading", { name: "Remove the GitHub App?" }),
     ).toBeDefined();
     expect(
-      screen.getByText(/no replacement identity will be configured/),
+      screen.getByText(
+        /Callers' requests will be rejected until you save a new identity/,
+      ),
     ).toBeDefined();
   });
 

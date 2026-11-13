@@ -118769,6 +118769,15 @@ components:
                     items:
                         $ref: '#/components/schemas/ServerClientAssociation'
                     description: The server's associated upstream OAuth clients, oldest first.
+                github_app_bound:
+                    type: boolean
+                    description: Whether this server has a live GitHub App service-account binding, including a disabled credential. Does not disclose the client or its configuration.
+                github_app_enabled:
+                    type: boolean
+                    description: Whether a live bound GitHub App credential is enabled.
+                github_app_required:
+                    type: boolean
+                    description: Whether this server still requires GitHub App identity. Remains true after removal or disablement until a live replacement identity is attached; choosing no identity does not erase this history.
                 required_client_ids:
                     type: array
                     items:
@@ -118778,6 +118787,9 @@ components:
             required:
                 - associations
                 - required_client_ids
+                - github_app_bound
+                - github_app_enabled
+                - github_app_required
         ListServerHeadersResult:
             type: object
             properties:

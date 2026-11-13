@@ -119,16 +119,32 @@ describe("RemoteIdentitySummary", () => {
   });
 
   it("treats a disabled App as unavailable rather than an absent identity eligible for probing", () => {
-    const unavailable = gitHubAppIdentityUnavailable({ enabled: false }, true);
+    const unavailable = gitHubAppIdentityUnavailable({
+      githubAppBound: true,
+      githubAppEnabled: false,
+      githubAppRequired: true,
+    });
     expect(unavailable).toBe(true);
     renderSummary({ mode: "none", unavailable });
     expect(screen.getByText("Identity unavailable")).toBeDefined();
     expect(
       screen.queryByRole("link", { name: /Manual|Service Account/ }),
     ).toBeNull();
-    expect(gitHubAppIdentityUnavailable({ enabled: true }, true)).toBe(false);
-    expect(gitHubAppIdentityUnavailable(undefined, true)).toBe(false);
-    expect(gitHubAppIdentityUnavailable(undefined, false)).toBe(true);
+    expect(
+      gitHubAppIdentityUnavailable({
+        githubAppBound: true,
+        githubAppEnabled: true,
+        githubAppRequired: true,
+      }),
+    ).toBe(false);
+    expect(
+      gitHubAppIdentityUnavailable({
+        githubAppBound: false,
+        githubAppEnabled: false,
+        githubAppRequired: false,
+      }),
+    ).toBe(false);
+    expect(gitHubAppIdentityUnavailable(null)).toBe(true);
   });
 
   it("keeps the problem out of the rail until hovered", () => {

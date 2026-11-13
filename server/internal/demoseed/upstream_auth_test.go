@@ -60,7 +60,7 @@ func TestSeedUpstreamAuthReadyAfterReseed(t *testing.T) {
 // shared token. Each agent attachment grant is bound to the agent's owner and
 // the attachment's upstream client.
 func expectedSeedAuthGrants() []string {
-	sharedClients := []string{"Static credential", "Your own GitHub token", "Engineering automation token", "Acme Wiki", "Acme Tracker"}
+	sharedClients := []string{"Static credential", "Your own GitHub token", "Engineering automation token", "GitHub App (demo — disabled)", "Acme Wiki", "Acme Tracker"}
 	var out []string
 	shared := func(principal, kind string, clients ...string) {
 		for _, client := range clients {
@@ -79,7 +79,7 @@ func expectedSeedAuthGrants() []string {
 	for _, role := range []string{"analyst", "collaborator", "read-only-tools", "temporary-escalation"} {
 		shared("role "+role, "shared_client", sharedClients...)
 	}
-	shared("role engineer", "shared_client", "Static credential", "Your own GitHub token", "Acme Wiki", "Acme Tracker")
+	shared("role engineer", "shared_client", "Static credential", "Your own GitHub token", "GitHub App (demo — disabled)", "Acme Wiki", "Acme Tracker")
 	shared("role engineer", "", "Engineering automation token")
 	shared("role support-desk", "shared_client", "Static credential")
 	out = append(out, "role contractors | mcp:blocked_auth | Engineering automation token | type= | owner= | upstream= | ")
@@ -88,7 +88,7 @@ func expectedSeedAuthGrants() []string {
 
 	personal("user:all")
 	shared("user mateo", "shared_client", sharedClients...)
-	shared("user priya", "shared_client", "Your own GitHub token", "Engineering automation token")
+	shared("user priya", "shared_client", "Your own GitHub token", "Engineering automation token", "GitHub App (demo — disabled)")
 
 	personal("agent Identity-bound assistant agent")
 	shared("agent Identity-bound assistant agent", "shared_client", sharedClients...)

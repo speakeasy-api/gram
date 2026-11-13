@@ -1,5 +1,9 @@
 import { useRBAC } from "@/hooks/useRBAC";
-import { useBoundGitHubApp } from "@/lib/remote-identity/drafts/useGitHubAppDraft";
+import {
+  gitHubAppBinding,
+  type GitHubAppBinding,
+} from "@/lib/remote-identity/model/githubApp";
+import { useServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import {
   deriveIdentityMode,
   findPassThroughAuthorizationHeader,
@@ -66,30 +70,33 @@ export function useMcpServerAuthenticationReadiness(
     enabled: remoteMcpServerId !== "",
   });
   const remoteHeaders = remoteHeadersResult?.headers ?? [];
-  const githubApp = useBoundGitHubApp(
-    mcpServer?.id ?? "",
-    remoteMcpServerId !== "" &&
-      upstreamAuth === "legacy" &&
-      !rbacLoading &&
-      hasScope("org:read"),
+  const canReadBinding = !rbacLoading && hasScope("mcp:read", mcpServer?.id);
+  const associationsQuery = useServerClientAssociations(
+    { mcpServerId: mcpServer?.id ?? "" },
+    undefined,
+    {
+      enabled:
+        remoteMcpServerId !== "" && upstreamAuth === "legacy" && canReadBinding,
+      throwOnError: false,
+    },
   );
+  const githubBinding = canReadBinding
+    ? gitHubAppBinding(associationsQuery.data)
+    : null;
   const remoteIdentityMode = deriveIdentityMode(
     remoteSessionClients.length,
     remoteHeaders,
-    !!githubApp.bound?.enabled,
+    !!githubBinding?.githubAppBound && githubBinding.githubAppEnabled,
   );
   const passThroughAuthorization =
     findPassThroughAuthorizationHeader(remoteHeaders);
   const identityUnavailable =
     isRemoteSessionClientsError ||
     isRemoteHeadersError ||
-    githubApp.error ||
     (remoteMcpServerId !== "" &&
       upstreamAuth === "legacy" &&
-      gitHubAppIdentityUnavailable(
-        githubApp.bound,
-        !rbacLoading && hasScope("org:read"),
-      ));
+      (associationsQuery.isError ||
+        gitHubAppIdentityUnavailable(githubBinding)));
   // Enforcing organizations configure upstream identity through credentials,
   // so the summary reads their status instead of the legacy identity mode.
   const enforcedIdentity =
@@ -112,7 +119,7 @@ export function useMcpServerAuthenticationReadiness(
           !passThroughAuthorization &&
           !isLoadingRemoteSessionClients &&
           !isLoadingRemoteHeaders &&
-          !githubApp.loading,
+          !associationsQuery.isLoading,
   );
 
   const isRemoteBacked = !!mcpServer?.remoteMcpServerId;
@@ -153,6 +160,12 @@ export function useMcpServerAuthenticationReadiness(
     }
   } else if (!legacyRemoteIdentity) {
     description = "The identity status is not available yet.";
+  } else if (
+    githubBinding?.githubAppRequired &&
+    !githubBinding.githubAppBound
+  ) {
+    description =
+      "Callers' requests are blocked until you save a new identity.";
   } else if (remoteIdentityMode === "user" && hasRemoteIdentityProvider) {
     description = "An authorization server is attached to this server.";
   } else if (remoteIdentityMode === "agent" && isRemoteBacked) {
@@ -167,14 +180,14 @@ export function useMcpServerAuthenticationReadiness(
   const ready =
     isUnproxied ||
     remoteIdentitySettled ||
-    (legacyRemoteIdentity && hasRemoteIdentityProvider) ||
+    (!isRemoteBacked && legacyRemoteIdentity && hasRemoteIdentityProvider) ||
     (isTunneledBacked && !!userSessionIssuerId);
 
   const isLoadingRemoteIdentity =
     isLoadingRemoteSessionClients ||
     isLoadingRemoteHeaders ||
     rbacLoading ||
-    githubApp.loading;
+    associationsQuery.isLoading;
   // Whether the answer can still change once the queries settle, so a caller
   // never reports a step as open, or done, before the data is in.
   const loading =
@@ -204,10 +217,14 @@ export function useMcpServerAuthenticationReadiness(
   };
 }
 
-/** An unreadable or disabled binding is not an anonymous server to probe. */
+/** Unknown metadata or an unmet requirement must never be probed as anonymous. */
 export function gitHubAppIdentityUnavailable(
-  bound: { enabled: boolean } | undefined,
-  canRead: boolean,
+  binding: GitHubAppBinding | null,
 ): boolean {
-  return !canRead || (!!bound && !bound.enabled);
+  return (
+    !binding ||
+    (binding.githubAppBound && !binding.githubAppEnabled) ||
+    (binding.githubAppRequired &&
+      !(binding.githubAppBound && binding.githubAppEnabled))
+  );
 }

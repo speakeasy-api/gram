@@ -83,7 +83,7 @@ describe("CreationIdentityChoice", () => {
         installationId: "456",
         privateKey: "",
       },
-      onGitHubAppChange: vi.fn(),
+      onGitHubAppChange: vi.fn<() => void>(),
     });
     expect(screen.getByLabelText("App ID")).toBeDefined();
     expect(

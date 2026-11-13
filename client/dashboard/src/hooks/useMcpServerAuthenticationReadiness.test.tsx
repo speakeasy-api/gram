@@ -3,7 +3,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  github: vi.fn(),
+  associations: vi.fn(),
   probe: vi.fn(),
   hasScope: vi.fn(),
   rbacLoading: false,
@@ -20,8 +20,8 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
   useUpstreamAuthEnforcement: () => mocks.enforcement,
 }));
-vi.mock("@/lib/remote-identity/drafts/useGitHubAppDraft", () => ({
-  useBoundGitHubApp: mocks.github,
+vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
+  useServerClientAssociations: mocks.associations,
 }));
 vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
   useMcpServerAuthentication: () => mocks.auth,
@@ -51,85 +51,99 @@ const server = {
 } as McpServer;
 
 describe("shared authentication readiness with GitHub App identity", () => {
+  const noApp = {
+    githubAppBound: false,
+    githubAppEnabled: false,
+    githubAppRequired: false,
+  };
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.enforcement = "legacy";
     mocks.rbacLoading = false;
     mocks.hasScope.mockReturnValue(true);
-    mocks.github.mockReturnValue({
-      bound: undefined,
-      loading: false,
-      error: false,
+    mocks.associations.mockReturnValue({
+      data: noApp,
+      isLoading: false,
+      isError: false,
     });
     mocks.probe.mockReturnValue("idle");
     mocks.auth = { data: undefined, isPending: false, isError: false };
   });
 
-  it("reports a bound GitHub App as a ready shared credential without probing", () => {
-    mocks.github.mockReturnValue({
-      bound: { id: "client-fixture", enabled: true },
-      loading: false,
-      error: false,
+  it("reports an enabled bound App as ready without organization read access or probing", () => {
+    mocks.hasScope.mockImplementation((scope: string) => scope === "mcp:read");
+    mocks.associations.mockReturnValue({
+      data: {
+        githubAppBound: true,
+        githubAppEnabled: true,
+        githubAppRequired: true,
+      },
     });
     const { result } = renderHook(() =>
       useMcpServerAuthenticationReadiness(server),
     );
-    expect(mocks.github).toHaveBeenCalledWith(server.id, true);
     expect(result.current).toMatchObject({
       ready: true,
       loading: false,
       unavailable: false,
       remoteIdentityMode: "agent",
     });
-    expect(result.current.description).toContain("shared credential");
+    expect(mocks.hasScope).not.toHaveBeenCalledWith("org:read");
     expect(mocks.probe).toHaveBeenCalledWith("remote-fixture", false);
   });
 
-  it("treats a disabled binding as unavailable rather than anonymous", () => {
-    mocks.github.mockReturnValue({
-      bound: { enabled: false },
-      loading: false,
-      error: false,
-    });
+  it.each([
+    { githubAppBound: true, githubAppEnabled: false, githubAppRequired: true },
+    { githubAppBound: false, githubAppEnabled: false, githubAppRequired: true },
+    {},
+  ])(
+    "does not probe a disabled, historical, or unknown App requirement: %o",
+    (data) => {
+      mocks.associations.mockReturnValue({ data });
+      const { result } = renderHook(() =>
+        useMcpServerAuthenticationReadiness(server),
+      );
+      expect(result.current).toMatchObject({
+        ready: false,
+        unavailable: true,
+        remoteIdentityMode: "none",
+      });
+      expect(mocks.probe).toHaveBeenCalledWith("remote-fixture", false);
+    },
+  );
+
+  it("probes an unbound server without org:read once scoped metadata settles", () => {
+    mocks.hasScope.mockImplementation((scope: string) => scope === "mcp:read");
     const { result } = renderHook(() =>
       useMcpServerAuthenticationReadiness(server),
     );
-    expect(result.current).toMatchObject({
-      ready: false,
-      unavailable: true,
-      remoteIdentityMode: "none",
-    });
-    expect(mocks.probe).toHaveBeenCalledWith("remote-fixture", false);
-  });
-
-  it("probes an unbound server once identity queries settle", () => {
-    renderHook(() => useMcpServerAuthenticationReadiness(server));
+    expect(result.current.unavailable).toBe(false);
     expect(mocks.probe).toHaveBeenCalledWith("remote-fixture", true);
   });
 
   it.each([
-    { loading: true, error: false },
-    { loading: false, error: true },
-  ])("does not probe while GitHub state is unresolved: %o", (state) => {
-    mocks.github.mockReturnValue({ bound: undefined, ...state });
+    { isLoading: true, isError: false },
+    { isLoading: false, isError: true },
+  ])("does not probe while metadata is unresolved: %o", (state) => {
+    mocks.associations.mockReturnValue({ data: undefined, ...state });
     const { result } = renderHook(() =>
       useMcpServerAuthenticationReadiness(server),
     );
-    expect(result.current.loading).toBe(state.loading);
-    expect(result.current.unavailable).toBe(state.error);
+    expect(result.current.loading).toBe(state.isLoading);
     expect(result.current.ready).toBe(false);
     expect(mocks.probe).toHaveBeenCalledWith("remote-fixture", false);
   });
 
-  it("gates the GitHub lookup on organization read access", () => {
+  it("keeps missing mcp:read metadata unknown rather than absent", () => {
     mocks.hasScope.mockReturnValue(false);
+    mocks.associations.mockReturnValue({ data: undefined });
     const { result } = renderHook(() =>
       useMcpServerAuthenticationReadiness(server),
     );
     expect(result.current.unavailable).toBe(true);
-    expect(mocks.probe).toHaveBeenCalledWith("remote-fixture", false);
-    expect(mocks.hasScope).toHaveBeenCalledWith("org:read");
-    expect(mocks.github).toHaveBeenCalledWith(server.id, false);
+    expect(mocks.associations.mock.calls[0]?.[2]).toMatchObject({
+      enabled: false,
+    });
   });
 
   it("waits for access scopes before loading or probing legacy identity", () => {
@@ -138,17 +152,18 @@ describe("shared authentication readiness with GitHub App identity", () => {
       useMcpServerAuthenticationReadiness(server),
     );
     expect(result.current.loading).toBe(true);
-    expect(mocks.github).toHaveBeenCalledWith(server.id, false);
     expect(mocks.probe).toHaveBeenCalledWith("remote-fixture", false);
   });
 
-  it("keeps enforced readiness on the credentials API without a legacy GitHub lookup", () => {
+  it("keeps enforced readiness on the credentials API", () => {
     mocks.enforcement = "enforced";
     mocks.auth.data = { status: "configured" };
     const { result } = renderHook(() =>
       useMcpServerAuthenticationReadiness(server),
     );
-    expect(mocks.github).toHaveBeenCalledWith(server.id, false);
+    expect(mocks.associations.mock.calls[0]?.[2]).toMatchObject({
+      enabled: false,
+    });
     expect(result.current.ready).toBe(true);
     expect(result.current.description).toBe(
       "Credentials are set up for the upstream service.",

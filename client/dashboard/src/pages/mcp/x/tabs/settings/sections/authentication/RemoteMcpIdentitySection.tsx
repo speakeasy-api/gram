@@ -1,5 +1,8 @@
 import { Spinner } from "@/components/ui/Spinner";
-import { isGitHubMcpUrl } from "@/lib/remote-identity/model/githubApp";
+import {
+  gitHubAppBinding,
+  isGitHubMcpUrl,
+} from "@/lib/remote-identity/model/githubApp";
 import { GitHubAppFields } from "@/lib/remote-identity/components/GitHubAppFields";
 import { useGitHubAppDraft } from "@/lib/remote-identity/drafts/useGitHubAppDraft";
 import { RequireScope } from "@/components/require-scope";
@@ -196,13 +199,26 @@ export function RemoteMcpIdentitySectionBody({
     !rbacLoading && hasScope("org:read"),
   );
   const canManageGitHub = !rbacLoading && hasScope("org:admin");
-  const githubLookupUnavailable = rbacLoading || !hasScope("org:read");
+  const githubBinding = canRead
+    ? gitHubAppBinding(associationsQuery.data)
+    : null;
+  const githubIdentityPresent =
+    githubBinding?.githubAppBound || githubBinding?.githubAppRequired;
+  const githubLookupUnavailable =
+    !githubBinding ||
+    (!!githubIdentityPresent &&
+      (rbacLoading ||
+        !hasScope("org:read") ||
+        githubDraft.error ||
+        (!githubDraft.loading &&
+          githubBinding.githubAppBound &&
+          !githubDraft.bound)));
+
   const identityQueryError =
     headersQuery.isError ||
     clientsError ||
     associationsUnavailable ||
-    githubDraft.error ||
-    githubLookupUnavailable;
+    (!associationsQuery.isLoading && !githubBinding);
   // A service account client (credential_owner self) is bound the same way as
   // a per-user one, but it is the Service Account choice: one credential every
   // caller shares, obtained by the client rather than pasted as a header.
@@ -212,11 +228,12 @@ export function RemoteMcpIdentitySectionBody({
   const subjectClients = ownClients.filter(
     (linked) => linked.credentialOwner !== "self",
   );
-  const actualMode = identityQueryError
-    ? null
-    : selfClient || githubDraft.bound
-      ? "agent"
-      : deriveIdentityMode(subjectClients.length, headers);
+  const actualMode =
+    identityQueryError || githubLookupUnavailable
+      ? null
+      : selfClient || githubBinding?.githubAppBound
+        ? "agent"
+        : deriveIdentityMode(subjectClients.length, headers);
   // A refresh keeps the panel, and what was typed into it, on screen. Save waits
   // for it instead, so nothing commits against a list being rechecked.
   const loading =
@@ -224,8 +241,9 @@ export function RemoteMcpIdentitySectionBody({
     (clientsLoading && !clientsRefreshing) ||
     siblingsQuery.isLoading ||
     associationsQuery.isLoading ||
-    githubDraft.loading;
-  const identityResolved = !loading && !identityQueryError;
+    (!!githubIdentityPresent && githubDraft.loading);
+  const identityResolved =
+    !loading && !identityQueryError && !githubLookupUnavailable;
   const [selectedMode, setSelectedMode] = useState<IdentityMode>("none");
   // Raised by Save when it would remove an existing identity, which is the
   // "after confirmation" AIM-230 asks for.
@@ -251,7 +269,7 @@ export function RemoteMcpIdentitySectionBody({
         githubLookupUnavailable ? "agent" : selectedMode,
         headers,
       ),
-      isError: headersQuery.isError || clientsError || githubDraft.error,
+      isError: headersQuery.isError || clientsError,
     },
     readOnly: headersReadOnly,
     suggestions: headerSuggestions,
@@ -271,9 +289,10 @@ export function RemoteMcpIdentitySectionBody({
     createHeader.isPending || updateHeader.isPending || deleteHeader.isPending;
 
   const invalidateHeaders = async () => {
-    await invalidateAllRemoteMcpServerHeaders(queryClient, {
-      refetchType: "all",
-    });
+    await Promise.all([
+      invalidateAllRemoteMcpServerHeaders(queryClient, { refetchType: "all" }),
+      invalidateAllServerClientAssociations(queryClient),
+    ]);
     const refreshed = await headersQuery.refetch();
     return !refreshed.isError && !!refreshed.data;
   };
@@ -386,11 +405,12 @@ export function RemoteMcpIdentitySectionBody({
         (!!oauthFormat && clientDraft.canSave(oauthFormat))));
   const leavingGitHub = !!githubDraft.bound && !githubSelected;
   const destructive =
-    leavingUser ||
-    leavingAgent ||
-    replacingSelf ||
-    replacingClient ||
-    leavingGitHub;
+    !githubLookupUnavailable &&
+    (leavingUser ||
+      leavingAgent ||
+      replacingSelf ||
+      replacingClient ||
+      leavingGitHub);
 
   // The upstream authorization server is derived per user session issuer, so
   // changing this server's clients can re-point every server sharing the
@@ -647,6 +667,7 @@ export function RemoteMcpIdentitySectionBody({
       toast.success("Identity removed");
     }
     if (headersSaved) {
+      await invalidateAllServerClientAssociations(queryClient);
       toast.success("Upstream headers updated");
     }
   };
@@ -700,7 +721,7 @@ export function RemoteMcpIdentitySectionBody({
     !userEditIncomplete &&
     !staticSwitchBlocked &&
     !oauthSwitchBlocked &&
-    (identityCanSave || headerDrafts.isDirty);
+    ((!githubLookupUnavailable && identityCanSave) || headerDrafts.isDirty);
   const savePending =
     githubDraft.saving ||
     detachIssuer.isPending ||
@@ -771,11 +792,30 @@ export function RemoteMcpIdentitySectionBody({
               <Alert variant="error" dismissible={false}>
                 Could not determine the current identity configuration
                 {identityError?.message ? `: ${identityError.message}` : "."}
-                {githubDraft.error ? (
-                  <Button variant="secondary" onClick={githubDraft.retry}>
-                    Retry identity lookup
-                  </Button>
-                ) : null}
+              </Alert>
+            ) : null}
+
+            {githubLookupUnavailable && githubIdentityPresent ? (
+              <Alert variant="warning" dismissible={false}>
+                This server has a GitHub App identity requirement. Its
+                configuration is unavailable; identity editing is disabled, but
+                custom headers can still be edited.
+              </Alert>
+            ) : null}
+            {githubDraft.error ? (
+              <Alert variant="warning" dismissible={false}>
+                Could not finish loading GitHub App configuration. Previously
+                loaded data is retained. Other identity choices remain available
+                when this server has no GitHub App requirement.
+                <Button variant="secondary" onClick={githubDraft.retry}>
+                  Retry GitHub App lookup
+                </Button>
+              </Alert>
+            ) : null}
+            {githubBinding?.githubAppRequired &&
+            !githubBinding.githubAppBound ? (
+              <Alert variant="warning" dismissible={false}>
+                Callers' requests are blocked until you save a new identity.
               </Alert>
             ) : null}
 
@@ -787,7 +827,7 @@ export function RemoteMcpIdentitySectionBody({
               </Alert>
             ) : null}
 
-            {identityQueryError ? (
+            {identityQueryError || githubLookupUnavailable ? (
               <Text muted small>
                 Identity is unavailable.
               </Text>
@@ -1166,7 +1206,7 @@ function removalConsequences({
 }): string {
   if (leavingGitHub) {
     return removingGitHub
-      ? "The GitHub App will be unbound from this server. Requests will no longer use its installation token, and no replacement identity will be configured."
+      ? "The GitHub App will be unbound from this server. No replacement identity will be configured. Callers' requests will be rejected until you save a new identity."
       : "The GitHub App will be unbound from this server. Requests will use the replacement identity instead of its installation token.";
   }
   const credentialConsequence = replacingCredential

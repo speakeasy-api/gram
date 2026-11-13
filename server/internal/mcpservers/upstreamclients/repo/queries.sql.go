@@ -176,6 +176,11 @@ WHERE (f.issuer_id = ANY($3::uuid[]) OR s.user_session_issuer_id = ANY($3::uuid[
       AND offer.deleted IS FALSE
       AND offered.remote_session_client_id IS DISTINCT FROM c.id
   )
+  AND NOT EXISTS (
+    SELECT 1 FROM mcp_server_auth_clients a
+    JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
+    WHERE a.mcp_server_id = s.id AND a.organization_id = p.organization_id
+  )
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
 RETURNING mcp_server_id
 `
@@ -263,7 +268,9 @@ WHERE s.project_id = $2::uuid
   AND NOT EXISTS (
     SELECT 1 FROM mcp_server_auth_clients a
     JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
-    WHERE a.mcp_server_id = s.id AND a.organization_id = p.organization_id AND NOT a.deleted
+    -- GitHub history blocks inferred replacement; only an explicit save
+    -- may attach a new OAuth identity after the App is removed.
+    WHERE a.mcp_server_id = s.id AND a.organization_id = p.organization_id
   )
   AND NOT EXISTS (
     SELECT 1

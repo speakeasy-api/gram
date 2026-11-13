@@ -43,11 +43,6 @@ func New(db repo.DBTX, enc *encryption.Client, policy *guardian.Policy, tracerPr
 	}
 }
 
-// Origin requires an explicit HTTPS origin, not an arbitrary path or userinfo.
-func Origin(raw string) (string, error) {
-	return httpsorigin.Parse(raw)
-}
-
 // Verify proves the supplied key can mint for this installation. No token or
 // private key escapes to the configuration response.
 func (p *Provider) Verify(ctx context.Context, instance string, appID, installationID int64, pem string) error {

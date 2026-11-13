@@ -11068,7 +11068,7 @@ examples:
           mcp_server_id: "9fe4eeb2-ab23-422d-8b3c-8f84188e6522"
       responses:
         "200":
-          application/json: {"associations": [], "required_client_ids": ["fe4eeb2a-b232-42db-83c8-f84188e65223", "5683a8ef-51a1-46b2-bb89-2537e3be4ecf"]}
+          application/json: {"associations": [], "github_app_bound": false, "github_app_enabled": false, "github_app_required": false, "required_client_ids": ["fe4eeb2a-b232-42db-83c8-f84188e65223", "5683a8ef-51a1-46b2-bb89-2537e3be4ecf"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

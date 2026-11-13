@@ -1,3 +1,4 @@
+import { invalidateAllServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { invalidateAllAuthClient } from "@gram/client/react-query/authClient.js";
 import { invalidateAllAuthClientAudience } from "@gram/client/react-query/authClientAudience.js";
 import { invalidateAllAuthClients } from "@gram/client/react-query/authClients.js";
@@ -11,6 +12,7 @@ export async function invalidateAuthClientQueries(
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ["launcher-auth-clients"] }),
     invalidateAllMcpServerAuthentication(queryClient),
+    invalidateAllServerClientAssociations(queryClient),
     invalidateAllAuthClients(queryClient),
     invalidateAllAuthClient(queryClient),
     invalidateAllAuthClientAudience(queryClient),

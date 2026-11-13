@@ -15,20 +15,19 @@ import (
 // attachments count until an explicit replacement is attached: deleting or
 // disabling a client alone must not restore a legacy credential.
 func (s *Service) serverRequiresGitHubApp(ctx context.Context, organizationID string, serverID uuid.UUID) (bool, error) {
-	present, err := authclientsrepo.New(s.db).ServerHasGitHubAppAuthClient(ctx, authclientsrepo.ServerHasGitHubAppAuthClientParams{OrganizationID: organizationID, McpServerID: serverID})
+	servers, err := authclientsrepo.New(s.db).ListGitHubAppServers(ctx, authclientsrepo.ListGitHubAppServersParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{serverID}})
 	if err != nil {
 		return false, fmt.Errorf("check GitHub App requirement: %w", err)
 	}
-	return present, nil
+	return len(servers) != 0, nil
 }
 
 func (s *Service) prepareGitHubApp(ctx context.Context, permit authClientPermitRequest, res authClientResolution, headers []proxy.ConfiguredHeader) (authClientResolution, error) {
 	if s.githubApps == nil {
 		return res, fmt.Errorf("GitHub App provider is unavailable")
 	}
-	if err := s.authorizeGitHubApp(ctx, permit, res); err != nil {
-		return res, err
-	}
+	// Both serving paths have already checked this client's permission. Renewal
+	// below checks it again because grants may change after the initial request.
 	token, err := s.githubApps.Credential(ctx, permit.OrganizationID, res.clientID, permit.ServerID)
 	if err != nil {
 		return res, fmt.Errorf("resolve GitHub App credential: %w", err)
@@ -60,7 +59,7 @@ func (s *Service) prepareGitHubApp(ctx context.Context, permit authClientPermitR
 			own = append(own, header)
 		}
 	}
-	own = append(own, proxy.ConfiguredHeader{ValueFromRequestHeader: "", Name: "Authorization", IsRequired: true, StaticValue: "Bearer " + token.Value()})
+	own = append(own, proxy.ConfiguredHeader{ValueFromRequestHeader: "", Name: "Authorization", IsRequired: true, IsSecret: true, StaticValue: "Bearer " + token.Value()})
 	return applyAuthClientHeaders(res, own), nil
 }
 

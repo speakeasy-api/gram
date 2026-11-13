@@ -12,8 +12,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace/noop"
 )
 
 func TestAPIBase(t *testing.T) {
@@ -60,7 +60,7 @@ func TestInstallationExchange(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, parsed.Valid)
 				return jsonResponse(t, http.StatusCreated, map[string]any{"token": "TEST_INSTALLATION_TOKEN", "expires_at": expires}), nil
-			})}, noop.NewTracerProvider())
+			})}, testenv.NewTracerProvider(t))
 			require.NoError(t, err)
 			token, expiry, err := client.MintInstallationToken(t.Context(), 456)
 			require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestInstallationExchange(t *testing.T) {
 				expires = time.Now().Add(4 * time.Minute)
 			}
 			return jsonResponse(t, http.StatusCreated, map[string]any{"token": "TEST_INSTALLATION_TOKEN", "expires_at": expires}), nil
-		})}, noop.NewTracerProvider())
+		})}, testenv.NewTracerProvider(t))
 		require.NoError(t, err)
 		_, err = client.InstallationToken(t.Context(), 456)
 		require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestInstallationExchange(t *testing.T) {
 					}
 					return response, nil
 				}),
-			}, noop.NewTracerProvider())
+			}, testenv.NewTracerProvider(t))
 			require.NoError(t, err)
 			_, _, err = client.MintInstallationToken(t.Context(), 456)
 			require.Error(t, err)

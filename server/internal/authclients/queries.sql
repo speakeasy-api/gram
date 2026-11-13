@@ -593,18 +593,6 @@ SELECT EXISTS (
  WHERE a.mcp_server_id = @mcp_server_id AND a.organization_id = @organization_id
 ) AS present;
 
--- name: ServerHasGitHubAppAuthClient :one
-SELECT EXISTS (
- SELECT 1 FROM mcp_server_auth_clients a
- JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
- WHERE a.mcp_server_id = @mcp_server_id AND a.organization_id = @organization_id
-   AND (NOT a.deleted OR NOT EXISTS (
-     SELECT 1 FROM mcp_server_auth_clients replacement
-     WHERE replacement.mcp_server_id = a.mcp_server_id
-       AND replacement.organization_id = a.organization_id AND NOT replacement.deleted
-   ))
-) AS present;
-
 -- name: GetGitHubAppServerURL :one
 SELECT r.url FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id AND p.organization_id = @organization_id AND NOT p.deleted
@@ -613,7 +601,7 @@ WHERE m.id = @mcp_server_id AND NOT m.deleted;
 
 -- name: ReplaceServerAuthWithGitHubApp :exec
 WITH retired AS (
- UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp(), source = 'admin', updated_at = clock_timestamp()
+ UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
  WHERE mcp_server_id = @mcp_server_id AND organization_id = @organization_id
    AND auth_client_id <> @auth_client_id AND NOT deleted
 ), oauth AS (
@@ -630,6 +618,15 @@ JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.
 WHERE a.organization_id = @organization_id AND a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND (NOT a.deleted OR NOT EXISTS (
     SELECT 1 FROM mcp_server_auth_clients replacement
+    JOIN mcp_auth_clients client ON client.id = replacement.auth_client_id
+      AND client.organization_id = replacement.organization_id AND NOT client.deleted
+    WHERE replacement.mcp_server_id = a.mcp_server_id
+      AND replacement.organization_id = a.organization_id AND NOT replacement.deleted
+  ) AND NOT EXISTS (
+    SELECT 1 FROM mcp_server_remote_session_clients replacement
+    JOIN remote_session_clients client ON client.id = replacement.remote_session_client_id
+      AND client.attachment_scope = replacement.client_attachment_scope AND NOT client.deleted
+    JOIN remote_session_issuers issuer ON issuer.id = client.remote_session_issuer_id AND NOT issuer.deleted
     WHERE replacement.mcp_server_id = a.mcp_server_id
       AND replacement.organization_id = a.organization_id AND NOT replacement.deleted
   ));
@@ -645,3 +642,17 @@ JOIN projects p ON p.id = m.project_id AND p.organization_id = @organization_id 
 JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND NOT r.deleted
 WHERE m.id = @mcp_server_id AND NOT m.deleted
 FOR UPDATE OF m, r;
+
+-- name: GetGitHubAppServerBindingState :one
+WITH bindings AS (
+ SELECT ac.enabled
+ FROM mcp_server_auth_clients a
+ JOIN mcp_auth_clients ac ON ac.id = a.auth_client_id AND ac.organization_id = a.organization_id
+   AND ac.client_type = 'service_account' AND ac.remote_session_client_id IS NULL AND NOT ac.deleted
+ JOIN mcp_auth_client_github_apps g ON g.auth_client_id = ac.id AND g.organization_id = ac.organization_id
+ JOIN mcp_servers m ON m.id = a.mcp_server_id AND m.project_id = a.project_id AND NOT m.deleted
+ JOIN projects p ON p.id = m.project_id AND p.organization_id = a.organization_id AND NOT p.deleted
+ WHERE a.mcp_server_id = @mcp_server_id AND a.organization_id = @organization_id AND NOT a.deleted
+)
+SELECT EXISTS (SELECT 1 FROM bindings) AS bound,
+       EXISTS (SELECT 1 FROM bindings WHERE enabled) AS enabled;

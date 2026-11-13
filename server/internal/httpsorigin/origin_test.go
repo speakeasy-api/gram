@@ -23,6 +23,7 @@ func TestNormalization(t *testing.T) {
 		{"https://example.com/%2f", "https://example.com", false},
 	} {
 		t.Run(tc.raw, func(t *testing.T) {
+			t.Parallel()
 			got, err := FromURL(tc.raw)
 			if tc.strict {
 				got, err = Parse(tc.raw)
@@ -38,6 +39,7 @@ func TestRejectInvalidOrigins(t *testing.T) {
 	t.Parallel()
 	for _, raw := range []string{"", "http://example.com", "//example.com", "https:///", "https:example.com", "https://user:password@example.com", "https://user@example.com/mcp", "https://example.com:bad", "https://example.com:", "https://[::1]:", "https://example.com:65536", "https://[::1"} {
 		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
 			for _, parse := range []func(string) (string, error){Parse, FromURL} {
 				got, err := parse(raw)
 				if err == nil || got != "" {
@@ -48,6 +50,7 @@ func TestRejectInvalidOrigins(t *testing.T) {
 	}
 	for _, raw := range []string{"https://example.com/mcp", "https://example.com?", "https://example.com?q=1", "https://example.com/#fragment", "https://example.com/%2f"} {
 		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
 			if got, err := Parse(raw); err == nil || got != "" {
 				t.Fatalf("accepted non-origin: %q, %v", got, err)
 			}

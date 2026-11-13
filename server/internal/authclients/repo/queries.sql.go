@@ -578,6 +578,38 @@ func (q *Queries) GetGitHubAppCredential(ctx context.Context, arg GetGitHubAppCr
 	return i, err
 }
 
+const getGitHubAppServerBindingState = `-- name: GetGitHubAppServerBindingState :one
+WITH bindings AS (
+ SELECT ac.enabled
+ FROM mcp_server_auth_clients a
+ JOIN mcp_auth_clients ac ON ac.id = a.auth_client_id AND ac.organization_id = a.organization_id
+   AND ac.client_type = 'service_account' AND ac.remote_session_client_id IS NULL AND NOT ac.deleted
+ JOIN mcp_auth_client_github_apps g ON g.auth_client_id = ac.id AND g.organization_id = ac.organization_id
+ JOIN mcp_servers m ON m.id = a.mcp_server_id AND m.project_id = a.project_id AND NOT m.deleted
+ JOIN projects p ON p.id = m.project_id AND p.organization_id = a.organization_id AND NOT p.deleted
+ WHERE a.mcp_server_id = $1 AND a.organization_id = $2 AND NOT a.deleted
+)
+SELECT EXISTS (SELECT 1 FROM bindings) AS bound,
+       EXISTS (SELECT 1 FROM bindings WHERE enabled) AS enabled
+`
+
+type GetGitHubAppServerBindingStateParams struct {
+	McpServerID    uuid.UUID
+	OrganizationID string
+}
+
+type GetGitHubAppServerBindingStateRow struct {
+	Bound   bool
+	Enabled bool
+}
+
+func (q *Queries) GetGitHubAppServerBindingState(ctx context.Context, arg GetGitHubAppServerBindingStateParams) (GetGitHubAppServerBindingStateRow, error) {
+	row := q.db.QueryRow(ctx, getGitHubAppServerBindingState, arg.McpServerID, arg.OrganizationID)
+	var i GetGitHubAppServerBindingStateRow
+	err := row.Scan(&i.Bound, &i.Enabled)
+	return i, err
+}
+
 const getGitHubAppServerURL = `-- name: GetGitHubAppServerURL :one
 SELECT r.url FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id AND p.organization_id = $1 AND NOT p.deleted
@@ -1100,6 +1132,15 @@ JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.
 WHERE a.organization_id = $1 AND a.mcp_server_id = ANY($2::uuid[])
   AND (NOT a.deleted OR NOT EXISTS (
     SELECT 1 FROM mcp_server_auth_clients replacement
+    JOIN mcp_auth_clients client ON client.id = replacement.auth_client_id
+      AND client.organization_id = replacement.organization_id AND NOT client.deleted
+    WHERE replacement.mcp_server_id = a.mcp_server_id
+      AND replacement.organization_id = a.organization_id AND NOT replacement.deleted
+  ) AND NOT EXISTS (
+    SELECT 1 FROM mcp_server_remote_session_clients replacement
+    JOIN remote_session_clients client ON client.id = replacement.remote_session_client_id
+      AND client.attachment_scope = replacement.client_attachment_scope AND NOT client.deleted
+    JOIN remote_session_issuers issuer ON issuer.id = client.remote_session_issuer_id AND NOT issuer.deleted
     WHERE replacement.mcp_server_id = a.mcp_server_id
       AND replacement.organization_id = a.organization_id AND NOT replacement.deleted
   ))
@@ -1683,7 +1724,7 @@ func (q *Queries) RenameIssuanceProfile(ctx context.Context, arg RenameIssuanceP
 
 const replaceServerAuthWithGitHubApp = `-- name: ReplaceServerAuthWithGitHubApp :exec
 WITH retired AS (
- UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp(), source = 'admin', updated_at = clock_timestamp()
+ UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
  WHERE mcp_server_id = $1 AND organization_id = $2
    AND auth_client_id <> $3 AND NOT deleted
 ), oauth AS (
@@ -1704,31 +1745,6 @@ type ReplaceServerAuthWithGitHubAppParams struct {
 func (q *Queries) ReplaceServerAuthWithGitHubApp(ctx context.Context, arg ReplaceServerAuthWithGitHubAppParams) error {
 	_, err := q.db.Exec(ctx, replaceServerAuthWithGitHubApp, arg.McpServerID, arg.OrganizationID, arg.AuthClientID)
 	return err
-}
-
-const serverHasGitHubAppAuthClient = `-- name: ServerHasGitHubAppAuthClient :one
-SELECT EXISTS (
- SELECT 1 FROM mcp_server_auth_clients a
- JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
- WHERE a.mcp_server_id = $1 AND a.organization_id = $2
-   AND (NOT a.deleted OR NOT EXISTS (
-     SELECT 1 FROM mcp_server_auth_clients replacement
-     WHERE replacement.mcp_server_id = a.mcp_server_id
-       AND replacement.organization_id = a.organization_id AND NOT replacement.deleted
-   ))
-) AS present
-`
-
-type ServerHasGitHubAppAuthClientParams struct {
-	McpServerID    uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) ServerHasGitHubAppAuthClient(ctx context.Context, arg ServerHasGitHubAppAuthClientParams) (bool, error) {
-	row := q.db.QueryRow(ctx, serverHasGitHubAppAuthClient, arg.McpServerID, arg.OrganizationID)
-	var present bool
-	err := row.Scan(&present)
-	return present, err
 }
 
 const serverHasHistoricalGitHubAppAuthClient = `-- name: ServerHasHistoricalGitHubAppAuthClient :one

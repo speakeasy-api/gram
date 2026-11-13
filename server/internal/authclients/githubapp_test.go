@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/stretchr/testify/require"
 )
@@ -50,9 +51,16 @@ func TestGitHubAppConfiguration(t *testing.T) {
 		}
 		return nil
 	})
-	payload := &gen.ConfigureGitHubAppAuthClientPayload{McpServerID: server.id.String(), Name: "Fixture bot", InstanceURL: "https://git.example.com", AppID: "123", InstallationID: "456", PrivateKey: "TEST_PRIVATE_KEY_ONE", UpstreamOrigin: "https://upstream.example.com"}
+	payload := &gen.ConfigureGitHubAppAuthClientPayload{McpServerID: server.id.String(), Name: strings.Repeat("界", 101), InstanceURL: "https://git.example.com", AppID: "123", InstallationID: "456", PrivateKey: "TEST_PRIVATE_KEY_ONE", UpstreamOrigin: "https://upstream.example.com"}
+	_, err = ti.service.ConfigureGitHubAppAuthClient(ctx, payload)
+	var invalid *oops.ShareableError
+	require.ErrorAs(t, err, &invalid)
+	require.Equal(t, oops.CodeBadRequest, invalid.Code)
+	require.Zero(t, calls, "overlong names are rejected before verification")
+	payload.Name = strings.Repeat("界", 100)
 	created, err := ti.service.ConfigureGitHubAppAuthClient(ctx, payload)
 	require.NoError(t, err)
+	require.Equal(t, payload.Name, created.Name)
 	require.Equal(t, "service_account", created.ClientType)
 	require.Nil(t, created.RemoteSessionClientID)
 	require.NotNil(t, created.GithubApp)
@@ -109,6 +117,62 @@ func TestGitHubAppConfiguration(t *testing.T) {
 
 }
 
+func TestGitHubAppConfigurationLookupErrors(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                           string
+		wantCode                       oops.Code
+		missingTarget                  bool
+		removeTargetDuringVerification bool
+		missingClient                  bool
+		closedPool                     bool
+	}{
+		{name: "missing target", missingTarget: true, wantCode: oops.CodeNotFound},
+		{name: "target removed during verification", removeTargetDuringVerification: true, wantCode: oops.CodeNotFound},
+		{name: "missing auth client", missingClient: true, wantCode: oops.CodeNotFound},
+		{name: "destination read failure", closedPool: true, wantCode: oops.CodeUnexpected},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			ctx = withOrgGrants(t, ctx, authz.ScopeOrgAdmin)
+			server := seedServer(t, ctx, ti.conn, ti.projectID, "private")
+			calls := 0
+			authclients.SetGitHubAppTestVerifier(ti.service, ti.enc, func(context.Context, string, int64, int64, string) error {
+				calls++
+				if tc.removeTargetDuringVerification {
+					_, err := remoterepo.New(ti.conn).DeleteServer(ctx, remoterepo.DeleteServerParams{ID: server.remoteID, ProjectID: ti.projectID})
+					require.NoError(t, err)
+				}
+				return nil
+			})
+			payload := &gen.ConfigureGitHubAppAuthClientPayload{
+				McpServerID: server.id.String(), Name: "Fixture bot", InstanceURL: "https://git.example.com",
+				AppID: "123", InstallationID: "456", PrivateKey: "TEST_PRIVATE_KEY", UpstreamOrigin: "https://upstream.example.com",
+			}
+			if tc.missingTarget {
+				payload.McpServerID = uuid.NewString()
+			}
+			if tc.missingClient {
+				id := uuid.NewString()
+				payload.ID = &id
+			}
+			if tc.closedPool {
+				ti.conn.Close()
+			}
+			_, err := ti.service.ConfigureGitHubAppAuthClient(ctx, payload)
+			var shared *oops.ShareableError
+			require.ErrorAs(t, err, &shared)
+			require.Equal(t, tc.wantCode, shared.Code)
+			if tc.missingTarget || tc.closedPool {
+				require.Zero(t, calls, "target lookup fails before verification")
+			} else {
+				require.Equal(t, 1, calls)
+			}
+		})
+	}
+}
+
 func TestGitHubAppAttachmentUpsertKeepsHistory(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -125,7 +189,8 @@ func TestGitHubAppAttachmentUpsertKeepsHistory(t *testing.T) {
 	require.NoError(t, queries.AttachGitHubAppAuthClient(ctx, attachment))
 	var live, retired int
 	counts := func() {
-		err := ti.conn.QueryRow(ctx, `SELECT count(*) FILTER (WHERE NOT deleted), count(*) FILTER (WHERE deleted)
+		err := ti.conn.QueryRow(ctx, //nolint:glint // notestingrawsql: attachment history counts are the invariant under test; application queries expose only live links.
+			`SELECT count(*) FILTER (WHERE NOT deleted), count(*) FILTER (WHERE deleted)
 			FROM mcp_server_auth_clients WHERE mcp_server_id = $1 AND auth_client_id = $2`, server.id, client.ID).Scan(&live, &retired)
 		require.NoError(t, err)
 	}
@@ -136,7 +201,8 @@ func TestGitHubAppAttachmentUpsertKeepsHistory(t *testing.T) {
 		McpServerID: server.id, AuthClientID: client.ID, OrganizationID: ti.organizationID,
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, n)
+	require.NotEqual(t, uuid.Nil, n.ID)
+	require.Equal(t, ti.projectID, n.ProjectID)
 	require.NoError(t, queries.AttachGitHubAppAuthClient(ctx, attachment))
 	counts()
 	require.Equal(t, 1, live)

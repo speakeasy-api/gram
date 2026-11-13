@@ -2,11 +2,14 @@ package authclients
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	gen "github.com/speakeasy-api/gram/server/gen/auth_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -50,23 +53,26 @@ func (s *Service) ConfigureGitHubAppAuthClient(ctx context.Context, payload *gen
 	if err != nil || installationID <= 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid installation ID")
 	}
-	instance, err := githubapp.Origin(payload.InstanceURL)
+	instance, err := httpsorigin.Parse(payload.InstanceURL)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid GitHub instance URL")
 	}
-	origin, err := githubapp.Origin(payload.UpstreamOrigin)
+	origin, err := httpsorigin.Parse(payload.UpstreamOrigin)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid MCP origin")
 	}
 	name := strings.TrimSpace(payload.Name)
-	if name == "" || len(name) > 100 || len(payload.PrivateKey) > 32768 {
+	if name == "" || utf8.RuneCountInString(name) > 100 || len(payload.PrivateKey) > 32768 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid name or private key")
 	}
 	// Check the target before any network request or secret processing.
 	q := repo.New(s.db)
 	target, err := q.GetGitHubAppServerURL(ctx, repo.GetGitHubAppServerURLParams{McpServerID: serverID, OrganizationID: authCtx.ActiveOrganizationID})
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeNotFound, nil, "remote MCP server not found")
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read GitHub App MCP destination").LogError(ctx, logger)
 	}
 	targetOrigin, err := httpsorigin.FromURL(target)
 	if err != nil || targetOrigin != origin {
@@ -86,8 +92,11 @@ func (s *Service) ConfigureGitHubAppAuthClient(ctx context.Context, payload *gen
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	queries := repo.New(tx)
 	server, err := queries.LockGitHubAppServerURL(ctx, repo.LockGitHubAppServerURLParams{McpServerID: serverID, OrganizationID: authCtx.ActiveOrganizationID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
+	}
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "MCP server not found")
+		return nil, oops.E(oops.CodeUnexpected, err, "lock GitHub App MCP destination").LogError(ctx, logger)
 	}
 	if server.Url != target {
 		return nil, oops.E(oops.CodeBadRequest, nil, "MCP destination changed during verification; retry configuration")
@@ -100,8 +109,11 @@ func (s *Service) ConfigureGitHubAppAuthClient(ctx context.Context, payload *gen
 			return nil, oops.E(oops.CodeBadRequest, nil, "invalid auth client ID")
 		}
 		client, err = queries.LockAuthClient(ctx, repo.LockAuthClientParams{ID: id, OrganizationID: authCtx.ActiveOrganizationID})
-		if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, nil, "auth client not found")
+		}
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock GitHub App auth client").LogError(ctx, logger)
 		}
 		if client.ClientType != "service_account" || client.RemoteSessionClientID.Valid || (client.ProjectID.Valid && client.ProjectID.UUID != server.ProjectID) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "auth client is not a GitHub App in this project")
