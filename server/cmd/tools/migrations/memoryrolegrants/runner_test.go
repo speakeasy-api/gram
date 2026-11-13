@@ -250,3 +250,36 @@ func TestSystemRoleMemoryGrantsCoversAdminOnly(t *testing.T) {
 	require.ElementsMatch(t, []string{string(authz.ScopeMemoryRead), string(authz.ScopeMemoryWrite)}, scopes)
 	require.Empty(t, memoryrolegrants.SystemRoleMemoryGrants(authz.SystemRoleMember))
 }
+
+func TestRunIgnoresTemporaryGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	pool := newTestDB(t)
+
+	// An expired memory grant does not stand in for the permanent ones.
+	expiredOrgID := seedOrganization(t, ctx, pool)
+	admin := seedLegacySystemRole(t, ctx, pool, expiredOrgID, authz.SystemRoleAdmin)
+	seedTemporaryGrant(t, ctx, pool, expiredOrgID, admin, authz.ScopeMemoryRead)
+
+	// A role whose only stored grant is temporary was never provisioned.
+	temporaryOnlyOrgID := seedOrganization(t, ctx, pool)
+	seedTemporaryGrant(t, ctx, pool, temporaryOnlyOrgID, admin, authz.ScopeProjectRead)
+
+	report, err := memoryrolegrants.Run(ctx, pool, memoryrolegrants.Options{OrganizationID: "", Apply: true})
+	require.NoError(t, err)
+	require.Equal(t, memoryrolegrants.Report{Roles: 1, GrantsAdded: 2}, report)
+	requireAuthorized(t, ctx, pool, expiredOrgID, admin, readCheck, true)
+	requireAuthorized(t, ctx, pool, expiredOrgID, admin, writeCheck, true)
+	requireAuthorized(t, ctx, pool, temporaryOnlyOrgID, admin, readCheck, false)
+}
+
+func seedTemporaryGrant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID string, principal urn.Principal, scope authz.Scope) {
+	t.Helper()
+
+	selectors, err := authz.NewSelector(scope, authz.WildcardResource).MarshalJSON()
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at)
+VALUES ($1, $2, $3, $4, clock_timestamp() - interval '1 hour')`, orgID, principal.String(), string(scope), selectors)
+	require.NoError(t, err)
+}

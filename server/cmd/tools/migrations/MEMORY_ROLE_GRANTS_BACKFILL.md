@@ -4,8 +4,8 @@ New organizations get `memory:read` and `memory:write` on the built-in Admin rol
 
 A built-in Admin role principal (`role:global:<id>`) in an organization is backfilled only when all of the following hold:
 
-- the role has at least one stored grant in the organization (roles with none are seeded in full by `authz.SeedSystemRoleGrants`);
-- the role has no stored `memory:*` grant;
+- the role has at least one stored permanent grant in the organization (roles with none are seeded in full by `authz.SeedSystemRoleGrants`);
+- the role has no stored permanent `memory:*` grant (temporary grants are ignored);
 - no `access_role:update` audit entry for the role has a memory grant in its before or after snapshot. A role that once held a stored memory grant and now holds none had it removed deliberately, and stays revoked.
 
 Rows go through `authz.PatchRoleGrantsTx`, one transaction per role principal. Each principal is rechecked before writing under the same per-role lock that role edits take, so neither a concurrent revocation nor rerunning the command (preview or apply) can restore revoked access.

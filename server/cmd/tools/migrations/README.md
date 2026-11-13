@@ -3,8 +3,10 @@
 An offline operator tool for back-filling data between stores using a generic,
 reusable **Source → Transform → Sink** pipeline.
 
-Each concrete migration is a set of three small implementations wired together by
-the shared harness. The migrations shipped today:
+Pipeline migrations are a set of three small implementations wired together by
+the shared harness. The tool also ships standalone application-data backfills
+(the `*_BACKFILL.md` entries), which run their own transactions instead of the
+pipeline. The migrations shipped today:
 
 | Migration                                                                           | Doc                                                                                |
 | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |

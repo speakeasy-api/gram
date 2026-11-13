@@ -4,13 +4,15 @@
 -- Those roles were seeded before the memory scopes existed. Any other empty
 -- memory grant set is an explicit revocation and is excluded. Roles with no
 -- stored grants at all are left to SeedSystemRoleGrants, which writes the
--- full canonical set.
+-- full canonical set. Only permanent rows count as role state: a temporary
+-- grant neither makes a role a candidate nor stands in for its memory grants.
 SELECT grants.organization_id, roles.workos_slug AS role_slug, grants.principal_urn
 FROM global_roles AS roles
 JOIN principal_grants AS grants ON grants.principal_urn = 'role:global:' || roles.id::text
 WHERE roles.workos_slug = ANY(@role_slugs::text[])
   AND roles.deleted IS FALSE
   AND roles.workos_deleted IS FALSE
+  AND grants.expires_at IS NULL
   AND (sqlc.narg('organization_id')::text IS NULL OR grants.organization_id = sqlc.narg('organization_id')::text)
   AND NOT EXISTS (
     SELECT 1
@@ -18,6 +20,7 @@ WHERE roles.workos_slug = ANY(@role_slugs::text[])
     WHERE memory_grants.organization_id = grants.organization_id
       AND memory_grants.principal_urn = grants.principal_urn
       AND memory_grants.scope LIKE 'memory:%'
+      AND memory_grants.expires_at IS NULL
   )
   AND NOT EXISTS (
     SELECT 1

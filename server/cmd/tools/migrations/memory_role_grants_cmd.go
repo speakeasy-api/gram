@@ -66,6 +66,9 @@ func parseMemoryRoleGrantsFlags(args []string, getenv func(string) string) (memo
 			return memoryRoleGrantsConfig{}, errors.New("$GRAM_DATABASE_URL must name a single host; fallbacks to other hosts are not allowed")
 		}
 	}
+	if *apply && !requiresTLS(dbConfig) {
+		return memoryRoleGrantsConfig{}, errors.New("writes require a TLS connection: set sslmode=require, verify-ca or verify-full in $GRAM_DATABASE_URL")
+	}
 	target := net.JoinHostPort(dbConfig.Host, strconv.Itoa(int(dbConfig.Port))) + "/" + dbConfig.Database
 	if *apply && *confirmTarget != target {
 		return memoryRoleGrantsConfig{}, fmt.Errorf("writes require -confirm-target=%s to match the parsed database target", target)

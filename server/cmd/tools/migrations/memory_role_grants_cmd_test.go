@@ -21,7 +21,7 @@ func TestParseMemoryRoleGrantsFlagsDryRunByDefault(t *testing.T) {
 
 func TestParseMemoryRoleGrantsFlagsRequiresWriteConfirmations(t *testing.T) {
 	t.Parallel()
-	getenv := func(string) string { return "postgres://user@db.internal:5432/gram" }
+	getenv := func(string) string { return "postgres://user@db.internal:5432/gram?sslmode=require" }
 
 	_, err := parseMemoryRoleGrantsFlags([]string{"-apply"}, getenv)
 	require.ErrorContains(t, err, "environment is required")
@@ -58,4 +58,19 @@ func TestParseMemoryRoleGrantsFlagsRejectsFallbackHosts(t *testing.T) {
 
 	_, err := parseMemoryRoleGrantsFlags([]string{"-environment=staging"}, getenv)
 	require.ErrorContains(t, err, "single host")
+}
+
+func TestParseMemoryRoleGrantsFlagsRequiresTLSForWrites(t *testing.T) {
+	t.Parallel()
+	writeArgs := []string{"-apply", "-environment=staging", "-confirm-environment=staging", "-confirm-target=db.internal:5432/gram", "-confirm-apply=memory-role-grants"}
+
+	for _, mode := range []string{"", "?sslmode=prefer", "?sslmode=allow", "?sslmode=disable"} {
+		getenv := func(string) string { return "postgres://user@db.internal:5432/gram" + mode }
+		_, err := parseMemoryRoleGrantsFlags(writeArgs, getenv)
+		require.ErrorContains(t, err, "TLS", "sslmode %q", mode)
+
+		cfg, err := parseMemoryRoleGrantsFlags([]string{"-environment=staging"}, getenv)
+		require.NoError(t, err, "dry runs do not need TLS (sslmode %q)", mode)
+		require.False(t, cfg.apply)
+	}
 }
