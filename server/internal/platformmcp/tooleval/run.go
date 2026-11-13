@@ -2,9 +2,11 @@ package tooleval
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"slices"
 	"strings"
 	"time"
@@ -428,7 +430,7 @@ func completeWithRetry(ctx context.Context, client openrouter.CompletionClient, 
 		if !errors.Is(err, openrouter.ErrRateLimited) || try == rateLimitRetries {
 			return nil, fmt.Errorf("get completion: %w", err)
 		}
-		timer := time.NewTimer(wait)
+		timer := time.NewTimer(jittered(wait))
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -437,6 +439,16 @@ func completeWithRetry(ctx context.Context, client openrouter.CompletionClient, 
 		}
 		wait = min(2*wait, rateLimitMaxWait)
 	}
+}
+
+// jittered returns a wait between half and all of d, so cases rate limited
+// together do not all retry at the same moment.
+func jittered(d time.Duration) time.Duration {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(d/2)+1))
+	if err != nil {
+		return d
+	}
+	return d/2 + time.Duration(n.Int64())
 }
 
 func completionRequest(model string, messages []or.ChatMessages, tools []openrouter.Tool) openrouter.CompletionRequest {

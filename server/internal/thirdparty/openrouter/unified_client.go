@@ -57,7 +57,7 @@ type ChatClient struct {
 	chatTitleGenerator     ChatTitleGenerator
 	telemetryLogger        TelemetryLogger
 	// providerRouting, when set, limits which OpenRouter providers serve
-	// every request this client sends.
+	// every chat completion this client sends.
 	providerRouting *ProviderRouting
 }
 
@@ -85,11 +85,16 @@ func NewUnifiedClient(
 	}
 }
 
-// WithProviderRouting makes every request this client sends use only the
-// given OpenRouter providers. Evals use it so results do not shift with
-// whichever provider OpenRouter picks.
+// WithProviderRouting makes every chat completion this client sends use only
+// the given OpenRouter providers; embeddings are not affected. Evals use it so
+// results do not shift with whichever provider OpenRouter picks. The client
+// keeps its own copy, so later changes to routing do not reach it.
 func (c *ChatClient) WithProviderRouting(routing *ProviderRouting) *ChatClient {
-	c.providerRouting = routing
+	if routing == nil {
+		c.providerRouting = nil
+		return c
+	}
+	c.providerRouting = &ProviderRouting{Order: slices.Clone(routing.Order), AllowFallbacks: routing.AllowFallbacks}
 	return c
 }
 
