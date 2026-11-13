@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,12 +12,9 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/demoseed"
-	demoseedrepo "github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun/evalruntest"
 	evalrunrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun/repo"
 )
 
@@ -30,19 +26,6 @@ type recordingMemoryEvalStarter struct {
 func (s *recordingMemoryEvalStarter) StartMemoryEvalRun(_ context.Context, runID uuid.UUID) error {
 	s.started = append(s.started, runID)
 	return s.err
-}
-
-func seedMemoryEvalCorpusProject(t *testing.T, db *pgxpool.Pool) {
-	t.Helper()
-	spec := demoseed.LocalSpec()
-	keys := []memoryeval.ProjectKey{memoryeval.ProjectMain, memoryeval.ProjectOther}
-	_, err := orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{ID: spec.OrgID, Name: spec.OrgName, Slug: spec.OrgSlug})
-	require.NoError(t, err)
-	for _, key := range keys {
-		id, ok := demoseed.MemoryEvalProjectID(spec, key)
-		require.True(t, ok)
-		require.NoError(t, demoseedrepo.New(db).MemoryEvalInsertProject(t.Context(), demoseedrepo.MemoryEvalInsertProjectParams{ProjectID: id, Name: "Team memory eval " + string(key), Slug: "team-memory-eval-" + string(key), OrgID: spec.OrgID, CreatedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}}))
-	}
 }
 
 // withMemoryEvalOperator signs ctx in as a staff member, whose email a start
@@ -61,7 +44,7 @@ func TestStartMemoryEvalRun_QueuesAndStartsTheWorkflow(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	ctx = withMemoryEvalOperator(ctx)
-	seedMemoryEvalCorpusProject(t, db)
+	evalruntest.SeedCorpus(t, db)
 	starter := &recordingMemoryEvalStarter{}
 	svc.SetMemoryEvalRunStarter(starter)
 
@@ -91,7 +74,7 @@ func TestStartMemoryEvalRun_FailsTheRowWhenTheWorkflowCannotStart(t *testing.T) 
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	ctx = withMemoryEvalOperator(ctx)
-	seedMemoryEvalCorpusProject(t, db)
+	evalruntest.SeedCorpus(t, db)
 	starter := &recordingMemoryEvalStarter{err: errors.New("temporal unavailable")}
 	svc.SetMemoryEvalRunStarter(starter)
 
@@ -108,32 +91,108 @@ func TestStartMemoryEvalRun_FailsTheRowWhenTheWorkflowCannotStart(t *testing.T) 
 	require.Equal(t, 0, opts.RunsToday, "a run no workflow claimed spent nothing, so it must not use up the daily limit")
 }
 
-func TestStartMemoryEvalRun_Unconfigured(t *testing.T) {
+// Each Queue outcome and precondition maps to its own error code.
+func TestStartMemoryEvalRun_ErrorCodes(t *testing.T) {
 	t.Parallel()
-	ctx, svc, db := newTestAdminService(t)
-	ctx = withMemoryEvalOperator(ctx)
-	seedMemoryEvalCorpusProject(t, db)
 
-	_, err := svc.StartMemoryEvalRun(ctx, &gen.StartMemoryEvalRunPayload{Config: memoryEvalPayloadConfig()})
-	requireOopsCode(t, err, oops.CodeUnavailable)
+	tooManyRuns := evalrun.DefaultConfig()
+	tooManyRuns.Runs = evalrun.MaxRuns + 1
+
+	cases := []struct {
+		name string
+		// unseeded leaves the eval corpus out.
+		unseeded bool
+		// noStarter runs the server without Temporal.
+		noStarter bool
+		// anonymous leaves out the staff email a start records.
+		anonymous bool
+		config    evalrun.Config
+		// before runs on the seeded database ahead of the start.
+		before func(t *testing.T, ctx context.Context, db *pgxpool.Pool)
+		want   oops.Code
+	}{
+		{name: "server without Temporal", noStarter: true, want: oops.CodeUnavailable},
+		{name: "invalid config", config: tooManyRuns, want: oops.CodeInvalid},
+		{name: "no staff email", anonymous: true, want: oops.CodeUnauthorized},
+		{name: "corpus not seeded", unseeded: true, want: oops.CodeNotFound},
+		{name: "another run active", before: queueActiveRun, want: oops.CodeConflict},
+		{name: "daily limit reached", before: spendDailyLimit, want: oops.CodeRateLimitExceeded},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, svc, db := newTestAdminService(t)
+			if !tc.anonymous {
+				ctx = withMemoryEvalOperator(ctx)
+			}
+			if !tc.unseeded {
+				evalruntest.SeedCorpus(t, db)
+			}
+			starter := &recordingMemoryEvalStarter{}
+			if !tc.noStarter {
+				svc.SetMemoryEvalRunStarter(starter)
+			}
+			if tc.before != nil {
+				tc.before(t, ctx, db)
+			}
+			cfg := evalrun.DefaultConfig()
+			if tc.config.Runs != 0 {
+				cfg = tc.config
+			}
+
+			_, err := svc.StartMemoryEvalRun(ctx, &gen.StartMemoryEvalRunPayload{Config: memoryEvalConfigView(cfg)})
+			requireOopsCode(t, err, tc.want)
+			if !tc.noStarter {
+				require.Empty(t, starter.started, "a refused start launches no workflow")
+			}
+		})
+	}
 }
 
-func TestStartMemoryEvalRun_RequiresAStaffEmail(t *testing.T) {
-	t.Parallel()
-	ctx, svc, db := newTestAdminService(t)
-	seedMemoryEvalCorpusProject(t, db)
-	starter := &recordingMemoryEvalStarter{}
-	svc.SetMemoryEvalRunStarter(starter)
+// queueActiveRun leaves one run queued, so the next start conflicts.
+func queueActiveRun(t *testing.T, ctx context.Context, db *pgxpool.Pool) {
+	t.Helper()
+	_, err := evalrun.Queue(ctx, db, evalrun.DefaultConfig(), "earlier@example.com")
+	require.NoError(t, err)
+}
 
-	_, err := svc.StartMemoryEvalRun(ctx, &gen.StartMemoryEvalRunPayload{Config: memoryEvalPayloadConfig()})
-	requireOopsCode(t, err, oops.CodeUnauthorized)
-	require.Empty(t, starter.started, "no run is queued without a staff email to record")
+// spendDailyLimit uses up the daily limit with runs a workflow claimed and
+// that then failed, which count because they spent.
+func spendDailyLimit(t *testing.T, ctx context.Context, db *pgxpool.Pool) {
+	t.Helper()
+	q := evalrunrepo.New(db)
+	for range evalrun.DailyRunLimit {
+		run, err := evalrun.Queue(ctx, db, evalrun.DefaultConfig(), "earlier@example.com")
+		require.NoError(t, err)
+		_, err = q.MarkRunRunning(ctx, run.ID)
+		require.NoError(t, err)
+		_, err = q.FailRun(ctx, evalrunrepo.FailRunParams{Error: pgtype.Text{String: "test", Valid: true}, CostUsd: pgtype.Numeric{}, ID: run.ID})
+		require.NoError(t, err)
+	}
+}
+
+// Malformed IDs and unknown cursors are bad requests; a well-formed unknown
+// run ID is not found.
+func TestMemoryEvalRunReads_ErrorCodes(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newTestAdminService(t)
+	unknown := uuid.NewString()
+	malformed := "not-a-uuid"
+
+	_, err := svc.ListMemoryEvalRuns(ctx, &gen.ListMemoryEvalRunsPayload{Limit: 10, Cursor: &malformed})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = svc.ListMemoryEvalRuns(ctx, &gen.ListMemoryEvalRunsPayload{Limit: 10, Cursor: &unknown})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = svc.GetMemoryEvalRun(ctx, &gen.GetMemoryEvalRunPayload{ID: malformed})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = svc.GetMemoryEvalRun(ctx, &gen.GetMemoryEvalRunPayload{ID: unknown})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
 func TestListAndGetMemoryEvalRuns(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
-	seedMemoryEvalCorpusProject(t, db)
+	evalruntest.SeedCorpus(t, db)
 	svc.SetMemoryEvalRunStarter(&recordingMemoryEvalStarter{})
 	q := evalrunrepo.New(db)
 	ctx = withMemoryEvalOperator(ctx)
@@ -173,9 +232,4 @@ func TestListAndGetMemoryEvalRuns(t *testing.T) {
 	require.NotNil(t, got.CostUsd)
 	require.InDelta(t, 1.25, *got.CostUsd, 1e-9)
 	require.Equal(t, "operator@example.com", got.RequestedBy)
-
-	_, err = svc.GetMemoryEvalRun(ctx, &gen.GetMemoryEvalRunPayload{ID: uuid.NewString()})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
