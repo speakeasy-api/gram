@@ -99,48 +99,64 @@ func (q *Queries) DeleteStaleDayDigests(ctx context.Context) ([]uuid.UUID, error
 }
 
 const getDigest = `-- name: GetDigest :one
-SELECT d.id, d.level, d.period_start, d.period_end, d.content, d.chat_ids, d.memo_ids, d.child_digest_ids
-FROM memory_digests d
-WHERE d.id = $1
-  AND d.project_id = $2
-  AND d.organization_id = $3
-  AND NOT EXISTS (
-    SELECT 1
-    FROM memory_digests s
-    WHERE s.project_id = d.project_id
-      AND (
-        s.id = d.id
-        OR s.id = ANY(d.child_digest_ids)
-        OR EXISTS (
-          SELECT 1 FROM memory_digests w
-          WHERE w.id = ANY(d.child_digest_ids) AND s.id = ANY(w.child_digest_ids)
-        )
+WITH cand AS (
+  SELECT d.id, d.level, d.period_start, d.period_end, d.content, d.chat_ids, d.memo_ids, d.child_digest_ids
+  FROM memory_digests d
+  WHERE d.id = $1
+    AND d.project_id = $2
+    AND d.organization_id = $3
+),
+reach AS (
+  SELECT cand.id FROM cand
+  UNION
+  SELECT unnest(cand.child_digest_ids) FROM cand
+  UNION
+  SELECT unnest(w.child_digest_ids)
+  FROM memory_digests w
+  WHERE w.id IN (SELECT unnest(cand.child_digest_ids) FROM cand)
+),
+stale AS MATERIALIZED (
+  SELECT COALESCE(array_agg(s.id), '{}')::uuid[] AS ids
+  FROM memory_digests s
+  WHERE s.id IN (SELECT reach.id FROM reach)
+    AND s.project_id = $2
+    AND (
+      cardinality(s.chat_ids) > (
+        SELECT count(*)
+        FROM chats c
+        LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+        WHERE c.id = ANY(s.chat_ids)
+          AND c.summary_redacted IS TRUE
+          AND c.summary IS NOT NULL
+          AND c.memory_excluded_at IS NULL
+          AND c.deleted IS FALSE
+          AND (ua.id IS NULL OR ua.account_type <> 'personal')
       )
-      AND (
-        cardinality(s.chat_ids) > (
-          SELECT count(*)
-          FROM chats c
-          LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-          WHERE c.id = ANY(s.chat_ids)
-            AND c.summary_redacted IS TRUE
-            AND c.summary IS NOT NULL
-            AND c.memory_excluded_at IS NULL
-            AND c.deleted IS FALSE
-            AND (ua.id IS NULL OR ua.account_type <> 'personal')
-        )
-        OR cardinality(s.memo_ids) > (
-          SELECT count(*)
-          FROM memory_memos m
-          LEFT JOIN chats c ON c.id = m.chat_id
-          LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-          WHERE m.id = ANY(s.memo_ids)
-            AND m.deleted IS FALSE
-            AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
-        )
-        OR cardinality(s.child_digest_ids) > (
-          SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
-        )
+      OR cardinality(s.memo_ids) > (
+        SELECT count(*)
+        FROM memory_memos m
+        LEFT JOIN chats c ON c.id = m.chat_id
+        LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+        WHERE m.id = ANY(s.memo_ids)
+          AND m.deleted IS FALSE
+          AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
       )
+      OR cardinality(s.child_digest_ids) > (
+        SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+      )
+    )
+)
+SELECT cand.id, cand.level, cand.period_start, cand.period_end, cand.content, cand.chat_ids, cand.memo_ids, cand.child_digest_ids
+FROM cand
+CROSS JOIN stale
+WHERE cardinality(stale.ids) = 0
+  OR NOT (
+    cand.id = ANY(stale.ids)
+    OR cand.child_digest_ids && stale.ids
+    OR EXISTS (
+      SELECT 1 FROM memory_digests cw
+      WHERE cw.id = ANY(cand.child_digest_ids) AND cw.child_digest_ids && stale.ids
+    )
   )
 `
 
@@ -164,7 +180,9 @@ type GetDigestRow struct {
 // Stale digests are left out: one that folded a chat or memo no longer
 // eligible, or a child digest that is gone, and every parent above it.
 // DeleteStaleDayDigests removes them on the next run; until then an
-// exclusion or deletion must already hide them.
+// exclusion or deletion must already hide them. The stale check runs once
+// for each digest in reach (the digests read, their children and
+// grandchildren), not once for each pair of digests.
 func (q *Queries) GetDigest(ctx context.Context, arg GetDigestParams) (GetDigestRow, error) {
 	row := q.db.QueryRow(ctx, getDigest, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i GetDigestRow
@@ -482,50 +500,66 @@ func (q *Queries) ListDayDigestMemos(ctx context.Context, arg ListDayDigestMemos
 }
 
 const listDigestsByID = `-- name: ListDigestsByID :many
-SELECT d.id, d.level, d.period_start, d.content
-FROM memory_digests d
-WHERE d.id = ANY($1::uuid[])
-  AND d.project_id = $2
-  AND d.organization_id = $3
-  AND NOT EXISTS (
-    SELECT 1
-    FROM memory_digests s
-    WHERE s.project_id = d.project_id
-      AND (
-        s.id = d.id
-        OR s.id = ANY(d.child_digest_ids)
-        OR EXISTS (
-          SELECT 1 FROM memory_digests w
-          WHERE w.id = ANY(d.child_digest_ids) AND s.id = ANY(w.child_digest_ids)
-        )
+WITH cand AS (
+  SELECT d.id, d.level, d.period_start, d.content, d.child_digest_ids
+  FROM memory_digests d
+  WHERE d.id = ANY($1::uuid[])
+    AND d.project_id = $2
+    AND d.organization_id = $3
+),
+reach AS (
+  SELECT cand.id FROM cand
+  UNION
+  SELECT unnest(cand.child_digest_ids) FROM cand
+  UNION
+  SELECT unnest(w.child_digest_ids)
+  FROM memory_digests w
+  WHERE w.id IN (SELECT unnest(cand.child_digest_ids) FROM cand)
+),
+stale AS MATERIALIZED (
+  SELECT COALESCE(array_agg(s.id), '{}')::uuid[] AS ids
+  FROM memory_digests s
+  WHERE s.id IN (SELECT reach.id FROM reach)
+    AND s.project_id = $2
+    AND (
+      cardinality(s.chat_ids) > (
+        SELECT count(*)
+        FROM chats c
+        LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+        WHERE c.id = ANY(s.chat_ids)
+          AND c.summary_redacted IS TRUE
+          AND c.summary IS NOT NULL
+          AND c.memory_excluded_at IS NULL
+          AND c.deleted IS FALSE
+          AND (ua.id IS NULL OR ua.account_type <> 'personal')
       )
-      AND (
-        cardinality(s.chat_ids) > (
-          SELECT count(*)
-          FROM chats c
-          LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-          WHERE c.id = ANY(s.chat_ids)
-            AND c.summary_redacted IS TRUE
-            AND c.summary IS NOT NULL
-            AND c.memory_excluded_at IS NULL
-            AND c.deleted IS FALSE
-            AND (ua.id IS NULL OR ua.account_type <> 'personal')
-        )
-        OR cardinality(s.memo_ids) > (
-          SELECT count(*)
-          FROM memory_memos m
-          LEFT JOIN chats c ON c.id = m.chat_id
-          LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-          WHERE m.id = ANY(s.memo_ids)
-            AND m.deleted IS FALSE
-            AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
-        )
-        OR cardinality(s.child_digest_ids) > (
-          SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
-        )
+      OR cardinality(s.memo_ids) > (
+        SELECT count(*)
+        FROM memory_memos m
+        LEFT JOIN chats c ON c.id = m.chat_id
+        LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+        WHERE m.id = ANY(s.memo_ids)
+          AND m.deleted IS FALSE
+          AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
       )
+      OR cardinality(s.child_digest_ids) > (
+        SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+      )
+    )
+)
+SELECT cand.id, cand.level, cand.period_start, cand.content
+FROM cand
+CROSS JOIN stale
+WHERE cardinality(stale.ids) = 0
+  OR NOT (
+    cand.id = ANY(stale.ids)
+    OR cand.child_digest_ids && stale.ids
+    OR EXISTS (
+      SELECT 1 FROM memory_digests cw
+      WHERE cw.id = ANY(cand.child_digest_ids) AND cw.child_digest_ids && stale.ids
+    )
   )
-ORDER BY d.period_start
+ORDER BY cand.period_start
 `
 
 type ListDigestsByIDParams struct {
@@ -544,7 +578,9 @@ type ListDigestsByIDRow struct {
 // Stale digests are left out: one that folded a chat or memo no longer
 // eligible, or a child digest that is gone, and every parent above it.
 // DeleteStaleDayDigests removes them on the next run; until then an
-// exclusion or deletion must already hide them.
+// exclusion or deletion must already hide them. The stale check runs once
+// for each digest in reach (the digests read, their children and
+// grandchildren), not once for each pair of digests.
 func (q *Queries) ListDigestsByID(ctx context.Context, arg ListDigestsByIDParams) ([]ListDigestsByIDRow, error) {
 	rows, err := q.db.Query(ctx, listDigestsByID, arg.Ids, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
@@ -702,50 +738,66 @@ func (q *Queries) ListRecallChats(ctx context.Context, arg ListRecallChatsParams
 }
 
 const listRecallDigests = `-- name: ListRecallDigests :many
-SELECT d.id, d.level, d.period_start, d.content, d.chat_ids, d.memo_ids, d.child_digest_ids
-FROM memory_digests d
-WHERE d.project_id = $1
-  AND d.organization_id = $2
-  AND d.period_start >= $3::date
-  AND NOT EXISTS (
-    SELECT 1
-    FROM memory_digests s
-    WHERE s.project_id = d.project_id
-      AND (
-        s.id = d.id
-        OR s.id = ANY(d.child_digest_ids)
-        OR EXISTS (
-          SELECT 1 FROM memory_digests w
-          WHERE w.id = ANY(d.child_digest_ids) AND s.id = ANY(w.child_digest_ids)
-        )
+WITH cand AS (
+  SELECT d.id, d.level, d.period_start, d.content, d.chat_ids, d.memo_ids, d.child_digest_ids
+  FROM memory_digests d
+  WHERE d.project_id = $1
+    AND d.organization_id = $2
+    AND d.period_start >= $3::date
+),
+reach AS (
+  SELECT cand.id FROM cand
+  UNION
+  SELECT unnest(cand.child_digest_ids) FROM cand
+  UNION
+  SELECT unnest(w.child_digest_ids)
+  FROM memory_digests w
+  WHERE w.id IN (SELECT unnest(cand.child_digest_ids) FROM cand)
+),
+stale AS MATERIALIZED (
+  SELECT COALESCE(array_agg(s.id), '{}')::uuid[] AS ids
+  FROM memory_digests s
+  WHERE s.id IN (SELECT reach.id FROM reach)
+    AND s.project_id = $1
+    AND (
+      cardinality(s.chat_ids) > (
+        SELECT count(*)
+        FROM chats c
+        LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+        WHERE c.id = ANY(s.chat_ids)
+          AND c.summary_redacted IS TRUE
+          AND c.summary IS NOT NULL
+          AND c.memory_excluded_at IS NULL
+          AND c.deleted IS FALSE
+          AND (ua.id IS NULL OR ua.account_type <> 'personal')
       )
-      AND (
-        cardinality(s.chat_ids) > (
-          SELECT count(*)
-          FROM chats c
-          LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-          WHERE c.id = ANY(s.chat_ids)
-            AND c.summary_redacted IS TRUE
-            AND c.summary IS NOT NULL
-            AND c.memory_excluded_at IS NULL
-            AND c.deleted IS FALSE
-            AND (ua.id IS NULL OR ua.account_type <> 'personal')
-        )
-        OR cardinality(s.memo_ids) > (
-          SELECT count(*)
-          FROM memory_memos m
-          LEFT JOIN chats c ON c.id = m.chat_id
-          LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-          WHERE m.id = ANY(s.memo_ids)
-            AND m.deleted IS FALSE
-            AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
-        )
-        OR cardinality(s.child_digest_ids) > (
-          SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
-        )
+      OR cardinality(s.memo_ids) > (
+        SELECT count(*)
+        FROM memory_memos m
+        LEFT JOIN chats c ON c.id = m.chat_id
+        LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+        WHERE m.id = ANY(s.memo_ids)
+          AND m.deleted IS FALSE
+          AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
       )
+      OR cardinality(s.child_digest_ids) > (
+        SELECT count(*) FROM memory_digests k WHERE k.id = ANY(s.child_digest_ids)
+      )
+    )
+)
+SELECT cand.id, cand.level, cand.period_start, cand.content, cand.chat_ids, cand.memo_ids, cand.child_digest_ids
+FROM cand
+CROSS JOIN stale
+WHERE cardinality(stale.ids) = 0
+  OR NOT (
+    cand.id = ANY(stale.ids)
+    OR cand.child_digest_ids && stale.ids
+    OR EXISTS (
+      SELECT 1 FROM memory_digests cw
+      WHERE cw.id = ANY(cand.child_digest_ids) AND cw.child_digest_ids && stale.ids
+    )
   )
-ORDER BY d.period_start, d.level
+ORDER BY cand.period_start, cand.level
 `
 
 type ListRecallDigestsParams struct {
@@ -769,7 +821,9 @@ type ListRecallDigestsRow struct {
 // Stale digests are left out: one that folded a chat or memo no longer
 // eligible, or a child digest that is gone, and every parent above it.
 // DeleteStaleDayDigests removes them on the next run; until then an
-// exclusion or deletion must already hide them.
+// exclusion or deletion must already hide them. The stale check runs once
+// for each digest in reach (the digests read, their children and
+// grandchildren), not once for each pair of digests.
 func (q *Queries) ListRecallDigests(ctx context.Context, arg ListRecallDigestsParams) ([]ListRecallDigestsRow, error) {
 	rows, err := q.db.Query(ctx, listRecallDigests, arg.ProjectID, arg.OrganizationID, arg.Since)
 	if err != nil {
