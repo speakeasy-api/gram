@@ -155,6 +155,7 @@ function Tabs() {
           {item.title}
         </a>
       ))}
+      {chrome?.setupHref ? <a href={chrome.setupHref}>Setup</a> : null}
     </nav>
   );
 }

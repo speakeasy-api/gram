@@ -51,8 +51,13 @@ export function McpDetailFrame({
   children: ReactNode;
   contentRef?: React.Ref<HTMLDivElement>;
 }): JSX.Element {
-  const activeTab = chrome?.items.find((item) => item.active)?.key;
   const { pathname } = useLocation();
+  // The Setup modal opens over Overview, which stays the active tab.
+  const activeTab =
+    chrome?.items.find((item) => item.active)?.key ??
+    (chrome?.setupHref && pathname === chrome.setupHref
+      ? "overview"
+      : undefined);
   useHighlightLinkedSection();
 
   return (

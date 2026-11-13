@@ -91,11 +91,6 @@ import {
   type McpDetailTabDef,
 } from "./mcpDetailNavItems";
 
-const SETUP_TAB: McpDetailTabDef<TabValue> = {
-  key: "setup",
-  title: "Setup",
-  Icon: Wrench,
-};
 const HOSTED_TABS: McpDetailTabDef<TabValue>[] = [
   { key: "tools", title: "Tools", Icon: Wrench },
   { key: "resources", title: "Resources", Icon: Database },
@@ -488,7 +483,6 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     : withGuide;
   const items = buildMcpDetailNavItems<TabValue>({
     tabs: [
-      showSetup && SETUP_TAB,
       "overview",
       // Inspect sits second on every kind of server. Hidden for unproxied
       // servers: there's no reliable way to list their tools yet (the vendor's
@@ -559,6 +553,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       `${settingsHref}#${SETTINGS_GROUPS.identity.id}`,
     ),
     readinessChecks,
+    setupHref: showSetup ? setupHref : undefined,
     // The upstream endpoint is what the guide catalog indexes; a server
     // with no upstream has no guide to point at.
     installLinks: effectiveInstallPageLinks,

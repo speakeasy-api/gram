@@ -245,10 +245,9 @@ function RetainedProviderSetup({
     saveProviderProgress(storageKey, s);
     if (s.screen === "success") void navigate(overviewHref, { replace: true });
   }, [storageKey, s, overviewHref, navigate]);
-  // Each step starts at the top of the tab; the detail frame, not the
-  // window, is what scrolls.
+  // Each step starts at the top of the Setup modal, which is what scrolls.
   useEffect(() => {
-    document.querySelector("[data-page-bound]")?.scrollTo?.(0, 0);
+    document.querySelector("[data-setup-scroll]")?.scrollTo?.(0, 0);
   }, [s.step, s.screen]);
   if (s.screen === "success") return <></>;
   return (

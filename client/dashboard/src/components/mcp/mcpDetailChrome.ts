@@ -23,6 +23,8 @@ export interface McpDetailChrome {
   /** Whose account the server acts as, for servers that sign in upstream. */
   identity?: { label: string; href: string; warn?: boolean };
   readinessChecks: McpReadinessCheck[];
+  /** Opens the Setup modal over Overview, when this server offers Setup. */
+  setupHref?: string;
   /** Install pages to hand to teammates. */
   installLinks: { url: string; label: string }[];
   items: DetailSidebarNavItem[];

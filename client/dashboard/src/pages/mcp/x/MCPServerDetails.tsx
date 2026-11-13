@@ -3,6 +3,7 @@ import { useMcpServerDetailChrome } from "@/components/mcp/useMcpServerDetailChr
 import { McpDetailFrame } from "@/components/mcp/McpDetailFrame";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { ProviderSetupPage } from "./setup/ProviderSetupPage";
+import { SetupModal } from "./setup/SetupModal";
 import { isKnownEnumValue } from "@/lib/enum";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { SplashScreen } from "@/components/ui/LogoLoader";
@@ -36,7 +37,13 @@ import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { ArrowRight, Check, ChevronDown, Loader2 } from "lucide-react";
-import { Link, Navigate, useLocation, useParams } from "react-router";
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import { RemoteTeamAccessTab } from "./tabs/RemoteTeamAccessTab";
 import {
@@ -78,6 +85,7 @@ export default function MCPServerDetails(): JSX.Element | null {
   const location = useLocation();
   const routes = useRoutes();
   const providerSetupRollout = useProviderSetupRollout();
+  const navigate = useNavigate();
   const mcpScopedFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
   const mcpScoped = mcpScopedFlag.status === "enabled";
   const idOrSlug = mcpServerSlug ?? "";
@@ -224,14 +232,32 @@ export default function MCPServerDetails(): JSX.Element | null {
     switch (activeTab) {
       case "setup":
         if (providerSetupRollout === "loading") return <SplashScreen />;
+        // Setup is a modal over Overview; closing it lands there.
         return (
-          <RequireScope
-            scope="mcp:write"
-            resourceId={mcpServer.id}
-            level="page"
-          >
-            <ProviderSetupPage key={mcpServer.id} mcpServer={mcpServer} />
-          </RequireScope>
+          <>
+            <OverviewTab
+              mcpServer={mcpServer}
+              hostedToolset={hostedToolset}
+              agentSetupHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AGENT_SETUP_SECTION_ID}`}
+            />
+            <SetupModal
+              onClose={() =>
+                void navigate(
+                  routes.mcp.details.overview.href(
+                    mcpServerRouteParam(mcpServer),
+                  ),
+                )
+              }
+            >
+              <RequireScope
+                scope="mcp:write"
+                resourceId={mcpServer.id}
+                level="page"
+              >
+                <ProviderSetupPage key={mcpServer.id} mcpServer={mcpServer} />
+              </RequireScope>
+            </SetupModal>
+          </>
         );
       case "tools":
         return (
