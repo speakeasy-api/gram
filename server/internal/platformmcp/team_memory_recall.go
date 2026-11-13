@@ -168,6 +168,11 @@ func (s *TeamMemoryService) recall(ctx context.Context, principal Principal, pro
 		}
 		entries[i].Text = text
 	}
+	// The capped note is appended after Render, so its tokens come out of
+	// the budget first.
+	if capped {
+		budget -= memorydigest.EstimateTokens(teamMemoryRecallCappedNote)
+	}
 	kept, omitted := memorydigest.Budget(entries, budget)
 
 	output := RecallTeamHistoryOutput{History: memorydigest.Render(kept, omitted), Sources: make([]TeamMemorySource, 0, len(kept)), Omitted: omitted, Since: since, Capped: capped}

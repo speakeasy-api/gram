@@ -170,11 +170,16 @@ func TestRecallTeamHistorySaysWhenUnfoldedItemsAreCapped(t *testing.T) {
 	require.False(t, output.Capped)
 	require.NotContains(t, output.History, teamMemoryRecallCappedNote)
 
-	f.summarizedChat(t, ctx, f.project.ID, "Chat", "canary-capped-chat", now.Add(-48*time.Hour), uuid.NullUUID{})
+	oldest := f.summarizedChat(t, ctx, f.project.ID, "Chat", "canary-capped-chat", now.Add(-48*time.Hour), uuid.NullUUID{})
 	output, err = f.service.Recall(ctx, f.principal, RecallTeamHistoryInput{ProjectSlug: f.project.Slug})
 	require.NoError(t, err)
 	require.True(t, output.Capped)
 	require.True(t, strings.HasSuffix(output.History, teamMemoryRecallCappedNote))
+	// The cap drops the oldest row before budgeting: shown plus omitted
+	// sections add up to the cap, not the 201 rows stored.
+	require.Equal(t, teamMemoryRecallRowLimit, len(output.Sources)+output.Omitted)
+	require.NotContains(t, sourceRefs(output.Sources), "chat:"+oldest.String())
+	require.LessOrEqual(t, memorydigest.EstimateTokens(output.History), teamMemoryRecallDefaultTokens)
 }
 
 func TestRecallTeamHistoryRedactsBeforeCutting(t *testing.T) {
