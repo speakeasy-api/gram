@@ -11,11 +11,19 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { scrollWithinPage } from "@/lib/scroll-within-page";
 import { useIsDarkTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { Check, Circle, CircleDashed, ExternalLink } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  CircleDashed,
+  ExternalLink,
+} from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 import { ReadinessIssuesProvider } from "@/components/detail/readiness-issues";
 import type { McpDetailChrome, McpReadinessCheck } from "./mcpDetailChrome";
+import { HEADER_CONTROL_BUTTON } from "./headerControl";
 
 /** Link state that asks the frame to show the section a link lands on. */
 const HIGHLIGHT_STATE = { highlightLinkedSection: true } as const;
@@ -64,12 +72,15 @@ export function McpDetailFrame({
         <HeaderBand>
           <div className="flex flex-wrap items-start justify-between gap-6">
             {chrome ? <TitleBlock chrome={chrome} /> : <TitleSkeleton />}
-            {/* Settings has its own Plugins area and Overview leads with the
-                full banner; one plugin box per view. */}
-            {activeTab === "settings" ||
-            (activeTab === "overview" && chrome?.overviewBanner)
-              ? null
-              : chrome?.aside}
+            <div className="flex w-full flex-col items-end gap-4 sm:w-auto sm:pt-1">
+              {chrome ? <HeaderControls chrome={chrome} /> : null}
+              {/* Settings has its own Plugins area and Overview leads with
+                  the full banner; one plugin box per view. */}
+              {activeTab === "settings" ||
+              (activeTab === "overview" && chrome?.overviewBanner)
+                ? null
+                : chrome?.aside}
+            </div>
           </div>
         </HeaderBand>
 
@@ -187,56 +198,112 @@ function TitleBlock({ chrome }: { chrome: McpDetailChrome }): JSX.Element {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-        {chrome.statusControl}
-        <ReadinessChip chrome={chrome} />
-        {chrome.primaryUrl ? (
-          <span className="text-muted-foreground flex h-6 min-w-0 items-center gap-1">
-            <span
-              // Mono sits low beside the sans labels; a matching line box
-              // keeps its centre on theirs.
-              className="max-w-[320px] truncate font-mono text-xs leading-6"
-              title={chrome.primaryUrl}
-            >
-              {chrome.primaryUrl.replace(/^https?:\/\//, "")}
+      {chrome.primaryUrl || chrome.installLinks.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          {chrome.primaryUrl ? (
+            <span className="text-muted-foreground flex h-6 min-w-0 items-center gap-1">
+              <span
+                // Mono sits low beside the sans labels; a matching line box
+                // keeps its centre on theirs.
+                className="max-w-[320px] truncate font-mono text-xs leading-6"
+                title={chrome.primaryUrl}
+              >
+                {chrome.primaryUrl.replace(/^https?:\/\//, "")}
+              </span>
+              <CopyButton
+                text={chrome.primaryUrl}
+                size="xs"
+                tooltip="Copy URL"
+              />
+              {chrome.addresses ? (
+                <AddressList addresses={chrome.addresses} />
+              ) : null}
             </span>
-            <CopyButton text={chrome.primaryUrl} size="xs" tooltip="Copy URL" />
-            {chrome.addresses ? (
-              <AddressList addresses={chrome.addresses} />
-            ) : null}
-          </span>
-        ) : null}
-        {chrome.identity ? (
-          <Link
-            to={chrome.identity.href}
-            aria-label={`Identity: ${chrome.identity.label}. Open identity settings`}
-            className="text-muted-foreground hover:text-foreground flex h-6 items-center gap-1.5 leading-6 hover:no-underline"
-          >
-            <span className="text-eyebrow">Identity</span>
-            <span
-              className={cn(
-                "text-foreground",
-                chrome.identity.warn && "text-warning-foreground",
-              )}
+          ) : null}
+          {chrome.installLinks.map((link) => (
+            <a
+              key={link.url}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground flex h-6 items-center gap-1 leading-6 hover:no-underline"
             >
-              {chrome.identity.label}
-            </span>
-          </Link>
-        ) : null}
-        {chrome.installLinks.map((link) => (
-          <a
-            key={link.url}
-            href={link.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground flex h-6 items-center gap-1 leading-6 hover:no-underline"
-          >
-            {link.label}
-            <ExternalLink className="size-3.5" />
-          </a>
-        ))}
-      </div>
+              {link.label}
+              <ExternalLink className="size-3.5" />
+            </a>
+          ))}
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * The header's controls, stacked on the right: a label, then the same
+ * dropdown-style button, for readiness, how it authenticates to the upstream server, and whether
+ * agents can connect.
+ */
+function HeaderControls({
+  chrome,
+}: {
+  chrome: McpDetailChrome;
+}): JSX.Element | null {
+  const rows: { key: string; label: string; control: ReactNode }[] = [];
+  if (chrome.readinessChecks.length > 0) {
+    rows.push({
+      key: "readiness",
+      label: "Readiness",
+      control: <ReadinessChip chrome={chrome} />,
+    });
+  }
+  if (chrome.identity) {
+    rows.push({
+      key: "identity",
+      label: "Upstream auth",
+      control: (
+        <Link
+          to={chrome.identity.href}
+          state={HIGHLIGHT_STATE}
+          aria-label={`Upstream auth: ${chrome.identity.label}. Open authentication settings`}
+          className={HEADER_CONTROL_BUTTON}
+        >
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-left",
+              chrome.identity.warn && "text-warning-foreground",
+            )}
+          >
+            {chrome.identity.label}
+          </span>
+          <ChevronRight className="text-muted-foreground size-3.5 shrink-0" />
+        </Link>
+      ),
+    });
+  }
+  if (chrome.statusControl) {
+    rows.push({
+      key: "status",
+      label: "Status",
+      control: (
+        // The visibility picker sizes itself to fit; here it fills the row.
+        <div className="[&>button]:h-8 [&>button]:w-full">
+          {chrome.statusControl}
+        </div>
+      ),
+    });
+  }
+  if (rows.length === 0) return null;
+  return (
+    // A soft wash of the card color behind the rows lifts their labels off
+    // the halftone sea.
+    <dl className="before:bg-card/85 relative isolate grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-2 before:absolute before:-inset-y-5 before:-right-5 before:-left-12 before:-z-10 before:rounded-3xl before:blur-xl sm:w-[300px]">
+      {rows.map((row) => (
+        <div key={row.key} className="contents">
+          <dt className="text-eyebrow">{row.label}</dt>
+          <dd className="min-w-0">{row.control}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -298,7 +365,7 @@ function ReadinessChip({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        className="flex h-6 min-w-0 items-center gap-2 leading-6 whitespace-nowrap hover:underline"
+        className={HEADER_CONTROL_BUTTON}
         aria-label={
           summary.open.length > 0
             ? `${summary.label}: ${pendingNames}. Open checklist`
@@ -307,15 +374,10 @@ function ReadinessChip({
         title={summary.open.length > 0 ? pendingNames : undefined}
       >
         <StatusDot tone={summary.tone} />
-        <span
-          className={cn(
-            summary.open.length === 0
-              ? "text-muted-foreground"
-              : "text-foreground font-medium",
-          )}
-        >
+        <span className="min-w-0 flex-1 truncate text-left">
           {summary.label}
         </span>
+        <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -521,21 +583,31 @@ function useHighlightLinkedSection(): void {
       align();
       timers.push(window.setTimeout(align, 400));
       timers.push(window.setTimeout(align, 1000));
-      // Flash once the scroll has landed. The outline lives only in the
-      // animation, so nothing is left behind.
+      // Once the scroll has landed, a thin ring and a faint tint settle on
+      // the section, hold, then fade. Both live only in the animation, so
+      // nothing is left behind.
+      const ring = "color-mix(in oklab, var(--color-primary) 45%, transparent)";
+      const wash = "color-mix(in oklab, var(--color-primary) 4%, transparent)";
+      const clear = "color-mix(in oklab, var(--color-primary) 0%, transparent)";
+      const lit = {
+        outline: `1px solid ${ring}`,
+        outlineOffset: "8px",
+        backgroundColor: wash,
+        boxShadow: `0 0 0 8px ${wash}`,
+        borderRadius: "10px",
+      };
+      const dark = {
+        outline: `1px solid ${clear}`,
+        outlineOffset: "8px",
+        backgroundColor: clear,
+        boxShadow: `0 0 0 8px ${clear}`,
+        borderRadius: "10px",
+      };
       timers.push(
         window.setTimeout(() => {
           target.animate?.(
-            [
-              { outline: "2px solid var(--color-ring)", outlineOffset: "4px" },
-              {
-                outline: "2px solid var(--color-ring)",
-                outlineOffset: "4px",
-                offset: 0.6,
-              },
-              { outline: "2px solid transparent", outlineOffset: "4px" },
-            ],
-            { duration: 1600, easing: reduced ? "steps(1, end)" : "ease-out" },
+            [dark, { ...lit, offset: 0.12 }, { ...lit, offset: 0.7 }, dark],
+            { duration: 2200, easing: reduced ? "steps(1, end)" : "ease-out" },
           );
         }, 400),
       );

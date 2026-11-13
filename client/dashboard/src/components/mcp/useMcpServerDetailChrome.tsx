@@ -348,7 +348,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
                   : "Turned on and accepting connections.",
                 ready: !isDisabled,
                 broken: true,
-                chipLabel: "Turned off",
+                chipLabel: "Off",
                 href: `${settingsHref}#${MCP_VISIBILITY_SECTION_ID}`,
               },
             ]),
@@ -559,12 +559,18 @@ function identitySummary(
   auth: McpServerAuthenticationReadiness,
   href: string,
 ): McpDetailChrome["identity"] {
-  if (!signsInUpstream || auth.loading || auth.unavailable) return undefined;
-  if (auth.isLoadingRemoteIdentity || auth.identityUnavailable)
-    return undefined;
+  // The header always shows this row, so every state has words: one that
+  // can't be settled yet says so rather than dropping the row.
+  if (!signsInUpstream) return { label: "Not used", href };
+  if (auth.loading || auth.isLoadingRemoteIdentity) {
+    return { label: "Checking…", href };
+  }
+  if (auth.unavailable || auth.identityUnavailable) {
+    return { label: "Couldn't check", href, warn: true };
+  }
   if (auth.upstreamAuth === "enforced") {
     const status = auth.upstreamAuthQuery.data?.status;
-    if (status === undefined) return undefined;
+    if (status === undefined) return { label: "Checking…", href };
     const presentation = enumPresentation(
       UPSTREAM_AUTH_STATUS,
       status,

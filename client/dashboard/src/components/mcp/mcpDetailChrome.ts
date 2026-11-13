@@ -44,7 +44,7 @@ export type McpReadinessCheck = ReadinessCheck & {
    */
   pending?: boolean;
   /**
-   * The chip's words when this is the only open item, e.g. "Turned off".
+   * The chip's words when this is the only open item, e.g. "Off".
    * Short, so the header row never wraps; the popover has the full text.
    */
   chipLabel?: string;

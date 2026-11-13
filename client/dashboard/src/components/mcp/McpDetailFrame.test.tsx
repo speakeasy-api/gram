@@ -94,9 +94,9 @@ it("counts issues and steps together, so the chip matches the list", () => {
 it("uses a broken check's short label when it is the only one", () => {
   renderChip([
     check("url", true),
-    { ...check("availability", false, false, true), chipLabel: "Turned off" },
+    { ...check("availability", false, false, true), chipLabel: "Off" },
   ]);
-  expect(screen.getByText("Turned off")).toBeTruthy();
+  expect(screen.getByText("Off")).toBeTruthy();
 });
 
 it("names no step while another check is still pending", () => {

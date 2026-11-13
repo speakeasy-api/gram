@@ -6,13 +6,20 @@ import {
   MCPServerStatusDropdown,
 } from "@/pages/mcp/x/MCPServerDetails";
 import { useMcpServerVisibilityUpdate } from "@/pages/mcp/x/mcpServerVisibility";
-import { Switch } from "@/components/ui/Switch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/Dropdown";
+import { HEADER_CONTROL_BUTTON } from "@/components/mcp/headerControl";
+import { StatusDot } from "@/components/ui/StatusDot";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { type IdentityMode } from "@/lib/remote-identity";
 import { IdentityExplainerDialog } from "@/lib/remote-identity";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Info } from "lucide-react";
+import { Check, ChevronDown, Info, Loader2 } from "lucide-react";
 import {
   HoverCard,
   HoverCardContent,
@@ -332,6 +339,19 @@ export function McpServerCardStatus({
   );
 }
 
+const STATUS_OPTIONS = [
+  {
+    on: true,
+    label: "On",
+    description: "Agents can connect and use its tools.",
+  },
+  {
+    on: false,
+    label: "Off",
+    description: "Agents can't reach it or its tools.",
+  },
+] as const;
+
 /**
  * The header's on/off control. A remote server is a switch, and turning it
  * off asks first, since every connection to it then fails; other kinds keep
@@ -342,14 +362,27 @@ export function McpServerHeaderStatus({
 }: {
   server: McpServer;
 }): React.JSX.Element | null {
-  const { canWrite, updateVisibility, updating } =
+  const { canWrite, updateVisibility, updating, displayVisibility } =
     useMcpServerVisibilityUpdate(server);
   const [confirmOff, setConfirmOff] = React.useState(false);
-  if (server.unproxiedMcpServerId) return null;
+  // Clients reach an unproxied server's vendor directly, so there is
+  // nothing to switch; the row still says so.
+  if (server.unproxiedMcpServerId) {
+    return (
+      <span
+        className={cn(HEADER_CONTROL_BUTTON, "hover:bg-card cursor-default")}
+      >
+        <StatusDot tone="success" />
+        Always on
+      </span>
+    );
+  }
   if (!server.remoteMcpServerId) {
     return <MCPServerStatusDropdown server={server} />;
   }
-  const on = server.visibility === "private" || server.visibility === "public";
+  // Shows the requested state while the change saves, so the control
+  // answers at once; the spinner says it hasn't landed yet.
+  const on = displayVisibility === "private" || displayVisibility === "public";
   // A state this build doesn't know is neither on nor off: say so, and
   // leave the switch alone until a refresh.
   const known = isKnownEnumValue(
@@ -359,25 +392,60 @@ export function McpServerHeaderStatus({
   const name = server.name || "this server";
   return (
     <>
-      <label
-        className="text-muted-foreground flex h-6 items-center gap-2 text-sm leading-6"
-        title={
-          known
-            ? undefined
-            : "Refresh the page to see whether this server is on."
-        }
-      >
-        <Switch
-          checked={on}
-          disabled={!known || !canWrite || updating}
-          aria-label={on ? `Turn off ${name}` : `Turn on ${name}`}
-          onCheckedChange={(checked) => {
-            if (checked) updateVisibility("private");
-            else setConfirmOff(true);
-          }}
-        />
-        {!known ? "Unknown" : on ? "On" : "Off"}
-      </label>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={!known || !canWrite}>
+          <button
+            type="button"
+            className={HEADER_CONTROL_BUTTON}
+            aria-busy={updating}
+            title={
+              known
+                ? undefined
+                : "Refresh the page to see whether this server is on."
+            }
+          >
+            {updating ? (
+              <Loader2
+                aria-label="Saving"
+                className="text-muted-foreground size-3 shrink-0 animate-spin"
+              />
+            ) : (
+              <StatusDot tone={on ? "success" : "destructive"} />
+            )}
+            <span className="min-w-0 flex-1 truncate text-left">
+              {!known ? "Unknown" : on ? "On" : "Off"}
+            </span>
+            <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[280px] p-1">
+          {STATUS_OPTIONS.map((option) => (
+            <DropdownMenuItem
+              key={option.label}
+              className="flex items-start gap-2 py-2"
+              onSelect={() => {
+                if (updating || option.on === on) return;
+                if (option.on) updateVisibility("private");
+                else setConfirmOff(true);
+              }}
+            >
+              <StatusDot
+                tone={option.on ? "success" : "destructive"}
+                className="mt-1.5"
+              />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="text-sm font-medium">{option.label}</span>
+                <span className="text-muted-foreground text-xs">
+                  {option.description}
+                </span>
+              </span>
+              {option.on === on ? (
+                <Check className="mt-0.5 size-4 shrink-0" />
+              ) : null}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <ConfirmDialog
         open={confirmOff}
         onOpenChange={setConfirmOff}

@@ -35,7 +35,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { ArrowRight, Check, ChevronDown } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Loader2 } from "lucide-react";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import { RemoteTeamAccessTab } from "./tabs/RemoteTeamAccessTab";
@@ -377,7 +377,7 @@ export function MCPServerStatusDropdown({
 }: {
   server: McpServer;
 }): JSX.Element {
-  const { canWrite, updateVisibility, updating } =
+  const { canWrite, updateVisibility, updating, displayVisibility } =
     useMcpServerVisibilityUpdate(server);
   const hosted = standsInForToolset(server);
   const guard = useHostedVisibilityGuard({
@@ -395,9 +395,11 @@ export function MCPServerStatusDropdown({
   const sourceAllowsPublic = tunneledSource?.allowPublic ?? false;
   const options =
     isTunneled || hosted ? ALL_VISIBILITY_OPTIONS : VISIBILITY_OPTIONS;
-  const currentLabel = visibilityLabel(server.visibility);
+  // The requested state shows while the change saves, so the control answers
+  // at once; a spinner replaces the dot until it lands.
+  const currentLabel = visibilityLabel(displayVisibility);
   const currentDotClass =
-    ALL_VISIBILITY_OPTIONS.find((option) => option.value === server.visibility)
+    ALL_VISIBILITY_OPTIONS.find((option) => option.value === displayVisibility)
       ?.dotClass ?? "bg-muted-foreground";
   // Public is gated on the source's consent; the option stays visible but
   // disabled, and this footer takes the owner to where consent is given.
@@ -424,7 +426,7 @@ export function MCPServerStatusDropdown({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild disabled={!canWrite || updating}>
+        <DropdownMenuTrigger asChild disabled={!canWrite}>
           <button
             type="button"
             title={
@@ -435,12 +437,20 @@ export function MCPServerStatusDropdown({
                 ? undefined
                 : "Refresh the page before changing this server’s availability."
             }
-            disabled={!canWrite || updating}
+            disabled={!canWrite}
+            aria-busy={updating}
             className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span
-              className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
-            />
+            {updating ? (
+              <Loader2
+                aria-label="Saving"
+                className="text-muted-foreground size-3 shrink-0 animate-spin"
+              />
+            ) : (
+              <span
+                className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
+              />
+            )}
             {currentLabel}
             <ChevronDown className="text-muted-foreground h-3 w-3" />
           </button>
@@ -455,13 +465,13 @@ export function MCPServerStatusDropdown({
                 key={option.value}
                 disabled={optionBlocked}
                 onSelect={() => {
-                  if (optionBlocked) return;
+                  if (optionBlocked || updating) return;
                   if (hosted) guard.request(option.value);
                   else updateVisibility(option.value);
                 }}
                 className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
               >
-                {option.value === server.visibility ? (
+                {option.value === displayVisibility ? (
                   <span
                     className={cn(
                       "mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full",

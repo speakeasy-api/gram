@@ -44,15 +44,15 @@ export const VISIBILITY_OPTIONS: VisibilityOption[] = [
     value: "disabled",
     label: "Disabled",
     description: "This server is offline. No users can connect to it",
-    dotClass: "bg-amber-400",
-    hoverDotClass: "group-hover:bg-amber-400",
+    dotClass: "bg-[var(--fill-destructive-default)]",
+    hoverDotClass: "group-hover:bg-[var(--fill-destructive-default)]",
   },
   {
     value: "private",
     label: "Private",
     description: "The server serves traffic.",
-    dotClass: "bg-blue-400",
-    hoverDotClass: "group-hover:bg-blue-400",
+    dotClass: "bg-[var(--fill-success-default)]",
+    hoverDotClass: "group-hover:bg-[var(--fill-success-default)]",
   },
 ];
 
@@ -63,8 +63,8 @@ const PUBLIC_VISIBILITY_OPTION: VisibilityOption = {
   label: "Public",
   description:
     "Anyone can connect anonymously — no login. Every tool is exposed to the public internet.",
-  dotClass: "bg-green-400",
-  hoverDotClass: "group-hover:bg-green-400",
+  dotClass: "bg-[var(--fill-success-default)]",
+  hoverDotClass: "group-hover:bg-[var(--fill-success-default)]",
 };
 
 export const HOSTED_PUBLIC_DESCRIPTION =
@@ -98,6 +98,11 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
   canWrite: boolean;
   updateVisibility: (visibility: McpServerVisibility) => void;
   updating: boolean;
+  /**
+   * The visibility to show: the requested one while an update is in flight,
+   * so the control answers at once, then the stored one.
+   */
+  displayVisibility: McpServerVisibility;
 } {
   const { hasScope } = useRBAC();
   // Checked on this server, like the API does; a hosted server is granted
@@ -111,6 +116,7 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
   const telemetry = useTelemetry();
   const followRenamedServer = useFollowRenamedServer();
   const [fetchingLatest, setFetchingLatest] = useState(false);
+  const [requested, setRequested] = useState<McpServerVisibility | null>(null);
   const update = useUpdateMcpServerMutation({
     onSuccess: async (updated, variables) => {
       followRenamedServer(updated);
@@ -141,6 +147,7 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
 
   const updateVisibility = (next: McpServerVisibility) => {
     if (!canWrite || next === server.visibility) return;
+    setRequested(next);
     setFetchingLatest(true);
     void (async () => {
       try {
@@ -166,10 +173,12 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
     })();
   };
 
+  const updating = fetchingLatest || update.isPending;
   return {
     hasWriteScope,
     canWrite,
     updateVisibility,
-    updating: fetchingLatest || update.isPending,
+    updating,
+    displayVisibility: updating && requested ? requested : server.visibility,
   };
 }

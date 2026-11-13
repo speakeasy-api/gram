@@ -344,6 +344,8 @@ it("keeps public non-tunneled servers green without offering Public as an editab
     <MCPServerStatusDropdown server={{ ...server, visibility: "public" }} />,
   );
   const current = screen.getByRole("button", { name: "Public" });
-  expect(current.querySelector(".bg-green-400")).not.toBeNull();
+  expect(
+    current.querySelector('[class*="fill-success-default"]'),
+  ).not.toBeNull();
   expect(screen.queryByRole("menuitem", { name: /^Public/ })).toBeNull();
 });
