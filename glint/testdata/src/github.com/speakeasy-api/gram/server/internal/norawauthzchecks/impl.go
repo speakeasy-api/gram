@@ -19,7 +19,7 @@ func constructors(env, project string) []authz.Check {
 }
 
 func allowed(env, project string) []authz.Check {
-	ref := authz.Environment(authz.EnvironmentID(env), authz.ProjectID(project))
+	ref := authz.Environment(authz.EnvironmentIDFrom(env), authz.ProjectIDFrom(project))
 	return []authz.Check{
 		ref.Read(),
 		ref.MCPCheck(),
