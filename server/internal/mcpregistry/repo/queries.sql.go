@@ -30,7 +30,7 @@ SELECT
     true,
     $2::timestamptz
 WHERE octet_length($1::jsonb::text) <= $3::bigint
-RETURNING id, data, published, published_at, created_at, updated_at
+RETURNING id, server_id, data, published, published_at, created_at, updated_at
 `
 
 type CreateEntryParams struct {
@@ -44,6 +44,7 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (McpRe
 	var i McpRegistryEntry
 	err := row.Scan(
 		&i.ID,
+		&i.ServerID,
 		&i.Data,
 		&i.Published,
 		&i.PublishedAt,
@@ -148,7 +149,7 @@ func (q *Queries) DiscoverEntries(ctx context.Context, arg DiscoverEntriesParams
 }
 
 const discoverVersion = `-- name: DiscoverVersion :one
-SELECT id, data, published, published_at, created_at, updated_at FROM mcp_registry_entries
+SELECT id, server_id, data, published, published_at, created_at, updated_at FROM mcp_registry_entries
 WHERE published
 AND data #>> '{server,name}' = $1::text
 AND ($2::boolean OR COALESCE(data #>> '{_meta,io.modelcontextprotocol.registry/official,status}', '') <> 'deleted')
@@ -166,6 +167,7 @@ func (q *Queries) DiscoverVersion(ctx context.Context, arg DiscoverVersionParams
 	var i McpRegistryEntry
 	err := row.Scan(
 		&i.ID,
+		&i.ServerID,
 		&i.Data,
 		&i.Published,
 		&i.PublishedAt,
@@ -176,7 +178,7 @@ func (q *Queries) DiscoverVersion(ctx context.Context, arg DiscoverVersionParams
 }
 
 const getEntry = `-- name: GetEntry :one
-SELECT id, data, published, published_at, created_at, updated_at
+SELECT id, server_id, data, published, published_at, created_at, updated_at
 FROM mcp_registry_entries
 WHERE id = $1
 `
@@ -186,6 +188,7 @@ func (q *Queries) GetEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry,
 	var i McpRegistryEntry
 	err := row.Scan(
 		&i.ID,
+		&i.ServerID,
 		&i.Data,
 		&i.Published,
 		&i.PublishedAt,
@@ -196,7 +199,7 @@ func (q *Queries) GetEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry,
 }
 
 const getEntryByName = `-- name: GetEntryByName :one
-SELECT id, data, published, published_at, created_at, updated_at
+SELECT id, server_id, data, published, published_at, created_at, updated_at
 FROM mcp_registry_entries
 WHERE data #>> '{server,name}' = $1::text
 `
@@ -206,6 +209,7 @@ func (q *Queries) GetEntryByName(ctx context.Context, name string) (McpRegistryE
 	var i McpRegistryEntry
 	err := row.Scan(
 		&i.ID,
+		&i.ServerID,
 		&i.Data,
 		&i.Published,
 		&i.PublishedAt,
@@ -435,7 +439,7 @@ func (q *Queries) ListOktaMappingConflicts(ctx context.Context, arg ListOktaMapp
 }
 
 const lockEntry = `-- name: LockEntry :one
-SELECT id, data, published, published_at, created_at, updated_at
+SELECT id, server_id, data, published, published_at, created_at, updated_at
 FROM mcp_registry_entries
 WHERE id = $1
 FOR UPDATE
@@ -446,6 +450,7 @@ func (q *Queries) LockEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry
 	var i McpRegistryEntry
 	err := row.Scan(
 		&i.ID,
+		&i.ServerID,
 		&i.Data,
 		&i.Published,
 		&i.PublishedAt,
@@ -538,7 +543,7 @@ SET
     updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
 WHERE id = $4
 AND (NOT $1::boolean OR octet_length($3::jsonb::text) <= $5::bigint)
-RETURNING id, data, published, published_at, created_at, updated_at
+RETURNING id, server_id, data, published, published_at, created_at, updated_at
 `
 
 type SetEntryPublishedParams struct {
@@ -560,6 +565,7 @@ func (q *Queries) SetEntryPublished(ctx context.Context, arg SetEntryPublishedPa
 	var i McpRegistryEntry
 	err := row.Scan(
 		&i.ID,
+		&i.ServerID,
 		&i.Data,
 		&i.Published,
 		&i.PublishedAt,
@@ -600,7 +606,7 @@ SET
     updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
 WHERE id = $2
 AND octet_length($1::jsonb::text) <= $3::bigint
-RETURNING id, data, published, published_at, created_at, updated_at
+RETURNING id, server_id, data, published, published_at, created_at, updated_at
 `
 
 type UpdateEntryParams struct {
@@ -614,6 +620,7 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) (McpRe
 	var i McpRegistryEntry
 	err := row.Scan(
 		&i.ID,
+		&i.ServerID,
 		&i.Data,
 		&i.Published,
 		&i.PublishedAt,

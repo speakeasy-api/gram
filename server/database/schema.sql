@@ -8924,8 +8924,28 @@ CREATE INDEX IF NOT EXISTS agent_executions_project_id_started_at_idx
 ON agent_executions (project_id, started_at)
 WHERE deleted IS FALSE;
 
+CREATE TABLE IF NOT EXISTS mcp_registry_servers (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  name text NOT NULL,
+  visible boolean NOT NULL DEFAULT true,
+  default_entry_id uuid,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_registry_servers_name_key
+  ON mcp_registry_servers (name);
+
+COMMENT ON COLUMN mcp_registry_servers.id IS '@access: confidential';
+COMMENT ON COLUMN mcp_registry_servers.name IS '@access: confidential';
+COMMENT ON COLUMN mcp_registry_servers.visible IS '@access: confidential';
+COMMENT ON COLUMN mcp_registry_servers.default_entry_id IS '@access: confidential';
+COMMENT ON COLUMN mcp_registry_servers.created_at IS '@access: confidential';
+COMMENT ON COLUMN mcp_registry_servers.updated_at IS '@access: confidential';
+
 CREATE TABLE IF NOT EXISTS mcp_registry_entries (
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  server_id uuid REFERENCES mcp_registry_servers(id) ON DELETE SET NULL,
   data jsonb NOT NULL,
   published boolean NOT NULL DEFAULT true,
   published_at timestamptz,
@@ -8941,6 +8961,19 @@ CREATE TABLE IF NOT EXISTS mcp_registry_entries (
   )
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_registry_entries_server_id_id_key
+  ON mcp_registry_entries (server_id, id);
+
+/* Circular ownership requires ALTER here: entries reference parents, while the
+   parent's default references the entry ownership key defined above. Both tables
+   and the unique index must exist before declaring this deferred foreign key.
+   Approved restrictive-delete exception: Atlas v1.3.4 drops the column list in
+   SET NULL (default_entry_id), which would also null the parent primary key. */
+ALTER TABLE mcp_registry_servers ADD CONSTRAINT mcp_registry_servers_default_entry_fkey
+  FOREIGN KEY (id, default_entry_id) REFERENCES mcp_registry_entries(server_id, id)
+  ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED;
+
+COMMENT ON COLUMN mcp_registry_entries.server_id IS '@access: confidential';
 COMMENT ON COLUMN mcp_registry_entries.id IS '@access: confidential';
 COMMENT ON COLUMN mcp_registry_entries.data IS '@access: opaque-restricted';
 COMMENT ON COLUMN mcp_registry_entries.published IS '@access: confidential';
