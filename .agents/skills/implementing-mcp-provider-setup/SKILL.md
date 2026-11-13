@@ -29,7 +29,7 @@ Use the [code map](../../../client/dashboard/src/pages/catalog/provider-setup/RE
 
 Trace the actual Catalog **Add** action through every intermediate screen and choice to completion. Compare handlers with the working provider implementation, not just a standalone wizard.
 
-Keep the Add modal’s existing name, identity and guardrail controls. Collect account information, endpoint variables, app registration and credentials on the actual MCP server’s Setup page. Preserve unaffected identity modes, bulk/headless callers and provider choices at their approved steps.
+Keep the Add modal’s existing name, identity and guardrail controls. Keep the provider’s configuration fields and instructions on the actual MCP server’s Setup page; follow its documented external app-registration and support handoffs. Preserve unaffected identity modes, bulk/headless callers and provider choices at their approved steps.
 
 Treat creation, configuration, verification and serving as separate transitions: create the disabled MCP server, open its Setup page, then configure it. Before declaring missing endpoint details a creation blocker, inspect existing create/update APIs and disabled-state gates. A required URL need not be the final connection URL.
 

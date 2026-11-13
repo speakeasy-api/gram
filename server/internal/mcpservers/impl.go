@@ -367,6 +367,7 @@ func (s *Service) setDefaultServerIcon(ctx context.Context, logger *slog.Logger,
 	}
 
 	if sourceURL == snowflakeSetupURL {
+		// Setup replaces this temporary URL; skip outbound favicon discovery for it.
 		return
 	}
 

@@ -32,6 +32,19 @@ it("generates server creation SQL without requiring a creator-role name", () => 
   expect(sql.creator).toBeUndefined();
 });
 
+it.each(["PUBLIC", "public", '"PUBLIC"', '"public"'])(
+  "does not generate creator grants for the account-wide role %s",
+  (creatorRole) => {
+    expect(snowflakeSql({ ...values, creatorRole }).creator).toBeUndefined();
+  },
+);
+
+it("allows an administrator role to prepare the server", () => {
+  expect(
+    snowflakeSql({ ...values, creatorRole: "ACCOUNTADMIN" }).creator,
+  ).toContain("TO ROLE ACCOUNTADMIN");
+});
+
 describe("Snowflake native setup contract", () => {
   it("configures the native account endpoint and confidential OAuth", () => {
     expect(snowflakeConnection(values)).toMatchObject({

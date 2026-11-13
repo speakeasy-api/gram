@@ -2034,6 +2034,38 @@ describe("Snowflake shared actions", () => {
     clientSecret: "app-secret",
   };
 
+  it.each(["populated", "duplicate", "secret", "request"])(
+    "preserves a %s Salesforce-named header when saving Snowflake",
+    async (kind) => {
+      const header = {
+        id: "unrelated",
+        name: "MCP-Instance-URL",
+        value: "https://example.my.salesforce.com",
+        isSecret: kind === "secret",
+        valueFromRequestHeader: kind === "request" ? "X-Instance" : undefined,
+      };
+      mocks.headers.mockResolvedValue({
+        headers:
+          kind === "duplicate"
+            ? [header, { ...header, id: "other" }]
+            : [header],
+      });
+      mocks.remote.mockResolvedValue({ id: "upstream", url: oldUrl });
+      mocks.provider.mockRejectedValue({ statusCode: 404 });
+      const { result } = mount(
+        "snowflake",
+        { step: "credentials", values },
+        { url: oldUrl, instanceUrl: "" },
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.next());
+      await waitFor(() => expect(result.current.state.saved).toBe(true));
+      expect(mocks.createHeader).not.toHaveBeenCalled();
+      expect(mocks.updateHeader).not.toHaveBeenCalled();
+      expect(mocks.deleteHeader).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([{ scope: [] }, { scope: ["session:role:OTHER"] }])(
     "requires corrected credentials for saved Snowflake scopes $scope",
     async ({ scope }) => {

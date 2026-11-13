@@ -466,7 +466,9 @@ export function useProviderConnection(
       )
         throw new ConfigurationChanged();
       const { header: instance, instanceUrl: currentInstance } =
-        salesforceInstanceConfiguration(headers);
+        providerKey === "salesforce"
+          ? salesforceInstanceConfiguration(headers)
+          : { header: undefined, instanceUrl: "" };
       const expected = appliedSource.current;
       if (
         !expected ||

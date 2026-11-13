@@ -30,6 +30,8 @@ const identifier = (value: string): string =>
   value.trim().startsWith('"') ? value.trim() : value.trim().toUpperCase();
 const rawIdentifier = (value: string): string =>
   identifier(value).replace(/^"|"$/g, "").replace(/""/g, '"');
+export const creatorRoleAllowed = (value: string): boolean =>
+  idValid(value) && rawIdentifier(value).toUpperCase() !== "PUBLIC";
 export const mcpNameValid = (value: string): boolean =>
   idValid(value) && ![".", ".."].includes(rawIdentifier(value));
 const identifierParts = (value: string): string[] =>
@@ -206,7 +208,7 @@ export function snowflakeSql(
   const ns = [v.database, v.schema].map(id).join("."),
     server = [v.database, v.schema, v.serverName].map(id).join(".");
   if (v.method === "new" && serverValid(v)) {
-    if (idValid(v.creatorRole))
+    if (creatorRoleAllowed(v.creatorRole))
       result.creator = `GRANT USAGE ON DATABASE ${id(v.database)} TO ROLE ${creator};\nGRANT USAGE ON SCHEMA ${ns} TO ROLE ${creator};\nGRANT CREATE MCP SERVER ON SCHEMA ${ns} TO ROLE ${creator};\nGRANT USAGE ON DATABASE ${a[0]} TO ROLE ${creator};\nGRANT USAGE ON SCHEMA ${a.slice(0, 2).join(".")} TO ROLE ${creator};\nGRANT USAGE ON AGENT ${a.join(".")} TO ROLE ${creator};`;
     if (
       /^[A-Za-z_][A-Za-z0-9_]*$/.test(v.toolName) &&

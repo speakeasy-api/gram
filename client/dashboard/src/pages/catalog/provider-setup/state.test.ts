@@ -190,12 +190,12 @@ describe("Snowflake setup state", () => {
     const initial = initialState("snowflake");
     expect(steps(initial).map((x) => x.id)).toContain("create");
     expect(steps(initial).map((x) => x.id)).toContain("creator");
-    expect(
-      steps({
-        ...initial,
-        values: { ...initial.values, method: "existing" },
-      }).map((x) => x.id),
-    ).not.toEqual(expect.arrayContaining(["creator", "create"]));
+    const existing = steps({
+      ...initial,
+      values: { ...initial.values, method: "existing" },
+    }).map((x) => x.id);
+    expect(existing).not.toContain("creator");
+    expect(existing).not.toContain("create");
   });
   it("requires a creator role before advancing to server creation", () => {
     const state = { ...initialState("snowflake"), step: "creator" };
@@ -209,6 +209,18 @@ describe("Snowflake setup state", () => {
     expect(next.step).toBe("create");
     expect(reduce(next, { type: "back" }).step).toBe("creator");
   });
+  it.each(["creator", "create"])(
+    "rejects the PUBLIC creator role at the %s step",
+    (step) => {
+      const initial = initialState("snowflake");
+      const state = {
+        ...initial,
+        step,
+        values: { ...initial.values, creatorRole: '"public"' },
+      };
+      expect(reduce(state, { type: "next" }).errors.creatorRole).toBeDefined();
+    },
+  );
 });
 
 it("clears old Snowflake instructions when another editor changes the source", () => {

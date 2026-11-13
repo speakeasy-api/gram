@@ -3,6 +3,7 @@ import {
   snowflakeConnection,
   publicSnowflakeHost,
   idValid,
+  creatorRoleAllowed,
   mcpNameValid,
   agentValid,
   roleAllowed,
@@ -219,8 +220,12 @@ export function validate(s: State): State["errors"] {
             "Use an agent identifier without $$ delimiters in the server specification.";
       }
     }
-    if (["creator", "create"].includes(s.step) && !idValid(v.creatorRole))
-      errors.creatorRole = "Enter the server-creator role.";
+    if (
+      ["creator", "create"].includes(s.step) &&
+      !creatorRoleAllowed(v.creatorRole)
+    )
+      errors.creatorRole =
+        "Enter an approved server-creator role other than PUBLIC.";
     if (s.step === "access") {
       if (!roleAllowed(v.accessRole))
         errors.accessRole =
