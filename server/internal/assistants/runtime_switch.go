@@ -155,6 +155,9 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
 		for _, runtime := range runtimes {
+			// The selection transaction is already committed or rolled back.
+			// Retirement must acquire and reload its own lifecycle authority.
+			runtime.LifecycleTx = nil
 			if err := s.finishRuntimeSwitchRetirement(cleanup, runtime); err != nil && s.logger != nil {
 				s.logger.ErrorContext(cleanup, "runtime switch retirement pending retry", attr.SlogError(err))
 			}
@@ -178,7 +181,11 @@ func runtimeSwitchQueries(ctx context.Context, db assistantrepo.DBTX) *assistant
 // rollback leaves no intent; a crash leaves it for the stopped-runtime janitor.
 func (s *ServiceCore) finishRuntimeSwitchRetirement(ctx context.Context, runtime assistantRuntimeRecord) error {
 	if kitProductionRuntime(runtime.RuntimeVersion, runtime.Backend) {
-		return s.kitGKELifecycle(ctx, runtime, func(ctx context.Context, locked assistantRuntimeRecord) error {
+		lifecycle := s.kitGKELifecycle
+		if runtime.Backend == runtimeBackendATE {
+			lifecycle = s.kitATELifecycle
+		}
+		return lifecycle(ctx, runtime, func(ctx context.Context, locked assistantRuntimeRecord) error {
 			if locked.State != "switch_retiring" || !locked.Retired {
 				return nil
 			}

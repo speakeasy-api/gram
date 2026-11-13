@@ -96,7 +96,7 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 
 	presented := presentedWorkload{
 		issuerURL: "", subject: "", issuerID: uuid.Nil, jwksURI: "",
-		assertionPolicyChecked: false, allowAssertionReuse: false, signatureVerified: false,
+		assertionPolicyChecked: false, allowAssertionReuse: false, signatureVerified: false, ateClaims: nil,
 	}
 	token, err := assertioncore.ParseSigned(assertion, workloadAssertionMaxBytes)
 	if err != nil {
@@ -177,12 +177,25 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
 	}
 
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: ""})
+	isolation := pgx.RepeatableRead
+	if _, managed := ateManagedRuntimeID(presented.subject); managed {
+		isolation = pgx.ReadCommitted
+	}
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: isolation, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	if err := lockWorkloadAssertionPolicy(ctx, tx, organizationID, nil, presented); err != nil {
+	if _, managed := ateManagedRuntimeID(presented.subject); managed {
+		if err := admitATEWorkloadGrantInTx(ctx, tx, tenancy, presented); err != nil {
+			if errors.Is(err, errWorkloadNotAdmitted) {
+				err = refuseWorkloadGrant("ate_actor_binding_invalid", err)
+			} else if _, ok := errors.AsType[*workloadGrantError](err); !ok {
+				err = workloadGrantStageUnavailable("ate_actor_binding_unavailable", err)
+			}
+			return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
+		}
+	} else if err := lockWorkloadAssertionPolicy(ctx, tx, organizationID, nil, presented); err != nil {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
 	}
 	if _, err := s.admitWorkloadGrantInTx(authorizationCtx, tx, organizationID, subject, workloadSessionCredential{DerivesPolicyAtAdmission: false, DelegatedGrants: ceiling, DelegatedGrantsVersion: version}); err != nil {

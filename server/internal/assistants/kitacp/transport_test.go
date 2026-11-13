@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,6 +22,16 @@ import (
 
 func TestTransport(t *testing.T) {
 	t.Parallel()
+	for _, path := range []string{"/acp/v2", "/acp"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			testTransport(t, path, false)
+		})
+	}
+}
+
+func testTransport(t *testing.T, path string, tunnel bool) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var mu sync.Mutex
@@ -28,7 +39,7 @@ func TestTransport(t *testing.T) {
 	var canceled, deleted, prompts atomic.Int32
 	promptReceived := make(chan struct{})
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/acp/v2" || r.Header.Get("Authorization") != "Bearer test-secret" {
+		if r.URL.Path != path || r.Header.Get("Authorization") != "Bearer test-secret" {
 			t.Error("bad endpoint/auth")
 		}
 		session := r.Header.Get("Acp-Session-Id")
@@ -68,6 +79,9 @@ func TestTransport(t *testing.T) {
 			case "session/new":
 				result = `{"sessionId":"s1"}`
 			case "session/resume":
+				if !strings.Contains(string(m.Params), `"replayFrom":{"type":"start"}`) {
+					t.Error("missing replay start")
+				}
 				result = `{}`
 			case "session/prompt":
 				prompts.Add(1)
@@ -108,7 +122,22 @@ func TestTransport(t *testing.T) {
 	}))
 	defer s.Close()
 	setup, stopSetup := context.WithCancel(ctx)
-	c, _, err := Dial(setup, s.URL+"/acp/v2", "test-secret", testHTTPClient(t), json.RawMessage(`{"protocolVersion":2,"info":{"name":"test","version":"0"},"capabilities":{}}`))
+	endpoint := s.URL + path
+	hc := testHTTPClient(t)
+	if tunnel {
+		target, err := url.Parse(s.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hc.Transport = confidentialTestTransport{authority: "actor.example:8081", target: target, transport: hc.Transport}
+		endpoint = "http://actor.example:8081" + path
+		for _, foreign := range []string{"http://foreign.example:8081" + path, "http://actor.example:8082" + path} {
+			if _, _, err := Dial(setup, foreign, "test-secret", hc, struct{}{}); err == nil {
+				t.Fatal("confidential transport accepted foreign origin")
+			}
+		}
+	}
+	c, _, err := Dial(setup, endpoint, "test-secret", hc, json.RawMessage(`{"protocolVersion":2,"info":{"name":"test","version":"0"},"capabilities":{}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +156,7 @@ func TestTransport(t *testing.T) {
 	if err = c.AttachSession(ctx, "s1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = c.Call(ctx, "session/resume", json.RawMessage(`{"sessionId":"s1","cwd":"/approved","mcpServers":[]}`), "s1"); err != nil {
+	if _, err = c.Call(ctx, "session/resume", json.RawMessage(`{"sessionId":"s1","cwd":"/approved","mcpServers":[],"replayFrom":{"type":"start"}}`), "s1"); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()
@@ -447,4 +476,68 @@ func TestDialClosesConnectionWhenStreamAttachFails(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTransportRejectsNonExactEndpoints(t *testing.T) {
+	t.Parallel()
+	for _, endpoint := range []string{
+		"http://example.com/acp", "http://example.com/acp/v2",
+		"http://192.0.2.1/acp", "http://[2001:db8::1]/acp",
+		"http://example.com/", "http://example.com/acp/", "http://example.com/acp/v2/",
+		"http://example.com/acp?", "http://example.com/acp?x=1", "http://example.com/acp#",
+		"http://example.com/acp#fragment", "http://user@example.com/acp", "ftp://example.com/acp",
+		"http://example.com/%61cp", "http://example.com/acp%2fv2", "http://example.com/acp/v3",
+	} {
+		t.Run(endpoint, func(t *testing.T) {
+			t.Parallel()
+			_, _, err := Dial(t.Context(), endpoint, "token", testHTTPClient(t), struct{}{})
+			if err == nil || !strings.Contains(err.Error(), "invalid ACP endpoint") {
+				t.Fatalf("expected endpoint rejection: %v", err)
+			}
+		})
+	}
+}
+
+func TestTransportConfidentialTunnel(t *testing.T) {
+	t.Parallel()
+	testTransport(t, "/acp", true)
+}
+
+func TestConfidentialTunnelRejectsHostMismatch(t *testing.T) {
+	t.Parallel()
+	transport := confidentialTestTransport{authority: "actor.test"}
+	req := httptest.NewRequest(http.MethodGet, "http://actor.test/acp", nil)
+	req.Host = "foreign.test"
+	response, err := transport.RoundTrip(req)
+	if response != nil {
+		_ = response.Body.Close()
+	}
+	if err == nil {
+		t.Fatal("accepted foreign request host")
+	}
+}
+
+type confidentialTestTransport struct {
+	authority string
+	target    *url.URL
+	transport http.RoundTripper
+}
+
+func (t confidentialTestTransport) ConfidentialOrigin(u *url.URL) bool {
+	return u != nil && u.Scheme == "http" && u.Host == t.authority && u.User == nil && u.Opaque == ""
+}
+
+func (t confidentialTestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if !t.ConfidentialOrigin(req.URL) || (req.Host != "" && req.Host != t.authority) {
+		return nil, errors.New("test tunnel origin rejected")
+	}
+	cloned := req.Clone(req.Context())
+	target := *req.URL
+	target.Host, target.Scheme = t.target.Host, t.target.Scheme
+	cloned.URL, cloned.Host = &target, t.target.Host
+	response, err := t.transport.RoundTrip(cloned)
+	if err != nil {
+		return nil, fmt.Errorf("test tunnel request: %w", err)
+	}
+	return response, nil
 }

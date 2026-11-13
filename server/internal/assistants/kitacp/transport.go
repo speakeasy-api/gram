@@ -1,4 +1,4 @@
-// Package kitacp implements Kit's ACP v2 HTTP/SSE transport without extensions.
+// Package kitacp implements Kit's ACP HTTP/SSE transport without extensions.
 package kitacp
 
 import (
@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -83,8 +84,15 @@ type Client struct {
 // The supplied HTTP client is copied and redirects are always disabled.
 func Dial(ctx context.Context, endpoint, token string, hc *guardian.HTTPClient, params any) (*Client, json.RawMessage, error) {
 	u, err := url.Parse(endpoint)
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.Path != "/acp/v2" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
-		return nil, nil, errors.New("invalid ACP endpoint: expected exact /acp/v2 URL")
+	// HTTP origins require loopback or an origin-bound confidential transport.
+	secureOrigin := err == nil && (u.Scheme == "https" || (u.Scheme == "http" &&
+		(strings.EqualFold(u.Hostname(), "localhost") || net.ParseIP(u.Hostname()).IsLoopback())))
+	if !secureOrigin && err == nil && u.Scheme == "http" && hc != nil {
+		confidential, ok := hc.Transport.(interface{ ConfidentialOrigin(*url.URL) bool })
+		secureOrigin = ok && confidential.ConfidentialOrigin(u)
+	}
+	if !secureOrigin || u.Host == "" || (u.Path != "/acp" && u.Path != "/acp/v2") || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.User != nil || u.Opaque != "" || strings.ContainsAny(endpoint, "?#") {
+		return nil, nil, errors.New("invalid ACP endpoint: expected exact /acp or /acp/v2 URL")
 	}
 	if token == "" || strings.ContainsAny(token, "\r\n") {
 		return nil, nil, errors.New("invalid ACP bearer credential")

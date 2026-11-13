@@ -25,6 +25,10 @@ import (
 // KitLocalCompositionConfig composes runtime-owned workload authentication.
 // Inference and MCP never borrow a human token or an API key.
 type KitLocalCompositionConfig struct {
+	// Set only by ATE composition after selecting an exact thread actor.
+	ateIdentity           *kitATEWorkloadIdentity
+	bootstrapGatewayToken string
+	bootstrapWorkload     *KitWorkloadBinding
 	// Set only by the native GKE composition, never from token claims.
 	nativeIdentity *KitGKEIdentityConfig
 	// Derived only from the exact persisted attachment during bootstrap.
@@ -302,22 +306,38 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	r.LifecycleTx = tx
-	gateway, err := s.rotateKitGatewayTokenAlreadyLocked(ctx, r)
-	if err != nil {
-		return zero, err
+	gateway := c.bootstrapGatewayToken
+	if gateway == "" {
+		gateway, err = s.rotateKitGatewayTokenAlreadyLocked(ctx, r)
+		if err != nil {
+			return zero, err
+		}
 	}
-	workload, err := s.provisionKitWorkload(ctx, r, c, identity, gateway)
-	if err != nil {
-		return zero, err
+	workload := c.bootstrapWorkload
+	if workload != nil {
+		if err := s.validateKitATEBootstrapWorkload(ctx, r, c, workload, identity, gateway); err != nil {
+			return zero, err
+		}
+		recovered := *workload
+		workload = &recovered
+	} else {
+		workload, err = s.provisionKitWorkload(ctx, r, c, identity, gateway)
+		if err != nil {
+			return zero, err
+		}
 	}
-	workload.MCPDesiredSetHash = kitMCPDesiredSetHash(resolveAssistantMCPServers(ctx, s.logger, s.serverURL, assistant.MCPServers, slugs))
+	desiredHash := kitMCPDesiredSetHash(resolveAssistantMCPServers(ctx, s.logger, s.serverURL, assistant.MCPServers, slugs))
+	if c.bootstrapWorkload != nil && workload.MCPDesiredSetHash != desiredHash {
+		return zero, ErrKitMCPDesiredSetUnsupported
+	}
+	workload.MCPDesiredSetHash = desiredHash
 	mcpJSON, err := kitCompositionMCP(c, workload)
 	if err != nil {
 		return zero, err
 	}
 
 	instructions := []byte("# Speakeasy assistant\n\n" + assistant.Instructions + "\n")
-	bootstrap := KitLocalBootstrap{Model: assistant.Model, AgentsMD: instructions, MCPJSON: mcpJSON, GatewayToken: []byte(gateway), Workload: workload, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: c.Origin.String() + "/chat/completions"}
+	bootstrap := KitLocalBootstrap{Model: assistant.Model, AgentsMD: instructions, MCPJSON: mcpJSON, GatewayToken: []byte(gateway), Workload: workload, AssertionFile: kitCompositionAssertionFile(c), InferenceEndpoint: c.Origin.String() + "/chat/completions"}
 	if err := validateKitBootstrap(bootstrap); err != nil {
 		return zero, err
 	}
@@ -360,6 +380,13 @@ func kitBuiltinMCPConnections(base *url.URL, projectID uuid.UUID, slugs []string
 	return connections
 }
 
+func kitCompositionAssertionFile(c KitLocalCompositionConfig) string {
+	if c.ateIdentity != nil {
+		return KitATEWorkloadAssertionPath
+	}
+	return KitWorkloadAssertionPath
+}
+
 func kitCompositionMCP(c KitLocalCompositionConfig, binding *KitWorkloadBinding) ([]byte, error) {
 	if binding == nil || binding.Audience == "" || (c.mcpConnections == nil && c.MCPResource == nil) {
 		return nil, errors.New("kit MCP requires workload binding and resource")
@@ -385,7 +412,7 @@ func kitCompositionMCP(c KitLocalCompositionConfig, binding *KitWorkloadBinding)
 			headers["Gram-Environment"] = connection.Environment
 		}
 		auth := map[string]any{
-			"type": "workload_identity", "tokenFile": KitWorkloadAssertionPath, "endpointMode": "explicit", "grant": "jwtBearer",
+			"type": "workload_identity", "tokenFile": kitCompositionAssertionFile(c), "endpointMode": "explicit", "grant": "jwtBearer",
 			"tokenEndpoint": binding.Audience + "/token", "resource": u.String(), "scope": "mcp:connect",
 		}
 		if connection.ProjectID != uuid.Nil {
