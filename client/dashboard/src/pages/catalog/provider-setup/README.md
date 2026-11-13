@@ -1,6 +1,8 @@
 # MCP provider setup code map
 
-Workflow, UX and integration rules live in the [implementing-mcp-provider-setup skill](../../../../../../.agents/skills/implementing-mcp-provider-setup/SKILL.md).
+Start with the [implementing-mcp-provider-setup skill](../../../../../../.agents/skills/implementing-mcp-provider-setup/SKILL.md) for workflow and approval boundaries. This document owns implementation discovery, extension points and verification selection. [Provider contracts](../../../../../../.agents/skills/implementing-mcp-provider-setup/references/provider-contracts.md) own provider differences; [SETUP.md](../../../../../../server/internal/remotesessions/SETUP.md) owns backend API and authorization semantics.
+
+Slack, GitHub, Salesforce, Snowflake and Okta have guided implementations. Customer guides and FDE enablement are separate rollout work under GRW-331.
 
 | Concern                                              | Owning code                                                                                                                                                                                                                                                                                                                        |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -18,3 +20,38 @@ Workflow, UX and integration rules live in the [implementing-mcp-provider-setup 
 | Backend identity and connection-test contract        | [SETUP.md](../../../../../../server/internal/remotesessions/SETUP.md)                                                                                                                                                                                                                                                              |
 | Component and state tests                            | [ProviderTasks.test.tsx](./ProviderTasks.test.tsx), [state.test.ts](./state.test.ts)                                                                                                                                                                                                                                               |
 | Integration tests                                    | [ProviderSetupPage.test.tsx](../../mcp/x/setup/ProviderSetupPage.test.tsx), [useProviderConnection.test.tsx](../../mcp/x/setup/useProviderConnection.test.tsx)                                                                                                                                                                     |
+
+## Adding or extending a provider
+
+1. Identify the exact catalog record and supported remote template/endpoint. Trace the current Add modal and installer, preserving name, identity, guardrails and callers outside guided User Identity setup.
+2. Choose a matching implementation: Slack/GitHub for fixed endpoints, Salesforce for native server/domain selection and support handoff, Snowflake/Okta for account-specific endpoints. Keep configuration on the created server's Setup page.
+3. For a new account provider, update exact matching and temporary markers in `account-provider.ts`, installation in `useRemoteMcpInstallWorkflow.ts`, and backend marker guards together. Temporary sources are disabled-only and must never be probed or used for OAuth. Guards match exact markers, not every URL belonging to the provider.
+4. Extend provider helpers, `state.ts`, `provider-data.ts`, `ProviderTasks.tsx`, URL recognition/progress in `provider-setup.ts`, and loading/hydration in `ProviderSetupPage.tsx`. Extend shared connection selection explicitly in `useProviderConnection.ts`. Adding a provider union member alone does not wire the lifecycle.
+5. Trace source writes, identity commit, private serving and gateway attachment in order. Preserve the recovery distinctions below. For account-provider gateway entry, inspect all Snowflake/Okta branches in `ProviderSetupPage.tsx`: attachment and completion destinations require explicit integration. Preserve Customize now → policy editor, ordinary gateway entry → gateway Overview, otherwise server Overview.
+6. Select checks from the matrix, inspect the actual click path, and report what is implemented, controlled-tested and live-verified separately. Keep product guides/FDE material in rollout work.
+
+## Recovery boundaries
+
+- **Before identity commit:** account-provider saves retain applied source writes and update fingerprints so retries recognize their own writes. Salesforce uses guarded compensating source rollback. Failed compensation routes to identity settings; it is not an atomic transaction.
+- **After identity commit:** private serving is enabled before first-party sign-in; a later failure does not undo the committed identity or trigger source rollback. A private-serving update failure currently falls through the generic credential-save error. Treat that message as a controller limitation, not evidence that the backend rejected the credentials.
+- **Gateway handoff:** attachment runs after configuration. A handoff failure reports that credentials were saved, keeps the credential step incomplete and retains entered values. Retrying in that state can repeat credential commit; do not describe it as a handoff-only retry. The controller's handoff-only shortcut requires saved frontend state and empty credential inputs. Preserve attachment idempotency and avoid duplicate server creation. Any change to retry semantics or failure copy is a separate product fix.
+- **Configuration edits and reload:** preserve valid non-secret choices and editable rejected values while invalidating affected authorization/test results. The step rail and result row must agree about readiness. Correction actions return to the exact relevant step.
+
+## Choose verification by changed behavior
+
+Paths below are relative to `client/dashboard/src/` unless stated otherwise. Start with the affected rows and expand when shared code changes; controlled responses do not establish live provider compatibility.
+
+| Changed behavior                                     | Focused checks                                                                                                                                                                                              |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Endpoint, SQL, OAuth settings, validation            | `pages/catalog/provider-setup/{slack,salesforce,snowflake,okta,state}.test.*`; `pages/mcp/x/setup/provider-setup.test.ts` for URL matching, progress and fingerprints                                       |
+| Instructions, app choices, correction controls       | `pages/catalog/provider-setup/ProviderTasks.test.tsx`, `ConnectionTask.test.tsx`, `shared.test.tsx`; assert instruction order, retained field values and exact recovery destinations                        |
+| Save, sign-in, test, invalidation or partial saves   | `pages/mcp/x/setup/useProviderConnection.test.tsx`, `setup-api-contract.test.ts`; include stale operations, retries, provider isolation and the other shared consumers                                      |
+| Entry, reload, visibility, gateway/policy completion | `pages/catalog/AddServerDialog.test.tsx`, `useRemoteMcpInstallWorkflow.test.ts`, `snowflake-install.test.ts`, `pages/mcp/x/setup/ProviderSetupPage.test.tsx`, `pages/mcp/x/MCPServerDetailsRouting.test.ts` |
+| Temporary-source safety                              | Repository-root `server/internal/mcpservers/provider_setup_test.go`; cover enabled creation and enablement, plus legitimate provider endpoints                                                              |
+| Backend save/test authorization                      | Repository-root `server/internal/remotesessions/serverconnection_test.go` and affected identity tests; use the backend contract for required identities and refusal cases                                   |
+
+Run selected frontend files with `mise exec -- aube run -F dashboard test <file> ...`, using paths relative to `client/dashboard/`. For frontend code changes, also run dashboard type-check/lint/knip as required by `frontend`. Discover server tasks with `mise tasks`; `mise run test:server` takes package paths relative to `server/`.
+
+Use `gram-playwright-cli` for actual Catalog card/detail Add, server Setup, direct-route/reload and gateway paths, including a narrow viewport. Report browser checks using controlled API/OAuth responses as controlled checks. For live verification, record the tested integration/branch, authorization and complete authenticated tool discovery without tool invocation. Record unavailable credentials or access as a verification limit.
+
+For documentation-only changes, check local Markdown links, skill discovery links, formatting and brand lint, then evaluate the skill with fresh-context agents per `writing-skills`. No provider credentials or running stack are needed for those checks.
