@@ -2481,6 +2481,7 @@ func marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(v *types.Environ
 		Name:      v.Name,
 		Value:     v.Value,
 		IsSecret:  v.IsSecret,
+		HasValue:  v.HasValue,
 		CreatedAt: v.CreatedAt,
 		UpdatedAt: v.UpdatedAt,
 	}

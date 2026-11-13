@@ -1415,7 +1415,7 @@ function buildAssistantTools(deps: ToolDeps) {
               description: e.description,
               entry_names: e.entries.map((entry) => entry.name),
               populated_entry_names: e.entries
-                .filter((entry) => entry.value !== "<EMPTY>")
+                .filter((entry) => entry.hasValue)
                 .map((entry) => entry.name),
             })),
           });
