@@ -17,10 +17,10 @@ import {
 } from "./memoryEvalModel";
 
 const config = {
-  answer_models: ["a/one"],
-  judge_model: "j/judge",
-  summary_model: "s/sum",
-  digest_model: "d/dig",
+  answerModels: ["a/one"],
+  judgeModel: "j/judge",
+  summaryModel: "s/sum",
+  digestModel: "d/dig",
   runs: 1,
 };
 
@@ -55,9 +55,9 @@ function run(id: string, report?: MemoryEvalReport): MemoryEvalRun {
     id,
     status: report ? "succeeded" : "queued",
     config,
-    requested_by: "staff@example.com",
-    created_at: "2026-11-02T10:00:00Z",
-    report_json: report ? JSON.stringify(report) : undefined,
+    requestedBy: "staff@example.com",
+    createdAt: new Date("2026-11-02T10:00:00Z"),
+    reportJson: report ? JSON.stringify(report) : undefined,
   };
 }
 
@@ -78,12 +78,12 @@ describe("memory eval model", () => {
     };
     expect(parseReport(run("r1", report))?.scores).toHaveLength(1);
     expect(parseReport(run("r2"))).toBeNull();
-    expect(parseReport({ ...run("r3"), report_json: "{" })).toBeNull();
+    expect(parseReport({ ...run("r3"), reportJson: "{" })).toBeNull();
     // A report missing fields the page reads is unreadable, not a crash.
     expect(
       parseReport({
         ...run("r4"),
-        report_json: JSON.stringify({
+        reportJson: JSON.stringify({
           scores: [{ model: "m", arm: "a", accuracy: 1 }],
         }),
       }),
@@ -202,7 +202,7 @@ describe("memory eval model", () => {
   it("labels runs in UTC with the random tail of the ID", () => {
     const r = {
       id: "019a0000-0000-7000-8000-00000000abcd",
-      created_at: "2026-11-02T05:00:00-05:00",
+      createdAt: new Date("2026-11-02T05:00:00-05:00"),
     };
     expect(runLabel(r)).toBe("2026-11-02 10:00 · 0000abcd");
     expect(shortRunLabel(r)).toBe("11-02 10:00");
@@ -214,8 +214,8 @@ describe("memory eval model", () => {
       runTiming(
         {
           status: "running",
-          created_at: "2026-11-02T09:00:00Z",
-          started_at: "2026-11-02T10:00:00Z",
+          createdAt: new Date("2026-11-02T09:00:00Z"),
+          startedAt: new Date("2026-11-02T10:00:00Z"),
         },
         now,
       ),
@@ -224,9 +224,9 @@ describe("memory eval model", () => {
       runTiming(
         {
           status: "succeeded",
-          created_at: "2026-11-02T09:00:00Z",
-          started_at: "2026-11-02T10:00:00Z",
-          finished_at: "2026-11-02T10:42:00Z",
+          createdAt: new Date("2026-11-02T09:00:00Z"),
+          startedAt: new Date("2026-11-02T10:00:00Z"),
+          finishedAt: new Date("2026-11-02T10:42:00Z"),
         },
         now,
       ),
@@ -242,39 +242,39 @@ describe("memory eval model", () => {
 
   it("validates configs like the server", () => {
     const allowed = {
-      allowed_models: ["a/one", "j/judge", "s/sum", "d/dig"],
-      max_answer_models: 4,
-      max_runs: 3,
+      allowedModels: ["a/one", "j/judge", "s/sum", "d/dig"],
+      maxAnswerModels: 4,
+      maxRuns: 3,
     };
     expect(validateConfig(config, allowed)).toBeNull();
     expect(validateConfig({ ...config, runs: 4 }, allowed)).toMatch(/Runs/);
-    expect(validateConfig({ ...config, answer_models: [] }, allowed)).toMatch(
+    expect(validateConfig({ ...config, answerModels: [] }, allowed)).toMatch(
       /at least one/,
     );
     expect(
-      validateConfig({ ...config, judge_model: "x/unknown" }, allowed),
+      validateConfig({ ...config, judgeModel: "x/unknown" }, allowed),
     ).toMatch(/not an allowed/);
     expect(
       validateConfig(
-        { ...config, answer_models: ["a/one", "j/judge"] },
+        { ...config, answerModels: ["a/one", "j/judge"] },
         allowed,
       ),
     ).toMatch(/judge must not also be an answer model/);
     const many = ["a/one", "a/two", "a/three", "a/four", "a/five"];
     expect(
       validateConfig(
-        { ...config, answer_models: many },
-        { ...allowed, allowed_models: [...allowed.allowed_models, ...many] },
+        { ...config, answerModels: many },
+        { ...allowed, allowedModels: [...allowed.allowedModels, ...many] },
       ),
     ).toMatch(/at most 4/);
     expect(
       validateConfig(
-        { ...config, answer_models: ["a/one"], runs: 2 },
-        { ...allowed, max_runs: 1 },
+        { ...config, answerModels: ["a/one"], runs: 2 },
+        { ...allowed, maxRuns: 1 },
       ),
     ).toMatch(/between 1 and 1/);
     expect(
-      validateConfig({ ...config, answer_models: ["a/one", "a/one"] }, allowed),
+      validateConfig({ ...config, answerModels: ["a/one", "a/one"] }, allowed),
     ).toMatch(/once/);
   });
 });
