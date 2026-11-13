@@ -23,6 +23,7 @@ import { usePolicyCandidates } from "./usePolicyCandidates";
 import { useProjectCandidates } from "./useProjectCandidates";
 import { useRecentCandidates } from "./useRecentCandidates";
 import { useRuleCandidates } from "./useRuleCandidates";
+import { useShadowMCPServerCandidates } from "./useShadowMCPServerCandidates";
 import { useSkillCandidates } from "./useSkillCandidates";
 import { useSourceCandidates } from "./useSourceCandidates";
 
@@ -149,6 +150,12 @@ export function useLauncherCandidates({
   const accessRequests = useAccessRequestCandidates({
     enabled: projectEnabled && canReadApprovals,
   });
+  // AI tools on the Shadow AI page are not indexed: the tab lists the scan
+  // target library, whose rows open an edit sheet rather than a page, and
+  // the per-tool detail pages are only reached from links that carry them.
+  const shadowMCPServers = useShadowMCPServerCandidates({
+    enabled: projectEnabled && canReadApprovals,
+  });
   const people = usePersonCandidates({ enabled: enabled && canReadPeople });
   const devices = useManagedDeviceCandidates({
     enabled: enabled && canReadDevices,
@@ -183,6 +190,7 @@ export function useLauncherCandidates({
       ...adminOnly(policies),
       ...adminOnly(rules),
       ...(inProject && canReadApprovals ? accessRequests : []),
+      ...(inProject && canReadApprovals ? shadowMCPServers : []),
       ...(canReadPeople ? people : []),
       ...(canReadDevices ? devices : []),
       ...projects,
@@ -218,6 +226,7 @@ export function useLauncherCandidates({
     policies,
     rules,
     accessRequests,
+    shadowMCPServers,
     people,
     devices,
     projects,

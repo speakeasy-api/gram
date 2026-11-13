@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   scopes: [] as string[],
   gatewayCandidateOptions: [] as Array<{ enabled: boolean }>,
+  shadowMCPServerOptions: [] as Array<{ enabled: boolean }>,
   includeNewResourceFixtures: false,
   /**
    * When set, the mcp:write grant is selector-scoped to these server ids:
@@ -57,6 +58,26 @@ vi.mock("./useGatewayConnectionCandidates", () => ({
   useGatewayConnectionCandidates: (options: { enabled: boolean }) => {
     mocks.gatewayCandidateOptions.push(options);
     return [];
+  },
+}));
+
+vi.mock("./useShadowMCPServerCandidates", () => ({
+  useShadowMCPServerCandidates: (options: { enabled: boolean }) => {
+    mocks.shadowMCPServerOptions.push(options);
+    return options.enabled
+      ? [
+          {
+            id: "shadow_mcp_server:notion",
+            kind: "shadow_mcp_server",
+            title: "Notion",
+            detail: "Shadow MCP",
+            keywords: [],
+            verbs: ["open"],
+            group: "Shadow MCP Servers",
+            run: () => undefined,
+          },
+        ]
+      : [];
   },
 }));
 
@@ -1637,6 +1658,26 @@ describe("useRuleCandidates", () => {
 });
 
 describe("useLauncherCandidates", () => {
+  // The Shadow AI page's own gate: org admins, inside a project, palette open.
+  it.each([
+    { scopes: ["org:admin", "project:read"], enabled: true, expected: true },
+    { scopes: ["org:read", "project:read"], enabled: true, expected: false },
+    { scopes: ["org:admin", "project:read"], enabled: false, expected: false },
+  ])(
+    "offers Shadow MCP servers only to org admins with the palette open (%o)",
+    ({ scopes, enabled, expected }) => {
+      mocks.scopes = scopes;
+      const { result } = renderCandidates({ enabled });
+
+      expect(mocks.shadowMCPServerOptions.at(-1)).toEqual({
+        enabled: expected,
+      });
+      expect(result.current.some((c) => c.kind === "shadow_mcp_server")).toBe(
+        expected,
+      );
+    },
+  );
+
   it("registers gateway discovery with the palette open state", () => {
     renderCandidates({ enabled: false });
     expect(mocks.gatewayCandidateOptions.at(-1)).toMatchObject({
@@ -1674,6 +1715,7 @@ describe("useLauncherCandidates", () => {
       "gateway",
       "catalog",
       "rule",
+      "shadow_mcp_server",
       "person",
       "project",
     ]);

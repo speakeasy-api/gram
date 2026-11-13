@@ -12,10 +12,6 @@ const TAB_LABEL: Record<ShadowAITab, string> = {
   "ai-tools": "AI tools",
 };
 
-export function shadowAITabLabel(tab: ShadowAITab): string {
-  return TAB_LABEL[tab];
-}
-
 /** The query string that selects a tab, for links that land on one from
  *  elsewhere: append it to the Shadow AI href. */
 export function shadowAITabSearch(tab: ShadowAITab): string {
