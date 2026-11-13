@@ -3652,6 +3652,24 @@ type McpAuthClientHeader struct {
 	Deleted bool
 }
 
+type McpConnectionLogRoute struct {
+	// @access: confidential
+	DataExportRouteID uuid.UUID
+	// @access: confidential
+	DataExportRoutesDataSource string
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Lowest log severity this route sends: info, warn or error.
+	// @access: confidential
+	MinSeverity string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type McpEndpoint struct {
 	// @access: confidential
 	ID uuid.UUID

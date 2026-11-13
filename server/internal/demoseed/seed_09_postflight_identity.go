@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+
+	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
 
 // postflightIDCheck is one count assert: the count must equal want. msg is
@@ -296,6 +298,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				OrgID:       org,
 				ProjectID:   proj,
 				AssistantID: s.det("assistant-bound"),
+				Issuer:      s.assistantIssuer,
+				JwksUri:     s.assistantIssuer + jwks.Path,
 				OwnerUserID: s.userID(demoUsers[0].handle),
 			})
 		}, 1, "demo seed postflight: identity-bound assistant root is incoherent"},

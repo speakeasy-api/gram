@@ -59,6 +59,7 @@ export const AUDIT_ACTIONS = [
   "auth-client:update-audience",
   "auth-client:update-headers",
   "assistant:identity_provision",
+  "assistant:runtime_switch",
   "assistant:tool_call",
   "assistant:update_execution_profile",
   "aws_iam_credential:create",
@@ -504,6 +505,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "changed who can use auth client";
     case "assistant:identity_provision":
       return "gave a dedicated agent to assistant";
+    case "assistant:runtime_switch":
+      return "changed the runtime of assistant";
     case "assistant:tool_call":
       return "ran assistant tool";
     case "assistant:update_execution_profile":

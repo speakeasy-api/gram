@@ -1,5 +1,6 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LauncherCandidate } from "./candidates/types";
 
@@ -18,6 +19,9 @@ const slugs = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   candidates: [] as unknown[],
+  capture: vi.fn(),
+  prefilter: vi.fn(),
+  rank: vi.fn(),
 }));
 
 vi.mock("@/contexts/CommandPalette", () => ({
@@ -32,12 +36,29 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
+vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetry: () => ({ capture: mocks.capture }),
+}));
 vi.mock("./recentlyVisited", () => ({
   useRecentsUserId: () => "user_1",
 }));
 vi.mock("./candidates", () => ({
   useLauncherCandidates: () => mocks.candidates,
 }));
+vi.mock("./ranker", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./ranker")>();
+  return {
+    ...actual,
+    prefilter: (...args: Parameters<typeof actual.prefilter>) => {
+      mocks.prefilter(...args);
+      return actual.prefilter(...args);
+    },
+    rank: (...args: Parameters<typeof actual.rank>) => {
+      mocks.rank(...args);
+      return actual.rank(...args);
+    },
+  };
+});
 import { CommandPalette } from "./CommandPalette";
 
 const runSettings = vi.fn();
@@ -103,6 +124,10 @@ beforeEach(() => {
   slugs.orgSlug = "acme";
   slugs.projectSlug = "widgets";
   mocks.candidates = [SETTINGS, SLACK];
+  mocks.capture.mockReset();
+  mocks.prefilter.mockReset();
+  mocks.rank.mockReset();
+  palette.isOpen = true;
   palette.close.mockReset();
   runSettings.mockReset();
   runSlack.mockReset().mockResolvedValue(undefined);
@@ -112,6 +137,94 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("CommandPalette", () => {
+  it("captures one performance event per open under StrictMode", () => {
+    const view = render(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+
+    palette.isOpen = false;
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+
+    expect(mocks.capture).toHaveBeenCalledOnce();
+    expect(mocks.capture).toHaveBeenCalledWith(
+      "command_palette_open_performance",
+      expect.objectContaining({
+        cache_state: "warm",
+        ranking_invocation_count: 0,
+        scope: "project",
+      }),
+    );
+
+    palette.isOpen = true;
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+    palette.isOpen = false;
+    view.rerender(
+      <StrictMode>
+        <CommandPalette />
+      </StrictMode>,
+    );
+
+    expect(mocks.capture).toHaveBeenCalledTimes(2);
+  });
+
+  it("only ranks meaningful queries across updates and reopen", async () => {
+    const view = render(<CommandPalette />);
+
+    expect(mocks.prefilter).not.toHaveBeenCalled();
+    expect(mocks.rank).not.toHaveBeenCalled();
+
+    mocks.candidates = [SETTINGS, SLACK, SESSIONS];
+    view.rerender(<CommandPalette />);
+    await userEvent.type(input(), "   ");
+    mocks.candidates = [SETTINGS, SLACK];
+    view.rerender(<CommandPalette />);
+
+    expect(mocks.prefilter).not.toHaveBeenCalled();
+    expect(mocks.rank).not.toHaveBeenCalled();
+
+    fireEvent.change(input(), { target: { value: "   s" } });
+
+    expect(mocks.prefilter).toHaveBeenCalledOnce();
+    expect(mocks.prefilter).toHaveBeenLastCalledWith("s", mocks.candidates);
+    expect(mocks.rank).toHaveBeenCalledOnce();
+
+    await userEvent.clear(input());
+    mocks.candidates = [SETTINGS, SLACK];
+    view.rerender(<CommandPalette />);
+
+    expect(mocks.prefilter).toHaveBeenCalledOnce();
+    expect(mocks.rank).toHaveBeenCalledOnce();
+
+    palette.isOpen = false;
+    view.rerender(<CommandPalette />);
+    palette.isOpen = true;
+    view.rerender(<CommandPalette />);
+
+    expect(mocks.prefilter).toHaveBeenCalledOnce();
+    expect(mocks.rank).toHaveBeenCalledOnce();
+
+    fireEvent.change(input(), { target: { value: "slack" } });
+
+    expect(mocks.prefilter).toHaveBeenCalledTimes(2);
+    expect(mocks.prefilter).toHaveBeenLastCalledWith("slack", mocks.candidates);
+    expect(mocks.rank).toHaveBeenCalledTimes(2);
+  });
+
   it("offers the Project Assistant for a query that matches nothing", async () => {
     render(<CommandPalette />);
 

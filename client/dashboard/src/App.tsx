@@ -254,6 +254,9 @@ const RouteProvider = () => {
     // so recording one would file a redirect under the reader's recent pages
     // instead of the page they actually ended up on.
     if (orgRoutes.killswitch.active) return;
+    // Channels is hidden from navigation, so a visit must not resurface it in
+    // Command K either.
+    if (routes.channels.active) return;
     const active =
       Object.values(routes).find((r) => r.active && !r.external) ??
       Object.values(orgRoutes).find((r) => r.active && !r.external);
@@ -398,6 +401,9 @@ const RouteProvider = () => {
           path="/risk-policy-challenge/acknowledge"
           element={<RiskPolicyChallengeAcknowledge />}
         />
+        {/* Short form of the acknowledge link, /ack#<token>, for surfaces
+            that cut a hook message off after a line or two (Claude Cowork). */}
+        <Route path="/ack" element={<RiskPolicyChallengeAcknowledge />} />
         <Route path="/blocks/:id" element={<BlockPage />} />
         <Route
           path={`${SHARED_SKILL_BASE_PATH}/:token`}

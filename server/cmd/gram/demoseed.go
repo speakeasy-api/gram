@@ -14,6 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/demoseed"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/dailyoutcomes"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
@@ -100,6 +102,12 @@ func newDemoSeedCommand() *cli.Command {
 				EnvVars: []string{"GRAM_SERVER_URL"},
 			},
 			&cli.StringFlag{
+				Name:     "authz-issuer-url",
+				Usage:    "Speakeasy platform signing issuer origin, under which the seeded assistant triggers are registered",
+				EnvVars:  []string{"GRAM_AUTHZ_ISSUER_URL"},
+				Required: true,
+			},
+			&cli.StringFlag{
 				Name:    "environment",
 				Usage:   "Deployment environment, which decides the API key prefix the local fixtures mint",
 				EnvVars: []string{"GRAM_ENVIRONMENT"},
@@ -122,6 +130,13 @@ func newDemoSeedCommand() *cli.Command {
 					return err
 				}
 			}
+			// HTTP is only for an environment explicitly declared local: the
+			// environment flag's default must not relax the issuer check.
+			issuerURL := c.String("authz-issuer-url")
+			allowHTTP := c.IsSet("environment") && c.String("environment") == "local"
+			inv.Require("demo seed assistant trigger issuer",
+				"authz-issuer-url is a Speakeasy issuer origin", mcpauthz.ValidateIssuerOrigin(issuerURL, allowHTTP),
+			)
 			ctx := c.Context
 			logger := PullLogger(ctx)
 
@@ -154,7 +169,7 @@ func newDemoSeedCommand() *cli.Command {
 			}
 
 			if !c.Bool("local") {
-				if err := demoseed.Run(ctx, logger, db, ch, blob, enc, demoseed.DefaultSpec()); err != nil {
+				if err := demoseed.Run(ctx, logger, db, ch, blob, enc, issuerURL, demoseed.DefaultSpec()); err != nil {
 					return fmt.Errorf("apply seed: %w", err)
 				}
 				return nil
@@ -170,7 +185,7 @@ func newDemoSeedCommand() *cli.Command {
 			// one that lifts the BookDemo gate, so a demo-org failure
 			// (ClickHouse is the flaky half locally) leaves a usable
 			// environment behind.
-			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, demoseed.LocalSpec()); err != nil {
+			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, issuerURL, demoseed.LocalSpec()); err != nil {
 				return fmt.Errorf("apply seed: %w", err)
 			}
 
@@ -215,7 +230,7 @@ func newDemoSeedCommand() *cli.Command {
 				return fmt.Errorf("apply local fixtures: %w", err)
 			}
 
-			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, demoseed.DefaultSpec()); err != nil {
+			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, issuerURL, demoseed.DefaultSpec()); err != nil {
 				return fmt.Errorf("apply demo org seed: %w", err)
 			}
 

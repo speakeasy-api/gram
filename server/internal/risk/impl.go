@@ -2530,8 +2530,9 @@ func (s *Service) platformToolsetByID(id uuid.UUID) (platformtools.Toolset, bool
 		}
 	}
 	return platformtools.Toolset{
-		Slug:  "",
-		Tools: nil,
+		Slug:          "",
+		Tools:         nil,
+		ActingContext: nil,
 	}, false
 }
 

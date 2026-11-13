@@ -16,7 +16,6 @@ import (
 )
 
 type assistantExecutionProfileManagementStub struct {
-	assistantIdentityManagementFunc
 	set    func(context.Context, *genassistants.SetExecutionProfileChoicePayload) (*genassistants.AssistantExecutionProfile, error)
 	listed *string
 }

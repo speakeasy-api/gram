@@ -125,8 +125,9 @@ func TestListProjectMCPServersExactTargetAndRedactedProjection(t *testing.T) {
 	t.Parallel()
 	reads := testDiagnosticsReads()
 	privateURL := "https://customer.example/private-route"
+	upstreamURL := "https://upstream.example.test/private-route"
 	reads.servers.McpServers = []*gen.AdminMcpServer{{
-		ID: "server-a", Name: "Docs", URL: &privateURL, Visibility: "public", Source: "toolset_only", CreatedAt: "2026-01-01T00:00:00Z",
+		ID: "server-a", Name: "Docs", URL: &privateURL, UpstreamURL: &upstreamURL, Visibility: "public", Source: "toolset_only", CreatedAt: "2026-01-01T00:00:00Z",
 	}}
 	args := `{"organization_id":"org-a","project_id":"` + testProjectID + `"}`
 	status, body, data := callDiagnosticReadTool(t, reads, "list_project_mcp_servers", args)
@@ -144,6 +145,8 @@ func TestListProjectMCPServersExactTargetAndRedactedProjection(t *testing.T) {
 		Servers: []ProjectMCPServer{{ID: "server-a", Name: "Docs", Visibility: "public", Source: "toolset_only", CreatedAt: "2026-01-01T00:00:00Z"}},
 	}, output)
 	require.NotContains(t, body, privateURL)
+	require.NotContains(t, body, upstreamURL)
+	require.NotContains(t, body, `"upstream_url"`)
 	require.NotContains(t, body, `"url"`)
 }
 

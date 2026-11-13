@@ -66,6 +66,8 @@ trackedFiles:
   src/funcs/adminGetInferenceKeys.ts: {}
   src/funcs/adminGetInferenceSpendHistory.ts: {}
   src/funcs/adminGetMcpServerToolCalls.ts: {}
+  src/funcs/adminGetMemoryEvalOptions.ts: {}
+  src/funcs/adminGetMemoryEvalRun.ts: {}
   src/funcs/adminGetMeterUsage.ts: {}
   src/funcs/adminGetOnboardingStackOptions.ts: {}
   src/funcs/adminGetOrganization.ts: {}
@@ -93,10 +95,12 @@ trackedFiles:
   src/funcs/adminListCustomerUsage.ts: {}
   src/funcs/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/funcs/adminListGlobalIssuers.ts: {}
+  src/funcs/adminListMemoryEvalRuns.ts: {}
   src/funcs/adminListOnboardingPlaybooks.ts: {}
   src/funcs/adminListOnboardingSteps.ts: {}
   src/funcs/adminListOnboardingUseCases.ts: {}
   src/funcs/adminListOrganizationActivity.ts: {}
+  src/funcs/adminListOrganizationAssistants.ts: {}
   src/funcs/adminListOrganizationMembers.ts: {}
   src/funcs/adminListOrganizationProjects.ts: {}
   src/funcs/adminListOrganizations.ts: {}
@@ -112,6 +116,8 @@ trackedFiles:
   src/funcs/adminListUsers.ts: {}
   src/funcs/adminLogout.ts: {}
   src/funcs/adminMarkEnterpriseTrialConverted.ts: {}
+  src/funcs/adminMigrateOrganizationAssistantIdentities.ts: {}
+  src/funcs/adminMigrateOrganizationAssistantsToKit.ts: {}
   src/funcs/adminMigrateToGlobalIssuer.ts: {}
   src/funcs/adminPromoteRegistryCandidate.ts: {}
   src/funcs/adminRearmTrial.ts: {}
@@ -133,6 +139,7 @@ trackedFiles:
   src/funcs/adminSetRegistryEntryPublished.ts: {}
   src/funcs/adminSetStripeCustomer.ts: {}
   src/funcs/adminSetStripeSubscription.ts: {}
+  src/funcs/adminStartMemoryEvalRun.ts: {}
   src/funcs/adminStartTrial.ts: {}
   src/funcs/adminTriggerOrganizationChatAnalysis.ts: {}
   src/funcs/adminUpdateGcpIamPlatformCredential.ts: {}
@@ -161,6 +168,10 @@ trackedFiles:
   src/lib/sdks.ts: {}
   src/lib/security.ts: {}
   src/lib/url.ts: {}
+  src/models/components/adminassistantidentitymigrationresult.ts: {}
+  src/models/components/adminassistantidentitymigrationrun.ts: {}
+  src/models/components/adminassistantkitmigrationresult.ts: {}
+  src/models/components/adminassistantkitmigrationrun.ts: {}
   src/models/components/adminauditlog.ts: {}
   src/models/components/adminbackfillmcpauthgrantsresult.ts: {}
   src/models/components/adminbackfillmcpconnectgrantsresult.ts: {}
@@ -213,6 +224,9 @@ trackedFiles:
   src/models/components/adminmcpservertoolcalloutcomes.ts: {}
   src/models/components/adminmcpservertoolcalls.ts: {}
   src/models/components/adminmdmvendoroption.ts: {}
+  src/models/components/adminmemoryevaloptions.ts: {}
+  src/models/components/adminmemoryevalrun.ts: {}
+  src/models/components/adminmemoryevalrunconfig.ts: {}
   src/models/components/adminmeterusagebucket.ts: {}
   src/models/components/adminmeterusageresponse.ts: {}
   src/models/components/adminonboardingplan.ts: {}
@@ -230,6 +244,8 @@ trackedFiles:
   src/models/components/adminonboardingusecaselist.ts: {}
   src/models/components/adminonboardingvendoroption.ts: {}
   src/models/components/adminorganization.ts: {}
+  src/models/components/adminorganizationassistant.ts: {}
+  src/models/components/adminorganizationassistants.ts: {}
   src/models/components/adminorganizationmember.ts: {}
   src/models/components/adminorganizationonboardingplaybook.ts: {}
   src/models/components/adminorganizationstats.ts: {}
@@ -309,11 +325,14 @@ trackedFiles:
   src/models/components/listexternalcredentialsresult.ts: {}
   src/models/components/listglobalremotesessionissuersresult.ts: {}
   src/models/components/listissuerconvergencecandidatesresult.ts: {}
+  src/models/components/listmemoryevalrunsresponsebody.ts: {}
   src/models/components/listplatformmcpfeedbackresponsebody.ts: {}
   src/models/components/listsignupoffersresponsebody.ts: {}
   src/models/components/markenterprisetrialconvertedrequestbody.ts: {}
   src/models/components/markenterprisetrialconvertedresult.ts: {}
   src/models/components/meterusagewindow.ts: {}
+  src/models/components/migrateorganizationassistantidentitiesrequestbody.ts: {}
+  src/models/components/migrateorganizationassistantstokitrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerresult.ts: {}
   src/models/components/productfeatures.ts: {}
@@ -343,6 +362,7 @@ trackedFiles:
   src/models/components/setstripesubscriptionrequestbody.ts: {}
   src/models/components/spendbucket.ts: {}
   src/models/components/spendproduct.ts: {}
+  src/models/components/startmemoryevalrunrequestbody.ts: {}
   src/models/components/starttrialrequestbody.ts: {}
   src/models/components/supportcapability.ts: {}
   src/models/components/supportcoveragecell.ts: {}
@@ -379,6 +399,7 @@ trackedFiles:
   src/models/operations/admingetinferencekeys.ts: {}
   src/models/operations/admingetinferencespendhistory.ts: {}
   src/models/operations/admingetmcpservertoolcalls.ts: {}
+  src/models/operations/admingetmemoryevalrun.ts: {}
   src/models/operations/admingetmeterusage.ts: {}
   src/models/operations/admingetorganization.ts: {}
   src/models/operations/admingetorganizationchatanalysissettings.ts: {}
@@ -401,8 +422,10 @@ trackedFiles:
   src/models/operations/adminlistcustomerusage.ts: {}
   src/models/operations/adminlistglobalissuerconvergencecandidates.ts: {}
   src/models/operations/adminlistglobalissuers.ts: {}
+  src/models/operations/adminlistmemoryevalruns.ts: {}
   src/models/operations/adminlistonboardingplaybooks.ts: {}
   src/models/operations/adminlistorganizationactivity.ts: {}
+  src/models/operations/adminlistorganizationassistants.ts: {}
   src/models/operations/adminlistorganizationmembers.ts: {}
   src/models/operations/adminlistorganizationprojects.ts: {}
   src/models/operations/adminlistorganizations.ts: {}
@@ -453,6 +476,10 @@ trackedFiles:
   src/react-query/adminGetInferenceSpendHistory.ts: {}
   src/react-query/adminGetMcpServerToolCalls.core.ts: {}
   src/react-query/adminGetMcpServerToolCalls.ts: {}
+  src/react-query/adminGetMemoryEvalOptions.core.ts: {}
+  src/react-query/adminGetMemoryEvalOptions.ts: {}
+  src/react-query/adminGetMemoryEvalRun.core.ts: {}
+  src/react-query/adminGetMemoryEvalRun.ts: {}
   src/react-query/adminGetMeterUsage.core.ts: {}
   src/react-query/adminGetMeterUsage.ts: {}
   src/react-query/adminGetOrganization.core.ts: {}
@@ -498,8 +525,12 @@ trackedFiles:
   src/react-query/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/react-query/adminListGlobalIssuers.core.ts: {}
   src/react-query/adminListGlobalIssuers.ts: {}
+  src/react-query/adminListMemoryEvalRuns.core.ts: {}
+  src/react-query/adminListMemoryEvalRuns.ts: {}
   src/react-query/adminListOrganizationActivity.core.ts: {}
   src/react-query/adminListOrganizationActivity.ts: {}
+  src/react-query/adminListOrganizationAssistants.core.ts: {}
+  src/react-query/adminListOrganizationAssistants.ts: {}
   src/react-query/adminListOrganizationMembers.core.ts: {}
   src/react-query/adminListOrganizationMembers.ts: {}
   src/react-query/adminListOrganizationProjects.core.ts: {}
@@ -528,6 +559,8 @@ trackedFiles:
   src/react-query/adminListUsers.ts: {}
   src/react-query/adminLogout.ts: {}
   src/react-query/adminMarkEnterpriseTrialConverted.ts: {}
+  src/react-query/adminMigrateOrganizationAssistantIdentities.ts: {}
+  src/react-query/adminMigrateOrganizationAssistantsToKit.ts: {}
   src/react-query/adminMigrateToGlobalIssuer.ts: {}
   src/react-query/adminOnboardingPlaybooks.core.ts: {}
   src/react-query/adminOnboardingPlaybooks.ts: {}
@@ -561,6 +594,7 @@ trackedFiles:
   src/react-query/adminSetRegistryEntryPublished.ts: {}
   src/react-query/adminSetStripeCustomer.ts: {}
   src/react-query/adminSetStripeSubscription.ts: {}
+  src/react-query/adminStartMemoryEvalRun.ts: {}
   src/react-query/adminStartTrial.ts: {}
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
   src/react-query/adminUpdateGcpIamPlatformCredential.ts: {}
@@ -1063,6 +1097,27 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminGetMemoryEvalOptions:
+    speakeasy-default-admin-get-memory-eval-options:
+      responses:
+        "200":
+          application/json: {"allowed_models": ["<value 1>", "<value 2>"], "daily_run_limit": 261511, "defaults": {"answer_models": ["<value 1>"], "digest_model": "<value>", "judge_model": "<value>", "runs": 871521, "summary_model": "<value>"}, "runs_today": 959694}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminGetMemoryEvalRun:
+    speakeasy-default-admin-get-memory-eval-run:
+      parameters:
+        query:
+          id: "3a3561b5-a812-409a-86c6-2f33b1451073"
+      responses:
+        "200":
+          application/json: {"config": {"answer_models": ["<value 1>"], "digest_model": "<value>", "judge_model": "<value>", "runs": 573770, "summary_model": "<value>"}, "created_at": "2026-07-23T10:59:18.919Z", "id": "cc41e66a-0c52-45c0-bbe1-18ba6875a1ed", "requested_by": "<value>", "status": "running"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminGetMeterUsage:
     speakeasy-default-admin-get-meter-usage:
       parameters:
@@ -1421,6 +1476,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminListMemoryEvalRuns:
+    speakeasy-default-admin-list-memory-eval-runs:
+      parameters:
+        query:
+          limit: 25
+      responses:
+        "200":
+          application/json: {"runs": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminListOnboardingPlaybooks:
     speakeasy-default-admin-list-onboarding-playbooks:
       responses:
@@ -1456,6 +1523,18 @@ examples:
       responses:
         "200":
           application/json: {"logs": [{"acting_surface": "<value>", "action": "<value>", "actor_id": "<id>", "actor_type": "<value>", "category": "security", "created_at": "2025-07-02T03:58:14.417Z", "id": "<id>", "is_internal": false, "subject_id": "<id>", "subject_type": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminListOrganizationAssistants:
+    speakeasy-default-admin-list-organization-assistants:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"assistants": [{"created_at": "2024-05-04T18:33:20.807Z", "creator_active": false, "id": "7973a17f-4340-4c3c-bdd9-0b343e41d404", "identity_state": "UNAVAILABLE", "name": "<value>", "project_id": "dbc2090b-16c3-4e90-aa99-ea12e94d3d48", "project_name": "<value>", "project_slug": "<value>", "runtime_version": 351493, "status": "<value>"}], "organization_id": "<id>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -1626,6 +1705,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminMigrateOrganizationAssistantIdentities:
+    speakeasy-default-admin-migrate-organization-assistant-identities:
+      requestBody:
+        application/json: {"organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"already_migrated": 703387, "failed": 323939, "migrated": 51220, "needs_owner": 824823, "organization_id": "<id>", "results": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminMigrateOrganizationAssistantsToKit:
+    speakeasy-default-admin-migrate-organization-assistants-to-kit:
+      requestBody:
+        application/json: {"organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"already_kit": 116395, "busy": 562065, "failed": 86037, "ineligible": 34050, "needs_identity": 832116, "organization_id": "<id>", "results": [], "switched": 161170}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminMigrateToGlobalIssuer:
     speakeasy-default-admin-migrate-to-global-issuer:
       requestBody:
@@ -1902,6 +2003,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminStartMemoryEvalRun:
+    speakeasy-default-admin-start-memory-eval-run:
+      requestBody:
+        application/json: {"config": {"answer_models": ["<value 1>"], "digest_model": "<value>", "judge_model": "<value>", "runs": 149483, "summary_model": "<value>"}}
+      responses:
+        "200":
+          application/json: {"config": {"answer_models": ["<value 1>"], "digest_model": "<value>", "judge_model": "<value>", "runs": 149483, "summary_model": "<value>"}, "created_at": "2026-12-25T06:28:16.919Z", "id": "7c5dca54-b0c1-4a90-9a9d-d10b283afdc4", "requested_by": "<value>", "status": "succeeded"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminStartTrial:
     speakeasy-default-admin-start-trial:
       requestBody:
