@@ -18,8 +18,8 @@ func TestAnyOf_MatchesRequireAnyUnblocked(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	alternatives := []Check{
-		Project("project-one").Write(),
-		Environment("env-one", "project-one").Write(),
+		Project(ProjectIDFrom("project-one")).Write(),
+		Environment(EnvironmentIDFrom("env-one"), ProjectIDFrom("project-one")).Write(),
 	}
 	for name, grants := range map[string][]Grant{
 		"project allow":                 {NewGrant(ScopeProjectWrite, "project-one")},
@@ -51,7 +51,7 @@ func TestAnyOf_MatchesRequireAnyUnblocked(t *testing.T) {
 func TestAnyOf_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	anyOf := AnyOf(Project("project-one").Write(), Project("project-one").Read())
+	anyOf := AnyOf(Project(ProjectIDFrom("project-one")).Write(), Project(ProjectIDFrom("project-one")).Read())
 
 	// A misuse is refused whether or not RBAC is enforced for the caller.
 	for name, ctx := range shapeTestContexts(t, []Grant{NewGrant(ScopeRoot, WildcardResource)}) {
@@ -61,7 +61,7 @@ func TestAnyOf_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
 			require.ErrorAs(t, err, &shareable, name)
 			require.NotEqual(t, oops.CodeForbidden, shareable.Code, "%s: a misused AnyOf is a bad check, not a denial", name)
 		}
-		requireInvalid(engine.Require(ctx, anyOf, Project("project-one").Read()))
+		requireInvalid(engine.Require(ctx, anyOf, Project(ProjectIDFrom("project-one")).Read()))
 		requireInvalid(engine.Require(ctx, AnyOf(anyOf)))
 		_, err := engine.Evaluate(ctx, anyOf)
 		requireInvalid(err)
@@ -69,7 +69,7 @@ func TestAnyOf_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
 		requireInvalid(err)
 		_, err = engine.FindMatched(ctx, []Check{anyOf})
 		requireInvalid(err)
-		_, err = engine.Can(ctx, anyOf, Project("project-one").Read())
+		_, err = engine.Can(ctx, anyOf, Project(ProjectIDFrom("project-one")).Read())
 		requireInvalid(err)
 		_, err = engine.Can(ctx, AnyOf(anyOf))
 		requireInvalid(err)
@@ -84,7 +84,7 @@ func TestAnyOf_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
 func TestProbe_RefusedByRequire(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	probe := MCPServer("server-1", "project-1").Connect().Probe()
+	probe := MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect().Probe()
 
 	for name, ctx := range shapeTestContexts(t, []Grant{NewGrant(ScopeMCPConnect, "server-1")}) {
 		can, err := engine.Can(ctx, probe)
@@ -99,7 +99,7 @@ func TestProbe_RefusedByRequire(t *testing.T) {
 			"require any":           engine.RequireAny(ctx, probe),
 			"require any unblocked": engine.RequireAnyUnblocked(ctx, probe),
 			"anyof alternative":     engine.Require(ctx, AnyOf(probe)),
-			"probed anyof":          engine.Require(ctx, AnyOf(MCPServer("server-1", "project-1").Connect()).Probe()),
+			"probed anyof":          engine.Require(ctx, AnyOf(MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect()).Probe()),
 		} {
 			require.ErrorIs(t, err, ErrInvalidCheck, "%s: %s", name, call)
 		}
