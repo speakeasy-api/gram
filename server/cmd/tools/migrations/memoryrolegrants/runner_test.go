@@ -4,8 +4,10 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -279,7 +281,12 @@ func seedTemporaryGrant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, o
 
 	selectors, err := authz.NewSelector(scope, authz.WildcardResource).MarshalJSON()
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at)
-VALUES ($1, $2, $3, $4, clock_timestamp() - interval '1 hour')`, orgID, principal.String(), string(scope), selectors)
+	_, err = accessrepo.New(pool).InsertTemporaryGrant(ctx, accessrepo.InsertTemporaryGrantParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   principal,
+		Scope:          string(scope),
+		Selectors:      selectors,
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+	})
 	require.NoError(t, err)
 }
