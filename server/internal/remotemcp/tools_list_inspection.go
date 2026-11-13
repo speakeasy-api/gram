@@ -21,7 +21,46 @@ const (
 	// inspected tools/list kept even though this caller cannot use it. Tools
 	// without the key are available to the caller.
 	ToolUnavailableMetaKey = "com.speakeasy/unavailable"
+
+	// ToolUnavailableReasonMetaKey is the per-tool _meta key that says why a
+	// tool carrying [ToolUnavailableMetaKey] is unavailable. Its value is a
+	// [ToolUnavailableReason].
+	ToolUnavailableReasonMetaKey = "com.speakeasy/unavailable_reason"
 )
+
+// ToolUnavailableReason is the value of [ToolUnavailableReasonMetaKey].
+type ToolUnavailableReason string
+
+const (
+	// ToolUnavailableReasonBlocked marks a tool an explicit block rule, such
+	// as mcp:blocked_connect on the tool or its server, denies.
+	ToolUnavailableReasonBlocked ToolUnavailableReason = "blocked"
+
+	// ToolUnavailableReasonReadOnly marks a tool denied only by its
+	// disposition where the caller's access covers read-only tools. A tool
+	// denied by a grant limited to another disposition, such as idempotent,
+	// reports [ToolUnavailableReasonNotGranted].
+	ToolUnavailableReasonReadOnly ToolUnavailableReason = "read_only"
+
+	// ToolUnavailableReasonNotGranted marks a tool no grant allows.
+	ToolUnavailableReasonNotGranted ToolUnavailableReason = "not_granted"
+)
+
+// toolUnavailableReason maps an authz denial to its wire reason. A check
+// that reports no denial was refused by the same evaluation moments earlier,
+// so it falls back to not granted.
+func toolUnavailableReason(reason authz.DenialReason) ToolUnavailableReason {
+	switch reason {
+	case authz.DenialReasonBlocked:
+		return ToolUnavailableReasonBlocked
+	case authz.DenialReasonReadOnly:
+		return ToolUnavailableReasonReadOnly
+	case authz.DenialReasonNone, authz.DenialReasonDisposition, authz.DenialReasonNotGranted:
+		return ToolUnavailableReasonNotGranted
+	default:
+		return ToolUnavailableReasonNotGranted
+	}
+}
 
 // toolsListInspection decides whether a tools/list response reports the whole
 // upstream catalog with unusable tools marked, instead of dropping them. Only
@@ -63,22 +102,25 @@ func (i toolsListInspection) allowed(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-// markToolUnavailable returns a copy of tool carrying [ToolUnavailableMetaKey].
-func markToolUnavailable(tool *mcp.Tool) *mcp.Tool {
+// markToolUnavailable returns a copy of tool carrying [ToolUnavailableMetaKey]
+// and [ToolUnavailableReasonMetaKey].
+func markToolUnavailable(tool *mcp.Tool, reason ToolUnavailableReason) *mcp.Tool {
 	marked := *tool
 	marked.Meta = maps.Clone(tool.Meta)
 	if marked.Meta == nil {
 		marked.Meta = mcp.Meta{}
 	}
 	marked.Meta[ToolUnavailableMetaKey] = true
+	marked.Meta[ToolUnavailableReasonMetaKey] = string(reason)
 	return &marked
 }
 
-// ToolsListReservedMetaInterceptor removes [ToolUnavailableMetaKey] from what an
-// upstream sent, so the mark only ever means Speakeasy set it. It runs ahead of
+// ToolsListReservedMetaInterceptor removes [ToolUnavailableMetaKey] and
+// [ToolUnavailableReasonMetaKey] from what an upstream sent, so the mark only
+// ever means Speakeasy set it. It runs ahead of
 // the access filter on private servers, the only ones that set the mark, because
 // any interceptor on a public server would cost its listings the upstream's cache
-// hints. A response without the key is left untouched.
+// hints. A response without either key is left untouched.
 type ToolsListReservedMetaInterceptor struct{}
 
 var _ proxy.ToolsListResponseInterceptor = ToolsListReservedMetaInterceptor{}
@@ -101,7 +143,9 @@ func (ToolsListReservedMetaInterceptor) InterceptToolsListResponse(_ context.Con
 			cleaned = append(cleaned, tool)
 			continue
 		}
-		if _, set := tool.Meta[ToolUnavailableMetaKey]; !set {
+		_, marked := tool.Meta[ToolUnavailableMetaKey]
+		_, reasoned := tool.Meta[ToolUnavailableReasonMetaKey]
+		if !marked && !reasoned {
 			cleaned = append(cleaned, tool)
 			continue
 		}
@@ -109,6 +153,7 @@ func (ToolsListReservedMetaInterceptor) InterceptToolsListResponse(_ context.Con
 		stripped := *tool
 		stripped.Meta = maps.Clone(tool.Meta)
 		delete(stripped.Meta, ToolUnavailableMetaKey)
+		delete(stripped.Meta, ToolUnavailableReasonMetaKey)
 		cleaned = append(cleaned, &stripped)
 	}
 	if !found {
