@@ -66,6 +66,11 @@ func newDemoSeedCommand() *cli.Command {
 				EnvVars: []string{"GRAM_ENCRYPTION_KEY"},
 			},
 			&cli.StringFlag{
+				Name:    "local-mock-mcp-url",
+				Usage:   "With --local, the URL of the local mock MCP server (server/cmd/mock-mcp) to register as a working remote MCP server; empty leaves it out",
+				EnvVars: []string{"GRAM_MOCK_MCP_URL"},
+			},
+			&cli.StringFlag{
 				Name:    "local-slack-bot-token",
 				Usage:   "Bot token of your Slack test app; with --local, connects the local org to its workspace (see mise run zero:slack)",
 				EnvVars: []string{"GRAM_DEV_SLACK_BOT_TOKEN"},
@@ -95,6 +100,9 @@ func newDemoSeedCommand() *cli.Command {
 				siteURL, err = parseSiteURL(c.String("site-url"))
 				if err != nil {
 					return fmt.Errorf("local seed site-url: %w", err)
+				}
+				if err := validateMockMCPURL(c.String("local-mock-mcp-url")); err != nil {
+					return fmt.Errorf("local seed local-mock-mcp-url: %w", err)
 				}
 			}
 			// HTTP is only for an environment explicitly declared local: the
@@ -192,6 +200,8 @@ func newDemoSeedCommand() *cli.Command {
 				Environment:    c.String("environment"),
 				ObservedEnv:    observed,
 				Slack:          slack,
+				ClickHouse:     ch,
+				MockMCPURL:     c.String("local-mock-mcp-url"),
 			}); err != nil {
 				return fmt.Errorf("apply local fixtures: %w", err)
 			}
@@ -222,4 +232,23 @@ func newDemoSeedCommand() *cli.Command {
 			return nil
 		},
 	}
+}
+
+// validateMockMCPURL accepts an empty value, which leaves the mock MCP server
+// out of the local fixtures, or an absolute http or https URL with a host.
+func validateMockMCPURL(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse %q: %w", raw, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("%q must be an absolute http or https URL", raw)
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("%q has no host", raw)
+	}
+	return nil
 }
