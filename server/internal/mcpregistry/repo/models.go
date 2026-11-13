@@ -12,6 +12,8 @@ import (
 type McpRegistryEntry struct {
 	// @access: confidential
 	ID uuid.UUID
+	// @access: confidential
+	ServerID uuid.NullUUID
 	// @access: opaque-restricted
 	Data []byte
 	// @access: confidential

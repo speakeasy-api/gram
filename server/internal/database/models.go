@@ -3802,12 +3802,29 @@ type McpRegistry struct {
 type McpRegistryEntry struct {
 	// @access: confidential
 	ID uuid.UUID
+	// @access: confidential
+	ServerID uuid.NullUUID
 	// @access: opaque-restricted
 	Data []byte
 	// @access: confidential
 	Published bool
 	// @access: confidential
 	PublishedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type McpRegistryServer struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Visible bool
+	// @access: confidential
+	DefaultEntryID uuid.NullUUID
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
