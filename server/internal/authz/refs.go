@@ -67,6 +67,19 @@ func (c EnvironmentCollection) Create() Check {
 	return Environment(c.project, c.project).Write()
 }
 
+// Read requests environment:read on the project: every environment in it.
+// Use it where no environment resolved, so the answer to a missing slug does
+// not reveal whether the environment exists.
+func (c EnvironmentCollection) Read() Check {
+	return Environment(c.project, c.project).Read()
+}
+
+// Write requests environment:write on the project: every environment in it.
+// It is the same check as Create.
+func (c EnvironmentCollection) Write() Check {
+	return Environment(c.project, c.project).Write()
+}
+
 // AssistantCollection names the assistants of one project.
 type AssistantCollection struct{ project string }
 
