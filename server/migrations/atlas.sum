@@ -1,4 +1,4 @@
-h1:6xOxU+a28VAJwJhth8C1gLLU2sIpTUkA713yH3MyEsk=
+h1:+ONo/IMrbFQLWH2Dr6srhjdmopxr7JkdtIJMRVp+m74=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -533,4 +533,4 @@ h1:6xOxU+a28VAJwJhth8C1gLLU2sIpTUkA713yH3MyEsk=
 20261112133745_custom-domains-add-dns-authorization-columns.sql h1:9+8tBKVrA6XqcCewyWNsoJjvEwyEHlMmZyL78ZJie9E=
 20261112142531_ai-integration-configs-add-settings.sql h1:rroY1fWhFjHRi7Ziu//Euf4n9a0RYJWZYuROiYYuw30=
 20261112151541_mcp-connection-log-routes.sql h1:QrE08D/H1qPGqcRN940Dg8lHbp5SF6po6dVx13iAX0s=
-20261113100303_add_mcp_servers_setup_guide_completed_at.sql h1:HaQUXzTjAdcb5bvtpUK0GYwp/npv165QMEnMdPNisYk=
+20261113100303_add_mcp_servers_setup_guide_completed_at.sql h1:+AFmV1syxmX7ew9fag/eJnPBn0RaKce1BsAY3Br/BMs=

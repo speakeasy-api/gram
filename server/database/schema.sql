@@ -10262,6 +10262,7 @@ COMMENT ON COLUMN mcp_servers.created_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.updated_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.deleted IS '@access: confidential';
+COMMENT ON COLUMN mcp_servers.setup_guide_completed_at IS '@access: confidential';
 COMMENT ON COLUMN mcp_servers.requires_upstream_auth IS 'Whether the upstream needs authentication: true needs it, false explicitly needs none, NULL is undecided.
 @access: confidential';
 
