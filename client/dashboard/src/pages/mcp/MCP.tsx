@@ -18,6 +18,7 @@ import {
 } from "@/components/mcp/mcp-table-rows";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/DotTable";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -298,12 +299,19 @@ function MCPOverview() {
   // "Add new", which are exactly what you need when nothing came back.
   const showFilters = !isLoading && (hasItems || hasRefreshError);
   // The Organization Gateway is the organization's, not one of this project's servers,
-  // so it leads the unfiltered list and steps aside once the list is narrowed.
+  // so it leads the unfiltered list and steps aside once the list is narrowed —
+  // except to gateways alone, since it is one.
   const organizationGateway = useOrganizationGatewayEntry();
+  const onlyGatewaysSelected =
+    mcpFilters.values.source.length === 1 &&
+    mcpFilters.values.source[0] === "gateway";
+  const narrowedToGatewaysOnly =
+    onlyGatewaysSelected &&
+    !hasActiveMcpFilters({ ...mcpFilters.values, source: [] });
   const showOrganizationGateway =
     organizationGateway.show &&
     search === "" &&
-    !hasActiveMcpFilters(mcpFilters.values);
+    (!hasActiveMcpFilters(mcpFilters.values) || narrowedToGatewaysOnly);
   const organizationGatewayCard = showOrganizationGateway && (
     <OrganizationGatewayCard isOff={organizationGateway.isOff} />
   );
@@ -311,7 +319,8 @@ function MCPOverview() {
     !isLoading &&
     (search !== "" || hasActiveMcpFilters(mcpFilters.values)) &&
     filteredMcpServers.length === 0 &&
-    filteredGateways.length === 0;
+    filteredGateways.length === 0 &&
+    !showOrganizationGateway;
 
   const newMcpServerButton = (
     <RequireScope scope="mcp:write" level="component">
@@ -381,6 +390,35 @@ function MCPOverview() {
               onClear={mcpFilters.clearValue as (id: string) => void}
               onClearAll={mcpFilters.clearAll}
             />
+            {/* A one-click shortcut for the Source filter's Gateway option. It
+                reads and writes that same filter, so the chip and the sheet
+                stay in step; any other source selection leaves both segments
+                unlit rather than claiming "All". */}
+            <Page.Toolbar.Leading>
+              <SegmentedControl
+                ariaLabel="Quick filter by source"
+                value={
+                  mcpFilters.values.source.length === 0
+                    ? "all"
+                    : onlyGatewaysSelected
+                      ? "gateway"
+                      : null
+                }
+                onChange={(value) =>
+                  value === "gateway"
+                    ? mcpFilters.setValue("source", ["gateway"])
+                    : mcpFilters.clearValue("source")
+                }
+                options={[
+                  { value: "all", label: "All", tooltip: "Every source" },
+                  {
+                    value: "gateway",
+                    label: "Gateways",
+                    tooltip: "Only gateways",
+                  },
+                ]}
+              />
+            </Page.Toolbar.Leading>
             <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
             <Page.Toolbar.Refresh
               onRefresh={handleRefresh}
