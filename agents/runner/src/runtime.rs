@@ -317,13 +317,15 @@ fn reap_oldest_idle(host: &RuntimeHost) {
 }
 
 /// Initializes warm state from an already-authenticated bootstrap. The caller
-/// holds the host admission lock through enqueue, excluding eviction. Later
+/// captures bootstrap_started_at before fetching that bootstrap and holds the
+/// host admission lock through enqueue, excluding eviction. Later
 /// invocations still validate bootstrap. Reasoning changes rehydrate idle
 /// drivers; bearer and MCP configuration change only when dequeued by the loop.
 pub async fn ensure_thread(
     host: &Arc<RuntimeHost>,
     thread_id: &str,
     bootstrap: ThreadBootstrap,
+    bootstrap_started_at: Instant,
     bearer: String,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
     // The provider is immutable for a driver's lifetime. Rehydrate an idle
@@ -335,11 +337,15 @@ pub async fn ensure_thread(
         .and_then(|cell| cell.get().cloned())
         && thread.reasoning_effort != bootstrap.reasoning_effort
     {
+        // Bootstrap is fetched before admission. A turn may have completed
+        // while that fetch was in flight, leaving its history snapshot stale.
+        // Only replace a driver that was already idle before the fetch began;
+        // otherwise retry admission with a fresh authenticated snapshot.
         if thread
             .idle_since
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_none()
+            .is_none_or(|idle_since| idle_since >= bootstrap_started_at)
         {
             return Err(RunnerError::InvocationBusy);
         }
@@ -1291,12 +1297,25 @@ mod tests {
         let host = empty_host();
         insert_thread(&host, "T", None);
         let original = host.threads.get("T").unwrap().get().unwrap().clone();
-        let same = ensure_thread(&host, "T", reasoning_bootstrap("medium"), "token".into())
-            .await
-            .unwrap();
+        let same = ensure_thread(
+            &host,
+            "T",
+            reasoning_bootstrap("medium"),
+            Instant::now(),
+            "token".into(),
+        )
+        .await
+        .unwrap();
         assert!(Arc::ptr_eq(&original, &same));
         assert!(matches!(
-            ensure_thread(&host, "T", reasoning_bootstrap("none"), "token".into()).await,
+            ensure_thread(
+                &host,
+                "T",
+                reasoning_bootstrap("none"),
+                Instant::now(),
+                "token".into()
+            )
+            .await,
             Err(RunnerError::InvocationBusy)
         ));
         assert!(Arc::ptr_eq(
@@ -1306,13 +1325,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reasoning_update_rejects_bootstrap_captured_before_last_completion() {
+        let host = empty_host();
+        insert_thread(&host, "T", None);
+        let original = host.threads.get("T").unwrap().get().unwrap().clone();
+
+        // Capture the old history while the driver is busy, then deterministically
+        // model completion/persistence before ensure_thread obtains admission.
+        let bootstrap_started_at = Instant::now();
+        let stale_bootstrap = reasoning_bootstrap("none");
+        *original.idle_since.lock().unwrap() = Some(bootstrap_started_at + Duration::from_nanos(1));
+
+        assert!(matches!(
+            ensure_thread(
+                &host,
+                "T",
+                stale_bootstrap,
+                bootstrap_started_at,
+                "token".into()
+            )
+            .await,
+            Err(RunnerError::InvocationBusy)
+        ));
+        assert!(Arc::ptr_eq(
+            host.threads.get("T").unwrap().get().unwrap(),
+            &original
+        ));
+        assert_eq!(original.reasoning_effort, "medium");
+        assert!(original.task_handle.lock().unwrap().is_some());
+    }
+
+    #[tokio::test]
     async fn reasoning_update_rehydrates_idle_driver() {
         let host = empty_host();
         insert_thread(&host, "T", Some(Instant::now()));
         let original = host.threads.get("T").unwrap().get().unwrap().clone();
-        let replacement = ensure_thread(&host, "T", reasoning_bootstrap("none"), "token".into())
-            .await
-            .unwrap();
+        let replacement = ensure_thread(
+            &host,
+            "T",
+            reasoning_bootstrap("none"),
+            Instant::now(),
+            "token".into(),
+        )
+        .await
+        .unwrap();
         assert!(!Arc::ptr_eq(&original, &replacement));
         assert_eq!(replacement.reasoning_effort, "none");
         replacement

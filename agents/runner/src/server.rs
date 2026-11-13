@@ -153,6 +153,7 @@ async fn thread_turn_inner(
         .ok_or((StatusCode::UNAUTHORIZED, "missing auth_token".into()))?;
     // Authenticate every invocation, including warm turns and duplicate requests,
     // before allocating admission/thread entries. Tokens remain opaque.
+    let bootstrap_started_at = std::time::Instant::now();
     let bootstrap = host
         .gram_client
         .fetch_bootstrap(&thread_id, &TokenRegistry::new(token.clone()))
@@ -238,7 +239,15 @@ async fn thread_turn_inner(
         return Ok(Json(ThreadTurnResponse::deduped()));
     }
 
-    let thread = match ensure_thread(&host, &thread_id, bootstrap, token.clone()).await {
+    let thread = match ensure_thread(
+        &host,
+        &thread_id,
+        bootstrap,
+        bootstrap_started_at,
+        token.clone(),
+    )
+    .await
+    {
         Ok(thread) => thread,
         Err(error) => {
             if let Some(key) = &idempotency_key {
