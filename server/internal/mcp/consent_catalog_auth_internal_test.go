@@ -104,6 +104,8 @@ func TestDirectConsentPickSkipsAnOutageServiceWithoutAPreference(t *testing.T) {
 // A connection the upstream refused stays refused during an outage, so consent neither defaults to it nor offers it.
 func TestConsentSkipsARefusedConnectionInAnOutage(t *testing.T) {
 	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_consent_refused_connection_outage")
+	require.NoError(t, err)
 	for name, refused := range map[string]remoteSessionCard{
 		"rejected":           {Connected: true, Unavailable: true, Rejected: true},
 		"inactive":           {Connected: true, Unavailable: true, Inactive: true},
@@ -122,7 +124,7 @@ func TestConsentSkipsARefusedConnectionInAnOutage(t *testing.T) {
 			member := metaMember{slug: "db", serverID: serverID, backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{refusedID: true, healthyID: true}}
 			cards := []remoteSessionCard{refused, {ClientID: healthyID.String(), Connected: true}}
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
-			choices, err := (&Service{}).gatewayConsentServiceChoices(t.Context(), request, endpoint, urn.NewUserSubject("user_1"), []metaMember{member}, cards)
+			choices, err := (&Service{db: pool}).gatewayConsentServiceChoices(t.Context(), request, endpoint, urn.NewUserSubject("user_1"), []metaMember{member}, cards)
 			require.NoError(t, err)
 			require.Empty(t, choices, "one usable connection leaves nothing to choose between")
 		})
