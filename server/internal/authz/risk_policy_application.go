@@ -8,8 +8,9 @@ import "fmt"
 type RiskPolicyApplication string
 
 const (
-	// RiskPolicyGoverns means the caller is in the policy's audience and holds
-	// no exemption for this request.
+	// RiskPolicyGoverns means the policy must be enforced: the caller is in
+	// its audience with no exemption for this request, or neither could be
+	// determined.
 	RiskPolicyGoverns RiskPolicyApplication = ""
 	// RiskPolicyExempt means the caller is in the audience and an exemption
 	// covers this request.

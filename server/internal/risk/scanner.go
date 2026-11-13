@@ -551,7 +551,12 @@ func (s *Scanner) scanForEnforcement(
 		return nil, nil
 	}
 
-	applies := s.riskPolicyApplicability(ctx, organizationID, userID)
+	applies, audienceErr := s.riskPolicyApplicability(ctx, organizationID, userID)
+	if audienceErr != nil {
+		// The scan still runs, against every policy, and its own outcome is
+		// recorded as usual. The trace keeps the reason every policy applied.
+		span.RecordError(audienceErr)
+	}
 	applicablePolicies := make([]repo.RiskPolicy, 0, len(policies))
 	for _, p := range policies {
 		if applies(p.ID.String()) {
@@ -788,7 +793,7 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 	if len(policies) == 0 {
 		return nil, nil
 	}
-	applies := s.riskPolicyApplicability(ctx, organizationID, userID)
+	applies, _ := s.riskPolicyApplicability(ctx, organizationID, userID)
 	for _, p := range policies {
 		if !applies(p.ID.String()) {
 			continue
@@ -819,12 +824,13 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 // their requests. A policy is left out only when the caller is known to be
 // outside its audience or to hold an exemption. When the caller's grants cannot
 // be read, or a policy cannot be evaluated, the policy applies and the failure
-// is logged.
-func (s *Scanner) riskPolicyApplicability(ctx context.Context, organizationID string, userID string) func(policyID string) bool {
+// is logged. The error is returned as well when the grants could not be read,
+// for callers that record it.
+func (s *Scanner) riskPolicyApplicability(ctx context.Context, organizationID string, userID string) (func(policyID string) bool, error) {
 	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "risk policy audience could not be read, so every policy applies", attr.SlogOrganizationID(organizationID), attr.SlogError(err))
-		return func(string) bool { return true }
+		return func(string) bool { return true }, err
 	}
 	return func(policyID string) bool {
 		application, err := authz.EvaluateRiskPolicy(grants, policyID, authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""})
@@ -832,7 +838,7 @@ func (s *Scanner) riskPolicyApplicability(ctx context.Context, organizationID st
 			s.logger.ErrorContext(ctx, "risk policy could not be evaluated, so it applies", attr.SlogOrganizationID(organizationID), attr.SlogRiskPolicyID(policyID), attr.SlogError(err))
 		}
 		return application.Applies()
-	}
+	}, nil
 }
 
 func (s *Scanner) riskPolicyGrants(ctx context.Context, organizationID string, userID string) ([]authz.Grant, error) {

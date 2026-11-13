@@ -40,6 +40,7 @@ func TestEvaluateRiskPolicy_APolicyThatCannotBeEvaluatedApplies(t *testing.T) {
 	for _, policyID := range []string{"", WildcardResource} {
 		application, err := EvaluateRiskPolicy(everything, policyID, RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""})
 		require.ErrorIs(t, err, ErrInvalidCheck, "%q", policyID)
+		require.Equal(t, RiskPolicyGoverns, application, "%q", policyID)
 		require.True(t, application.Applies(), "%q", policyID)
 	}
 
