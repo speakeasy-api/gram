@@ -464,12 +464,16 @@ func TestNewRejectsAChartThatHoldsResources(t *testing.T) {
 	require.ErrorContains(t, err, "open.conn")
 }
 
-func TestNewRejectsAChartThatSendsOrEmitsEvents(t *testing.T) {
+func TestNewRejectsAChartThatSendsEventsToItsServices(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
 		b.Initial("open")
-		b.State("open").On[tick]().Emit("report", func(order, tick) any { return tick{} }).To("closed")
+		open := b.State("open")
+		inv := open.Invoke("work", func(context.Context, order) (string, error) { return "", nil })
+		inv.OnDone().To("closed")
+		inv.OnError().To("closed")
+		open.On[tick]().SendTo("nudge", "work", func(order, tick) any { return tick{} })
 		b.Final("closed")
 	})
 	require.NoError(t, err)
@@ -517,4 +521,127 @@ func TestARetriedServiceRunsAgainFromTheOutbox(t *testing.T) {
 		}
 	}, 10*time.Second, 50*time.Millisecond)
 	require.Equal(t, int32(3), calls.Load())
+}
+
+type counted struct {
+	Count int `json:"count"`
+}
+
+func emittingMachine(t *testing.T) *sc.Machine[string, order] {
+	t.Helper()
+
+	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
+		b.Initial("open")
+		open := b.State("open")
+		open.On[tick]().
+			Assign("count", func(o order, _ tick) order { o.Count++; return o }).
+			Emit("report", func(o order, _ tick) counted { return counted{Count: o.Count} })
+		open.On[cancel]().To("closed")
+		b.Final("closed")
+	})
+	require.NoError(t, err)
+
+	return m
+}
+
+func TestEmittedEventsAreDeliveredInOrderAfterTheirStepCommits(t *testing.T) {
+	t.Parallel()
+
+	var (
+		mu       sync.Mutex
+		got      []string
+		failures = 1
+	)
+	d := mustNew(t, emittingMachine(t), pgdriver.WithEmit(func(_ context.Context, instance string, ev any) error {
+		mu.Lock()
+		defer mu.Unlock()
+
+		// The first delivery fails, and is made again.
+		if failures > 0 {
+			failures--
+			return errCardDeclined
+		}
+		got = append(got, fmt.Sprintf("%s %v", instance, ev))
+
+		return nil
+	}))
+
+	_, err := d.Create(t.Context(), "o1", order{})
+	require.NoError(t, err)
+
+	// A step that is rolled back emits nothing.
+	errAborted := errors.New("caller aborted")
+	err = pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
+		_, err := d.SendTx(t.Context(), tx, "o1", tick{})
+		require.NoError(t, err)
+
+		return errAborted
+	})
+	require.ErrorIs(t, err, errAborted)
+
+	for range 2 {
+		_, err = d.Send(t.Context(), "o1", tick{})
+		require.NoError(t, err)
+	}
+
+	// Nothing is delivered until a worker carries the effects out.
+	require.Empty(t, got)
+
+	_, err = d.Step(t.Context())
+	require.ErrorIs(t, err, errCardDeclined)
+	drain(t, d)
+
+	require.Equal(t, []string{"o1 {1}", "o1 {2}"}, got)
+	require.Zero(t, outboxSize(t, "o1"))
+}
+
+func TestEmittedEventsAreDroppedWithoutAHandler(t *testing.T) {
+	t.Parallel()
+
+	d := mustNew(t, emittingMachine(t))
+
+	_, err := d.Create(t.Context(), "o1", order{})
+	require.NoError(t, err)
+	_, err = d.Send(t.Context(), "o1", tick{})
+	require.NoError(t, err)
+
+	drain(t, d)
+	require.Zero(t, outboxSize(t, "o1"))
+}
+
+func TestAChildMachineRunsInsideAWorker(t *testing.T) {
+	t.Parallel()
+
+	child, err := sc.New("packing", func(b *sc.Builder[string, counted]) {
+		b.Initial("packing")
+		b.State("packing").After(50*time.Millisecond).
+			Assign("pack", func(c counted, _ struct{}) counted { c.Count++; return c }).
+			To("packed")
+		b.Final("packed")
+	})
+	require.NoError(t, err)
+
+	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
+		b.Initial("fulfilling")
+		pack := b.State("fulfilling").InvokeMachine("pack", child,
+			func(o order) counted { return counted{Count: o.Count} },
+			func(snap sc.Snapshot[string, counted]) (int, error) { return snap.Context.Count, nil },
+		)
+		pack.OnDone().Assign("keep", func(o order, d sc.Done[int]) order { o.Count = d.Result; return o }).To("shipped")
+		pack.OnError().To("failed")
+		b.Final("shipped")
+		b.Final("failed")
+	})
+	require.NoError(t, err)
+
+	d := mustNew(t, m)
+	_, err = d.Create(t.Context(), "o1", order{Items: nil, Attempts: 0, Receipt: "", Count: 4})
+	require.NoError(t, err)
+
+	drain(t, d)
+
+	snap, err := d.Load(t.Context(), "o1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"shipped"}, snap.Active())
+	require.Equal(t, 5, snap.Context.Count)
 }

@@ -315,7 +315,7 @@ func downloadChart(t *testing.T) *sc.Machine[string, counter] {
 		running := b.State("running")
 		running.On[tick]().
 			Assign("advance", func(c counter, _ tick) counter { c.N += 50; return c }).
-			Emit("report", func(c counter, _ tick) any { return progress{Percent: c.N} })
+			Emit("report", func(c counter, _ tick) progress { return progress{Percent: c.N} })
 		running.On[finish]().
 			Assign("outcome", func(c counter, ev finish) counter {
 				if ev.Fail {
@@ -468,9 +468,17 @@ func TestTheCoreReturnsSendsAndEmitsAsEffects(t *testing.T) {
 	require.Equal(t, run.ID, effects[0].ID)
 	require.Equal(t, tick{}, effects[0].Event)
 
-	require.True(t, parent.Messaging())
+	require.True(t, parent.Sends())
+	require.False(t, parent.Emits())
+	require.True(t, child.Emits())
 
-	_, err := sc.New("nowhere", func(b *sc.Builder[string, counter]) {
+	_, err := sc.New("vague", func(b *sc.Builder[string, counter]) {
+		b.Initial("a")
+		b.State("a").On[tick]().Emit("report", func(counter, tick) any { return tick{} })
+	})
+	require.ErrorContains(t, err, "emit a concrete type")
+
+	_, err = sc.New("nowhere", func(b *sc.Builder[string, counter]) {
 		b.Initial("a")
 		b.State("a").On[tick]().SendTo("send", "nobody", func(counter, tick) any { return tick{} })
 	})

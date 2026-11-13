@@ -45,6 +45,9 @@ type build[S comparable, C any] struct {
 
 	// spawns holds the services Spawn and StopSpawned name.
 	spawns []string
+
+	// emitTypes holds the types of the events Emit steps return.
+	emitTypes []reflect.Type
 }
 
 func (b *build[S, C]) errorf(format string, args ...any) {
@@ -982,7 +985,8 @@ func (t *Transition[S, C, Ev]) keyed(kind stepKind, name, service string, key fu
 // same step is not running yet.
 //
 // Only the [Instance] and [Actor] drivers deliver such events; pgdriver
-// rejects a chart that sends them.
+// rejects a chart that sends them, because the service runs in another
+// process than the one processing the event.
 func (t *Transition[S, C, Ev]) SendTo(name, service string, f func(C, Ev) any) *Transition[S, C, Ev] {
 	t.t.sendTargets[len(t.t.steps)] = service
 	t.b.sends = append(t.b.sends, service)
@@ -999,11 +1003,22 @@ func (t *Transition[S, C, Ev]) SendTo(name, service string, f func(C, Ev) any) *
 }
 
 // Emit hands the event f returns to whoever runs the machine: the function
-// its driver was given with [OnEmit], or the parent of a machine run with
-// [StateBuilder.InvokeMachine], which receives it as an event of its own.
-// It is how a machine reports progress without knowing who listens. Without
-// a listener the event is dropped.
-func (t *Transition[S, C, Ev]) Emit(name string, f func(C, Ev) any) *Transition[S, C, Ev] {
+// its driver was given with [OnEmit], the parent of a machine run with
+// [StateBuilder.InvokeMachine], which receives it as an event of its own, or
+// the handler pgdriver was given with its WithEmit option, which receives it
+// once the step has committed. It is how a machine reports progress without
+// knowing who listens. Without a listener the event is dropped.
+//
+// T must be a concrete type, so that a driver that stores effects can name
+// the event and load it again.
+func (t *Transition[S, C, Ev]) Emit[T any](name string, f func(C, Ev) T) *Transition[S, C, Ev] {
+	emitted := reflect.TypeFor[T]()
+	if emitted.Kind() == reflect.Interface {
+		t.b.errorf("state %q: emit %q returns %s, an interface; emit a concrete type", t.t.source.name, name, emitted)
+	} else {
+		t.b.emitTypes = append(t.b.emitTypes, emitted)
+	}
+
 	t.b.emits = true
 	t.t.steps = append(t.t.steps, step[C]{
 		kind:   stepEmit,

@@ -54,15 +54,20 @@ type Machine[S comparable, C any] struct {
 	// boundReleases holds the resource release functions given to Bind.
 	boundReleases map[string]func(context.Context, any, Leave[S])
 
-	// messaging is set when a transition sends to a service or emits.
-	messaging bool
+	// sends is set when a transition sends to a service, and emits when
+	// one emits.
+	sends bool
+	emits bool
 }
 
-// Messaging reports whether the chart sends events to its services, with
-// [Transition.SendTo], or to whoever runs it, with [Transition.Emit]. A
-// driver that cannot deliver such events checks it before running the
-// chart.
-func (m *Machine[S, C]) Messaging() bool { return m.messaging }
+// Sends reports whether the chart sends events to its running services,
+// with [Transition.SendTo] or [Transition.SendToKey]. A driver that cannot
+// reach a running service checks it before running the chart.
+func (m *Machine[S, C]) Sends() bool { return m.sends }
+
+// Emits reports whether the chart emits events to whoever runs it, with
+// [Transition.Emit].
+func (m *Machine[S, C]) Emits() bool { return m.emits }
 
 // options holds what the Option values passed to New configure.
 type options struct {
@@ -105,18 +110,19 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	root.root = true
 
 	b := &build[S, C]{
-		root:     root,
-		nodes:    map[S]*node[S, C]{},
-		ordered:  nil,
-		errs:     nil,
-		actions:  map[string]chartAction[S, C]{},
-		kinds:    map[string]bool{},
-		raises:   map[string]bool{},
-		cancels:  nil,
-		sends:    nil,
-		emits:    false,
-		releases: nil,
-		spawns:   nil,
+		root:      root,
+		nodes:     map[S]*node[S, C]{},
+		ordered:   nil,
+		errs:      nil,
+		actions:   map[string]chartAction[S, C]{},
+		kinds:     map[string]bool{},
+		raises:    map[string]bool{},
+		cancels:   nil,
+		sends:     nil,
+		emits:     false,
+		releases:  nil,
+		spawns:    nil,
+		emitTypes: nil,
 	}
 	def(&Builder[S, C]{b: b, parent: root})
 
@@ -134,7 +140,8 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 		actions:       b.actions,
 		bound:         map[string]boundService[C]{},
 		boundReleases: map[string]func(context.Context, any, Leave[S]){},
-		messaging:     false,
+		sends:         false,
+		emits:         false,
 	}
 
 	if id == "" {
@@ -168,7 +175,7 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 			b.errorf("Spawn or StopSpawned names %q, which is not a service declared Spawned", name)
 		}
 	}
-	m.messaging = len(b.sends) > 0 || b.emits
+	m.sends, m.emits = len(b.sends) > 0, b.emits
 	m.registerEvents(b)
 	if len(b.errs) == 0 {
 		m.checkReachable(b)
@@ -397,6 +404,10 @@ func (m *Machine[S, C]) registerEvents(b *build[S, C]) {
 	}
 
 	register(reflect.TypeFor[Failed](), "sc.failed")
+
+	for _, t := range b.emitTypes {
+		register(t, eventTypeName(t))
+	}
 
 	for _, n := range m.ordered {
 		for _, inv := range n.invocations {

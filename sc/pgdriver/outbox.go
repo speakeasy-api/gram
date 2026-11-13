@@ -38,8 +38,8 @@ type Outbox[S comparable, C any] struct {
 	Machine *sc.Machine[S, C]
 }
 
-// Enqueue inserts one row per effect to carry out, due at once for actions
-// and services and at its time for a timer, and deletes the rows that a
+// Enqueue inserts one row per effect to carry out, due at once for actions,
+// emitted events and services and at its time for a timer, and deletes the rows that a
 // cancellation refers to.
 func (o Outbox[S, C]) Enqueue(ctx context.Context, tx pgx.Tx, instance string, now time.Time, effects []sc.Effect[C]) error {
 	for _, e := range effects {
@@ -60,7 +60,7 @@ func (o Outbox[S, C]) Enqueue(ctx context.Context, tx pgx.Tx, instance string, n
 			if err != nil {
 				return fmt.Errorf("cancel effect %q: %w", e.ID, err)
 			}
-		case sc.EffectAction, sc.EffectStartInvocation, sc.EffectStartTimer:
+		case sc.EffectAction, sc.EffectStartInvocation, sc.EffectStartTimer, sc.EffectEmit:
 			data, err := o.Machine.EncodeEffect(e)
 			if err != nil {
 				return fmt.Errorf("encode %s effect: %w", e.Kind, err)
@@ -85,8 +85,8 @@ func (o Outbox[S, C]) Enqueue(ctx context.Context, tx pgx.Tx, instance string, n
 			// New rejects charts that declare resources, so these only
 			// arrive from a sink used outside the driver.
 			return fmt.Errorf("%w: %s effect", ErrResources, e.Kind)
-		case sc.EffectSend, sc.EffectEmit:
-			// New rejects charts that send or emit, likewise.
+		case sc.EffectSend:
+			// New rejects charts that send to their services, likewise.
 			return fmt.Errorf("%w: %s effect", ErrMessaging, e.Kind)
 		}
 	}

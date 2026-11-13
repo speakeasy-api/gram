@@ -69,10 +69,10 @@ var (
 	ErrResources = errors.New("chart declares resources, which the Postgres driver cannot hold")
 
 	// ErrMessaging is returned by [New] for a chart that sends events to
-	// its services or emits them to whoever runs it. Both reach a
-	// goroutine in one process, and any worker process may carry out an
-	// instance's effects. Run such a chart with sc.Instance or sc.Actor.
-	ErrMessaging = errors.New("chart sends or emits events, which the Postgres driver cannot deliver")
+	// its running services. A service runs in whichever worker process
+	// claimed it, and the event is processed in another, so there is no
+	// way to reach it. Run such a chart with sc.Instance or sc.Actor.
+	ErrMessaging = errors.New("chart sends events to its services, which the Postgres driver cannot deliver")
 )
 
 // Driver stores and runs the instances of one machine. It is safe for
@@ -86,6 +86,7 @@ type Driver[S comparable, C any] struct {
 	store  Store[S, C]
 	sink   Sink[C]
 	outbox bool
+	emit   func(ctx context.Context, instance string, ev any) error
 }
 
 // config holds what the Option values passed to New configure.
@@ -97,6 +98,8 @@ type config struct {
 	hooks any
 	store any
 	sink  any
+
+	emit func(ctx context.Context, instance string, ev any) error
 }
 
 // Option configures a [Driver].
@@ -111,6 +114,18 @@ func WithPollInterval(d time.Duration) Option {
 			c.poll = d
 		}
 	}
+}
+
+// WithEmit makes the driver call fn with each event a chart emits with
+// [sc.Transition.Emit], together with the ID of the instance that emitted
+// it. An emitted event is recorded with the step that produced it and
+// delivered after that step commits, so fn never sees an event from a step
+// that was rolled back. Delivery is at least once: when fn returns an error
+// the event is delivered again later, so fn must be idempotent. One
+// instance's events arrive in the order it emitted them, in step with its
+// actions. Without this option emitted events are dropped.
+func WithEmit(fn func(ctx context.Context, instance string, ev any) error) Option {
+	return func(c *config) { c.emit = fn }
 }
 
 // WithHooks makes the driver report to h. [Driver.Send] reports a step
@@ -139,17 +154,17 @@ func WithSink[C any](sink Sink[C]) Option {
 
 // New returns a driver for the instances of m. It fails with an error
 // wrapping [ErrResources] when the chart declares resources, and with
-// [ErrMessaging] when it sends or emits events.
+// [ErrMessaging] when it sends events to its services.
 func New[S comparable, C any](pool *pgxpool.Pool, m *sc.Machine[S, C], opts ...Option) (*Driver[S, C], error) {
 	if resources := m.Resources(); len(resources) > 0 {
 		return nil, fmt.Errorf("%w: %s", ErrResources, strings.Join(resources, ", "))
 	}
 
-	if m.Messaging() {
+	if m.Sends() {
 		return nil, ErrMessaging
 	}
 
-	cfg := config{poll: defaultPollInterval, hooks: nil, store: nil, sink: nil}
+	cfg := config{poll: defaultPollInterval, hooks: nil, store: nil, sink: nil, emit: nil}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -162,6 +177,7 @@ func New[S comparable, C any](pool *pgxpool.Pool, m *sc.Machine[S, C], opts ...O
 		store:  typed[Store[S, C]](cfg.store, "WithStore", m.ID()),
 		sink:   typed[Sink[C]](cfg.sink, "WithSink", m.ID()),
 		outbox: false,
+		emit:   cfg.emit,
 	}
 
 	if d.store == nil {
@@ -375,6 +391,18 @@ func (d *Driver[S, C]) Perform(ctx context.Context, instance string, data []byte
 		return err
 	}
 
+	if e.Kind == sc.EffectEmit {
+		if d.emit == nil {
+			return nil
+		}
+
+		if err := d.emit(ctx, instance, e.Event); err != nil {
+			return fmt.Errorf("deliver emitted event: %w", err)
+		}
+
+		return nil
+	}
+
 	now, err := dbNow(ctx, d.pool)
 	if err != nil {
 		return fmt.Errorf("perform effect: %w", err)
@@ -444,7 +472,8 @@ func (d *Driver[S, C]) Work(ctx context.Context) error {
 // and is removed in the same transaction, so no other worker picks it up,
 // and it becomes available again if this worker stops.
 //
-// The actions of one instance run in the order the machine produced them.
+// The actions and emitted events of one instance are carried out in the
+// order the machine produced them.
 // Services and timers of the same instance are not held up by each other or
 // by a running action.
 //
@@ -477,17 +506,17 @@ func (d *Driver[S, C]) Step(ctx context.Context) (bool, error) {
 			FROM statechart_effects e
 			WHERE e.machine = $1
 			  AND e.run_after <= clock_timestamp()
-			  AND (e.kind <> $2 OR NOT EXISTS (
+			  AND (NOT (e.kind = ANY($2)) OR NOT EXISTS (
 				SELECT 1 FROM statechart_effects earlier
 				WHERE earlier.machine = e.machine
 				  AND earlier.instance_id = e.instance_id
-				  AND earlier.kind = $2
+				  AND earlier.kind = ANY($2)
 				  AND earlier.id < e.id
 			  ))
 			ORDER BY e.id
 			LIMIT 1
 			FOR UPDATE OF e SKIP LOCKED`,
-			d.m.ID(), string(sc.EffectAction),
+			d.m.ID(), []string{string(sc.EffectAction), string(sc.EffectEmit)},
 		).Scan(&rowID, &instance, &kind, &data)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
