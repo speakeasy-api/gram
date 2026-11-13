@@ -154,7 +154,7 @@ func (b *Builder[S, C]) Parallel(s S, regions func(*Builder[S, C])) *StateBuilde
 // top-level final state completes the machine. Declared directly inside a
 // parallel state it is a region that is complete from the start.
 func (b *Builder[S, C]) Final(s S) *FinalBuilder[S, C] {
-	return &FinalBuilder[S, C]{n: b.declare(s, kindFinal)}
+	return &FinalBuilder[S, C]{b: b.b, n: b.declare(s, kindFinal)}
 }
 
 // History declares a history pseudo-state inside the enclosing state. A
@@ -205,6 +205,7 @@ func (b *Builder[S, C]) declare(s S, kind nodeKind) *node[S, C] {
 
 // FinalBuilder declares the behaviour of a final state.
 type FinalBuilder[S comparable, C any] struct {
+	b *build[S, C]
 	n *node[S, C]
 }
 
@@ -226,6 +227,14 @@ func (f *FinalBuilder[S, C]) AssignOnEntry(name string, fn func(C) C) *FinalBuil
 // is entered, as [StateBuilder.RaiseOnEntry] does.
 func (f *FinalBuilder[S, C]) RaiseOnEntry(name string, fn func(C) any) *FinalBuilder[S, C] {
 	f.n.entryRaises = append(f.n.entryRaises, stateRaise[C]{name: name, fn: fn})
+	return f
+}
+
+// EmitOnEntry hands the event f returns to whoever runs the machine when
+// the final state is entered, as [StateBuilder.EmitOnEntry] does: a child
+// machine's last word to its parent.
+func (f *FinalBuilder[S, C]) EmitOnEntry[T any](name string, fn func(C) T) *FinalBuilder[S, C] {
+	f.n.entryEmits = append(f.n.entryEmits, emitter(f.b, f.n, name, fn))
 	return f
 }
 
@@ -460,6 +469,56 @@ func (s *StateBuilder[S, C]) RaiseOnExit(name string, f func(C) any) *StateBuild
 	s.n.exitRaises = append(s.n.exitRaises, stateRaise[C]{name: name, fn: f})
 
 	return s
+}
+
+// SendOnEntry sends the event f returns to the service named service
+// whenever the state is entered, as [Transition.SendTo] does from a
+// transition. It reaches a service the state itself invokes, which is how a
+// state greets its own child machine or gives a service its first
+// instruction.
+func (s *StateBuilder[S, C]) SendOnEntry(name, service string, f func(C) any) *StateBuilder[S, C] {
+	s.b.sends = append(s.b.sends, service)
+	s.n.entrySends = append(s.n.entrySends, stateSend[C]{name: name, service: service, fn: f})
+
+	return s
+}
+
+// SendOnExit sends an event to a service whenever the state is exited, as
+// SendOnEntry does on entry. A service the state itself invokes is stopped
+// by the exit and does not receive it.
+func (s *StateBuilder[S, C]) SendOnExit(name, service string, f func(C) any) *StateBuilder[S, C] {
+	s.b.sends = append(s.b.sends, service)
+	s.n.exitSends = append(s.n.exitSends, stateSend[C]{name: name, service: service, fn: f})
+
+	return s
+}
+
+// EmitOnEntry hands the event f returns to whoever runs the machine
+// whenever the state is entered, as [Transition.Emit] does from a
+// transition. T must be a concrete type.
+func (s *StateBuilder[S, C]) EmitOnEntry[T any](name string, f func(C) T) *StateBuilder[S, C] {
+	s.n.entryEmits = append(s.n.entryEmits, emitter(s.b, s.n, name, f))
+	return s
+}
+
+// EmitOnExit hands an event to whoever runs the machine whenever the state
+// is exited, as EmitOnEntry does on entry.
+func (s *StateBuilder[S, C]) EmitOnExit[T any](name string, f func(C) T) *StateBuilder[S, C] {
+	s.n.exitEmits = append(s.n.exitEmits, emitter(s.b, s.n, name, f))
+	return s
+}
+
+// emitter records an event a state emits, and the type it emits.
+func emitter[S comparable, C, T any](b *build[S, C], n *node[S, C], name string, f func(C) T) stateRaise[C] {
+	emitted := reflect.TypeFor[T]()
+	if emitted.Kind() == reflect.Interface {
+		b.errorf("state %q: emit %q returns %s, an interface; emit a concrete type", n.name, name, emitted)
+	} else {
+		b.emitTypes = append(b.emitTypes, emitted)
+	}
+	b.emits = true
+
+	return stateRaise[C]{name: name, fn: func(c C) any { return f(c) }}
 }
 
 // OnEntry runs chart actions, declared with [Builder.Action], when the state
@@ -1093,10 +1152,11 @@ func (t *Transition[S, C, Ev]) keyed(kind stepKind, name, service string, key fu
 // SendTo sends the event f returns to the running service named service,
 // which reads it from [Inbox]. It is how a chart talks to work in progress:
 // a child machine declared with [StateBuilder.InvokeMachine], or a service
-// that takes instructions while it runs. The event goes to every running
-// service of that name; when none is running, because its state is not
-// active or it has finished, the event is dropped. A service started by the
-// same step is not running yet.
+// that takes instructions while it runs. The event goes to every service of
+// that name that is running once the step has settled, which includes one
+// the step itself starts, so a transition into a state can greet the service
+// that state invokes. When none is running, because its state is not active
+// or was left by this step, or it has finished, the event is dropped.
 //
 // Only the [Instance] and [Actor] drivers deliver such events; pgdriver
 // rejects a chart that sends them, because the service runs in another

@@ -357,7 +357,7 @@ func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)
 		}
 	}()
 
-	n, ok := m.names[e.State]
+	n, ok := m.owner(e.State)
 	if !ok {
 		return fmt.Errorf("%w: state %q", ErrUnknownEffect, e.State)
 	}
@@ -441,7 +441,7 @@ func (m *Machine[S, C]) release(ctx context.Context, e Effect[C], value any, clo
 		}
 	}()
 
-	n, ok := m.names[e.State]
+	n, ok := m.owner(e.State)
 	if !ok {
 		return fmt.Errorf("%w: state %q", ErrUnknownEffect, e.State)
 	}
@@ -619,4 +619,18 @@ func (m *Machine[S, C]) DecodeEffect(data []byte) (Effect[C], error) {
 	}
 
 	return e, nil
+}
+
+// owner returns the state an effect names: one of the chart's states, or
+// the chart itself for the actions of its own transitions.
+func (m *Machine[S, C]) owner(name string) (*node[S, C], bool) {
+	if n, ok := m.names[name]; ok {
+		return n, true
+	}
+
+	if name == m.root.name {
+		return m.root, true
+	}
+
+	return nil, false
 }

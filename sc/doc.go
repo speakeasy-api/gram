@@ -60,7 +60,9 @@
 // snapshot becomes the service's result. The parent sends it events with
 // [Transition.SendTo], and the child reports back with [Transition.Emit],
 // which the parent handles like any other event. A plain service reads what
-// the chart sends it from [Inbox]. The child's snapshot is kept inside the
+// the chart sends it from [Inbox]. A state does both as it is entered or
+// exited with [StateBuilder.SendOnEntry] and [StateBuilder.EmitOnEntry], so
+// it can greet the service it invokes. The child's snapshot is kept inside the
 // parent's, so a stored parent resumes its child where it was. Any service
 // can do the same for its own progress with [Checkpoint] and [Resumed], and
 // [RunID] gives it an idempotency key that survives being run again.
@@ -115,8 +117,10 @@
 //
 // The core's semantics are checked against two outside sources. The SCXML
 // conformance fixtures of the SCION test framework that need no scripting
-// run under internal/scxmltest. XState's own tests for parallel, history,
-// final and eventless behaviour are ported in the xstate_*_test.go files,
+// run under internal/scxmltest. XState's own tests for parallel states,
+// history, final states, eventless transitions, actions, invoked services,
+// delayed transitions, guards and restoring are ported in the
+// xstate_*_test.go files,
 // where a comment starting "DIVERGES from XState" marks each place sc
 // behaves differently on purpose.
 //

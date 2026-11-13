@@ -243,6 +243,12 @@ func (m *Machine[S, C]) resolve(b *build[S, C]) {
 			b.errorf("state %q: two state identifiers share this text form", n.name)
 		}
 		m.names[n.name] = n
+
+		// The chart's own actions are named after the machine, so a state
+		// of that name would take them for its own.
+		if n.name == m.root.name && len(m.root.transitions) > 0 {
+			b.errorf("state %q: has the machine's name, which the chart's own transitions use", n.name)
+		}
 	}
 
 	for _, n := range append([]*node[S, C]{m.root}, m.ordered...) {
@@ -613,6 +619,18 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 	}
 	for _, assign := range n.exitAssigns {
 		write("exit assign %q\n", assign.name)
+	}
+	for _, send := range n.entrySends {
+		write("entry send %q to=%q\n", send.name, send.service)
+	}
+	for _, send := range n.exitSends {
+		write("exit send %q to=%q\n", send.name, send.service)
+	}
+	for _, emit := range n.entryEmits {
+		write("entry emit %q\n", emit.name)
+	}
+	for _, emit := range n.exitEmits {
+		write("exit emit %q\n", emit.name)
 	}
 	for _, raise := range n.entryRaises {
 		write("entry raise %q\n", raise.name)

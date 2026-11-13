@@ -134,6 +134,21 @@ type node[S comparable, C any] struct {
 	// entered and exited, before its entry and exit actions.
 	entryAssigns []stateAssign[C]
 	exitAssigns  []stateAssign[C]
+
+	// entrySends and exitSends are the events the state sends to services
+	// when it is entered and exited, and entryEmits and exitEmits those it
+	// hands to whoever runs the machine.
+	entrySends []stateSend[C]
+	exitSends  []stateSend[C]
+	entryEmits []stateRaise[C]
+	exitEmits  []stateRaise[C]
+}
+
+// stateSend is an event a state sends to a service on entry or exit.
+type stateSend[C any] struct {
+	name    string
+	service string
+	fn      func(C) any
 }
 
 // stateAssign is an assignment a state makes on entry or exit.

@@ -205,3 +205,36 @@ func TestAFinalStateAssignsBeforeItsParentCompletes(t *testing.T) {
 	require.True(t, snap.Done())
 	require.Equal(t, 42, snap.Context.N)
 }
+
+type greeting struct{ Text string }
+
+func TestAStateSendsAndEmitsOnEntry(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("greeter", func(b *sc.Builder[string, counter]) {
+		b.Initial("idle")
+		b.State("idle").On[tick]().To("working")
+
+		working := b.State("working").
+			SendOnEntry("greet", "work", func(counter) any { return ping{} }).
+			EmitOnEntry("announce", func(counter) greeting { return greeting{Text: "started"} })
+		inv := working.Requires[int]("work")
+		inv.OnDone().To("done")
+		inv.OnError().To("done")
+
+		b.Final("done").EmitOnEntry("farewell", func(counter) greeting { return greeting{Text: "finished"} })
+	})
+	require.NoError(t, err)
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	snap, effects := m.Transition(snap, tick{}, epoch)
+
+	// The state's own service is started first and then greeted.
+	require.Equal(t, []sc.EffectKind{sc.EffectEmit, sc.EffectStartInvocation, sc.EffectSend}, kinds(effects))
+	require.Equal(t, greeting{Text: "started"}, effects[0].Event)
+	require.Equal(t, effects[1].ID, effects[2].ID)
+	require.Equal(t, ping{}, effects[2].Event)
+
+	_, effects = m.Transition(snap, sc.Done[int]{ID: effects[1].ID, Result: 1}, epoch)
+	require.Equal(t, greeting{Text: "finished"}, effect(t, effects, sc.EffectEmit).Event)
+}

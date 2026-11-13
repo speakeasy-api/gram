@@ -435,7 +435,9 @@ var (
 // The returned effects bring the outstanding timers and services in line
 // with the active states: they cancel those belonging to states that are no
 // longer active and start those of states that became active. They are empty
-// unless a migration changed the active states. now is the time a timer
+// for a snapshot stored by this chart as it is; a migration that changes the
+// active states produces them, and so does a stored snapshot whose timers or
+// services do not belong to its active states. now is the time a timer
 // started by a migration counts from, and the start of a timer recorded
 // without a due time. Restore fires nothing itself: pass the snapshot to
 // [Machine.Advance] to bring it up to date.
@@ -444,7 +446,7 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 
 	var raw RawSnapshot
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return zero, nil, fmt.Errorf("unmarshal snapshot: %w", err)
+		return zero, nil, fmt.Errorf("%w: unmarshal snapshot: %w", ErrInvalidSnapshot, err)
 	}
 
 	if raw.Machine != m.id {
@@ -501,12 +503,13 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 		passed:   nil,
 		changed:  false,
 		cause:    nil,
+		sends:    nil,
 		list:     nil,
 		listed:   false,
 	}
 
 	if err := json.Unmarshal(raw.Context, &r.ctx); err != nil {
-		return zero, nil, fmt.Errorf("unmarshal snapshot context: %w", err)
+		return zero, nil, fmt.Errorf("%w: unmarshal snapshot context: %w", ErrInvalidSnapshot, err)
 	}
 
 	if err := r.restoreStates(raw); err != nil {
@@ -631,6 +634,7 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 		passed:   nil,
 		changed:  false,
 		cause:    nil,
+		sends:    nil,
 		list:     nil,
 		listed:   false,
 	}

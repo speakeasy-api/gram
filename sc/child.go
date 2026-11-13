@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"reflect"
+	"sync"
 )
 
 // childEnded is what the goroutine watching a child machine puts in the
@@ -88,20 +89,48 @@ func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input fun
 			up := newInbox(0)
 
 			settings := append([]RunOption{WithClock(clockFrom(ctx))}, opts...)
-			settings = append(settings, OnEmit(func(_ context.Context, ev any) { up.put(ev) }))
 
-			inst, resumed, err := startChild(ctx, child, input(c, keyOf(id)), settings)
+			// What the child emits during a step waits until that step's
+			// snapshot has been handed up, so the parent never handles an
+			// event from a child it still sees in the state before.
+			var (
+				mu      sync.Mutex
+				emitted []any
+			)
+			settings = append(settings, OnEmit(func(_ context.Context, ev any) {
+				mu.Lock()
+				defer mu.Unlock()
+
+				emitted = append(emitted, ev)
+			}))
+
+			// moved hands up the child's snapshot, then what it emitted
+			// on the way there.
+			moved := func() {
+				mu.Lock()
+				defer mu.Unlock()
+
+				up.put(childMoved{})
+				for _, ev := range emitted {
+					up.put(ev)
+				}
+				emitted = nil
+			}
+
+			inst, _, err := startChild(ctx, child, input(c, keyOf(id)), settings)
 			if err != nil {
 				yield(Failed{ID: id, Err: err})
 				return
 			}
 			defer inst.Close()
 
-			// A new child's first snapshot is saved at once, so that a
-			// resumed parent does not start it a second time.
-			if !resumed {
-				up.put(childMoved{})
-			}
+			// The child's snapshot is handed up at once: a new child must
+			// be saved so that a resumed parent does not start it a second
+			// time, and either kind may already have taken a step, on a
+			// timer or a service of its own. The watcher below counts from
+			// the snapshot read before that, so no step falls between.
+			last := inst.Snapshot().Seq()
+			moved()
 
 			ctx, stop := context.WithCancel(ctx)
 			defer stop()
@@ -115,8 +144,6 @@ func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input fun
 			}()
 
 			go func() {
-				last := inst.Snapshot().Seq()
-
 				for {
 					snap, err := inst.Await(ctx, func(snap Snapshot[S2, C2]) bool { return snap.Seq() != last || snap.Done() })
 					if err != nil {
@@ -126,7 +153,7 @@ func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input fun
 
 					if snap.Seq() != last {
 						last = snap.Seq()
-						up.put(childMoved{})
+						moved()
 					}
 
 					if snap.Done() {

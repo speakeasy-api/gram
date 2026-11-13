@@ -271,6 +271,9 @@ type run[S comparable, C any] struct {
 	// cause is the event being processed, which the eventless transitions
 	// that follow it see.
 	cause any
+
+	// sends holds the events sent to services during the step.
+	sends []outgoing
 }
 
 // noteCause records the event of stim as the one being processed.
@@ -365,6 +368,7 @@ func (m *Machine[S, C]) start(c C, now time.Time, seed uint64) (Snapshot[S, C], 
 		passed:   nil,
 		changed:  false,
 		cause:    nil,
+		sends:    nil,
 		list:     nil,
 		listed:   false,
 	}
@@ -428,8 +432,20 @@ func (m *Machine[S, C]) transition(snap Snapshot[S, C], ev any, now time.Time) (
 	r := m.load(snap, now)
 	r.fireDue()
 
+	// Time passing is reason enough to look at the eventless transitions
+	// again: a guard on the time may hold now.
+	if ev == nil && !r.done {
+		r.settle()
+		r.fireDue()
+	}
+
 	if ev != nil && !r.done {
-		if stim, ok := r.accept(ev); ok {
+		// Bookkeeping the core does for itself, such as recording a
+		// service's progress, changes nothing a transition can see, so no
+		// eventless transition is looked at again for it. Otherwise one
+		// that sends to a child machine would be taken for every step the
+		// child records, which the send itself causes.
+		if stim, ok := r.accept(ev); ok && stim.trigger != triggerNone {
 			r.noteCause(stim)
 			if ts := r.selectTransitions(stim); len(ts) > 0 {
 				r.microstep(ts, stim)
@@ -447,8 +463,9 @@ func (m *Machine[S, C]) transition(snap Snapshot[S, C], ev any, now time.Time) (
 }
 
 // Advance returns the snapshot as of now: every timer due by now fires, as
-// [Machine.Transition] fires them before an event. It returns snap itself
-// when nothing is due. Use it to read an instance's current state without
+// [Machine.Transition] fires them before an event, and an eventless
+// transition whose guard holds by now is taken. It returns snap itself when
+// nothing changes. Use it to read an instance's current state without
 // waiting for its driver, such as an invitation that expired while nothing
 // ran, or to move time on in a test.
 func (m *Machine[S, C]) Advance(snap Snapshot[S, C], now time.Time) (Snapshot[S, C], []Effect[C]) {
@@ -528,6 +545,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 		passed:   nil,
 		changed:  false,
 		cause:    nil,
+		sends:    nil,
 		list:     snap.nodes,
 		listed:   true,
 	}
@@ -1194,6 +1212,7 @@ func (r *run[S, C]) exit(n *node[S, C], event any) {
 		r.emitRun(n, name, event, n.exitConds[k])
 	}
 	r.raise(n.exitRaises)
+	r.message(n, n.exitSends, n.exitEmits)
 
 	r.timers = slices.DeleteFunc(r.timers, func(t timer[S, C]) bool {
 		if t.owner() != n {
@@ -1225,6 +1244,20 @@ func (r *run[S, C]) raise(raises []stateRaise[C]) {
 		raised := on[S, C](triggerEvent)
 		raised.event = raise.fn(r.ctx)
 		r.queue = append(r.queue, raised)
+	}
+}
+
+// message queues the events a state sends to services on entry or exit, and
+// emits those it hands to whoever runs the machine.
+func (r *run[S, C]) message(n *node[S, C], sends []stateSend[C], emits []stateRaise[C]) {
+	for _, send := range sends {
+		r.sends = append(r.sends, outgoing{service: send.service, keyed: false, key: "", event: send.fn(r.ctx)})
+	}
+
+	for _, emit := range emits {
+		e := r.bare(EffectEmit, "", n, emit.name)
+		e.Event = emit.fn(r.ctx)
+		r.effects = append(r.effects, e)
 	}
 }
 
@@ -1302,18 +1335,13 @@ func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
 				return true
 			})
 		case stepSend:
-			ev := s.raise(r.ctx, stim.event)
-			for _, running := range r.services {
-				if keyFn, keyed := t.keys[k]; keyed && keyOf(running.id) != keyFn(r.ctx, stim.event) {
-					continue
-				}
-
-				if running.inv.resource == nil && running.inv.name == t.sendTargets[k] {
-					e := r.bare(EffectSend, running.id, running.inv.state, running.inv.name)
-					e.Event = ev
-					r.effects = append(r.effects, e)
-				}
+			// The event is delivered once the step has settled, so that
+			// it reaches a service the step itself starts.
+			send := outgoing{service: t.sendTargets[k], keyed: false, key: "", event: s.raise(r.ctx, stim.event)}
+			if keyFn, keyed := t.keys[k]; keyed {
+				send.keyed, send.key = true, keyFn(r.ctx, stim.event)
 			}
+			r.sends = append(r.sends, send)
 		case stepEmit:
 			e := r.bare(EffectEmit, "", t.source, s.name)
 			e.Event = s.raise(r.ctx, stim.event)
@@ -1350,6 +1378,7 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 		r.emitRun(n, name, event, n.entryConds[k])
 	}
 	r.raise(n.entryRaises)
+	r.message(n, n.entrySends, n.entryEmits)
 
 	for _, t := range n.transitions {
 		if t.trigger == triggerAfter {
@@ -1892,9 +1921,37 @@ func (r *run[S, C]) settle() {
 		r.services = nil
 	} else {
 		r.startServices()
+		r.deliver()
 	}
 
+	r.sends = nil
 	r.dropShortLivedTimers()
+}
+
+// outgoing is an event a transition sent to a service, waiting for the step
+// to settle.
+type outgoing struct {
+	service string
+	keyed   bool
+	key     string
+	event   any
+}
+
+// deliver turns the events sent during the step into effects for the
+// services that are running now that it has settled: those that were
+// running before and still are, and those the step started.
+func (r *run[S, C]) deliver() {
+	for _, send := range r.sends {
+		for _, running := range r.services {
+			if running.inv.resource != nil || running.inv.name != send.service || (send.keyed && keyOf(running.id) != send.key) {
+				continue
+			}
+
+			e := r.bare(EffectSend, running.id, running.inv.state, running.inv.name)
+			e.Event = send.event
+			r.effects = append(r.effects, e)
+		}
+	}
 }
 
 // startServices starts the services of entered states that are still active
