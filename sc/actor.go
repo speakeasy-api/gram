@@ -179,7 +179,7 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 					return err
 				}
 			case EffectStartInvocation:
-				box := newInbox()
+				box := newInbox(MaxInbox)
 				inboxes[e.ID] = box
 				serviceCtx, stop := context.WithCancel(serviceContext(ctx, box, a.now))
 				done := make(chan struct{})
@@ -201,6 +201,12 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 				// A stopped service must not wait on the loop, which may
 				// be waiting for it before releasing a resource.
 				send := func(evCtx context.Context, ev any) {
+					// Once stopped, nothing more is reported, even if
+					// the loop happens to be ready for it.
+					if serviceCtx.Err() != nil {
+						return
+					}
+
 					select {
 					case a.mailbox <- envelope[S, C]{ctx: context.WithoutCancel(evCtx), ev: ev, reply: nil}:
 					case <-serviceCtx.Done():
@@ -239,8 +245,16 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 				}
 				delete(inboxes, e.ID)
 			case EffectSend:
-				if box, ok := inboxes[e.ID]; ok {
-					box.put(e.Event)
+				if box, ok := inboxes[e.ID]; ok && !box.put(e.Event) {
+					// The run fell too far behind: it is stopped, and
+					// the chart is told it failed.
+					if stop, ok := stops[e.ID]; ok {
+						stop()
+						delete(stops, e.ID)
+					}
+					delete(inboxes, e.ID)
+
+					services.Go(func() { deliver(ctx, Failed{ID: e.ID, Err: ErrInboxFull}) })
 				}
 			case EffectEmit:
 				if a.emit != nil {

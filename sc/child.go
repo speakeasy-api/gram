@@ -83,7 +83,9 @@ func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input fun
 		return func(yield func(any) bool) {
 			// The child's events queue here, so that neither machine waits
 			// for the other while it is busy.
-			up := newInbox()
+			// It needs no limit of its own: every step of the child is
+			// saved through it, so the child cannot run ahead unseen.
+			up := newInbox(0)
 
 			settings := append([]RunOption{WithClock(clockFrom(ctx))}, opts...)
 			settings = append(settings, OnEmit(func(_ context.Context, ev any) { up.put(ev) }))

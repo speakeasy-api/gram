@@ -392,8 +392,8 @@ func (i *Instance[S, C]) apply(ctx context.Context, effects []Effect[C]) error {
 			run, ok := i.running[e.ID]
 			i.mu.Unlock()
 
-			if ok {
-				run.inbox.put(e.Event)
+			if ok && !run.inbox.put(e.Event) {
+				i.overflow(e.ID, run)
 			}
 		case EffectEmit:
 			if i.emit != nil {
@@ -418,7 +418,7 @@ func (i *Instance[S, C]) apply(ctx context.Context, effects []Effect[C]) error {
 // processed when the run can take the turn, and dropped once the run has
 // been stopped.
 func (i *Instance[S, C]) startService(ctx context.Context, e Effect[C]) {
-	box := newInbox()
+	box := newInbox(MaxInbox)
 	runCtx, stop := context.WithCancel(serviceContext(context.WithoutCancel(ctx), box, i.now))
 	execCtx, cancel := context.WithCancel(runCtx)
 	token, _ := ctx.Value(settleToken{}).(uint64)
@@ -521,6 +521,24 @@ func (i *Instance[S, C]) startService(ctx context.Context, e Effect[C]) {
 			deliver(execCtx, Failed{ID: e.ID, Err: err})
 		}
 	})
+}
+
+// overflow stops a service run that fell too far behind the events sent to
+// it, and tells the chart it failed.
+func (i *Instance[S, C]) overflow(id string, run serviceRun) {
+	i.mu.Lock()
+	if current, ok := i.running[id]; ok && current.done == run.done {
+		delete(i.running, id)
+	}
+	if !i.closed {
+		i.runs.Go(func() {
+			// The failure has no caller to report an action's error to.
+			_, _ = i.Send(i.base, Failed{ID: id, Err: ErrInboxFull})
+		})
+	}
+	i.mu.Unlock()
+
+	run.stop()
 }
 
 // schedule wakes the instance when a timer is due, unless timers are driven

@@ -950,3 +950,68 @@ func TestARetriedRunKeepsTheProgressOfTheOneThatFailed(t *testing.T) {
 	require.NotEqual(t, run.ID, again.ID)
 	require.JSONEq(t, `{"page":7}`, string(again.Saved))
 }
+
+func TestAServiceThatFallsBehindItsInboxFails(t *testing.T) {
+	t.Parallel()
+
+	chart := func(t *testing.T) *sc.Machine[string, counter] {
+		t.Helper()
+
+		m, err := sc.New("deaf", func(b *sc.Builder[string, counter]) {
+			b.Initial("working")
+			working := b.State("working")
+
+			// The service never reads what it is sent.
+			inv := working.Invoke("work", func(ctx context.Context, _ counter) (int, error) {
+				<-ctx.Done()
+				return 0, context.Cause(ctx)
+			})
+			inv.OnDone().To("done")
+			inv.OnError().
+				When("overflowed", func(_ counter, f sc.Failed) bool { return errors.Is(f.Err, sc.ErrInboxFull) }).
+				To("overflowed")
+			inv.OnError().To("done")
+			working.On[tick]().SendTo("nudge", "work", func(_ counter, ev tick) any { return ev })
+			b.Final("done")
+			b.Final("overflowed")
+		})
+		require.NoError(t, err)
+
+		return m
+	}
+
+	t.Run("instance", func(t *testing.T) {
+		t.Parallel()
+
+		synctest.Test(t, func(t *testing.T) {
+			inst, err := chart(t).Instance(t.Context(), counter{N: 0})
+			require.NoError(t, err)
+			defer inst.Close()
+
+			for range sc.MaxInbox + 1 {
+				_, err = inst.Send(t.Context(), tick{})
+				require.NoError(t, err)
+			}
+
+			snap, err := inst.Await(t.Context(), func(s sc.Snapshot[string, counter]) bool { return s.Done() })
+			require.NoError(t, err)
+			require.Equal(t, []string{"overflowed"}, snap.Active())
+		})
+	})
+
+	t.Run("actor", func(t *testing.T) {
+		t.Parallel()
+
+		synctest.Test(t, func(t *testing.T) {
+			a := chart(t).Actor(counter{N: 0})
+			wait := runActor(t.Context(), a)
+
+			for range sc.MaxInbox + 1 {
+				require.NoError(t, a.Send(t.Context(), tick{}))
+			}
+
+			require.NoError(t, wait())
+			require.Equal(t, []string{"overflowed"}, a.Snapshot().Active())
+		})
+	})
+}
