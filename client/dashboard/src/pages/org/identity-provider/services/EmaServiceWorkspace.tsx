@@ -94,10 +94,7 @@ export function EmaServiceWorkspace({
   useScrollToSection(Boolean(row));
   const permissions = useAcceptedProviderPermissions();
   const candidates = useProviderCandidates(permissions.canEdit);
-  const oktaFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
-  const connectedOktaId = useOktaIssuerId(oktaFlag.status === "enabled");
-  const oktaIssuerId =
-    oktaFlag.status === "enabled" ? connectedOktaId : undefined;
+  const oktaIssuerId = useOktaIssuerId();
   const name = row?.name ?? "Service";
 
   return (

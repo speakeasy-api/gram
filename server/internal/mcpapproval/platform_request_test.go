@@ -79,7 +79,7 @@ func TestPlatformRequesterNextActionIsSharedAcrossStates(t *testing.T) {
 	}
 }
 
-func TestCreatePlatformRequestUsesExistingAdmissionAndRolloutGate(t *testing.T) {
+func TestCreatePlatformRequestUsesExistingAdmission(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -88,8 +88,4 @@ func TestCreatePlatformRequestUsesExistingAdmissionAndRolloutGate(t *testing.T) 
 	require.Equal(t, "requested", created.Status)
 	require.NotContains(t, created.TargetRaw, "fabricated")
 	require.Equal(t, 1, created.RequesterCount)
-
-	disableMCPApproval(ti)
-	_, err = ti.service.CreatePlatformRequest(ctx, ti.organizationID, ti.projectID, ti.authContext.UserID, "server_url", "https://other.example.test/mcp", "needed for work")
-	requireOopsCode(t, err, oops.CodeForbidden)
 }

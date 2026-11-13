@@ -21,6 +21,18 @@ import (
 // only the provider account's email. These tests pin the fold — DNO-827, where
 // the employee page showed sessions and tool calls with no tokens or cost.
 
+// seedEmployeeIdentityMap maps each email to the employee the way the identity
+// map sync does, with the first email as the canonical one.
+func seedEmployeeIdentityMap(t *testing.T, ctx context.Context, ti *testInstance, employeeID string, emails ...string) {
+	t.Helper()
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	canonical := strings.ToLower(emails[0])
+	for _, email := range emails {
+		seedIdentityMapEntry(t, ctx, ti, authCtx.ActiveOrganizationID, strings.ToLower(email), employeeID, canonical)
+	}
+}
+
 func TestGetUserMetricsSummary_FoldsEmailOnlyUsageIntoEmployee(t *testing.T) {
 	t.Parallel()
 
@@ -35,6 +47,7 @@ func TestGetUserMetricsSummary_FoldsEmailOnlyUsageIntoEmployee(t *testing.T) {
 	// reach the employee through the user_accounts directory.
 	personalEmail := "personal-" + uuid.New().String() + "@example.com"
 	linkUserAccount(t, ctx, ti, employeeID, personalEmail, "personal")
+	seedEmployeeIdentityMap(t, ctx, ti, employeeID, employeeEmail, personalEmail)
 
 	strangerEmail := "stranger-" + uuid.New().String() + "@example.com"
 
@@ -78,6 +91,7 @@ func TestGetUserMetricsSummary_EmailIdentifierFoldsIDCarryingRows(t *testing.T) 
 	deploymentID := uuid.New().String()
 
 	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
+	seedEmployeeIdentityMap(t, ctx, ti, employeeID, employeeEmail)
 
 	now := time.Now().UTC()
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), "tools:http:petstore:listPets", 200, 0.5, employeeID, "")
@@ -150,6 +164,7 @@ func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
 	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
 	personalEmail := "personal-" + uuid.New().String() + "@example.com"
 	linkUserAccount(t, ctx, ti, employeeID, personalEmail, "personal")
+	seedEmployeeIdentityMap(t, ctx, ti, employeeID, employeeEmail, personalEmail)
 
 	now := time.Now().UTC()
 	workChatID := uuid.NewString()

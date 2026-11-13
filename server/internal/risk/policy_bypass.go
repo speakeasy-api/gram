@@ -208,12 +208,11 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	}
 
 	// A shadow-MCP block on a URL-identified server redeems into the MCP
-	// approval workflow when it is available: the ask attaches as a requester
-	// on the server's single review — deduplicated by canonical URL, evidence
-	// gathered — instead of minting a per-user bypass row. The legacy bypass
-	// request remains only for what the workflow cannot key: identity-only
-	// servers with no observed URL, and organizations without the approval
-	// feature (a forbidden intake error is that signal, not a failure).
+	// approval workflow: the ask attaches as a requester on the server's
+	// single review — deduplicated by canonical URL, evidence gathered —
+	// instead of minting a per-user bypass row. The legacy bypass request
+	// remains only for what the workflow cannot key: identity-only servers
+	// with no observed URL.
 	if s.approvalIntake != nil && target.Kind == PolicyBypassTargetKindShadowMCPServer {
 		// Only http(s) URLs are admittable: the approval intake rejects every
 		// other scheme, and the block evaluator will happily mint a ws:// (or
@@ -250,19 +249,14 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 				conv.PtrValOrEmpty(authCtx.Email, ""),
 				note,
 			)
-			switch {
-			case err == nil:
-				return &gen.PolicyBypassRedemption{
-					Kind:   "approval_request",
-					ID:     admittedID,
-					Status: admittedStatus,
-				}, nil
-			case oopsCodeIs(err, oops.CodeForbidden):
-				// The approval workflow is not enabled for this organization;
-				// fall through to the legacy bypass request.
-			default:
+			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "admit blocked server into approval workflow").LogError(ctx, s.logger)
 			}
+			return &gen.PolicyBypassRedemption{
+				Kind:   "approval_request",
+				ID:     admittedID,
+				Status: admittedStatus,
+			}, nil
 		}
 	}
 
@@ -318,12 +312,6 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		ID:     row.ID.String(),
 		Status: row.Status,
 	}, nil
-}
-
-// oopsCodeIs reports whether err carries the given shareable error code.
-func oopsCodeIs(err error, code oops.Code) bool {
-	var shareable *oops.ShareableError
-	return errors.As(err, &shareable) && shareable.Code == code
 }
 
 // serverURLSupportsApprovalIntake reports whether a blocked server's URL is

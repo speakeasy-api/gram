@@ -108,7 +108,7 @@ func (s *HomeSource) Load(ctx context.Context, organizationID, userID, dashboard
 			data.ApprovalsEnabled, data.Approvals, data.ApprovalsError = true, nil, true
 		}
 	}
-	if isAdmin && s.flagEnabled(ctx, logger, feature.FlagMCPApproval, organizationID, groups) {
+	if isAdmin {
 		data.MCPRequestsEnabled = true
 		data.MCPRequests, err = mcpRequests(ctx, queries, organizationID, links)
 		if err != nil {
