@@ -14,10 +14,6 @@ const (
 	GrantSourceRiskPolicy GrantSource = "risk_policy"
 )
 
-// scopeGrantSource maps every scope to where its grants are set.
-// Derived from Model: a block is written where its permission is.
-var scopeGrantSource = Model.deriveGrantSource()
-
 // ScopeGrantSource returns where the grants of scope are set.
 func ScopeGrantSource(scope Scope) (GrantSource, bool) {
 	owner, ok := scopeGrantSource[scope]

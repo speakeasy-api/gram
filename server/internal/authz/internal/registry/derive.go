@@ -1,4 +1,4 @@
-package authz
+package registry
 
 import (
 	"cmp"
@@ -6,15 +6,18 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
-// The functions in this file derive, from Model, every table the evaluator
-// and the catalogue read. They hold no policy of their own: a question about
-// what a scope means is answered in registry_resources.go.
+// The functions in this file derive, from Definitions, every table the
+// evaluator and the catalogue read; authzgen writes their results into
+// package authz. They hold no policy of their own: a question about what a
+// scope means is answered in definitions.go.
 
 // ModelScope is one stored scope and where it comes from.
 type ModelScope struct {
-	Scope      Scope
+	Scope      authz.Scope
 	Type       ResourceType
 	Permission Permission
 	// Block is true for a generated <prefix>:blocked_<action> scope; then
@@ -77,13 +80,13 @@ func impliedClosure(t ResourceType, action Action) []Action {
 	return out
 }
 
-// deriveScopeExpansions maps each checked scope to the other scopes whose
+// DeriveScopeExpansions maps each checked scope to the other scopes whose
 // grants also satisfy it. An allow is satisfied by every permission that
 // implies it. A block on an implied action also covers the implying one: a
 // project:blocked_read grant blocks project:write, so the check for
 // project:blocked_write is satisfied by it.
-func (r Registry) deriveScopeExpansions() map[Scope][]Scope {
-	out := make(map[Scope][]Scope)
+func (r Registry) DeriveScopeExpansions() map[authz.Scope][]authz.Scope {
+	out := make(map[authz.Scope][]authz.Scope)
 	out[r.Root.Scope] = nil
 	for _, s := range r.Scopes() {
 		out[s.Scope] = nil
@@ -114,11 +117,11 @@ func (r Registry) deriveScopeExpansions() map[Scope][]Scope {
 	return out
 }
 
-// deriveScopeExclusions maps each permission's scope to the scope that stores
+// DeriveScopeExclusions maps each permission's scope to the scope that stores
 // exclusions for it: its generated block, or the exemption it names. Every
 // other scope maps to "".
-func (r Registry) deriveScopeExclusions() map[Scope]Scope {
-	out := make(map[Scope]Scope)
+func (r Registry) DeriveScopeExclusions() map[authz.Scope]authz.Scope {
+	out := make(map[authz.Scope]authz.Scope)
 	out[r.Root.Scope] = ""
 	for _, s := range r.Scopes() {
 		out[s.Scope] = ""
@@ -139,47 +142,47 @@ func (r Registry) deriveScopeExclusions() map[Scope]Scope {
 	return out
 }
 
-// deriveScopeVisibility marks every declared permission user-visible, and
+// DeriveScopeVisibility marks every declared permission user-visible, and
 // generated blocks and root internal.
-func (r Registry) deriveScopeVisibility() map[Scope]scopeVisibility {
-	out := make(map[Scope]scopeVisibility)
-	out[r.Root.Scope] = scopeVisibilityInternal
+func (r Registry) DeriveScopeVisibility() map[authz.Scope]string {
+	out := make(map[authz.Scope]string)
+	out[r.Root.Scope] = authz.ScopeVisibilityInternal
 	for _, s := range r.Scopes() {
 		if s.Block {
-			out[s.Scope] = scopeVisibilityInternal
+			out[s.Scope] = authz.ScopeVisibilityInternal
 			continue
 		}
-		out[s.Scope] = scopeVisibilityUserVisible
+		out[s.Scope] = authz.ScopeVisibilityUserVisible
 	}
 	return out
 }
 
-// deriveGrantSource maps every scope to where its grants are set.
+// DeriveGrantSource maps every scope to where its grants are set.
 // A block is written where its permission is.
-func (r Registry) deriveGrantSource() map[Scope]GrantSource {
-	out := make(map[Scope]GrantSource)
-	out[r.Root.Scope] = GrantSourceRoles
+func (r Registry) DeriveGrantSource() map[authz.Scope]authz.GrantSource {
+	out := make(map[authz.Scope]authz.GrantSource)
+	out[r.Root.Scope] = authz.GrantSourceRoles
 	for _, s := range r.Scopes() {
 		out[s.Scope] = s.Permission.Source
 	}
 	return out
 }
 
-// deriveResourceKinds maps every scope to the resource kind its checks and
+// DeriveResourceKinds maps every scope to the resource kind its checks and
 // grant selectors name. Root's is the wildcard.
-func (r Registry) deriveResourceKinds() map[Scope]string {
-	out := make(map[Scope]string)
-	out[r.Root.Scope] = ResourceKindWildcard
+func (r Registry) DeriveResourceKinds() map[authz.Scope]string {
+	out := make(map[authz.Scope]string)
+	out[r.Root.Scope] = authz.ResourceKindWildcard
 	for _, s := range r.Scopes() {
 		out[s.Scope] = string(s.Type.Kind)
 	}
 	return out
 }
 
-// deriveAllowedSelectorKeys maps each resource kind that declares dimensions
+// DeriveAllowedSelectorKeys maps each resource kind that declares dimensions
 // to the keys its grant selectors may carry beyond resource_kind and
 // resource_id.
-func (r Registry) deriveAllowedSelectorKeys() map[string]map[string]bool {
+func (r Registry) DeriveAllowedSelectorKeys() map[string]map[string]bool {
 	out := make(map[string]map[string]bool)
 	for _, t := range r.Types {
 		if len(t.Dimensions) == 0 {
@@ -194,10 +197,10 @@ func (r Registry) deriveAllowedSelectorKeys() map[string]map[string]bool {
 	return out
 }
 
-// deriveScopeSelectorKeys maps each scope that declares its own dimensions
+// DeriveScopeSelectorKeys maps each scope that declares its own dimensions
 // to those keys. Blocks share their permission's.
-func (r Registry) deriveScopeSelectorKeys() map[Scope]map[string]bool {
-	out := make(map[Scope]map[string]bool)
+func (r Registry) DeriveScopeSelectorKeys() map[authz.Scope]map[string]bool {
+	out := make(map[authz.Scope]map[string]bool)
 	for _, s := range r.Scopes() {
 		if len(s.Permission.Dimensions) == 0 {
 			continue
@@ -211,16 +214,16 @@ func (r Registry) deriveScopeSelectorKeys() map[Scope]map[string]bool {
 	return out
 }
 
-// deriveUnknownableDimensions maps each scope to the dimensions its checks
+// DeriveUnknownableDimensions maps each scope to the dimensions its checks
 // may carry as SelectorValueUnknown: the optional dimensions of a loosely
 // matched type or permission whose exclusions, if any, are blocks. A required
 // dimension must be known, a strictly matched type has no optional ones, and
 // an unknown value must never reach an exemption, which would grant it.
 // project_id is never unknown: a request always knows its tenant.
-func (r Registry) deriveUnknownableDimensions() map[Scope]map[string]bool {
-	out := make(map[Scope]map[string]bool)
+func (r Registry) DeriveUnknownableDimensions() map[authz.Scope]map[string]bool {
+	out := make(map[authz.Scope]map[string]bool)
 	for _, t := range r.Types {
-		if t.Match == MatchStrict {
+		if t.Match == authz.MatchStrict {
 			continue
 		}
 		for _, p := range t.Permissions {
@@ -229,7 +232,7 @@ func (r Registry) deriveUnknownableDimensions() map[Scope]map[string]bool {
 			}
 			keys := make(map[string]bool)
 			for _, d := range slices.Concat(t.Dimensions, p.Dimensions) {
-				if !d.Required && d.Key != SelectorKeyProjectID {
+				if !d.Required && d.Key != authz.SelectorKeyProjectID {
 					keys[d.Key] = true
 				}
 			}
@@ -257,9 +260,9 @@ func (r Registry) isExemptionTarget(t ResourceType, p Permission) bool {
 	return false
 }
 
-// deriveRequiredCheckDimensions maps each resource kind to the dimensions
+// DeriveRequiredCheckDimensions maps each resource kind to the dimensions
 // every one of its checks must carry.
-func (r Registry) deriveRequiredCheckDimensions() map[string][]string {
+func (r Registry) DeriveRequiredCheckDimensions() map[string][]string {
 	out := make(map[string][]string)
 	for _, t := range r.Types {
 		for _, d := range t.Dimensions {
@@ -271,9 +274,9 @@ func (r Registry) deriveRequiredCheckDimensions() map[string][]string {
 	return out
 }
 
-// deriveDimensionValues returns the closed value set of the dimension key on
+// DeriveDimensionValues returns the closed value set of the dimension key on
 // kind, as a lookup.
-func (r Registry) deriveDimensionValues(kind Kind, key string) map[string]bool {
+func (r Registry) DeriveDimensionValues(kind Kind, key string) map[string]bool {
 	out := make(map[string]bool)
 	for _, t := range r.Types {
 		if t.Kind != kind {
@@ -291,17 +294,12 @@ func (r Registry) deriveDimensionValues(kind Kind, key string) map[string]bool {
 	return out
 }
 
-// deriveSystemRoleScopes returns a copy of a system role's seeded scopes.
-func (r Registry) deriveSystemRoleScopes(role string) []Scope {
-	return slices.Clone(r.SystemRoles[role])
-}
-
-// deriveCatalog lists every grantable scope with its presentation, ordered by
+// DeriveCatalog lists every grantable scope with its presentation, ordered by
 // category and then by declaration, each block right after its permission.
-func (r Registry) deriveCatalog() []ScopeEntry {
-	entries := make([]ScopeEntry, 0)
+func (r Registry) DeriveCatalog() []authz.ScopeEntry {
+	entries := make([]authz.ScopeEntry, 0)
 	for _, s := range r.Scopes() {
-		entry := ScopeEntry{
+		entry := authz.ScopeEntry{
 			Scope:        s.Scope,
 			Label:        s.Permission.Label,
 			Category:     s.Type.CategoryFor(s.Permission),
@@ -313,51 +311,34 @@ func (r Registry) deriveCatalog() []ScopeEntry {
 			block, _ := s.Permission.Block()
 			entry.Label = "Exception: " + lowerFirst(s.Permission.Label)
 			entry.Description = "Store exceptions for " + block.Subject + "."
-			entry.Sensitivity = SensitivityNone
+			entry.Sensitivity = authz.SensitivityNone
 		}
 		entries = append(entries, entry)
 	}
-	slices.SortStableFunc(entries, func(a, b ScopeEntry) int {
-		return cmp.Compare(slices.Index(ScopeCategories, a.Category), slices.Index(ScopeCategories, b.Category))
+	slices.SortStableFunc(entries, func(a, b authz.ScopeEntry) int {
+		return cmp.Compare(slices.Index(authz.ScopeCategories, a.Category), slices.Index(authz.ScopeCategories, b.Category))
 	})
 	return entries
 }
 
-// deriveAgentEligibility maps every scope, root and retired ones included, to
+// DeriveAgentEligibility maps every scope, root and retired ones included, to
 // the registry version it became agent-safe in (0 for never), and whether it
 // is retired.
-func (r Registry) deriveAgentEligibility() map[Scope]DerivedAgentEligibility {
-	out := make(map[Scope]DerivedAgentEligibility)
-	out[r.Root.Scope] = DerivedAgentEligibility{SafeSince: r.Root.Agent.safeSince, Retired: false}
+func (r Registry) DeriveAgentEligibility() map[authz.Scope]authz.DerivedAgentEligibility {
+	out := make(map[authz.Scope]authz.DerivedAgentEligibility)
+	out[r.Root.Scope] = authz.DerivedAgentEligibility{SafeSince: r.Root.Agent.safeSince, Retired: false}
 	for _, s := range r.Scopes() {
 		agent := s.Permission.Agent
 		if s.Block {
 			block, _ := s.Permission.Block()
 			agent = block.Agent
 		}
-		out[s.Scope] = DerivedAgentEligibility{SafeSince: agent.safeSince, Retired: false}
+		out[s.Scope] = authz.DerivedAgentEligibility{SafeSince: agent.safeSince, Retired: false}
 	}
 	for _, retired := range r.Retired {
-		out[retired] = DerivedAgentEligibility{SafeSince: 0, Retired: true}
+		out[retired] = authz.DerivedAgentEligibility{SafeSince: 0, Retired: true}
 	}
 	return out
-}
-
-// DerivedAgentEligibility is one scope's agent eligibility as the model
-// declares it.
-type DerivedAgentEligibility struct {
-	// SafeSince is the agent runtime scope registry version the scope became
-	// agent-safe in, or 0 if it never did.
-	SafeSince int
-	// Retired marks a tombstone: the scope no longer exists.
-	Retired bool
-}
-
-// AgentEligibilityByScope returns the agent eligibility of every scope the
-// model knows, retired tombstones included. The agent runtime scope registry
-// reads it.
-func AgentEligibilityByScope() map[Scope]DerivedAgentEligibility {
-	return Model.deriveAgentEligibility()
 }
 
 func lowerFirst(s string) string {

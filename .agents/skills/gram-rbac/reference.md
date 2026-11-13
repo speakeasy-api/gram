@@ -8,7 +8,7 @@ Background for the [gram-rbac skill](SKILL.md). Where this file and SKILL.md dif
 
 **Resource type.** The kind of resource a scope protects — for example `org`, `project`, `assistant`, or `mcp`. Every scope has exactly one resource type.
 
-**Scope expansion.** Higher-privilege scopes satisfy lower-privilege ones. `mcp:write` satisfies a `mcp:read` check. `mcp:connect` is separate: neither `mcp:read` nor `mcp:write` satisfies it, because viewing or managing a server is not permission to call its tools. It is each permission's `Implies` in `authz.Model`; `scopeExpansions` in `authz/scopes.go` is derived from it (key = required scope, value = higher-privilege scopes that also satisfy it).
+**Scope expansion.** Higher-privilege scopes satisfy lower-privilege ones. `mcp:write` satisfies a `mcp:read` check. `mcp:connect` is separate: neither `mcp:read` nor `mcp:write` satisfies it, because viewing or managing a server is not permission to call its tools. It is each permission's `Implies` in `registry.Definitions`; `scopeExpansions` in `authz/tables_gen.go` is generated from it (key = required scope, value = higher-privilege scopes that also satisfy it).
 
 **Selector.** A `map[string]string` of constraints attached to a grant or check. Always carries `resource_kind` and `resource_id` (both required); MCP scopes additionally allow `tool` and `disposition`. Wildcards are explicit values — `{"resource_kind":"*","resource_id":"*"}`, never empty `{}`. Defined in [server/internal/authz/selector.go](server/internal/authz/selector.go).
 
@@ -38,9 +38,9 @@ RBAC is split across two Go packages: `server/internal/authz/` holds the enforce
 
 Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s imports are deliberately minimal (DB, logger, cache, WorkOS, urn) so any package that gates on RBAC can depend on it without import cycles — never add an import to `authz` from a package that transitively depends on `authz`, since the split exists specifically to prevent the cycles that motivated it.
 
-**Scope declarations.** Every scope is declared by a permission in `authz.Model` (`registry_resources.go`). The `Scope*` constants are generated into `scopes_gen.go` by `mise run gen:authz`; string values follow `<resource>:<verb>` (e.g. `mcp:read`, `org:admin`). `ScopeRoot` is reserved for service-internal superadmin overrides. `scopes.go` holds the derived `scopeExpansions` and its inverse; `CalculateSubScopes(scope)` exposes the inverse to callers.
+**Scope declarations.** Every scope is declared by a permission in `registry.Definitions` (`authz/internal/registry/definitions.go`). The `Scope*` constants are generated into `scopes_gen.go` by `mise run gen:authz`; string values follow `<resource>:<verb>` (e.g. `mcp:read`, `org:admin`). `ScopeRoot` is reserved for service-internal superadmin overrides. `tables_gen.go` holds the generated `scopeExpansions`, `scopes.go` its inverse; `CalculateSubScopes(scope)` exposes the inverse to callers.
 
-**System role grants.** `Model.SystemRoles` in `registry_resources.go` declares the admin and member defaults; `SystemRoleGrants` in `server/internal/authz/grants.go` is built from it. Adding a scope usually means adding it to admin, and optionally to member if end users should get it by default. `SeedSystemRoleGrants` upserts the full set; `SyncGrants` upserts grants for a single role slug.
+**System role grants.** `SystemRoles` in `registry.Definitions` declares the admin and member defaults; `SystemRoleGrants` in `server/internal/authz/grants.go` is built from it. Adding a scope usually means adding it to admin, and optionally to member if end users should get it by default. `SeedSystemRoleGrants` upserts the full set; `SyncGrants` upserts grants for a single role slug.
 
 **`authz.Engine`.** The central enforcer. Methods: `PrepareContext`, `Require(ctx, checks...)`, `RequireAny`, `RequireAnyUnblocked`, `Can`, `Evaluate`, `Filter(ctx, checks)`, `FindMatched`, `ShouldEnforce`, `GetScopeOverrides`. Constructed in `server/cmd/gram/start.go` via `authz.NewEngine(logger, db, challengeLogging, membership, opts...)` and injected into every service that gates on RBAC. RBAC is always enforced for eligible authenticated requests; the `MembershipFetcher` is the WorkOS client used for role-slug lookups.
 
@@ -89,7 +89,7 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 | `server/internal/authz/override.go`    | Scope override plumbing (header parsing, override-to-grants conversion).                                                                                  |
 | `server/internal/authz/precedence.go`  | Principal precedence: direct concrete grants outrank blocklist exclusions inherited from roles or `user:all`.                                             |
 | `server/internal/authz/provisioner.go` | New-organization provisioning for built-in role grants and the initial Admin assignment.                                                                  |
-| `server/internal/authz/scopes.go`      | Scope type and the expansion tables derived from `authz.Model`.                                                                                           |
+| `server/internal/authz/scopes.go`      | Scope type and helpers over the generated expansion tables.                                                                                               |
 | `server/internal/authz/selector.go`    | `Selector` type, matching rules, `NewSelector`/`NewGrant` helpers, `ValidateSelector`, `ResourceKindForScope`, disposition vocabulary, `SelectorFromRow`. |
 | `server/internal/authztest/helpers.go` | Test helpers other packages reuse for RBAC setup, including `WithExactGrants`.                                                                            |
 | `server/internal/access/impl.go`       | Implementation of the `/rpc/access.*` Goa service.                                                                                                        |
@@ -133,7 +133,7 @@ The dashboard pages under `client/dashboard/src/pages/access/` render membership
 - `level="section"` — hides the children entirely.
 - `level="component"` — renders disabled with a tooltip explaining why (good for buttons and inputs).
 
-**Scope vocabulary import.** `useRBAC`, `RequireScope`, and the access pages import the `Scope` union directly from the generated SDK (`@gram/client/models/components/rolegrant.js`). That union is regenerated from the server scope enum by `gen:sdk`, and the design reads that enum from `authz.Model`, so a new scope reaches the client gates after `gen:goa-server` and `gen:sdk`.
+**Scope vocabulary import.** `useRBAC`, `RequireScope`, and the access pages import the `Scope` union directly from the generated SDK (`@gram/client/models/components/rolegrant.js`). That union is regenerated from the server scope enum by `gen:sdk`, and the design reads that enum from the generated scope constants, so a new scope reaches the client gates after `gen:goa-server` and `gen:sdk`.
 
 **Dashboard grant reference.** [docs/rbac.md](../../../docs/rbac.md) contains the "Dashboard Grant Reference" table that maps dashboard pages and actions to the grants required to use them. Whenever adding a new scope, changing a system-role grant default, adding a new dashboard RBAC gate, or changing the grant required by a dashboard feature, update that table in the same change. The table is the first place to answer questions like "what grant is required to create a project?"
 
@@ -155,7 +155,7 @@ The dashboard pages under `client/dashboard/src/pages/access/` render membership
 
 Use this when adjusting what `admin` or `member` gets out of the box. Prefer additive changes — removing a grant from a shipped role is an observable permissions change for existing users.
 
-1. Edit `Model.SystemRoles` in `server/internal/authz/registry_resources.go`.
+1. Edit `SystemRoles` in `server/internal/authz/internal/registry/definitions.go`, then run `mise run gen:authz`.
 2. Update `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go` if the admin set changed.
 3. Update the "Dashboard Grant Reference" table in [docs/rbac.md](../../../docs/rbac.md) if the default grant change affects what a built-in role can do in the dashboard.
 4. Consider whether existing orgs' grant tables need a migration to reflect the new defaults; new orgs pick up defaults automatically during organization provisioning.

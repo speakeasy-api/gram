@@ -1,10 +1,16 @@
-package authz
+// Package registry declares the authorization model: every resource type, its
+// permissions, blocks and dimensions, and the built-in roles. It is build-time
+// input only. authzgen reads Definitions and writes the scope constants, the
+// typed refs and every derived table into package authz, which never imports
+// this package. Being internal to authz, it cannot be imported from anywhere
+// else.
+package registry
+
+import "github.com/speakeasy-api/gram/server/internal/authz"
 
 // This file holds the types of the authorization model. The model itself, one
-// Go literal describing every resource type and its permissions, is Model in
-// registry_resources.go. Every hand-kept table elsewhere in this package is meant
-// to be derived from it. Later changes add parity tests that hold each table
-// equal to the model until it is derived.
+// Go literal describing every resource type and its permissions, is
+// Definitions in definitions.go.
 //
 // Vocabulary:
 //
@@ -27,17 +33,6 @@ type Kind string
 // Action names what a permission allows on its resource type, for example
 // "write".
 type Action string
-
-// MatchMode is how an allow grant's selector is compared with a check.
-type MatchMode int
-
-const (
-	// MatchLoose skips grant keys the check does not carry. It is today's
-	// default for every resource type except auth clients.
-	MatchLoose MatchMode = iota
-	// MatchStrict requires every grant key to be present in the check.
-	MatchStrict
-)
 
 // ExclusionKind distinguishes exclusions that take access away from ones that
 // exempt a holder from a policy.
@@ -116,14 +111,14 @@ type Dimension struct {
 // LegacyScope. They predate the registry and are stored in grants, API key
 // and agent policies, and the public scope enum. They go, with the field,
 // when R1 renames the scopes.
-var legacyScopes = []Scope{"plugin:write", "log:read", "mcp:auth"}
+var legacyScopes = []authz.Scope{"plugin:write", "log:read", "mcp:auth"}
 
 // Permission defines one action on a resource type.
 type Permission struct {
 	Action Action
 	// LegacyScope keeps a stored string that is not kind:action. Only the
 	// scopes in legacyScopes may use it; new permissions take the default.
-	LegacyScope Scope
+	LegacyScope authz.Scope
 	// Implies lists actions on the same resource type a grant of this one
 	// also satisfies. The closure is computed; list direct implications only.
 	Implies []Action
@@ -135,14 +130,14 @@ type Permission struct {
 	Dimensions []Dimension
 	// Source says where grants of this permission's scopes are set: through
 	// roles or through risk policies. Every permission sets it explicitly.
-	Source GrantSource
+	Source authz.GrantSource
 	// Category overrides the resource type's dashboard grouping.
-	Category ScopeCategory
+	Category authz.ScopeCategory
 	Label    string
 	// Description says what a holder can do and, where it matters, what the
 	// permission does not include.
 	Description string
-	Sensitivity Sensitivity
+	Sensitivity authz.Sensitivity
 	Agent       AgentEligibility
 }
 
@@ -153,8 +148,8 @@ type ResourceType struct {
 	// project in an org. It is documentation today; typed request refs take
 	// the parent's id as a required argument.
 	Parent      Kind
-	Category    ScopeCategory
-	Match       MatchMode
+	Category    authz.ScopeCategory
+	Match       authz.MatchMode
 	Dimensions  []Dimension
 	Permissions []Permission
 }
@@ -169,14 +164,14 @@ type Registry struct {
 	// SystemRoles lists the scopes each built-in role is seeded with, in
 	// order. Seeding only applies to new orgs: role grants an org has edited
 	// are never rewritten.
-	SystemRoles map[string][]Scope
+	SystemRoles map[string][]authz.Scope
 	// Retired lists scope names that no longer exist. They stay reserved so
 	// stored policies holding them still parse, and must never be reused.
-	Retired []Scope
+	Retired []authz.Scope
 }
 
 // RootPermission describes the root scope.
 type RootPermission struct {
-	Scope Scope
+	Scope authz.Scope
 	Agent AgentEligibility
 }

@@ -48,8 +48,8 @@ func TestPluginScopeIsIndependent(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopePluginWrite))
 	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopePluginBlockedWrite))
-	require.Contains(t, Model.SystemRoles[SystemRoleAdmin], ScopePluginWrite)
-	require.NotContains(t, Model.SystemRoles[SystemRoleMember], ScopePluginWrite)
+	require.Contains(t, systemRoleScopes[SystemRoleAdmin], ScopePluginWrite)
+	require.NotContains(t, systemRoleScopes[SystemRoleMember], ScopePluginWrite)
 	require.Equal(t, ScopePluginBlockedWrite, scopeExclusions[ScopePluginWrite])
 	for _, scope := range []Scope{ScopeSkillRead, ScopeSkillWrite, ScopeMCPRead, ScopeMCPWrite, ScopeProjectRead, ScopeProjectWrite, ScopeOrgRead} {
 		require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopePluginWrite, "*")}, Check{Scope: scope, ResourceID: "project-one"}), "plugin write must not imply %s", scope)

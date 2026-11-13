@@ -13,7 +13,7 @@ import (
 )
 
 // no-raw-authz-checks keeps migrated packages on the typed authorization
-// requests generated from authz.Model (authz.MCPServer(id, project).Write(),
+// requests generated from the authz registry (authz.MCPServer(id, project).Write(),
 // authz.Project(p).Environments().Create(), ...). A hand-built authz.Check
 // literal or a scope-taking constructor such as authz.EnvironmentCheck lets a
 // caller pair any scope with any resource and leave out dimensions the model
@@ -25,7 +25,7 @@ import (
 
 const (
 	noRawAuthzChecksAnalyzer       = "norawauthzchecks"
-	noRawAuthzChecksDefaultMessage = "build authorization checks with the typed refs generated from authz.Model, such as authz.Environment(id, project).Read()"
+	noRawAuthzChecksDefaultMessage = "build authorization checks with the typed refs generated from the authz registry, such as authz.Environment(id, project).Read()"
 )
 
 const authzPkgPath = "github.com/speakeasy-api/gram/server/internal/authz"

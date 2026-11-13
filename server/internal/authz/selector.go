@@ -78,9 +78,6 @@ func IsAgentKeyAuthClientType(clientType string) bool {
 	return IsSharedAuthClientType(clientType) && clientType != AuthClientTypePassThrough
 }
 
-// validAuthClientTypes is the closed value set of client_type in Model.
-var validAuthClientTypes = Model.deriveDimensionValues(ResourceKindMCPAuthClient, SelectorKeyClientType)
-
 // Matches reports whether this (grant) selector satisfies the given check
 // selector. A nil/empty grant selector matches any check (defensive fallback).
 // For each key present in BOTH the grant and check selectors, the values must
@@ -167,12 +164,8 @@ func selectorValueMatches(key, grantVal, checkVal, representedUser string) bool 
 		(checkVal == SelectorValueRepresentedUser && grantVal == representedUser)
 }
 
-// scopeResourceKinds maps every scope the model declares to the resource kind
-// its checks and grant selectors name.
-var scopeResourceKinds = Model.deriveResourceKinds()
-
 // ResourceKindForScope returns the selector resource kind of a scope: the kind
-// Model declares it on, or, for a scope the model does not know, the kind its
+// the registry declares it on, or, for a scope the model does not know, the kind its
 // prefix has always meant.
 func ResourceKindForScope(scope Scope) string {
 	if kind, ok := scopeResourceKinds[scope]; ok {
@@ -191,10 +184,8 @@ func legacyResourceKindForScope(scope Scope) string {
 	case "remote-mcp":
 		return ResourceKindMCP
 	}
-	for _, t := range Model.Types {
-		if string(t.Kind) == prefix && t.Kind != ResourceKindMCPAuthClient {
-			return prefix
-		}
+	if declaredResourceKinds[prefix] && prefix != ResourceKindMCPAuthClient {
+		return prefix
 	}
 	return ResourceKindWildcard
 }
@@ -206,19 +197,6 @@ const (
 	DispositionIdempotent  = "idempotent"
 	DispositionOpenWorld   = "open_world"
 )
-
-// validDispositions is the closed value set of disposition in Model.
-var validDispositions = Model.deriveDimensionValues(ResourceKindMCP, SelectorKeyDisposition)
-
-// allowedSelectorKeys defines which extra keys (beyond resource_kind and
-// resource_id) are valid for each resource kind: the Dimensions each type
-// declares in Model. Kinds not listed here allow no extra keys, except where
-// scopeAllowsSelectorKey admits one for a single scope.
-var allowedSelectorKeys = Model.deriveAllowedSelectorKeys()
-
-// scopeSelectorKeys holds the keys single permissions declare beyond their
-// type's.
-var scopeSelectorKeys = Model.deriveScopeSelectorKeys()
 
 // scopeAllowsSelectorKey reports whether a single permission declares key
 // beyond its type's dimensions. Today that is project_id on org:hooks_ingest:
