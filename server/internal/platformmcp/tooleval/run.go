@@ -411,9 +411,9 @@ func systemMessage(model, prompt string) or.ChatMessages {
 }
 
 // rateLimitRetries is how many times one completion is retried after a rate
-// limit, waiting rateLimitWait and then twice as long each time, up to
-// rateLimitMaxWait. A pinned provider rate limits a run with many cases in
-// flight.
+// limit. The backoff starts at rateLimitWait and doubles each time, up to
+// rateLimitMaxWait, and each wait is a random time between half and all of
+// it. A pinned provider rate limits a run with many cases in flight.
 const (
 	rateLimitRetries = 6
 	rateLimitWait    = 2 * time.Second
