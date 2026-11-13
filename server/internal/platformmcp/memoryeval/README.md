@@ -40,7 +40,7 @@ Synthetic corpus, questions and checks for team chat memory in the Platform MCP.
 
 Arms: A has no memory tools, B is today's `search_chats` and `read_chat`.
 Arm C is `search_team_memory` alone. Arm D is `recall_team_history` + `zoom` +
-`search_team_memory`; it recalls as of the corpus anchor (`WithClock`), so a
+`search_team_memory`; it recalls as of a day after the corpus anchor (`WithClock`), so a
 corpus built at a fixed date recalls the same history whenever it runs, and
 its sweep reads the largest recall block plus everything reachable by zooming
 down from it. Admin eval runs score arms A to D. Arm E is
