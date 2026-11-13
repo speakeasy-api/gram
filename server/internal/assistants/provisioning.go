@@ -328,6 +328,7 @@ func (s *ServiceCore) createManagedAssistant(
 		CreatedByUserID: createdBy,
 		Name:            name,
 		Model:           managedAssistantModel,
+		ReasoningEffort: "medium",
 		Instructions:    managedAssistantInstructions,
 		WarmTtlSeconds:  managedAssistantWarmTTLSeconds,
 		MaxConcurrency:  managedAssistantMaxConcurrency,
@@ -357,6 +358,9 @@ func (s *ServiceCore) createManagedAssistant(
 		return assistantRecord{}, err
 	}
 
+	if err := s.auditAssistantReasoning(ctx, tx, record, nil); err != nil {
+		return assistantRecord{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit managed assistant tx: %w", err)
 	}
@@ -377,6 +381,7 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
 		Name:            row.Name,
 		Model:           row.Model,
+		ReasoningEffort: reasoningEffortFromPGText(row.ReasoningEffort),
 		Instructions:    row.Instructions,
 		MCPServers:      nil,
 		Skills:          nil,

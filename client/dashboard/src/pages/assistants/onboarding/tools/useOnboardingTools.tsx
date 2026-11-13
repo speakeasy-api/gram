@@ -235,6 +235,7 @@ async function ensureAssistant(
       name: payload.name ?? "Untitled assistant",
       instructions: payload.instructions ?? "You are a helpful assistant.",
       model: payload.model ?? DEFAULT_ASSISTANT_MODEL,
+      reasoningEffort: draft.getReasoningEffort(),
       status: payload.status,
       toolsets: [],
       ...(payload.warm_ttl_seconds !== undefined
