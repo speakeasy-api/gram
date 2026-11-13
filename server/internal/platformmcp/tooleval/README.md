@@ -125,7 +125,9 @@ passed. Update it when a change improves cases or adds new ones, so the gate
 protects them from then on: download `baseline.json` from the pull request's
 `platform-tool-eval` artifact and commit it as `tooleval/baseline.json`.
 Locally, `--baseline-out` writes the same file. A relative path resolves
-against the directory you run mise from, so from the repository root:
+against the directory you run mise from, so from the repository root (for a
+stacked pull request, pass its base branch instead of `origin/main`, as CI
+compares with the pull request base):
 
 ```bash
 mise run eval:platform-tools --changed-since origin/main --surfaces progressive --runs 3 --gate --baseline-out server/internal/platformmcp/tooleval/baseline.json
