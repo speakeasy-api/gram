@@ -159,7 +159,7 @@ func SearchChatsArm(logger *slog.Logger, target Target) (Arm, error) {
 		return encodeOutput(tool, out)
 	}
 	return Arm{
-		Name:   "B: search_chats",
+		Name:   BaselineArm,
 		Search: search,
 		Sweep:  func(ctx context.Context) (ArmResult, error) { return search(ctx, "") },
 		Tools: []Tool{

@@ -31,11 +31,14 @@ const (
 	// judgeTimeout bounds one grading call.
 	judgeTimeout = time.Minute
 
-	// evalOrgID labels completion requests; the configured key pays for them.
+	// evalOrgID labels completion requests when the config names no
+	// organization. Only a development key (OPENROUTER_DEV_KEY) can pay for
+	// them: platform keys are provisioned per stored organization.
 	evalOrgID = "memoryeval"
 
-	// evalProjectID labels completion requests. The completion client rejects
-	// a request whose project ID is not a UUID before it calls the model.
+	// evalProjectID labels completion requests when the config names no
+	// project. The completion client rejects a request whose project ID is
+	// not a UUID before it calls the model.
 	evalProjectID = "6d656d6f-7279-4576-a16c-000000000001"
 )
 
@@ -58,6 +61,39 @@ type Config struct {
 
 	// Concurrency bounds in-flight questions across models, arms and runs.
 	Concurrency int
+
+	// Billing is who answer and judge completions are billed to. Leave it
+	// empty only with a development key; a deployed server provisions its
+	// OpenRouter key per stored organization, so it must name a real one.
+	Billing Billing
+}
+
+// Billing is the organization and project completions are made for.
+type Billing struct {
+	OrganizationID string
+	ProjectID      string
+}
+
+func (b Billing) orDefault() Billing {
+	if b.OrganizationID == "" {
+		b.OrganizationID = evalOrgID
+	}
+	if b.ProjectID == "" {
+		b.ProjectID = evalProjectID
+	}
+	return b
+}
+
+// CostCapPerPassUSD is the spend cap for one answer model answering every
+// question once in every arm, preparation and grading included. Full runs
+// have cost $8 to $12 a pass, so the cap stops a runaway run (retries, agent
+// loops, a pricier model) without failing a normal one.
+const CostCapPerPassUSD = 15.0
+
+// CostCapUSD is the default spend cap for the whole run: one CostCapPerPassUSD
+// per answer model per run.
+func (c Config) CostCapUSD() float64 {
+	return CostCapPerPassUSD * float64(len(c.AnswerModels)*c.Runs)
 }
 
 // Validate rejects a config that would grade a model with itself or call a
@@ -96,6 +132,13 @@ type usage struct {
 // noUsage is the usage of an answer or grade that made no model call.
 var noUsage = usage{promptTokens: 0, completionTokens: 0, costUSD: 0, latency: 0}
 
+func (u *usage) addUsage(other usage) {
+	u.promptTokens += other.promptTokens
+	u.completionTokens += other.completionTokens
+	u.costUSD += other.costUSD
+	u.latency += other.latency
+}
+
 func (u *usage) add(response *openrouter.CompletionResponse) {
 	u.promptTokens += response.Usage.PromptTokens
 	u.completionTokens += response.Usage.CompletionTokens
@@ -120,6 +163,9 @@ type answer struct {
 
 	usage usage
 	err   error
+
+	// retried is set when the first attempt errored and this is the second.
+	retried bool
 }
 
 type citation struct {
@@ -139,8 +185,8 @@ type verdict struct {
 
 	// Miss is "retrieval" when the answer lacks facts the tools should have
 	// found, "reasoning" when the facts were there but the answer drew the
-	// wrong conclusion, "error" when the answer or its grading failed, and
-	// empty for a correct answer.
+	// wrong conclusion, "error" when the answer failed twice (graded wrong),
+	// "ungraded" when the judge failed twice, and empty for a correct answer.
 	Miss string `json:"miss"`
 
 	Reason string `json:"reason"`
@@ -148,7 +194,17 @@ type verdict struct {
 	usage usage
 }
 
-const missError = "error"
+const (
+	// missError marks an answer that errored on both attempts. It counts as
+	// wrong: timeouts and runaway tool loops are the arm's failures, and
+	// dropping them from the denominators flatters the arm that has them.
+	missError = "error"
+
+	// missUngraded marks an answer the judge failed to grade twice. It is
+	// left out of the graded rates, since the judge failing says nothing
+	// about the arm.
+	missUngraded = "ungraded"
+)
 
 // Run asks every question with every answer model in every arm cfg.Runs
 // times, grades every answer and scores the results. It fails only when the
@@ -163,6 +219,7 @@ func Run(ctx context.Context, client openrouter.CompletionClient, corpus *memory
 		return nil, err
 	}
 	report := summarize(corpus, cfg, arms, answers, verdicts)
+	report.Gates = EvaluateGates(report)
 	report.StartedAt = started
 	report.FinishedAt = time.Now()
 	return report, nil
@@ -179,7 +236,7 @@ func runEval(ctx context.Context, client openrouter.CompletionClient, corpus *me
 			for run := range cfg.Runs {
 				for _, q := range corpus.Questions {
 					group.Go(func() error {
-						result := ask(groupCtx, client, model, corpus, a, q)
+						result := ask(groupCtx, client, cfg.Billing.orDefault(), model, corpus, a, q)
 						result.run = run
 						mu.Lock()
 						answers = append(answers, result)
@@ -192,8 +249,14 @@ func runEval(ctx context.Context, client openrouter.CompletionClient, corpus *me
 	}
 	// Every goroutine returns nil, so a cancelled run shows up only as ctx.Err.
 	_ = group.Wait()
-	if err := ctx.Err(); err != nil {
-		return nil, nil, fmt.Errorf("answer questions: %w", err)
+	if ctx.Err() != nil {
+		return nil, nil, fmt.Errorf("answer questions: %w", context.Cause(ctx))
+	}
+	retryErrored(ctx, cfg.Concurrency, answers, func(ctx context.Context, first answer) answer {
+		return ask(ctx, client, cfg.Billing.orDefault(), first.model, corpus, armNamed(arms, first.arm), first.question)
+	})
+	if ctx.Err() != nil {
+		return nil, nil, fmt.Errorf("retry errored answers: %w", context.Cause(ctx))
 	}
 	if err := someSucceeded("answer", len(answers), func(i int) error { return answers[i].err }); err != nil {
 		return nil, nil, err
@@ -204,13 +267,18 @@ func runEval(ctx context.Context, client openrouter.CompletionClient, corpus *me
 	group.SetLimit(cfg.Concurrency)
 	for i, ans := range answers {
 		group.Go(func() error {
-			verdicts[i] = judge(groupCtx, client, cfg.JudgeModel, ans)
+			verdicts[i] = judge(groupCtx, client, cfg.Billing.orDefault(), cfg.JudgeModel, ans)
+			if verdicts[i].Miss == missUngraded && groupCtx.Err() == nil {
+				first := verdicts[i].usage
+				verdicts[i] = judge(groupCtx, client, cfg.Billing.orDefault(), cfg.JudgeModel, ans)
+				verdicts[i].usage.addUsage(first)
+			}
 			return nil
 		})
 	}
 	_ = group.Wait()
-	if err := ctx.Err(); err != nil {
-		return nil, nil, fmt.Errorf("grade answers: %w", err)
+	if ctx.Err() != nil {
+		return nil, nil, fmt.Errorf("grade answers: %w", context.Cause(ctx))
 	}
 	// Only answers that reached the judge count: errored answers are never
 	// graded, and counting them would hide a judge that always fails.
@@ -221,7 +289,7 @@ func runEval(ctx context.Context, client openrouter.CompletionClient, corpus *me
 		}
 	}
 	err := someSucceeded("judge", len(judged), func(j int) error {
-		if v := verdicts[judged[j]]; v.Miss == missError {
+		if v := verdicts[judged[j]]; v.Miss == missUngraded {
 			return errors.New(v.Reason)
 		}
 		return nil
@@ -230,6 +298,42 @@ func runEval(ctx context.Context, client openrouter.CompletionClient, corpus *me
 		return nil, nil, err
 	}
 	return answers, verdicts, nil
+}
+
+// retryErrored asks every errored answer once more and keeps the second
+// attempt, carrying the first attempt's spend. An answer that errors twice
+// stays errored and is graded wrong.
+func retryErrored(ctx context.Context, concurrency int, answers []answer, retry func(context.Context, answer) answer) {
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(concurrency)
+	for i := range answers {
+		if answers[i].err == nil {
+			continue
+		}
+		group.Go(func() error {
+			first := answers[i]
+			second := retry(groupCtx, first)
+			second.run = first.run
+			second.retried = true
+			second.usage.addUsage(first.usage)
+			// What the failed attempt's tools returned still counts for leak,
+			// isolation and tool-token checks.
+			second.toolOutput = first.toolOutput + second.toolOutput
+			answers[i] = second
+			return nil
+		})
+	}
+	_ = group.Wait()
+}
+
+// armNamed returns the arm with name; names are unique within a run.
+func armNamed(arms []Arm, name string) Arm {
+	for _, a := range arms {
+		if a.Name == name {
+			return a
+		}
+	}
+	return NoMemoryArm()
 }
 
 // someSucceeded fails when every call of one kind errored, which means the
@@ -267,12 +371,12 @@ func systemPrompt(corpus *memoryeval.Corpus, a Arm) string {
 }
 
 // ask runs the answering agent for one question in one arm.
-func ask(ctx context.Context, client openrouter.CompletionClient, model string, corpus *memoryeval.Corpus, a Arm, q memoryeval.Question) answer {
+func ask(ctx context.Context, client openrouter.CompletionClient, billing Billing, model string, corpus *memoryeval.Corpus, a Arm, q memoryeval.Question) answer {
 	ctx, cancel := context.WithTimeout(ctx, questionTimeout)
 	defer cancel()
 	started := time.Now()
 
-	result := answer{model: model, arm: a.Name, run: 0, question: q, text: "", citations: nil, toolOutput: "", usage: noUsage, err: nil}
+	result := answer{model: model, arm: a.Name, run: 0, question: q, text: "", citations: nil, toolOutput: "", usage: noUsage, err: nil, retried: false}
 	tools := make([]openrouter.Tool, 0, len(a.Tools))
 	for _, tool := range a.Tools {
 		tools = append(tools, openrouter.Tool{Type: "function", Function: &openrouter.FunctionDefinition{Name: tool.Name, Description: tool.Description, Parameters: json.RawMessage(tool.Schema)}, CacheControl: nil})
@@ -281,7 +385,7 @@ func ask(ctx context.Context, client openrouter.CompletionClient, model string, 
 	var toolOutput strings.Builder
 
 	for turn := range maxAgentTurns {
-		response, err := client.GetCompletion(ctx, completionRequest(model, messages, tools, nil))
+		response, err := client.GetCompletion(ctx, completionRequest(billing, model, messages, tools, nil))
 		if err != nil {
 			result.err = fmt.Errorf("answer %s turn %d: %w", q.ID, turn, err)
 			break
@@ -334,11 +438,11 @@ func ask(ctx context.Context, client openrouter.CompletionClient, model string, 
 	return result
 }
 
-func completionRequest(model string, messages []or.ChatMessages, tools []openrouter.Tool, temperature *float64) openrouter.CompletionRequest {
+func completionRequest(billing Billing, model string, messages []or.ChatMessages, tools []openrouter.Tool, temperature *float64) openrouter.CompletionRequest {
 	return openrouter.CompletionRequest{
-		OrgID:                     evalOrgID,
+		OrgID:                     billing.OrganizationID,
 		Messages:                  messages,
-		ProjectID:                 evalProjectID,
+		ProjectID:                 billing.ProjectID,
 		Tools:                     tools,
 		Temperature:               temperature,
 		Model:                     model,
@@ -406,9 +510,9 @@ Grade the answer against the answer key.
 Reply with JSON only: {"correct": true|false, "miss": "retrieval"|"reasoning"|"", "reason": "<one sentence>"}.
 Use "retrieval" when the answer lacks facts it should have found, "reasoning" when it had the facts but concluded wrongly, and "" when correct.`
 
-// judge grades one answer. An answer that errored gets an error verdict
-// without a call, which summarize leaves out of accuracy.
-func judge(ctx context.Context, client openrouter.CompletionClient, model string, ans answer) verdict {
+// judge grades one answer. An answer that errored is graded wrong without a
+// call; a judge call that fails leaves the answer ungraded.
+func judge(ctx context.Context, client openrouter.CompletionClient, billing Billing, model string, ans answer) verdict {
 	if ans.err != nil {
 		return verdict{Correct: false, Miss: missError, Reason: ans.err.Error(), usage: noUsage}
 	}
@@ -417,9 +521,9 @@ func judge(ctx context.Context, client openrouter.CompletionClient, model string
 	started := time.Now()
 	temperature := 0.0
 	prompt := fmt.Sprintf(judgePrompt, ans.question.Text, ans.question.Answer, ans.text)
-	response, err := client.GetCompletion(ctx, completionRequest(model, []or.ChatMessages{openrouter.CreateMessageUser(prompt)}, nil, &temperature))
+	response, err := client.GetCompletion(ctx, completionRequest(billing, model, []or.ChatMessages{openrouter.CreateMessageUser(prompt)}, nil, &temperature))
 	if err != nil {
-		return verdict{Correct: false, Miss: missError, Reason: "judge: " + err.Error(), usage: noUsage}
+		return verdict{Correct: false, Miss: missUngraded, Reason: "judge: " + err.Error(), usage: noUsage}
 	}
 	cost := usage{promptTokens: 0, completionTokens: 0, costUSD: 0, latency: time.Since(started)}
 	cost.add(response)
@@ -427,7 +531,7 @@ func judge(ctx context.Context, client openrouter.CompletionClient, model string
 	text = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(text, "```json"), "```"), "```")
 	v, err := parseVerdict(text)
 	if err != nil {
-		return verdict{Correct: false, Miss: missError, Reason: err.Error(), usage: cost}
+		return verdict{Correct: false, Miss: missUngraded, Reason: err.Error(), usage: cost}
 	}
 	v.usage = cost
 	return v
