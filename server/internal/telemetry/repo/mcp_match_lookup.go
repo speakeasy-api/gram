@@ -32,6 +32,13 @@ type MCPProvenance struct {
 	ServerURL      string
 	ServerIdentity string
 	HookSource     string
+
+	// BuiltinEvidence is the `gram.mcp.builtin_evidence` attribute: why
+	// ingest classified the call's server as a coding agent built-in. It
+	// lives apart from Match so a sibling event that recorded a URL or
+	// command for the same call always surfaces in Match or ServerURL, which
+	// the scanner decides on first.
+	BuiltinEvidence string
 }
 
 // LookupMCPProvenanceByToolCallID returns a map of tool_call_id → the MCP
@@ -70,10 +77,12 @@ func (q *Queries) LookupMCPProvenanceByToolCallID(ctx context.Context, projectID
 		return map[string]MCPProvenance{}, nil
 	}
 
-	// Admit a row when either attribute is present. Senders that resolve a
-	// server from an inventory snapshot write both; Cursor-era rows predating
-	// the match attribute carry only the URL, and gating on match alone would
-	// silently drop every one of them.
+	// Admit a row when any provenance attribute is present. Senders that
+	// resolve a server from an inventory snapshot write both match and URL;
+	// Cursor-era rows predating the match attribute carry only the URL, and
+	// gating on match alone would silently drop every one of them. Canonical
+	// rows for a coding agent built-in server can carry only the built-in
+	// evidence.
 	//
 	// A trace can span several rows (PreToolUse, PostToolUse, ...) whose
 	// attributes differ — a row written before the sender's inventory snapshot
@@ -87,11 +96,14 @@ func (q *Queries) LookupMCPProvenanceByToolCallID(ctx context.Context, projectID
 		       max(toString(attributes.gram.mcp.match)) AS match,
 		       max(toString(attributes.gram.mcp.server_url)) AS server_url,
 		       max(toString(attributes.gram.tool_call.source)) AS server_identity,
-		       max(hook_source) AS hook_source
+		       max(hook_source) AS hook_source,
+		       max(toString(attributes.gram.mcp.builtin_evidence)) AS builtin_evidence
 		FROM telemetry_logs
 		WHERE gram_project_id = ?
 		  AND trace_id IN ?
-		  AND (toString(attributes.gram.mcp.match) != '' OR toString(attributes.gram.mcp.server_url) != '')
+		  AND (toString(attributes.gram.mcp.match) != ''
+		    OR toString(attributes.gram.mcp.server_url) != ''
+		    OR toString(attributes.gram.mcp.builtin_evidence) != '')
 	`
 	args := []any{projectID, traceIDs}
 	if !since.IsZero() {
@@ -108,8 +120,8 @@ func (q *Queries) LookupMCPProvenanceByToolCallID(ctx context.Context, projectID
 
 	out := make(map[string]MCPProvenance, len(traceIDs))
 	for rows.Next() {
-		var traceID, match, serverURL, serverIdentity, hookSource string
-		if err := rows.Scan(&traceID, &match, &serverURL, &serverIdentity, &hookSource); err != nil {
+		var traceID, match, serverURL, serverIdentity, hookSource, builtinEvidence string
+		if err := rows.Scan(&traceID, &match, &serverURL, &serverIdentity, &hookSource, &builtinEvidence); err != nil {
 			return nil, fmt.Errorf("scan mcp provenance row: %w", err)
 		}
 		toolCallID, ok := traceToToolCallID[traceID]
@@ -118,10 +130,11 @@ func (q *Queries) LookupMCPProvenanceByToolCallID(ctx context.Context, projectID
 		}
 		// One row per trace: the GROUP BY already collapsed siblings.
 		out[toolCallID] = MCPProvenance{
-			Match:          match,
-			ServerURL:      serverURL,
-			ServerIdentity: serverIdentity,
-			HookSource:     hookSource,
+			Match:           match,
+			ServerURL:       serverURL,
+			ServerIdentity:  serverIdentity,
+			HookSource:      hookSource,
+			BuiltinEvidence: builtinEvidence,
 		}
 	}
 	if err := rows.Err(); err != nil {

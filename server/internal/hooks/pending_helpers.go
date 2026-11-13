@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -258,13 +259,22 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	// Best-effort — when the MCP list snapshot is missing the attribute
 	// just isn't set, and the scanner falls back to its server-prefix
 	// guess.
+	//
+	// The same inventory decides whether the server is a coding agent
+	// built-in, recorded as gram.mcp.builtin_evidence so the scanner never
+	// reports it.
 	if parsed := parseClaudeToolName(toolName); parsed.IsMCP && payload.SessionID != nil && *payload.SessionID != "" {
-		if entries, err := s.getCachedMCPList(ctx, *payload.SessionID); err == nil {
-			matched := matchCachedMCPEntry(entries, parsed.Server)
+		inventory := s.loadShadowMCPInventory(ctx, *payload.SessionID, func() deviceMCPListScope {
+			return claudeDeviceMCPListScope(*metadata, payload)
+		})
+		if matched, _ := inventory.find(parsed.Server, toolName); inventory.loaded || matched != nil {
 			if v := resolvedMCPMatch(matched, parsed.Server); v != "" {
 				attrs[attr.MCPMatchKey] = v
 			}
 			applyMCPInventoryAttrs(attrs, matched)
+		}
+		if classification := shadowmcp.ClassifyServer(inventoryShadowMCPFacts(parsed.Server, toolName, inventory)); classification.IsBuiltin() {
+			attrs[attr.MCPBuiltinEvidenceKey] = string(classification.Evidence)
 		}
 	}
 

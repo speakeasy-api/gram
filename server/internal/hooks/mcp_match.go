@@ -180,12 +180,25 @@ func resolvedMCPMatch(matched *MCPServerEntry, serverPrefix string) string {
 // "buffer", or in the shadow-MCP guard's case, "deny with retry message".
 // Only the caller's own project's snapshot is visible.
 func (s *Service) getCachedMCPList(ctx context.Context, sessionID string) ([]MCPServerEntry, error) {
+	return s.getOwnedSessionMCPList(ctx, sessionID, sessionMCPListCacheKey)
+}
+
+// getCachedPartialMCPList retrieves the session's latest partial MCP
+// inventory under the same project scope and owner rule as the snapshot.
+func (s *Service) getCachedPartialMCPList(ctx context.Context, sessionID string) ([]MCPServerEntry, error) {
+	return s.getOwnedSessionMCPList(ctx, sessionID, sessionPartialMCPListCacheKey)
+}
+
+// getOwnedSessionMCPList reads a session MCP list stored under the key
+// keyFor builds, visible only in the caller's project and to a reader the
+// session's snapshot owner shares it with.
+func (s *Service) getOwnedSessionMCPList(ctx context.Context, sessionID string, keyFor func(projectID, sessionID string) string) ([]MCPServerEntry, error) {
 	projectID := s.mcpListProjectID(ctx, sessionID)
 	if projectID == "" {
 		return nil, fmt.Errorf("get cached mcp list: no project scope: %w", redisCache.ErrCacheMiss)
 	}
 	var entries []MCPServerEntry
-	if err := s.cache.Get(ctx, sessionMCPListCacheKey(projectID, sessionID), &entries); err != nil {
+	if err := s.cache.Get(ctx, keyFor(projectID, sessionID), &entries); err != nil {
 		return nil, fmt.Errorf("get cached mcp list: %w", err)
 	}
 	reader := mcpListOwnerFromContext(ctx)
