@@ -74,8 +74,9 @@ results are in the report JSON under `gates`.
   block size (under 8k tokens) is asserted by arm D's mechanical probe, not
   by the judged report.
 
-Every judged run has a spend cap: $15 per answer model per run by default,
-covering memory writing, answers and grading. Full runs have cost $8 to $12
+Every judged run has a spend cap: $15 per answer model per pass by default
+(so the total scales with `--runs`), covering memory writing, answers and
+grading. Full runs have cost $8 to $12
 a pass. Once the cap is reached the run stops and fails with the cap as the
 reason. In-flight calls finish, so spend can pass the cap by a few calls.
 `mise run eval:memory --max-cost <usd>` overrides it; platform-admin runs
