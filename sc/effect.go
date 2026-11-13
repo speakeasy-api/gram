@@ -50,6 +50,29 @@ func (e codedError) Error() string { return e.msg }
 
 func (e codedError) Code() string { return e.code }
 
+// WithCode returns err carrying code, for an error from a package that has
+// no codes of its own. The result wraps err, so errors.Is and errors.As
+// still see it.
+func WithCode(err error, code string) error {
+	if err == nil {
+		return nil
+	}
+
+	return codedWrapError{err: err, code: code}
+}
+
+// codedWrapError is an error given a code by WithCode.
+type codedWrapError struct {
+	err  error
+	code string
+}
+
+func (e codedWrapError) Error() string { return e.err.Error() }
+
+func (e codedWrapError) Code() string { return e.code }
+
+func (e codedWrapError) Unwrap() error { return e.err }
+
 // ErrorCode returns the code of the first error in err's tree that
 // implements [Coder], or "" when none does.
 func ErrorCode(err error) string {
@@ -106,6 +129,26 @@ func (f *Failed) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Acquired is the event delivered when a resource declared with
+// [StateBuilder.Holds] has been acquired. The driver keeps Value for the
+// services and actions inside the resource's state; the chart may read it
+// in the OnAcquired transition, but putting a live value into the context
+// would defeat the point of a resource.
+type Acquired[R any] struct {
+	// ID identifies the acquisition.
+	ID string
+
+	// Value is the acquired resource.
+	Value R
+}
+
+func (a Acquired[R]) acquisition() (string, any) { return a.ID, a.Value }
+
+// acquisition is implemented by Acquired events.
+type acquisition interface {
+	acquisition() (id string, value any)
+}
+
 // invocationResult is implemented by the events that end a service run.
 type invocationResult interface {
 	invocationID() string
@@ -143,6 +186,17 @@ const (
 	// driver that cannot stop it may let it finish; its events are
 	// ignored.
 	EffectStopInvocation EffectKind = "invocation.stop"
+
+	// EffectAcquire acquires a resource with [Machine.Exec], which reports
+	// an [Acquired] event carrying the value, or [Failed]. The driver keeps
+	// the value until the EffectRelease with the same ID. Only the [Instance]
+	// and [Actor] drivers hold resources.
+	EffectAcquire EffectKind = "resource.acquire"
+
+	// EffectRelease gives back the resource acquired under the same ID. If
+	// the acquisition is still in flight, the driver releases the value as
+	// soon as it arrives.
+	EffectRelease EffectKind = "resource.release"
 
 	// EffectStartTimer asks for a [TimerFired] event with the effect's ID
 	// once Delay has passed.
@@ -199,6 +253,11 @@ type Effect[C any] struct {
 
 	// To names the states active after the step.
 	To []string
+
+	// Needs lists the IDs of the held resources a service or an
+	// acquisition runs inside. A driver resuming an instance waits for them
+	// to be acquired again before it runs the effect. It is not persisted.
+	Needs []string
 }
 
 // Budget returns how long an EffectStartInvocation service may run, from
@@ -207,7 +266,7 @@ type Effect[C any] struct {
 // timeout rather than a deadline, because the driver's clock need not be the
 // wall clock.
 func (e Effect[C]) Budget(now time.Time) (time.Duration, bool) {
-	if e.Kind != EffectStartInvocation || e.At.IsZero() {
+	if (e.Kind != EffectStartInvocation && e.Kind != EffectAcquire) || e.At.IsZero() {
 		return 0, false
 	}
 
@@ -258,9 +317,9 @@ func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)
 	switch e.Kind {
 	case EffectAction:
 		return m.execAction(ctx, n, e)
-	case EffectStartInvocation:
+	case EffectStartInvocation, EffectAcquire:
 		for _, inv := range n.invocations {
-			if inv.name != e.Name {
+			if inv.name != e.Name || (inv.resource != nil) != (e.Kind == EffectAcquire) {
 				continue
 			}
 
@@ -280,7 +339,7 @@ func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)
 		}
 
 		return fmt.Errorf("%w: service %q in state %q", ErrUnknownEffect, e.Name, e.State)
-	case EffectStopInvocation, EffectStartTimer, EffectCancelTimer:
+	case EffectStopInvocation, EffectStartTimer, EffectCancelTimer, EffectRelease:
 		return fmt.Errorf("%w: %s effects are handled by the driver", errors.ErrUnsupported, e.Kind)
 	default:
 		return fmt.Errorf("%w: kind %q", ErrUnknownEffect, e.Kind)
@@ -322,6 +381,42 @@ func (m *Machine[S, C]) execAction(ctx context.Context, n *node[S, C], e Effect[
 	}
 
 	return fmt.Errorf("%w: action %q in state %q", ErrUnknownEffect, e.Name, e.State)
+}
+
+// release gives back a resource's value, as the EffectRelease e asks.
+func (m *Machine[S, C]) release(ctx context.Context, e Effect[C], value any, closed bool) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = fmt.Errorf("%w: release of %q in state %q: %v\n%s", ErrPanicked, e.Name, e.State, p, debug.Stack())
+		}
+	}()
+
+	n, ok := m.names[e.State]
+	if !ok {
+		return fmt.Errorf("%w: state %q", ErrUnknownEffect, e.State)
+	}
+
+	for _, inv := range n.invocations {
+		if inv.name != e.Name || inv.resource == nil {
+			continue
+		}
+
+		release := m.resourceRelease(inv)
+		if release == nil {
+			return fmt.Errorf("%w: resource %q in state %q", ErrNotBound, e.Name, e.State)
+		}
+
+		why := Leave[S]{Move: Move[S]{Source: n.id, From: m.stateIDs(e.From), To: m.stateIDs(e.To), Event: e.Event}, Closed: false}
+		if closed {
+			var none Move[S]
+			why = Leave[S]{Move: none, Closed: true}
+		}
+		release(ctx, value, why)
+
+		return nil
+	}
+
+	return fmt.Errorf("%w: resource %q in state %q", ErrUnknownEffect, e.Name, e.State)
 }
 
 // stateIDs turns state names back into identifiers, skipping names the
@@ -446,6 +541,7 @@ func (m *Machine[S, C]) DecodeEffect(data []byte) (Effect[C], error) {
 		Event:   nil,
 		From:    raw.From,
 		To:      raw.To,
+		Needs:   nil,
 	}
 
 	if len(raw.Context) > 0 {

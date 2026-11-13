@@ -81,7 +81,7 @@ type envelope[S comparable, C any] struct {
 // actor's clock. It does nothing until [Actor.Run] is called.
 func (m *Machine[S, C]) Actor(c C, opts ...RunOption) *Actor[S, C] {
 	o := runSettings(opts)
-	snap, effects := m.Start(c, o.now())
+	snap, effects := m.Start(c, o.now(), RandomSeed())
 
 	return m.newActor(snap, effects, o)
 }
@@ -124,9 +124,17 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 
 	ctx, cancel := context.WithCancel(ctx)
 
+	res := newResourceTable(a.m, a.hooks)
+	ctx = res.attach(ctx)
+
+	// On the way out: acquisitions still in flight release what they get,
+	// every service and acquisition is cancelled and waited for, and then
+	// the held resources are released, the last acquired first.
 	var services sync.WaitGroup
+	defer res.releaseAll(context.WithoutCancel(ctx))
 	defer services.Wait()
 	defer cancel()
+	defer res.abandon()
 
 	// deliver sends an event from a service or timer to the loop, giving
 	// up when the actor stops.
@@ -138,6 +146,11 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 	}
 
 	stops := map[string]context.CancelFunc{}
+
+	// stopping holds the stopped service runs that have not returned yet;
+	// a resource is released only once they have.
+	var stopping []chan struct{}
+
 	timers := map[string]*time.Timer{}
 	defer func() {
 		for _, t := range timers {
@@ -154,9 +167,39 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 				}
 			case EffectStartInvocation:
 				serviceCtx, stop := context.WithCancel(ctx)
-				stops[e.ID] = stop
+				done := make(chan struct{})
+				stops[e.ID] = func() {
+					stop()
+
+					// Runs that have already returned need no waiting.
+					stopping = slices.DeleteFunc(stopping, func(d chan struct{}) bool {
+						select {
+						case <-d:
+							return true
+						default:
+							return false
+						}
+					})
+					stopping = append(stopping, done)
+				}
+
+				// A stopped service must not wait on the loop, which may
+				// be waiting for it before releasing a resource.
+				send := func(evCtx context.Context, ev any) {
+					select {
+					case a.mailbox <- envelope[S, C]{ctx: context.WithoutCancel(evCtx), ev: ev, reply: nil}:
+					case <-serviceCtx.Done():
+					}
+				}
 
 				services.Go(func() {
+					defer close(done)
+
+					if err := res.wait(serviceCtx, e.Needs); err != nil {
+						send(serviceCtx, Failed{ID: e.ID, Err: err})
+						return
+					}
+
 					if a.services != nil {
 						if err := a.services.Acquire(serviceCtx, 1); err != nil {
 							return
@@ -164,8 +207,8 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 						defer a.services.Release(1)
 					}
 
-					if err := a.hooks.Exec(serviceCtx, a.m, e, a.now(), deliver); err != nil {
-						deliver(serviceCtx, Failed{ID: e.ID, Err: err})
+					if err := a.hooks.Exec(serviceCtx, a.m, e, a.now(), send); err != nil {
+						send(serviceCtx, Failed{ID: e.ID, Err: err})
 					}
 				})
 			case EffectStopInvocation:
@@ -173,6 +216,41 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 					stop()
 					delete(stops, e.ID)
 				}
+			case EffectAcquire:
+				res.begin(e)
+
+				// An acquired value is kept before the chart hears of
+				// it. One that arrives after its state was left has been
+				// released, and its event goes no further.
+				keep := func(evCtx context.Context, ev any) {
+					if acq, ok := ev.(acquisition); ok {
+						if id, value := acq.acquisition(); !res.store(evCtx, id, value) {
+							return
+						}
+					}
+
+					deliver(evCtx, ev)
+				}
+
+				services.Go(func() {
+					defer res.settle(e.ID)
+
+					if err := res.wait(ctx, e.Needs); err != nil {
+						deliver(ctx, Failed{ID: e.ID, Err: err})
+						return
+					}
+
+					if err := a.hooks.Exec(ctx, a.m, e, a.now(), keep); err != nil {
+						deliver(ctx, Failed{ID: e.ID, Err: err})
+					}
+				})
+			case EffectRelease:
+				for _, done := range stopping {
+					<-done
+				}
+				stopping = nil
+
+				res.releaseFor(ctx, e)
 			case EffectStartTimer:
 				now := a.now()
 				wait := e.Wait(now, rand.Float64)

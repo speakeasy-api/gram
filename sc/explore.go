@@ -36,6 +36,13 @@ func Fails(err error) Outcome {
 	return func(id string, _ time.Time) any { return Failed{ID: id, Err: err} }
 }
 
+// Acquires is the outcome of a resource being acquired with value. List it
+// under the resource's name in Outcomes, beside [Fails] for an acquisition
+// that fails.
+func Acquires[R any](value R) Outcome {
+	return func(id string, _ time.Time) any { return Acquired[R]{ID: id, Value: value} }
+}
+
 // Emits is the outcome of a [StateBuilder.Stream] service yielding ev.
 func Emits(ev any) Outcome {
 	return func(id string, _ time.Time) any { return Emitted{ID: id, Event: ev} }
@@ -373,7 +380,7 @@ func (m *Machine[S, C]) Explore(c C, x Exploration[S, C]) (Report[S, C], error) 
 	)
 
 	for _, initial := range append([]C{c}, x.Starts...) {
-		start, _, passed := m.start(initial, begin)
+		start, _, passed := m.start(initial, begin, seedFor(begin, nil))
 		for _, n := range passed {
 			report.reached[n.id] = true
 		}
@@ -589,6 +596,11 @@ func (m *Machine[S, C]) candidates(snap Snapshot[S, C], now time.Time, x Explora
 	}
 
 	for _, inv := range snap.invocations {
+		// A held resource has nothing more to report.
+		if inv.acquired {
+			continue
+		}
+
 		// A service under a Within budget can only report before the
 		// deadline, and fails with the deadline at it.
 		deadline := m.serviceDeadline(snap, inv.state)
@@ -765,7 +777,11 @@ func (m *Machine[S, C]) stateKey(snap Snapshot[S, C], now time.Time, key func(C,
 	slices.Sort(id.Timers)
 
 	for _, inv := range snap.invocations {
-		id.Services = append(id.Services, m.nodes[inv.state].name+"."+inv.name)
+		held := ""
+		if inv.acquired {
+			held = " held"
+		}
+		id.Services = append(id.Services, m.nodes[inv.state].name+"."+inv.name+held)
 	}
 	slices.Sort(id.Services)
 

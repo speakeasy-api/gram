@@ -180,7 +180,7 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 			def.After[key] = append(def.After[key], td)
 		case triggerStateDone:
 			def.OnDone = append(def.OnDone, td)
-		case triggerInvokeDone:
+		case triggerInvokeDone, triggerAcquired:
 			inv := &def.Invoke[invokes[t.invocation]]
 			inv.OnDone = append(inv.OnDone, td)
 		case triggerInvokeError:

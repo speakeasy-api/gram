@@ -27,6 +27,7 @@ type boundService[C any] struct {
 type Binder[S comparable, C any] struct {
 	m        *Machine[S, C]
 	services map[string]boundService[C]
+	releases map[string]func(context.Context, any, Leave[S])
 	actions  map[string]chartAction[S, C]
 	errs     []error
 }
@@ -58,26 +59,42 @@ func (b *Binder[S, C]) Action(name string, fn func(ctx context.Context, c C, mv 
 }
 
 func (b *Binder[S, C]) bind(name string, doneType reflect.Type, run func(context.Context, C, string) iter.Seq[any]) {
+	b.bindKind("service", false, name, doneType, run)
+}
+
+// Resource binds the resource named name to its acquire and release
+// functions, replacing any it had. R must be the type the chart declared.
+func (b *Binder[S, C]) Resource[R any](name string, acquire func(context.Context, C) (R, error), release func(ctx context.Context, value R, why Leave[S])) {
+	if b.bindKind("resource", true, name, reflect.TypeFor[Acquired[R]](), adaptAcquire(acquire)) {
+		b.releases[name] = adaptRelease(release)
+	}
+}
+
+// bindKind binds a service or a resource, and reports whether one of that
+// kind is declared under name.
+func (b *Binder[S, C]) bindKind(kind string, resource bool, name string, doneType reflect.Type, run func(context.Context, C, string) iter.Seq[any]) bool {
 	found := false
 	for _, n := range b.m.ordered {
 		for _, inv := range n.invocations {
-			if inv.name != name {
+			if inv.name != name || (inv.resource != nil) != resource {
 				continue
 			}
 
 			found = true
 			if inv.doneType != doneType {
-				b.errs = append(b.errs, fmt.Errorf("service %q in state %q reports %s, not %s", name, n.name, inv.doneType, doneType))
+				b.errs = append(b.errs, fmt.Errorf("%s %q in state %q reports %s, not %s", kind, name, n.name, inv.doneType, doneType))
 			}
 		}
 	}
 
 	if !found {
-		b.errs = append(b.errs, fmt.Errorf("service %q is not declared", name))
-		return
+		b.errs = append(b.errs, fmt.Errorf("%s %q is not declared", kind, name))
+		return false
 	}
 
 	b.services[name] = boundService[C]{doneType: doneType, run: run}
+
+	return true
 }
 
 // Bind returns a copy of the machine with the implementations def gives.
@@ -87,7 +104,13 @@ func (b *Binder[S, C]) bind(name string, doneType reflect.Type, run func(context
 // cheap. Bind returns every binding error at once: an undeclared name, or a
 // result type that does not match the declaration.
 func (m *Machine[S, C]) Bind(def func(b *Binder[S, C])) (*Machine[S, C], error) {
-	b := &Binder[S, C]{m: m, services: map[string]boundService[C]{}, actions: map[string]chartAction[S, C]{}, errs: nil}
+	b := &Binder[S, C]{
+		m:        m,
+		services: map[string]boundService[C]{},
+		releases: map[string]func(context.Context, any, Leave[S]){},
+		actions:  map[string]chartAction[S, C]{},
+		errs:     nil,
+	}
 	def(b)
 
 	if len(b.errs) > 0 {
@@ -98,6 +121,10 @@ func (m *Machine[S, C]) Bind(def func(b *Binder[S, C])) (*Machine[S, C], error) 
 	bound.bound = make(map[string]boundService[C], len(m.bound)+len(b.services))
 	maps.Copy(bound.bound, m.bound)
 	maps.Copy(bound.bound, b.services)
+
+	bound.boundReleases = make(map[string]func(context.Context, any, Leave[S]), len(m.boundReleases)+len(b.releases))
+	maps.Copy(bound.boundReleases, m.boundReleases)
+	maps.Copy(bound.boundReleases, b.releases)
 
 	bound.actions = make(map[string]chartAction[S, C], len(m.actions))
 	maps.Copy(bound.actions, m.actions)
@@ -113,8 +140,14 @@ func (m *Machine[S, C]) Unbound() []string {
 	var missing []string
 	for _, n := range m.ordered {
 		for _, inv := range n.invocations {
-			if m.serviceRunner(inv) == nil && !slices.Contains(missing, "service "+inv.name) {
-				missing = append(missing, "service "+inv.name)
+			kind := "service "
+			if inv.resource != nil {
+				kind = "resource "
+			}
+
+			unbound := m.serviceRunner(inv) == nil || (inv.resource != nil && m.resourceRelease(inv) == nil)
+			if unbound && !slices.Contains(missing, kind+inv.name) {
+				missing = append(missing, kind+inv.name)
 			}
 		}
 	}
@@ -138,4 +171,30 @@ func (m *Machine[S, C]) serviceRunner(inv *invocation[S, C]) func(context.Contex
 	}
 
 	return inv.run
+}
+
+// resourceRelease returns the release function of a resource: a bound one
+// if Bind gave one, otherwise the one it was declared with.
+func (m *Machine[S, C]) resourceRelease(inv *invocation[S, C]) func(context.Context, any, Leave[S]) {
+	if release, ok := m.boundReleases[inv.name]; ok {
+		return release
+	}
+
+	return inv.resource.release
+}
+
+// Resources lists the resources the chart declares, as "state.name", in
+// document order. Drivers that cannot hold resources use it to reject the
+// chart.
+func (m *Machine[S, C]) Resources() []string {
+	var out []string
+	for _, n := range m.ordered {
+		for _, inv := range n.invocations {
+			if inv.resource != nil {
+				out = append(out, n.name+"."+inv.name)
+			}
+		}
+	}
+
+	return out
 }

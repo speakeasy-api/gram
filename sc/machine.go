@@ -1,6 +1,7 @@
 package sc
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -46,8 +47,12 @@ type Machine[S comparable, C any] struct {
 	// their implementations; nil for one not yet bound.
 	actions map[string]chartAction[S, C]
 
-	// bound holds the service implementations given to Bind, by name.
+	// bound holds the service and resource implementations given to
+	// Bind, by name.
 	bound map[string]boundService[C]
+
+	// boundReleases holds the resource release functions given to Bind.
+	boundReleases map[string]func(context.Context, any, Leave[S])
 }
 
 // options holds what the Option values passed to New configure.
@@ -100,18 +105,19 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	def(&Builder[S, C]{b: b, parent: root})
 
 	m := &Machine[S, C]{
-		id:         id,
-		version:    o.version,
-		hash:       "",
-		migrate:    o.migrate,
-		root:       root,
-		nodes:      b.nodes,
-		names:      map[string]*node[S, C]{},
-		ordered:    b.ordered,
-		eventNames: map[reflect.Type]string{},
-		eventTypes: map[string]reflect.Type{},
-		actions:    b.actions,
-		bound:      map[string]boundService[C]{},
+		id:            id,
+		version:       o.version,
+		hash:          "",
+		migrate:       o.migrate,
+		root:          root,
+		nodes:         b.nodes,
+		names:         map[string]*node[S, C]{},
+		ordered:       b.ordered,
+		eventNames:    map[reflect.Type]string{},
+		eventTypes:    map[string]reflect.Type{},
+		actions:       b.actions,
+		bound:         map[string]boundService[C]{},
+		boundReleases: map[string]func(context.Context, any, Leave[S]){},
 	}
 
 	if id == "" {
@@ -343,6 +349,11 @@ func (m *Machine[S, C]) registerEvents(b *build[S, C]) {
 
 	for _, n := range m.ordered {
 		for _, inv := range n.invocations {
+			if inv.resource != nil {
+				register(inv.doneType, "sc.acquired:"+inv.doneType.String())
+				continue
+			}
+
 			register(inv.doneType, "sc.done:"+inv.doneType.String())
 		}
 
@@ -459,7 +470,7 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 		write("exit run %q if=%t\n", name, n.exitConds[k] != nil)
 	}
 	for _, inv := range n.invocations {
-		write("invoke %q %s\n", inv.name, inv.doneType)
+		write("invoke %q %s resource=%t\n", inv.name, inv.doneType, inv.resource != nil)
 	}
 
 	for _, t := range n.transitions {

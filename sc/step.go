@@ -2,8 +2,11 @@ package sc
 
 import (
 	"cmp"
+	crand "crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"iter"
+	"math/rand/v2"
 	"reflect"
 	"slices"
 	"time"
@@ -59,6 +62,36 @@ func restoredTimer[S comparable, C any](id string, t *transition[S, C], delay ti
 type service[S comparable, C any] struct {
 	id  string
 	inv *invocation[S, C]
+
+	// acquired is set for a resource once its value has been acquired.
+	acquired bool
+}
+
+// endEffect is the effect that ends the run: a release for a resource, a
+// stop for a service.
+func (r *run[S, C]) endEffect(s service[S, C]) Effect[C] {
+	kind := EffectStopInvocation
+	if s.inv.resource != nil {
+		kind = EffectRelease
+	}
+
+	return r.bare(kind, s.id, s.inv.state, s.inv.name)
+}
+
+// endServices ends the given runs: services are stopped first, then
+// resources are released in the reverse of the order they started.
+func (r *run[S, C]) endServices(ending []service[S, C]) {
+	for _, s := range ending {
+		if s.inv.resource == nil {
+			r.effects = append(r.effects, r.endEffect(s))
+		}
+	}
+
+	for _, s := range slices.Backward(ending) {
+		if s.inv.resource != nil {
+			r.effects = append(r.effects, r.endEffect(s))
+		}
+	}
 }
 
 // stimulus is the thing the machine is currently reacting to.
@@ -110,9 +143,21 @@ type run[S comparable, C any] struct {
 	// fired lists the IDs of timers that fired during this call.
 	fired []string
 
+	// seed is the instance's seed, and stream numbers this call among the
+	// instance's calls; together they fix the call's random numbers.
+	seed   uint64
+	stream uint64
+
+	// rng is the call's source of random numbers, made on first use.
+	rng *rand.Rand
+
 	// scopes holds the deadline of each active state that declared a
 	// budget with Within.
 	scopes map[*node[S, C]]time.Time
+
+	// acquired lists the resources acquired during this call; the next
+	// resource of each one's state starts once the machine has settled.
+	acquired []*invocation[S, C]
 
 	// pending holds the conditional chart action runs of the current
 	// microstep, decided once its move is known.
@@ -138,15 +183,66 @@ type run[S comparable, C any] struct {
 
 func byOrder[S comparable, C any](a, b *node[S, C]) int { return cmp.Compare(a.order, b.order) }
 
+// StartOption configures a new instance in [Machine.Start].
+type StartOption func(*startOptions)
+
+// startOptions holds what the StartOption values set.
+type startOptions struct {
+	seed    uint64
+	hasSeed bool
+}
+
+// Seed sets the seed from which the instance's random numbers, those
+// [Transition.AssignRand] receives, are derived. Drivers pass a random one so
+// that instances differ. Without it the seed comes from the start time, so
+// instances started at the same instant draw the same numbers.
+func Seed(seed uint64) StartOption {
+	return func(o *startOptions) { o.seed, o.hasSeed = seed, true }
+}
+
+// RandomSeed sets a seed drawn from the system's random source, which is
+// what a driver passes when it starts an instance.
+func RandomSeed() StartOption {
+	var b [8]byte
+
+	// crypto/rand.Read never fails on the platforms Go supports.
+	_, _ = crand.Read(b[:])
+
+	return Seed(binary.LittleEndian.Uint64(b[:]))
+}
+
+// seedFor returns the seed opts ask for, or one derived from now.
+func seedFor(now time.Time, opts []StartOption) uint64 {
+	o := startOptions{seed: 0, hasSeed: false}
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	if !o.hasSeed {
+		return uint64(now.UnixNano())
+	}
+
+	return o.seed
+}
+
+// random returns the call's source of random numbers.
+func (r *run[S, C]) random() *rand.Rand {
+	if r.rng == nil {
+		r.rng = rand.New(rand.NewPCG(r.seed, r.stream)) //nolint:gosec // G404: reproducible draws for jitter are the point; nothing here is secret.
+	}
+
+	return r.rng
+}
+
 // Start returns the snapshot of a new machine instance with context c,
 // started at now, and the effects of entering its initial states.
-func (m *Machine[S, C]) Start(c C, now time.Time) (Snapshot[S, C], []Effect[C]) {
-	snap, effects, _ := m.start(c, now)
+func (m *Machine[S, C]) Start(c C, now time.Time, opts ...StartOption) (Snapshot[S, C], []Effect[C]) {
+	snap, effects, _ := m.start(c, now, seedFor(now, opts))
 	return snap, effects
 }
 
 // start is Start, also returning every state entered on the way.
-func (m *Machine[S, C]) start(c C, now time.Time) (Snapshot[S, C], []Effect[C], []*node[S, C]) {
+func (m *Machine[S, C]) start(c C, now time.Time, seed uint64) (Snapshot[S, C], []Effect[C], []*node[S, C]) {
 	r := &run[S, C]{
 		m:        m,
 		config:   map[*node[S, C]]bool{m.root: true},
@@ -158,7 +254,11 @@ func (m *Machine[S, C]) start(c C, now time.Time) (Snapshot[S, C], []Effect[C], 
 		done:     false,
 		now:      now,
 		fired:    nil,
+		seed:     seed,
+		stream:   0,
+		rng:      nil,
 		scopes:   map[*node[S, C]]time.Time{},
+		acquired: nil,
 		pending:  nil,
 		effects:  nil,
 		queue:    nil,
@@ -306,7 +406,11 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 		done:     snap.done,
 		now:      now,
 		fired:    nil,
+		seed:     snap.seed,
+		stream:   snap.seq + 1,
+		rng:      nil,
 		scopes:   map[*node[S, C]]time.Time{},
+		acquired: nil,
 		pending:  nil,
 		effects:  nil,
 		queue:    nil,
@@ -342,7 +446,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 	for _, ri := range snap.invocations {
 		for _, inv := range m.nodes[ri.state].invocations {
 			if inv.name == ri.name {
-				r.services = append(r.services, service[S, C]{id: ri.id, inv: inv})
+				r.services = append(r.services, service[S, C]{id: ri.id, inv: inv, acquired: ri.acquired})
 			}
 		}
 	}
@@ -358,6 +462,7 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 		version:     r.m.version,
 		hash:        r.m.hash,
 		seq:         seq,
+		seed:        r.seed,
 		done:        r.done,
 		active:      make([]S, 0, len(r.config)),
 		history:     make(map[S][]S, len(r.history)),
@@ -391,7 +496,7 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 	}
 
 	for _, s := range r.services {
-		snap.invocations = append(snap.invocations, runningInvocation[S]{id: s.id, state: s.inv.state.id, name: s.inv.name})
+		snap.invocations = append(snap.invocations, runningInvocation[S]{id: s.id, state: s.inv.state.id, name: s.inv.name, resource: s.inv.resource != nil, acquired: s.acquired})
 	}
 
 	return snap
@@ -441,6 +546,25 @@ func (r *run[S, C]) accept(ev any) (stimulus[S, C], bool) {
 		stim.event = e.Event
 
 		return stim, true
+	case acquisition:
+		id, _ := e.acquisition()
+		i := slices.IndexFunc(r.services, func(s service[S, C]) bool { return s.id == id })
+
+		// An acquisition of a resource that is already held is the
+		// driver acquiring it again after a restart; nothing changes.
+		if i < 0 || r.services[i].acquired {
+			return none, false
+		}
+
+		r.services[i].acquired = true
+		r.acquired = append(r.acquired, r.services[i].inv)
+		r.changed = true
+
+		stim := on[S, C](triggerAcquired)
+		stim.event = ev
+		stim.inv = r.services[i].inv
+
+		return stim, true
 	case invocationResult:
 		i := slices.IndexFunc(r.services, func(s service[S, C]) bool { return s.id == e.invocationID() })
 		if i < 0 {
@@ -486,7 +610,7 @@ func (r *run[S, C]) matches(t *transition[S, C], stim stimulus[S, C]) bool {
 		if stim.done != t.source {
 			return false
 		}
-	case triggerInvokeDone, triggerInvokeError:
+	case triggerInvokeDone, triggerInvokeError, triggerAcquired:
 		if stim.inv != t.invocation || reflect.TypeOf(stim.event) != t.eventType {
 			return false
 		}
@@ -664,9 +788,12 @@ func (r *run[S, C]) microstep(ts []*transition[S, C], stim stimulus[S, C]) {
 	// Every action this step produced is told the move it belongs to.
 	after := r.activeNames()
 	for i := first; i < len(r.effects); i++ {
-		if r.effects[i].Kind == EffectAction {
+		if r.effects[i].Kind == EffectAction || r.effects[i].Kind == EffectRelease {
 			r.effects[i].From = before
 			r.effects[i].To = after
+		}
+		if r.effects[i].Kind == EffectRelease {
+			r.effects[i].Event = stim.event
 		}
 	}
 
@@ -721,7 +848,7 @@ func (r *run[S, C]) emitRun(source *node[S, C], name string, event any, cond fun
 
 // chartActionEffect is the effect of running a chart action.
 func (r *run[S, C]) chartActionEffect(source *node[S, C], name string, event any) Effect[C] {
-	return Effect[C]{Kind: EffectAction, ID: "", State: source.name, Name: name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: event, From: nil, To: nil}
+	return Effect[C]{Kind: EffectAction, ID: "", State: source.name, Name: name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: event, From: nil, To: nil, Needs: nil}
 }
 
 // record returns what history state h must remember about its parent.
@@ -745,7 +872,7 @@ func (r *run[S, C]) record(h *node[S, C]) []*node[S, C] {
 
 func (r *run[S, C]) exit(n *node[S, C], event any) {
 	for _, a := range n.exit {
-		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil})
+		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: nil})
 	}
 	for k, name := range n.exitRuns {
 		r.emitRun(n, name, event, n.exitConds[k])
@@ -762,14 +889,15 @@ func (r *run[S, C]) exit(n *node[S, C], event any) {
 
 	delete(r.scopes, n)
 
+	var ending []service[S, C]
 	r.services = slices.DeleteFunc(r.services, func(s service[S, C]) bool {
-		if s.inv.state != n {
-			return false
+		if s.inv.state == n {
+			ending = append(ending, s)
 		}
-		r.effects = append(r.effects, r.bare(EffectStopInvocation, s.id, n, s.inv.name))
 
-		return true
+		return s.inv.state == n
 	})
+	r.endServices(ending)
 
 	delete(r.config, n)
 }
@@ -777,16 +905,16 @@ func (r *run[S, C]) exit(n *node[S, C], event any) {
 // bare builds an effect that carries no context or event.
 func (r *run[S, C]) bare(kind EffectKind, id string, n *node[S, C], name string) Effect[C] {
 	var zero C
-	return Effect[C]{Kind: kind, ID: id, State: n.name, Name: name, Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil}
+	return Effect[C]{Kind: kind, ID: id, State: n.name, Name: name, Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil, Needs: nil}
 }
 
 func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
 	for k, s := range t.steps {
 		switch s.kind {
 		case stepAssign:
-			r.ctx = s.assign(r.ctx, stim.event, r.now)
+			r.ctx = s.assign(r.ctx, stim.event, r.now, r.random())
 		case stepDo:
-			r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: t.source.name, Name: s.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: stim.event, From: nil, To: nil})
+			r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: t.source.name, Name: s.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: stim.event, From: nil, To: nil, Needs: nil})
 		case stepRun:
 			r.emitRun(t.source, s.name, stim.event, t.runConds[k])
 		case stepRaise:
@@ -806,7 +934,7 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 	r.passed = append(r.passed, n)
 
 	for _, a := range n.entry {
-		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil})
+		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: nil})
 	}
 	for k, name := range n.entryRuns {
 		r.emitRun(n, name, event, n.entryConds[k])
@@ -905,6 +1033,7 @@ func timerEffect[S comparable, C any](tm timer[S, C]) Effect[C] {
 		Event:   nil,
 		From:    nil,
 		To:      nil,
+		Needs:   nil,
 	}
 }
 
@@ -956,14 +1085,36 @@ func (r *run[S, C]) fireDue() {
 
 func (r *run[S, C]) startService(inv *invocation[S, C]) {
 	id := r.nextID(inv.state, inv.name)
-	r.services = append(r.services, service[S, C]{id: id, inv: inv})
+	r.services = append(r.services, service[S, C]{id: id, inv: inv, acquired: false})
 	r.effects = append(r.effects, r.serviceEffect(id, inv))
 }
 
 // serviceEffect is the effect that starts a run of inv, carrying the
 // deadline of the budgets around it.
 func (r *run[S, C]) serviceEffect(id string, inv *invocation[S, C]) Effect[C] {
-	return Effect[C]{Kind: EffectStartInvocation, ID: id, State: inv.state.name, Name: inv.name, Delay: 0, At: r.deadlineFor(inv.state), Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil}
+	// A service or acquisition runs inside every held resource of its
+	// state and the states around it.
+	var needs []string
+	for _, s := range r.services {
+		if !s.acquired || s.inv == inv || !inv.state.within(s.inv.state) {
+			continue
+		}
+
+		// A resource waits only for the ones declared before it on its
+		// own state, which is the order they are acquired in.
+		if inv.resource != nil && s.inv.state == inv.state &&
+			slices.Index(inv.state.invocations, s.inv) > slices.Index(inv.state.invocations, inv) {
+			continue
+		}
+
+		needs = append(needs, s.id)
+	}
+
+	if inv.resource != nil {
+		return Effect[C]{Kind: EffectAcquire, ID: id, State: inv.state.name, Name: inv.name, Delay: 0, At: r.deadlineFor(inv.state), Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: needs}
+	}
+
+	return Effect[C]{Kind: EffectStartInvocation, ID: id, State: inv.state.name, Name: inv.name, Delay: 0, At: r.deadlineFor(inv.state), Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: needs}
 }
 
 // deadlineFor returns the earliest deadline among the budgets of n and the
@@ -977,6 +1128,11 @@ func (r *run[S, C]) deadlineFor(n *node[S, C]) time.Time {
 	}
 
 	return deadline
+}
+
+// running reports whether inv has a run or, for a resource, is held.
+func (r *run[S, C]) running(inv *invocation[S, C]) bool {
+	return slices.ContainsFunc(r.services, func(s service[S, C]) bool { return s.inv == inv })
 }
 
 // entrySet returns the states ts enters, in document order.
@@ -1117,8 +1273,11 @@ func (r *run[S, C]) settle() {
 		for _, t := range r.timers {
 			r.effects = append(r.effects, r.bare(EffectCancelTimer, t.id, t.t.source, ""))
 		}
-		for _, s := range r.services {
-			r.effects = append(r.effects, r.bare(EffectStopInvocation, s.id, s.inv.state, s.inv.name))
+		names := r.activeNames()
+		first := len(r.effects)
+		r.endServices(r.services)
+		for i := first; i < len(r.effects); i++ {
+			r.effects[i].From, r.effects[i].To = names, names
 		}
 		r.timers = nil
 		r.services = nil
@@ -1139,14 +1298,53 @@ func (r *run[S, C]) startServices() {
 			continue
 		}
 
+		// A state's resources are acquired one after another, in the
+		// order they were declared, so only the first starts now. It
+		// starts before the services that may use it.
 		for _, inv := range n.invocations {
-			if !slices.ContainsFunc(r.services, func(s service[S, C]) bool { return s.inv == inv }) {
+			if inv.resource != nil {
+				if !r.running(inv) {
+					r.startService(inv)
+				}
+
+				break
+			}
+		}
+
+		for _, inv := range n.invocations {
+			if inv.resource == nil && !r.running(inv) {
 				r.startService(inv)
 			}
 		}
 	}
 
 	r.entered = nil
+
+	// Each resource acquired in this call lets the next one declared on
+	// its state start, if the state is still active.
+	for _, got := range r.acquired {
+		if !r.config[got.state] {
+			continue
+		}
+
+		next := false
+		for _, inv := range got.state.invocations {
+			if inv == got {
+				next = true
+				continue
+			}
+
+			if next && inv.resource != nil {
+				if !r.running(inv) {
+					r.startService(inv)
+				}
+
+				break
+			}
+		}
+	}
+
+	r.acquired = nil
 }
 
 // dropShortLivedTimers removes the start and cancel effects of timers that

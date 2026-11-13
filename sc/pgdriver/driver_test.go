@@ -168,7 +168,17 @@ func newDriver(t *testing.T, rec *recorder, charge func(context.Context, order) 
 	})
 	require.NoError(t, err)
 
-	return pgdriver.New(pool, m)
+	return mustNew(t, m)
+}
+
+// mustNew builds a driver on the shared pool.
+func mustNew[S comparable, C any](t *testing.T, m *sc.Machine[S, C], opts ...pgdriver.Option) *pgdriver.Driver[S, C] {
+	t.Helper()
+
+	d, err := pgdriver.New(pool, m, opts...)
+	require.NoError(t, err)
+
+	return d
 }
 
 // drain carries out effects until none is due.
@@ -386,17 +396,37 @@ func TestEffectTheChartNoLongerDeclaresIsDroppedAndReported(t *testing.T) {
 		return m
 	}
 
-	before := pgdriver.New(pool, chart("announce"))
+	before := mustNew(t, chart("announce"))
 	_, err := before.Create(t.Context(), "o1", order{})
 	require.NoError(t, err)
 	_, err = before.Send(t.Context(), "o1", submit{Items: nil})
 	require.NoError(t, err)
 	require.Equal(t, 1, outboxSize(t, "o1"))
 
-	after := pgdriver.New(pool, chart("notify"))
+	after := mustNew(t, chart("notify"))
 	worked, err := after.Step(t.Context())
 
 	require.True(t, worked)
 	require.ErrorIs(t, err, sc.ErrUnknownEffect)
 	require.Zero(t, outboxSize(t, "o1"))
+}
+
+func TestNewRejectsAChartThatHoldsResources(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
+		b.Initial("open")
+		conn := b.State("open").Holds("conn",
+			func(context.Context, order) (int, error) { return 1, nil },
+			func(context.Context, int, sc.Leave[string]) {},
+		)
+		conn.OnError().To("closed")
+		b.Final("closed")
+	})
+	require.NoError(t, err)
+
+	_, err = pgdriver.New(pool, m)
+
+	require.ErrorIs(t, err, pgdriver.ErrResources)
+	require.ErrorContains(t, err, "open.conn")
 }

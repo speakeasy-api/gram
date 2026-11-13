@@ -3,6 +3,7 @@ package sc
 import (
 	"context"
 	"iter"
+	"math/rand/v2"
 	"reflect"
 	"time"
 )
@@ -212,8 +213,8 @@ type step[C any] struct {
 	name string
 
 	// assign is set for stepAssign. It receives the time the core is
-	// acting at.
-	assign func(C, any, time.Time) C
+	// acting at and the step's source of random numbers.
+	assign func(C, any, time.Time, *rand.Rand) C
 
 	// do is set for stepDo.
 	do func(context.Context, C, any)
@@ -241,8 +242,12 @@ const (
 	// triggerInvokeDone fires when an invoked service returns a result.
 	triggerInvokeDone triggerKind = "invoke.done"
 
-	// triggerInvokeError fires when an invoked service fails.
+	// triggerInvokeError fires when an invoked service fails, or a
+	// resource cannot be acquired.
 	triggerInvokeError triggerKind = "invoke.error"
+
+	// triggerAcquired fires when a resource has been acquired.
+	triggerAcquired triggerKind = "acquired"
 )
 
 // transition is one outgoing edge of a state with its event type erased.
@@ -331,6 +336,33 @@ type invocation[S comparable, C any] struct {
 	doneType reflect.Type
 
 	// run executes the service and yields the events it produces, ending
-	// with a Done or Failed event carrying id.
+	// with a Done or Failed event carrying id. For a resource it acquires
+	// the value and yields an Acquired or Failed event.
 	run func(ctx context.Context, c C, id string) iter.Seq[any]
+
+	// resource is set for a resource declared with Holds, and nil for a
+	// service.
+	resource *resourceSpec[S]
+}
+
+// resourceSpec is what makes an invocation a resource.
+type resourceSpec[S comparable] struct {
+	// key identifies the resource to its handle: its state and name.
+	key string
+
+	// release gives back an acquired value; nil when not yet bound.
+	release func(ctx context.Context, value any, why Leave[S])
+}
+
+// Leave says why a resource is being released.
+type Leave[S comparable] struct {
+	// Move is the step that left the resource's state. It is the zero
+	// value when Closed is set.
+	Move Move[S]
+
+	// Closed is set when the driver is shutting the instance down while
+	// the chart is still in the resource's state. The snapshot still
+	// records the resource as held, so resuming the instance acquires it
+	// again.
+	Closed bool
 }

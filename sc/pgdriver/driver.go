@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -60,6 +61,12 @@ var (
 	// ErrNoOutbox is returned by [Driver.Work] and [Driver.Step] for a
 	// driver whose sink is not the built-in [Outbox].
 	ErrNoOutbox = errors.New("driver does not use the built-in outbox")
+
+	// ErrResources is returned by [New] for a chart that declares
+	// resources with Holds. A resource lives in one process, but any
+	// worker process may carry out an instance's effects, so this driver
+	// cannot hold one. Run such a chart with sc.Instance or sc.Actor.
+	ErrResources = errors.New("chart declares resources, which the Postgres driver cannot hold")
 )
 
 // Driver stores and runs the instances of one machine. It is safe for
@@ -118,8 +125,13 @@ func WithSink[C any](sink Sink[C]) Option {
 	return func(c *config) { c.sink = sink }
 }
 
-// New returns a driver for the instances of m.
-func New[S comparable, C any](pool *pgxpool.Pool, m *sc.Machine[S, C], opts ...Option) *Driver[S, C] {
+// New returns a driver for the instances of m. It fails with an error
+// wrapping [ErrResources] when the chart declares resources.
+func New[S comparable, C any](pool *pgxpool.Pool, m *sc.Machine[S, C], opts ...Option) (*Driver[S, C], error) {
+	if resources := m.Resources(); len(resources) > 0 {
+		return nil, fmt.Errorf("%w: %s", ErrResources, strings.Join(resources, ", "))
+	}
+
 	cfg := config{poll: defaultPollInterval, hooks: nil, store: nil, sink: nil}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -143,7 +155,7 @@ func New[S comparable, C any](pool *pgxpool.Pool, m *sc.Machine[S, C], opts ...O
 		d.outbox = true
 	}
 
-	return d
+	return d, nil
 }
 
 // typed asserts an option's value to the type the driver needs, panicking
@@ -193,7 +205,7 @@ func (d *Driver[S, C]) CreateTx(ctx context.Context, tx pgx.Tx, id string, c C) 
 		return zero, fmt.Errorf("create instance %q: %w", id, err)
 	}
 
-	snap, effects := d.m.Start(c, now)
+	snap, effects := d.m.Start(c, now, sc.RandomSeed())
 
 	data, err := json.Marshal(snap)
 	if err != nil {

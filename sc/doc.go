@@ -43,6 +43,14 @@
 // [Machine.Bind], so a chart can be declared, exported and explored without the
 // dependencies its services need.
 //
+// A state can hold a live resource, such as a connection, for as long as it
+// is active: [StateBuilder.Holds] acquires it on entry and releases it on
+// exit, the driver keeps the value out of the snapshot, and the services and
+// actions inside the state read it with [Resource.From].
+// [StateBuilder.HoldsPermit] is a resource that takes one unit of a shared
+// budget without waiting, which caps how many instances are in a state at
+// once.
+//
 // Every guard, assignment, action, and service has a name. Names identify
 // actions inside persisted effects and label the chart in [Machine.Definition],
 // which exports it in the XState machine configuration format.

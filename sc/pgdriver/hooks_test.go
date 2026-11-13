@@ -2,6 +2,7 @@ package pgdriver_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -28,7 +29,7 @@ func deadlineDriver(t *testing.T) *pgdriver.Driver[string, reminder] {
 	})
 	require.NoError(t, err)
 
-	return pgdriver.New(pool, m)
+	return mustNew(t, m)
 }
 
 func TestDeadlineTimerIsDueAtItsOwnTime(t *testing.T) {
@@ -89,7 +90,7 @@ func TestDriverReportsCommittedStepsAndEffectsToItsHooks(t *testing.T) {
 	require.NoError(t, err)
 
 	log := &hookLog{mu: sync.Mutex{}, calls: nil}
-	d := pgdriver.New(pool, m, pgdriver.WithHooks(&sc.Hooks[string, order]{
+	d := mustNew(t, m, pgdriver.WithHooks(&sc.Hooks[string, order]{
 		Transition: func(_ context.Context, step sc.Step[string, order]) {
 			log.add("transition %s to %v", m.EventName(step.Event), step.To.Active())
 		},
@@ -134,5 +135,53 @@ func TestWithHooksForAnotherMachinePanics(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Panics(t, func() { pgdriver.New(pool, m, pgdriver.WithHooks(&sc.Hooks[string, reminder]{})) })
+	require.Panics(t, func() { _, _ = pgdriver.New(pool, m, pgdriver.WithHooks(&sc.Hooks[string, reminder]{})) })
+}
+
+// quotaError is a typed service error with a code, like a provider's rate
+// limit.
+type quotaError struct{ retryIn time.Duration }
+
+func (quotaError) Error() string { return "quota exceeded" }
+
+func (quotaError) Code() string { return "quota_exceeded" }
+
+func TestErrorRoutingWorksOnTypesBeforeStorageAndOnCodesAfter(t *testing.T) {
+	t.Parallel()
+
+	seen := make(chan string, 1)
+
+	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
+		b.Initial("charging")
+		charge := b.State("charging").Invoke("charge", func(context.Context, order) (string, error) {
+			return "", fmt.Errorf("charge: %w", quotaError{retryIn: time.Minute})
+		})
+		charge.OnDone().To("paid")
+		charge.OnError().
+			// The guard runs when the worker hands the failure to the
+			// chart, so it still sees the error's type.
+			When("overQuota", func(_ order, f sc.Failed) bool {
+				var quota quotaError
+				return errors.As(f.Err, &quota) && quota.retryIn == time.Minute
+			}).
+			// The action runs later from the outbox, after the event was
+			// stored, so it reads the code.
+			Do("report", func(_ context.Context, _ order, f sc.Failed) { seen <- sc.ErrorCode(f.Err) + ": " + f.Err.Error() }).
+			To("throttled")
+		charge.OnError().To("declined")
+		b.Final("paid")
+		b.Final("throttled")
+		b.Final("declined")
+	})
+	require.NoError(t, err)
+
+	d := mustNew(t, m)
+	_, err = d.Create(t.Context(), "o1", order{})
+	require.NoError(t, err)
+	drain(t, d)
+
+	snap, err := d.Load(t.Context(), "o1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"throttled"}, snap.Active())
+	require.Equal(t, "quota_exceeded: charge: quota exceeded", <-seen)
 }

@@ -142,7 +142,7 @@ func TestSendTxCommitsWithTheCallersTransactionAndRollsBackWithIt(t *testing.T) 
 	m := invitationMachine(t)
 	store := newInvitationStore(t)
 	sink := &capturingSink{m: m, mu: sync.Mutex{}, encoded: nil}
-	d := pgdriver.New(pool, m, pgdriver.WithStore[string, invitation](store), pgdriver.WithSink[invitation](sink))
+	d := mustNew(t, m, pgdriver.WithStore[string, invitation](store), pgdriver.WithSink[invitation](sink))
 
 	_, err := d.Create(t.Context(), "i1", invitation{ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestSendTxWritesNothingForAnEventItIgnores(t *testing.T) {
 	m := invitationMachine(t)
 	store := newInvitationStore(t)
 	sink := &capturingSink{m: m, mu: sync.Mutex{}, encoded: nil}
-	d := pgdriver.New(pool, m, pgdriver.WithStore[string, invitation](store), pgdriver.WithSink[invitation](sink))
+	d := mustNew(t, m, pgdriver.WithStore[string, invitation](store), pgdriver.WithSink[invitation](sink))
 
 	_, err := d.Create(t.Context(), "i1", invitation{ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
@@ -195,7 +195,7 @@ func TestACustomSinksConsumerPerformsTheEffects(t *testing.T) {
 	m := invitationMachine(t)
 	store := newInvitationStore(t)
 	sink := &capturingSink{m: m, mu: sync.Mutex{}, encoded: nil}
-	d := pgdriver.New(pool, m, pgdriver.WithStore[string, invitation](store), pgdriver.WithSink[invitation](sink))
+	d := mustNew(t, m, pgdriver.WithStore[string, invitation](store), pgdriver.WithSink[invitation](sink))
 
 	// The expiry is already past, so the deadline's effect is due at once.
 	_, err := d.Create(t.Context(), "i1", invitation{ExpiresAt: time.Now().Add(-time.Minute)})
@@ -230,7 +230,7 @@ func TestLoadShowsAnExpiryNothingHasProcessed(t *testing.T) {
 	m := invitationMachine(t)
 	store := newInvitationStore(t)
 	sink := &capturingSink{m: m, mu: sync.Mutex{}, encoded: nil}
-	d := pgdriver.New(pool, m, pgdriver.WithStore[string, invitation](store), pgdriver.WithSink[invitation](sink))
+	d := mustNew(t, m, pgdriver.WithStore[string, invitation](store), pgdriver.WithSink[invitation](sink))
 
 	// expiresIn is short so the test can pass it; long enough that the
 	// invitation is still pending when created.

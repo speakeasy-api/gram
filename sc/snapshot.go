@@ -30,6 +30,7 @@ type Snapshot[S comparable, C any] struct {
 	invocations []runningInvocation[S]
 	scopes      map[S]time.Time
 	counter     uint64
+	seed        uint64
 }
 
 // pendingTimer is a delayed transition whose timer has not fired.
@@ -49,6 +50,10 @@ type runningInvocation[S comparable] struct {
 	id    string
 	state S
 	name  string
+
+	// resource marks a resource; acquired is set once it is held.
+	resource bool
+	acquired bool
 }
 
 // PendingTimer is a timer that has started and not yet fired or been
@@ -105,7 +110,37 @@ func (s Snapshot[S, C]) Timers() []PendingTimer[S] {
 func (s Snapshot[S, C]) Services() []RunningService[S] {
 	out := make([]RunningService[S], 0, len(s.invocations))
 	for _, inv := range s.invocations {
-		out = append(out, RunningService[S]{ID: inv.id, State: inv.state, Name: inv.name})
+		if !inv.resource {
+			out = append(out, RunningService[S]{ID: inv.id, State: inv.state, Name: inv.name})
+		}
+	}
+
+	return out
+}
+
+// HeldResource is a resource of an active state.
+type HeldResource[S comparable] struct {
+	// ID is the ID of the effect that acquires the resource.
+	ID string
+
+	// State is the state that holds the resource.
+	State S
+
+	// Name is the resource name.
+	Name string
+
+	// Acquired is false while the acquisition is still in flight.
+	Acquired bool
+}
+
+// Resources returns the resources of the active states, in the order their
+// acquisition started.
+func (s Snapshot[S, C]) Resources() []HeldResource[S] {
+	var out []HeldResource[S]
+	for _, inv := range s.invocations {
+		if inv.resource {
+			out = append(out, HeldResource[S]{ID: inv.id, State: inv.state, Name: inv.name, Acquired: inv.acquired})
+		}
 	}
 
 	return out
@@ -163,6 +198,9 @@ type RawSnapshot struct {
 	// Counter is the last number used in a timer or service run ID.
 	Counter uint64 `json:"counter"`
 
+	// Seed is the seed the instance's random numbers are derived from.
+	Seed uint64 `json:"seed,omitempty"`
+
 	// Context is the chart's extended state.
 	Context json.RawMessage `json:"context"`
 }
@@ -200,6 +238,12 @@ type RawInvocation struct {
 
 	// Name is the service name.
 	Name string `json:"name"`
+
+	// Resource marks a resource declared with Holds.
+	Resource bool `json:"resource,omitempty"`
+
+	// Acquired is set for a resource that was held.
+	Acquired bool `json:"acquired,omitempty"`
 }
 
 // MarshalJSON encodes the snapshot in the [RawSnapshot] format.
@@ -221,6 +265,7 @@ func (s Snapshot[S, C]) MarshalJSON() ([]byte, error) {
 		Invocations: make([]RawInvocation, 0, len(s.invocations)),
 		Scopes:      make(map[string]time.Time, len(s.scopes)),
 		Counter:     s.counter,
+		Seed:        s.seed,
 		Context:     ctx,
 	}
 
@@ -241,7 +286,7 @@ func (s Snapshot[S, C]) MarshalJSON() ([]byte, error) {
 	}
 
 	for _, inv := range s.invocations {
-		raw.Invocations = append(raw.Invocations, RawInvocation{ID: inv.id, State: fmt.Sprint(inv.state), Name: inv.name})
+		raw.Invocations = append(raw.Invocations, RawInvocation{ID: inv.id, State: fmt.Sprint(inv.state), Name: inv.name, Resource: inv.resource, Acquired: inv.acquired})
 	}
 
 	for state, deadline := range s.scopes {
@@ -328,7 +373,11 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 		done:     raw.Done,
 		now:      now,
 		fired:    nil,
+		seed:     raw.Seed,
+		stream:   raw.Seq + 1,
+		rng:      nil,
 		scopes:   map[*node[S, C]]time.Time{},
+		acquired: nil,
 		pending:  nil,
 		effects:  nil,
 		queue:    nil,
@@ -444,7 +493,11 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 		done:     false,
 		now:      now,
 		fired:    nil,
+		seed:     seedFor(now, nil),
+		stream:   0,
+		rng:      nil,
 		scopes:   map[*node[S, C]]time.Time{},
+		acquired: nil,
 		pending:  nil,
 		effects:  nil,
 		queue:    nil,
@@ -517,7 +570,7 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 
 		if !kept {
 			var zero C
-			r.effects = append(r.effects, Effect[C]{Kind: EffectCancelTimer, ID: rt.ID, State: rt.State, Name: "", Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil})
+			r.effects = append(r.effects, Effect[C]{Kind: EffectCancelTimer, ID: rt.ID, State: rt.State, Name: "", Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil, Needs: nil})
 		}
 	}
 
@@ -527,16 +580,18 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 
 		if ok && r.config[n] && !r.done {
 			for _, inv := range n.invocations {
-				if inv.name == ri.Name {
-					r.services = append(r.services, service[S, C]{id: ri.ID, inv: inv})
+				if inv.name == ri.Name && (inv.resource != nil) == ri.Resource {
+					r.services = append(r.services, service[S, C]{id: ri.ID, inv: inv, acquired: ri.Acquired})
 					kept = true
 				}
 			}
 		}
 
-		if !kept {
+		// A resource that is dropped needs no release: whatever process
+		// held its value is gone.
+		if !kept && !ri.Resource {
 			var zero C
-			r.effects = append(r.effects, Effect[C]{Kind: EffectStopInvocation, ID: ri.ID, State: ri.State, Name: ri.Name, Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil})
+			r.effects = append(r.effects, Effect[C]{Kind: EffectStopInvocation, ID: ri.ID, State: ri.State, Name: ri.Name, Delay: 0, At: time.Time{}, Jitter: 0, Context: zero, Event: nil, From: nil, To: nil, Needs: nil})
 		}
 	}
 
@@ -563,7 +618,8 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 
 // Resume returns the effects that restart everything outstanding in snap:
 // one [EffectStartTimer] per pending timer, carrying the time it is due,
-// which may already be past, and one
+// which may already be past, one [EffectAcquire] per resource of an active
+// state, and one
 // [EffectStartInvocation] per unfinished service run. Drivers that keep
 // timers and services in memory call it after loading a snapshot in a new
 // process. Drivers that store them durably do not need it.
@@ -576,8 +632,14 @@ func (m *Machine[S, C]) Resume(snap Snapshot[S, C]) []Effect[C] {
 		effects = append(effects, timerEffect(t))
 	}
 
-	for _, s := range r.services {
-		effects = append(effects, r.serviceEffect(s.id, s.inv))
+	// Resources are acquired again before the services that run inside
+	// them.
+	for _, resources := range []bool{true, false} {
+		for _, s := range r.services {
+			if (s.inv.resource != nil) == resources {
+				effects = append(effects, r.serviceEffect(s.id, s.inv))
+			}
+		}
 	}
 
 	return effects

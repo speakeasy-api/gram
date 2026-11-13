@@ -81,6 +81,10 @@ func (o Outbox[S, C]) Enqueue(ctx context.Context, tx pgx.Tx, instance string, n
 			if err != nil {
 				return fmt.Errorf("insert %s effect: %w", e.Kind, err)
 			}
+		case sc.EffectAcquire, sc.EffectRelease:
+			// New rejects charts that declare resources, so these only
+			// arrive from a sink used outside the driver.
+			return fmt.Errorf("%w: %s effect", ErrResources, e.Kind)
 		}
 	}
 

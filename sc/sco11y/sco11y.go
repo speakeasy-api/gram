@@ -6,8 +6,10 @@
 //
 //   - a span for each accepted event, named "sc.transition", whose parent is
 //     the span in the context the event was sent with;
-//   - a span for each action and service run, named "sc.action" or
-//     "sc.service", which becomes the parent of the calls the effect makes;
+//   - a span for each action and service run, and for each acquiring and
+//     releasing of a resource, named "sc.action", "sc.service", "sc.acquire"
+//     or "sc.release", which becomes the parent of the calls the effect
+//     makes;
 //   - an "sc.event.ignored" span event on the current span for each event
 //     that changed nothing;
 //   - the metrics sc.transitions, sc.events.ignored, and sc.effect.duration.
@@ -56,7 +58,7 @@ const (
 	// keyState is the state an effect belongs to.
 	keyState = attribute.Key("sc.state")
 
-	// keyEffectKind is "action" or "service".
+	// keyEffectKind is "action", "service", "acquire" or "release".
 	keyEffectKind = attribute.Key("sc.effect.kind")
 
 	// keyEffectName is the action or service name.
@@ -150,10 +152,18 @@ func New[S comparable, C any](m *sc.Machine[S, C], tp trace.TracerProvider, mp m
 	}, nil
 }
 
-// effectKind is the kind recorded for an action or service effect.
+// effectKind is the kind recorded for an effect: an action, a service, or
+// the acquiring or releasing of a resource.
 func effectKind[C any](e sc.Effect[C]) string {
-	if e.Kind == sc.EffectStartInvocation {
+	switch e.Kind {
+	case sc.EffectStartInvocation:
 		return "service"
+	case sc.EffectAcquire:
+		return "acquire"
+	case sc.EffectRelease:
+		return "release"
+	case sc.EffectAction, sc.EffectStopInvocation, sc.EffectStartTimer, sc.EffectCancelTimer:
+		return "action"
 	}
 
 	return "action"
@@ -195,6 +205,9 @@ func eventName[S comparable, C any](m *sc.Machine[S, C], ev any) string {
 	name := m.EventName(ev)
 	if strings.HasPrefix(name, "sc.done:") {
 		return "sc.done"
+	}
+	if strings.HasPrefix(name, "sc.acquired:") {
+		return "sc.acquired"
 	}
 
 	return name

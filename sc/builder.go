@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"math/rand/v2"
 	"reflect"
 	"time"
 )
@@ -353,6 +354,7 @@ func (s *StateBuilder[S, C]) Invoke[R any](name string, fn func(context.Context,
 		name:     name,
 		doneType: reflect.TypeFor[Done[R]](),
 		run:      adaptService(fn),
+		resource: nil,
 	}
 	s.n.invocations = append(s.n.invocations, inv)
 
@@ -370,6 +372,7 @@ func (s *StateBuilder[S, C]) Requires[R any](name string) *Invocation[S, C, R] {
 		name:     name,
 		doneType: reflect.TypeFor[Done[R]](),
 		run:      nil,
+		resource: nil,
 	}
 	s.n.invocations = append(s.n.invocations, inv)
 
@@ -380,6 +383,134 @@ func (s *StateBuilder[S, C]) Requires[R any](name string) *Invocation[S, C, R] {
 // only. Its implementation is given later with [Machine.Bind].
 func (s *StateBuilder[S, C]) RequiresStream(name string) *Invocation[S, C, struct{}] {
 	return s.Requires[struct{}](name)
+}
+
+// Holds declares a resource the state holds for as long as it is active: a
+// connection, a listener, a running node. acquire runs when the state is
+// entered, like a service, and its outcome is routed with the returned
+// [Resource]: OnAcquired when it succeeds, OnError when it fails. release
+// runs when the state is left, after the services inside it have stopped,
+// and is told why.
+//
+// A state's resources are acquired one after another, in the order they
+// were declared: each starts once the one before it is held, and its acquire
+// function can read the earlier ones with [Resource.From]. If one fails, the
+// later ones are not acquired. Services of the same state start with the
+// first acquisition, so put work that needs the resource in a child state
+// entered from OnAcquired.
+//
+// The value never enters the context or the snapshot. The driver keeps it,
+// and services and actions of the state and the states inside it read it
+// with [Resource.From]. Resources are released in the reverse of the order
+// they were declared, and those of inner states before those of outer ones.
+//
+// If the state is left while acquire is still running, acquire is left to
+// finish and its value is released at once. Resuming a persisted instance
+// that held the resource acquires it again before the services inside it
+// run; if that fails, the OnError transition decides what happens.
+//
+// release cannot fail, like an action. Only the [Instance] and [Actor]
+// drivers hold resources; pgdriver rejects a chart that declares one.
+func (s *StateBuilder[S, C]) Holds[R any](name string, acquire func(context.Context, C) (R, error), release func(ctx context.Context, value R, why Leave[S])) *Resource[S, C, R] {
+	res := s.HoldsRequired[R](name)
+	res.inv.run = adaptAcquire(acquire)
+	res.inv.resource.release = adaptRelease(release)
+
+	return res
+}
+
+// HoldsRequired declares a resource like [StateBuilder.Holds], by its name
+// and type only. Its acquire and release functions are given later with
+// [Machine.Bind].
+func (s *StateBuilder[S, C]) HoldsRequired[R any](name string) *Resource[S, C, R] {
+	inv := &invocation[S, C]{
+		state:    s.n,
+		name:     name,
+		doneType: reflect.TypeFor[Acquired[R]](),
+		run:      nil,
+		resource: &resourceSpec[S]{key: s.n.name + "\x00" + name, release: nil},
+	}
+	s.n.invocations = append(s.n.invocations, inv)
+
+	return &Resource[S, C, R]{b: s.b, n: s.n, inv: inv}
+}
+
+// Resource routes the outcome of acquiring a resource and gives access to
+// its value.
+type Resource[S comparable, C, R any] struct {
+	b   *build[S, C]
+	n   *node[S, C]
+	inv *invocation[S, C]
+}
+
+// OnAcquired declares a transition taken when the resource has been
+// acquired.
+func (r *Resource[S, C, R]) OnAcquired() *Transition[S, C, Acquired[R]] {
+	t := newTransition[S, C, Acquired[R]](r.b, r.n, triggerAcquired)
+	t.t.eventType = reflect.TypeFor[Acquired[R]]()
+	t.t.invocation = r.inv
+
+	return t
+}
+
+// OnError declares a transition taken when the resource cannot be acquired,
+// at first or again after a restart. Every resource needs at least one.
+func (r *Resource[S, C, R]) OnError() *Transition[S, C, Failed] {
+	t := newTransition[S, C, Failed](r.b, r.n, triggerInvokeError)
+	t.t.eventType = reflect.TypeFor[Failed]()
+	t.t.invocation = r.inv
+
+	return t
+}
+
+// From returns the resource's value from the context a service or action
+// was given. It reports false when the resource is not held: before it is
+// acquired, after its state is left, or under a driver that holds no
+// resources.
+func (r *Resource[S, C, R]) From(ctx context.Context) (R, bool) {
+	var zero R
+
+	lookup, ok := ctx.Value(heldResources{}).(func(key string) (any, bool))
+	if !ok {
+		return zero, false
+	}
+
+	value, ok := lookup(r.inv.resource.key)
+	if !ok {
+		return zero, false
+	}
+
+	typed, ok := value.(R)
+
+	return typed, ok
+}
+
+// heldResources is the context key under which a driver exposes the
+// resources it holds.
+type heldResources struct{}
+
+// adaptAcquire adapts an acquire function to the form the core runs.
+func adaptAcquire[C, R any](fn func(context.Context, C) (R, error)) func(context.Context, C, string) iter.Seq[any] {
+	return func(ctx context.Context, c C, id string) iter.Seq[any] {
+		return func(yield func(any) bool) {
+			value, err := fn(ctx, c)
+			if err != nil {
+				yield(Failed{ID: id, Err: err})
+				return
+			}
+
+			yield(Acquired[R]{ID: id, Value: value})
+		}
+	}
+}
+
+// adaptRelease adapts a release function to the form the core runs.
+func adaptRelease[S comparable, R any](fn func(context.Context, R, Leave[S])) func(context.Context, any, Leave[S]) {
+	return func(ctx context.Context, value any, why Leave[S]) {
+		if typed, ok := value.(R); ok {
+			fn(ctx, typed, why)
+		}
+	}
 }
 
 // adaptService adapts a service function to the form the core runs.
@@ -428,6 +559,7 @@ func (s *StateBuilder[S, C]) Stream(name string, fn func(context.Context, C) ite
 		name:     name,
 		doneType: reflect.TypeFor[Done[struct{}]](),
 		run:      adaptStream(fn),
+		resource: nil,
 	}
 	s.n.invocations = append(s.n.invocations, inv)
 
@@ -562,7 +694,7 @@ func (t *Transition[S, C, Ev]) Assign(name string, f func(C, Ev) C) *Transition[
 	t.t.steps = append(t.t.steps, step[C]{
 		kind:   stepAssign,
 		name:   name,
-		assign: func(c C, ev any, _ time.Time) C { return f(c, event[Ev](ev)) },
+		assign: func(c C, ev any, _ time.Time, _ *rand.Rand) C { return f(c, event[Ev](ev)) },
 		do:     nil,
 		raise:  nil,
 	})
@@ -577,7 +709,26 @@ func (t *Transition[S, C, Ev]) AssignAt(name string, f func(c C, ev Ev, now time
 	t.t.steps = append(t.t.steps, step[C]{
 		kind:   stepAssign,
 		name:   name,
-		assign: func(c C, ev any, now time.Time) C { return f(c, event[Ev](ev), now) },
+		assign: func(c C, ev any, now time.Time, _ *rand.Rand) C { return f(c, event[Ev](ev), now) },
+		do:     nil,
+		raise:  nil,
+	})
+
+	return t
+}
+
+// AssignRand is [Transition.AssignAt] for an assignment that also needs
+// random numbers, such as spreading a refresh time so that instances started
+// together do not all act together. rnd is a source the core derives from the
+// instance's seed and how many events it has processed, so the assignment
+// stays a pure function of its arguments: replaying the same events gives the
+// same draws, and exploration stays deterministic. For a timer, prefer
+// [Transition.Jitter].
+func (t *Transition[S, C, Ev]) AssignRand(name string, f func(c C, ev Ev, now time.Time, rnd *rand.Rand) C) *Transition[S, C, Ev] {
+	t.t.steps = append(t.t.steps, step[C]{
+		kind:   stepAssign,
+		name:   name,
+		assign: func(c C, ev any, now time.Time, rnd *rand.Rand) C { return f(c, event[Ev](ev), now, rnd) },
 		do:     nil,
 		raise:  nil,
 	})

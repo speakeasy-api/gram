@@ -41,6 +41,9 @@ type Instance[S comparable, C any] struct {
 	// rather than a mutex lets a stopped service give up waiting for it.
 	turn chan struct{}
 
+	// res holds the values of the resources the instance has acquired.
+	res *resourceTable[S, C]
+
 	// runs tracks service goroutines so Close can wait for them.
 	runs sync.WaitGroup
 
@@ -108,7 +111,7 @@ type settleToken struct{}
 // and only the error is returned.
 func (m *Machine[S, C]) Instance(ctx context.Context, c C, opts ...RunOption) (*Instance[S, C], error) {
 	o := runSettings(opts)
-	snap, effects := m.Start(c, o.now())
+	snap, effects := m.Start(c, o.now(), RandomSeed())
 
 	return m.newInstance(ctx, snap, effects, o)
 }
@@ -128,6 +131,7 @@ func (m *Machine[S, C]) newInstance(ctx context.Context, snap Snapshot[S, C], ef
 		now:       o.now,
 		manual:    o.manualTimers,
 		turn:      make(chan struct{}, 1),
+		res:       nil,
 		runs:      sync.WaitGroup{},
 		mu:        sync.Mutex{},
 		snap:      snap,
@@ -139,6 +143,7 @@ func (m *Machine[S, C]) newInstance(ctx context.Context, snap Snapshot[S, C], ef
 		ended:     make(chan struct{}),
 		closed:    false,
 	}
+	i.res = newResourceTable(m, i.hooks)
 	i.turn <- struct{}{}
 
 	<-i.turn
@@ -281,21 +286,26 @@ func (i *Instance[S, C]) Await(ctx context.Context, cond func(Snapshot[S, C]) bo
 	}
 }
 
-// Close stops every running service and timer and waits for the service
-// goroutines to return. Later sends fail with [ErrInstanceClosed]. The
-// snapshot stays readable, so the caller can persist it.
+// Close stops every running service and timer, waits for the service
+// goroutines to return, and then releases every resource the instance
+// holds, the last acquired first. Later sends fail with
+// [ErrInstanceClosed]. The snapshot stays readable, so the caller can
+// persist it; it still records the resources as held, so an instance
+// resumed from it acquires them again.
 func (i *Instance[S, C]) Close() {
 	i.mu.Lock()
 	i.closed = true
 	for _, w := range i.wakeups {
 		w.Stop()
 	}
+	i.res.abandon()
 	for _, run := range i.running {
 		run.stop()
 	}
 	i.mu.Unlock()
 
 	i.runs.Wait()
+	i.res.releaseAll(context.Background())
 }
 
 // process takes one step. The caller holds the turn.
@@ -333,8 +343,15 @@ func (i *Instance[S, C]) process(ctx context.Context, ev any) (Step[S, C], error
 func (i *Instance[S, C]) apply(ctx context.Context, effects []Effect[C]) error {
 	var first error
 
+	ctx = i.res.attach(ctx)
+
 	for _, e := range effects {
 		switch e.Kind {
+		case EffectAcquire:
+			i.res.begin(e)
+			i.startService(ctx, e)
+		case EffectRelease:
+			i.res.releaseFor(ctx, e)
 		case EffectAction:
 			if err := i.hooks.Exec(ctx, i.m, e, i.now(), func(context.Context, any) {}); err != nil && first == nil {
 				first = err
@@ -393,6 +410,15 @@ func (i *Instance[S, C]) startService(ctx context.Context, e Effect[C]) {
 	i.mu.Unlock()
 
 	deliver := func(evCtx context.Context, ev any) {
+		// An acquired value is kept before the chart hears of it. One
+		// that arrives after its state was left has been released, and
+		// its event goes no further.
+		if a, ok := ev.(acquisition); ok {
+			if id, value := a.acquisition(); !i.res.store(evCtx, id, value) {
+				return
+			}
+		}
+
 		select {
 		case <-i.turn:
 		case <-runCtx.Done():
@@ -430,7 +456,16 @@ func (i *Instance[S, C]) startService(ctx context.Context, e Effect[C]) {
 			i.mu.Unlock()
 		}()
 
-		if i.services != nil {
+		if e.Kind == EffectAcquire {
+			defer i.res.settle(e.ID)
+		}
+
+		if err := i.res.wait(execCtx, e.Needs); err != nil {
+			deliver(execCtx, Failed{ID: e.ID, Err: err})
+			return
+		}
+
+		if i.services != nil && e.Kind == EffectStartInvocation {
 			if err := i.services.Acquire(execCtx, 1); err != nil {
 				return
 			}
