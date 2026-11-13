@@ -175,7 +175,7 @@ func (s *Service) consentAuthChoicesEnforced(ctx context.Context, organizationID
 	// runtime cache must not approve through the previous enforcement mode.
 	enforced, err := authenforcement.ReadEnforced(ctx, s.db, organizationID)
 	if err != nil {
-		return false, fmt.Errorf("read consent auth enforcement: %w", err)
+		return false, fmt.Errorf("read upstream auth enforcement: %w", err)
 	}
 	return enforced, nil
 }
