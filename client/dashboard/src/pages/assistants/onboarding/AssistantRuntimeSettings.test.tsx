@@ -153,3 +153,21 @@ it("enables switching to Kit after a compatible effort is persisted", () => {
     },
   });
 });
+
+it("explains the Kit requirement to read-only users without instructing them to save", () => {
+  render(
+    <AssistantRuntimeSettings
+      assistant={{ ...assistant, reasoningEffort: "none" }}
+      canWrite={false}
+    />,
+  );
+  expect(
+    screen.getByText(
+      /A user with assistant write permission can change this setting/,
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText(/Set reasoning effort.*and save/)).toBeNull();
+  expect((screen.getByRole("switch") as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("switch"));
+  expect(mocks.mutate).not.toHaveBeenCalled();
+});

@@ -100,7 +100,7 @@ function renderPanel() {
     </QueryClientProvider>,
   );
 }
-it("defaults new assistants to Medium and lets onboarding select Off", () => {
+it("shows the draft selection and lets onboarding select Off", () => {
   state.assistantId = null;
   renderPanel();
   const selector = screen.getByRole("combobox", { name: "Reasoning effort" });

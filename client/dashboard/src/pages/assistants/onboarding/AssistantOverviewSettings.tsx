@@ -18,13 +18,13 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Row, Section } from "./PanelSection";
 import {
-  ReasoningEffortSelect,
   REASONING_EFFORT_LABELS,
   REASONING_EFFORT_HELP,
   KIT_REASONING_EFFORT_HELP,
   type ReasoningEffort,
   reasoningEffortOrDefault,
-} from "./ReasoningEffortSelect";
+} from "./reasoning-effort";
+import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
 import { AssistantRuntimeSettings } from "./AssistantRuntimeSettings";
 
 type OverviewDraft = {

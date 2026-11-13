@@ -76,7 +76,10 @@ func (s *ServiceCore) prepareRuntimeSelection(ctx context.Context, queries *assi
 		if int(current.RuntimeVersion) != *change.ExpectedVersion {
 			return nil, errRuntimeSwitchConflict
 		}
-		effectiveVersion = int16(*change.Version)
+		effectiveVersion = 2
+		if *change.Version == 3 {
+			effectiveVersion = 3
+		}
 	}
 	if change.ReasoningEffort != nil {
 		effectiveEffort = *change.ReasoningEffort

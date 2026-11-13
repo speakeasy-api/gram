@@ -358,6 +358,9 @@ func (s *ServiceCore) createManagedAssistant(
 		return assistantRecord{}, err
 	}
 
+	if err := s.auditAssistantReasoning(ctx, tx, record, nil); err != nil {
+		return assistantRecord{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit managed assistant tx: %w", err)
 	}

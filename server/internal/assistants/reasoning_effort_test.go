@@ -1,9 +1,11 @@
 package assistants
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -87,7 +89,7 @@ func TestAssistantLegacyNullReasoningEffort(t *testing.T) {
 	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
 	created := createTestAssistant(t, svc, ctx, "Legacy reasoning")
 	assistantID := uuid.MustParse(created.ID)
-	_, err := conn.Exec(ctx, `UPDATE assistants SET reasoning_effort = NULL WHERE project_id = $1 AND id = $2`, projectID, assistantID)
+	err := assistantrepo.New(conn).ClearAssistantReasoningEffortForTest(ctx, assistantrepo.ClearAssistantReasoningEffortForTestParams{ProjectID: projectID, AssistantID: assistantID})
 	require.NoError(t, err)
 	fetched, err := svc.GetAssistant(ctx, &gen.GetAssistantPayload{ID: created.ID})
 	require.NoError(t, err)
@@ -150,5 +152,39 @@ func TestReasoningEffortFromNullableText(t *testing.T) {
 		{pgtype.Text{String: "high", Valid: true}, "high"},
 	} {
 		require.Equal(t, tc.expected, reasoningEffortFromPGText(tc.value))
+	}
+}
+
+func TestAssistantAutomaticKitPromotionPreservesReasoningCompatibility(t *testing.T) {
+	t.Parallel()
+	for _, effort := range []string{"none", "medium"} {
+		t.Run(effort, func(t *testing.T) {
+			t.Parallel()
+			svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistant_auto_kit_"+effort)
+			ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
+			svc.core.newAssistantRuntimeVersion = 0 // GKE uses automatic eligibility, not unconditional Kit.
+			checks := 0
+			svc.core.newAssistantRuntimeEligible = func(_ context.Context, _ pgx.Tx, record assistantRecord) (bool, error) {
+				checks++
+				require.EqualValues(t, 2, record.RuntimeVersion)
+				require.Equal(t, effort, record.ReasoningEffort)
+				return true, nil
+			}
+			created, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{Name: "Automatic runtime", Model: "test-model", ReasoningEffort: effort, Status: new(StatusPaused)})
+			require.NoError(t, err)
+			require.Equal(t, 1, checks)
+			expectedVersion := 3
+			if effort == "none" {
+				expectedVersion = 2
+			}
+			require.Equal(t, expectedVersion, created.RuntimeVersion)
+			require.Equal(t, effort, created.ReasoningEffort)
+			persisted, err := assistantrepo.New(conn).GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: projectID, AssistantID: uuid.MustParse(created.ID)})
+			require.NoError(t, err)
+			require.EqualValues(t, expectedVersion, persisted.RuntimeVersion)
+			incompatibleRuntimes, err := assistantrepo.New(conn).CountAssistantRuntimeRowsForTest(ctx, assistantrepo.CountAssistantRuntimeRowsForTestParams{ProjectID: projectID, AssistantID: uuid.MustParse(created.ID)})
+			require.NoError(t, err)
+			require.Zero(t, incompatibleRuntimes, "paused creation does not provision runtime authority")
+		})
 	}
 }

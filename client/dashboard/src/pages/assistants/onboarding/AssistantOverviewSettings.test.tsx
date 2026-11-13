@@ -173,3 +173,17 @@ it("blocks a stale Off draft after the effective runtime becomes Kit", () => {
   fireEvent.click(save);
   expect(mocks.mutate).not.toHaveBeenCalled();
 });
+
+it("keeps Off selectable on Default runtime with model compatibility guidance", () => {
+  edit();
+  expect(
+    screen.getByText(/Unsupported models may reject requests/),
+  ).toBeTruthy();
+  fireEvent.pointerDown(
+    screen.getByRole("combobox", { name: "Reasoning effort" }),
+    { button: 0, ctrlKey: false, pointerType: "mouse" },
+  );
+  expect(
+    screen.getByRole("option", { name: "Off" }).getAttribute("aria-disabled"),
+  ).not.toBe("true");
+});

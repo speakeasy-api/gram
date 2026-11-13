@@ -1,5 +1,5 @@
 import type { Assistant } from "@gram/client/models/components/assistant.js";
-import type { ReasoningEffort } from "./ReasoningEffortSelect";
+import type { ReasoningEffort } from "./reasoning-effort";
 import { createContext, useContext } from "react";
 
 type PendingResolver = (result: unknown) => void;

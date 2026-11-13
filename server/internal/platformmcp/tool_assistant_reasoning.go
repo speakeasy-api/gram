@@ -27,6 +27,7 @@ type SetAssistantReasoningEffortOutput struct {
 	ProjectID       string `json:"project_id"`
 	AssistantID     string `json:"assistant_id"`
 	ReasoningEffort string `json:"reasoning_effort"`
+	RuntimeVersion  int    `json:"runtime_version"`
 }
 
 func (s *AssistantIdentityService) setReasoningEffort(ctx context.Context, principal Principal, input SetAssistantReasoningEffortInput) (SetAssistantReasoningEffortOutput, error) {
@@ -80,7 +81,7 @@ func (s *AssistantIdentityService) setReasoningEffort(ctx context.Context, princ
 		return zero, ErrUnavailable
 	}
 	if !input.Confirmed {
-		return SetAssistantReasoningEffortOutput{ProjectID: current.ProjectID, AssistantID: current.ID, ReasoningEffort: current.ReasoningEffort}, nil
+		return SetAssistantReasoningEffortOutput{ProjectID: current.ProjectID, AssistantID: current.ID, ReasoningEffort: current.ReasoningEffort, RuntimeVersion: current.RuntimeVersion}, nil
 	}
 	// The authorized service locks the assistant and audits the persisted
 	// change. No frontend flag grants access.
@@ -95,7 +96,7 @@ func (s *AssistantIdentityService) setReasoningEffort(ctx context.Context, princ
 	if assistant == nil || assistant.ID != assistantID.String() || assistant.ProjectID != projectID.String() {
 		return zero, ErrUnavailable
 	}
-	return SetAssistantReasoningEffortOutput{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, ReasoningEffort: assistant.ReasoningEffort}, nil
+	return SetAssistantReasoningEffortOutput{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, ReasoningEffort: assistant.ReasoningEffort, RuntimeVersion: assistant.RuntimeVersion}, nil
 }
 
 func registerAssistantReasoningEffortTool(reg *Registrar, service *AssistantIdentityService) {
@@ -109,7 +110,7 @@ func registerAssistantReasoningEffortTool(reg *Registrar, service *AssistantIden
 		}, []string{"project_id", "assistant_id", "reasoning_effort", "confirmed"}),
 		Name:        setAssistantReasoningEffortToolName,
 		Title:       "Set an Assistant's Reasoning Effort",
-		Description: "Configure reasoning effort for one assistant in an exact project: none, low, medium, or high. First call with confirmed:false to inspect the current preference, then obtain explicit confirmation of the exact assistant and desired value before confirmed:true. Requires organization administrator access and assistant:write authorization. Omits all unrelated configuration, preserving model, runtime and attachments. Returns committed configuration only, not inference support or runtime readiness. Managed assistants cannot change their own configuration through this tool.",
+		Description: "Configure reasoning effort for one assistant in an exact project: none, low, medium, or high. The none setting is only available on the default runtime (2) with compatible models; Kit (3) requires low, medium, or high. First call with confirmed:false to inspect the current preference and runtime_version, then obtain explicit confirmation of the exact assistant and desired value before confirmed:true. If the current runtime is Kit, choose low, medium, or high, or explicitly switch to the default runtime before setting none. Requires organization administrator access and assistant:write authorization. Omits all unrelated configuration, preserving model, runtime and attachments. Returns committed configuration only, not inference support or runtime readiness. Managed assistants cannot change their own configuration through this tool.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), ReadOnlyHint: false, IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetAssistantReasoningEffortInput) (*mcp.CallToolResult, SetAssistantReasoningEffortOutput, error) {
 		return principalToolCall(ctx, assistantReasoningEffortToolResult, func(principal Principal) (SetAssistantReasoningEffortOutput, error) {
@@ -128,7 +129,7 @@ func assistantReasoningEffortToolResult(err error) (*mcp.CallToolResult, bool) {
 	} else if shared, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shared.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
-			result.Code, result.Message = "invalid_request", "Provide exact project and assistant UUIDs, a supported reasoning effort and explicit confirmation."
+			result.Code, result.Message = "invalid_request", "Provide exact project and assistant UUIDs, a supported reasoning effort and explicit confirmation. Kit requires low, medium, or high; none is only available on the default runtime with compatible models. Preview the runtime and choose a supported effort or explicitly switch runtimes first."
 		case oops.CodeForbidden, oops.CodeUnauthorized:
 			result.Code, result.Message = "permission_denied", "Reasoning configuration requires organization administrator access, assistant:write on the selected assistant and a user identity."
 		case oops.CodeNotFound:

@@ -1796,7 +1796,11 @@ func (s *ServiceCore) CreateAssistant(
 		if err != nil {
 			return assistantRecord{}, fmt.Errorf("check new assistant Kit eligibility: %w", err)
 		}
-		if eligible {
+		// Automatic eligibility must not override an explicit default-runtime Off preference.
+		if eligible && record.ReasoningEffort != "none" {
+			if err := validateRuntimeReasoningEffort(3, record.ReasoningEffort); err != nil {
+				return assistantRecord{}, err
+			}
 			changed, err := queries.SetAssistantDesiredRuntimeVersion(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionParams{RuntimeVersion: 3, AssistantID: record.ID, ProjectID: projectID, ExpectedRuntimeVersion: record.RuntimeVersion})
 			if err != nil {
 				return assistantRecord{}, fmt.Errorf("select eligible assistant Kit runtime: %w", err)
@@ -1904,7 +1908,7 @@ func (s *ServiceCore) UpdateAssistant(
 	canBindEnvironment func(environmentID uuid.UUID) bool,
 	selection ...runtimeSelectionChange,
 ) (assistantRecord, error) {
-	change := runtimeSelectionChange{Version: nil, ExpectedVersion: nil}
+	change := runtimeSelectionChange{Version: nil, ExpectedVersion: nil, ReasoningEffort: nil}
 	if len(selection) > 1 {
 		return assistantRecord{}, fmt.Errorf("%w: one runtime selection is required", errAssistantValidation)
 	}
@@ -4781,11 +4785,14 @@ func (s *ServiceCore) auditAssistantReasoning(ctx context.Context, tx pgx.Tx, re
 		return nil
 	}
 	actor := assistantActor(ctx, record.CreatedByUserID)
-	return s.audit.LogAssistantReasoningUpdate(ctx, tx, audit.LogAssistantReasoningUpdateEvent{
+	if err := s.audit.LogAssistantReasoningUpdate(ctx, tx, audit.LogAssistantReasoningUpdateEvent{
 		OrganizationID: record.OrganizationID, ProjectID: record.ProjectID,
 		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, actor.UserID), ActorDisplayName: actor.Email,
 		AssistantURN: urn.NewAssistant(record.ID), AssistantName: record.Name,
 		AssistantReasoningSnapshotBefore: before,
 		AssistantReasoningSnapshotAfter:  &audit.AssistantReasoningSnapshot{ReasoningEffort: record.ReasoningEffort},
-	})
+	}); err != nil {
+		return fmt.Errorf("audit assistant reasoning preference: %w", err)
+	}
+	return nil
 }

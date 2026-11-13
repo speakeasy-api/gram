@@ -286,6 +286,21 @@
     project_id: 0b7c3d1e-0000-4000-8000-000000000001
     assistant_id: a1b2c3d4-0000-4000-8000-000000000201
     reasoning_effort: high
+- id: access-assistant-reasoning-preview-kit-off
+  prompt: I want reasoning effort none for assistant a1b2c3d4-0000-4000-8000-000000000201 in Default. It might be on Kit. Show its current runtime and reasoning preference before I confirm a change.
+  expect: [set_assistant_reasoning_effort]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    assistant_id: a1b2c3d4-0000-4000-8000-000000000201
+    reasoning_effort: none
+    confirmed: false
+- id: access-assistant-reasoning-before-kit
+  prompt: Assistant a1b2c3d4-0000-4000-8000-000000000201 in Default has reasoning Off. Before we move it to Kit, change reasoning to medium so it is compatible. Do not switch runtimes yet.
+  expect: [set_assistant_reasoning_effort]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    assistant_id: a1b2c3d4-0000-4000-8000-000000000201
+    reasoning_effort: medium
 - id: access-assistant-runtime-preserve-reasoning
   prompt: Move assistant a1b2c3d4-0000-4000-8000-000000000201 in Default to the Kit runtime. Keep its reasoning effort at its current setting; I only want to change which runtime hosts it.
   expect: [select_assistant_runtime]

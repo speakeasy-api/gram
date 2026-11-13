@@ -9,6 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -56,7 +59,7 @@ func TestEnableManagedAssistantIsIdempotent(t *testing.T) {
 	require.NotEmpty(t, first.Instructions, "managed instructions must be embedded, not empty")
 
 	// Nullable expansion rows retain the effective default on both managed reads.
-	_, err = conn.Exec(ctx, `UPDATE assistants SET reasoning_effort = NULL WHERE project_id = $1 AND id = $2`, projectID, first.ID)
+	err = assistantrepo.New(conn).ClearAssistantReasoningEffortForTest(ctx, assistantrepo.ClearAssistantReasoningEffortForTestParams{ProjectID: projectID, AssistantID: first.ID})
 	require.NoError(t, err)
 
 	// A second enable (even by a different user) returns the same assistant.
@@ -73,6 +76,12 @@ func TestEnableManagedAssistantIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, first.ID, got.ID)
 	require.Equal(t, "medium", got.ReasoningEffort)
+	initialAudit, err := audittest.LatestAuditLogByActionAndSubject(ctx, conn, audit.ActionAssistantReasoningUpdate, first.ID.String())
+	require.NoError(t, err)
+	require.JSONEq(t, `{"reasoning_effort":"medium"}`, string(initialAudit.AfterSnapshot))
+	auditCount, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAssistantReasoningUpdate)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, auditCount, "managed creation is audited once; idempotent enables do not emit updates")
 
 	triggers, err := triggerrepo.New(conn).ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{
 		ProjectID:      projectID,

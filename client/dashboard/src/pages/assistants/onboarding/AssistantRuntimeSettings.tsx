@@ -90,8 +90,9 @@ export function AssistantRuntimeSettings({
           {kitRequiresReasoning && (
             <div id={compatibilityHelpId}>
               <Text small muted>
-                Set reasoning effort to Low, Medium, or High and save before
-                switching to Kit runtime. Kit does not support Off.
+                {canWrite
+                  ? "Set reasoning effort to Low, Medium, or High and save before switching to Kit runtime. Kit does not support Off."
+                  : "Kit runtime requires Low, Medium, or High reasoning effort. A user with assistant write permission can change this setting. Kit does not support Off."}
               </Text>
             </div>
           )}

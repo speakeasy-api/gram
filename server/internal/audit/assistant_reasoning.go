@@ -41,6 +41,9 @@ func (l *Logger) LogAssistantReasoningUpdate(ctx context.Context, dbtx repo.DBTX
 		return fmt.Errorf("marshal assistant reasoning after snapshot: %w", err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal: false,
+		ActorSlug:  conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""),
+		Metadata: nil, ActingSurface: conv.ToPGTextEmpty(""), ActingClientID: conv.ToPGTextEmpty(""),
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: true},
 		ActorID:        event.Actor.ID, ActorType: string(event.Actor.Type),

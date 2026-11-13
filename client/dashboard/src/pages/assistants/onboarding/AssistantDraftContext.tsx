@@ -1,4 +1,4 @@
-import type { ReasoningEffort } from "./ReasoningEffortSelect";
+import type { ReasoningEffort } from "./reasoning-effort";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
 import {
   invalidateAllAssistantsGet,

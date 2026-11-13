@@ -49,6 +49,7 @@ func TestKitReasoningRejectedUpdatesPreserveRuntimeAuthority(t *testing.T) {
 	}
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			svc, ctx, projectID, conn := newRBACServiceWithConn(t, fmt.Sprintf("kit_reasoning_reject_%d", i))
 			ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
 			svc.core.newAssistantRuntimeVersion = tc.initialVersion

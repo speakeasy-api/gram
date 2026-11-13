@@ -599,6 +599,22 @@ func (q *Queries) ClearAssistantMcpServersForServers(ctx context.Context, arg Cl
 	return err
 }
 
+const clearAssistantReasoningEffortForTest = `-- name: ClearAssistantReasoningEffortForTest :exec
+UPDATE assistants SET reasoning_effort = NULL
+WHERE id = $1 AND project_id = $2
+`
+
+type ClearAssistantReasoningEffortForTestParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Test fixture only: simulate a legacy row during nullable column expansion.
+func (q *Queries) ClearAssistantReasoningEffortForTest(ctx context.Context, arg ClearAssistantReasoningEffortForTestParams) error {
+	_, err := q.db.Exec(ctx, clearAssistantReasoningEffortForTest, arg.AssistantID, arg.ProjectID)
+	return err
+}
+
 const completeAssistantMCPOAuthClientRegistration = `-- name: CompleteAssistantMCPOAuthClientRegistration :execrows
 UPDATE assistant_mcp_oauth_clients AS clients
 SET

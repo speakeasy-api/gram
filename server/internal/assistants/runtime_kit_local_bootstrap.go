@@ -131,6 +131,6 @@ func kitReasoningEffort(effort string) (string, error) {
 	case "low", "medium", "high":
 		return effort, nil
 	default:
-		return "", fmt.Errorf("Kit does not support reasoning effort %q; select low, medium or high", effort)
+		return "", fmt.Errorf("kit does not support reasoning effort %q; select low, medium or high", effort)
 	}
 }

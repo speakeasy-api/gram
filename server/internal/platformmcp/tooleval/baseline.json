@@ -19,6 +19,12 @@
         "runs": 3
       }
     },
+    "access-assistant-reasoning-before-kit": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
     "access-assistant-reasoning-high": {
       "progressive": {
         "passes": 3,
@@ -26,6 +32,12 @@
       }
     },
     "access-assistant-reasoning-none": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-assistant-reasoning-preview-kit-off": {
       "progressive": {
         "passes": 3,
         "runs": 3

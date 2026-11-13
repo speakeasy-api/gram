@@ -16,12 +16,17 @@ import (
 )
 
 type assistantReasoningManagementStub struct {
-	update func(context.Context, *genassistants.UpdateAssistantPayload) (*types.Assistant, error)
+	runtimeVersion int
+	update         func(context.Context, *genassistants.UpdateAssistantPayload) (*types.Assistant, error)
 }
 
 func (s assistantReasoningManagementStub) GetAssistant(ctx context.Context, p *genassistants.GetAssistantPayload) (*types.Assistant, error) {
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	return &types.Assistant{ID: p.ID, ProjectID: auth.ProjectID.String(), ReasoningEffort: "medium"}, nil
+	version := s.runtimeVersion
+	if version == 0 {
+		version = 2
+	}
+	return &types.Assistant{ID: p.ID, ProjectID: auth.ProjectID.String(), ReasoningEffort: "medium", RuntimeVersion: version}, nil
 }
 
 func (s assistantReasoningManagementStub) UpdateAssistant(ctx context.Context, p *genassistants.UpdateAssistantPayload) (*types.Assistant, error) {
@@ -62,13 +67,14 @@ func TestAssistantReasoningSelection(t *testing.T) {
 			if endpointErr != nil {
 				return nil, endpointErr
 			}
-			return &types.Assistant{ID: p.ID, ProjectID: projectID.String(), ReasoningEffort: "high", Instructions: "private"}, nil
+			return &types.Assistant{ID: p.ID, ProjectID: projectID.String(), ReasoningEffort: "high", RuntimeVersion: 2, Instructions: "private"}, nil
 		}},
 	}
 	input := SetAssistantReasoningEffortInput{ProjectID: projectID.String(), AssistantID: assistantID.String(), ReasoningEffort: "high", Confirmed: true}
 	out, err := service.setReasoningEffort(ctx, principal, input)
 	require.NoError(t, err)
 	require.Equal(t, "high", out.ReasoningEffort)
+	require.Equal(t, 2, out.RuntimeVersion)
 	encoded, err := json.Marshal(out)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "private")
@@ -85,8 +91,18 @@ func TestAssistantReasoningSelection(t *testing.T) {
 	out, err = service.setReasoningEffort(ctx, principal, preview)
 	require.NoError(t, err)
 	require.Equal(t, "medium", out.ReasoningEffort)
+	require.Equal(t, 2, out.RuntimeVersion)
 	require.Equal(t, before, calls)
 
+	service.management = assistantReasoningManagementStub{runtimeVersion: 3, update: func(context.Context, *genassistants.UpdateAssistantPayload) (*types.Assistant, error) {
+		t.Fatal("preview must not attempt a write on Kit")
+		return nil, nil
+	}}
+	preview.ReasoningEffort = "none"
+	out, err = service.setReasoningEffort(ctx, principal, preview)
+	require.NoError(t, err)
+	require.Equal(t, 3, out.RuntimeVersion, "preview exposes Kit incompatibility before confirmation")
+	require.Equal(t, "medium", out.ReasoningEffort)
 	for _, invalid := range []SetAssistantReasoningEffortInput{
 		{ProjectID: input.ProjectID, AssistantID: input.AssistantID, ReasoningEffort: "invalid"},
 		{ProjectID: input.ProjectID, AssistantID: input.AssistantID, ReasoningEffort: ""},
@@ -135,6 +151,8 @@ func TestAssistantReasoningToolContract(t *testing.T) {
 	}
 	require.Contains(t, string(a.InputSchema), `"enum":["none","low","medium","high"]`)
 	require.Contains(t, a.Description, "assistant:write")
+	require.Contains(t, a.Description, "compatible models")
+	require.Contains(t, a.Description, "Kit (3) requires low, medium, or high")
 	require.Contains(t, a.Description, "organization administrator")
 	require.NotContains(t, a.Description, "project:write")
 }

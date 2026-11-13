@@ -272,7 +272,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 		return err
 	}
 	if appliedEffort != effort {
-		return errors.New("Kit did not apply the persisted assistant reasoning effort")
+		return errors.New("kit did not apply the persisted assistant reasoning effort")
 	}
 	// The same-stream configuration response follows startup replay. Drain all
 	// queued history before reserving the single live prompt echo slot. Unknown

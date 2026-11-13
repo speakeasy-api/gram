@@ -2101,3 +2101,8 @@ SELECT pg_advisory_xact_lock(hashtextextended(@subject_key::text, 0));
 
 -- name: LockProjectForKitWorkload :one
 SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id FOR UPDATE;
+
+-- name: ClearAssistantReasoningEffortForTest :exec
+-- Test fixture only: simulate a legacy row during nullable column expansion.
+UPDATE assistants SET reasoning_effort = NULL
+WHERE id = @assistant_id AND project_id = @project_id;

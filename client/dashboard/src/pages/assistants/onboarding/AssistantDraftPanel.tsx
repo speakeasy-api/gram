@@ -28,10 +28,8 @@ import { AssistantOverviewSettings } from "./AssistantOverviewSettings";
 import { useRBAC } from "@/hooks/useRBAC";
 import { AssistantSkillsSection } from "./AssistantSkillsSection";
 import { AssistantTriggersList } from "./AssistantTriggersList";
-import {
-  ReasoningEffortSelect,
-  REASONING_EFFORT_HELP,
-} from "./ReasoningEffortSelect";
+import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
+import { REASONING_EFFORT_HELP } from "./reasoning-effort";
 import { Section } from "./PanelSection";
 import { useAssistantDraft } from "./useAssistantDraft";
 

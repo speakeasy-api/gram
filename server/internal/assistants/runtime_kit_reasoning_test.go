@@ -15,6 +15,7 @@ func TestKitReasoningBootstrap(t *testing.T) {
 	t.Parallel()
 	for _, effort := range []string{"", "low", "medium", "high"} {
 		t.Run(effort, func(t *testing.T) {
+			t.Parallel()
 			b := kitTestWorkloadBootstrap()
 			b.ReasoningEffort = effort
 			require.NoError(t, validateKitBootstrap(b))
@@ -36,14 +37,17 @@ func TestKitReasoningBootstrap(t *testing.T) {
 		})
 	}
 	for _, effort := range []string{"none", "default", "invalid", "HIGH"} {
-		b := kitTestWorkloadBootstrap()
-		b.ReasoningEffort = effort
-		require.ErrorContains(t, validateKitBootstrap(b), "does not support reasoning effort")
-		require.Empty(t, kitBootstrapConfig(b))
-		in := kitGKEInput()
-		in.ReasoningEffort = effort
-		_, err := RenderKitGKEProvision(in)
-		require.ErrorContains(t, err, "does not support reasoning effort")
+		t.Run(effort, func(t *testing.T) {
+			t.Parallel()
+			b := kitTestWorkloadBootstrap()
+			b.ReasoningEffort = effort
+			require.ErrorContains(t, validateKitBootstrap(b), "does not support reasoning effort")
+			require.Empty(t, kitBootstrapConfig(b))
+			in := kitGKEInput()
+			in.ReasoningEffort = effort
+			_, err := RenderKitGKEProvision(in)
+			require.ErrorContains(t, err, "does not support reasoning effort")
+		})
 	}
 }
 
