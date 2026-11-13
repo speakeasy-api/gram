@@ -451,8 +451,8 @@ function WritablePluginStatusBanner({
     <StatusBanner tone={isTrulyPublished ? "success" : "warning"}>
       {/* State, why plugins, and the picker on the left; the clients it
           reaches on the right. */}
-      <div className="flex flex-wrap items-center justify-between gap-6 px-5 py-4">
-        <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex items-center justify-between gap-6 px-5 py-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex min-w-0 flex-col gap-0.5">
             <div className="flex items-center gap-2">
               {isTrulyPublished ? (
@@ -475,7 +475,10 @@ function WritablePluginStatusBanner({
                     : "Not published to any plugin"}
               </Text>
             </div>
-            <Text variant="small" className="text-muted-foreground pl-6">
+            <Text
+              variant="small"
+              className="text-muted-foreground max-w-xl pl-6"
+            >
               {isTrulyPublished
                 ? memberPlugins
                     .map((plugin) => {
@@ -494,13 +497,21 @@ function WritablePluginStatusBanner({
           {/* Unpublished, the story is the subtitle; once published the
               subtitle lists the plugins, and the story follows it. */}
           {memberPlugins.length > 0 ? (
-            <Text variant="small" className="text-muted-foreground/90 max-w-xl">
+            <Text
+              variant="small"
+              className="text-muted-foreground/90 max-w-xl pl-6"
+            >
               {PLUGINS_STORY}
             </Text>
           ) : null}
-          {pickerControls}
+          {/* Lined up with the text above, under the status icon's gutter. */}
+          <div className="pl-6">{pickerControls}</div>
         </div>
-        <ClientIconFan />
+        {/* Always at the right edge; dropped where there's no room beside
+            the text. */}
+        <div className="hidden shrink-0 md:block">
+          <ClientIconFan />
+        </div>
       </div>
 
       {isPublished && (
