@@ -45,6 +45,7 @@ import {
   useSessionData,
   useUser,
   usePylonInAppChat,
+  useLetterproveIdentify,
   useFermatPixel,
 } from "./Auth";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
@@ -206,6 +207,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   );
   const sessionAuthorized =
     Boolean(session?.session) && !isGramSessionUnauthorizedError(error);
+  // Only a valid, non-impersonated session's email is reported.
+  useLetterproveIdentify(
+    sessionAuthorized && !isImpersonating ? session?.user.email : undefined,
+  );
   const organizationHostTarget =
     sessionAuthorized &&
     session?.activeOrganizationId &&

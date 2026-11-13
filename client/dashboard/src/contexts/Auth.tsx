@@ -231,6 +231,55 @@ export function usePylonInAppChat(user: User | undefined): void {
   }, [user]);
 }
 
+declare global {
+  interface Window {
+    Letterprove?: {
+      q?: [string, string][];
+      identify: (email: string) => void;
+    };
+  }
+}
+
+// Same queue the Letterprove snippet installs inline: attest.js replays
+// window.Letterprove.q once it loads. It lives here because index.html
+// allows no inline scripts.
+function letterprove(): NonNullable<Window["Letterprove"]> {
+  if (!window.Letterprove) {
+    const q: [string, string][] = [];
+    window.Letterprove = {
+      q,
+      identify: (email) => {
+        q.push(["identify", email]);
+      },
+    };
+  }
+  return window.Letterprove;
+}
+
+// Letterprove counts are published as signed evidence, so only the production
+// dashboard host reports. PR previews and shared staging are production
+// builds too, so the build mode alone would not keep their (mostly staff)
+// sign-ins out of the counts.
+const LETTERPROVE_HOST = "ai.speakeasy.com";
+
+/**
+ * Report the signed-in user's email to Letterprove, which publishes counts of
+ * companies by email domain. Pass the email only for a valid session that is
+ * not impersonated or under support access; the caller decides that.
+ */
+export function useLetterproveIdentify(email: string | undefined): void {
+  useEffect(() => {
+    if (!email || !import.meta.env.PROD) return;
+    if (typeof window === "undefined") return;
+    if (window.location.hostname !== LETTERPROVE_HOST) return;
+    try {
+      letterprove().identify(email);
+    } catch {
+      // never let the attestation script break the page
+    }
+  }, [email]);
+}
+
 /**
  * Boot the Claire de Fermat pixel and emit a `page_view` on each route
  * change. The pixel is gated to production builds so we don't pollute
