@@ -55,7 +55,7 @@ if [ -n "${usage_baseline_out:-}" ]; then
   esac
   export TOOLEVAL_BASELINE_OUT="$usage_baseline_out"
 fi
-if [ "${TOOLEVAL_GATE:-}" = "1" ] && [ -n "${usage_changed_since:-}" ] && [ ! -s internal/platformmcp/tooleval/baseline.json ]; then
+if [ "${TOOLEVAL_GATE:-}" = "1" ] && [ ! -s internal/platformmcp/tooleval/baseline.json ]; then
   # A gated run with no committed baseline has nothing to compare against,
   # so it runs every case uncapped and --baseline-out writes the first
   # baseline. Report-only runs keep their change selection.

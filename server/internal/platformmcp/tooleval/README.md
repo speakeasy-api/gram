@@ -124,10 +124,11 @@ it. A provider outage that errors every case fails the job; re-run it.
 passed. Update it when a change improves cases or adds new ones, so the gate
 protects them from then on: download `baseline.json` from the pull request's
 `platform-tool-eval` artifact and commit it as `tooleval/baseline.json`.
-Locally, `--baseline-out` writes the same file:
+Locally, `--baseline-out` writes the same file. A relative path resolves
+against the directory you run mise from, so from the repository root:
 
 ```bash
-mise run eval:platform-tools --changed-since origin/main --surfaces progressive --runs 3 --gate --baseline-out baseline.json
+mise run eval:platform-tools --changed-since origin/main --surfaces progressive --runs 3 --gate --baseline-out server/internal/platformmcp/tooleval/baseline.json
 ```
 
 ## Adding or changing a tool
