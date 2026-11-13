@@ -31,5 +31,8 @@ func recordPluginProjectPublishOutcome(ctx workflow.Context, result plugins.Publ
 		Counter("plugin_project_publish_outcomes").Inc(1)
 	// A fixed message and bounded outcome make this safe to aggregate. Temporal
 	// supplies workflow context for drilldown without copying raw upstream errors.
-	workflow.GetLogger(ctx).Info("plugin project publish outcome", "outcome", outcome)
+	// Keep unchanged sweeps quiet while still counting their skipped outcomes.
+	if outcome != "skipped" {
+		workflow.GetLogger(ctx).Info("plugin project publish outcome", "outcome", outcome)
+	}
 }

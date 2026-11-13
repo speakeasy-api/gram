@@ -1,8 +1,10 @@
 package background
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"testing"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
+	temporallog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 
@@ -74,6 +77,8 @@ func TestPluginPublishWorkflow_OutcomeCountsLogicalPublishNotAttempts(t *testing
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var suite testsuite.WorkflowTestSuite
+			var output bytes.Buffer
+			suite.SetLogger(temporallog.NewStructuredLogger(slog.New(slog.NewJSONHandler(&output, nil))))
 			metrics := newPublishOutcomeMetrics()
 			suite.SetMetricsHandler(metrics)
 			env := suite.NewTestWorkflowEnvironment()
@@ -90,6 +95,11 @@ func TestPluginPublishWorkflow_OutcomeCountsLogicalPublishNotAttempts(t *testing
 			require.Equal(t, tc.workflowFails, env.GetWorkflowError() != nil)
 			require.Equal(t, tc.attempts, attempts)
 			require.Equal(t, map[string]int64{tc.outcome: 1}, metrics.counts.values)
+			if tc.outcome == "skipped" {
+				require.NotContains(t, output.String(), "plugin project publish outcome")
+			} else {
+				require.Contains(t, output.String(), "plugin project publish outcome")
+			}
 		})
 	}
 }
