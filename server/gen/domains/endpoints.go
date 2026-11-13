@@ -22,6 +22,7 @@ type Endpoints struct {
 	UpdateDomain       goa.Endpoint
 	SetRootMcpEndpoint goa.Endpoint
 	ListRootMcpServers goa.Endpoint
+	ReconcileDomain    goa.Endpoint
 	CheckHealth        goa.Endpoint
 	DeleteDomain       goa.Endpoint
 	ListMcpEndpoints   goa.Endpoint
@@ -38,6 +39,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateDomain:       NewUpdateDomainEndpoint(s, a.APIKeyAuth),
 		SetRootMcpEndpoint: NewSetRootMcpEndpointEndpoint(s, a.APIKeyAuth),
 		ListRootMcpServers: NewListRootMcpServersEndpoint(s, a.APIKeyAuth),
+		ReconcileDomain:    NewReconcileDomainEndpoint(s, a.APIKeyAuth),
 		CheckHealth:        NewCheckHealthEndpoint(s, a.APIKeyAuth),
 		DeleteDomain:       NewDeleteDomainEndpoint(s, a.APIKeyAuth),
 		ListMcpEndpoints:   NewListMcpEndpointsEndpoint(s, a.APIKeyAuth),
@@ -52,6 +54,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateDomain = m(e.UpdateDomain)
 	e.SetRootMcpEndpoint = m(e.SetRootMcpEndpoint)
 	e.ListRootMcpServers = m(e.ListRootMcpServers)
+	e.ReconcileDomain = m(e.ReconcileDomain)
 	e.CheckHealth = m(e.CheckHealth)
 	e.DeleteDomain = m(e.DeleteDomain)
 	e.ListMcpEndpoints = m(e.ListMcpEndpoints)
@@ -192,6 +195,29 @@ func NewListRootMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.ListRootMcpServers(ctx, p)
+	}
+}
+
+// NewReconcileDomainEndpoint returns an endpoint function that calls the
+// method "reconcileDomain" of service "domains".
+func NewReconcileDomainEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReconcileDomainPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ReconcileDomain(ctx, p)
 	}
 }
 

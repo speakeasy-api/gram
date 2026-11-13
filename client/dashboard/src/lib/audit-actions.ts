@@ -86,6 +86,7 @@ export const AUDIT_ACTIONS = [
   "chat_session:recall",
   "custom_domains:create",
   "custom_domains:delete",
+  "custom_domains:reconcile",
   "custom_domains:update",
   "dashboard:create",
   "dashboard:delete",
@@ -628,6 +629,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated custom domain";
     case "custom_domains:delete":
       return "removed custom domain";
+    case "custom_domains:reconcile":
+      return "reconciled custom domain";
 
     case "data_export_route:create":
       return "created data export route";

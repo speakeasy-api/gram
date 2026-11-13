@@ -141,7 +141,7 @@ func UsageCommands() []string {
 		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs|evaluate-open-ap-iv3|get-deployment-evaluation)",
 		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage|list-fleet-devices|get-fleet-coverage)",
-		"domains (get-domain|list-domains|create-domain|update-domain|set-root-mcp-endpoint|list-root-mcp-servers|check-health|delete-domain|list-mcp-endpoints)",
+		"domains (get-domain|list-domains|create-domain|update-domain|set-root-mcp-endpoint|list-root-mcp-servers|reconcile-domain|check-health|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|verify-gcp-iam-credential|get-gcp-setup-info|delete-aws-iam-credential|delete-gcp-iam-credential)",
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|verify-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
@@ -1302,6 +1302,9 @@ func ParseEndpoint(
 
 		domainsListRootMcpServersFlags            = flag.NewFlagSet("list-root-mcp-servers", flag.ExitOnError)
 		domainsListRootMcpServersSessionTokenFlag = domainsListRootMcpServersFlags.String("session-token", "", "")
+
+		domainsReconcileDomainFlags            = flag.NewFlagSet("reconcile-domain", flag.ExitOnError)
+		domainsReconcileDomainSessionTokenFlag = domainsReconcileDomainFlags.String("session-token", "", "")
 
 		domainsCheckHealthFlags            = flag.NewFlagSet("check-health", flag.ExitOnError)
 		domainsCheckHealthSessionTokenFlag = domainsCheckHealthFlags.String("session-token", "", "")
@@ -5868,6 +5871,7 @@ func ParseEndpoint(
 	domainsUpdateDomainFlags.Usage = domainsUpdateDomainUsage
 	domainsSetRootMcpEndpointFlags.Usage = domainsSetRootMcpEndpointUsage
 	domainsListRootMcpServersFlags.Usage = domainsListRootMcpServersUsage
+	domainsReconcileDomainFlags.Usage = domainsReconcileDomainUsage
 	domainsCheckHealthFlags.Usage = domainsCheckHealthUsage
 	domainsDeleteDomainFlags.Usage = domainsDeleteDomainUsage
 	domainsListMcpEndpointsFlags.Usage = domainsListMcpEndpointsUsage
@@ -7703,6 +7707,9 @@ func ParseEndpoint(
 
 			case "list-root-mcp-servers":
 				epf = domainsListRootMcpServersFlags
+
+			case "reconcile-domain":
+				epf = domainsReconcileDomainFlags
 
 			case "check-health":
 				epf = domainsCheckHealthFlags
@@ -11115,6 +11122,9 @@ func ParseEndpoint(
 			case "list-root-mcp-servers":
 				endpoint = c.ListRootMcpServers()
 				data, err = domainsc.BuildListRootMcpServersPayload(*domainsListRootMcpServersSessionTokenFlag)
+			case "reconcile-domain":
+				endpoint = c.ReconcileDomain()
+				data, err = domainsc.BuildReconcileDomainPayload(*domainsReconcileDomainSessionTokenFlag)
 			case "check-health":
 				endpoint = c.CheckHealth()
 				data, err = domainsc.BuildCheckHealthPayload(*domainsCheckHealthSessionTokenFlag)
@@ -18453,6 +18463,7 @@ func domainsUsage() {
 	fmt.Fprintln(os.Stderr, `    update-domain: Update settings for the organization's custom domain`)
 	fmt.Fprintln(os.Stderr, `    set-root-mcp-endpoint: Set or clear the MCP endpoint mapped to a custom domain's root. Pass mcp_endpoint_id for an endpoint already attached to the domain, or mcp_server_id to attach a server (creating its domain endpoint if needed) and map it in one call — usable while the domain is still pending verification, so a migration can be staged before DNS cuts over.`)
 	fmt.Fprintln(os.Stderr, `    list-root-mcp-servers: List the organization's MCP servers that can be mapped to the custom domain root, including servers not yet attached to the domain`)
+	fmt.Fprintln(os.Stderr, `    reconcile-domain: Reapply the configured ingress state for the organization's verified custom domain`)
 	fmt.Fprintln(os.Stderr, `    check-health: Check the routing and certificate health of the organization's custom domain`)
 	fmt.Fprintln(os.Stderr, `    delete-domain: Delete a custom domain`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-endpoints: List the MCP endpoints registered under the organization's custom domain across every project. Returns enriched rows that include the parent MCP server and project so callers can preview what a custom-domain deletion would cascade through.`)
@@ -18572,6 +18583,24 @@ func domainsListRootMcpServersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains list-root-mcp-servers --session-token \"abc123\"")
+}
+
+func domainsReconcileDomainUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] domains reconcile-domain", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Reapply the configured ingress state for the organization's verified custom domain`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "domains reconcile-domain --session-token \"abc123\"")
 }
 
 func domainsCheckHealthUsage() {

@@ -1412,6 +1412,236 @@ func DecodeListRootMcpServersResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildReconcileDomainRequest instantiates a HTTP request object with method
+// and path set to call the "domains" service "reconcileDomain" endpoint
+func (c *Client) BuildReconcileDomainRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ReconcileDomainDomainsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("domains", "reconcileDomain", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeReconcileDomainRequest returns an encoder for requests sent to the
+// domains reconcileDomain server.
+func EncodeReconcileDomainRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*domains.ReconcileDomainPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("domains", "reconcileDomain", "*domains.ReconcileDomainPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeReconcileDomainResponse returns a decoder for responses returned by
+// the domains reconcileDomain endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeReconcileDomainResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeReconcileDomainResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ReconcileDomainResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "reconcileDomain", err)
+			}
+			err = ValidateReconcileDomainResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "reconcileDomain", err)
+			}
+			res := NewReconcileDomainCustomDomainOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ReconcileDomainUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "reconcileDomain", err)
+			}
+			err = ValidateReconcileDomainUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "reconcileDomain", err)
+			}
+			return nil, NewReconcileDomainUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ReconcileDomainForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "reconcileDomain", err)
+			}
+			err = ValidateReconcileDomainForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "reconcileDomain", err)
+			}
+			return nil, NewReconcileDomainForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ReconcileDomainBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "reconcileDomain", err)
+			}
+			err = ValidateReconcileDomainBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "reconcileDomain", err)
+			}
+			return nil, NewReconcileDomainBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ReconcileDomainNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "reconcileDomain", err)
+			}
+			err = ValidateReconcileDomainNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "reconcileDomain", err)
+			}
+			return nil, NewReconcileDomainNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ReconcileDomainConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "reconcileDomain", err)
+			}
+			err = ValidateReconcileDomainConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "reconcileDomain", err)
+			}
+			return nil, NewReconcileDomainConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ReconcileDomainUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "reconcileDomain", err)
+			}
+			err = ValidateReconcileDomainUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "reconcileDomain", err)
+			}
+			return nil, NewReconcileDomainUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ReconcileDomainInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "reconcileDomain", err)
+			}
+			err = ValidateReconcileDomainInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "reconcileDomain", err)
+			}
+			return nil, NewReconcileDomainInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ReconcileDomainInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("domains", "reconcileDomain", err)
+				}
+				err = ValidateReconcileDomainInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("domains", "reconcileDomain", err)
+				}
+				return nil, NewReconcileDomainInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ReconcileDomainUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("domains", "reconcileDomain", err)
+				}
+				err = ValidateReconcileDomainUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("domains", "reconcileDomain", err)
+				}
+				return nil, NewReconcileDomainUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("domains", "reconcileDomain", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ReconcileDomainGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("domains", "reconcileDomain", err)
+			}
+			err = ValidateReconcileDomainGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("domains", "reconcileDomain", err)
+			}
+			return nil, NewReconcileDomainGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("domains", "reconcileDomain", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCheckHealthRequest instantiates a HTTP request object with method and
 // path set to call the "domains" service "checkHealth" endpoint
 func (c *Client) BuildCheckHealthRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2101,6 +2331,8 @@ func unmarshalCustomDomainResponseBodyToDomainsCustomDomain(v *CustomDomainRespo
 		CreatedAt:                *v.CreatedAt,
 		UpdatedAt:                *v.UpdatedAt,
 		IsUpdating:               *v.IsUpdating,
+		IsReconciling:            *v.IsReconciling,
+		ReconciliationStatus:     *v.ReconciliationStatus,
 		HealthStatus:             v.HealthStatus,
 		HealthIssue:              v.HealthIssue,
 		HealthCheckedAt:          v.HealthCheckedAt,
