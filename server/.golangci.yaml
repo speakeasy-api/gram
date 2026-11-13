@@ -66,11 +66,11 @@ linters:
       - path: cmd/|internal/dns/
         linters:
           - forbidigo
-      # Bench commands and dev-mcp are developer CLIs (not part of the server
+      # Bench commands, dev-mcp and mock-mcp are developer CLIs (not part of the server
       # binary). Like test files, they favor terse partial structs and direct
       # error returns over production-grade hardening, so exempt them from the
       # same dev-tooling linters we exempt tests from.
-      - path: cmd/(riskjudge|skillefficacy|skillsuggest)bench/|cmd/dev-mcp/
+      - path: cmd/(riskjudge|skillefficacy|skillsuggest)bench/|cmd/dev-mcp/|cmd/mock-mcp/
         linters:
           - exhaustruct
           - wrapcheck
