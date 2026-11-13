@@ -13,6 +13,7 @@ import (
 )
 
 func TestGitHubAppOriginSchema(t *testing.T) {
+	t.Parallel()
 	if err := eval.RunDSL(); err != nil {
 		t.Fatal(err)
 	}
@@ -21,6 +22,7 @@ func TestGitHubAppOriginSchema(t *testing.T) {
 	for name, object := range map[string]*expr.Object{"request": payload, "response": configuration} {
 		for _, field := range []string{"instance_url", "upstream_origin"} {
 			t.Run(name+"/"+field, func(t *testing.T) {
+				t.Parallel()
 				validation := object.Attribute(field).Validation
 				if validation == nil || validation.Format != expr.FormatURI || validation.Pattern == "" || validation.MaxLength == nil || *validation.MaxLength != 2048 {
 					t.Fatalf("expected URI, HTTPS-origin pattern, and max length 2048; got %+v", validation)
