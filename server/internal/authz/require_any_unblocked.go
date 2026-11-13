@@ -33,10 +33,36 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 	for _, check := range checks {
-		if err := validateInput(check); err != nil {
+		if err := validateRequireInput(check); err != nil {
 			return e.mapError(ctx, err)
 		}
 	}
+	blocked, err := firstUnoverriddenExclusion(authorization, checks)
+	if err != nil {
+		return e.mapError(ctx, err)
+	}
+	if blocked != nil {
+		challengeLogger{
+			Operation:            authzrepo.OperationRequireAny,
+			Outcome:              authzrepo.OutcomeDeny,
+			Reason:               authzrepo.ReasonDenyGrant,
+			Checks:               checks,
+			Focus:                blocked,
+			Matches:              nil,
+			EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
+			FilterCandidateCount: 0,
+			FilterAllowedCount:   0,
+		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+		return e.mapError(ctx, Denied(blocked.Scope, blocked.selector()))
+	}
+	return e.RequireAny(ctx, checks...)
+}
+
+// firstUnoverriddenExclusion returns the first check an exclusion rejects,
+// bound to the caller, or nil when none does. An exclusion inherited from a
+// role or user:all does not count when a direct grant naming the concrete
+// resource satisfies the check.
+func firstUnoverriddenExclusion(authorization grantAuthorization, checks []Check) (*Check, error) {
 	for _, check := range checks {
 		check = authorization.bind(check)
 		exclusionScope, ok := ExclusionScopeFor(check.Scope)
@@ -55,24 +81,13 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 			}
 			override, _, err := directOverride(policy, check)
 			if err != nil {
-				return e.mapError(ctx, err)
+				return nil, err
 			}
 			if override != nil {
 				continue
 			}
-			challengeLogger{
-				Operation:            authzrepo.OperationRequireAny,
-				Outcome:              authzrepo.OutcomeDeny,
-				Reason:               authzrepo.ReasonDenyGrant,
-				Checks:               checks,
-				Focus:                &check,
-				Matches:              nil,
-				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
-				FilterCandidateCount: 0,
-				FilterAllowedCount:   0,
-			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, Denied(check.Scope, check.selector()))
+			return &check, nil
 		}
 	}
-	return e.RequireAny(ctx, checks...)
+	return nil, nil
 }
