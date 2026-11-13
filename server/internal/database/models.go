@@ -601,6 +601,8 @@ type Assistant struct {
 	Name string
 	// @access: confidential
 	Model string
+	// @access: confidential
+	ReasoningEffort pgtype.Text
 	// @access: opaque-restricted
 	Instructions string
 	// @access: confidential
