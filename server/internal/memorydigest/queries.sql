@@ -313,7 +313,7 @@ LIMIT @row_limit;
 -- Eligible memos saved since @since that no live day digest has folded yet:
 -- today's memos, any a capped day digest left out, and those folded only by a
 -- stale day digest. Newest first so @row_limit keeps the most recent.
-SELECT m.id, m.content, m.created_at
+SELECT m.id, m.chat_id, m.content, m.created_at
 FROM memory_memos m
 LEFT JOIN chats c ON c.id = m.chat_id
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id

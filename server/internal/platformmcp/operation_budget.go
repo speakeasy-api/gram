@@ -192,7 +192,8 @@ const (
 	SessionRecallsPerConnectionPerMinute   = 10
 	SessionRecallsPerOrganizationPerMinute = 100
 
-	// TeamMemoryCallsPer* bound search_team_memory and remember. They return
+	// TeamMemoryCallsPer* bound search_team_memory, recall_team_history,
+	// zoom and remember. They return
 	// masked summaries and memos, not transcripts, so they get their own
 	// allowance instead of competing with session recall.
 	TeamMemoryCallsPerConnectionPerMinute   = 20
