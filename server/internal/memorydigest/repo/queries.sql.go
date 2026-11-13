@@ -102,8 +102,8 @@ const getDigest = `-- name: GetDigest :one
 WITH cand AS (
   SELECT d.id, d.level, d.period_start, d.period_end, d.content, d.chat_ids, d.memo_ids, d.child_digest_ids
   FROM memory_digests d
-  WHERE d.id = $1
-    AND d.project_id = $2
+  WHERE d.id = $2
+    AND d.project_id = $1
     AND d.organization_id = $3
 ),
 reach AS (
@@ -114,12 +114,13 @@ reach AS (
   SELECT unnest(w.child_digest_ids)
   FROM memory_digests w
   WHERE w.id IN (SELECT unnest(cand.child_digest_ids) FROM cand)
+    AND w.project_id = $1
 ),
 stale AS MATERIALIZED (
   SELECT COALESCE(array_agg(s.id), '{}')::uuid[] AS ids
   FROM memory_digests s
   WHERE s.id IN (SELECT reach.id FROM reach)
-    AND s.project_id = $2
+    AND s.project_id = $1
     AND (
       cardinality(s.chat_ids) > (
         SELECT count(*)
@@ -155,14 +156,16 @@ WHERE cardinality(stale.ids) = 0
     OR cand.child_digest_ids && stale.ids
     OR EXISTS (
       SELECT 1 FROM memory_digests cw
-      WHERE cw.id = ANY(cand.child_digest_ids) AND cw.child_digest_ids && stale.ids
+      WHERE cw.id = ANY(cand.child_digest_ids)
+        AND cw.project_id = $1
+        AND cw.child_digest_ids && stale.ids
     )
   )
 `
 
 type GetDigestParams struct {
-	ID             uuid.UUID
 	ProjectID      uuid.UUID
+	ID             uuid.UUID
 	OrganizationID string
 }
 
@@ -184,7 +187,7 @@ type GetDigestRow struct {
 // for each digest in reach (the digests read, their children and
 // grandchildren), not once for each pair of digests.
 func (q *Queries) GetDigest(ctx context.Context, arg GetDigestParams) (GetDigestRow, error) {
-	row := q.db.QueryRow(ctx, getDigest, arg.ID, arg.ProjectID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, getDigest, arg.ProjectID, arg.ID, arg.OrganizationID)
 	var i GetDigestRow
 	err := row.Scan(
 		&i.ID,
@@ -503,8 +506,8 @@ const listDigestsByID = `-- name: ListDigestsByID :many
 WITH cand AS (
   SELECT d.id, d.level, d.period_start, d.content, d.child_digest_ids
   FROM memory_digests d
-  WHERE d.id = ANY($1::uuid[])
-    AND d.project_id = $2
+  WHERE d.id = ANY($2::uuid[])
+    AND d.project_id = $1
     AND d.organization_id = $3
 ),
 reach AS (
@@ -515,12 +518,13 @@ reach AS (
   SELECT unnest(w.child_digest_ids)
   FROM memory_digests w
   WHERE w.id IN (SELECT unnest(cand.child_digest_ids) FROM cand)
+    AND w.project_id = $1
 ),
 stale AS MATERIALIZED (
   SELECT COALESCE(array_agg(s.id), '{}')::uuid[] AS ids
   FROM memory_digests s
   WHERE s.id IN (SELECT reach.id FROM reach)
-    AND s.project_id = $2
+    AND s.project_id = $1
     AND (
       cardinality(s.chat_ids) > (
         SELECT count(*)
@@ -556,15 +560,17 @@ WHERE cardinality(stale.ids) = 0
     OR cand.child_digest_ids && stale.ids
     OR EXISTS (
       SELECT 1 FROM memory_digests cw
-      WHERE cw.id = ANY(cand.child_digest_ids) AND cw.child_digest_ids && stale.ids
+      WHERE cw.id = ANY(cand.child_digest_ids)
+        AND cw.project_id = $1
+        AND cw.child_digest_ids && stale.ids
     )
   )
 ORDER BY cand.period_start
 `
 
 type ListDigestsByIDParams struct {
-	Ids            []uuid.UUID
 	ProjectID      uuid.UUID
+	Ids            []uuid.UUID
 	OrganizationID string
 }
 
@@ -582,7 +588,7 @@ type ListDigestsByIDRow struct {
 // for each digest in reach (the digests read, their children and
 // grandchildren), not once for each pair of digests.
 func (q *Queries) ListDigestsByID(ctx context.Context, arg ListDigestsByIDParams) ([]ListDigestsByIDRow, error) {
-	rows, err := q.db.Query(ctx, listDigestsByID, arg.Ids, arg.ProjectID, arg.OrganizationID)
+	rows, err := q.db.Query(ctx, listDigestsByID, arg.ProjectID, arg.Ids, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -753,6 +759,7 @@ reach AS (
   SELECT unnest(w.child_digest_ids)
   FROM memory_digests w
   WHERE w.id IN (SELECT unnest(cand.child_digest_ids) FROM cand)
+    AND w.project_id = $1
 ),
 stale AS MATERIALIZED (
   SELECT COALESCE(array_agg(s.id), '{}')::uuid[] AS ids
@@ -794,7 +801,9 @@ WHERE cardinality(stale.ids) = 0
     OR cand.child_digest_ids && stale.ids
     OR EXISTS (
       SELECT 1 FROM memory_digests cw
-      WHERE cw.id = ANY(cand.child_digest_ids) AND cw.child_digest_ids && stale.ids
+      WHERE cw.id = ANY(cand.child_digest_ids)
+        AND cw.project_id = $1
+        AND cw.child_digest_ids && stale.ids
     )
   )
 ORDER BY cand.period_start, cand.level

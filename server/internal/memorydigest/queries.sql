@@ -212,6 +212,7 @@ reach AS (
   SELECT unnest(w.child_digest_ids)
   FROM memory_digests w
   WHERE w.id IN (SELECT unnest(cand.child_digest_ids) FROM cand)
+    AND w.project_id = @project_id
 ),
 stale AS MATERIALIZED (
   SELECT COALESCE(array_agg(s.id), '{}')::uuid[] AS ids
@@ -253,7 +254,9 @@ WHERE cardinality(stale.ids) = 0
     OR cand.child_digest_ids && stale.ids
     OR EXISTS (
       SELECT 1 FROM memory_digests cw
-      WHERE cw.id = ANY(cand.child_digest_ids) AND cw.child_digest_ids && stale.ids
+      WHERE cw.id = ANY(cand.child_digest_ids)
+        AND cw.project_id = @project_id
+        AND cw.child_digest_ids && stale.ids
     )
   )
 ORDER BY cand.period_start, cand.level;
@@ -370,6 +373,7 @@ reach AS (
   SELECT unnest(w.child_digest_ids)
   FROM memory_digests w
   WHERE w.id IN (SELECT unnest(cand.child_digest_ids) FROM cand)
+    AND w.project_id = @project_id
 ),
 stale AS MATERIALIZED (
   SELECT COALESCE(array_agg(s.id), '{}')::uuid[] AS ids
@@ -411,7 +415,9 @@ WHERE cardinality(stale.ids) = 0
     OR cand.child_digest_ids && stale.ids
     OR EXISTS (
       SELECT 1 FROM memory_digests cw
-      WHERE cw.id = ANY(cand.child_digest_ids) AND cw.child_digest_ids && stale.ids
+      WHERE cw.id = ANY(cand.child_digest_ids)
+        AND cw.project_id = @project_id
+        AND cw.child_digest_ids && stale.ids
     )
   );
 
@@ -437,6 +443,7 @@ reach AS (
   SELECT unnest(w.child_digest_ids)
   FROM memory_digests w
   WHERE w.id IN (SELECT unnest(cand.child_digest_ids) FROM cand)
+    AND w.project_id = @project_id
 ),
 stale AS MATERIALIZED (
   SELECT COALESCE(array_agg(s.id), '{}')::uuid[] AS ids
@@ -478,7 +485,9 @@ WHERE cardinality(stale.ids) = 0
     OR cand.child_digest_ids && stale.ids
     OR EXISTS (
       SELECT 1 FROM memory_digests cw
-      WHERE cw.id = ANY(cand.child_digest_ids) AND cw.child_digest_ids && stale.ids
+      WHERE cw.id = ANY(cand.child_digest_ids)
+        AND cw.project_id = @project_id
+        AND cw.child_digest_ids && stale.ids
     )
   )
 ORDER BY cand.period_start;
