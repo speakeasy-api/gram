@@ -496,7 +496,8 @@ export function MCPServerStatusDropdown({
             return (
               <DropdownMenuItem
                 key={option.value}
-                disabled={optionBlocked}
+                // Visibly unavailable while a change saves.
+                disabled={optionBlocked || updating}
                 onSelect={() => {
                   if (optionBlocked || updating) return;
                   if (hosted) guard.request(option.value);

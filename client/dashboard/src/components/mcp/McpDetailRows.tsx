@@ -422,6 +422,9 @@ export function McpServerHeaderStatus({
           {STATUS_OPTIONS.map((option) => (
             <DropdownMenuItem
               key={option.label}
+              // Visibly unavailable while a change saves, rather than a
+              // menu whose choices do nothing.
+              disabled={updating}
               className="flex items-start gap-2 py-2"
               onSelect={() => {
                 if (updating || option.on === on) return;

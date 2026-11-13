@@ -17,9 +17,50 @@ import type {
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import { buildGetMcpServerQuery } from "@gram/client/react-query/getMcpServer.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { useState, useSyncExternalStore } from "react";
+
 import { toast } from "sonner";
+
+/**
+ * The visibility each server is being changed to, shared by every control for
+ * that server, so the header and Settings show the same optimistic state
+ * during one update. Kept per query client: the app has one, so every
+ * control shares it, and each test's fresh client starts empty.
+ */
+type PendingStore = {
+  pending: Map<string, McpServerVisibility>;
+  listeners: Set<() => void>;
+  subscribe: (listener: () => void) => () => void;
+};
+const pendingStores = new WeakMap<QueryClient, PendingStore>();
+function pendingStoreFor(queryClient: QueryClient): PendingStore {
+  let store = pendingStores.get(queryClient);
+  if (!store) {
+    const listeners = new Set<() => void>();
+    store = {
+      pending: new Map(),
+      listeners,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    };
+    pendingStores.set(queryClient, store);
+  }
+  return store;
+}
+function setPending(
+  store: PendingStore,
+  serverId: string,
+  visibility: McpServerVisibility | null,
+): void {
+  if (visibility === null) store.pending.delete(serverId);
+  else store.pending.set(serverId, visibility);
+  for (const listener of store.listeners) listener();
+}
 
 /**
  * Remote and unproxied servers only switch on and off ("Availability");
@@ -112,11 +153,15 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
     hasWriteScope &&
     isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);
   const queryClient = useQueryClient();
+  const pendingStore = pendingStoreFor(queryClient);
   const client = useSdkClient();
   const telemetry = useTelemetry();
   const followRenamedServer = useFollowRenamedServer();
   const [fetchingLatest, setFetchingLatest] = useState(false);
-  const [requested, setRequested] = useState<McpServerVisibility | null>(null);
+  const requested = useSyncExternalStore(
+    pendingStore.subscribe,
+    () => pendingStore.pending.get(server.id) ?? null,
+  );
   const update = useUpdateMcpServerMutation({
     onSuccess: async (updated, variables) => {
       followRenamedServer(updated);
@@ -136,6 +181,9 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
         });
       }
     },
+    // The page has the saved state by now (onSuccess refetched it), so the
+    // shared optimistic value can go.
+    onSettled: () => setPending(pendingStore, server.id, null),
     onError: (error) => {
       toast.error(
         error instanceof Error
@@ -147,7 +195,7 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
 
   const updateVisibility = (next: McpServerVisibility) => {
     if (!canWrite || next === server.visibility) return;
-    setRequested(next);
+    setPending(pendingStore, server.id, next);
     setFetchingLatest(true);
     void (async () => {
       try {
@@ -158,6 +206,7 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
         // Someone else already made this change; refresh so the page shows it.
         if (next === latest.visibility) {
           await invalidateMcpServerQueries(queryClient);
+          setPending(pendingStore, server.id, null);
           return;
         }
         update.mutate({
@@ -166,6 +215,7 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
           },
         });
       } catch (error) {
+        setPending(pendingStore, server.id, null);
         handleError(error, { title: "Couldn't update server availability" });
       } finally {
         setFetchingLatest(false);
@@ -173,12 +223,14 @@ export function useMcpServerVisibilityUpdate(server: McpServer): {
     })();
   };
 
-  const updating = fetchingLatest || update.isPending;
+  // Any control for this server shows a change in flight, whichever
+  // control started it.
+  const updating = fetchingLatest || update.isPending || requested !== null;
   return {
     hasWriteScope,
     canWrite,
     updateVisibility,
     updating,
-    displayVisibility: updating && requested ? requested : server.visibility,
+    displayVisibility: requested ?? server.visibility,
   };
 }
