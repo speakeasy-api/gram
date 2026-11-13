@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: designs-approval-with-withdraw
+expected_outcome: |
+  A TLA+ spec and cfg sit next to a Go chart built on sc, TLC was actually run and its result reported, the model includes the driver or outside world (the CMS publish call running late or more than once), the withdraw-during-publish race is found or explicitly handled, the chart has tests that check the three rules against the real chart, and the hand-off lists rules, counterexamples found, and what the model leaves out.
