@@ -83,6 +83,17 @@ vi.mock("@gram/client/react-query/getUnproxiedMcpServer.js", () => ({
 vi.mock("@gram/client/react-query/mcpEndpoints.js", () => ({
   useMcpEndpoints: () => ({ data: { mcpEndpoints: [] } }),
 }));
+vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
+  useServerClientAssociations: () => ({
+    data: {
+      githubAppBound: false,
+      githubAppEnabled: false,
+      githubAppRequired: false,
+    },
+    isLoading: false,
+    isError: false,
+  }),
+}));
 vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
   useRemoteMcpServerHeaders: () => ({}),
 }));

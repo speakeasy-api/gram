@@ -96,15 +96,29 @@ describe("useBoundGitHubApp", () => {
     expect(query.fetchNextPage).toHaveBeenCalledTimes(2);
   });
 
-  it("fails closed when a later page fails", () => {
-    mocks.query.mockReturnValue({
-      ...mocks.query(),
-      isFetchNextPageError: true,
-    });
-    const { result } = renderHook(() => useBoundGitHubApp("server-1", true));
-    expect(result.current.error).toBe(true);
-    expect(result.current.loading).toBe(true);
-  });
+  it.each([undefined, { id: "github-client", githubApp: { appId: "123" } }])(
+    "retains partial data and an unresolved error until a failed page is retried: %o",
+    async (app) => {
+      const query = {
+        ...mocks.query(),
+        data: { pages: [{ result: { items: app ? [app] : [] } }] },
+        hasNextPage: true,
+        isFetchNextPageError: true,
+      };
+      mocks.query.mockReturnValue(query);
+      const { result } = renderHook(() => useBoundGitHubApp("server-1", true));
+      expect(result.current.bound).toEqual(app);
+      expect(result.current.error).toBe(true);
+      expect(result.current.loading).toBe(false);
+      expect(query.fetchNextPage).not.toHaveBeenCalled();
+      await act(async () => {
+        await result.current.retry();
+      });
+      expect(query.fetchNextPage).toHaveBeenCalledOnce();
+      expect(query.refetch).not.toHaveBeenCalled();
+      expect(result.current.error).toBe(true);
+    },
+  );
 
   it("does not fetch pages when the server lookup is disabled", () => {
     const query = { ...mocks.query(), hasNextPage: true, isLoading: true };
