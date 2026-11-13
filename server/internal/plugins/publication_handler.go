@@ -9,55 +9,50 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	publicationv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
-
-type PublicationSignal func(context.Context, uuid.UUID, string) error
 
 type PublicationHandler struct {
 	logger   *slog.Logger
 	validate func(context.Context, string, uuid.UUID) (bool, error)
-	signal   PublicationSignal
+	signaler PluginSyncSignaler
 }
 
-func NewPublicationHandler(logger *slog.Logger, db *pgxpool.Pool, signal PublicationSignal) *PublicationHandler {
+func NewPublicationHandler(logger *slog.Logger, db *pgxpool.Pool, signaler PluginSyncSignaler) *PublicationHandler {
 	return &PublicationHandler{
 		logger: logger,
 		validate: func(ctx context.Context, organizationID string, projectID uuid.UUID) (bool, error) {
-			var connected bool
-			err := db.QueryRow(ctx, `SELECT EXISTS (
-				SELECT 1
-				FROM plugin_github_connections c
-				JOIN projects p ON p.id = c.project_id
-				WHERE c.project_id = $1
-				  AND p.organization_id = $2
-				  AND p.deleted IS FALSE
-			)`, projectID, organizationID).Scan(&connected)
+			connected, err := repo.New(db).ProjectHasMarketplaceConnection(ctx, repo.ProjectHasMarketplaceConnectionParams{ProjectID: projectID, OrganizationID: organizationID})
 			if err != nil {
 				return false, fmt.Errorf("check plugin marketplace connection: %w", err)
 			}
 			return connected, nil
 		},
-		signal: signal,
+		signaler: signaler,
 	}
 }
 
 func (h *PublicationHandler) HandleBatchWithResult(ctx context.Context, messages []streams.BatchMessage[*publicationv1.PublicationRequested]) error {
-	type key struct {
-		organizationID string
-		projectID      uuid.UUID
+	// Each project is signalled once per batch, so a manual sync must not be
+	// lost to an ordinary request for the same project that came first, and
+	// the sync is attributed to whoever asked for it.
+	syncActors := make(map[publicationRequestKey]string)
+	for _, message := range messages {
+		requestKey, ok := publicationRequestKeyOf(message.Message)
+		if _, seen := syncActors[requestKey]; ok && !seen && message.Message.GetIncludePausedPlugins() {
+			syncActors[requestKey] = message.Message.GetCreatedByUserId()
+		}
 	}
-	results := make(map[key]error)
+
+	results := make(map[publicationRequestKey]error)
 	for _, message := range messages {
 		request := message.Message
-		organizationID := request.GetOrganizationId()
-		projectID, err := uuid.Parse(request.GetProjectId())
-		if organizationID == "" || err != nil || projectID == uuid.Nil {
+		requestKey, ok := publicationRequestKeyOf(request)
+		if !ok {
 			h.logger.WarnContext(ctx, "discard invalid plugin publication request", attr.SlogError(fmt.Errorf("invalid organization or project id")))
 			continue
 		}
-
-		requestKey := key{organizationID: organizationID, projectID: projectID}
 		if previous, ok := results[requestKey]; ok {
 			if previous != nil {
 				message.Fail(previous)
@@ -65,7 +60,7 @@ func (h *PublicationHandler) HandleBatchWithResult(ctx context.Context, messages
 			continue
 		}
 
-		connected, err := h.validate(ctx, organizationID, projectID)
+		connected, err := h.validate(ctx, requestKey.organizationID, requestKey.projectID)
 		if err != nil {
 			err = fmt.Errorf("validate plugin publication request: %w", err)
 			results[requestKey] = err
@@ -77,14 +72,17 @@ func (h *PublicationHandler) HandleBatchWithResult(ctx context.Context, messages
 			continue
 		}
 
-		if h.signal == nil {
+		if h.signaler == nil {
 			err = fmt.Errorf("plugin publication signal is not configured")
 			results[requestKey] = err
 			message.Fail(err)
 			continue
 		}
-		err = h.signal(ctx, projectID, request.GetCreatedByUserId())
-		if err != nil {
+		signal, actor := h.signaler.SignalPluginPublish, request.GetCreatedByUserId()
+		if syncActor, ok := syncActors[requestKey]; ok {
+			signal, actor = h.signaler.SignalPluginSync, syncActor
+		}
+		if err := signal(ctx, requestKey.projectID, actor); err != nil {
 			err = fmt.Errorf("signal plugin publication: %w", err)
 			results[requestKey] = err
 			message.Fail(err)
@@ -93,6 +91,19 @@ func (h *PublicationHandler) HandleBatchWithResult(ctx context.Context, messages
 		results[requestKey] = nil
 	}
 	return nil
+}
+
+type publicationRequestKey struct {
+	organizationID string
+	projectID      uuid.UUID
+}
+
+func publicationRequestKeyOf(request *publicationv1.PublicationRequested) (publicationRequestKey, bool) {
+	projectID, err := uuid.Parse(request.GetProjectId())
+	if request.GetOrganizationId() == "" || err != nil || projectID == uuid.Nil {
+		return publicationRequestKey{organizationID: "", projectID: uuid.Nil}, false
+	}
+	return publicationRequestKey{organizationID: request.GetOrganizationId(), projectID: projectID}, true
 }
 
 var _ streams.BatchResultHandler[*publicationv1.PublicationRequested] = (*PublicationHandler)(nil)

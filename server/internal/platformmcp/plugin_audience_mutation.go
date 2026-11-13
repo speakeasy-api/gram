@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -79,7 +80,11 @@ type SetPluginAssignmentsReceiptResult struct {
 
 type SetPluginAssignmentsOutput struct {
 	SetPluginAssignmentsReceiptResult
-	Receipt RiskMutationToolReceipt `json:"receipt"`
+	// PublishSignal reports whether the best-effort republish was requested
+	// after commit. It is "not_requested" on a replay, when the contents did
+	// not change, and when the durable publication request already covers it.
+	PublishSignal string                  `json:"publish_signal"`
+	Receipt       RiskMutationToolReceipt `json:"receipt"`
 	// DistributionAdmission is the plugin's standing with the project's Shadow
 	// MCP policy after the write, read fresh on every call including replays:
 	// covered means every server added by URL in it is approved for the whole
@@ -292,9 +297,26 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	}
 	return SetPluginAssignmentsOutput{
 		SetPluginAssignmentsReceiptResult: result,
+		PublishSignal:                     s.signalPluginAssignmentPublish(ctx, principal, project, receipt.Replayed, result.PublicationRequest),
 		Receipt:                           riskMutationToolReceipt(receipt),
 		DistributionAdmission:             s.pluginDistributionAdmission(ctx, principal.OrganizationID, project.ID, result.Plugin.ID),
 	}, nil
+}
+
+// signalPluginAssignmentPublish sends the best-effort republish after an
+// assignment change that moved package contents has committed, matching the
+// dashboard. An empty publicationRequest means the contents did not change.
+func (s *PluginsService) signalPluginAssignmentPublish(ctx context.Context, principal Principal, project ResolvedProject, replayed bool, publicationRequest string) string {
+	if replayed || publicationRequest == "" || publicationRequest == string(plugindelivery.ProjectPublicationEnqueued) {
+		return "not_requested"
+	}
+	if s.publisher == nil {
+		return "unavailable"
+	}
+	if err := plugindelivery.SignalPluginPublishAfterRequest(ctx, s.publisher, plugindelivery.ProjectPublicationRequestOutcome(publicationRequest), project.ID, principal.UserID); err != nil {
+		return "request_failed"
+	}
+	return "best_effort_requested"
 }
 
 // pluginDistributionAdmission reads the plugin's Shadow MCP standing after a

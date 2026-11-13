@@ -1,0 +1,1547 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "cases": {
+    "access-agent-authz-checks": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-agent-mcp-access": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-assign-role": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-assistant-runtime": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-assistant-upstream-credential": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-create-project": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-create-role": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-describe-permissions": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-directory-review-dismiss": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-directory-review-list": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-headless-caller-credential": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-inbound-ema-trust-add": {
+      "progressive": {
+        "passes": 2,
+        "runs": 3
+      }
+    },
+    "access-inbound-ema-trust-read": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-inbound-ema-trust-remove": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-inference-role-all-projects": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-inference-role-project": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-internal-session-issuer": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-list-members": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-list-projects": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-list-roles": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-list-roles-directory-mappings": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-member-access-priya-blocks": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-member-access-priya-linear": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-member-access-sam": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-memory-role": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-my-access-all": {
+      "progressive": {
+        "passes": 2,
+        "runs": 3
+      }
+    },
+    "access-my-access-all-admin": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-my-access-one": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-my-access-one-github": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-my-channels": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-my-connection-status": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-my-connection-status-github": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-my-servers-reachable": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-negative-laptop-password": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-negative-okta-password": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-offer-upstream-credential": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-platform-context-scope": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-rename-project": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-role-auth-client-block": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-server-access-billing-credential": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-server-access-github": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-update-role": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-whoami-role-short": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-whoami-roles": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-workload-reuse-disable": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-workload-reuse-enable": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-workload-reuse-read": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "access-xaa-readiness-billing": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "access-xaa-readiness-linear": {
+      "progressive": {
+        "passes": 2,
+        "runs": 3
+      }
+    },
+    "mcp-add-tool-billing": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-attach-idp-linear": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-catalog-search-notion": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-client-admission-open-github": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-client-admission-read-github": {
+      "progressive": {
+        "passes": 2,
+        "runs": 3
+      }
+    },
+    "mcp-client-admission-set-linear": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-connection-settings-github": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-connection-settings-github-auth": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "mcp-create-from-functions-invoicing": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-create-gateway-dev-tools": {
+      "progressive": {
+        "passes": 2,
+        "runs": 3
+      }
+    },
+    "mcp-custom-domain-status": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-describe-linear-tools": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "mcp-disable-github-incident": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "mcp-disable-linear": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-enable-linear": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-execute-linear-issue": {
+      "progressive": {
+        "passes": 2,
+        "runs": 3
+      }
+    },
+    "mcp-find-linear-anywhere": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-find-payments-servers": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-gateway-members-drop-linear": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "mcp-gateway-sessions-org": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-gateway-sessions-priya": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-get-github-summary": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-inspect-candidate-notion": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-inspect-candidate-remote-url": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-list-my-servers": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "mcp-my-org-gateway": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "mcp-my-project-gateway-payments": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-my-review-status": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-my-servers-crm-lookup": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "mcp-negative-reveal-oauth-secret": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "mcp-negative-write-server-code": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-network-ingress-before-private": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "mcp-network-ingress-health": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-network-private-billing": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-org-gateway-activity": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-project-tools-new-function": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-readiness-github-yes-no": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-readiness-linear": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-redeploy-payments": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-register-catalog-sentry": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-register-remote-internal": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-remove-tool-github": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-rename-linear": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-repair-plan-github-checklist": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-repair-plan-linear": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-request-review-asana": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "mcp-search-my-tools-pr": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "mcp-set-address-linear-slug": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "mcp-setup-handoff-sentry": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "memory-docs-github-oauth": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "memory-docs-salesforce-steps-only": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "memory-list-risky-chats": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "memory-read-chat": {
+      "progressive": {
+        "passes": 2,
+        "runs": 3
+      }
+    },
+    "memory-record-workflow-run": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "memory-save-pgbouncer-convention": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "memory-search-chats-webhook-error": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "memory-search-pooler-decision": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "memory-search-team-tried-linear": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "memory-send-feedback": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "negative-aws-console": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "negative-paste-token": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "negative-translate": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "negative-weather": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "negative-write-python": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-add-card-to-dashboard": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-analytics-catalog": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-analytics-daily-sessions": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-analytics-dimension-values": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-analytics-risk-findings-by-week": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "obs-attribute-keys": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-billing-api-traffic": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-create-dashboard": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-create-widget": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-dashboard-default-filters": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-delete-dashboard": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-delete-widget": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-diagnose-linear": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "obs-duplicate-dashboard": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-duplicate-widget": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-find-person-partial": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "obs-get-dashboard": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-get-widget": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-github-by-tool-outcome": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "obs-github-totals": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-linear-recent-calls": {
+      "progressive": {
+        "passes": 2,
+        "runs": 3
+      }
+    },
+    "obs-linear-users-today": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "obs-list-dashboards": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-list-widgets": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-negative-email-dashboard-pdf": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "obs-negative-postgres-csv": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-org-event-feed": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-org-event-feed-logs-hour": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-priya-linear-status": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-project-overview": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "obs-recent-calls-one-agent": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-recent-failed-calls-default": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-remove-card-keep-widget": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-rename-dashboard": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-rename-widget": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-sam-activity-summary": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-search-calls-by-custom-attribute": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-search-calls-by-error-text": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-search-calls-by-tool-name": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-tool-usage-shadow-vs-hosted": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "obs-tool-usage-tunneled": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-assignment-targets": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-auto-sync-back-on": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-auto-sync-off": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-create-finance-tools": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-distribute-linear": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-get-engineering": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-install-instructions": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "plugin-list-default": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-negative-npm-publish": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "plugin-remove-auto-added-github": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-remove-hand-added-github": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-rename-engineering": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-republish-now": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-set-assignments": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "plugin-undo-linear-add": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-ai-scan-library": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "risk-ai-scan-library-harnesses": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "risk-analysis-last-run": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-analysis-no-findings-yet": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-create-data-export": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "risk-create-data-export-findings": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "risk-create-exclusion-test-key": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-create-policy-from-preset": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "risk-create-policy-prompt-guardrail": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-create-sensor": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "risk-create-signal": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-device-coverage": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-device-coverage-jamf": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-disable-exclusion": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-export-min-severity": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-find-sensors": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-find-signal-sessions": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "risk-find-signals": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-findings-by-chat": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-findings-github-server": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-findings-one-chat": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-findings-secrets-policy": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-get-policy": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-get-sensor": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-get-signal-definition": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-list-data-exports": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-list-data-exports-payments": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-list-exclusions": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "risk-list-policies": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-list-presets": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-managed-devices-outdated": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-managed-devices-priya": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-mark-false-positive": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-mark-false-positive-one-off": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-negative-disable-quietly": {
+      "progressive": {
+        "passes": 2,
+        "runs": 3
+      }
+    },
+    "risk-negative-purge-findings": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-pause-data-export": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-policy-audience-add-sam": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-preview-sensor-match": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-remove-self-from-policy": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "risk-resume-data-export": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-rule-breakdown-pii": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-rule-breakdown-secrets-payments": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-shadow-ai-inventory": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-shadow-ai-local-models": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-shadow-mcp-decide": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-shadow-mcp-inventory": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-shadow-mcp-pending-requests": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-shadow-mcp-review": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-suggest-policy-ssn": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-suggest-policy-vague": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "risk-unmark-false-positive": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "risk-update-policy-to-flag": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-update-sensor-pause": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-update-signal": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "risk-watchdog-critical-today": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "risk-watchdog-high-week-payments": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "session-continue-by-id": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "session-handoff-link": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "session-list-mine": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "session-pick-up-yesterday": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-add-version-group-by-component": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-compare-versions": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-create-incident-triage": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-distribute-to-engineering-plugin": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-feedback-release-notes": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-get-release-notes": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-insights-vs-counts": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-insights-worth-keeping": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-link-to-github-mcp": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "skill-link-to-org-gateway": {
+      "progressive": {
+        "passes": 0,
+        "runs": 3
+      }
+    },
+    "skill-list-distributions": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-list-payments": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-list-versions": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-metadata-summary-only": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-negative-calendar-reminder": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-rename-release-notes": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-suggestion-approve": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-suggestion-approve-with-fix": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-suggestion-dismiss": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-suggestion-evidence": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-suggestions-open": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-undistribute-from-engineering": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "skill-unlink-from-org-gateway": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "skill-usage-activations-default": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-usage-user-status-reference": {
+      "progressive": {
+        "passes": 1,
+        "runs": 3
+      }
+    },
+    "skill-usage-users-named-person": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    },
+    "skill-usage-users-release-notes": {
+      "progressive": {
+        "passes": 3,
+        "runs": 3
+      }
+    }
+  }
+}

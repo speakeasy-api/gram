@@ -68,6 +68,11 @@ type ResolvedMcpEndpoint struct {
 	// RequireUserSessionIssuer is the one place that does so.
 	CIMDAdmissionModeRaw pgtype.Text
 
+	// clientInfoScope keys this endpoint's session client-info records. Empty
+	// when no record exists or the gate can't name it: a direct remote server
+	// records none, and a hosted mcp_server keys by a toolset slug it hasn't loaded.
+	clientInfoScope string
+
 	// CustomDomainID, when valid, scopes the endpoint to a custom domain.
 	CustomDomainID uuid.NullUUID
 
@@ -144,6 +149,21 @@ type ResolvedMcpEndpoint struct {
 	// UserSessionIssuerID is the user_session_issuer the endpoint is
 	// gated on.
 	UserSessionIssuerID uuid.UUID
+}
+
+// clientInfoProjectID is the project this endpoint's client-info records are keyed under.
+func (e *ResolvedMcpEndpoint) clientInfoProjectID() uuid.UUID {
+	if e.MetaMcpServerID.Valid {
+		return uuid.Nil
+	}
+	return e.ProjectID
+}
+
+func mcpServerClientInfoScope(mcpServer *mcpservers_repo.McpServer) string {
+	if mcpServer.TunneledMcpServerID.Valid {
+		return tunnelClientInfoScopePrefix + mcpServer.ID.String()
+	}
+	return ""
 }
 
 // AuthorizationServerURLs is the set of URLs the endpoint advertises in
@@ -490,6 +510,7 @@ func NewResolvedMcpEndpointFromMcpServer(
 		AudienceURN: urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
 		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+		clientInfoScope:           mcpServerClientInfoScope(mcpServer),
 		CustomDomainID:            mcpEndpoint.CustomDomainID,
 		IsPublic:                  mcpServer.Visibility == mcpservers.VisibilityPublic,
 		idJAGConfigured:           false,
@@ -507,6 +528,17 @@ func NewResolvedMcpEndpointFromMcpServer(
 		UpstreamResource:          "",
 		UserSessionIssuerID:       mcpServer.UserSessionIssuerID.UUID,
 	}
+}
+
+// proxiedServerID is the MCP server this endpoint serves directly when that
+// server's upstream clients are the ones its callers need. It is invalid for a
+// gateway, and for a hosted server, whose tools dispatch through every client
+// the issuer binds.
+func (e *ResolvedMcpEndpoint) proxiedServerID() uuid.NullUUID {
+	if e.ToolsetID.Valid || e.MetaMcpServerID.Valid {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return e.McpServerID
 }
 
 // connectResourceID is the mcp:connect resource id: the server or meta-server
@@ -549,6 +581,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 		AudienceURN: urn.NewUserSessionIssuer(metaServer.UserSessionIssuerID.UUID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
 		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+		clientInfoScope:           metaClientInfoScope(metaServer.ID),
 		CustomDomainID:            mcpEndpoint.CustomDomainID,
 		IsPublic:                  false,
 		idJAGConfigured:           false,
@@ -578,6 +611,7 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, hosting h
 		AudienceURN: urn.NewToolset(toolset.ID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
 		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+		clientInfoScope:           toolset.Slug,
 		CustomDomainID:            alias.CustomDomainID,
 		IsPublic:                  hosting.Public,
 		idJAGConfigured:           false,
@@ -637,7 +671,7 @@ func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref Endpoint
 			OrganizationID:   ref.Authority.OrganizationID,
 			NetworkIngressID: uuid.Nil,
 			NetworkIdentity:  nil,
-		}}
+		}, organizationGatewayDefault: false}
 	}
 	return endpoint, nil
 }

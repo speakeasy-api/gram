@@ -532,6 +532,62 @@ func TestService_ListResourceAudience_HonoursProjectScopedGrants(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func TestService_ListResourceAudience_OrgAdminReadsBlockedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	// An organization admin whose read of this server is blocked (for example
+	// by a block on everyone) can still read the rules they are allowed to
+	// write.
+	adminCtx := authz.GrantsToContext(contextvalues.SetAuthContext(ctx, authCtx), []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeMCPBlockedRead, serverID),
+	})
+
+	_, err := ti.service.ListResourceAudience(adminCtx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+}
+
+func TestService_ListResourceAudience_BlockedNonAdminForbidden(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	// The org admin exemption must not weaken blocks for everyone else: a
+	// non-admin whose read of this server is blocked still cannot list its rules.
+	blockedCtx := authz.GrantsToContext(contextvalues.SetAuthContext(ctx, authCtx), []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeMCPRead, serverID),
+		authz.NewGrant(authz.ScopeMCPBlockedRead, serverID),
+	})
+
+	_, err := ti.service.ListResourceAudience(blockedCtx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestService_SetResourceAudience_RefusesStaleVersion(t *testing.T) {
 	t.Parallel()
 
@@ -1049,6 +1105,110 @@ func TestService_SetResourceAudience_RefusesNewAccessForSuspendedAgent(t *testin
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
 
+// A rule naming a deleted agent is left out of the audience, so the page
+// never sends it back, and the next save removes its grant.
+func TestService_SetResourceAudience_HidesAndRemovesRulesForDeletedAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Retired assistant",
+	})
+	require.NoError(t, err)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: agentPrincipal.String(), Level: "blocked", Tools: nil, Dispositions: []string{"destructive"}},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+
+	_, err = agentsrepo.New(ti.conn).DeleteAgent(ctx, agentsrepo.DeleteAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             agent.ID,
+	})
+	require.NoError(t, err)
+
+	listed, err := ti.service.ListResourceAudience(ctx, &gen.ListResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	for _, entry := range listed.Entries {
+		require.NotEqual(t, agentPrincipal.String(), entry.PrincipalUrn, "deleted agent's rule should be hidden")
+	}
+
+	// The page saves what it shows, plus the edit.
+	userURN := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String()
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: userURN, Level: "use", Tools: nil, Dispositions: nil},
+		},
+		ExpectedVersion: listed.Version,
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+
+	grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{agentPrincipal})
+	require.NoError(t, err)
+	require.Empty(t, grants)
+}
+
+// A deleted agent with no rule on this server still cannot be given one.
+func TestService_SetResourceAudience_RefusesNewAccessForDeletedAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Gone assistant",
+	})
+	require.NoError(t, err)
+	_, err = agentsrepo.New(ti.conn).DeleteAgent(ctx, agentsrepo.DeleteAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             agent.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), Level: "use", Tools: nil, Dispositions: nil},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
 func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAccessService(t)
@@ -1060,12 +1220,14 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 	})
 	require.NoError(t, err)
 	principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
-	selectors, err := authz.NewSelector(authz.ScopeMCPWrite, "*").MarshalJSON()
-	require.NoError(t, err)
-	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
-		OrganizationID: authCtx.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPWrite), Selectors: selectors,
-	})
-	require.NoError(t, err)
+	for _, scope := range []authz.Scope{authz.ScopeMCPWrite, authz.ScopeMCPConnect} {
+		selectors, err := authz.NewSelector(scope, "*").MarshalJSON()
+		require.NoError(t, err)
+		_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+			OrganizationID: authCtx.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(scope), Selectors: selectors,
+		})
+		require.NoError(t, err)
+	}
 	// The two servers share one upstream session. A policy-only removal must
 	// not invoke credential revocation or erase the other server's connection.
 	otherServerID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
@@ -1121,9 +1283,8 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 		})
 		require.NoError(t, err)
 	}
-	var beforeSession, afterSession string
-	//nolint:glint // notestingrawsql: capture the shared credential without logging it
-	err = ti.conn.QueryRow(ctx, `SELECT row_to_json(s)::text FROM remote_sessions s WHERE id = $1`, sessionID).Scan(&beforeSession)
+	// Capture the shared credential without logging it.
+	beforeSession, err := accessrepo.New(ti.conn).GetRemoteSessionRowDigestFixture(ctx, sessionID)
 	require.NoError(t, err)
 	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp", ResourceID: serverID,
@@ -1139,8 +1300,8 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 	allowed, err = authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: otherServerID})
 	require.NoError(t, err)
 	require.True(t, allowed)
-	//nolint:glint // notestingrawsql: prove server-local policy removal leaves shared upstream authority intact
-	err = ti.conn.QueryRow(ctx, `SELECT row_to_json(s)::text FROM remote_sessions s WHERE id = $1`, sessionID).Scan(&afterSession)
+	// Server-local policy removal leaves shared upstream authority intact.
+	afterSession, err := accessrepo.New(ti.conn).GetRemoteSessionRowDigestFixture(ctx, sessionID)
 	require.NoError(t, err)
 	require.Equal(t, beforeSession, afterSession, "shared upstream session must be unchanged")
 }

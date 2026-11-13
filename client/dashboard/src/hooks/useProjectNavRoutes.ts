@@ -2,8 +2,9 @@ import { useMemo } from "react";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { AppRoute, useRoutes } from "@/routes";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { AppRoute } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
@@ -61,8 +62,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     // Observe navigation stays visible to project readers. The Identities
     // roster uses that scope; identity detail resolution separately requires
     // org:read, and the remaining Observe pages render an org-admin notice.
-    // Tool Logs is the exception: it needs log:read on this project, which no
-    // role holds by default, so it only appears to those granted it.
+    // Tool Logs included: without log:read on the project it shows the
+    // member's own sessions and agents, so the page is reachable by all.
     const observe: Scope[] = ["project:read"];
     return [
       { route: routes.home, scope: read },
@@ -91,6 +92,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.deployments, scope: readWrite },
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
+      // Channels is deliberately absent: while it is hidden it is reachable
+      // only by direct URL, so neither the sidebar nor Command K offers it.
       {
         route: routes.assistants,
         scope: ["assistant:read"],
@@ -127,7 +130,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       ...(isOrgMemoryEnabled
         ? [{ route: routes.orgMemory, scope: observe }]
         : []),
-      { route: routes.logs, scope: ["log:read"], resourceId: projectId },
+      { route: routes.logs, scope: observe, resourceId: projectId },
       { route: routes.settings, scope: ["project:write"] },
     ];
   }, [

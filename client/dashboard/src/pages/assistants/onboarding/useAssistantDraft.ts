@@ -1,4 +1,4 @@
-import { Assistant } from "@gram/client/models/components/assistant.js";
+import type { Assistant } from "@gram/client/models/components/assistant.js";
 import { createContext, useContext } from "react";
 
 type PendingResolver = (result: unknown) => void;

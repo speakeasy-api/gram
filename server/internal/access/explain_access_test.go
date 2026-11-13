@@ -175,9 +175,14 @@ func TestEvaluateEffectiveMCPAccessMatchesDashboardDecisions(t *testing.T) {
 				held(user, narrowed(authz.ScopeMCPConnect, serverID, explainedProbeTool)),
 			}
 		}(), want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessSome}},
-		{name: "view and manage", grants: []authz.Grant{
+		{name: "view and manage do not connect", grants: []authz.Grant{
 			held(role, authz.NewGrant(authz.ScopeMCPRead, serverID)),
 			held(role, authz.NewGrant(authz.ScopeMCPWrite, serverID)),
+		}, want: EffectiveMCPAccess{CanConnect: false, ToolAccess: explainedToolAccessNone, CanView: true, CanManage: true}},
+		{name: "view, manage and connect", grants: []authz.Grant{
+			held(role, authz.NewGrant(authz.ScopeMCPRead, serverID)),
+			held(role, authz.NewGrant(authz.ScopeMCPWrite, serverID)),
+			held(role, authz.NewGrant(authz.ScopeMCPConnect, serverID)),
 		}, want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessAll, CanView: true, CanManage: true}},
 	}
 	for _, test := range tests {
@@ -206,7 +211,6 @@ func TestService_ExplainResourceAccess_BlockFromMappedRoleWins(t *testing.T) {
 	require.Equal(t, []explainedRuleSummary{
 		{displayName: "Contractors", level: audienceLevelBlocked, effect: string(authz.GrantEffectBlocks)},
 		{displayName: "Engineer", level: audienceLevelUse, effect: string(authz.GrantEffectBlocked)},
-		{displayName: "Engineer", level: audienceLevelView, effect: string(authz.GrantEffectBlocked)},
 	}, summarizeExplainedRules(use.Rules))
 
 	contractors := explainedRule(t, use.Rules, "Contractors")
@@ -272,7 +276,6 @@ func TestService_ExplainResourceAccess_DirectGrantOutranksRoleBlock(t *testing.T
 		{displayName: "Mateo", level: audienceLevelUse, effect: string(authz.GrantEffectOverrides)},
 		{displayName: "Contractors", level: audienceLevelBlocked, effect: string(authz.GrantEffectOverridden)},
 		{displayName: "Engineer", level: audienceLevelUse, effect: string(authz.GrantEffectBlocked)},
-		{displayName: "Engineer", level: audienceLevelView, effect: string(authz.GrantEffectBlocked)},
 	}, summarizeExplainedRules(use.Rules))
 	require.Equal(t, "user", explainedRule(t, use.Rules, "Mateo").Kind)
 }

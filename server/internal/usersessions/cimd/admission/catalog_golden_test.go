@@ -41,6 +41,8 @@ func TestCatalogMatchesTheCatalogAsShipped(t *testing.T) {
 		{VendorKey: "linear", URL: "https://linear.app/.well-known/oauth-client-metadata/mcp.json", DisplayName: "Linear", Enabled: true},
 		{VendorKey: "lovable", URL: "https://api.lovable.dev/.well-known/oauth-client", DisplayName: "Lovable", Enabled: true},
 		{VendorKey: "google", URL: "https://antigravity.google/oauth/client-metadata.json", DisplayName: "Google Antigravity", Enabled: true},
+		{VendorKey: "pi", URL: "https://pi.dev/oauth/client.json", DisplayName: "Pi", Enabled: true},
+		{VendorKey: "pi", URL: "https://pi.dev/oauth/*/client.json", DisplayName: "Pi (per-server document)", Enabled: true},
 	}
 
 	require.Equal(t, expected, Catalog())

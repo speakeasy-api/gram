@@ -139,7 +139,7 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 # Started by start only when the local code provider is configured.
 [daemons.code-runtime]
 run = "exec mise run start:code-runtime"
-ready_output = "gram-code-runner protocol 1 listening on"
+ready_output = "gram-code-runner protocol 2 listening on"
 retry = 0
 
 # Not a service: a cron that checks, every five minutes, whether this
@@ -154,3 +154,10 @@ retry = 0
 run = "mise run idle-pause"
 env = { COMPOSE_PROJECT_NAME = "gram" }
 cron = "0 */5 * * * *"
+
+# Not a service: renews this worktree's Tailscale HTTPS certificate daily and
+# restarts the daemons that serve it when it changes. Started by start only when
+# GRAM_TLS_PROVIDER=tailscale, and stopped with the stack like idle-pause.
+[daemons.tailscale-cert]
+run = "mise run tls:tailscale --restart"
+cron = "0 17 4 * * *"

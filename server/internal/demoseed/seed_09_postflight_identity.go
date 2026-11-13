@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+
+	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
 
 // postflightIDCheck is one count assert: the count must equal want. msg is
@@ -94,7 +96,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDInertUpstreamSessions(ctx, s.det("remote-identity-client-linear"))
 		}, 6, "demo seed postflight: expected 6 inert validated-spread upstream sessions, found %d"},
-		{byOrg(s.q.PostflightIDAgents), 6, "demo seed postflight: expected 6 managed agents, found %d"},
+		{byOrg(s.q.PostflightIDAgents), 7, "demo seed postflight: expected 7 managed agents, found %d"},
 		{byOrg(s.q.PostflightIDAgentSessions), 1, "demo seed postflight: expected 1 managed agent session, found %d"},
 		// This External OAuth row drives the metadata recommendation. Keep its
 		// count stable so a rerun cannot duplicate it or silently drop the demo
@@ -148,7 +150,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// duplicated any of them would leave the badges telling a different
 		// story than the one they were seeded to tell.
 		// Two upstream MCP issuers, two independent gateway issuers, one
-		// Connections issuer, and the approvals server's issuer; GitHub uses the
+		// Connections issuer, and Notion's issuer; GitHub and DeepWiki use the
 		// organization workforce issuer.
 		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 6, "demo seed postflight: expected 6 project user session issuers, found %d"},
 		{byProj(s.q.PostflightIDGatewayIssuers), 2, "demo seed postflight: expected 2 distinct gateway issuers, found %d"},
@@ -160,17 +162,17 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				OrgID:           org,
 			})
 		}, 1, "demo seed postflight: expected the workforce user session issuer in shared mode, found %d"},
-		{byProj(s.q.PostflightIDUserSessionClients), 8, "demo seed postflight: expected 8 registered agents, found %d"},
+		{byProj(s.q.PostflightIDUserSessionClients), 9, "demo seed postflight: expected 9 registered agents, found %d"},
 		// EMA: two ready bindings, no cached credentials, and one saved
-		// provider order. The workforce sign-in must not trust the fictional
-		// provider.
+		// provider order. The workforce issuer accepts ID-JAGs from the
+		// fictional provider, but interactive sign-in does not go through it.
 		{func(ctx context.Context) (int64, error) {
-			return s.q.PostflightIDWorkforceTrustsEMAProvider(ctx, repo.PostflightIDWorkforceTrustsEMAProviderParams{
+			return s.q.PostflightIDWorkforceInboundEMATrust(ctx, repo.PostflightIDWorkforceInboundEMATrustParams{
 				WorkforceIssuer: s.det("issuer-workforce"),
 				OrgID:           org,
 				EmaProvider:     s.det("ema-idp"),
 			})
-		}, 0, "demo seed postflight: the workforce issuer must not trust Acme Identity, found %d"},
+		}, 1, "demo seed postflight: expected the workforce issuer to trust Acme Identity for inbound EMA only, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDReadyEMABindings(ctx, repo.PostflightIDReadyEMABindingsParams{OrgID: org, ProjectID: proj})
 		}, 2, "demo seed postflight: expected 2 ready EMA bindings, found %d"},
@@ -216,7 +218,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.det("mcpserver-github"), s.tunnelServerID()},
+				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion"), s.det("mcpserver-deepwiki")},
+				GithubServerID:     s.det("mcpserver-github"),
+				GithubAuthClientID: s.det("auth-client-github-forwarded"),
 				ProjectID:          proj,
 				LinearSessionIds:   []uuid.UUID{s.det("user-session-6"), s.det("user-session-7"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
 				SlackSessionIds:    []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
@@ -224,17 +228,35 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				SlackServerID:      s.det("mcpserver-slack"),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 			})
-		}, 26, "demo seed postflight: expected exactly 26 matching upstream client choices, found %d"},
+		}, 32, "demo seed postflight: expected exactly 32 matching upstream client choices, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.det("mcpserver-github"), s.tunnelServerID()},
+				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion"), s.det("mcpserver-deepwiki")},
+				GithubServerID:     s.det("mcpserver-github"),
+				GithubAuthClientID: s.det("auth-client-github-forwarded"),
 				ProjectID:          proj,
 				LinearServerID:     s.det("mcpserver-linear"),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 				SlackServerID:      s.det("mcpserver-slack"),
 			})
 		}, 0, "demo seed postflight: %d upstream client choices are not the intended Linear client or Slack no-auth choice"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDIssuanceProfileChoices(ctx, repo.PostflightIDIssuanceProfileChoicesParams{
+				ProjectID:      proj,
+				ClientID:       s.det("usc-nightly-report"),
+				LinearServerID: s.det("mcpserver-linear"),
+				AuthClientID:   s.det("auth-client-github-token"),
+			})
+		}, 1, "demo seed postflight: expected the headless app's profile to choose the shared token on Linear, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDExecutionProfileChoices(ctx, repo.PostflightIDExecutionProfileChoicesParams{
+				ProjectID:      proj,
+				AssistantID:    s.det("assistant-bound"),
+				LinearServerID: s.det("mcpserver-linear"),
+				AuthClientID:   s.det("auth-client-github-token"),
+			})
+		}, 2, "demo seed postflight: expected the bound assistant's two profiles to choose the shared token on Linear, found %d"},
 		{byProj(s.q.PostflightIDServiceAccountHeaders), 1, "demo seed postflight: expected 1 Remote MCP Service Account header, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.
@@ -263,6 +285,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 			return s.q.PostflightIDAssistantAgentBindings(ctx, repo.PostflightIDAssistantAgentBindingsParams{OrgID: org, ProjectID: proj})
 		}, 1, "demo seed postflight: expected 1 assistant binding, found %d"},
 		{byProj(s.q.PostflightIDAssistantThreads), 2, "demo seed postflight: expected 2 assistant threads, found %d"},
+		{byProj(s.q.PostflightIDSlackbotSession), 1, "demo seed postflight: expected 1 Slackbot session, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDTriggerWorkloadBindings(ctx, repo.PostflightIDTriggerWorkloadBindingsParams{OrgID: org, ProjectID: proj})
 		}, 1, "demo seed postflight: expected 1 root binding, found %d"},
@@ -271,6 +294,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				OrgID:       org,
 				ProjectID:   proj,
 				AssistantID: s.det("assistant-bound"),
+				Issuer:      s.assistantIssuer,
+				JwksUri:     s.assistantIssuer + jwks.Path,
 				OwnerUserID: s.userID(demoUsers[0].handle),
 			})
 		}, 1, "demo seed postflight: identity-bound assistant root is incoherent"},

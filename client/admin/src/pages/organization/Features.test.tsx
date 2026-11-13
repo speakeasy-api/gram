@@ -183,11 +183,30 @@ const CHAT_ANALYSIS: AdminOrganizationChatAnalysisSettings = {
   is_default: false,
 };
 
+// Product feature switches, leaving out the chat analysis Organizational Memory
+// switch, which has its own mutation.
+function productFeatureSwitches(): HTMLElement[] {
+  return screen
+    .getAllByRole("switch")
+    .filter(
+      (item) =>
+        item.getAttribute("aria-label") !== "Toggle Organizational Memory",
+    );
+}
+
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
   mocks.featureFetch.mockImplementation(async (input: RequestInfo | URL) => {
     const request = input as Request;
     if (request.method === "GET") return jsonResponse(FEATURES_RESPONSE);
+
+    if (new URL(request.url).pathname === "/admin/organization.providerSetup") {
+      const body = await request.clone().json();
+      return jsonResponse({
+        ...FEATURES_RESPONSE,
+        provider_setup_enabled: body.enabled,
+      });
+    }
 
     const body = (await request.clone().json()) as {
       enabled: boolean;
@@ -218,16 +237,61 @@ async function renderFeatures(queryClient?: QueryClient): Promise<void> {
 }
 
 describe("Features", () => {
+  it("enables and disables provider setup using its staff rollout endpoint", async () => {
+    await renderFeatures();
+    const toggle = await screen.findByRole("switch", {
+      name: "Toggle MCP provider setup",
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    for (const enabled of [true, false]) {
+      fireEvent.click(toggle);
+      await waitFor(() =>
+        expect(toggle.getAttribute("aria-checked")).toBe(String(enabled)),
+      );
+      await waitFor(() => expect(toggle.hasAttribute("disabled")).toBe(false));
+      const request = mocks.featureFetch.mock.calls
+        .map(([request]) => request as Request)
+        .filter((request) => request.method === "POST")
+        .at(-1)!;
+      expect(new URL(request.url).pathname).toBe(
+        "/admin/organization.providerSetup",
+      );
+      expect(await request.clone().json()).toEqual({
+        organization_id: ORG.id,
+        enabled,
+      });
+    }
+  });
+
+  it("keeps the saved provider setup state and displays failed writes", async () => {
+    await renderFeatures();
+    const toggle = await screen.findByRole("switch", {
+      name: "Toggle MCP provider setup",
+    });
+    mocks.featureFetch.mockImplementation(async (request: Request) =>
+      request.method === "POST"
+        ? serviceError("Rollout unavailable", 403)
+        : jsonResponse(FEATURES_RESPONSE),
+    );
+    fireEvent.click(toggle);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Rollout unavailable",
+    );
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    await waitFor(() => expect(toggle.hasAttribute("disabled")).toBe(false));
+  });
+
   it("renders exactly the typed direct toggles", async () => {
     await renderFeatures();
 
-    const switches = await screen.findAllByRole("switch");
-    expect(switches).toHaveLength(TOGGLE_FEATURES.length);
+    await screen.findByRole("switch", { name: "Toggle Organizational Memory" });
+    const switches = productFeatureSwitches();
+    expect(switches).toHaveLength(TOGGLE_FEATURES.length + 1);
     expect(
       TOGGLE_FEATURES.map(({ label }) =>
         screen.getByRole("switch", { name: `Toggle ${label}` }),
       ),
-    ).toEqual(switches);
+    ).toEqual(switches.slice(1));
     expect(
       Object.values(OMITTED_FEATURES).filter(
         (classification) => classification === "omitted",
@@ -294,7 +358,10 @@ describe("Features", () => {
 
     expect(await screen.findByText("Chat analysis")).toBeTruthy();
     expect(screen.getByText("Work Delivered Chat Analysis")).toBeTruthy();
-    expect(screen.getByText("Business Memory Extraction")).toBeTruthy();
+    expect(screen.getByText("Organizational Memory")).toBeTruthy();
+    expect(
+      screen.queryByLabelText("Business memory daily extraction cap"),
+    ).toBeNull();
     expect(
       screen.getByText(
         "Caps are evaluations per UTC day; a cap of 0 disables the pipeline.",
@@ -317,7 +384,7 @@ describe("Features", () => {
     expect(await screen.findByText("Triggered 2 projects.")).toBeTruthy();
   });
 
-  it("enables a disabled zero-cap judge with the default cap", async () => {
+  it("switches Organizational Memory on with the default cap", async () => {
     mocks.setOrganizationChatAnalysisSetting.mockResolvedValue({
       ...CHAT_ANALYSIS,
       business_memory_enabled: true,
@@ -325,7 +392,11 @@ describe("Features", () => {
     });
     await renderFeatures();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Enable" }));
+    const toggle = await screen.findByRole("switch", {
+      name: "Toggle Organizational Memory",
+    });
+    expect(toggle.getAttribute("data-state")).toBe("unchecked");
+    fireEvent.click(toggle);
 
     await waitFor(() => {
       expect(mocks.setOrganizationChatAnalysisSetting).toHaveBeenCalledWith({
@@ -335,13 +406,58 @@ describe("Features", () => {
         dailyCap: 100,
       });
     });
-    expect(
-      (
-        screen.getByLabelText(
-          "Business memory daily extraction cap",
-        ) as HTMLInputElement
-      ).value,
-    ).toBe("100");
+    await waitFor(() => {
+      expect(toggle.getAttribute("data-state")).toBe("checked");
+    });
+    expect(screen.getByText("Up to 100 sessions per UTC day.")).toBeTruthy();
+  });
+
+  it("keeps a stored Organizational Memory cap when switching it off", async () => {
+    mocks.getOrganizationChatAnalysisSettings.mockResolvedValue({
+      ...CHAT_ANALYSIS,
+      business_memory_enabled: true,
+      business_memory_daily_cap: 40,
+    });
+    await renderFeatures();
+
+    fireEvent.click(
+      await screen.findByRole("switch", {
+        name: "Toggle Organizational Memory",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.setOrganizationChatAnalysisSetting).toHaveBeenCalledWith({
+        organizationID: ORG.id,
+        judge: "business_memory",
+        enabled: false,
+        dailyCap: 40,
+      });
+    });
+  });
+
+  it("shows an enabled zero-cap Organizational Memory as off", async () => {
+    mocks.getOrganizationChatAnalysisSettings.mockResolvedValue({
+      ...CHAT_ANALYSIS,
+      business_memory_enabled: true,
+      business_memory_daily_cap: 0,
+    });
+    await renderFeatures();
+
+    const toggle = await screen.findByRole("switch", {
+      name: "Toggle Organizational Memory",
+    });
+    expect(toggle.getAttribute("data-state")).toBe("unchecked");
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(mocks.setOrganizationChatAnalysisSetting).toHaveBeenCalledWith({
+        organizationID: ORG.id,
+        judge: "business_memory",
+        enabled: true,
+        dailyCap: 100,
+      });
+    });
   });
 
   it("saves an integer cap and replaces settings from the response", async () => {
@@ -355,10 +471,6 @@ describe("Features", () => {
     const input = await screen.findByLabelText(
       "Work delivered daily evaluation cap",
     );
-    const otherInput = screen.getByLabelText(
-      "Business memory daily extraction cap",
-    );
-    fireEvent.change(otherInput, { target: { value: "12" } });
     fireEvent.change(input, { target: { value: "48" } });
     fireEvent.click(screen.getByRole("button", { name: "Save cap" }));
 
@@ -370,7 +482,6 @@ describe("Features", () => {
         dailyCap: 48,
       });
     });
-    expect((otherInput as HTMLInputElement).value).toBe("12");
   });
 
   it("disables an enabled judge with its stored cap", async () => {
@@ -455,7 +566,7 @@ describe("Features", () => {
 
     await waitFor(() => {
       expect(control.getAttribute("data-state")).toBe("checked");
-      for (const item of screen.getAllByRole("switch")) {
+      for (const item of productFeatureSwitches()) {
         expect((item as HTMLButtonElement).disabled).toBe(true);
       }
     });

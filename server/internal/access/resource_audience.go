@@ -114,7 +114,15 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, payload.ResourceID, projectID)); err != nil {
+	// Organization admins can always read the rules they are allowed to write
+	// (SetResourceAudience requires only org:admin). Without this, a block that
+	// reaches an admin through user:all or one of their roles would hide the
+	// server's rules from them, and the organization-wide assignment review
+	// could never load.
+	if err := s.authz.RequireAny(ctx,
+		authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil},
+		authz.MCPCheck(authz.ScopeMCPRead, payload.ResourceID, projectID),
+	); err != nil {
 		return nil, err
 	}
 	// The entries name the people each rule reaches, so seeing them takes
@@ -637,6 +645,14 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 	for key, rule := range rules {
 		name := names[key.principalURN]
 		if name.displayName == "" {
+			// A deleted agent can never act again, so its rule decides
+			// nothing and is not listed. A rule naming this resource then
+			// drops out of the next save, which replaces this resource's
+			// rules; organization-wide rows are left to the surface that
+			// owns them.
+			if strings.HasPrefix(key.principalURN, string(urn.PrincipalTypeAgent)+":") {
+				continue
+			}
 			name = describeUnknownPrincipal(key.principalURN)
 		}
 		entries = append(entries, &gen.ResourceAudienceEntry{
@@ -918,8 +934,6 @@ func describeUnknownPrincipal(principalURN string) audienceName {
 		return audienceName{kind: "role", displayName: "Deleted role", description: nil, memberCount: nil}
 	case strings.HasPrefix(principalURN, string(urn.PrincipalTypeUser)+":"):
 		return audienceName{kind: "user", displayName: "Former member", description: nil, memberCount: nil}
-	case strings.HasPrefix(principalURN, string(urn.PrincipalTypeAgent)+":"):
-		return audienceName{kind: "agent", displayName: "Deleted agent", description: nil, memberCount: nil}
 	default:
 		return audienceName{kind: "unknown", displayName: principalURN, description: nil, memberCount: nil}
 	}

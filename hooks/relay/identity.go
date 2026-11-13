@@ -12,12 +12,14 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -41,33 +43,138 @@ func resolveUserEmail(ctx context.Context, typed any) string {
 			return email
 		}
 	}
+	if inCoworkVM(base) {
+		if email := claudeAccountEmail(); email != "" {
+			return email
+		}
+	}
 	return topLevelPayloadEmail(base.Raw)
 }
 
 func deviceAgentEmail(ctx context.Context) string {
+	return deviceIdentityFor(ctx).Email
+}
+
+// deviceIdentity is what the device agent reports about this box: the managed
+// user's email for attribution and, on a headless workload box (ADR-0025,
+// contract C8), the argv that mints its hooks token.
+type deviceIdentity struct {
+	Email          string
+	Workload       bool
+	HooksTokenArgv []string
+	// Known is set when a device agent answered at all, so a caller can tell
+	// "not a workload box" from "could not ask".
+	Known bool
+}
+
+// deviceIdentityTTL bounds how long one lookup serves, so an event runs identity
+// at most once and a serve process still picks up enrollment changes.
+const deviceIdentityTTL = 30 * time.Second
+
+var deviceIdentityMemo struct {
+	sync.Mutex
+	key string
+	at  time.Time
+	id  deviceIdentity
+}
+
+// deviceIdentityFor returns the memoized identity for the current device-agent
+// lookup inputs. The key covers everything that changes where the lookup goes,
+// so a changed environment never reads a stale answer.
+func deviceIdentityFor(ctx context.Context) deviceIdentity {
+	key := strings.Join(deviceAgentCommands(), "\x00") + "\x01" + strings.Join(agentSocketPaths(), "\x00") + "\x01" + Env("DEVICE_AGENT_COMMANDS")
+	deviceIdentityMemo.Lock()
+	if deviceIdentityMemo.key == key && nowFunc().Sub(deviceIdentityMemo.at) < deviceIdentityTTL {
+		id := deviceIdentityMemo.id
+		deviceIdentityMemo.Unlock()
+		return id
+	}
+	deviceIdentityMemo.Unlock()
+	// The lookup runs unlocked: concurrent events must not queue behind a slow
+	// device agent and spend their gating budget waiting. Racing lookups are
+	// harmless; the last one stored wins.
+	id := lookupDeviceIdentity(ctx)
+	deviceIdentityMemo.Lock()
+	deviceIdentityMemo.key, deviceIdentityMemo.at, deviceIdentityMemo.id = key, nowFunc(), id
+	deviceIdentityMemo.Unlock()
+	return id
+}
+
+// resetDeviceIdentityMemo forgets the memoized identity; tests use it.
+func resetDeviceIdentityMemo() {
+	deviceIdentityMemo.Lock()
+	defer deviceIdentityMemo.Unlock()
+	deviceIdentityMemo.key, deviceIdentityMemo.at, deviceIdentityMemo.id = "", time.Time{}, deviceIdentity{}
+}
+
+func lookupDeviceIdentity(ctx context.Context) deviceIdentity {
+	// The env override is a real off switch: only its commands run, and the
+	// socket and machine-wide tiers stay silent.
+	if env := Env("DEVICE_AGENT_COMMANDS"); env != "" {
+		id, _ := execIdentity(ctx, strings.Split(env, ","))
+		return id
+	}
+	found, done := execIdentity(ctx, userAgentCommands())
+	if done {
+		return found
+	}
+	// Rescue tier: a daemon running from a location the exec chain can't
+	// guess still owns a socket at a fixed per-OS path — ask it directly.
+	if id, ok := socketIdentity(ctx); ok {
+		return id
+	}
+	// Machine-wide copies come last. They are installer seeds that do not
+	// auto-update, and an old one's `identity` writes a keychain probe: under
+	// a $HOME with no keychain (an agent harness's temporary home) macOS shows
+	// a modal "Keychain Not Found" dialog for it, and every hook event that
+	// reaches it adds another.
+	id, _ := execIdentity(ctx, machineWideAgentCommands())
+	id.Known = id.Known || found.Known
+	return id
+}
+
+// execIdentity runs `<name> identity` for each command in order. done reports
+// a definitive answer (an email or a workload identity); otherwise id.Known
+// says whether any command ran at all.
+func execIdentity(ctx context.Context, commands []string) (id deviceIdentity, done bool) {
 	timeout := tenthsDuration("DEVICE_AGENT_TIMEOUT_TENTHS", 15)
-	for _, name := range deviceAgentCommands() {
+	env := identityEnv()
+	var found deviceIdentity
+	for _, name := range commands {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
 		commandCtx, cancel := context.WithTimeout(ctx, timeout)
-		output, err := exec.CommandContext(commandCtx, name, "identity").Output()
+		cmd := exec.CommandContext(commandCtx, name, "identity")
+		cmd.Env = env
+		output, err := cmd.Output()
 		cancel()
 		if err != nil {
 			continue
 		}
-		if email := identityOutputEmail(output); email != "" {
-			return email
+		found.Known = true
+		id := identityOutput(output)
+		if id.Workload || id.Email != "" {
+			id.Known = true
+			return id, true
 		}
 	}
-	// Rescue tier: a daemon running from a location the exec chain can't
-	// guess still owns a socket at a fixed per-OS path — ask it directly.
-	// The env override is a real off switch and silences this tier too.
-	if Env("DEVICE_AGENT_COMMANDS") != "" {
-		return ""
+	return found, false
+}
+
+// identityOutput parses `speakeasyd identity` output: a bare email, or a JSON
+// document that may also carry the workload fields.
+func identityOutput(output []byte) deviceIdentity {
+	id := deviceIdentity{Email: identityOutputEmail(output)}
+	var workload struct {
+		Workload       bool     `json:"workload"`
+		HooksTokenArgv []string `json:"hooks_token_argv"`
 	}
-	return socketIdentityEmail(ctx)
+	if json.Unmarshal(output, &workload) == nil && workload.Workload {
+		id.Workload, id.HooksTokenArgv = true, workload.HooksTokenArgv
+	}
+	return id
 }
 
 // socketAgentTimeout bounds the whole socket-rescue request. Only a *hung*
@@ -82,9 +189,25 @@ const socketAgentTimeout = 150 * time.Millisecond
 // config files per call, while the daemon serves its boot-time snapshot —
 // exec is fresher whenever both are available. One attempt, no retry.
 func socketIdentityEmail(ctx context.Context) string {
-	socket := agentSocketPath()
+	id, _ := socketIdentity(ctx)
+	return id.Email
+}
+
+// socketIdentity is socketIdentityEmail's full answer, workload fields
+// included, from the first socket that returns a usable document. ok is false
+// when none did.
+func socketIdentity(ctx context.Context) (deviceIdentity, bool) {
+	for _, socket := range agentSocketPaths() {
+		if id, ok := socketIdentityAt(ctx, socket); ok {
+			return id, true
+		}
+	}
+	return deviceIdentity{}, false
+}
+
+func socketIdentityAt(ctx context.Context, socket string) (deviceIdentity, bool) {
 	if socket == "" {
-		return ""
+		return deviceIdentity{}, false
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, socketAgentTimeout)
 	defer cancel()
@@ -100,49 +223,116 @@ func socketIdentityEmail(ctx context.Context) string {
 	}}
 	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, "http://speakeasy-agent/v1/identity", nil)
 	if err != nil {
-		return ""
+		return deviceIdentity{}, false
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return ""
+		return deviceIdentity{}, false
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return ""
+		return deviceIdentity{}, false
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
 	if err != nil {
-		return ""
+		return deviceIdentity{}, false
 	}
 	var identity struct {
-		V        int    `json:"v"`
-		Enrolled bool   `json:"enrolled"`
-		Email    string `json:"email"`
+		V              int      `json:"v"`
+		Enrolled       bool     `json:"enrolled"`
+		Email          string   `json:"email"`
+		Workload       bool     `json:"workload"`
+		HooksTokenArgv []string `json:"hooks_token_argv"`
 	}
 	if json.Unmarshal(body, &identity) != nil {
-		return ""
+		return deviceIdentity{}, false
 	}
 	// Contract rule: a document version newer than we understand is
 	// unreadable, same as the exec path's consumers.
-	if identity.V > 1 || !identity.Enrolled || !validEmail(identity.Email) {
-		return ""
+	if identity.V > 1 {
+		return deviceIdentity{}, false
 	}
-	return identity.Email
+	id := deviceIdentity{Email: "", Workload: identity.Workload, HooksTokenArgv: nil, Known: true}
+	if identity.Workload {
+		id.HooksTokenArgv = identity.HooksTokenArgv
+	}
+	if identity.Enrolled && validEmail(identity.Email) {
+		id.Email = identity.Email
+	}
+	return id, true
 }
 
-// agentSocketPath mirrors the device agent's api.SocketPath, including the
-// SPEAKEASY_SOCKET override.
-func agentSocketPath() string {
+// accountHomeDir is the home folder the OS user database records for this
+// account. Unlike $HOME it does not follow a harness that points HOME at a
+// temporary folder, which is where the per-user device agent and its socket
+// still live. A var so tests can keep the developer's real install out of
+// reach.
+var accountHomeDir = func() string {
+	u, err := user.Current()
+	if err != nil {
+		return ""
+	}
+	return u.HomeDir
+}
+
+// agentHomes lists the folders the per-user device agent may live under:
+// $HOME first, then the account's home when a harness has moved $HOME.
+func agentHomes() []string {
+	var homes []string
+	for _, home := range []string{envHomeDir(), accountHomeDir()} {
+		if home != "" && !slices.Contains(homes, home) {
+			homes = append(homes, home)
+		}
+	}
+	return homes
+}
+
+func envHomeDir() string {
+	home, _ := os.UserHomeDir()
+	return home
+}
+
+// identityEnv is the environment for `speakeasyd identity`. The device
+// identity belongs to the OS account, not to a harness's temporary $HOME, so
+// when $HOME has moved the agent runs with the account's home: it then reads
+// the account's enrollment and keychain. Under the temporary home it would
+// read neither, and an older agent would write a keychain probe there, which
+// macOS answers with a modal "Keychain Not Found" dialog. nil inherits the
+// environment unchanged.
+func identityEnv() []string {
+	account := accountHomeDir()
+	if account == "" || account == envHomeDir() {
+		return nil
+	}
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "HOME=") })
+	return append(env, "HOME="+account)
+}
+
+// agentSocketPaths mirrors the device agent's api.SocketPath, including the
+// SPEAKEASY_SOCKET override, in the order callers should try them. Without the
+// override it lists the socket under $HOME and then under the account's home:
+// a hook running under a temporary $HOME still reaches the daemon in the real
+// home, even when a stale socket file sits in the temporary one. A missing
+// socket fails the dial at once, so trying the next path costs nothing.
+func agentSocketPaths() []string {
 	if v := os.Getenv("SPEAKEASY_SOCKET"); v != "" {
-		return v
+		return []string{v}
 	}
 	if runtime.GOOS == "windows" {
-		return `\\.\pipe\speakeasy-agent`
+		return []string{`\\.\pipe\speakeasy-agent`}
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "/tmp/speakeasy-agent.sock"
+	homes := agentHomes()
+	if len(homes) == 0 {
+		return []string{"/tmp/speakeasy-agent.sock"}
 	}
+	paths := make([]string, 0, len(homes))
+	for _, home := range homes {
+		paths = append(paths, homeSocketPath(home))
+	}
+	return paths
+}
+
+func homeSocketPath(home string) string {
 	if runtime.GOOS == "darwin" {
 		return filepath.Join(home, "Library", "Application Support", "Speakeasy", "agent.sock")
 	}
@@ -157,17 +347,23 @@ func agentSocketPath() string {
 // installs place it under the per-user Speakeasy directory without touching
 // PATH, and GUI-spawned hook hosts see a minimal PATH anyway), so a bare
 // lookup alone silently loses managed identity attribution. A daemon running
-// somewhere none of these cover is handled by the socket rescue.
+// somewhere none of these cover is handled by the socket rescue, which runs
+// before the machine-wide installs (see lookupDeviceIdentity).
 func deviceAgentCommands() []string {
 	if env := Env("DEVICE_AGENT_COMMANDS"); env != "" {
 		return strings.Split(env, ",")
 	}
+	return append(userAgentCommands(), machineWideAgentCommands()...)
+}
+
+// userAgentCommands is the PATH lookup plus the per-user install locations,
+// under $HOME and under the account's home.
+func userAgentCommands() []string {
 	commands := []string{"speakeasyd"}
-	home, _ := os.UserHomeDir()
 	var candidates []string
 	switch runtime.GOOS {
 	case "darwin":
-		if home != "" {
+		for _, home := range agentHomes() {
 			candidates = append(candidates, filepath.Join(home, "Library", "Application Support", "Speakeasy", "bin", "speakeasyd"))
 		}
 	case "windows":
@@ -178,7 +374,7 @@ func deviceAgentCommands() []string {
 		if stateHome := strings.TrimSpace(os.Getenv("XDG_STATE_HOME")); filepath.IsAbs(stateHome) {
 			candidates = append(candidates, filepath.Join(stateHome, "speakeasy", "bin", "speakeasyd"))
 		}
-		if home != "" {
+		for _, home := range agentHomes() {
 			candidates = append(candidates,
 				filepath.Join(home, ".local", "state", "speakeasy", "bin", "speakeasyd"),
 				// ~/.speakeasy is the agent's conventional dotdir on Linux
@@ -190,13 +386,21 @@ func deviceAgentCommands() []string {
 			)
 		}
 	}
-	candidates = append(candidates, machineWideAgentPaths...)
+	return append(commands, executableFiles(candidates)...)
+}
+
+func machineWideAgentCommands() []string {
+	return executableFiles(machineWideAgentPaths)
+}
+
+func executableFiles(candidates []string) []string {
+	var found []string
 	for _, candidate := range candidates {
 		if executableFile(candidate) {
-			commands = append(commands, candidate)
+			found = append(found, candidate)
 		}
 	}
-	return commands
+	return found
 }
 
 // machineWideAgentPaths are the install locations outside $HOME, probed after
@@ -486,6 +690,35 @@ func codexAuthFileEmail() string {
 		if email := jwtEmail(auth.Tokens[key]); email != "" {
 			return email
 		}
+	}
+	return ""
+}
+
+// claudeAccountEmail returns the signed-in Claude account inside the Cowork
+// VM, where no device agent runs and Claude Code's hook payloads carry no
+// email. Claude sets CLAUDE_CODE_USER_EMAIL for the processes it starts and
+// keeps the same address under oauthAccount in its global config. Without it a
+// transcript upload names no one, so the session's owner depends on OTEL
+// arriving first.
+func claudeAccountEmail() string {
+	if email := strings.TrimSpace(os.Getenv("CLAUDE_CODE_USER_EMAIL")); validEmail(email) {
+		return email
+	}
+	home, _ := os.UserHomeDir()
+	b, err := os.ReadFile(filepath.Join(firstNonEmpty(os.Getenv("CLAUDE_CONFIG_DIR"), home), ".claude.json"))
+	if err != nil {
+		return ""
+	}
+	var config struct {
+		OAuthAccount struct {
+			EmailAddress string `json:"emailAddress"`
+		} `json:"oauthAccount"`
+	}
+	if json.Unmarshal(b, &config) != nil {
+		return ""
+	}
+	if email := strings.TrimSpace(config.OAuthAccount.EmailAddress); validEmail(email) {
+		return email
 	}
 	return ""
 }

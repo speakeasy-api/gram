@@ -12,6 +12,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 )
 
 // defaultPageSize bounds each page of servers read; writes are single
@@ -34,8 +36,10 @@ const (
 	// advertises exactly one of the issuer's clients' authorization servers.
 	OutcomeMetadataMatch Outcome = "metadata_match"
 
-	// OutcomeConfigured is a server on a shared issuer that already has an
-	// explicitly configured association and no further proven one.
+	// OutcomeConfigured is a server whose clients the backfill leaves to its
+	// configuration: one on a shared issuer that already has an explicitly
+	// configured association and no further proven one, or one with no live
+	// association that offers an OAuth client of its own.
 	OutcomeConfigured Outcome = "configured"
 
 	// OutcomeGrant is a server on a shared issuer for whose upstream exactly
@@ -89,7 +93,11 @@ const (
 	GatewayOutcomeDerived GatewayOutcome = "derived"
 
 	// GatewayOutcomeConfigured is a server already associated with the
-	// decided client.
+	// decided client, or one whose evidence names several clients but whose
+	// explicit configuration settles it: at least one outbound client is
+	// associated with it, and every candidate with grants for its upstream
+	// is already associated with it, was explicitly detached from it, or is
+	// associated with another server on the same upstream.
 	GatewayOutcomeConfigured GatewayOutcome = "configured"
 
 	// GatewayOutcomeDetached is a server whose decided client was explicitly
@@ -154,6 +162,12 @@ type ServerResult struct {
 
 	// Skipped counts decided writes whose evidence changed before the write.
 	Skipped int `json:"skipped"`
+
+	// Enforced reports that the server's organization enforces typed auth
+	// clients, so the decision is reported but not written: an enforced
+	// server offers only what was configured for it, never a client inferred
+	// from its issuer.
+	Enforced bool `json:"enforced"`
 }
 
 // GatewayResult is one decision for a server a gateway issuer fronts.
@@ -178,6 +192,10 @@ type GatewayResult struct {
 
 	// Skipped reports a decided write whose evidence changed before it.
 	Skipped bool `json:"skipped"`
+
+	// Enforced reports that the server's organization enforces typed auth
+	// clients, so the decision is reported but not written.
+	Enforced bool `json:"enforced"`
 }
 
 // Report summarizes a run. Results carry ids only, never names or URLs.
@@ -201,8 +219,13 @@ type Report struct {
 	Skipped int `json:"skipped"`
 
 	// Gaps counts servers left without a proven association; cutover is
-	// blocked until it is zero.
+	// blocked until it is zero. Servers of organizations that enforce typed
+	// auth clients are not gaps: their offers, not associations, decide.
 	Gaps int `json:"gaps"`
+
+	// Enforced counts decided associations left unwritten because the
+	// organization enforces typed auth clients.
+	Enforced int `json:"enforced"`
 
 	// Results lists every decided server.
 	Results []ServerResult `json:"results"`
@@ -228,6 +251,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 		Written:  0,
 		Skipped:  0,
 		Gaps:     0,
+		Enforced: 0,
 		Results:  []ServerResult{},
 
 		GatewayOutcomes: make(map[GatewayOutcome]int),
@@ -237,6 +261,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 		report.Mode = "apply"
 	}
 	q := New(db)
+	enforcement := enforcementReader{db: db, read: make(map[string]bool)}
 	cursor := uuid.Nil
 	for {
 		rows, err := q.ListUpstreamClientBackfillCandidates(ctx, ListUpstreamClientBackfillCandidatesParams{
@@ -248,7 +273,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			return report, fmt.Errorf("list backfill candidates after %s: %w", cursor, err)
 		}
 		if len(rows) == 0 {
-			if err := runGateways(ctx, q, opts, &report); err != nil {
+			if err := runGateways(ctx, q, opts, &enforcement, &report); err != nil {
 				return report, err
 			}
 			return report, nil
@@ -256,7 +281,15 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 		for _, server := range groupByServer(rows) {
 			result := Decide(server)
 			report.Decided += len(result.Associate)
-			if opts.Apply {
+			enforced, err := enforcement.enforced(ctx, server[0].OrganizationID)
+			if err != nil {
+				return report, err
+			}
+			result.Enforced = enforced
+			if enforced {
+				report.Enforced += len(result.Associate)
+			}
+			if opts.Apply && !enforced {
 				for _, clientID := range result.Associate {
 					n, err := q.BackfillUpstreamClientAssociation(ctx, BackfillUpstreamClientAssociationParams{
 						RemoteSessionClientID: clientID,
@@ -281,7 +314,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			report.Outcomes[result.Outcome]++
 			report.Written += result.Written
 			report.Skipped += result.Skipped
-			if !result.Outcome.Covered() {
+			if !result.Outcome.Covered() && !enforced {
 				report.Gaps++
 			}
 			report.Results = append(report.Results, result)
@@ -291,6 +324,26 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			return report, fmt.Errorf("backfill interrupted: %w", err)
 		}
 	}
+}
+
+// enforcementReader reads each organization's upstream auth enforcement once
+// per run, uncached across runs, so a run decides every server of an
+// organization the same way.
+type enforcementReader struct {
+	db   DBTX
+	read map[string]bool
+}
+
+func (r *enforcementReader) enforced(ctx context.Context, organizationID string) (bool, error) {
+	if enforced, ok := r.read[organizationID]; ok {
+		return enforced, nil
+	}
+	enforced, err := authenforcement.ReadEnforced(ctx, r.db, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("read upstream auth enforcement for %s: %w", organizationID, err)
+	}
+	r.read[organizationID] = enforced
+	return enforced, nil
 }
 
 // groupByServer splits a page into one slice per server, preserving order.
@@ -312,6 +365,9 @@ func groupByServer(rows []ListUpstreamClientBackfillCandidatesRow) [][]ListUpstr
 // only consumer, otherwise the single client its own upstream's metadata
 // names. It never copies a shared issuer's clients onto every server on it,
 // and never reads an unbound issuer as proof that no authentication is needed.
+// A server with no association that offers an OAuth client of its own was
+// configured apart from the issuer, so the issuer's clients say nothing about
+// it, even when it is their only consumer.
 func Decide(rows []ListUpstreamClientBackfillCandidatesRow) ServerResult {
 	first := rows[0]
 	result := ServerResult{
@@ -322,6 +378,7 @@ func Decide(rows []ListUpstreamClientBackfillCandidatesRow) ServerResult {
 		RespectRemoved: true,
 		Written:        0,
 		Skipped:        0,
+		Enforced:       false,
 	}
 
 	var bound, matched, granted, derived []ListUpstreamClientBackfillCandidatesRow
@@ -345,6 +402,8 @@ func Decide(rows []ListUpstreamClientBackfillCandidatesRow) ServerResult {
 	switch {
 	case len(bound) == 0:
 		return result
+	case first.LiveAssociations == 0 && first.OffersOwnOauthClient:
+		result.Outcome = OutcomeConfigured
 	case first.IssuerServerCount <= 1 && !first.IssuerHasGateway:
 		result.Outcome, decided, result.RespectRemoved = OutcomeSoleConsumer, bound, false
 	case len(matched) == 1 && !matched[0].PairRecorded:
@@ -370,7 +429,7 @@ func Decide(rows []ListUpstreamClientBackfillCandidatesRow) ServerResult {
 
 // runGateways decides every server a gateway issuer fronts and, with Apply,
 // writes the decisions.
-func runGateways(ctx context.Context, q *Queries, opts Options, report *Report) error {
+func runGateways(ctx context.Context, q *Queries, opts Options, enforcement *enforcementReader, report *Report) error {
 	rows, err := q.ListGatewayAssociationCandidates(ctx, opts.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("list gateway association candidates: %w", err)
@@ -381,9 +440,17 @@ func runGateways(ctx context.Context, q *Queries, opts Options, report *Report) 
 			end++
 		}
 		result := DecideGateway(rows[start:end])
+		enforced, err := enforcement.enforced(ctx, rows[start].OrganizationID)
+		if err != nil {
+			return err
+		}
+		result.Enforced = enforced
 		if result.Associate.Valid {
 			report.Decided++
-			if opts.Apply {
+			if enforced {
+				report.Enforced++
+			}
+			if opts.Apply && !enforced {
 				n, err := q.BackfillGatewayAssociation(ctx, BackfillGatewayAssociationParams{
 					UserSessionIssuerID:   result.UserSessionIssuerID,
 					RemoteSessionClientID: result.Associate.UUID,
@@ -401,7 +468,7 @@ func runGateways(ctx context.Context, q *Queries, opts Options, report *Report) 
 			}
 		}
 		report.GatewayOutcomes[result.Outcome]++
-		if !result.Outcome.Covered() {
+		if !result.Outcome.Covered() && !enforced {
 			report.Gaps++
 		}
 		report.GatewayResults = append(report.GatewayResults, result)
@@ -444,7 +511,8 @@ func decideByEvidence(granted, derived []ListUpstreamClientBackfillCandidatesRow
 // candidate rows, which all belong to that pair. Grants decide first, since
 // requests route by them today; the derived authorization server decides
 // only a server nobody has a grant for. More than one match, or the two
-// disagreeing, is left for explicit configuration.
+// disagreeing, is left for explicit configuration, unless that configuration
+// already exists (see settledByConfiguration).
 func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 	first := rows[0]
 	result := GatewayResult{
@@ -455,8 +523,10 @@ func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 		Associate:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Written:             false,
 		Skipped:             false,
+		Enforced:            false,
 	}
 	var granted, derived []ListGatewayAssociationCandidatesRow
+	associated := false
 	for _, row := range rows {
 		if row.GrantMatch {
 			granted = append(granted, row)
@@ -464,24 +534,30 @@ func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 		if row.DerivedMatch {
 			derived = append(derived, row)
 		}
+		associated = associated || row.PairLive
+	}
+	// Configured apart from the issuer, as Decide treats it.
+	if !associated && first.OffersOwnOauthClient {
+		result.Outcome = GatewayOutcomeConfigured
+		return result
 	}
 	var decided ListGatewayAssociationCandidatesRow
 	switch {
 	case len(granted) > 1:
 		result.Outcome = GatewayOutcomeAmbiguous
-		return result
+		return settledByConfiguration(result, rows)
 	case len(granted) == 1:
 		decided = granted[0]
 		for _, row := range derived {
 			if row.RemoteSessionClientID != decided.RemoteSessionClientID {
 				result.Outcome = GatewayOutcomeConflict
-				return result
+				return settledByConfiguration(result, rows)
 			}
 		}
 		result.Outcome = GatewayOutcomeGrant
 	case len(derived) > 1:
 		result.Outcome = GatewayOutcomeAmbiguous
-		return result
+		return settledByConfiguration(result, rows)
 	case len(derived) == 1:
 		decided = derived[0]
 		result.Outcome = GatewayOutcomeDerived
@@ -495,6 +571,34 @@ func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 		result.Outcome = GatewayOutcomeDetached
 	default:
 		result.Associate = uuid.NullUUID{UUID: decided.RemoteSessionClientID, Valid: true}
+	}
+	return result
+}
+
+// settledByConfiguration marks an ambiguous or conflicting pair configured
+// when at least one outbound client is already associated with the server and
+// every grant-bearing candidate is associated, explicitly detached, or
+// associated with another server on the same upstream. Multiple outbound
+// registrations can share an authorization server, so a derived match does not
+// distinguish them or outweigh existing associations. Inbound issuer bindings
+// alone do not justify adding outbound clients. A detached client stays
+// detached. Grants name an upstream, not a server, so a client's grants match
+// every server on it: a client another server on that upstream is associated
+// with is already accounted for, while a grant for a client associated with no
+// such server still needs configuration. This decides nothing new and writes
+// nothing.
+func settledByConfiguration(result GatewayResult, rows []ListGatewayAssociationCandidatesRow) GatewayResult {
+	associated := false
+	for _, row := range rows {
+		switch {
+		case row.PairLive:
+			associated = true
+		case row.GrantMatch && !row.PairRecorded && !row.ClaimedBySibling:
+			return result
+		}
+	}
+	if associated {
+		result.Outcome = GatewayOutcomeConfigured
 	}
 	return result
 }

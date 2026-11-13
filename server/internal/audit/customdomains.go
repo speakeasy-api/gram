@@ -55,6 +55,7 @@ func (l *Logger) LogCustomDomainUpdate(ctx context.Context, dbtx repo.DBTX, even
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -82,6 +83,7 @@ func (l *Logger) LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, even
 	action := ActionCustomDomainsCreate
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -114,12 +116,22 @@ type LogCustomDomainDeleteEvent struct {
 
 	CustomDomainURN urn.CustomDomain
 	DomainName      string
+
+	// CustomDomainSnapshotBefore is the domain's API view before deletion.
+	// Deletion clears the DNS target token, so this snapshot is the lasting
+	// record of which domain owned it.
+	CustomDomainSnapshotBefore *domains.CustomDomain
 }
 
 func (l *Logger) LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, event LogCustomDomainDeleteEvent) error {
 	action := ActionCustomDomainsDelete
+	beforeSnapshot, err := marshalAuditPayload(event.CustomDomainSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -136,7 +148,7 @@ func (l *Logger) LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, even
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		Metadata:       nil,
-		BeforeSnapshot: nil,
+		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  nil,
 	}
 

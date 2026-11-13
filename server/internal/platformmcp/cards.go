@@ -1,8 +1,10 @@
 package platformmcp
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
+	"fmt"
 	"html/template"
 	"strings"
 	"unicode"
@@ -30,22 +32,23 @@ var cardShellHTML string
 
 // cardTemplate is the markup shared by every card. html/template escapes each
 // value for its context and replaces any URL that is not http(s) or mailto.
-// The one exception is Logo: a data: image URI that cardLogoDataURI builds
-// only from stored bytes it has checked, typed as template.URL so the filter
-// lets it through.
+// Two values are trusted instead: Logo, a data: image URI that cardLogoDataURI
+// builds only from stored bytes it has checked, typed as template.URL; and
+// Icon, which must be one of the fixed SVG constants in cards_generic.go.
 //
 // Every card is a dotted panel holding the resource's tile, and beside it a
-// coloured eyebrow, a serif title, one line below it, tags and one action,
-// over a Speakeasy footer.
+// coloured eyebrow, a serif title, up to two lines below it, an optional list of
+// rows, tags and one action, over a Speakeasy footer.
 var cardTemplate = template.Must(template.New("card").Parse(`<article class="card">` +
 	`<div class="body">` +
 	`<div class="panel"><div class="tile{{if .Logo}} tile-logo{{end}}">` +
-	`{{if .Logo}}<img class="logo" src="{{.Logo}}" alt="">{{else if .Initials}}<span aria-hidden="true">{{.Initials}}</span>{{else}}` + cardServerIcon + `{{end}}` +
+	`{{if .Logo}}<img class="logo" src="{{.Logo}}" alt="">{{else if .Initials}}<span aria-hidden="true">{{.Initials}}</span>{{else if .Icon}}{{.Icon}}{{else}}` + cardServerIcon + `{{end}}` +
 	`</div></div>` +
 	`<div class="text">` +
 	`<p class="eyebrow eyebrow-{{.Eyebrow.Tone}}">{{.Eyebrow.Label}}</p>` +
 	`<h1>{{.Title}}</h1>` +
-	`{{with .Field}}<p class="line">{{.Label}} <code>{{.Value}}</code></p>{{else}}{{with .Description}}<p class="line">{{.}}</p>{{end}}{{end}}` +
+	`{{with .Field}}<p class="line">{{.Label}} <code>{{.Value}}</code></p>{{end}}{{with .Description}}<p class="line">{{.}}</p>{{end}}` +
+	`{{with .Rows}}<ul class="rows">{{range .}}<li><span class="row-label">{{.Label}}</span>{{with .Meta}}<span class="row-meta">{{.}}</span>{{end}}</li>{{end}}</ul>{{end}}` +
 	`<div class="foot">{{with .Tags}}<ul class="tags">{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}` +
 	`{{with .Action}}<a class="button" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Label}} <span aria-hidden="true">&rarr;</span></a>{{end}}</div>` +
 	`</div>` +
@@ -59,8 +62,8 @@ const cardServerIcon = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"
 // cardSpeakeasyMark is the Speakeasy mark in the card footer.
 const cardSpeakeasyMark = `<svg class="mark" viewBox="72 75 156 150" aria-hidden="true"><path d="M181.781 215.464L81.7665 201.253L74.0996 207.903L181.781 223.198L225.901 184.921L218.244 183.837L181.781 215.464Z"/><path d="M181.781 192.261L225.901 153.984L218.244 152.899L181.781 184.517L146.095 179.45L97.0809 172.494L81.7665 170.315L74.0996 176.965L89.4237 179.134L74.0996 192.424L181.781 207.719L225.901 169.452L218.244 168.367L181.79 199.995L130.771 192.74L138.428 186.1L181.781 192.261Z"/><path d="M181.781 169.045L81.7665 154.834L74.0996 161.484L181.781 176.779L225.901 138.512L218.244 137.428L181.781 169.045Z"/><path d="M218.244 106.478L202.92 119.767L181.781 138.105L140.443 132.232L81.7665 123.894L74.0996 130.543L132.776 138.872L125.119 145.522L81.7569 139.362L74.0996 146.011L181.781 161.307L225.901 123.04L210.577 120.861L225.901 107.562L218.244 106.478Z"/><path d="M225.901 92.0971L118.22 76.8018L74.0996 115.069L181.781 130.374L225.901 92.0971Z"/></svg>`
 
-// resultCard is what one card shows. Every value except Logo is plain text;
-// the template escapes it.
+// resultCard is what one card shows. Every value except Logo and Icon is plain
+// text; the template escapes it.
 type resultCard struct {
 	// Eyebrow is the short coloured label above the title that says what
 	// happened.
@@ -73,13 +76,24 @@ type resultCard struct {
 	// Initials fill the tile when there is no logo, as on a sign-in card.
 	// Without either the tile shows the MCP server icon.
 	Initials string
-	// Field is a label and a monospaced value under the title. When it is
-	// absent, Description is shown there instead.
+	// Icon is one of the fixed tile icons in cards_generic.go, never text from
+	// a result. Without initials or an icon the tile shows the server icon.
+	Icon template.HTML
+	// Field is a label and a monospaced value under the title. Description,
+	// when set, is shown on the line below it.
 	Field       *cardField
 	Description string
 	// Tags are short uppercase facts about the resource.
-	Tags   []string
+	Tags []string
+	// Rows are a list card's first few items: a label and an optional status.
+	Rows   []cardRow
 	Action *cardAction
+}
+
+// cardRow is one item on a list card.
+type cardRow struct {
+	Label string
+	Meta  string
 }
 
 // cardTone colours an eyebrow.
@@ -117,7 +131,7 @@ type cardAction struct {
 // the first two words.
 func cardInitials(name string) string {
 	var initials []rune
-	for _, word := range strings.Fields(name) {
+	for word := range strings.FieldsSeq(name) {
 		first, _ := utf8.DecodeRuneInString(word)
 		if first == utf8.RuneError || !unicode.IsLetter(first) && !unicode.IsDigit(first) {
 			continue
@@ -142,13 +156,22 @@ func cardToolMeta() mcp.Meta {
 // cardResult is a tool result that carries the card in _meta. The SDK still
 // fills in the text and structured content from the handler's output.
 func cardResult(card resultCard) *mcp.CallToolResult {
-	var rendered strings.Builder
-	if err := cardTemplate.Execute(&rendered, card); err != nil {
+	rendered, ok := renderResultCard(card)
+	if !ok {
 		// A card is decoration on a result that has already succeeded.
 		return nil
 	}
 	// The SDK fills Content and StructuredContent from the handler's output.
-	return &mcp.CallToolResult{Meta: mcp.Meta{cardMetaKey: rendered.String()}, Content: nil, StructuredContent: nil, IsError: false, InputRequests: nil, RequestState: ""}
+	return &mcp.CallToolResult{Meta: mcp.Meta{cardMetaKey: rendered}, Content: nil, StructuredContent: nil, IsError: false, InputRequests: nil, RequestState: ""}
+}
+
+// renderResultCard renders a card's markup, and false when it cannot.
+func renderResultCard(card resultCard) (string, bool) {
+	var rendered strings.Builder
+	if err := cardTemplate.Execute(&rendered, card); err != nil {
+		return "", false
+	}
+	return rendered.String(), true
 }
 
 // registerCardResource serves the card view to external clients. The managed
@@ -158,7 +181,7 @@ func registerCardResource(reg *Registrar) {
 		URI:         cardResourceURI,
 		Name:        "platform-card",
 		Title:       "Speakeasy result card",
-		Description: "Inline card for MCP servers added to a project and for sign-in steps.",
+		Description: "Inline card for Platform MCP tool results: one resource, a list, a completed change, why a request did not complete, and a carousel of catalog search results.",
 		MIMEType:    cardMIMEType,
 		// No csp: the card loads nothing from the network, so the host's
 		// restrictive default applies.
@@ -173,6 +196,8 @@ func registerCardResource(reg *Registrar) {
 }
 
 const (
+	// nextActionReady says no required setup is left.
+	nextActionReady = "ready"
 	// nextActionStartSetup leaves the user to check the new server's readiness.
 	nextActionStartSetup = "start_setup"
 	// nextActionContinueDashboardSetup sends the user to the dashboard to sign
@@ -202,9 +227,11 @@ func serverCard(serverName string, logo template.URL, project ResolvedProject, n
 		Title:       cardTitle(serverName),
 		Logo:        logo,
 		Initials:    "",
+		Icon:        "",
 		Field:       &cardField{Label: "Project", Value: project.Slug},
 		Description: "",
 		Tags:        []string{tag},
+		Rows:        nil,
 		Action:      nil,
 	}
 	label := ""
@@ -236,9 +263,11 @@ func signInCard(serverName string, logo template.URL, authorizationURL string) r
 		Title:       "Sign in",
 		Logo:        logo,
 		Initials:    cardInitials(serverName),
+		Icon:        "",
 		Field:       nil,
 		Description: "Let this MCP server act on your behalf.",
 		Tags:        []string{"OAuth"},
+		Rows:        nil,
 		Action:      &cardAction{Label: "Sign in", URL: authorizationURL},
 	}
 	if serverName != "" {
@@ -246,6 +275,39 @@ func signInCard(serverName string, logo template.URL, authorizationURL string) r
 		card.Description = "Let this MCP server use " + serverName + " on your behalf."
 	}
 	return card
+}
+
+// maxWhoamiCardRoles keeps the tag row to one line; the result lists them all.
+const maxWhoamiCardRoles = 3
+
+// whoamiCard shows who a session is connected as: the user, their email, the
+// active organization and their roles in it.
+func whoamiCard(output WhoamiOutput) resultCard {
+	name := cmp.Or(output.User.DisplayName, output.User.Email)
+	email := output.User.Email
+	if email == name {
+		email = ""
+	}
+	tags := make([]string, 0, maxWhoamiCardRoles+1)
+	for _, role := range output.Roles {
+		if len(tags) == maxWhoamiCardRoles {
+			tags = append(tags, fmt.Sprintf("+%d", len(output.Roles)-maxWhoamiCardRoles))
+			break
+		}
+		tags = append(tags, role.Name)
+	}
+	return resultCard{
+		Eyebrow:     cardStatus{Label: "Connected as", Tone: cardToneNeutral},
+		Title:       name,
+		Logo:        "",
+		Initials:    cardInitials(name),
+		Icon:        "",
+		Field:       &cardField{Label: "Organization", Value: output.Organization.Name},
+		Description: email,
+		Tags:        tags,
+		Rows:        nil,
+		Action:      nil,
+	}
 }
 
 func cardTitle(serverName string) string {

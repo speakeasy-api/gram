@@ -1,13 +1,11 @@
 import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { isSendable } from "./types";
 
 const state = vi.hoisted(() => ({
   org: "org-one",
   project: "project-one",
   allowed: true,
   navigate: vi.fn(),
-  routeOptions: [] as Array<{ projectSlug: string }>,
   fetchNextPage: vi.fn<() => Promise<unknown>>(),
   next: false,
   nextError: false,
@@ -21,23 +19,16 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
   useProjectSlugForRequests: () => state.project,
+  // Differs from the request project so the tests show which one links use.
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "route-project" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => state.allowed }),
 }));
-vi.mock("react-router", () => ({ useNavigate: () => state.navigate }));
-vi.mock("@/routes", () => ({
-  useRoutes: (options: { projectSlug: string }) => {
-    state.routeOptions.push(options);
-    return {
-      mcp: {
-        organizationGateway: { href: () => "/org/gateway" },
-        gateway: {
-          sessions: { href: (id: string) => `/gateway/${id}/sessions` },
-        },
-      },
-    };
-  },
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useLocation: () => ({ pathname: "/", search: "" }),
+  useNavigate: () => state.navigate,
 }));
 vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
   buildMetaMcpServersQuery: (_: unknown, input: unknown) => ({
@@ -121,18 +112,24 @@ it("finds a cached registration and opens its canonical gateway with private mat
   );
   expect(result.current.map((candidate) => candidate.title)).toEqual([
     "Organization Gateway Connections",
+    "Organization Gateway Activity",
     "Example gateway",
     "Example desktop",
   ]);
-  const registration = result.current[2]!;
+  const registration = result.current[3]!;
   expect(registration.keywords).toContain("public-client");
-  expect(isSendable(registration)).toBe(false);
   void registration.run("open");
   expect(state.navigate).toHaveBeenCalledWith(
-    "/gateway/gateway-one/sessions?registration=later-page",
+    "/acme/projects/project-one/mcp/gateway/gateway-one/sessions?registration=later-page",
   );
   void result.current[0]!.run("open");
-  expect(state.navigate).toHaveBeenCalledWith("/org/gateway?tab=connections");
+  expect(state.navigate).toHaveBeenCalledWith(
+    "/acme/projects/project-one/mcp/organization-gateway?tab=connections",
+  );
+  void result.current[1]!.run("open");
+  expect(state.navigate).toHaveBeenCalledWith(
+    "/acme/projects/project-one/mcp/organization-gateway?tab=activity",
+  );
 });
 it("does not fetch or return cached resources while closed or unauthorized", () => {
   state.next = true;
@@ -151,15 +148,23 @@ it("does not fetch or return cached resources while closed or unauthorized", () 
   expect(state.queryCalls.at(-1)?.enabled).toBe(false);
   expect(state.infiniteCalls.at(-1)?.enabled).toBe(false);
 });
-it("drains inventory only while open and stops after a page error", () => {
+it("drains inventory only while open and retries a failed page once on reopen", () => {
   state.next = true;
-  const { rerender } = renderHook(() =>
-    useGatewayConnectionCandidates({ enabled: true, inProject: true }),
+  const { rerender } = renderHook(
+    ({ enabled }) =>
+      useGatewayConnectionCandidates({ enabled, inProject: true }),
+    { initialProps: { enabled: true } },
   );
   expect(state.fetchNextPage).toHaveBeenCalledTimes(1);
   state.nextError = true;
-  rerender();
+  rerender({ enabled: true });
   expect(state.fetchNextPage).toHaveBeenCalledTimes(1);
+  rerender({ enabled: false });
+  expect(state.fetchNextPage).toHaveBeenCalledTimes(1);
+  rerender({ enabled: true });
+  expect(state.fetchNextPage).toHaveBeenCalledTimes(2);
+  rerender({ enabled: true });
+  expect(state.fetchNextPage).toHaveBeenCalledTimes(2);
 });
 it("keys both inventories by organization and project and offers org navigation outside a project", () => {
   const { result, rerender } = renderHook(
@@ -167,22 +172,28 @@ it("keys both inventories by organization and project and offers org navigation 
       useGatewayConnectionCandidates({ enabled: true, inProject }),
     { initialProps: { inProject: true } },
   );
-  expect(state.queryCalls.at(-1)?.queryKey).toEqual([
-    "gateways",
-    { gramProject: "project-one" },
-    "org-one",
-  ]);
-  expect(state.infiniteCalls.at(-1)?.queryKey).toEqual([
-    "clients",
-    { gramProject: "project-one", limit: 100 },
-    "org-one",
-  ]);
-  expect(state.routeOptions.at(-1)).toEqual({ projectSlug: "project-one" });
+  expect(state.queryCalls.at(-1)).toMatchObject({
+    queryKey: ["gateways", { gramProject: "project-one" }, "org-one"],
+    staleTime: 30_000,
+  });
+  expect(state.infiniteCalls.at(-1)).toMatchObject({
+    queryKey: [
+      "clients",
+      { gramProject: "project-one", limit: 100 },
+      "org-one",
+    ],
+    staleTime: 30_000,
+  });
+  void result.current[0]!.run("open");
+  expect(state.navigate).toHaveBeenLastCalledWith(
+    "/acme/projects/project-one/mcp/organization-gateway?tab=connections",
+  );
   state.org = "org-two";
   state.project = "project-two";
   rerender({ inProject: false });
   expect(result.current.map((c) => c.title)).toEqual([
     "Organization Gateway Connections",
+    "Organization Gateway Activity",
   ]);
   expect(state.queryCalls.at(-1)?.enabled).toBe(false);
   expect(state.queryCalls.at(-1)?.queryKey).toEqual([

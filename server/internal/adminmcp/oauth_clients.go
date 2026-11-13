@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 
@@ -76,6 +77,14 @@ func (s postgresStaffClientStore) GetClient(ctx context.Context, clientID string
 		RedirectURIs:    row.RedirectUris,
 		SecretExpiresAt: optionalTime(row.ClientSecretExpiresAt),
 	}, nil
+}
+
+func optionalTime(value pgtype.Timestamptz) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	t := value.Time
+	return &t
 }
 
 // StaffOAuthClients owns the registration endpoint; mounting it remains a separate decision.

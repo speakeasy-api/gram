@@ -12,6 +12,10 @@
 -- the server already offers that auth client; link_detached that an
 -- administrator detached the client's backfilled auth client from the server,
 -- so the backfill must not link it again.
+--
+-- only_mcp_server_ids narrows the rows to those servers' associations, for an
+-- association write that records its own servers' clients; NULL reads every
+-- server in the organization.
 SELECT a.id AS association_id,
        a.project_id,
        a.organization_id,
@@ -78,6 +82,8 @@ LEFT JOIN LATERAL (
 WHERE a.deleted IS FALSE
   AND a.id > @cursor::uuid
   AND a.organization_id = @organization_id::text
+  AND (sqlc.narg('only_mcp_server_ids')::uuid[] IS NULL
+       OR a.mcp_server_id = ANY(sqlc.narg('only_mcp_server_ids')::uuid[]))
 ORDER BY a.id
 LIMIT @page_size::int;
 
@@ -542,6 +548,8 @@ ON CONFLICT (id) DO UPDATE
 SET deleted_at = NULL, updated_at = clock_timestamp()
 WHERE mcp_auth_clients.deleted
   AND mcp_auth_clients.source = 'backfill'
+  AND mcp_auth_clients.organization_id = EXCLUDED.organization_id
+  AND mcp_auth_clients.project_id IS NOT DISTINCT FROM EXCLUDED.project_id
   AND mcp_auth_clients.client_type = EXCLUDED.client_type;
 
 -- name: PlanClientHeaders :many
@@ -818,7 +826,7 @@ WHERE s.id = @mcp_server_id::uuid
                    AND db.project_id = gs.project_id
                    AND db.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND db.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.resource = gx.resource
                    AND db.state = 'ready'
                    AND db.user_session_issuer_id = gs.user_session_issuer_id
                )
@@ -828,7 +836,7 @@ WHERE s.id = @mcp_server_id::uuid
                    AND gb.project_id = gs.project_id
                    AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND gb.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.resource = gx.resource
                    AND gb.state = 'ready'
                    AND gb.user_session_issuer_id = (
                      -- The gateways' issuer, as ListEMABindingServers reads it.
@@ -869,6 +877,7 @@ JOIN mcp_auth_clients AS ac
  AND ac.client_type = 'ema'
  AND ac.source = 'backfill'
 JOIN mcp_servers AS s ON s.id = l.mcp_server_id AND s.project_id = l.project_id AND s.deleted IS FALSE
+JOIN projects AS p ON p.id = s.project_id AND p.organization_id = l.organization_id AND p.deleted IS FALSE
 WHERE l.auth_client_id = @auth_client_id::uuid
   AND l.organization_id = @organization_id::text
   AND l.deleted IS FALSE
@@ -1003,9 +1012,42 @@ WHERE ac.organization_id = @organization_id::text
   AND ac.deleted IS FALSE
 ORDER BY ac.id;
 
+-- name: LockEMARegistrationForSync :one
+-- Serialize EMA binding and credential-copy decisions on their registration.
+-- The caller must read bindings and links again after taking this lock. Lock
+-- strength allows concurrent binding inserts' foreign-key checks to finish.
+-- Existing typed clients can lock registrations in deleted projects so stale
+-- credential copies can be retired; live-owner queries decide serving reach.
+SELECT c.id
+FROM remote_session_clients AS c
+WHERE (EXISTS (
+  SELECT 1 FROM remote_session_ema_bindings AS b
+  JOIN projects AS p ON p.id = b.project_id
+    AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+  WHERE b.id = sqlc.narg('binding_id')::uuid
+    AND b.organization_id = @organization_id::text
+    AND b.remote_session_client_id = c.id
+    AND (c.project_id = b.project_id
+         OR (c.project_id IS NULL AND c.organization_id = b.organization_id)
+         OR (c.project_id IS NULL AND c.organization_id IS NULL))
+) OR EXISTS (
+  SELECT 1 FROM mcp_auth_clients AS ac
+  WHERE ac.id = sqlc.narg('auth_client_id')::uuid
+    AND ac.organization_id = @organization_id::text
+    AND ac.client_type = 'ema'
+    AND ac.remote_session_client_id = c.id
+    AND (c.project_id IS NULL OR EXISTS (
+      SELECT 1 FROM projects AS p WHERE p.id = c.project_id
+        AND p.organization_id = ac.organization_id
+    ))
+    AND (c.project_id IS NOT NULL OR c.organization_id IS NULL
+         OR c.organization_id = ac.organization_id)
+))
+FOR NO KEY UPDATE OF c;
+
 -- name: ListEMABackfillBindings :many
 -- The organization's ready, client-bound identity chaining bindings in live
--- projects, as the runtime selects them, with the exact and trimmed resource.
+-- projects, with the exact resource used for grouping and stable typed keys.
 -- in_reach reports that the binding's registration and its issuer are live
 -- and belong to the binding's project, its organization or the platform.
 SELECT b.id AS binding_id,
@@ -1013,7 +1055,7 @@ SELECT b.id AS binding_id,
        b.user_session_issuer_id,
        b.remote_session_issuer_id,
        b.resource AS exact_resource,
-       rtrim(b.resource, '/')::text AS resource,
+       b.resource::text AS resource,
        b.requested_scopes,
        b.remote_session_client_id::uuid AS remote_session_client_id,
        rsi.name AS issuer_name,
@@ -1040,9 +1082,28 @@ LEFT JOIN remote_session_issuers AS rsi
 WHERE b.organization_id = @organization_id::text
   AND b.state = 'ready'
   AND b.remote_session_client_id IS NOT NULL
+  AND (sqlc.narg('only_binding_id')::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings AS selected
+    WHERE selected.id = sqlc.narg('only_binding_id')::uuid
+      AND selected.organization_id = b.organization_id
+      AND selected.remote_session_issuer_id = b.remote_session_issuer_id
+      AND selected.remote_session_client_id = b.remote_session_client_id
+      AND selected.resource = b.resource
+  ))
+  AND (sqlc.narg('only_project_id')::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings AS selected
+    WHERE selected.project_id = sqlc.narg('only_project_id')::uuid
+      AND selected.organization_id = b.organization_id
+      AND selected.state = 'ready'
+      AND selected.remote_session_issuer_id = b.remote_session_issuer_id
+      AND selected.remote_session_client_id = b.remote_session_client_id
+      AND selected.resource = b.resource
+  ))
 ORDER BY b.id;
 
 -- name: ListEMABindingServers :many
+-- Resource identity is byte-exact. Metadata location normalization may locate
+-- a distinct parent resource, but must not alias slash-distinct resources.
 -- The live servers a ready binding reaches, as the runtime matches them: in
 -- the binding's project and signed in through its user session issuer, either
 -- directly or as the issuer of the organization and project gateways, which
@@ -1051,8 +1112,8 @@ ORDER BY b.id;
 -- chains only a request whose own inbound issuer the binding names. It is a
 -- remote server whose valid persisted protected resource names the binding's
 -- resource, or, with no valid persisted record, whose URL names it; or a
--- tunneled server whose resource identifier names it under its own derived
--- issuer. A remote server whose valid record lists authorization servers
+-- tunneled server whose resource identifier names it and whose client
+-- associations name the binding's issuer as their one provider. A remote server whose valid record lists authorization servers
 -- without the binding's issuer is returned as issuer_not_allowed, since the
 -- runtime would refuse it. direct reports that the server's own issuer is the
 -- binding's.
@@ -1114,8 +1175,9 @@ LEFT JOIN LATERAL (
     AND rp.deleted IS FALSE
     AND rp.metadata_fetched_at IS NOT NULL
     AND rp.metadata_last_error IS NULL
-    AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-         OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+    AND (rp.resource_identifier = r.url
+         OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
   ORDER BY rp.metadata_fetched_at DESC, rp.id
   LIMIT 1
 ) AS rp ON TRUE
@@ -1125,12 +1187,30 @@ WHERE b.id = @binding_id::uuid
   AND b.remote_session_client_id IS NOT NULL
   AND (
     (r.id IS NOT NULL AND (
-      (rp.id IS NOT NULL AND rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
-      OR (rp.id IS NULL AND rtrim(r.url, '/') = rtrim(b.resource, '/'))
+      (rp.id IS NOT NULL AND rp.resource_identifier = b.resource)
+      OR (rp.id IS NULL AND r.url = b.resource)
     ))
     OR (t.id IS NOT NULL
-        AND s.remote_session_issuer_id = b.remote_session_issuer_id
-        AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
+        AND ARRAY(
+              -- The one live provider the server's live client associations name.
+              SELECT DISTINCT c.remote_session_issuer_id
+              FROM mcp_server_remote_session_clients AS a
+              JOIN remote_session_clients AS c
+                ON c.id = a.remote_session_client_id
+               AND c.deleted IS FALSE
+               AND (c.project_id = a.project_id
+                    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+              JOIN remote_session_issuers AS provider
+                ON provider.id = c.remote_session_issuer_id
+               AND provider.deleted IS FALSE
+               AND (provider.project_id = a.project_id
+                    OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+              WHERE a.mcp_server_id = s.id
+                AND a.project_id = s.project_id
+                AND a.organization_id = b.organization_id
+                AND a.deleted IS FALSE
+            )::uuid[] = ARRAY[b.remote_session_issuer_id]::uuid[]
+        AND t.resource_identifier = b.resource)
   )
 ORDER BY s.id;
 
@@ -1172,8 +1252,9 @@ LEFT JOIN LATERAL (
     AND rp.deleted IS FALSE
     AND rp.metadata_fetched_at IS NOT NULL
     AND rp.metadata_last_error IS NULL
-    AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-         OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+    AND (rp.resource_identifier = r.url
+         OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
   ORDER BY rp.metadata_fetched_at DESC, rp.id
   LIMIT 1
 ) AS rp ON TRUE
@@ -1182,7 +1263,7 @@ WHERE b.id = @binding_id::uuid
   AND b.state = 'ready'
   AND b.remote_session_client_id IS NOT NULL
   AND lower(substring(r.url from '^https://[^/?#]+')) = lower(substring(b.resource from '^https://[^/?#]+'))
-  AND (rp.id IS NULL OR rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
+  AND (rp.id IS NULL OR rp.resource_identifier = b.resource)
 ORDER BY s.id;
 
 -- name: FindEMAAuthClient :one
@@ -1321,8 +1402,9 @@ LEFT JOIN LATERAL (
     AND rp.deleted IS FALSE
     AND rp.metadata_fetched_at IS NOT NULL
     AND rp.metadata_last_error IS NULL
-    AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-         OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
+    AND (rp.resource_identifier = r.url
+         OR (rtrim(rp.resource_identifier, '/') <> rtrim(r.url, '/')
+             AND rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/')))
   ORDER BY rp.metadata_fetched_at DESC, rp.id
   LIMIT 1
 ) AS rp ON TRUE
@@ -1353,16 +1435,34 @@ WHERE s.id = @mcp_server_id::uuid
            ))
       AND b.remote_session_issuer_id = e.remote_session_issuer_id
       AND b.remote_session_client_id = e.remote_session_client_id
-      AND rtrim(b.resource, '/') = rtrim(e.resource, '/')
+      AND b.resource = e.resource
       AND b.state = 'ready'
       AND (
         (r.id IS NOT NULL AND (
-          (rp.id IS NOT NULL AND rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
-          OR (rp.id IS NULL AND rtrim(r.url, '/') = rtrim(b.resource, '/'))
+          (rp.id IS NOT NULL AND rp.resource_identifier = b.resource)
+          OR (rp.id IS NULL AND r.url = b.resource)
         ))
         OR (t.id IS NOT NULL
-            AND s.remote_session_issuer_id = b.remote_session_issuer_id
-            AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
+            AND ARRAY(
+                  -- The one live provider the server's live client associations name.
+                  SELECT DISTINCT c.remote_session_issuer_id
+                  FROM mcp_server_remote_session_clients AS a
+                  JOIN remote_session_clients AS c
+                    ON c.id = a.remote_session_client_id
+                   AND c.deleted IS FALSE
+                   AND (c.project_id = a.project_id
+                        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+                  JOIN remote_session_issuers AS provider
+                    ON provider.id = c.remote_session_issuer_id
+                   AND provider.deleted IS FALSE
+                   AND (provider.project_id = a.project_id
+                        OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+                  WHERE a.mcp_server_id = s.id
+                    AND a.project_id = s.project_id
+                    AND a.organization_id = p.organization_id
+                    AND a.deleted IS FALSE
+                )::uuid[] = ARRAY[b.remote_session_issuer_id]::uuid[]
+            AND t.resource_identifier = b.resource)
       )
   )
   AND NOT EXISTS (
@@ -1444,7 +1544,7 @@ WITH retired AS (
         ON b.organization_id = e.organization_id
        AND b.remote_session_issuer_id = e.remote_session_issuer_id
        AND b.remote_session_client_id = e.remote_session_client_id
-       AND rtrim(b.resource, '/') = rtrim(e.resource, '/')
+       AND b.resource = e.resource
       WHERE e.auth_client_id = ac.id
         AND GREATEST(b.created_at, b.updated_at) >= @evidence_since::timestamptz
     )
@@ -1524,7 +1624,16 @@ SELECT DISTINCT a.remote_session_client_id
 FROM mcp_server_remote_session_clients AS a
 WHERE a.organization_id = @organization_id::text
   AND a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
-ORDER BY a.remote_session_client_id;
+UNION
+SELECT ac.remote_session_client_id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac ON ac.id = l.auth_client_id AND ac.organization_id = l.organization_id
+WHERE l.organization_id = @organization_id::text
+  AND l.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND ac.client_type IN ('remote_session', 'service_account')
+  AND ac.source = 'backfill'
+  AND ac.remote_session_client_id IS NOT NULL
+ORDER BY remote_session_client_id;
 
 -- name: ListEMAClientsOfServers :many
 -- Every live backfilled EMA client the given servers are linked to, with the
@@ -1548,12 +1657,13 @@ LEFT JOIN mcp_servers AS ls
   ON ls.id = live.mcp_server_id
  AND ls.project_id = live.project_id
  AND ls.deleted IS FALSE
+ AND EXISTS (SELECT 1 FROM projects AS p WHERE p.id = ls.project_id AND p.organization_id = ac.organization_id AND p.deleted IS FALSE)
 WHERE ac.organization_id = @organization_id::text
   AND ac.client_type = 'ema'
   AND ac.source = 'backfill'
   AND ac.deleted IS FALSE
 GROUP BY ac.id
-ORDER BY ac.id;
+ORDER BY ac.remote_session_client_id, ac.id;
 
 -- name: LockTunneledCredentialSource :one
 -- LockRemoteCredentialSource for a tunneled source.
@@ -1614,228 +1724,6 @@ WHERE l.organization_id = @organization_id::text
   AND l.deleted IS FALSE
 ORDER BY l.id;
 
--- name: ListUndecidedUpstreamAuthServers :many
--- The servers among those given, in the organization, whose need for upstream
--- authentication is still undecided and that still hold the evidence of a
--- backfilled client MarkServersRequiringUpstreamAuth requires: a live
--- association with a client in reach, a credential header on the server's
--- source, or a ready binding reaching the server. A dry run counts what an
--- apply marks.
-SELECT s.id
-FROM mcp_servers AS s
-JOIN projects AS p
-  ON p.id = s.project_id
- AND p.organization_id = @organization_id::text
- AND p.deleted IS FALSE
-WHERE s.id = ANY(@mcp_server_ids::uuid[])
-  AND s.deleted IS FALSE
-  AND s.requires_upstream_auth IS NULL
-  AND (EXISTS (
-    SELECT 1
-    FROM mcp_server_remote_session_clients AS a
-    JOIN remote_session_clients AS c
-      ON c.id = a.remote_session_client_id
-     AND c.attachment_scope = a.client_attachment_scope
-     AND c.deleted IS FALSE
-    JOIN remote_session_issuers AS rsi
-      ON rsi.id = c.remote_session_issuer_id
-     AND rsi.deleted IS FALSE
-     AND (rsi.project_id = a.project_id
-          OR (rsi.project_id IS NULL AND rsi.organization_id = a.organization_id)
-          OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
-    WHERE a.mcp_server_id = s.id
-      AND a.project_id = s.project_id
-      AND a.organization_id = @organization_id::text
-      AND a.deleted IS FALSE
-  )
-  OR EXISTS (
-    SELECT 1 FROM remote_mcp_server_headers AS h
-    JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
-    WHERE r.id = s.remote_mcp_server_id AND h.deleted IS FALSE
-      AND (lower(h.name) = 'authorization' OR h.value_from_request_header IS NOT NULL OR h.is_secret)
-    UNION ALL
-    SELECT 1 FROM tunneled_mcp_server_headers AS h
-    JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id AND t.deleted IS FALSE
-    WHERE t.id = s.tunneled_mcp_server_id AND h.deleted IS FALSE
-      AND (lower(h.name) = 'authorization' OR h.value_from_request_header IS NOT NULL OR h.is_secret)
-  )
-  OR EXISTS (
-    SELECT 1
-    FROM remote_session_ema_bindings AS b
-    JOIN remote_session_issuers AS bi ON bi.id = b.remote_session_issuer_id AND bi.deleted IS FALSE
-    LEFT JOIN remote_mcp_servers AS r ON r.id = s.remote_mcp_server_id AND r.deleted IS FALSE
-    LEFT JOIN tunneled_mcp_servers AS t ON t.id = s.tunneled_mcp_server_id AND t.deleted IS FALSE
-    LEFT JOIN LATERAL (
-      SELECT rp.id, rp.resource_identifier, rp.authorization_servers
-      FROM remote_protected_resources AS rp
-      WHERE r.id IS NOT NULL
-        AND rp.project_id = s.project_id
-        AND rp.organization_id = b.organization_id
-        AND rp.deleted IS FALSE
-        AND rp.metadata_fetched_at IS NOT NULL
-        AND rp.metadata_last_error IS NULL
-        AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-             OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
-      ORDER BY rp.metadata_fetched_at DESC, rp.id
-      LIMIT 1
-    ) AS rp ON TRUE
-    WHERE b.organization_id = @organization_id::text
-      AND b.project_id = s.project_id
-      AND (b.user_session_issuer_id = s.user_session_issuer_id
-           OR b.user_session_issuer_id = (
-             -- The gateways' issuer, as ListEMABindingServers reads it.
-             SELECT (array_agg(gi.id))[1]
-             FROM user_session_issuers AS gi
-             WHERE gi.organization_id = b.organization_id
-               AND gi.project_id IS NULL
-               AND gi.deleted IS FALSE
-               AND EXISTS (
-                 SELECT 1 FROM organization_features AS gf
-                 WHERE gf.organization_id = b.organization_id
-                   AND gf.feature_name = 'organization_gateway_disabled'
-               )
-             HAVING count(*) = 1
-           ))
-      AND b.state = 'ready'
-      AND b.remote_session_client_id IS NOT NULL
-      AND (rp.id IS NULL OR rp.authorization_servers IS NULL OR EXISTS (
-        SELECT 1 FROM unnest(rp.authorization_servers) AS allowed(server)
-        WHERE rtrim(allowed.server, '/') = rtrim(bi.issuer, '/')
-      ))
-      AND (
-        (r.id IS NOT NULL AND (
-          (rp.id IS NOT NULL AND rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
-          OR (rp.id IS NULL AND rtrim(r.url, '/') = rtrim(b.resource, '/'))
-        ))
-        OR (t.id IS NOT NULL
-            AND s.remote_session_issuer_id = b.remote_session_issuer_id
-            AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
-      )
-  ))
-ORDER BY s.id;
-
--- name: MarkServersRequiringUpstreamAuth :many
--- Records that the given servers need upstream authentication, only where it
--- is still undecided and the server offers a live backfilled auth client whose
--- evidence still holds: for an OAuth client, a live association with its
--- upstream client; for a header client, a credential header on the server's
--- source; for an EMA client, a ready binding for its upstream reaching the
--- server. Never overwrites a decision.
-UPDATE mcp_servers AS s
-SET requires_upstream_auth = TRUE, updated_at = clock_timestamp()
-FROM projects AS p
-WHERE p.id = s.project_id
-  AND p.organization_id = @organization_id::text
-  AND p.deleted IS FALSE
-  AND s.id = ANY(@mcp_server_ids::uuid[])
-  AND s.deleted IS FALSE
-  AND s.requires_upstream_auth IS NULL
-  AND EXISTS (
-    SELECT 1
-    FROM mcp_server_auth_clients AS link
-    JOIN mcp_auth_clients AS ac
-      ON ac.id = link.auth_client_id
-     AND ac.organization_id = link.organization_id
-     AND ac.source = 'backfill'
-     AND ac.deleted IS FALSE
-    WHERE link.mcp_server_id = s.id
-      AND link.organization_id = @organization_id::text
-      AND link.source = 'backfill'
-      AND link.deleted IS FALSE
-      AND ((ac.client_type IN ('remote_session', 'service_account') AND EXISTS (
-        SELECT 1
-        FROM mcp_server_remote_session_clients AS a
-        JOIN remote_session_clients AS c
-          ON c.id = a.remote_session_client_id
-         AND c.attachment_scope = a.client_attachment_scope
-         AND c.deleted IS FALSE
-        JOIN remote_session_issuers AS rsi
-          ON rsi.id = c.remote_session_issuer_id
-         AND rsi.deleted IS FALSE
-         AND (rsi.project_id = a.project_id
-              OR (rsi.project_id IS NULL AND rsi.organization_id = a.organization_id)
-              OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
-        WHERE a.mcp_server_id = s.id
-          AND a.project_id = s.project_id
-          AND a.organization_id = @organization_id::text
-          AND a.remote_session_client_id = ac.remote_session_client_id
-          AND a.deleted IS FALSE
-      ))
-      OR (ac.client_type IN ('static_credential', 'pass_through') AND EXISTS (
-        SELECT 1 FROM remote_mcp_server_headers AS h
-        JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
-        WHERE r.id = s.remote_mcp_server_id AND h.deleted IS FALSE
-          AND (lower(h.name) = 'authorization' OR h.value_from_request_header IS NOT NULL OR h.is_secret)
-        UNION ALL
-        SELECT 1 FROM tunneled_mcp_server_headers AS h
-        JOIN tunneled_mcp_servers AS t ON t.id = h.tunneled_mcp_server_id AND t.deleted IS FALSE
-        WHERE t.id = s.tunneled_mcp_server_id AND h.deleted IS FALSE
-          AND (lower(h.name) = 'authorization' OR h.value_from_request_header IS NOT NULL OR h.is_secret)
-      ))
-      OR (ac.client_type = 'ema' AND EXISTS (
-        SELECT 1
-        FROM remote_session_ema_bindings AS b
-        JOIN remote_session_issuers AS bi ON bi.id = b.remote_session_issuer_id AND bi.deleted IS FALSE
-        LEFT JOIN remote_mcp_servers AS r ON r.id = s.remote_mcp_server_id AND r.deleted IS FALSE
-        LEFT JOIN tunneled_mcp_servers AS t ON t.id = s.tunneled_mcp_server_id AND t.deleted IS FALSE
-        LEFT JOIN LATERAL (
-          SELECT rp.id, rp.resource_identifier, rp.authorization_servers
-          FROM remote_protected_resources AS rp
-          WHERE r.id IS NOT NULL
-            AND rp.project_id = s.project_id
-            AND rp.organization_id = b.organization_id
-            AND rp.deleted IS FALSE
-            AND rp.metadata_fetched_at IS NOT NULL
-            AND rp.metadata_last_error IS NULL
-            AND (rtrim(rp.resource_identifier, '/') = rtrim(r.url, '/')
-                 OR rtrim(rp.metadata_url, '/') = rtrim(regexp_replace(r.url, '^(https?://[^/?#]+)(.*)$', '\1/.well-known/oauth-protected-resource\2'), '/'))
-          ORDER BY rp.metadata_fetched_at DESC, rp.id
-          LIMIT 1
-        ) AS rp ON TRUE
-        WHERE b.organization_id = @organization_id::text
-          AND b.project_id = s.project_id
-          AND (b.user_session_issuer_id = s.user_session_issuer_id
-               OR b.user_session_issuer_id = (
-                 -- The gateways' issuer, as ListEMABindingServers reads it.
-                 SELECT (array_agg(gi.id))[1]
-                 FROM user_session_issuers AS gi
-                 WHERE gi.organization_id = b.organization_id
-                   AND gi.project_id IS NULL
-                   AND gi.deleted IS FALSE
-                   AND EXISTS (
-                     SELECT 1 FROM organization_features AS gf
-                     WHERE gf.organization_id = b.organization_id
-                       AND gf.feature_name = 'organization_gateway_disabled'
-                   )
-                 HAVING count(*) = 1
-               ))
-          AND b.state = 'ready'
-          AND b.remote_session_client_id IS NOT NULL
-          AND EXISTS (
-            SELECT 1 FROM mcp_auth_client_emas AS e
-            WHERE e.auth_client_id = ac.id
-              AND e.deleted IS FALSE
-              AND e.remote_session_issuer_id = b.remote_session_issuer_id
-              AND e.remote_session_client_id = b.remote_session_client_id
-              AND rtrim(e.resource, '/') = rtrim(b.resource, '/')
-          )
-          AND (rp.id IS NULL OR rp.authorization_servers IS NULL OR EXISTS (
-            SELECT 1 FROM unnest(rp.authorization_servers) AS allowed(server)
-            WHERE rtrim(allowed.server, '/') = rtrim(bi.issuer, '/')
-          ))
-          AND (
-            (r.id IS NOT NULL AND (
-              (rp.id IS NOT NULL AND rtrim(rp.resource_identifier, '/') = rtrim(b.resource, '/'))
-              OR (rp.id IS NULL AND rtrim(r.url, '/') = rtrim(b.resource, '/'))
-            ))
-            OR (t.id IS NOT NULL
-                AND s.remote_session_issuer_id = b.remote_session_issuer_id
-                AND rtrim(t.resource_identifier, '/') = rtrim(b.resource, '/'))
-          )
-      )))
-  )
-RETURNING s.id;
-
 -- name: ListLiveCredentialClasses :many
 -- One row per live user session credential in the organization after the
 -- cursor, with the class coverage is reported by and the user session issuer
@@ -1859,17 +1747,22 @@ JOIN user_session_issuers AS usi
   ON usi.id = s.user_session_issuer_id
 LEFT JOIN projects AS p
   ON p.id = usi.project_id
-WHERE s.deleted IS FALSE
+WHERE usi.deleted IS FALSE
+  AND (usi.project_id IS NULL OR p.deleted IS FALSE)
+  AND (s.organization_id IS NULL OR s.organization_id = CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END)
+  AND s.deleted IS FALSE
   AND s.refresh_expires_at > clock_timestamp()
   AND COALESCE(s.credential_id, s.id) > @cursor::uuid
-  AND COALESCE(usi.organization_id, p.organization_id) = @organization_id::text
+  AND CASE WHEN usi.project_id IS NULL THEN usi.organization_id ELSE p.organization_id END = @organization_id::text
 ORDER BY COALESCE(s.credential_id, s.id), s.created_at DESC
 LIMIT @page_size::int;
 
 -- name: ListSelectionMappings :many
 -- Every live user session choice for a live server in the organization after
 -- the cursor, or the one named by only_id, with what mapping it onto a typed
--- auth client decides from.
+-- auth client decides from. A supplied scope_user_session_issuer_id restricts
+-- this to that issuer's live credential lineages. only_unmapped independently
+-- restricts results to choices that do not yet name a typed auth client.
 --
 -- What the upstream client choice reads today (GetUpstreamClientSelection):
 -- whether the server has any upstream OAuth client association, whether the
@@ -1883,9 +1776,30 @@ LIMIT @page_size::int;
 -- static_credential or pass_through clients that carry exactly the server
 -- source's current credential headers, while the server has no OAuth
 -- association and links no enabled OAuth-backed client: those are the
--- server's own headers, which the no-auth choice was served with. A mapped
+-- server's own headers, which the no-auth choice was served with. When the
+-- source has no credential headers, a client an administrator created or
+-- linked is the server's own configuration and is a candidate too. A mapped
 -- choice's client is usable while it is live, enabled, linked to the server
 -- and, for an OAuth choice, still the registration's.
+-- Compute refreshable lineages once per page, not once per candidate choice.
+-- The nullable scope keeps unscoped backfill callers unchanged. Issuer ownership
+-- is canonical; legacy sessions may omit their denormalized organization.
+WITH scoped_live_credentials AS MATERIALIZED (
+    SELECT DISTINCT COALESCE(session.credential_id, session.id) AS credential_id
+    FROM user_sessions AS session
+    JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE sqlc.narg('scope_user_session_issuer_id')::uuid IS NOT NULL
+      AND issuer.id = sqlc.narg('scope_user_session_issuer_id')::uuid
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+      AND (session.organization_id IS NULL OR session.organization_id = @organization_id::text)
+      AND session.deleted IS FALSE
+      AND session.refresh_expires_at > clock_timestamp()
+)
 SELECT sel.id,
        sel.project_id,
        sel.credential_id,
@@ -1931,6 +1845,17 @@ SELECT sel.id,
            AND a.remote_session_client_id = sel.remote_session_client_id
            AND a.deleted IS FALSE
        )::boolean AS registration_associated,
+       -- The registration and its issuer are live, which the typed resolver
+       -- requires of a choice whatever the server's associations.
+       EXISTS (
+         SELECT 1
+         FROM remote_session_clients AS c
+         JOIN remote_session_issuers AS rsi
+           ON rsi.id = c.remote_session_issuer_id
+          AND rsi.deleted IS FALSE
+         WHERE c.id = sel.remote_session_client_id
+           AND c.deleted IS FALSE
+       )::boolean AS registration_live,
        ARRAY(
          SELECT link.user_session_issuer_id
          FROM remote_session_client_user_session_issuers AS link
@@ -1957,36 +1882,57 @@ SELECT sel.id,
                  -- headers, compared as stored. RecordUpstreamClientSelections
                  -- repeats this comparison; the two must stay identical.
                  AND (
-                   SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
-                   FROM mcp_auth_client_headers AS h
-                   WHERE h.auth_client_id = ac.id
-                     AND h.deleted IS FALSE
-                 ) = (
-                   SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+                   SELECT COALESCE(
+                            cmp.client_headers = cmp.source_headers,
+                            -- A source with no credential headers has none to carry. A
+                            -- client or association an administrator created there is
+                            -- the server's own configuration and mirrors nothing, as
+                            -- GetAuthClientSelection reads it.
+                            cmp.source_headers IS NULL
+                            AND NOT (ac.source = 'backfill' AND NOT EXISTS (
+                              SELECT 1
+                              FROM mcp_server_auth_clients AS admin_link
+                              WHERE admin_link.mcp_server_id = sel.mcp_server_id
+                                AND admin_link.auth_client_id = ac.id
+                                AND admin_link.organization_id = ac.organization_id
+                                AND admin_link.deleted IS FALSE
+                                AND admin_link.source <> 'backfill'
+                            ))
+                          )
                    FROM (
-                     SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
-                     FROM mcp_servers AS s
-                     JOIN remote_mcp_servers AS r
-                       ON r.id = s.remote_mcp_server_id
-                      AND r.project_id = s.project_id
-                      AND r.deleted IS FALSE
-                     JOIN remote_mcp_server_headers AS rh
-                       ON rh.remote_mcp_server_id = r.id
-                      AND rh.deleted IS FALSE
-                     WHERE s.id = sel.mcp_server_id
-                     UNION ALL
-                     SELECT th.name, th.value, th.value_from_request_header, th.is_secret
-                     FROM mcp_servers AS s
-                     JOIN tunneled_mcp_servers AS t
-                       ON t.id = s.tunneled_mcp_server_id
-                      AND t.project_id = s.project_id
-                      AND t.deleted IS FALSE
-                     JOIN tunneled_mcp_server_headers AS th
-                       ON th.tunneled_mcp_server_id = t.id
-                      AND th.deleted IS FALSE
-                     WHERE s.id = sel.mcp_server_id
-                   ) AS src
-                   WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+                     SELECT (
+                       SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
+                       FROM mcp_auth_client_headers AS h
+                       WHERE h.auth_client_id = ac.id
+                         AND h.deleted IS FALSE
+                     ) AS client_headers, (
+                       SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+                       FROM (
+                         SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
+                         FROM mcp_servers AS s
+                         JOIN remote_mcp_servers AS r
+                           ON r.id = s.remote_mcp_server_id
+                          AND r.project_id = s.project_id
+                          AND r.deleted IS FALSE
+                         JOIN remote_mcp_server_headers AS rh
+                           ON rh.remote_mcp_server_id = r.id
+                          AND rh.deleted IS FALSE
+                         WHERE s.id = sel.mcp_server_id
+                         UNION ALL
+                         SELECT th.name, th.value, th.value_from_request_header, th.is_secret
+                         FROM mcp_servers AS s
+                         JOIN tunneled_mcp_servers AS t
+                           ON t.id = s.tunneled_mcp_server_id
+                          AND t.project_id = s.project_id
+                          AND t.deleted IS FALSE
+                         JOIN tunneled_mcp_server_headers AS th
+                           ON th.tunneled_mcp_server_id = t.id
+                          AND th.deleted IS FALSE
+                         WHERE s.id = sel.mcp_server_id
+                       ) AS src
+                       WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+                     ) AS source_headers
+                   ) AS cmp
                  ))
            )
          ORDER BY ac.id
@@ -2017,7 +1963,7 @@ SELECT sel.id,
                    AND db.project_id = gs.project_id
                    AND db.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND db.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.resource = gx.resource
                    AND db.state = 'ready'
                    AND db.user_session_issuer_id = gs.user_session_issuer_id
                )
@@ -2027,7 +1973,7 @@ SELECT sel.id,
                    AND gb.project_id = gs.project_id
                    AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND gb.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.resource = gx.resource
                    AND gb.state = 'ready'
                    AND gb.user_session_issuer_id = (
                      -- The gateways' issuer, as ListEMABindingServers reads it.
@@ -2062,7 +2008,7 @@ SELECT sel.id,
           AND gb2.project_id = sel.project_id
           AND gb2.remote_session_issuer_id = x.remote_session_issuer_id
           AND gb2.remote_session_client_id = x.remote_session_client_id
-          AND rtrim(gb2.resource, '/') = rtrim(x.resource, '/')
+          AND gb2.resource = x.resource
           AND gb2.state = 'ready'
           AND gb2.user_session_issuer_id = (
             -- The gateways' issuer, as ListEMABindingServers reads it.
@@ -2097,7 +2043,7 @@ SELECT sel.id,
                    AND db.project_id = gs.project_id
                    AND db.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND db.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(db.resource, '/') = rtrim(gx.resource, '/')
+                   AND db.resource = gx.resource
                    AND db.state = 'ready'
                    AND db.user_session_issuer_id = gs.user_session_issuer_id
                )
@@ -2107,7 +2053,7 @@ SELECT sel.id,
                    AND gb.project_id = gs.project_id
                    AND gb.remote_session_issuer_id = gx.remote_session_issuer_id
                    AND gb.remote_session_client_id = gx.remote_session_client_id
-                   AND rtrim(gb.resource, '/') = rtrim(gx.resource, '/')
+                   AND gb.resource = gx.resource
                    AND gb.state = 'ready'
                    AND gb.user_session_issuer_id = (
                      -- The gateways' issuer, as ListEMABindingServers reads it.
@@ -2130,6 +2076,11 @@ FROM upstream_client_selections AS sel
 WHERE sel.organization_id = @organization_id::text
   AND sel.credential_kind = 'user_session'
   AND sel.deleted IS FALSE
+  AND (sqlc.narg('scope_mcp_server_ids')::uuid[] IS NULL
+       OR sel.mcp_server_id = ANY(sqlc.narg('scope_mcp_server_ids')::uuid[]))
+  AND (NOT @only_unmapped::boolean OR sel.auth_client_id IS NULL)
+  AND (sqlc.narg('scope_user_session_issuer_id')::uuid IS NULL
+       OR sel.credential_id IN (SELECT credential_id FROM scoped_live_credentials))
   -- A choice for a deleted server is kept as history but is never served
   -- again, so it is not live coverage.
   AND EXISTS (
@@ -2215,6 +2166,37 @@ SET auth_client_id = ac.id,
     updated_at = clock_timestamp()
 FROM mcp_auth_clients AS ac
 WHERE sel.id = @id::uuid
+  AND sel.organization_id = @organization_id::text
+  AND sel.deleted IS FALSE
+  AND sel.auth_client_id IS NULL
+  AND sel.no_auth = @no_auth::boolean
+  AND sel.remote_session_client_id IS NOT DISTINCT FROM sqlc.narg('remote_session_client_id')::uuid
+  AND ac.id = @auth_client_id::uuid
+  AND ac.organization_id = sel.organization_id
+  AND ac.deleted IS FALSE
+  AND ac.enabled
+  AND EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS l
+    WHERE l.auth_client_id = ac.id
+      AND l.mcp_server_id = sel.mcp_server_id
+      AND l.deleted IS FALSE
+  );
+
+-- name: MapSelectionGroupToAuthClient :execrows
+-- The caller confirmed one representative with MapSelectionToAuthClient and
+-- retains its source/server/client/binding locks for this transaction. The
+-- policy is shared by this server/registration/no-auth group; each row must
+-- still be unmapped and match the legacy evidence read for this page.
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE,
+    updated_at = clock_timestamp()
+FROM mcp_auth_clients AS ac
+WHERE sel.id = ANY(@ids::uuid[])
+  AND sel.mcp_server_id = @mcp_server_id::uuid
+  AND sel.credential_kind = 'user_session'
   AND sel.organization_id = @organization_id::text
   AND sel.deleted IS FALSE
   AND sel.auth_client_id IS NULL
@@ -2369,7 +2351,7 @@ UPDATE remote_mcp_servers SET deleted_at = clock_timestamp() WHERE id = @id;
 UPDATE remote_mcp_server_headers SET deleted_at = NULL, updated_at = clock_timestamp() WHERE id = @id;
 
 -- name: ListAuthClientSummariesFixture :many
-SELECT id, client_type, project_id, name, deleted
+SELECT id, client_type, project_id, name, deleted, enabled
 FROM mcp_auth_clients
 WHERE organization_id = @organization_id
 ORDER BY id;
@@ -2431,11 +2413,14 @@ ORDER BY l.auth_client_id, l.project_id;
 -- name: ListServerAccessGrants :many
 -- Grants that can satisfy mcp:connect, held by anyone but API keys, whose
 -- policies are provisioned separately. Like grant loading, effect is ignored.
+-- Temporary grants are skipped: a permanent default must not be derived from
+-- access that ends.
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = ANY(@scopes::text[])
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn, scope, id;
 
 -- name: ListAgentRolePrincipals :many
@@ -2713,7 +2698,7 @@ INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id,
 VALUES (
     @project_id, @organization_id, @mcp_server_id, @auth_client_id,
     (SELECT ac.attachment_scope FROM mcp_auth_clients AS ac WHERE ac.id = @auth_client_id),
-    'admin'
+    @source
 );
 
 -- name: SetAuthClientEnabledFixture :exec
@@ -2773,7 +2758,7 @@ INSERT INTO user_sessions (project_id, organization_id, user_session_issuer_id, 
 VALUES (@project_id, @organization_id, @user_session_issuer_id, @subject_urn, @jti, sqlc.narg('refresh_token_hash'), clock_timestamp() + interval '1 day', clock_timestamp() + interval '1 hour', @credential_id);
 
 -- name: GetSelectionFixture :one
-SELECT remote_session_client_id, auth_client_id, no_auth
+SELECT remote_session_client_id, auth_client_id, no_auth, source
 FROM upstream_client_selections
 WHERE credential_id = @credential_id AND mcp_server_id = @mcp_server_id AND deleted IS FALSE;
 
@@ -2800,3 +2785,165 @@ VALUES (@organization_id, @feature_name, sqlc.narg('deleted_at'));
 
 -- name: CountServerSelectionsFixture :one
 SELECT count(*) FROM upstream_client_selections WHERE mcp_server_id = @mcp_server_id;
+
+-- name: ListEMAPreparationLockScope :many
+-- Discover before taking registration locks, including old ownership and all
+-- projects sharing this issuer's registrations. Include deleted sources and
+-- servers: their old typed links and copies may still need retirement. The
+-- conservative project envelope also covers a binding not yet inserted.
+WITH registrations AS (
+  SELECT c.id FROM remote_session_clients c
+  WHERE c.remote_session_issuer_id = @issuer_id::uuid
+    AND (c.project_id IN (SELECT p.id FROM projects p WHERE p.organization_id = @organization_id::text)
+         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+), scope_projects AS (
+  SELECT @project_id::uuid AS id
+  UNION
+  SELECT b.project_id FROM remote_session_ema_bindings b
+  WHERE b.organization_id = @organization_id::text AND b.remote_session_issuer_id = @issuer_id::uuid
+  UNION
+  SELECT s.project_id FROM mcp_servers s
+  JOIN mcp_server_auth_clients l ON l.mcp_server_id = s.id
+  JOIN mcp_auth_clients ac ON ac.id = l.auth_client_id
+  WHERE ac.organization_id = @organization_id::text AND ac.client_type = 'ema'
+    AND ac.remote_session_client_id IN (SELECT id FROM registrations)
+), owned_projects AS (
+  SELECT p.id FROM projects p JOIN scope_projects sp ON sp.id = p.id
+  WHERE p.organization_id = @organization_id::text
+)
+SELECT 'project'::text AS kind, p.id FROM owned_projects p
+UNION ALL
+SELECT 'remote'::text AS kind, r.id FROM remote_mcp_servers r WHERE r.project_id IN (SELECT id FROM owned_projects)
+UNION ALL
+SELECT 'tunneled'::text AS kind, t.id FROM tunneled_mcp_servers t WHERE t.project_id IN (SELECT id FROM owned_projects)
+UNION ALL
+SELECT 'server'::text AS kind, s.id FROM mcp_servers s WHERE s.project_id IN (SELECT id FROM owned_projects)
+ORDER BY kind, id;
+
+-- name: LockEMAPreparationServer :exec
+SELECT s.id FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE s.id = @server_id::uuid AND p.organization_id = @organization_id::text
+FOR UPDATE OF s;
+
+-- name: LockServersForAuthClientSync :exec
+-- Locks the servers a synchronization is about to link in UUID order, which is
+-- the order LockEMAPreparationServer walks them in. The link insert takes a
+-- foreign-key lock on each server it records, and it records them in
+-- association order, so without this the two orders disagree and deadlock.
+SELECT s.id FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE s.id = ANY(@mcp_server_ids::uuid[]) AND p.organization_id = @organization_id::text
+ORDER BY s.id
+FOR UPDATE OF s;
+
+-- name: GetEMABindingLockScope :one
+SELECT b.project_id, b.remote_session_issuer_id, b.remote_session_client_id
+FROM remote_session_ema_bindings b
+JOIN projects p ON p.id = b.project_id AND p.organization_id = b.organization_id
+WHERE b.id = @binding_id::uuid AND b.organization_id = @organization_id::text;
+
+-- name: LockEMACopyClient :exec
+-- Administrator mutations lock the typed client before its links.
+SELECT ac.id FROM mcp_auth_clients ac
+WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @organization_id::text
+FOR UPDATE OF ac;
+
+-- name: LockEMAProjectScope :exec
+-- Serializes scope discovery with creation/retargeting, including an empty
+-- project. All normal preparation and source/server preflights take these
+-- gates in project UUID order before acquiring any source rows.
+SELECT pg_advisory_xact_lock(hashtextextended('authclient-ema-scope:' || @organization_id::text || ':' || p.id::text, 0))
+FROM projects p WHERE p.id = @project_id::uuid AND p.organization_id = @organization_id::text;
+
+-- name: LockEMAGatewayReachReader :exec
+-- Hold before discovering projects or taking project/source locks. Shared
+-- acquisition permits unrelated preparation and normal writers to proceed.
+SELECT pg_advisory_xact_lock_shared(hashtextextended('authclient-ema-gateway-reach:' || @organization_id::text, 0));
+
+-- name: LockEMAGatewayReachWriter :exec
+-- A setting change must exclude first preparations before discovering their
+-- project set, including when no gateway bindings have committed yet.
+SELECT pg_advisory_xact_lock(hashtextextended('authclient-ema-gateway-reach:' || @organization_id::text, 0));
+
+-- name: GetEMALinkSourceFixture :one
+SELECT source FROM mcp_server_auth_clients
+WHERE auth_client_id = @auth_client_id AND mcp_server_id = @mcp_server_id AND project_id = @project_id
+ORDER BY updated_at DESC LIMIT 1;
+
+-- name: SetEMAClientAdministratorStateFixture :exec
+UPDATE mcp_auth_clients SET enabled = @enabled, source = @source
+WHERE id = @id AND organization_id = @organization_id;
+
+-- name: ClearEMABindingClientFixture :exec
+UPDATE remote_session_ema_bindings SET state = 'manual_setup_required', remote_session_client_id = NULL
+WHERE id = @id AND project_id = @project_id;
+
+-- name: GetEMAClientAdministratorStateFixture :one
+SELECT deleted, enabled, source FROM mcp_auth_clients
+WHERE id = @id AND organization_id = @organization_id;
+
+-- name: RetireServerStaleBackfillLinks :exec
+-- Soft-deletes the links ListStaleBackfillLinks reports, rechecking the same
+-- evidence.
+UPDATE mcp_server_auth_clients AS target
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE target.id IN (
+  SELECT l.id
+FROM mcp_server_auth_clients AS l
+JOIN mcp_auth_clients AS ac
+  ON ac.id = l.auth_client_id
+ AND ac.organization_id = l.organization_id
+WHERE l.organization_id = @organization_id::text
+  AND l.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND l.source = 'backfill'
+  AND l.deleted IS FALSE
+  AND ac.source = 'backfill'
+  AND ac.client_type IN ('remote_session', 'service_account')
+  AND (ac.deleted IS TRUE OR NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS a
+    JOIN projects AS p
+      ON p.id = a.project_id
+     AND p.organization_id = a.organization_id
+     AND p.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.id = a.mcp_server_id
+     AND s.project_id = a.project_id
+     AND s.deleted IS FALSE
+    JOIN remote_session_clients AS c
+      ON c.id = a.remote_session_client_id
+     AND c.attachment_scope = a.client_attachment_scope
+     AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS rsi
+      ON rsi.id = c.remote_session_issuer_id
+     AND rsi.deleted IS FALSE
+     AND (rsi.project_id = a.project_id
+          OR (rsi.project_id IS NULL AND rsi.organization_id = a.organization_id)
+          OR (rsi.project_id IS NULL AND rsi.organization_id IS NULL))
+    WHERE a.organization_id = l.organization_id
+      AND a.mcp_server_id = l.mcp_server_id
+      AND a.remote_session_client_id = ac.remote_session_client_id
+      AND a.deleted IS FALSE
+  ))
+)
+;
+
+
+-- name: LockServerOAuthClientsForSync :exec
+SELECT ac.id FROM mcp_auth_clients AS ac
+WHERE ac.organization_id = @organization_id::text
+  AND ac.source = 'backfill'
+  AND ac.client_type IN ('remote_session', 'service_account')
+  AND (ac.remote_session_client_id = ANY(@registration_ids::uuid[])
+    OR EXISTS (SELECT 1 FROM mcp_server_auth_clients AS l
+    WHERE l.auth_client_id = ac.id AND l.organization_id = ac.organization_id
+      AND l.mcp_server_id = ANY(@mcp_server_ids::uuid[])))
+ORDER BY ac.id FOR UPDATE OF ac;
+
+-- name: LockOAuthRegistrationSyncScope :exec
+-- A registration gate also covers prospective typed clients with no row yet.
+-- Ordered gates precede typed client locks and every server-link mutation.
+SELECT pg_advisory_xact_lock(hashtextextended('oauth-authclient-sync:' || @organization_id::text || ':' || registration_id::text, 0))
+FROM unnest(@registration_ids::uuid[]) AS registration_id
+ORDER BY registration_id;

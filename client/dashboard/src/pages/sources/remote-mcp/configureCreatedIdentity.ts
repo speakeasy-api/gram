@@ -1,6 +1,6 @@
 import { requireKnownEnumValue } from "@/lib/enum";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
-import { isNotFoundError } from "@/lib/errors";
+import { isForbiddenError, isNotFoundError } from "@/lib/errors";
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { serverIdentityAuthMethod } from "@/lib/remote-identity/model/clientConfiguration";
@@ -32,8 +32,6 @@ type ConfigureCreatedIdentityInput = {
    * Takes precedence over agentAuthorization.
    */
   serviceAccountClient?: ServiceAccountClientSpec;
-  /** The server's issuer is organization-owned, so a project may not set it up. */
-  organizationOwnedUserSessionIssuer?: boolean;
   options?: RequestOptions;
 };
 
@@ -59,7 +57,6 @@ export async function configureCreatedRemoteMcpIdentity({
   identityMode,
   agentAuthorization,
   serviceAccountClient,
-  organizationOwnedUserSessionIssuer = false,
   options,
 }: ConfigureCreatedIdentityInput): Promise<ConfigureCreatedIdentityResult> {
   if (identityMode === "none") {
@@ -113,7 +110,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Add a Service Account credential in Settings > Identity.",
+        "Add a shared credential in Settings > Identity.",
       );
     }
     try {
@@ -134,7 +131,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Service Account could not be configured. Add the credential in Settings > Identity.",
+        "The shared credential could not be configured. Add it in Settings > Identity.",
       );
     }
 
@@ -147,19 +144,9 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
+        "The shared credential was configured, but the server could not be enabled. Enable it from Settings.",
       );
     }
-  }
-
-  // Only User Identity touches the session issuer, and an organization-owned
-  // one is not a project's to set up.
-  if (organizationOwnedUserSessionIssuer) {
-    return setupRequired(
-      mcpServer,
-      identityMode,
-      "Organization user session issuers are configured by organization administrators.",
-    );
   }
 
   if (!mcpServer.userSessionIssuerId) {
@@ -286,11 +273,13 @@ export async function configureCreatedRemoteMcpIdentity({
       undefined,
       options,
     );
-  } catch {
+  } catch (error) {
     return setupRequired(
       mcpServer,
       identityMode,
-      "User Identity could not be configured. Open Settings > Identity to finish setup.",
+      isForbiddenError(error)
+        ? "This server shares its sign-in client with other projects. An organization admin can finish setup in Settings > Identity."
+        : "User Identity could not be configured. Open Settings > Identity to finish setup.",
     );
   }
 

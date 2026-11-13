@@ -6,15 +6,16 @@ export function isKnownEnumValue<T extends Record<string, string>>(
   return value !== undefined && Object.values(values).includes(value);
 }
 
+export const UNSUPPORTED_ENUM_VALUE_MESSAGE =
+  "This value is not supported by this version of Speakeasy. Refresh the page before editing.";
+
 /** Use at mutation boundaries: never replace an unsupported value with a default. */
 export function requireKnownEnumValue<T extends Record<string, string>>(
   values: T,
   value: string,
 ): T[keyof T] {
   if (isKnownEnumValue(values, value)) return value;
-  throw new Error(
-    "This value is not supported by this version of Speakeasy. Refresh the page before editing.",
-  );
+  throw new Error(UNSUPPORTED_ENUM_VALUE_MESSAGE);
 }
 
 /** Unknown values (including inherited object keys) use an explicit presentation. */

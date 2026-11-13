@@ -494,3 +494,200 @@ func TestRunIgnoresGrantsMintedInAnotherOrganization(t *testing.T) {
 	require.Equal(t, GatewayOutcomeUnserved, gatewayResultFor(t, report, member).Outcome)
 	require.Empty(t, f.associations(member))
 }
+
+// boundClient creates a project client on remoteIssuerID bound to every
+// userIssuerIDs, so several clients can share one authorization server.
+func (f *fixture) boundClient(remoteIssuerID uuid.UUID, userIssuerIDs ...uuid.UUID) uuid.UUID {
+	f.t.Helper()
+	ctx := f.t.Context()
+	clientID := uuid.New()
+	require.NoError(f.t, f.q.SeedRemoteSessionClientFixture(ctx, SeedRemoteSessionClientFixtureParams{
+		ID:                    clientID,
+		ProjectID:             uuid.NullUUID{UUID: f.projectID, Valid: true},
+		OrganizationID:        pgtype.Text{String: f.orgID, Valid: true},
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              "cid-" + clientID.String()[:8],
+	}))
+	for _, userIssuerID := range userIssuerIDs {
+		require.NoError(f.t, f.q.SeedClientBindingFixture(ctx, SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID}))
+	}
+	return clientID
+}
+
+// dedicatedMember creates a server on its own issuer, derived to
+// remoteIssuerID, with a dedicated client on that authorization server bound
+// to its issuer and gatewayIssuer and associated with it.
+func (f *fixture) dedicatedMember(gatewayIssuer, remoteIssuerID uuid.UUID, upstreamURL string) (serverID, clientID uuid.UUID) {
+	f.t.Helper()
+	issuer := f.userIssuer()
+	serverID = f.server(issuer, upstreamURL)
+	f.derive(serverID, remoteIssuerID)
+	clientID = f.boundClient(remoteIssuerID, issuer, gatewayIssuer)
+	f.associate(serverID, clientID, false)
+	return serverID, clientID
+}
+
+// A gateway fronts several servers on one authorization server, so every
+// client on it matches every member's derived issuer. Each member was moved
+// from a shared client to a dedicated one: the shared association was
+// removed and the dedicated one added. That sole association settles each
+// member, whatever grants the detached shared client holds.
+func TestRunTreatsAGatewayMemberItsSoleAssociationSettlesAsConfigured(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+	_, remoteIssuer := f.gatewayClient(gatewayIssuer)
+	shared := f.boundClient(remoteIssuer, gatewayIssuer)
+	// A client on another authorization server with no evidence for anyone.
+	_, _ = f.gatewayClient(gatewayIssuer)
+
+	// No grants: every client matches by derived issuer alone.
+	noGrants, noGrantsClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://one.example.com/mcp")
+	f.associate(noGrants, shared, true)
+
+	// Grants for both the detached shared client and the dedicated one.
+	bothGranted, bothGrantedClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://two.example.com/mcp")
+	f.associate(bothGranted, shared, true)
+	f.grant(gatewayIssuer, shared, "https://two.example.com/mcp")
+	f.grant(gatewayIssuer, bothGrantedClient, "https://two.example.com/mcp")
+
+	// Grants only for the detached shared client.
+	detachedGranted, detachedGrantedClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://three.example.com/mcp")
+	f.associate(detachedGranted, shared, true)
+	f.grant(gatewayIssuer, shared, "https://three.example.com/mcp")
+
+	// Grants only for the dedicated client.
+	ownGranted, ownGrantedClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://four.example.com/mcp")
+	f.associate(ownGranted, shared, true)
+	f.grant(gatewayIssuer, ownGrantedClient, "https://four.example.com/mcp")
+
+	// The shared client stays associated with one member, which has grants
+	// for it.
+	keptIssuer := f.userIssuer()
+	kept := f.server(keptIssuer, "https://five.example.com/mcp")
+	f.derive(kept, remoteIssuer)
+	require.NoError(t, f.q.SeedClientBindingFixture(t.Context(), SeedClientBindingFixtureParams{RemoteSessionClientID: shared, UserSessionIssuerID: keptIssuer}))
+	f.associate(kept, shared, false)
+	f.grant(gatewayIssuer, shared, "https://five.example.com/mcp")
+
+	f.gateway(gatewayIssuer, noGrants, bothGranted, detachedGranted, ownGranted, kept)
+	want := map[uuid.UUID]uuid.UUID{
+		noGrants:        noGrantsClient,
+		bothGranted:     bothGrantedClient,
+		detachedGranted: detachedGrantedClient,
+		ownGranted:      ownGrantedClient,
+		kept:            shared,
+	}
+
+	for _, apply := range []bool{false, true, true} {
+		report := f.run(apply)
+		require.Zero(t, report.Gaps)
+		require.Zero(t, report.Decided)
+		require.Zero(t, report.Written)
+		for serverID, clientID := range want {
+			result := gatewayResultFor(t, report, serverID)
+			require.Equal(t, GatewayOutcomeConfigured, result.Outcome)
+			require.False(t, result.Associate.Valid)
+			require.Equal(t, []uuid.UUID{clientID}, f.associations(serverID), "nothing is associated or removed")
+		}
+	}
+}
+
+// Existing outbound associations settle shared authorization server inference,
+// but not grants for an unrecorded client or a member with no live association.
+func TestRunGatewayConfigurationAcceptsAssociationsAndRejectsUnrecordedGrants(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+	_, remoteIssuer := f.gatewayClient(gatewayIssuer)
+
+	// Two associated clients that both match by derived issuer.
+	twoAssociated, first := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://one.example.com/mcp")
+	second := f.boundClient(remoteIssuer, gatewayIssuer)
+	f.associate(twoAssociated, second, false)
+	// A detached outbound client with grants must not be re-associated.
+	detached := f.boundClient(remoteIssuer, gatewayIssuer)
+	f.associate(twoAssociated, detached, true)
+	f.grant(gatewayIssuer, detached, "https://one.example.com/mcp")
+
+	// Two associated clients, but grants for a client never associated.
+	foreignGrant, foreignGrantClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://two.example.com/mcp")
+	foreign := f.boundClient(remoteIssuer, gatewayIssuer)
+	f.associate(foreignGrant, first, false)
+	f.grant(gatewayIssuer, foreign, "https://two.example.com/mcp")
+
+	// Two associated clients, but grants for two clients never associated.
+	twoForeignGrants, twoForeignGrantsClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://three.example.com/mcp")
+	twoForeignGrantsSecond := f.boundClient(remoteIssuer, gatewayIssuer)
+	f.associate(twoForeignGrants, twoForeignGrantsSecond, false)
+	f.grant(gatewayIssuer, foreign, "https://three.example.com/mcp")
+	f.grant(gatewayIssuer, second, "https://three.example.com/mcp")
+
+	// Only a removed association.
+	onlyDetached := f.server(f.userIssuer(), "https://four.example.com/mcp")
+	f.derive(onlyDetached, remoteIssuer)
+	f.associate(onlyDetached, f.boundClient(remoteIssuer, gatewayIssuer), true)
+
+	f.gateway(gatewayIssuer, twoAssociated, foreignGrant, twoForeignGrants, onlyDetached)
+	for _, apply := range []bool{false, true, true} {
+		report := f.run(apply)
+		require.Equal(t, GatewayOutcomeConfigured, gatewayResultFor(t, report, twoAssociated).Outcome)
+		require.Equal(t, GatewayOutcomeConflict, gatewayResultFor(t, report, foreignGrant).Outcome)
+		require.Equal(t, GatewayOutcomeAmbiguous, gatewayResultFor(t, report, twoForeignGrants).Outcome)
+		require.Equal(t, GatewayOutcomeAmbiguous, gatewayResultFor(t, report, onlyDetached).Outcome)
+		require.Equal(t, 3, report.Gaps)
+		require.ElementsMatch(t, []uuid.UUID{first, second}, f.associations(twoAssociated), "the detached grant-bearing client is not added")
+		require.ElementsMatch(t, []uuid.UUID{foreignGrantClient, first}, f.associations(foreignGrant))
+		require.ElementsMatch(t, []uuid.UUID{twoForeignGrantsClient, twoForeignGrantsSecond}, f.associations(twoForeignGrants))
+		require.Empty(t, f.associations(onlyDetached))
+	}
+}
+
+// Several servers on one upstream each have a client of their own. A grant
+// names the upstream, not the server, so every client's grants match every one
+// of those servers; each server's own association settles it all the same.
+func TestRunTreatsGrantsOfASiblingsClientOnTheSameUpstreamAsConfigured(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	gatewayIssuer := f.userIssuer()
+	_, remoteIssuer := f.gatewayClient(gatewayIssuer)
+	const upstream = "https://shared.example.com/mcp"
+
+	first, firstClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, upstream)
+	second, secondClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, upstream+"/")
+	f.grant(gatewayIssuer, firstClient, upstream)
+	f.grant(gatewayIssuer, secondClient, upstream)
+
+	// The sibling's client holds the only grants, and they disagree with the
+	// derived issuer of the server's own association.
+	_, otherRemoteIssuer := f.gatewayClient(gatewayIssuer)
+	conflicting, conflictingClient := f.dedicatedMember(gatewayIssuer, otherRemoteIssuer, upstream)
+
+	// A client associated with a server on another upstream is nobody's
+	// sibling here, so its grants for this one still need configuration.
+	elsewhere, elsewhereClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://elsewhere.example.com/mcp")
+	unsettled, unsettledClient := f.dedicatedMember(gatewayIssuer, remoteIssuer, "https://unsettled.example.com/mcp")
+	f.grant(gatewayIssuer, unsettledClient, "https://unsettled.example.com/mcp")
+	f.grant(gatewayIssuer, elsewhereClient, "https://unsettled.example.com/mcp")
+
+	f.gateway(gatewayIssuer, first, second, conflicting, elsewhere, unsettled)
+	want := map[uuid.UUID]uuid.UUID{
+		first:       firstClient,
+		second:      secondClient,
+		conflicting: conflictingClient,
+		elsewhere:   elsewhereClient,
+		unsettled:   unsettledClient,
+	}
+	for _, apply := range []bool{false, true, true} {
+		report := f.run(apply)
+		require.Equal(t, GatewayOutcomeConfigured, gatewayResultFor(t, report, first).Outcome)
+		require.Equal(t, GatewayOutcomeConfigured, gatewayResultFor(t, report, second).Outcome)
+		require.Equal(t, GatewayOutcomeConfigured, gatewayResultFor(t, report, conflicting).Outcome)
+		require.Equal(t, GatewayOutcomeAmbiguous, gatewayResultFor(t, report, unsettled).Outcome)
+		require.Equal(t, 1, report.Gaps)
+		require.Zero(t, report.Written)
+		for serverID, clientID := range want {
+			require.Equal(t, []uuid.UUID{clientID}, f.associations(serverID), "nothing is associated or removed")
+		}
+	}
+}

@@ -1,11 +1,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfirmTrafficSection } from "./confirm-traffic-section";
 import { ConfirmTrafficStep } from "./steps/confirm-traffic-step";
-import {
-  isAnthropicOrCursorSource,
-  isOtherPlatformSource,
-} from "./hook-event-sources";
+import { isAnthropicSource, isOtherPlatformSource } from "./hook-event-sources";
 
 const mocks = vi.hoisted(() => ({
   query: {
@@ -45,11 +43,8 @@ vi.mock("./session-audit-access", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./session-audit-access")>()),
   useSessionAuditAccess: () => mocks.access,
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
-}));
-vi.mock("react-router", () => ({
-  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 // Sections stay mounted while hidden, so the celebration has to know whether
@@ -103,6 +98,7 @@ describe("ConfirmTrafficSection", () => {
         description="Run a tool."
         matchesSource={isOtherPlatformSource}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.getByText("Waiting")).toBeTruthy();
 
@@ -125,6 +121,7 @@ describe("ConfirmTrafficSection", () => {
         description="Run a tool."
         matchesSource={isOtherPlatformSource}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(mocks.burst).not.toHaveBeenCalled();
 
@@ -160,7 +157,7 @@ describe("ConfirmTrafficSection", () => {
         matchesSource={isOtherPlatformSource}
       />
     );
-    const view = render(card());
+    const view = render(card(), { wrapper: MemoryRouter });
 
     poll("codex");
     view.rerender(card());
@@ -176,8 +173,9 @@ describe("ConfirmTrafficSection", () => {
       <ConfirmTrafficSection
         index={3}
         description="Start a Cowork session."
-        matchesSource={isAnthropicOrCursorSource}
+        matchesSource={isAnthropicSource}
       />,
+      { wrapper: MemoryRouter },
     );
 
     poll("codex");
@@ -185,7 +183,7 @@ describe("ConfirmTrafficSection", () => {
       <ConfirmTrafficSection
         index={3}
         description="Start a Cowork session."
-        matchesSource={isAnthropicOrCursorSource}
+        matchesSource={isAnthropicSource}
       />,
     );
 
@@ -200,6 +198,7 @@ describe("ConfirmTrafficSection", () => {
         description="Run a tool."
         matchesSource={isOtherPlatformSource}
       />,
+      { wrapper: MemoryRouter },
     );
 
     poll("");
@@ -216,7 +215,9 @@ describe("ConfirmTrafficSection", () => {
 
   it("shows polling failures and retries them", () => {
     mocks.query.isError = true;
-    render(<ConfirmTrafficSection index={3} description="Run a tool." />);
+    render(<ConfirmTrafficSection index={3} description="Run a tool." />, {
+      wrapper: MemoryRouter,
+    });
 
     expect(screen.getByRole("alert").textContent).toContain(
       "We couldn't check for traffic. Try again.",
@@ -244,8 +245,9 @@ describe("ConfirmTrafficSection detected clients", () => {
       <ConfirmTrafficSection
         index={3}
         description="Run a tool."
-        matchesSource={isAnthropicOrCursorSource}
+        matchesSource={isAnthropicSource}
       />,
+      { wrapper: MemoryRouter },
     );
 
     expect(screen.getByText("Open one of these clients:")).toBeTruthy();
@@ -253,7 +255,7 @@ describe("ConfirmTrafficSection detected clients", () => {
     // the vendor rather than the harness the detector matched.
     expect(screen.getByText("Claude")).toBeTruthy();
     expect(screen.queryByText("Claude Code")).toBeNull();
-    expect(screen.getByText("Cursor")).toBeTruthy();
+    expect(screen.queryByText("Cursor")).toBeNull();
     expect(screen.queryByText("Codex")).toBeNull();
   });
 
@@ -267,8 +269,9 @@ describe("ConfirmTrafficSection detected clients", () => {
         index={3}
         description="Run a tool."
         callout={{ title: "Turn Cowork on", body: "Switch the toggle on." }}
-        matchesSource={isAnthropicOrCursorSource}
+        matchesSource={isAnthropicSource}
       />,
+      { wrapper: MemoryRouter },
     );
 
     const alert = screen.getByRole("alert");
@@ -283,6 +286,7 @@ describe("ConfirmTrafficSection detected clients", () => {
         description="Run a tool."
         callout={{ title: "Turn Cowork on", body: "Switch the toggle on." }}
       />,
+      { wrapper: MemoryRouter },
     );
 
     expect(screen.queryByText("Open one of these clients:")).toBeNull();
@@ -290,7 +294,9 @@ describe("ConfirmTrafficSection detected clients", () => {
   });
 
   it("keeps the generic prompt when nothing has been detected", () => {
-    render(<ConfirmTrafficSection index={3} description="Run a tool." />);
+    render(<ConfirmTrafficSection index={3} description="Run a tool." />, {
+      wrapper: MemoryRouter,
+    });
 
     expect(screen.queryByText("Open one of these clients:")).toBeNull();
   });
@@ -300,7 +306,9 @@ describe("ConfirmTrafficSection session audit hand-back", () => {
   it("shares confirmation and access hand-back with the standalone board task", () => {
     mocks.access.holdsRole = true;
     const onComplete = vi.fn<() => void>();
-    const view = render(<ConfirmTrafficStep onComplete={onComplete} />);
+    const view = render(<ConfirmTrafficStep onComplete={onComplete} />, {
+      wrapper: MemoryRouter,
+    });
     expect(
       (screen.getByRole("button", { name: "Mark done" }) as HTMLButtonElement)
         .disabled,
@@ -332,7 +340,7 @@ describe("ConfirmTrafficSection session audit hand-back", () => {
   it("waits for confirmed traffic before asking for the permission back", () => {
     mocks.access.holdsRole = true;
 
-    render(card());
+    render(card(), { wrapper: MemoryRouter });
 
     expect(
       screen.queryByRole("button", { name: "Remove my access" }),
@@ -341,7 +349,7 @@ describe("ConfirmTrafficSection session audit hand-back", () => {
 
   it("offers the hand-back once traffic is confirmed", () => {
     mocks.access.holdsRole = true;
-    const view = render(card());
+    const view = render(card(), { wrapper: MemoryRouter });
 
     poll("codex");
     view.rerender(card());
@@ -352,7 +360,7 @@ describe("ConfirmTrafficSection session audit hand-back", () => {
   });
 
   it("says nothing to an admin who never took the role", () => {
-    const view = render(card());
+    const view = render(card(), { wrapper: MemoryRouter });
 
     poll("codex");
     view.rerender(card());

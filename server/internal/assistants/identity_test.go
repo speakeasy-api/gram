@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -62,7 +61,7 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	project := newProvisioningProject(t, db, "identity-create")
 	core := newProvisioningCore(t, db)
 
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Identity assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Identity assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, string(assistantidentity.Active), record.IdentityState)
 	require.NotNil(t, record.AgentID)
@@ -109,32 +108,6 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	require.EqualValues(t, 1, created)
 }
 
-func TestUpgradeAssistantIdentityAcceptsAPIKeyUserAndIsIdempotent(t *testing.T) {
-	t.Parallel()
-	svc, ctx, project, db := newRBACServiceWithConn(t, "identity_upgrade")
-	legacy := createLegacyAssistant(t, db, project, "Legacy assistant")
-	before, err := svc.core.GetAssistant(ctx, project, legacy.ID)
-	require.NoError(t, err)
-	require.Equal(t, string(assistantidentity.NeverConfigured), before.IdentityState)
-
-	payload := &gen.UpgradeAssistantIdentityPayload{ID: legacy.ID.String(), SessionToken: nil, ProjectSlugInput: nil}
-	_, err = svc.UpgradeAssistantIdentity(authztest.WithExactGrants(t, ctx), payload)
-	require.Error(t, err, "session users need project write")
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	apiKey := *authCtx
-	apiKey.APIKeyID = uuid.NewString()
-	apiKey.SessionID = nil
-	keyCtx := contextvalues.WithLegacyAPIKeyAuthorization(ctx, &apiKey)
-	first, err := svc.UpgradeAssistantIdentity(keyCtx, payload)
-	require.NoError(t, err)
-	require.Equal(t, string(assistantidentity.Active), *first.IdentityState)
-	second, err := svc.UpgradeAssistantIdentity(keyCtx, payload)
-	require.NoError(t, err)
-	require.Equal(t, first.AgentID, second.AgentID)
-}
-
 func TestManagedDashboardTriggerBindsLikeAnyRoot(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "identity_dashboard")
@@ -150,7 +123,7 @@ func TestManagedDashboardTriggerBindsLikeAnyRoot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.NeverConfigured, resolution.State)
 
-	_, err = core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID, ActorUserID: "user-2", AgentID: uuid.Nil, AgentName: ""})
+	_, err = core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID, ActorUserID: "user-2", Staff: nil})
 	require.NoError(t, err)
 	reused, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, legacy.ID, legacy.Name)
 	require.NoError(t, err)
@@ -177,7 +150,7 @@ func TestUserAgentEditsDoNotBlockAssistantManagement(t *testing.T) {
 	require.NoError(t, err)
 	project := newProvisioningProject(t, db, "identity-agent-edits")
 	core := newProvisioningCore(t, db)
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Edited agent", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Edited agent", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
 	require.NoError(t, err)
 	agents := agentrepo.New(db)
 	agentID := uuid.MustParse(*record.AgentID)
@@ -197,9 +170,9 @@ func TestUserAgentEditsDoNotBlockAssistantManagement(t *testing.T) {
 	require.Equal(t, string(assistantidentity.Unavailable), got.IdentityState)
 
 	paused := StatusPaused
-	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil, nil, nil, nil, nil, &paused, nil)
+	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil, nil, nil, nil, nil, &paused, nil, nil)
 	require.NoError(t, err)
-	_, err = core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: record.ID, ActorUserID: "user-1", AgentID: uuid.Nil, AgentName: ""})
+	_, err = core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: record.ID, ActorUserID: "user-1", Staff: nil})
 	require.NoError(t, err)
 	require.NoError(t, core.DeleteAssistant(t.Context(), project, record.ID, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
 	kept, err := agents.GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: agentID})
@@ -233,11 +206,10 @@ func TestDeleteAssistantWithdrawsWorkloads(t *testing.T) {
 	require.Equal(t, assistantidentity.NeverConfigured, states[record.ID].State)
 }
 
-// Every new assistant gets a dedicated agent, and an assistant created before
-// identity provisioning existed is upgraded on request.
+// Every new assistant gets a dedicated agent.
 func TestIdentityProvisioningIsAlwaysOn(t *testing.T) {
 	t.Parallel()
-	svc, ctx, project, db := newRBACServiceWithConn(t, "identity_always_on")
+	svc, ctx, project, _ := newRBACServiceWithConn(t, "identity_always_on")
 	granted := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, project.String()), authz.NewGrant(authz.ScopeProjectWrite, project.String()))
 
 	created, err := svc.CreateAssistant(granted, &gen.CreateAssistantPayload{SessionToken: nil, ProjectSlugInput: nil, Name: "Provisioned", Model: "openai/gpt-4o-mini", Instructions: "", Toolsets: nil, McpServers: nil, WarmTTLSeconds: nil, MaxConcurrency: nil, Status: nil})
@@ -246,11 +218,6 @@ func TestIdentityProvisioningIsAlwaysOn(t *testing.T) {
 	managed, err := svc.EnsureManagedAssistant(granted, &gen.EnsureManagedAssistantPayload{SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Equal(t, string(assistantidentity.Active), *managed.IdentityState)
-
-	legacy := createLegacyAssistant(t, db, project, "Legacy")
-	upgraded, err := svc.UpgradeAssistantIdentity(granted, &gen.UpgradeAssistantIdentityPayload{ID: legacy.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
-	require.NoError(t, err)
-	require.Equal(t, string(assistantidentity.Active), *upgraded.IdentityState)
 }
 
 func TestDerivedWorkloadCeilingCarriesAssistantSelfAdministration(t *testing.T) {

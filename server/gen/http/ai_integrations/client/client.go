@@ -41,6 +41,10 @@ type Client struct {
 	// deleteConfig endpoint.
 	DeleteConfigDoer goahttp.Doer
 
+	// ListOrgUnits Doer is the HTTP client used to make requests to the
+	// listOrgUnits endpoint.
+	ListOrgUnitsDoer goahttp.Doer
+
 	// ListSchedules Doer is the HTTP client used to make requests to the
 	// listSchedules endpoint.
 	ListSchedulesDoer goahttp.Doer
@@ -80,6 +84,7 @@ func NewClient(
 		GetConfigDoer:                      doer,
 		UpsertConfigDoer:                   doer,
 		DeleteConfigDoer:                   doer,
+		ListOrgUnitsDoer:                   doer,
 		ListSchedulesDoer:                  doer,
 		SetScheduleEnabledDoer:             doer,
 		RetryScheduleDoer:                  doer,
@@ -230,6 +235,30 @@ func (c *Client) DeleteConfig() goa.Endpoint {
 		resp, err := c.DeleteConfigDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("aiIntegrations", "deleteConfig", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListOrgUnits returns an endpoint that makes HTTP requests to the
+// aiIntegrations service listOrgUnits server.
+func (c *Client) ListOrgUnits() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListOrgUnitsRequest(c.encoder)
+		decodeResponse = DecodeListOrgUnitsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListOrgUnitsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListOrgUnitsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("aiIntegrations", "listOrgUnits", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -37,11 +37,13 @@ type federatedClientSnapshot struct {
 	CredentialOwner                 string             `json:"CredentialOwner"`
 	// A label, so it is kept out of the fingerprint. A rename still bumps
 	// UpdatedAt, which is in it, like any other write to the client.
-	DisplayName pgtype.Text        `json:"-"`
-	CreatedAt   pgtype.Timestamptz `json:"CreatedAt"`
-	UpdatedAt   pgtype.Timestamptz `json:"UpdatedAt"`
-	DeletedAt   pgtype.Timestamptz `json:"DeletedAt"`
-	Deleted     bool               `json:"Deleted"`
+	DisplayName pgtype.Text `json:"-"`
+	// Only shapes the authorize URL, so it is kept out of the fingerprint too.
+	ForwardClientName bool               `json:"-"`
+	CreatedAt         pgtype.Timestamptz `json:"CreatedAt"`
+	UpdatedAt         pgtype.Timestamptz `json:"UpdatedAt"`
+	DeletedAt         pgtype.Timestamptz `json:"DeletedAt"`
+	Deleted           bool               `json:"Deleted"`
 }
 
 type federatedIssuerSnapshot struct {

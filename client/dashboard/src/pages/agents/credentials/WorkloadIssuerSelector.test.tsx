@@ -211,9 +211,9 @@ describe("WorkloadIssuerSelector", () => {
   });
   it("renders loading and retryable query errors instead of selection", () => {
     const { props, rerender } = setup({ loading: true });
-    expect(screen.getByRole("status").textContent).toContain(
-      "Loading workload issuers",
-    );
+    expect(
+      screen.getByRole("status", { name: "Loading workload issuers" }),
+    ).toBeTruthy();
     expect(screen.queryByRole("combobox")).toBeNull();
     rerender(<WorkloadIssuerSelector {...props} loading={false} failed />);
     expect(screen.getByRole("alert").textContent).toContain(

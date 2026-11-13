@@ -1,7 +1,7 @@
 import { render, screen, cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ActingPrincipal } from ".";
+import { ActingPrincipal, PersonFace } from ".";
 import { actingPrincipalText } from "./text";
 
 vi.mock("@/lib/useIdentityHref", () => ({
@@ -84,6 +84,36 @@ describe("ActingPrincipal", () => {
         "/other-project/identities/x",
       );
     }
+  });
+
+  it("names how the call signed in in place of the key's authorizer", () => {
+    setup(
+      <ActingPrincipal
+        agent={{ id: "a1", name: "Release assistant" }}
+        authorizer={{ id: "u1", name: "Amara Okafor" }}
+        signedInWith={{
+          label: "shared credential",
+          detail: "Signed in with: Service account",
+        }}
+      />,
+    );
+    expect(screen.getByText("shared credential")).toBeTruthy();
+    expect(screen.queryByText(/on behalf of/)).toBeNull();
+    expect(screen.queryByText("Amara Okafor")).toBeNull();
+    expect(
+      screen
+        .getByText("shared credential")
+        .parentElement?.getAttribute("title"),
+    ).toBe("Signed in with: Service account");
+  });
+
+  it.each([
+    { name: "Amara Okafor", expected: "AO" },
+    { name: "j.smith@example.com", expected: "JS" },
+    { name: "amara@example.com", expected: "AM" },
+  ])("draws $name as $expected", ({ name, expected }) => {
+    setup(<PersonFace person={{ id: "u1", name }} />);
+    expect(screen.getByText(expected)).toBeTruthy();
   });
 
   it("gives the same relation as plain text", () => {

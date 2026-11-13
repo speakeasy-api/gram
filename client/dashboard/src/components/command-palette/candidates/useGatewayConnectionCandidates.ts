@@ -8,9 +8,11 @@ import {
   type UserSessionClientsPageParams,
 } from "@gram/client/react-query/userSessionClients.js";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
+
+const GATEWAY_INVENTORY_STALE_TIME_MS = 30_000;
 
 /** Named gateways and registrations, never a crawl of session history. */
 export function useGatewayConnectionCandidates({
@@ -35,6 +37,7 @@ export function useGatewayConnectionCandidates({
     ...gatewaysQuery,
     queryKey: [...gatewaysQuery.queryKey, organization.id],
     enabled: enabled && canReadGateways,
+    staleTime: GATEWAY_INVENTORY_STALE_TIME_MS,
     retry: false,
     throwOnError: false,
   });
@@ -54,6 +57,7 @@ export function useGatewayConnectionCandidates({
     initialPageParam: undefined as UserSessionClientsPageParams,
     getNextPageParam: (page) => page["~next"],
     enabled: clientsEnabled,
+    staleTime: GATEWAY_INVENTORY_STALE_TIME_MS,
     retry: false,
     throwOnError: false,
   });
@@ -63,14 +67,15 @@ export function useGatewayConnectionCandidates({
     isFetchNextPageError,
     fetchNextPage,
   } = clients;
+  const opens = useRef(0);
+  const lastFetchOpen = useRef(0);
   useEffect(() => {
-    if (
-      !clientsEnabled ||
-      !hasNextPage ||
-      isFetchingNextPage ||
-      isFetchNextPageError
-    )
-      return;
+    if (clientsEnabled) opens.current += 1;
+  }, [clientsEnabled]);
+  useEffect(() => {
+    if (!clientsEnabled || !hasNextPage || isFetchingNextPage) return;
+    if (isFetchNextPageError && lastFetchOpen.current === opens.current) return;
+    lastFetchOpen.current = opens.current;
     void fetchNextPage().catch(() => undefined);
   }, [
     clientsEnabled,
@@ -83,7 +88,7 @@ export function useGatewayConnectionCandidates({
   return useMemo(() => {
     if (!enabled) return [];
     const result: LauncherCandidate[] = [];
-    if (canReadOrg)
+    if (canReadOrg) {
       result.push({
         id: `gateway-connections:organization:${organization.id}`,
         kind: "page",
@@ -99,6 +104,22 @@ export function useGatewayConnectionCandidates({
           );
         },
       });
+      result.push({
+        id: `gateway-activity:organization:${organization.id}`,
+        kind: "page",
+        title: "Organization Gateway Activity",
+        detail: "Calls across projects",
+        keywords: ["gateway", "activity", "usage", "calls", "organization"],
+        verbs: ["open"],
+        icon: "network",
+        group: "Pages",
+        run: () => {
+          void navigate(
+            `${routes.mcp.organizationGateway.href()}?tab=activity`,
+          );
+        },
+      });
+    }
     if (!canReadGateways || gateways.isError) return result;
     for (const gateway of gateways.data?.metaMcpServers ?? []) {
       const href = routes.mcp.gateway.sessions.href(gateway.id);
@@ -127,7 +148,6 @@ export function useGatewayConnectionCandidates({
           detail: `Registration · ${gateway.name}`,
           keywords: ["client", "registration", client.id, client.clientId],
           // A client-supplied display name may contain a person's identity.
-          fuzzyOnly: true,
           verbs: ["open"],
           icon: "key",
           group: "Client Registrations",

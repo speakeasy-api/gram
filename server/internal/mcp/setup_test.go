@@ -71,6 +71,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
@@ -114,20 +115,22 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	principalCredentials *principalcredential.Issuer
-	service              *migratedService
-	conn                 *pgxpool.Pool
-	sessionManager       *sessions.Manager
-	serverURL            *url.URL
-	siteURL              *url.URL
-	logger               *slog.Logger
-	tracerProvider       trace.TracerProvider
-	cacheAdapter         cache.Cache
-	chatSessionsManager  *chatsessions.Manager
-	authnChallengeCache  cache.TypedCacheObject[mcp.AuthnChallengeState]
-	enc                  *encryption.Client
-	authzEngine          *authz.Engine
-	audit                *audit.Logger
-	tunnelRoutes         route.Store
+	// assistantTokens mints and authorizes assistant turn credentials.
+	assistantTokens     *assistanttokens.Manager
+	service             *migratedService
+	conn                *pgxpool.Pool
+	sessionManager      *sessions.Manager
+	serverURL           *url.URL
+	siteURL             *url.URL
+	logger              *slog.Logger
+	tracerProvider      trace.TracerProvider
+	cacheAdapter        cache.Cache
+	chatSessionsManager *chatsessions.Manager
+	authnChallengeCache cache.TypedCacheObject[mcp.AuthnChallengeState]
+	enc                 *encryption.Client
+	authzEngine         *authz.Engine
+	audit               *audit.Logger
+	tunnelRoutes        route.Store
 	// features is the injectable flag provider wired into the service; tests
 	// enable flag-gated behavior (e.g. the Platform MCP assistant toolset
 	// variant) with SetFlagVariant.
@@ -209,7 +212,7 @@ func (s *migratedService) HandleConsent(w http.ResponseWriter, r *http.Request) 
 
 func (s *migratedService) ApplyIssuerGate(ctx context.Context, w http.ResponseWriter, authToken, baseURL string, endpoint *mcp.ResolvedMcpEndpoint) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionPolicy, error) {
 	s.migrate(ctx)
-	return s.Service.ApplyIssuerGate(ctx, w, authToken, baseURL, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+	return s.Service.ApplyIssuerGate(ctx, w, nil, authToken, baseURL, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
 }
 
 func (s *migratedService) HandleToolsCall(ctx context.Context, inputs *mcp.McpInputs, toolName string, arguments json.RawMessage) (*mcp.ToolCallResult, error) {
@@ -524,7 +527,7 @@ func newTestMCPServiceWithPlatformMCPReadTools(t *testing.T) (context.Context, *
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, provider, nil, nil, "", true)
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, provider, nil, nil, "", true, nil)
 	return ctx, ti, recorder
 }
 
@@ -547,7 +550,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return buildTestMCPService(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, withTemporal, metaRuntime, tracerProvider, funcs, callerAssertions, serverURLOverride, false, guardianOpts...)
+	return buildTestMCPService(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, withTemporal, metaRuntime, tracerProvider, funcs, callerAssertions, serverURLOverride, false, nil, guardianOpts...)
 }
 
 func buildTestMCPService(
@@ -565,6 +568,7 @@ func buildTestMCPService(
 	callerAssertions *mcpauthz.Issuer,
 	serverURLOverride string,
 	withPlatformMCPReadTools bool,
+	refreshRecorder *mcpconnectionattempts.Recorder,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
@@ -622,7 +626,7 @@ func buildTestMCPService(
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
-	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
@@ -660,7 +664,7 @@ func buildTestMCPService(
 
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 	principalCredentials := principalcredential.New(callerAssertions, conn)
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine, principalCredentials, cache.NewRedisCacheAdapter(redisClient))
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
@@ -677,6 +681,7 @@ func buildTestMCPService(
 			clientCredentials.use(clientcredentials.New(logger, conn, enc, m, cacheAdapter))
 			return clientCredentials
 		}),
+		remotesessions.WithConnectionRecorder(refreshRecorder),
 		remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(idTokenKeys)),
 		remotesessions.WithProtectedResourceProber(protectedResources),
 	)
@@ -695,17 +700,20 @@ func buildTestMCPService(
 	})
 	assistantSkillTools := platformtoolsruntime.AssistantSkillTools(logger, conn, platformskills.WithEfficacySignaler(efficacySignaler))
 	var platformMCPReadTools []platformtools.ExternalTool
+	var platformMCPReadActingContext func(context.Context) (context.Context, error)
 	if withPlatformMCPReadTools {
 		// Composed the way the server composes it: descriptors admitted to the
 		// assistant audience, called directly by the adapter.
+		platformMCPAuthorizer := platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine)
 		platformMCPReadTools = assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
-				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "test-cursor-key",
+				logger, nil, nil, platformMCPAuthorizer, "", "test-cursor-key",
 				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
-			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),
+			platformMCPAuthorizer,
 		)
+		platformMCPReadActingContext = assistant_platform_mcp_adapter.ActingContext(platformMCPAuthorizer)
 	}
 	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 		AssistantMemoryTools:          nil,
@@ -713,12 +721,13 @@ func buildTestMCPService(
 		AssistantTriggerTools:         nil,
 		ManagedAssistantInsightsTools: managedLogsTools,
 		PlatformMCPReadTools:          platformMCPReadTools,
+		PlatformMCPReadActingContext:  platformMCPReadActingContext,
 	})
 	tunnelRoutes := route.NewRouteTable()
 	toolCallRecords := &toolCallRecorder{}
 	// Named as in production, so the pipeline derives the same source.
 	toolCallLogs := otelpub.NewLogger(toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GatewayLogScope)
-	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime, nil)
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime, nil, nil)
 	require.NoError(t, err)
 	// Identity chaining runs as in production, so gate tests without bindings
 	// prove it leaves their behavior unchanged.
@@ -731,6 +740,7 @@ func buildTestMCPService(
 
 	return ctx, &testInstance{
 		principalCredentials: principalCredentials,
+		assistantTokens:      assistantTokens,
 		service:              &migratedService{Service: svc, conn: conn, manual: false},
 		conn:                 conn,
 		sessionManager:       sessionManager,

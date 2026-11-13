@@ -211,6 +211,43 @@ type ResolveChallengeRequestBody struct {
 	RoleAssignmentConfirmed *bool `form:"role_assignment_confirmed,omitempty" json:"role_assignment_confirmed,omitempty" xml:"role_assignment_confirmed,omitempty"`
 }
 
+// CreateTemporaryGrantRequestBody is the type of the "access" service
+// "createTemporaryGrant" endpoint HTTP request body.
+type CreateTemporaryGrantRequestBody struct {
+	// The principal receiving the access: an organization member (user:<id>),
+	// everyone (user:all), a role (role:organization:<id> or role:global:<id>) or
+	// an active agent (agent:<id>).
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	// The scope to give, e.g. chat:read or log:read. Only scopes that grant access
+	// to read, use or manage resources can be given temporarily; org:admin,
+	// blocklist, auth client, risk policy and machine scopes cannot.
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// The resource or activity boundary. Omit to cover every resource of the
+	// scope's kind.
+	Selector *SelectorRequestBody `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
+	// When the grant stops authorizing new requests. At least five minutes and at
+	// most 24 hours from now.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+	// Why the access is needed, recorded in the audit log.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// RenewTemporaryGrantRequestBody is the type of the "access" service
+// "renewTemporaryGrant" endpoint HTTP request body.
+type RenewTemporaryGrantRequestBody struct {
+	// The temporary grant to renew.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The new deadline. At least five minutes and at most 24 hours from now.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+}
+
+// RevokeTemporaryGrantRequestBody is the type of the "access" service
+// "revokeTemporaryGrant" endpoint HTTP request body.
+type RevokeTemporaryGrantRequestBody struct {
+	// The temporary grant to end.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // ListRolesResponseBody is the type of the "access" service "listRoles"
 // endpoint HTTP response body.
 type ListRolesResponseBody struct {
@@ -417,6 +454,16 @@ type UpdateDirectoryReviewSettingsResponseBody struct {
 // endpoint HTTP response body.
 type ListScopesResponseBody struct {
 	// The scopes available in access control.
+	Scopes []*ScopeDefinitionResponseBody `form:"scopes" json:"scopes" xml:"scopes"`
+	// Tasks that need more than one scope, so a missing scope can be explained in
+	// context.
+	Tasks []*ScopeTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
+}
+
+// ListAgentPolicyScopesResponseBody is the type of the "access" service
+// "listAgentPolicyScopes" endpoint HTTP response body.
+type ListAgentPolicyScopesResponseBody struct {
+	// The scopes an agent policy may hold, in catalogue order.
 	Scopes []*ScopeDefinitionResponseBody `form:"scopes" json:"scopes" xml:"scopes"`
 }
 
@@ -672,6 +719,103 @@ type ListIdentityAccessResponseBody struct {
 	Servers []*AccessibleMCPServerResponseBody `form:"servers" json:"servers" xml:"servers"`
 	// Skills accessible to this identity.
 	Skills []*AccessibleSkillResponseBody `form:"skills" json:"skills" xml:"skills"`
+}
+
+// CreateTemporaryGrantResponseBody is the type of the "access" service
+// "createTemporaryGrant" endpoint HTTP response body.
+type CreateTemporaryGrantResponseBody struct {
+	// Temporary grant ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN holding the access.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// The scope given.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// The resource or activity boundary.
+	Selector *SelectorResponseBody `form:"selector" json:"selector" xml:"selector"`
+	// When the grant stops, or stopped, authorizing new requests.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+	// active: authorizing requests. expired: its deadline passed. revoked: ended
+	// early by this request.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Seconds until the deadline while active; 0 once ended.
+	RemainingSeconds int64 `form:"remaining_seconds" json:"remaining_seconds" xml:"remaining_seconds"`
+	// For an active grant, the principal URNs of the holder's other grants that
+	// already give the same access: for a member or agent, a role, everyone
+	// (user:all), or the holder itself for a grant made to it directly; for a role
+	// or everyone, only that principal's own other grants. Access through these
+	// remains when this grant ends. Empty for ended grants and when this grant is
+	// the only route.
+	OtherAccess []string `form:"other_access" json:"other_access" xml:"other_access"`
+	// When the grant was given, or restarted after expiring.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListTemporaryGrantsResponseBody is the type of the "access" service
+// "listTemporaryGrants" endpoint HTTP response body.
+type ListTemporaryGrantsResponseBody struct {
+	// Temporary grants, soonest deadline first. At most 500 are returned.
+	Grants []*TemporaryGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
+}
+
+// RenewTemporaryGrantResponseBody is the type of the "access" service
+// "renewTemporaryGrant" endpoint HTTP response body.
+type RenewTemporaryGrantResponseBody struct {
+	// Temporary grant ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN holding the access.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// The scope given.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// The resource or activity boundary.
+	Selector *SelectorResponseBody `form:"selector" json:"selector" xml:"selector"`
+	// When the grant stops, or stopped, authorizing new requests.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+	// active: authorizing requests. expired: its deadline passed. revoked: ended
+	// early by this request.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Seconds until the deadline while active; 0 once ended.
+	RemainingSeconds int64 `form:"remaining_seconds" json:"remaining_seconds" xml:"remaining_seconds"`
+	// For an active grant, the principal URNs of the holder's other grants that
+	// already give the same access: for a member or agent, a role, everyone
+	// (user:all), or the holder itself for a grant made to it directly; for a role
+	// or everyone, only that principal's own other grants. Access through these
+	// remains when this grant ends. Empty for ended grants and when this grant is
+	// the only route.
+	OtherAccess []string `form:"other_access" json:"other_access" xml:"other_access"`
+	// When the grant was given, or restarted after expiring.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// RevokeTemporaryGrantResponseBody is the type of the "access" service
+// "revokeTemporaryGrant" endpoint HTTP response body.
+type RevokeTemporaryGrantResponseBody struct {
+	// Temporary grant ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN holding the access.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// The scope given.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// The resource or activity boundary.
+	Selector *SelectorResponseBody `form:"selector" json:"selector" xml:"selector"`
+	// When the grant stops, or stopped, authorizing new requests.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+	// active: authorizing requests. expired: its deadline passed. revoked: ended
+	// early by this request.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Seconds until the deadline while active; 0 once ended.
+	RemainingSeconds int64 `form:"remaining_seconds" json:"remaining_seconds" xml:"remaining_seconds"`
+	// For an active grant, the principal URNs of the holder's other grants that
+	// already give the same access: for a member or agent, a role, everyone
+	// (user:all), or the holder itself for a grant made to it directly; for a role
+	// or everyone, only that principal's own other grants. Access through these
+	// remains when this grant ends. Empty for ended grants and when this grant is
+	// the only route.
+	OtherAccess []string `form:"other_access" json:"other_access" xml:"other_access"`
+	// When the grant was given, or restarted after expiring.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListRolesUnauthorizedResponseBody is the type of the "access" service
@@ -4011,6 +4155,195 @@ type ListScopesUnexpectedResponseBody struct {
 // ListScopesGatewayErrorResponseBody is the type of the "access" service
 // "listScopes" endpoint HTTP response body for the "gateway_error" error.
 type ListScopesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesUnauthorizedResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListAgentPolicyScopesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesForbiddenResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "forbidden" error.
+type ListAgentPolicyScopesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesBadRequestResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "bad_request" error.
+type ListAgentPolicyScopesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesNotFoundResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "not_found" error.
+type ListAgentPolicyScopesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesConflictResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "conflict" error.
+type ListAgentPolicyScopesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesUnsupportedMediaResponseBody is the type of the
+// "access" service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListAgentPolicyScopesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesInvalidResponseBody is the type of the "access" service
+// "listAgentPolicyScopes" endpoint HTTP response body for the "invalid" error.
+type ListAgentPolicyScopesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesInvariantViolationResponseBody is the type of the
+// "access" service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListAgentPolicyScopesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesUnexpectedResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "unexpected" error.
+type ListAgentPolicyScopesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesGatewayErrorResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListAgentPolicyScopesGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -8119,6 +8452,752 @@ type ListIdentityAccessGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateTemporaryGrantUnauthorizedResponseBody is the type of the "access"
+// service "createTemporaryGrant" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateTemporaryGrantUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTemporaryGrantForbiddenResponseBody is the type of the "access"
+// service "createTemporaryGrant" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateTemporaryGrantForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTemporaryGrantBadRequestResponseBody is the type of the "access"
+// service "createTemporaryGrant" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateTemporaryGrantBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTemporaryGrantNotFoundResponseBody is the type of the "access" service
+// "createTemporaryGrant" endpoint HTTP response body for the "not_found" error.
+type CreateTemporaryGrantNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTemporaryGrantConflictResponseBody is the type of the "access" service
+// "createTemporaryGrant" endpoint HTTP response body for the "conflict" error.
+type CreateTemporaryGrantConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTemporaryGrantUnsupportedMediaResponseBody is the type of the "access"
+// service "createTemporaryGrant" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateTemporaryGrantUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTemporaryGrantInvalidResponseBody is the type of the "access" service
+// "createTemporaryGrant" endpoint HTTP response body for the "invalid" error.
+type CreateTemporaryGrantInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTemporaryGrantInvariantViolationResponseBody is the type of the
+// "access" service "createTemporaryGrant" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateTemporaryGrantInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTemporaryGrantUnexpectedResponseBody is the type of the "access"
+// service "createTemporaryGrant" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateTemporaryGrantUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTemporaryGrantGatewayErrorResponseBody is the type of the "access"
+// service "createTemporaryGrant" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateTemporaryGrantGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTemporaryGrantsUnauthorizedResponseBody is the type of the "access"
+// service "listTemporaryGrants" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListTemporaryGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTemporaryGrantsForbiddenResponseBody is the type of the "access" service
+// "listTemporaryGrants" endpoint HTTP response body for the "forbidden" error.
+type ListTemporaryGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTemporaryGrantsBadRequestResponseBody is the type of the "access"
+// service "listTemporaryGrants" endpoint HTTP response body for the
+// "bad_request" error.
+type ListTemporaryGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTemporaryGrantsNotFoundResponseBody is the type of the "access" service
+// "listTemporaryGrants" endpoint HTTP response body for the "not_found" error.
+type ListTemporaryGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTemporaryGrantsConflictResponseBody is the type of the "access" service
+// "listTemporaryGrants" endpoint HTTP response body for the "conflict" error.
+type ListTemporaryGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTemporaryGrantsUnsupportedMediaResponseBody is the type of the "access"
+// service "listTemporaryGrants" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListTemporaryGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTemporaryGrantsInvalidResponseBody is the type of the "access" service
+// "listTemporaryGrants" endpoint HTTP response body for the "invalid" error.
+type ListTemporaryGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTemporaryGrantsInvariantViolationResponseBody is the type of the
+// "access" service "listTemporaryGrants" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListTemporaryGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTemporaryGrantsUnexpectedResponseBody is the type of the "access"
+// service "listTemporaryGrants" endpoint HTTP response body for the
+// "unexpected" error.
+type ListTemporaryGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTemporaryGrantsGatewayErrorResponseBody is the type of the "access"
+// service "listTemporaryGrants" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListTemporaryGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenewTemporaryGrantUnauthorizedResponseBody is the type of the "access"
+// service "renewTemporaryGrant" endpoint HTTP response body for the
+// "unauthorized" error.
+type RenewTemporaryGrantUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenewTemporaryGrantForbiddenResponseBody is the type of the "access" service
+// "renewTemporaryGrant" endpoint HTTP response body for the "forbidden" error.
+type RenewTemporaryGrantForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenewTemporaryGrantBadRequestResponseBody is the type of the "access"
+// service "renewTemporaryGrant" endpoint HTTP response body for the
+// "bad_request" error.
+type RenewTemporaryGrantBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenewTemporaryGrantNotFoundResponseBody is the type of the "access" service
+// "renewTemporaryGrant" endpoint HTTP response body for the "not_found" error.
+type RenewTemporaryGrantNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenewTemporaryGrantConflictResponseBody is the type of the "access" service
+// "renewTemporaryGrant" endpoint HTTP response body for the "conflict" error.
+type RenewTemporaryGrantConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenewTemporaryGrantUnsupportedMediaResponseBody is the type of the "access"
+// service "renewTemporaryGrant" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RenewTemporaryGrantUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenewTemporaryGrantInvalidResponseBody is the type of the "access" service
+// "renewTemporaryGrant" endpoint HTTP response body for the "invalid" error.
+type RenewTemporaryGrantInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenewTemporaryGrantInvariantViolationResponseBody is the type of the
+// "access" service "renewTemporaryGrant" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RenewTemporaryGrantInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenewTemporaryGrantUnexpectedResponseBody is the type of the "access"
+// service "renewTemporaryGrant" endpoint HTTP response body for the
+// "unexpected" error.
+type RenewTemporaryGrantUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RenewTemporaryGrantGatewayErrorResponseBody is the type of the "access"
+// service "renewTemporaryGrant" endpoint HTTP response body for the
+// "gateway_error" error.
+type RenewTemporaryGrantGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeTemporaryGrantUnauthorizedResponseBody is the type of the "access"
+// service "revokeTemporaryGrant" endpoint HTTP response body for the
+// "unauthorized" error.
+type RevokeTemporaryGrantUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeTemporaryGrantForbiddenResponseBody is the type of the "access"
+// service "revokeTemporaryGrant" endpoint HTTP response body for the
+// "forbidden" error.
+type RevokeTemporaryGrantForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeTemporaryGrantBadRequestResponseBody is the type of the "access"
+// service "revokeTemporaryGrant" endpoint HTTP response body for the
+// "bad_request" error.
+type RevokeTemporaryGrantBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeTemporaryGrantNotFoundResponseBody is the type of the "access" service
+// "revokeTemporaryGrant" endpoint HTTP response body for the "not_found" error.
+type RevokeTemporaryGrantNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeTemporaryGrantConflictResponseBody is the type of the "access" service
+// "revokeTemporaryGrant" endpoint HTTP response body for the "conflict" error.
+type RevokeTemporaryGrantConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeTemporaryGrantUnsupportedMediaResponseBody is the type of the "access"
+// service "revokeTemporaryGrant" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RevokeTemporaryGrantUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeTemporaryGrantInvalidResponseBody is the type of the "access" service
+// "revokeTemporaryGrant" endpoint HTTP response body for the "invalid" error.
+type RevokeTemporaryGrantInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeTemporaryGrantInvariantViolationResponseBody is the type of the
+// "access" service "revokeTemporaryGrant" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RevokeTemporaryGrantInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeTemporaryGrantUnexpectedResponseBody is the type of the "access"
+// service "revokeTemporaryGrant" endpoint HTTP response body for the
+// "unexpected" error.
+type RevokeTemporaryGrantUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RevokeTemporaryGrantGatewayErrorResponseBody is the type of the "access"
+// service "revokeTemporaryGrant" endpoint HTTP response body for the
+// "gateway_error" error.
+type RevokeTemporaryGrantGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RoleResponseBody is used to define fields on response body types.
 type RoleResponseBody struct {
 	// Unique role identifier.
@@ -8394,10 +9473,25 @@ type DirectoryReviewItemResponseBody struct {
 type ScopeDefinitionResponseBody struct {
 	// Unique scope identifier.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// What this scope protects.
+	// Short name for the permission as people see it, e.g. "View tool logs".
+	Label string `form:"label" json:"label" xml:"label"`
+	// What a holder of this scope can do and, where it matters, what the scope
+	// does not include.
 	Description string `form:"description" json:"description" xml:"description"`
 	// The type of resource this scope applies to.
 	ResourceType string `form:"resource_type" json:"resource_type" xml:"resource_type"`
+	// How the dashboard groups the permission. Differs from resource_type where
+	// one resource type carries several permission families: plugins and tool logs
+	// are checked against a project but are not project permissions.
+	Category string `form:"category" json:"category" xml:"category"`
+	// Whether granting this scope exposes other members' private activity or
+	// allows destructive administration. Clients warn before granting it.
+	Sensitive bool `form:"sensitive" json:"sensitive" xml:"sensitive"`
+	// Why the scope is sensitive. Absent when sensitive is false.
+	Sensitivity *string `form:"sensitivity,omitempty" json:"sensitivity,omitempty" xml:"sensitivity,omitempty"`
+	// User-visible scopes a grant of this scope also satisfies, one step down:
+	// org:admin also satisfies org:read. Empty when the scope implies nothing else.
+	SubScopes []string `form:"sub_scopes" json:"sub_scopes" xml:"sub_scopes"`
 	// Whether this scope is a first-class permission or an internal
 	// storage/evaluation scope.
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
@@ -8407,6 +9501,16 @@ type ScopeDefinitionResponseBody struct {
 	AgentEligible bool `form:"agent_eligible" json:"agent_eligible" xml:"agent_eligible"`
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
+}
+
+// ScopeTaskResponseBody is used to define fields on response body types.
+type ScopeTaskResponseBody struct {
+	// Stable identifier of the task.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// What a person is trying to do.
+	Label string `form:"label" json:"label" xml:"label"`
+	// Every scope the task needs end to end.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 }
 
 // AccessMemberResponseBody is used to define fields on response body types.
@@ -8947,6 +10051,35 @@ type AccessibleSkillResponseBody struct {
 	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
 }
 
+// TemporaryGrantResponseBody is used to define fields on response body types.
+type TemporaryGrantResponseBody struct {
+	// Temporary grant ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN holding the access.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// The scope given.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// The resource or activity boundary.
+	Selector *SelectorResponseBody `form:"selector" json:"selector" xml:"selector"`
+	// When the grant stops, or stopped, authorizing new requests.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+	// active: authorizing requests. expired: its deadline passed. revoked: ended
+	// early by this request.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Seconds until the deadline while active; 0 once ended.
+	RemainingSeconds int64 `form:"remaining_seconds" json:"remaining_seconds" xml:"remaining_seconds"`
+	// For an active grant, the principal URNs of the holder's other grants that
+	// already give the same access: for a member or agent, a role, everyone
+	// (user:all), or the holder itself for a grant made to it directly; for a role
+	// or everyone, only that principal's own other grants. Access through these
+	// remains when this grant ends. Empty for ended grants and when this grant is
+	// the only route.
+	OtherAccess []string `form:"other_access" json:"other_access" xml:"other_access"`
+	// When the grant was given, or restarted after expiring.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // RoleGrantRequestBody is used to define fields on request body types.
 type RoleGrantRequestBody struct {
 	// The scope slug this grant applies to.
@@ -9437,6 +10570,37 @@ func NewUpdateDirectoryReviewSettingsResponseBody(res *access.DirectoryReviewSet
 // the "listScopes" endpoint of the "access" service.
 func NewListScopesResponseBody(res *access.ListScopesResult) *ListScopesResponseBody {
 	body := &ListScopesResponseBody{}
+	if res.Scopes != nil {
+		body.Scopes = make([]*ScopeDefinitionResponseBody, len(res.Scopes))
+		for i, val := range res.Scopes {
+			if val == nil {
+				body.Scopes[i] = nil
+				continue
+			}
+			body.Scopes[i] = marshalAccessScopeDefinitionToScopeDefinitionResponseBody(val)
+		}
+	} else {
+		body.Scopes = []*ScopeDefinitionResponseBody{}
+	}
+	if res.Tasks != nil {
+		body.Tasks = make([]*ScopeTaskResponseBody, len(res.Tasks))
+		for i, val := range res.Tasks {
+			if val == nil {
+				body.Tasks[i] = nil
+				continue
+			}
+			body.Tasks[i] = marshalAccessScopeTaskToScopeTaskResponseBody(val)
+		}
+	} else {
+		body.Tasks = []*ScopeTaskResponseBody{}
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesResponseBody builds the HTTP response body from the
+// result of the "listAgentPolicyScopes" endpoint of the "access" service.
+func NewListAgentPolicyScopesResponseBody(res *access.ListAgentPolicyScopesResult) *ListAgentPolicyScopesResponseBody {
+	body := &ListAgentPolicyScopesResponseBody{}
 	if res.Scopes != nil {
 		body.Scopes = make([]*ScopeDefinitionResponseBody, len(res.Scopes))
 		for i, val := range res.Scopes {
@@ -9975,6 +11139,106 @@ func NewListIdentityAccessResponseBody(res *access.ListIdentityAccessResult) *Li
 		}
 	} else {
 		body.Skills = []*AccessibleSkillResponseBody{}
+	}
+	return body
+}
+
+// NewCreateTemporaryGrantResponseBody builds the HTTP response body from the
+// result of the "createTemporaryGrant" endpoint of the "access" service.
+func NewCreateTemporaryGrantResponseBody(res *access.TemporaryGrant) *CreateTemporaryGrantResponseBody {
+	body := &CreateTemporaryGrantResponseBody{
+		ID:               res.ID,
+		PrincipalUrn:     res.PrincipalUrn,
+		Scope:            res.Scope,
+		ExpiresAt:        res.ExpiresAt,
+		Status:           res.Status,
+		RemainingSeconds: res.RemainingSeconds,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
+	}
+	if res.Selector != nil {
+		body.Selector = marshalAccessSelectorToSelectorResponseBody(res.Selector)
+	}
+	if res.OtherAccess != nil {
+		body.OtherAccess = make([]string, len(res.OtherAccess))
+		for i, val := range res.OtherAccess {
+			body.OtherAccess[i] = val
+		}
+	} else {
+		body.OtherAccess = []string{}
+	}
+	return body
+}
+
+// NewListTemporaryGrantsResponseBody builds the HTTP response body from the
+// result of the "listTemporaryGrants" endpoint of the "access" service.
+func NewListTemporaryGrantsResponseBody(res *access.ListTemporaryGrantsResult) *ListTemporaryGrantsResponseBody {
+	body := &ListTemporaryGrantsResponseBody{}
+	if res.Grants != nil {
+		body.Grants = make([]*TemporaryGrantResponseBody, len(res.Grants))
+		for i, val := range res.Grants {
+			if val == nil {
+				body.Grants[i] = nil
+				continue
+			}
+			body.Grants[i] = marshalAccessTemporaryGrantToTemporaryGrantResponseBody(val)
+		}
+	} else {
+		body.Grants = []*TemporaryGrantResponseBody{}
+	}
+	return body
+}
+
+// NewRenewTemporaryGrantResponseBody builds the HTTP response body from the
+// result of the "renewTemporaryGrant" endpoint of the "access" service.
+func NewRenewTemporaryGrantResponseBody(res *access.TemporaryGrant) *RenewTemporaryGrantResponseBody {
+	body := &RenewTemporaryGrantResponseBody{
+		ID:               res.ID,
+		PrincipalUrn:     res.PrincipalUrn,
+		Scope:            res.Scope,
+		ExpiresAt:        res.ExpiresAt,
+		Status:           res.Status,
+		RemainingSeconds: res.RemainingSeconds,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
+	}
+	if res.Selector != nil {
+		body.Selector = marshalAccessSelectorToSelectorResponseBody(res.Selector)
+	}
+	if res.OtherAccess != nil {
+		body.OtherAccess = make([]string, len(res.OtherAccess))
+		for i, val := range res.OtherAccess {
+			body.OtherAccess[i] = val
+		}
+	} else {
+		body.OtherAccess = []string{}
+	}
+	return body
+}
+
+// NewRevokeTemporaryGrantResponseBody builds the HTTP response body from the
+// result of the "revokeTemporaryGrant" endpoint of the "access" service.
+func NewRevokeTemporaryGrantResponseBody(res *access.TemporaryGrant) *RevokeTemporaryGrantResponseBody {
+	body := &RevokeTemporaryGrantResponseBody{
+		ID:               res.ID,
+		PrincipalUrn:     res.PrincipalUrn,
+		Scope:            res.Scope,
+		ExpiresAt:        res.ExpiresAt,
+		Status:           res.Status,
+		RemainingSeconds: res.RemainingSeconds,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
+	}
+	if res.Selector != nil {
+		body.Selector = marshalAccessSelectorToSelectorResponseBody(res.Selector)
+	}
+	if res.OtherAccess != nil {
+		body.OtherAccess = make([]string, len(res.OtherAccess))
+		for i, val := range res.OtherAccess {
+			body.OtherAccess[i] = val
+		}
+	} else {
+		body.OtherAccess = []string{}
 	}
 	return body
 }
@@ -12607,6 +13871,156 @@ func NewListScopesUnexpectedResponseBody(res *goa.ServiceError) *ListScopesUnexp
 // result of the "listScopes" endpoint of the "access" service.
 func NewListScopesGatewayErrorResponseBody(res *goa.ServiceError) *ListScopesGatewayErrorResponseBody {
 	body := &ListScopesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesUnauthorizedResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesUnauthorizedResponseBody {
+	body := &ListAgentPolicyScopesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesForbiddenResponseBody builds the HTTP response body
+// from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesForbiddenResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesForbiddenResponseBody {
+	body := &ListAgentPolicyScopesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesBadRequestResponseBody builds the HTTP response body
+// from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesBadRequestResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesBadRequestResponseBody {
+	body := &ListAgentPolicyScopesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesNotFoundResponseBody builds the HTTP response body
+// from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesNotFoundResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesNotFoundResponseBody {
+	body := &ListAgentPolicyScopesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesConflictResponseBody builds the HTTP response body
+// from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesConflictResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesConflictResponseBody {
+	body := &ListAgentPolicyScopesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listAgentPolicyScopes" endpoint of the
+// "access" service.
+func NewListAgentPolicyScopesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesUnsupportedMediaResponseBody {
+	body := &ListAgentPolicyScopesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesInvalidResponseBody builds the HTTP response body
+// from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesInvalidResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesInvalidResponseBody {
+	body := &ListAgentPolicyScopesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listAgentPolicyScopes" endpoint of the
+// "access" service.
+func NewListAgentPolicyScopesInvariantViolationResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesInvariantViolationResponseBody {
+	body := &ListAgentPolicyScopesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesUnexpectedResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesUnexpectedResponseBody {
+	body := &ListAgentPolicyScopesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesGatewayErrorResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesGatewayErrorResponseBody {
+	body := &ListAgentPolicyScopesGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -15836,6 +17250,604 @@ func NewListIdentityAccessGatewayErrorResponseBody(res *goa.ServiceError) *ListI
 	return body
 }
 
+// NewCreateTemporaryGrantUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "createTemporaryGrant" endpoint of the "access"
+// service.
+func NewCreateTemporaryGrantUnauthorizedResponseBody(res *goa.ServiceError) *CreateTemporaryGrantUnauthorizedResponseBody {
+	body := &CreateTemporaryGrantUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTemporaryGrantForbiddenResponseBody builds the HTTP response body
+// from the result of the "createTemporaryGrant" endpoint of the "access"
+// service.
+func NewCreateTemporaryGrantForbiddenResponseBody(res *goa.ServiceError) *CreateTemporaryGrantForbiddenResponseBody {
+	body := &CreateTemporaryGrantForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTemporaryGrantBadRequestResponseBody builds the HTTP response body
+// from the result of the "createTemporaryGrant" endpoint of the "access"
+// service.
+func NewCreateTemporaryGrantBadRequestResponseBody(res *goa.ServiceError) *CreateTemporaryGrantBadRequestResponseBody {
+	body := &CreateTemporaryGrantBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTemporaryGrantNotFoundResponseBody builds the HTTP response body
+// from the result of the "createTemporaryGrant" endpoint of the "access"
+// service.
+func NewCreateTemporaryGrantNotFoundResponseBody(res *goa.ServiceError) *CreateTemporaryGrantNotFoundResponseBody {
+	body := &CreateTemporaryGrantNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTemporaryGrantConflictResponseBody builds the HTTP response body
+// from the result of the "createTemporaryGrant" endpoint of the "access"
+// service.
+func NewCreateTemporaryGrantConflictResponseBody(res *goa.ServiceError) *CreateTemporaryGrantConflictResponseBody {
+	body := &CreateTemporaryGrantConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTemporaryGrantUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createTemporaryGrant" endpoint of the "access"
+// service.
+func NewCreateTemporaryGrantUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateTemporaryGrantUnsupportedMediaResponseBody {
+	body := &CreateTemporaryGrantUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTemporaryGrantInvalidResponseBody builds the HTTP response body
+// from the result of the "createTemporaryGrant" endpoint of the "access"
+// service.
+func NewCreateTemporaryGrantInvalidResponseBody(res *goa.ServiceError) *CreateTemporaryGrantInvalidResponseBody {
+	body := &CreateTemporaryGrantInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTemporaryGrantInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createTemporaryGrant" endpoint of the
+// "access" service.
+func NewCreateTemporaryGrantInvariantViolationResponseBody(res *goa.ServiceError) *CreateTemporaryGrantInvariantViolationResponseBody {
+	body := &CreateTemporaryGrantInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTemporaryGrantUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createTemporaryGrant" endpoint of the "access"
+// service.
+func NewCreateTemporaryGrantUnexpectedResponseBody(res *goa.ServiceError) *CreateTemporaryGrantUnexpectedResponseBody {
+	body := &CreateTemporaryGrantUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTemporaryGrantGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "createTemporaryGrant" endpoint of the "access"
+// service.
+func NewCreateTemporaryGrantGatewayErrorResponseBody(res *goa.ServiceError) *CreateTemporaryGrantGatewayErrorResponseBody {
+	body := &CreateTemporaryGrantGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTemporaryGrantsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listTemporaryGrants" endpoint of the "access"
+// service.
+func NewListTemporaryGrantsUnauthorizedResponseBody(res *goa.ServiceError) *ListTemporaryGrantsUnauthorizedResponseBody {
+	body := &ListTemporaryGrantsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTemporaryGrantsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listTemporaryGrants" endpoint of the "access"
+// service.
+func NewListTemporaryGrantsForbiddenResponseBody(res *goa.ServiceError) *ListTemporaryGrantsForbiddenResponseBody {
+	body := &ListTemporaryGrantsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTemporaryGrantsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listTemporaryGrants" endpoint of the "access"
+// service.
+func NewListTemporaryGrantsBadRequestResponseBody(res *goa.ServiceError) *ListTemporaryGrantsBadRequestResponseBody {
+	body := &ListTemporaryGrantsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTemporaryGrantsNotFoundResponseBody builds the HTTP response body
+// from the result of the "listTemporaryGrants" endpoint of the "access"
+// service.
+func NewListTemporaryGrantsNotFoundResponseBody(res *goa.ServiceError) *ListTemporaryGrantsNotFoundResponseBody {
+	body := &ListTemporaryGrantsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTemporaryGrantsConflictResponseBody builds the HTTP response body
+// from the result of the "listTemporaryGrants" endpoint of the "access"
+// service.
+func NewListTemporaryGrantsConflictResponseBody(res *goa.ServiceError) *ListTemporaryGrantsConflictResponseBody {
+	body := &ListTemporaryGrantsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTemporaryGrantsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listTemporaryGrants" endpoint of the "access"
+// service.
+func NewListTemporaryGrantsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListTemporaryGrantsUnsupportedMediaResponseBody {
+	body := &ListTemporaryGrantsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTemporaryGrantsInvalidResponseBody builds the HTTP response body from
+// the result of the "listTemporaryGrants" endpoint of the "access" service.
+func NewListTemporaryGrantsInvalidResponseBody(res *goa.ServiceError) *ListTemporaryGrantsInvalidResponseBody {
+	body := &ListTemporaryGrantsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTemporaryGrantsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listTemporaryGrants" endpoint of the
+// "access" service.
+func NewListTemporaryGrantsInvariantViolationResponseBody(res *goa.ServiceError) *ListTemporaryGrantsInvariantViolationResponseBody {
+	body := &ListTemporaryGrantsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTemporaryGrantsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listTemporaryGrants" endpoint of the "access"
+// service.
+func NewListTemporaryGrantsUnexpectedResponseBody(res *goa.ServiceError) *ListTemporaryGrantsUnexpectedResponseBody {
+	body := &ListTemporaryGrantsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTemporaryGrantsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listTemporaryGrants" endpoint of the "access"
+// service.
+func NewListTemporaryGrantsGatewayErrorResponseBody(res *goa.ServiceError) *ListTemporaryGrantsGatewayErrorResponseBody {
+	body := &ListTemporaryGrantsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenewTemporaryGrantUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "renewTemporaryGrant" endpoint of the "access"
+// service.
+func NewRenewTemporaryGrantUnauthorizedResponseBody(res *goa.ServiceError) *RenewTemporaryGrantUnauthorizedResponseBody {
+	body := &RenewTemporaryGrantUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenewTemporaryGrantForbiddenResponseBody builds the HTTP response body
+// from the result of the "renewTemporaryGrant" endpoint of the "access"
+// service.
+func NewRenewTemporaryGrantForbiddenResponseBody(res *goa.ServiceError) *RenewTemporaryGrantForbiddenResponseBody {
+	body := &RenewTemporaryGrantForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenewTemporaryGrantBadRequestResponseBody builds the HTTP response body
+// from the result of the "renewTemporaryGrant" endpoint of the "access"
+// service.
+func NewRenewTemporaryGrantBadRequestResponseBody(res *goa.ServiceError) *RenewTemporaryGrantBadRequestResponseBody {
+	body := &RenewTemporaryGrantBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenewTemporaryGrantNotFoundResponseBody builds the HTTP response body
+// from the result of the "renewTemporaryGrant" endpoint of the "access"
+// service.
+func NewRenewTemporaryGrantNotFoundResponseBody(res *goa.ServiceError) *RenewTemporaryGrantNotFoundResponseBody {
+	body := &RenewTemporaryGrantNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenewTemporaryGrantConflictResponseBody builds the HTTP response body
+// from the result of the "renewTemporaryGrant" endpoint of the "access"
+// service.
+func NewRenewTemporaryGrantConflictResponseBody(res *goa.ServiceError) *RenewTemporaryGrantConflictResponseBody {
+	body := &RenewTemporaryGrantConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenewTemporaryGrantUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "renewTemporaryGrant" endpoint of the "access"
+// service.
+func NewRenewTemporaryGrantUnsupportedMediaResponseBody(res *goa.ServiceError) *RenewTemporaryGrantUnsupportedMediaResponseBody {
+	body := &RenewTemporaryGrantUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenewTemporaryGrantInvalidResponseBody builds the HTTP response body from
+// the result of the "renewTemporaryGrant" endpoint of the "access" service.
+func NewRenewTemporaryGrantInvalidResponseBody(res *goa.ServiceError) *RenewTemporaryGrantInvalidResponseBody {
+	body := &RenewTemporaryGrantInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenewTemporaryGrantInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "renewTemporaryGrant" endpoint of the
+// "access" service.
+func NewRenewTemporaryGrantInvariantViolationResponseBody(res *goa.ServiceError) *RenewTemporaryGrantInvariantViolationResponseBody {
+	body := &RenewTemporaryGrantInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenewTemporaryGrantUnexpectedResponseBody builds the HTTP response body
+// from the result of the "renewTemporaryGrant" endpoint of the "access"
+// service.
+func NewRenewTemporaryGrantUnexpectedResponseBody(res *goa.ServiceError) *RenewTemporaryGrantUnexpectedResponseBody {
+	body := &RenewTemporaryGrantUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRenewTemporaryGrantGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "renewTemporaryGrant" endpoint of the "access"
+// service.
+func NewRenewTemporaryGrantGatewayErrorResponseBody(res *goa.ServiceError) *RenewTemporaryGrantGatewayErrorResponseBody {
+	body := &RenewTemporaryGrantGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeTemporaryGrantUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "revokeTemporaryGrant" endpoint of the "access"
+// service.
+func NewRevokeTemporaryGrantUnauthorizedResponseBody(res *goa.ServiceError) *RevokeTemporaryGrantUnauthorizedResponseBody {
+	body := &RevokeTemporaryGrantUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeTemporaryGrantForbiddenResponseBody builds the HTTP response body
+// from the result of the "revokeTemporaryGrant" endpoint of the "access"
+// service.
+func NewRevokeTemporaryGrantForbiddenResponseBody(res *goa.ServiceError) *RevokeTemporaryGrantForbiddenResponseBody {
+	body := &RevokeTemporaryGrantForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeTemporaryGrantBadRequestResponseBody builds the HTTP response body
+// from the result of the "revokeTemporaryGrant" endpoint of the "access"
+// service.
+func NewRevokeTemporaryGrantBadRequestResponseBody(res *goa.ServiceError) *RevokeTemporaryGrantBadRequestResponseBody {
+	body := &RevokeTemporaryGrantBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeTemporaryGrantNotFoundResponseBody builds the HTTP response body
+// from the result of the "revokeTemporaryGrant" endpoint of the "access"
+// service.
+func NewRevokeTemporaryGrantNotFoundResponseBody(res *goa.ServiceError) *RevokeTemporaryGrantNotFoundResponseBody {
+	body := &RevokeTemporaryGrantNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeTemporaryGrantConflictResponseBody builds the HTTP response body
+// from the result of the "revokeTemporaryGrant" endpoint of the "access"
+// service.
+func NewRevokeTemporaryGrantConflictResponseBody(res *goa.ServiceError) *RevokeTemporaryGrantConflictResponseBody {
+	body := &RevokeTemporaryGrantConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeTemporaryGrantUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "revokeTemporaryGrant" endpoint of the "access"
+// service.
+func NewRevokeTemporaryGrantUnsupportedMediaResponseBody(res *goa.ServiceError) *RevokeTemporaryGrantUnsupportedMediaResponseBody {
+	body := &RevokeTemporaryGrantUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeTemporaryGrantInvalidResponseBody builds the HTTP response body
+// from the result of the "revokeTemporaryGrant" endpoint of the "access"
+// service.
+func NewRevokeTemporaryGrantInvalidResponseBody(res *goa.ServiceError) *RevokeTemporaryGrantInvalidResponseBody {
+	body := &RevokeTemporaryGrantInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeTemporaryGrantInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "revokeTemporaryGrant" endpoint of the
+// "access" service.
+func NewRevokeTemporaryGrantInvariantViolationResponseBody(res *goa.ServiceError) *RevokeTemporaryGrantInvariantViolationResponseBody {
+	body := &RevokeTemporaryGrantInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeTemporaryGrantUnexpectedResponseBody builds the HTTP response body
+// from the result of the "revokeTemporaryGrant" endpoint of the "access"
+// service.
+func NewRevokeTemporaryGrantUnexpectedResponseBody(res *goa.ServiceError) *RevokeTemporaryGrantUnexpectedResponseBody {
+	body := &RevokeTemporaryGrantUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRevokeTemporaryGrantGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "revokeTemporaryGrant" endpoint of the "access"
+// service.
+func NewRevokeTemporaryGrantGatewayErrorResponseBody(res *goa.ServiceError) *RevokeTemporaryGrantGatewayErrorResponseBody {
+	body := &RevokeTemporaryGrantGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListRolesPayload builds a access service listRoles endpoint payload.
 func NewListRolesPayload(apikeyToken *string, sessionToken *string) *access.ListRolesPayload {
 	v := &access.ListRolesPayload{}
@@ -16138,6 +18150,15 @@ func NewListScopesPayload(apikeyToken *string, sessionToken *string) *access.Lis
 	return v
 }
 
+// NewListAgentPolicyScopesPayload builds a access service
+// listAgentPolicyScopes endpoint payload.
+func NewListAgentPolicyScopesPayload(sessionToken *string) *access.ListAgentPolicyScopesPayload {
+	v := &access.ListAgentPolicyScopesPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewListMembersPayload builds a access service listMembers endpoint payload.
 func NewListMembersPayload(apikeyToken *string, sessionToken *string) *access.ListMembersPayload {
 	v := &access.ListMembersPayload{}
@@ -16372,11 +18393,12 @@ func NewRequestAccessPayload(body *RequestAccessRequestBody, apikeyToken *string
 
 // NewListChallengesPayload builds a access service listChallenges endpoint
 // payload.
-func NewListChallengesPayload(outcome *string, principalUrn *string, scope *string, projectID *string, resolved *bool, ids []string, from *string, to *string, limit int, offset int, apikeyToken *string, sessionToken *string) *access.ListChallengesPayload {
+func NewListChallengesPayload(outcome *string, principalUrn *string, scope *string, excludeScopes []string, projectID *string, resolved *bool, ids []string, from *string, to *string, limit int, offset int, apikeyToken *string, sessionToken *string) *access.ListChallengesPayload {
 	v := &access.ListChallengesPayload{}
 	v.Outcome = outcome
 	v.PrincipalUrn = principalUrn
 	v.Scope = scope
+	v.ExcludeScopes = excludeScopes
 	v.ProjectID = projectID
 	v.Resolved = resolved
 	v.Ids = ids
@@ -16434,6 +18456,57 @@ func NewResolveChallengePayload(body *ResolveChallengeRequestBody, apikeyToken *
 func NewListIdentityAccessPayload(userID string, sessionToken *string) *access.ListIdentityAccessPayload {
 	v := &access.ListIdentityAccessPayload{}
 	v.UserID = userID
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewCreateTemporaryGrantPayload builds a access service createTemporaryGrant
+// endpoint payload.
+func NewCreateTemporaryGrantPayload(body *CreateTemporaryGrantRequestBody, sessionToken *string) *access.CreateTemporaryGrantPayload {
+	v := &access.CreateTemporaryGrantPayload{
+		PrincipalUrn: *body.PrincipalUrn,
+		Scope:        *body.Scope,
+		ExpiresAt:    *body.ExpiresAt,
+		Reason:       body.Reason,
+	}
+	if body.Selector != nil {
+		v.Selector = unmarshalSelectorRequestBodyToAccessSelector(body.Selector)
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListTemporaryGrantsPayload builds a access service listTemporaryGrants
+// endpoint payload.
+func NewListTemporaryGrantsPayload(principalUrn string, includeExpired bool, sessionToken *string) *access.ListTemporaryGrantsPayload {
+	v := &access.ListTemporaryGrantsPayload{}
+	v.PrincipalUrn = principalUrn
+	v.IncludeExpired = includeExpired
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewRenewTemporaryGrantPayload builds a access service renewTemporaryGrant
+// endpoint payload.
+func NewRenewTemporaryGrantPayload(body *RenewTemporaryGrantRequestBody, sessionToken *string) *access.RenewTemporaryGrantPayload {
+	v := &access.RenewTemporaryGrantPayload{
+		ID:        *body.ID,
+		ExpiresAt: *body.ExpiresAt,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewRevokeTemporaryGrantPayload builds a access service revokeTemporaryGrant
+// endpoint payload.
+func NewRevokeTemporaryGrantPayload(body *RevokeTemporaryGrantRequestBody, sessionToken *string) *access.RevokeTemporaryGrantPayload {
+	v := &access.RevokeTemporaryGrantPayload{
+		ID: *body.ID,
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -16748,8 +18821,8 @@ func ValidateRequestAccessRequestBody(body *RequestAccessRequestBody) (err error
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write" || *body.Scope == "skill:read" || *body.Scope == "skill:write" || *body.Scope == "plugin:write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "inference:execute" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write" || *body.Scope == "skill:read" || *body.Scope == "skill:write" || *body.Scope == "plugin:write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "inference:execute" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest" || *body.Scope == "channels:connect" || *body.Scope == "channels:admin" || *body.Scope == "channels:read_all") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all"}))
 		}
 	}
 	if body.Message != nil {
@@ -16786,6 +18859,64 @@ func ValidateResolveChallengeRequestBody(body *ResolveChallengeRequestBody) (err
 	return
 }
 
+// ValidateCreateTemporaryGrantRequestBody runs the validations defined on
+// CreateTemporaryGrantRequestBody
+func ValidateCreateTemporaryGrantRequestBody(body *CreateTemporaryGrantRequestBody) (err error) {
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.ExpiresAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expires_at", "body"))
+	}
+	if body.Selector != nil {
+		if err2 := ValidateSelectorRequestBody(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	if body.Reason != nil {
+		if utf8.RuneCountInString(*body.Reason) > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 1000, false))
+		}
+	}
+	return
+}
+
+// ValidateRenewTemporaryGrantRequestBody runs the validations defined on
+// RenewTemporaryGrantRequestBody
+func ValidateRenewTemporaryGrantRequestBody(body *RenewTemporaryGrantRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ExpiresAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expires_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRevokeTemporaryGrantRequestBody runs the validations defined on
+// RevokeTemporaryGrantRequestBody
+func ValidateRevokeTemporaryGrantRequestBody(body *RevokeTemporaryGrantRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateRoleGrantRequestBody runs the validations defined on
 // RoleGrantRequestBody
 func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
@@ -16793,8 +18924,8 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "mcp:auth" || *body.Scope == "mcp:blocked_auth" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "inference:execute" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest" || *body.Scope == "channels:connect" || *body.Scope == "channels:admin" || *body.Scope == "channels:read_all" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "mcp:auth" || *body.Scope == "mcp:blocked_auth" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "memory:read" || *body.Scope == "memory:write" || *body.Scope == "inference:execute" || *body.Scope == "log:read" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "memory:read", "memory:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write"}))
 		}
 	}
 	for _, e := range body.Selectors {

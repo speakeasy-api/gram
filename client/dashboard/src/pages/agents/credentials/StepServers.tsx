@@ -18,6 +18,8 @@ import type { InventoryServer } from "./useServerInventory";
 export interface ServerSelection {
   server: InventoryServer;
   tools?: string[];
+  /** The shared credential the key uses on a server that offers several. */
+  authClientId?: string;
 }
 
 /** Why "All servers" cannot be turned on, said beside it. */
@@ -267,7 +269,7 @@ export function StepServers({
                   <li
                     key={server.id}
                     className={cn(
-                      "flex items-center pr-4",
+                      "flex flex-wrap items-center pr-4",
                       !locked && checked && "bg-accent/40",
                       !locked && !checked && "hover:bg-muted/40",
                     )}

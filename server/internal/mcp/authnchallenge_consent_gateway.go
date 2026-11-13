@@ -79,6 +79,16 @@ type gatewayServer struct {
 	Hidden bool
 	// cardIDs are the services the server signs in through.
 	cardIDs []string
+
+	// providerOutage marks a service of this server a provider outage stopped, which reconnecting may repair.
+	providerOutage bool
+
+	// connectionDown marks a service of this server any recorded outage stopped.
+	connectionDown bool
+
+	// Auth is the server's upstream credential choice, where typed auth
+	// client resolution is enforced.
+	Auth *consentServerAuth
 }
 
 // Ready reports whether the server works without any further action.
@@ -96,7 +106,7 @@ func (g gatewayServer) Ready() bool {
 func (g gatewayServer) StatusLabel() string {
 	switch g.Status {
 	case gatewayServerUnavailable:
-		return "Unavailable · try again later"
+		return "Unavailable · try again shortly, or ask your administrator"
 	case gatewayServerNoAccess:
 		return "No access"
 	case gatewayServerNoSignIn:
@@ -119,7 +129,17 @@ func (g gatewayServer) StatusLabel() string {
 
 // NeedsAttention reports whether the status line should warn.
 func (g gatewayServer) NeedsAttention() bool {
-	return g.Status == gatewayServerReconnect || g.Status == gatewayServerNotSetUp
+	return g.Status == gatewayServerReconnect || g.Status == gatewayServerNotSetUp || g.reconnectsOutage()
+}
+
+// ConnectionUnavailable reports a server a recorded outage stopped; its page keeps Refresh in reach.
+func (g gatewayServer) ConnectionUnavailable() bool {
+	return g.Status == gatewayServerUnavailable && g.connectionDown
+}
+
+// reconnectsOutage reports an unavailable server whose connection a person can try replacing.
+func (g gatewayServer) reconnectsOutage() bool {
+	return g.Status == gatewayServerUnavailable && g.providerOutage
 }
 
 // NeedsSignIn reports whether the server signs in through a service the
@@ -139,6 +159,9 @@ func (g gatewayServer) NotSetUp() bool {
 type gatewayConsentView struct {
 	members []metaMember
 	cards   []remoteSessionCard
+	// auth is each proxied member's credential choice, by server, where
+	// typed auth client resolution is enforced.
+	auth map[uuid.UUID]*consentServerAuth
 	// Servers are the servers the person can reach through the gateway,
 	// those needing action first.
 	Servers    []gatewayServer
@@ -288,19 +311,21 @@ func (s *Service) gatewayConsent(
 // server, from the member's own project unless no project owns it, the same
 // match clientServesAnyMember makes.
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
-	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards}
+	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, Auth: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
 				server.Status = strongerStatus(server.Status, cardStatus(card))
+				server.providerOutage = server.providerOutage || (card.Unavailable && !card.UnavailableTunnel)
+				server.connectionDown = server.connectionDown || card.Unavailable
 			}
 		}
 		if memberNeedsSignIn(member) && len(server.cardIDs) == 0 {
 			server.Status = gatewayServerNotSetUp
 		}
-		if len(server.cardIDs) == 1 && (server.Status == gatewayServerNotConnected || server.Status == gatewayServerReconnect) {
+		if len(server.cardIDs) == 1 && (server.Status == gatewayServerNotConnected || server.Status == gatewayServerReconnect || server.reconnectsOutage()) {
 			server.ConnectClientID = server.cardIDs[0]
 		}
 		view.Servers = append(view.Servers, server)
@@ -321,8 +346,14 @@ func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
 				break
 			}
 		}
+		for _, member := range v.members {
+			if member.slug == server.Slug {
+				server.Auth = v.auth[member.serverID]
+				break
+			}
+		}
 		server.ConnectClientID = ""
-		if len(server.cardIDs) == 1 && (server.Status == gatewayServerReconnect || server.Status == gatewayServerNotConnected) {
+		if len(server.cardIDs) == 1 && (server.Status == gatewayServerReconnect || server.Status == gatewayServerNotConnected || server.reconnectsOutage()) {
 			server.ConnectClientID = server.cardIDs[0]
 		}
 	}
@@ -344,8 +375,16 @@ func cardServesMember(card remoteSessionCard, member metaMember) bool {
 	return memberUsesClient(member, clientID, card.remoteSessionIssuerID, card.projectID)
 }
 
+// reconnectsDespiteOutage is a connection that an outage ending would not fix: refused, inactive, or missing openid.
+func (c remoteSessionCard) reconnectsDespiteOutage() bool {
+	return c.Rejected || c.Inactive || c.IdentityReconnect
+}
+
 // cardStatus is the status one service gives the servers it signs in to.
 func cardStatus(card remoteSessionCard) gatewayServerStatus {
+	if card.Unavailable {
+		return gatewayServerUnavailable
+	}
 	reconnect := card.Expired || card.Unroutable || card.IdentityReconnect || card.Rejected || card.Inactive
 	switch {
 	case card.Connected && !reconnect:
@@ -451,9 +490,18 @@ func gatewayServerConnectURL(endpointRoot string, serverSlug string) string {
 
 // memberConnectURL is the URL a person opens to connect member on this
 // gateway, or empty when the gateway has no connect pages or the member signs
-// in through no service.
+// in through no service. Where the typed auth client resolver judged the
+// member under enforcement, the service is the registration its choice names.
+// A choice that cannot serve still links, since consent can offer another,
+// unless the server needs no upstream authentication or the choice is a stale
+// no-auth one, which only a new consent replaces. The authorization server
+// derived for the member decides nothing there.
 func (g metaGateContext) memberConnectURL(member metaMember) string {
-	if g.connectRoot == "" || !member.remoteSessionIssuerID.Valid {
+	signsIn := member.remoteSessionIssuerID.Valid
+	if res := member.authClient; g.memberChoices != nil && g.memberChoices.enforced && res != nil {
+		signsIn = member.chosenClientID.Valid || (res.outcome == authClientGap && !res.noAuthAllowed && !res.staleNoAuth())
+	}
+	if g.connectRoot == "" || !signsIn {
 		return ""
 	}
 	return gatewayServerConnectURL(g.connectRoot, member.slug)

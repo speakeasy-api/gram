@@ -50,11 +50,32 @@ const PROVIDER_PRESETS: Record<ProviderKey, ProviderPreset> = {
     tokenizerMin: "1.00",
     tokenizerMax: "1.00",
   },
+  // Grok 4.7's tokenizer is unpublished, so this was measured through the API:
+  // its prompt-token counts ran 1.05–1.13 per o200k_base token across samples
+  // of English prose, code, config and SQL (1.09 overall).
+  spacexsi: { label: "SpaceXSI", tokenizerMin: "1.05", tokenizerMax: "1.13" },
+  // Calibrated for Composer 2.5, which is built on Kimi K2.5. Kimi K2.5's
+  // prompt-token counts through the API ran 0.99–1.00 per o200k_base token
+  // across English prose, code, config and SQL, matching its published
+  // 164K-vocab tokenizer. Claude or GPT usage routed through Cursor belongs in
+  // its vendor's row.
+  cursor: {
+    label: "Cursor",
+    tokenizerMin: "1.00",
+    tokenizerMax: "1.00",
+  },
   other: { label: "Other", tokenizerMin: "1.00", tokenizerMax: "1.00" },
 };
 
 // The picker's order. `other` last, because it is the one that asks for more.
-const PROVIDER_KEYS: ProviderKey[] = ["openai", "anthropic", "gemini", "other"];
+const PROVIDER_KEYS: ProviderKey[] = [
+  "openai",
+  "anthropic",
+  "gemini",
+  "spacexsi",
+  "cursor",
+  "other",
+];
 
 const integerFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
@@ -536,12 +557,12 @@ function MethodSection(): JSX.Element {
         </p>
       </div>
 
-      <p className="flex flex-wrap items-baseline gap-3 border-t pt-4 text-sm">
+      <div className="flex flex-wrap items-baseline gap-3 border-t pt-4 text-sm">
         <SectionIndex>Anthropic example</SectionIndex>
         <code className="font-mono">
           120M provider tokens at R = 1.20–1.60 → 25M–50M s-tokens.
         </code>
-      </p>
+      </div>
 
       <p className="border-t pt-4 text-sm font-medium">
         Quote estimate, not measured usage. This band combines the outer

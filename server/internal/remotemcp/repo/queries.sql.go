@@ -517,6 +517,60 @@ func (q *Queries) ListMcpServerIDsByRemoteURL(ctx context.Context, arg ListMcpSe
 	return items, nil
 }
 
+const listServerHeaderMetadata = `-- name: ListServerHeaderMetadata :many
+SELECT h.remote_mcp_server_id, h.name, h.is_required, h.is_secret, h.value_from_request_header,
+       (h.value IS NOT NULL)::boolean AS has_stored_value
+FROM remote_mcp_server_headers AS h
+JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
+JOIN projects AS p ON p.id = r.project_id AND p.deleted IS FALSE
+WHERE h.remote_mcp_server_id = ANY($1::uuid[])
+  AND p.organization_id = $2
+  AND h.deleted IS FALSE
+ORDER BY h.name
+`
+
+type ListServerHeaderMetadataParams struct {
+	RemoteMcpServerIds []uuid.UUID
+	OrganizationID     string
+}
+
+type ListServerHeaderMetadataRow struct {
+	RemoteMcpServerID      uuid.UUID
+	Name                   string
+	IsRequired             bool
+	IsSecret               bool
+	ValueFromRequestHeader pgtype.Text
+	HasStoredValue         bool
+}
+
+// Discovery checks header sources without reading credential values.
+func (q *Queries) ListServerHeaderMetadata(ctx context.Context, arg ListServerHeaderMetadataParams) ([]ListServerHeaderMetadataRow, error) {
+	rows, err := q.db.Query(ctx, listServerHeaderMetadata, arg.RemoteMcpServerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServerHeaderMetadataRow
+	for rows.Next() {
+		var i ListServerHeaderMetadataRow
+		if err := rows.Scan(
+			&i.RemoteMcpServerID,
+			&i.Name,
+			&i.IsRequired,
+			&i.IsSecret,
+			&i.ValueFromRequestHeader,
+			&i.HasStoredValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServerHeaders = `-- name: ListServerHeaders :many
 SELECT id, remote_mcp_server_id, name, description, is_required, is_secret, value, value_from_request_header, created_at, updated_at, deleted_at, deleted
 FROM remote_mcp_server_headers
@@ -603,6 +657,27 @@ func (q *Queries) ListServersByProjectID(ctx context.Context, projectID uuid.UUI
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockLiveProjectForRemoteMCPProvisioning = `-- name: LockLiveProjectForRemoteMCPProvisioning :one
+SELECT id
+FROM projects
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockLiveProjectForRemoteMCPProvisioningParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockLiveProjectForRemoteMCPProvisioning(ctx context.Context, arg LockLiveProjectForRemoteMCPProvisioningParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLiveProjectForRemoteMCPProvisioning, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const recordRemoteProtectedResourceChallengeScopes = `-- name: RecordRemoteProtectedResourceChallengeScopes :execrows

@@ -81,11 +81,12 @@ func TestRuntimeScopeAllowlist(t *testing.T) {
 	unsafe := []authz.Scope{
 		authz.Scope("unknown:scope"),
 		authz.ScopeRoot,
-		authz.ScopeOrgRead, authz.ScopeOrgBlockedRead, authz.ScopeOrgAdmin, authz.ScopeOrgBlockedAdmin,
+		authz.ScopeOrgAdmin,
 		authz.ScopePluginWrite, authz.ScopePluginBlockedWrite,
 		authz.ScopeRiskPolicyBypass, authz.ScopeRiskPolicyBlock,
 		authz.ScopeChatRead, authz.ScopeChatWrite,
 		authz.ScopeLogRead,
+		authz.ScopeMemoryRead, authz.ScopeMemoryWrite,
 		authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer,
 		scopeMCPApprovalReadTombstone, scopeMCPApprovalDecideTombstone,
 	}
@@ -98,7 +99,8 @@ func TestRuntimeScopeAllowlist(t *testing.T) {
 func TestRuntimeScopeImplicationClosure(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, []authz.Scope{authz.ScopeMCPConnect, authz.ScopeMCPRead, authz.ScopeMCPWrite}, authz.ScopeImplicationClosure(authz.ScopeMCPWrite))
+	require.Equal(t, []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrite}, authz.ScopeImplicationClosure(authz.ScopeMCPWrite))
+	require.Equal(t, []authz.Scope{authz.ScopeMCPConnect}, authz.ScopeImplicationClosure(authz.ScopeMCPConnect))
 	require.Equal(t, []authz.Scope{authz.ScopeProjectRead, authz.ScopeProjectWrite}, authz.ScopeImplicationClosure(authz.ScopeProjectWrite))
 	require.Equal(t, []authz.Scope{authz.ScopeSkillRead}, authz.ScopeImplicationClosure(authz.ScopeSkillRead))
 }
@@ -115,4 +117,17 @@ func TestRetiredScopeTombstonesFailClosedIndependently(t *testing.T) {
 	require.Error(t, ValidateRuntimeScope(CurrentRuntimeScopeRegistryVersion, scopeMCPApprovalReadTombstone))
 	require.Error(t, ValidateRuntimeScope(CurrentRuntimeScopeRegistryVersion, authz.Scope("unknown:scope")))
 	require.NoError(t, ValidateRuntimeScope(CurrentRuntimeScopeRegistryVersion, authz.ScopeProjectRead))
+}
+
+func TestOrganizationReadRuntimeScopeVersion(t *testing.T) {
+	t.Parallel()
+	for _, scope := range []authz.Scope{authz.ScopeOrgRead, authz.ScopeOrgBlockedRead, authz.ScopeOrgBlockedAdmin} {
+		require.False(t, IsRuntimeScopeSafe(RuntimeScopeRegistryVersion6, scope))
+		require.True(t, IsRuntimeScopeSafe(RuntimeScopeRegistryVersion7, scope))
+		_, err := NewDelegatedPolicy(DelegatedPolicyVersion6, []authz.Grant{authz.NewGrant(scope, "org_example")})
+		require.Error(t, err)
+		_, err = NewDelegatedPolicy(DelegatedPolicyVersion7, []authz.Grant{authz.NewGrant(scope, "org_example")})
+		require.NoError(t, err)
+	}
+	require.False(t, IsIssuableScope(authz.ScopeOrgRead), "general credential issuance is unchanged")
 }

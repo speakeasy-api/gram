@@ -227,6 +227,8 @@ type UpdateSubjectResponseBody struct {
 // WithdrawSubjectResponseBody is the type of the "workloadIdentities" service
 // "withdrawSubject" endpoint HTTP response body.
 type WithdrawSubjectResponseBody struct {
+	// The tier of the admission that was withdrawn: organization or project.
+	WithdrawnTier string `form:"withdrawn_tier" json:"withdrawn_tier" xml:"withdrawn_tier"`
 	// Trusted issuers, organization tier first.
 	Issuers []*WorkloadIssuerResponseBody `form:"issuers" json:"issuers" xml:"issuers"`
 	// Admitted subjects.
@@ -2637,6 +2639,25 @@ type WorkloadPlatformSubjectResponseBody struct {
 	Template string `form:"template" json:"template" xml:"template"`
 	// Whether the rule is the filled template followed by *.
 	Wildcard bool `form:"wildcard" json:"wildcard" xml:"wildcard"`
+	// Names the default rule beside its alternatives. Empty where there are none.
+	Label string `form:"label" json:"label" xml:"label"`
+	// Other rules the operator may choose instead, in the order they are offered.
+	// Absent where there are none.
+	Alternatives []*WorkloadPlatformSubjectAlternativeResponseBody `form:"alternatives,omitempty" json:"alternatives,omitempty" xml:"alternatives,omitempty"`
+}
+
+// WorkloadPlatformSubjectAlternativeResponseBody is used to define fields on
+// response body types.
+type WorkloadPlatformSubjectAlternativeResponseBody struct {
+	// Identifies the choice within the platform.
+	Key string `form:"key" json:"key" xml:"key"`
+	// What the operator chooses it by.
+	Label string `form:"label" json:"label" xml:"label"`
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template string `form:"template" json:"template" xml:"template"`
+	// Whether the rule is the filled template followed by *.
+	Wildcard bool `form:"wildcard" json:"wildcard" xml:"wildcard"`
 }
 
 // WorkloadFormResponseBody is used to define fields on response body types.
@@ -2960,8 +2981,10 @@ func NewUpdateSubjectResponseBody(res *workloadidentities.WorkloadIdentityPolicy
 
 // NewWithdrawSubjectResponseBody builds the HTTP response body from the result
 // of the "withdrawSubject" endpoint of the "workloadIdentities" service.
-func NewWithdrawSubjectResponseBody(res *workloadidentities.WorkloadIdentityPolicy) *WithdrawSubjectResponseBody {
-	body := &WithdrawSubjectResponseBody{}
+func NewWithdrawSubjectResponseBody(res *workloadidentities.WithdrawnWorkloadSubjectPolicy) *WithdrawSubjectResponseBody {
+	body := &WithdrawSubjectResponseBody{
+		WithdrawnTier: res.WithdrawnTier,
+	}
 	if res.Issuers != nil {
 		body.Issuers = make([]*WorkloadIssuerResponseBody, len(res.Issuers))
 		for i, val := range res.Issuers {

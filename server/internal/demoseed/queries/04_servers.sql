@@ -133,8 +133,7 @@ VALUES
 
 -- Distribute these servers to the seeded organization roles holding
 -- mcp:connect, including disposition-limited connect. mcp:read and
--- mcp:write still allow connecting at the endpoint but do not deliver
--- servers. Store server identities, not legacy toolset memberships. Content
+-- mcp:write neither allow connecting nor deliver servers. Store server identities, not legacy toolset memberships. Content
 -- has no manual/automatic distinction and never widens a plugin's audience.
 -- name: ServersInsertRoleServerMemberships :execrows
 INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
@@ -160,8 +159,8 @@ WHERE p.organization_id = @org_id::text AND p.project_id = @project_id::uuid
 -- Engineer reaches GitHub through both its role plugin and this one. Other
 -- servers/roles keep their single-match and no-match examples.
 -- name: ServersInsertEngineeringEssentialsPlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug)
-VALUES (@org_id::text, @project_id::uuid, 'Engineering Essentials', 'engineering-essentials')
+INSERT INTO plugins (organization_id, project_id, name, slug, auto_sync_enabled)
+VALUES (@org_id::text, @project_id::uuid, 'Engineering Essentials', 'engineering-essentials', false)
 RETURNING id;
 
 -- name: ServersInsertEngineeringEssentialsAssignment :exec
@@ -181,6 +180,45 @@ WHERE project_id = @project_id::uuid AND slug = 'github';
 -- project-scoped CIMD client, Slack carries one inert shared Service Account
 -- credential, and GitHub intentionally has no upstream identity. The demo
 -- values are display fixtures only and cannot authenticate to any service.
+-- Two more vendor remotes for the agent MCP sign-in tab, both real and
+-- connectable: Notion signs each caller in to their own account once an
+-- admin sets up its sign-in from the server's page (Speakeasy registers a
+-- client with Notion then; the seed holds no credential), and DeepWiki is a
+-- public server that needs no sign-in at all.
+-- name: ServersInsertSignInExampleRemoteMCPServers :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  (@notion_id::uuid, @project_id::uuid, 'Notion', 'notion',
+   'streamable-http', 'https://mcp.notion.com/mcp'),
+  (@deepwiki_id::uuid, @project_id::uuid, 'DeepWiki', 'deepwiki',
+   'streamable-http', 'https://mcp.deepwiki.com/mcp');
+
+-- name: ServersInsertNotionUserSessionIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode) VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, 'notion',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
+
+-- DeepWiki takes no credential, so it sits under the shared workforce issuer
+-- like GitHub, with no upstream client to sign in through.
+-- name: ServersInsertSignInExampleMCPServers :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                         remote_mcp_server_id, user_session_issuer_id,
+                         visibility) VALUES
+  (@notion_id::uuid, @project_id::uuid, 'Notion', 'notion',
+   NULL, @remote_notion_id::uuid, @issuer_notion_id::uuid, 'private'),
+  (@deepwiki_id::uuid, @project_id::uuid, 'DeepWiki', 'deepwiki',
+   NULL, @remote_deepwiki_id::uuid, @issuer_workforce_id::uuid, 'private');
+
+-- Each gets an endpoint of its own, as a server added in the dashboard does:
+-- the endpoint is where its sign-in page lives.
+-- name: ServersInsertSignInExampleEndpoints :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  (@notion_endpoint_id::uuid, @project_id::uuid, NULL,
+   @notion_server_id::uuid, @notion_slug::text),
+  (@deepwiki_endpoint_id::uuid, @project_id::uuid, NULL,
+   @deepwiki_server_id::uuid, @deepwiki_slug::text);
+
 -- name: ServersInsertLinearRemoteSessionIssuer :exec
 INSERT INTO remote_session_issuers
   (id, project_id, organization_id, slug, issuer, authorization_endpoint,
@@ -219,14 +257,12 @@ VALUES
   (@remote_session_client_id::uuid,
    @user_session_issuer_id::uuid);
 
--- mcp_servers.remote_session_issuer_id is denormalized from the live client
--- bindings, and the app recomputes it after the commit that writes them
--- (ResyncMCPServerRemoteSessionIssuers). Seeding the binding in SQL never
--- goes through that path, so stamp what the resync would derive: exactly one
--- remote issuer is bound to this server's user session issuer (the
--- attachment fixture's client below sits under the same one). Left NULL,
--- upstream token routing fails closed and Linear reads as having no identity.
--- name: ServersStampLinearRemoteSessionIssuer :exec
+-- mcp_servers.remote_session_issuer_id is denormalized from a server's client
+-- associations, and the app recomputes it after the commit that writes them
+-- (ResyncMCPServerRemoteSessionIssuers). Seeding them in SQL never goes through
+-- that path, so stamp what the resync would derive. Left NULL, upstream token
+-- routing fails closed and the server reads as having no identity.
+-- name: ServersStampRemoteSessionIssuer :exec
 UPDATE mcp_servers
 SET remote_session_issuer_id = @remote_session_issuer_id::uuid
 WHERE id = @mcp_server_id::uuid
@@ -397,9 +433,9 @@ VALUES
    ARRAY['code'], ARRAY['client_secret_basic'], ARRAY['S256'], TRUE,
    'Acme Identity');
 
--- The workforce sign-in is left as it is: pointing it at this fictional
--- provider would send interactive sign-in for every server on it to a
--- provider that doesn't exist. The Services pages still show these vendors.
+-- The workforce sign-in client is left unset: pointing interactive sign-in at
+-- this fictional provider would send every server on it to a provider that
+-- doesn't exist. The Services pages still show these vendors.
 -- name: ServersInsertEMAIdentityProviderClient :exec
 INSERT INTO remote_session_clients
   (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -409,6 +445,17 @@ VALUES
    'demo-acme-identity-sign-in', 'DEMO-NOT-VALID-CIPHERTEXT',
    'client_secret_basic', ARRAY['authorization_code', 'refresh_token'],
    ARRAY['openid', 'profile', 'email']);
+
+-- Inbound EMA: the workforce issuer accepts ID-JAGs from Acme Identity. Only
+-- the issuer is linked, never the sign-in client, so interactive sign-in stays
+-- on the organization's own login.
+-- name: ServersTrustEMAIdentityProviderForInboundEMA :execrows
+UPDATE user_session_issuers
+SET trusted_remote_session_issuer_id = @ema_provider::uuid
+WHERE id = @workforce_issuer::uuid
+  AND organization_id = @org_id::text
+  AND project_id IS NULL
+  AND deleted IS FALSE;
 
 -- name: ServersInsertEMARemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
@@ -549,8 +596,10 @@ VALUES
 -- The client sits under Linear's own remote identity provider: every client
 -- bound to one user session issuer must share a remote issuer, or the
 -- mcp_servers.remote_session_issuer_id derivation above would come out NULL.
--- Reserved example endpoints, an invalid ciphertext and no refresh token
--- prevent this display fixture from becoming a usable upstream credential.
+-- Reserved example endpoints and no refresh token keep this display fixture
+-- from becoming a usable upstream credential while its dummy access token,
+-- encrypted at seed time, reads as connected. A held re-check lease keeps the
+-- idle re-check from presenting it anywhere.
 -- name: ServersInsertAttachmentClient :exec
 INSERT INTO remote_session_clients
   (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -565,33 +614,35 @@ VALUES (@id::uuid, @project_id::uuid, @org_id::text,
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
    access_token_encrypted, access_expires_at, auto_refresh, scopes,
-   upstream_display_name, created_at, last_used_at)
+   upstream_display_name, created_at, last_used_at, last_refresh_attempt_at)
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + @expires_in::interval, false,
+        @access_token_encrypted::text, now() + @expires_in::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
-        now() - interval '3 days', now() - interval '40 minutes');
+        now() - interval '3 days', now() - interval '40 minutes', now() + interval '10 years');
 
 -- Upstream sessions on Linear's CIMD client, one per last-validation outcome
 -- plus one never validated, so the admin server health page shows every
--- validation state. Inert like the session above: an invalid ciphertext and
--- no refresh token. grant_generation above 1 records re-authorizations.
+-- validation state. Inert like the session above: no refresh token, and a held
+-- re-check lease, renewed by each reseed, keeps the idle re-check from
+-- presenting the dummy token to Linear and overwriting the seeded verdicts. grant_generation above 1 records re-authorizations.
 -- An empty status is the never-validated session (NULL status and
 -- last_validated_at).
 -- name: ServersInsertValidatedSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
    access_token_encrypted, access_expires_at, auto_refresh, scopes,
-   grant_generation, last_validated_at, validation_status, created_at, last_used_at)
+   grant_generation, last_validated_at, validation_status, created_at, last_used_at,
+   last_refresh_attempt_at)
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        @access_token_encrypted::text, now() + interval '7 days', false,
         ARRAY['read'], @grant_generation::bigint,
         CASE WHEN @status::text <> '' THEN now() - make_interval(hours => @hours_ago::int) END,
         NULLIF(@status::text, ''), now() - make_interval(days => @days_ago::int),
-        now() - make_interval(hours => @hours_ago::int));
+        now() - make_interval(hours => @hours_ago::int), now() + interval '10 years');
 
 -- Many principals can reference one exact human-owned session. Reconnecting
 -- must never silently replace these references with a different session.
@@ -737,15 +788,14 @@ VALUES
 -- Typed auth clients, as the upstream OAuth migration records them: Linear's
 -- personal client over its OAuth registration, and one static credential
 -- shared by GitHub and Linear, so the server settings show a shared client
--- and a server offering two. Slack is left undecided about upstream
--- authentication.
+-- and a server offering two. Slack offers none.
 -- The projects delete cascades the clients, their headers and associations.
 -- name: ServersInsertAuthClient :exec
 INSERT INTO mcp_auth_clients
   (id, organization_id, project_id, client_type, source, name,
    remote_session_client_id, client_attachment_scope)
 SELECT @id::uuid, @org_id::text, @project_id::uuid, @client_type::text,
-       'backfill', @name::text, c.id, c.attachment_scope
+       @source::text, @name::text, c.id, c.attachment_scope
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
   ON c.id = sqlc.narg(remote_session_client_id)::uuid;
@@ -758,20 +808,21 @@ VALUES
   (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
    @value::text);
 
+-- name: ServersInsertAuthClientForwardedHeader :exec
+INSERT INTO mcp_auth_client_headers
+  (id, auth_client_id, organization_id, name, is_required, value_from_request_header)
+VALUES
+  (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
+   @value_from_request_header::text);
+
 -- name: ServersInsertServerAuthClient :exec
 INSERT INTO mcp_server_auth_clients
   (id, project_id, organization_id, mcp_server_id, auth_client_id,
    client_attachment_scope, source)
 SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
-       ac.id, ac.attachment_scope, 'backfill'
+       ac.id, ac.attachment_scope, ac.source
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid;
-
--- name: ServersMarkRequiresUpstreamAuth :exec
-UPDATE mcp_servers
-SET requires_upstream_auth = TRUE
-WHERE project_id = @project_id::uuid
-  AND id = ANY(@ids::uuid[]);
 
 -- Engineers may use the shared GitHub token; Contractors are blocked from
 -- it on every server that offers it. Cleared by id at the top of the seed.
@@ -786,6 +837,85 @@ FROM (VALUES
 ) AS v(id, slug, scope)
 JOIN organization_roles r
   ON r.organization_id = @org_id::text AND r.workos_slug = v.slug;
+
+-- An app that signs in to Linear without a browser, so it cannot pick a
+-- credential on the consent screen.
+-- name: ServersInsertHeadlessClient :exec
+INSERT INTO user_session_clients
+  (id, project_id, organization_id, user_session_issuer_id, client_id,
+   client_secret_hash, client_name, redirect_uris, client_id_issued_at,
+   token_endpoint_auth_method)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, @issuer_id::uuid,
+   'gram_demo_client_nightly_report', NULL, 'Nightly report job',
+   ARRAY[]::text[], now() - interval '6 days', 'none');
+
+-- The credential the headless app's sessions use on one server.
+-- name: ServersInsertIssuanceProfile :exec
+INSERT INTO issuance_selection_profiles
+  (id, organization_id, project_id, user_session_issuer_id,
+   user_session_client_id, name)
+VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, @issuer_id::uuid,
+   @client_id::uuid, @name::text);
+
+-- name: ServersInsertIssuanceProfileChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   auth_client_id, auth_client_attachment_scope, source)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, 'issuance_profile',
+       @profile_id::uuid, @mcp_server_id::uuid, ac.remote_session_client_id,
+       NULL, FALSE, ac.id, ac.attachment_scope, 'issuance'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
+
+-- Sets the organization gateway's seeded GitHub choices to the caller's own
+-- GitHub token. The server offers two credentials, so a choice that names
+-- neither resolves to no credential under enforcement.
+-- name: ServersPickGatewayGitHubCredential :execrows
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid
+  AND ac.organization_id = @org_id::text
+  AND sel.project_id = @project_id::uuid
+  AND sel.organization_id = @org_id::text
+  AND sel.credential_kind = 'user_session'
+  AND sel.credential_id = ANY(@credential_ids::uuid[])
+  AND sel.mcp_server_id = @mcp_server_id::uuid
+  AND sel.deleted IS FALSE;
+
+-- name: ServersAttachAssistantServer :exec
+INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, project_id)
+VALUES (@id::uuid, @assistant_id::uuid, @mcp_server_id::uuid, @project_id::uuid);
+
+-- The upstream credential an administrator chose for an assistant's turns
+-- under one root trigger and execution context, as version 1 of its profile.
+-- name: ServersInsertExecutionProfile :exec
+INSERT INTO execution_selection_profiles
+  (id, organization_id, project_id, assistant_id, trigger_instance_id, execution_context)
+VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, @assistant_id::uuid,
+   @trigger_instance_id::uuid, @execution_context::text);
+
+-- name: ServersInsertExecutionProfileVersion :exec
+INSERT INTO execution_selection_profile_versions
+  (id, profile_id, organization_id, project_id, version, source)
+VALUES (@id::uuid, @profile_id::uuid, @org_id::text, @project_id::uuid, 1, 'admin');
+
+-- name: ServersInsertExecutionProfileChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   auth_client_id, auth_client_attachment_scope, source)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, 'execution_profile_version',
+       @version_id::uuid, @mcp_server_id::uuid, ac.remote_session_client_id,
+       NULL, FALSE, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
 
 -- name: ServersInsertOrganizationGatewayClient :exec
 INSERT INTO user_session_clients

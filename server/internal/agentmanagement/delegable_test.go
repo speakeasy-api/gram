@@ -205,6 +205,27 @@ func TestListDelegableGrantsConservativelyOmitsOverlappingExclusions(t *testing.
 	}
 }
 
+// An "All servers" key needs the project wildcard itself, or it reaches only
+// the servers that existed when it was issued. With carry_exclusions the
+// owner's blocked server comes back beside the wildcard rather than removing it.
+func TestListDelegableGrantsCarriesExclusionsBesideWildcard(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	projectWildcard := authz.NewSelector(authz.ScopeMCPConnect, "*")
+	projectWildcard[authz.SelectorKeyProjectID] = "project-one"
+	f.grant(t, "agent", authz.ScopeMCPConnect, projectWildcard)
+	f.grant(t, "owner", authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, "*"))
+	f.grant(t, "owner", authz.ScopeMCPBlockedConnect, authz.NewSelector(authz.ScopeMCPBlockedConnect, "blocked-server"))
+
+	require.Empty(t, f.list(t, "owner"), "without carrying, the overlapped wildcard is omitted")
+
+	result, err := f.service.ListDelegableGrants(validatedHumanContext(t, "org-delegable", "owner"), &gen.ListDelegableGrantsPayload{AgentID: f.agentID.String(), CarryExclusions: true})
+	require.NoError(t, err)
+	projectOne := "project-one"
+	require.Contains(t, result, &gen.AgentPolicyGrantForm{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*", ProjectID: &projectOne}})
+	require.Contains(t, result, &gen.AgentPolicyGrantForm{Scope: string(authz.ScopeMCPBlockedConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "blocked-server", ProjectID: &projectOne}})
+}
+
 func TestListDelegableGrantsRejectsInactiveAgentOrOwner(t *testing.T) {
 	t.Parallel()
 	for _, state := range []string{"suspended", "revoked", "deleted", "owner deleted", "owner membership removed"} {
@@ -297,13 +318,18 @@ func TestListDelegableGrantsScopedToolset(t *testing.T) {
 			other := f.toolset(t, "org-delegable", "other")
 			for _, principal := range []string{"agent", "owner", "caller"} {
 				f.grant(t, principal, authz.ScopeMCPWrite, authz.NewSelector(authz.ScopeMCPWrite, "*"))
+				f.grant(t, principal, authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, "*"))
 			}
 			// Both server and project exclusions on unrelated resources must be disjoint.
 			f.grant(t, excludedBy, authz.ScopeMCPBlockedConnect, authz.NewSelector(authz.ScopeMCPBlockedConnect, other.ID.String()))
 			exclusion := authz.NewSelector(authz.ScopeMCPBlockedConnect, "*")
 			exclusion[authz.SelectorKeyProjectID] = other.ProjectID.String()
 			f.grant(t, excludedBy, authz.ScopeMCPBlockedConnect, exclusion)
-			require.Empty(t, f.list(t, "caller"), "unscoped broad grants still overlap exclusions")
+			unscoped := f.list(t, "caller")
+			require.Len(t, unscoped, 2, "unscoped broad connect still overlaps exclusions; read and write do not")
+			for _, grant := range unscoped {
+				require.NotEqual(t, string(authz.ScopeMCPConnect), grant.Scope)
+			}
 			ctx := validatedHumanContext(t, "org-delegable", "caller")
 			grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
 				AgentID: f.agentID.String(), ToolsetID: new(selected.ID.String()),
@@ -319,7 +345,10 @@ func TestListDelegableGrantsScopedToolset(t *testing.T) {
 				AgentID: f.agentID.String(), ToolsetID: new(other.ID.String()),
 			})
 			require.NoError(t, err)
-			require.Empty(t, grants)
+			require.Len(t, grants, 2, "a connect exclusion withdraws connect only")
+			for _, grant := range grants {
+				require.NotEqual(t, string(authz.ScopeMCPConnect), grant.Scope)
+			}
 		})
 	}
 }
@@ -332,6 +361,7 @@ func TestListDelegableGrantsBatchedToolsets(t *testing.T) {
 	blocked := f.toolset(t, "org-delegable", "blocked")
 	for _, principal := range []string{"agent", "owner", "caller"} {
 		f.grant(t, principal, authz.ScopeMCPWrite, authz.NewSelector(authz.ScopeMCPWrite, "*"))
+		f.grant(t, principal, authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, "*"))
 	}
 	f.grant(t, "owner", authz.ScopeMCPBlockedConnect, authz.NewSelector(authz.ScopeMCPBlockedConnect, blocked.ID.String()))
 	ctx := validatedHumanContext(t, "org-delegable", "caller")
@@ -353,7 +383,9 @@ func TestListDelegableGrantsBatchedToolsets(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, want, grants)
 	for _, grant := range grants {
-		require.NotEqual(t, blocked.ID.String(), grant.Selector.ResourceID)
+		if grant.Scope == string(authz.ScopeMCPConnect) {
+			require.NotEqual(t, blocked.ID.String(), grant.Selector.ResourceID)
+		}
 	}
 }
 

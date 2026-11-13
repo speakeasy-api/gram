@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
+	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -19,6 +21,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -35,21 +41,31 @@ func seedTwoClientConsentEndpoint(t *testing.T, tag string) (context.Context, co
 	return ctx, fx
 }
 
+// postApproveResult posts the fixture's approval and returns what the handler did.
+func postApproveResult(t *testing.T, ctx context.Context, fx consentActionFixture) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}, "tool_filtering": {"off"}}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	if err := fx.ti.service.ServeConsent(w, req.WithContext(ctx), fx.endpoint); err != nil {
+		return w, fmt.Errorf("serve consent approval: %w", err)
+	}
+	return w, nil
+}
+
+func postApprove(t *testing.T, ctx context.Context, fx consentActionFixture) *httptest.ResponseRecorder {
+	t.Helper()
+	w, err := postApproveResult(t, ctx, fx)
+	require.NoError(t, err)
+	return w
+}
+
 // approveConsent approves the fixture's consent and returns the grant its
 // authorization code redeems.
 func approveConsent(t *testing.T, ctx context.Context, fx consentActionFixture) mcp.UserSessionGrant {
 	t.Helper()
-	form := url.Values{}
-	form.Set("state", fx.stateID)
-	form.Set("csrf_token", "csrf-token")
-	form.Set("action", "approve")
-	form.Set("tool_filtering", "off")
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req = req.WithContext(ctx)
-
-	w := httptest.NewRecorder()
-	require.NoError(t, fx.ti.service.ServeConsent(w, req, fx.endpoint))
+	w := postApprove(t, ctx, fx)
 	require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
 	loc, err := url.Parse(w.Header().Get("Location"))
 	require.NoError(t, err)
@@ -63,8 +79,8 @@ func approveConsent(t *testing.T, ctx context.Context, fx consentActionFixture) 
 }
 
 // The card a person goes through is the server's pick, whether they connected
-// it interactively or identity chaining serves it; with no such card, or
-// several, the server gets no pick.
+// it interactively or identity chaining serves it; with several, the server
+// gets no pick.
 func TestConsentPost_RecordsTheUpstreamClientPicked(t *testing.T) {
 	t.Parallel()
 
@@ -84,14 +100,6 @@ func TestConsentPost_RecordsTheUpstreamClientPicked(t *testing.T) {
 
 		grant := approveConsent(t, ctx, fx)
 		require.Equal(t, map[uuid.UUID]uuid.UUID{fx.endpoint.McpServerID.UUID: fx.clientA}, grant.UpstreamClientPicks)
-	})
-
-	t.Run("no usable card", func(t *testing.T) {
-		t.Parallel()
-		ctx, fx := seedTwoClientConsentEndpoint(t, "pick-none")
-
-		grant := approveConsent(t, ctx, fx)
-		require.Empty(t, grant.UpstreamClientPicks)
 	})
 
 	t.Run("several usable cards", func(t *testing.T) {
@@ -160,4 +168,122 @@ func TestHandleToken_RecordsTheConsentPickAsTheChoice(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, uuid.NullUUID{UUID: fx.clientB, Valid: true}, choice.RemoteSessionClientID)
+}
+
+// Where typed auth clients are enforced, redeeming a code with no pick records
+// the choice from the auth clients the server offers. Two associations would
+// leave the choice undecided; the one offered client decides it.
+func TestHandleToken_RecordsChoicesFromAuthClientsUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedTwoClientConsentEndpoint(t, "typed-redeem")
+	client, err := usersessions_repo.New(fx.ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{UserSessionIssuerID: fx.shared, ClientID: "age3328-mcp-client"})
+	require.NoError(t, err)
+	serverID := fx.endpoint.McpServerID.UUID
+	_, err = mcpendpointsrepo.New(fx.ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:       fx.projectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     conv.ToNullUUID(serverID),
+		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:            fx.endpoint.Slug,
+	})
+	require.NoError(t, err)
+	// Both registrations are associated, so the legacy reading has two
+	// candidates and would record nothing without a pick.
+	for _, registration := range []uuid.UUID{fx.clientA, fx.clientB} {
+		n, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: fx.orgID, RemoteSessionClientID: registration, McpServerID: serverID, ProjectID: fx.projectID})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+	}
+	fixtures := authclientfixtures.New(fx.ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: fx.clientB, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
+	_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+
+	verifier := "verifier-" + uuid.NewString()
+	sum := sha256.Sum256([]byte(verifier))
+	code := "code-" + uuid.NewString()
+	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](fx.ti.logger, fx.ti.cacheAdapter, cache.SuffixNone)
+	require.NoError(t, grantCache.Store(ctx, mcp.UserSessionGrant{
+		Code:                code,
+		UserSessionIssuerID: fx.shared,
+		UserSessionClientID: client.ID,
+		ClientID:            client.ClientID,
+		RedirectURI:         client.RedirectUris[0],
+		CodeChallenge:       base64.RawURLEncoding.EncodeToString(sum[:]),
+		CodeChallengeMethod: "S256",
+		Subject:             fx.subject,
+		CreatedAt:           time.Now(),
+	}))
+
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", client.RedirectUris[0])
+	form.Set("client_id", client.ClientID)
+	form.Set("code_verifier", verifier)
+	w := postForm(t, fx.ti, fx.endpoint.Slug, "token", form)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	sessions, err := testrepo.New(fx.ti.conn).ListUserSessionCredentialsForSubjectFixture(ctx, fx.subject)
+	require.NoError(t, err)
+	require.Len(t, sessions, 1)
+	choice, err := fixtures.GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: sessions[0].CredentialID, McpServerID: serverID})
+	require.NoError(t, err)
+	require.Equal(t, uuid.NullUUID{UUID: fx.clientB, Valid: true}, choice.RemoteSessionClientID)
+	require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, choice.AuthClientID)
+}
+
+// Where typed auth clients are enforced, a personal client an administrator
+// offered on the server is connected and chosen on its consent page even
+// though the sign-in does not link its registration and no older association
+// names it.
+func TestConsentPost_ChoosesAnAdministratorOfferedPersonalClient(t *testing.T) {
+	t.Parallel()
+	ctx, fx := standaloneConsent(t, "typed-offered", consentChainedUpstream, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
+		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, consentChainedUpstream)
+	})
+	fx.ti.service.manual = true
+	fx.ti.service.SetAuthClientPermitted(true)
+	serverID := fx.endpoint.McpServerID.UUID
+	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-offered", "", nil)
+	fixtures := authclientfixtures.New(fx.ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
+	_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, registration, fx.subject, "token-typed", consentChainedUpstream)
+
+	grant := approveConsent(t, ctx, fx)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{serverID: authClientID}, grant.AuthClientPicks)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{serverID: registration}, grant.UpstreamClientPicks)
+}
+
+// The consent page judges a credential's permission as the consenting
+// person, as their requests will be, both when it offers the choice and when
+// it approves it.
+func TestConsentPost_JudgesCredentialPermissionAsTheConsentingPerson(t *testing.T) {
+	t.Parallel()
+	ctx, fx := standaloneConsent(t, "judge-person", consentChainedUpstream, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
+		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, consentChainedUpstream)
+	})
+	fx.ti.service.manual = true
+	callers := fx.ti.service.RecordAuthClientPermitCallers()
+	serverID := fx.endpoint.McpServerID.UUID
+	fixtures := authclientfixtures.New(fx.ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "static_credential", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: authClientID, OrganizationID: fx.orgID, Name: "X-Api-Key", Value: pgtype.Text{String: "key", Valid: true}}))
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
+	_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+
+	grant := approveConsent(t, ctx, fx)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{serverID: authClientID}, grant.AuthClientPicks)
+	require.NotEmpty(t, callers())
+	for _, user := range callers() {
+		require.Equal(t, fx.subject.ID, user)
+	}
 }

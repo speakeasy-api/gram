@@ -29,13 +29,8 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-1", slug: "acme" }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    gateway: { href: () => "/acme/gateway" },
-    identity: { href: () => "/acme/identity" },
-    domains: { href: () => "/acme/domains" },
-    userSessionIssuers: { href: () => "/acme/user-session-issuers" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: state.issuerDashboard }),
@@ -146,7 +141,9 @@ describe("OrganizationGatewayConnectorSection", () => {
 
     renderSection();
 
-    expect(screen.getByText(/Loading the Organization Gateway/)).toBeTruthy();
+    expect(
+      screen.getByRole("status", { name: /Loading the Organization Gateway/ }),
+    ).toBeTruthy();
     expectNoUrlOrSteps();
   });
 

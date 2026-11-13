@@ -1,14 +1,12 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { parseFilters } from "@/pages/logs/log-filter-url";
 import { OverviewTab } from "./OverviewTab";
 
-const logs = vi.hoisted(() => ({ canView: true, enabled: true }));
+const logs = vi.hoisted(() => ({ enabled: true }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project" }) }));
-vi.mock("@/components/observe/observeDeepLink", () => ({
-  useCanViewToolLogs: () => logs.canView,
-}));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
@@ -20,8 +18,8 @@ vi.mock("@tanstack/react-query", async (original) => ({
     isSuccess: enabled !== false && logs.enabled,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ logs: { href: () => "/example/projects/test/logs" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "test" }),
 }));
 vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
   PluginStatusBanner: () => <div>Marketplace</div>,
@@ -59,7 +57,6 @@ vi.mock("./TunneledMcpConnectionsPanel", () => ({
 }));
 afterEach(() => {
   cleanup();
-  logs.canView = true;
   logs.enabled = true;
 });
 const server = {
@@ -72,6 +69,7 @@ const server = {
 it("places the marketplace above tunnel status and keeps the usage dashboard below it", () => {
   const { container } = render(
     <OverviewTab mcpServer={server} agentSetupHref="/settings" />,
+    { wrapper: MemoryRouter },
   );
   expect(container.textContent).toBe(
     "MarketplaceTunnel statusShared usage dashboard",
@@ -87,12 +85,11 @@ it("places the marketplace above tunnel status and keeps the usage dashboard bel
   ]);
 });
 
-it.each([
-  ["the organization does not record logs", { canView: true, enabled: false }],
-  ["the user cannot read logs", { canView: false, enabled: true }],
-])("offers no Tool Logs link when %s", (_, state) => {
-  Object.assign(logs, state);
-  render(<OverviewTab mcpServer={server} agentSetupHref="/settings" />);
+it("offers no Tool Logs link when the organization does not record logs", () => {
+  logs.enabled = false;
+  render(<OverviewTab mcpServer={server} agentSetupHref="/settings" />, {
+    wrapper: MemoryRouter,
+  });
   expect(screen.getByText("Tunnel status")).toBeTruthy();
   expect(screen.queryByRole("link")).toBeNull();
 });
@@ -103,6 +100,7 @@ it("shows the tunnel status without a usage dashboard when the server has no slu
       mcpServer={{ ...server, slug: undefined }}
       agentSetupHref="/settings"
     />,
+    { wrapper: MemoryRouter },
   );
   expect(container.textContent).toBe("MarketplaceTunnel status");
 });
@@ -113,6 +111,7 @@ it("retains the shared overview for servers without tunnels", () => {
       mcpServer={{ ...server, tunneledMcpServerId: undefined }}
       agentSetupHref="/settings"
     />,
+    { wrapper: MemoryRouter },
   );
   expect(screen.getByText("Shared usage dashboard")).toBeTruthy();
   expect(screen.getAllByText("Marketplace")).toHaveLength(1);
@@ -147,6 +146,7 @@ it.each([
         }
         agentSetupHref="/settings"
       />,
+      { wrapper: MemoryRouter },
     );
     expect(screen.getByTestId("scope").getAttribute("data-scope")).toBe(
       "toolset:toolset-slug",

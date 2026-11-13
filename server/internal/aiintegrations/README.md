@@ -128,3 +128,97 @@ When adding a provider:
 4. Add provider-specific polling inside the activity layer.
 5. Emit telemetry with the shared `gen_ai.usage.*` attributes where possible.
 6. Store provider-specific fields under a provider namespace, such as `cursor.*`.
+
+## Gemini app compliance import (Google Vault)
+
+`gemini_compliance` imports managed `gemini.google.com` text transcripts through
+Google Vault. It does not import Gemini API/Vertex AI traffic, Workspace side-panel
+conversations, attachments, media, or token/cost estimates.
+
+Setup is two saves. The encrypted `api_key` holds only the Google service
+account JSON key file, unchanged; the non-secret settings live in the config's
+`settings` column so the dashboard can redisplay and edit them without the key.
+
+1. **Credentials.** Save the key file with `delegated_user`, the Workspace admin
+   the service account acts as. Speakeasy checks them with Google and finds or
+   creates its own open Vault matter, `Speakeasy Gemini import`, storing its ID as
+   `external_organization_id` (an explicit matter UUID is still accepted). The
+   connection is saved but held: it cannot sync without an export scope.
+2. **Scope.** `listOrgUnits` returns the organizational units the delegated admin
+   can read, including the root (`/`). Saving one as `org_unit_id` validates it
+   against that list, stores its path, and starts syncing. Select the root for
+   organization-wide coverage: Vault documents `ENTIRE_ORG` as Gmail-only, so the
+   importer uses an explicit `ORG_UNIT` query. Changing the unit restarts the
+   backfill for the new scope.
+
+Enable the Vault API and the Admin SDK API, and authorize the service account's
+client ID for domain-wide delegation with
+`https://www.googleapis.com/auth/ediscovery`,
+`https://www.googleapis.com/auth/devstorage.read_only` and
+`https://www.googleapis.com/auth/admin.directory.orgunit.readonly`. Directory calls
+use a separate token holding only the last scope. The delegated admin needs a
+Vault license, the Manage Matters, Manage Searches and Manage Exports privileges,
+and permission to read organizational units; covered users need Vault licenses.
+`ediscovery` grants all of Vault for every service, so the importer's Gemini-only
+corpus is enforced in code, not by Google; prefer a dedicated delegated admin.
+Saves only call Google when the key, admin, matter or unit changes, or when the
+connection is turned on. Credentials never leave through read APIs or error bodies.
+
+### Export lifecycle and guarantees
+
+- Reuses the existing integration polling workflow, with one hourly activity per
+  connected schedule and no workflows/timers per message. Incremental Temporal cost
+  is approximately 720 child starts + 720 activities/month per enabled organization
+  per namespace, plus retries; no new fleet-wide schedule is introduced.
+- First sync starts 30 UTC days before connection, imports one completed UTC-day
+  window at a time, and includes a 48-hour overlap. Once caught up, each export
+  rechecks the latest two completed days. Current-day chats appear after UTC
+  midnight; Google indexing lag beyond the overlap is not a completeness guarantee.
+- A versioned cursor checkpoints the export ID, exact query window, completed-date
+  watermark, and sequence. Deterministic names recover a lost create response;
+  pending jobs resume across activity retries and process restarts. Export polling
+  is scheduled from wall-clock time, never the historical/pending watermark.
+  A periodic activity heartbeat also covers long downloads and archive parsing.
+- Downloads all returned artifacts through authenticated, fixed-host, bounded
+  requests. ZIP/XML complexity and total expanded size are bounded. Counts and
+  error reports are validated before any transcript callbacks. Empty windows need
+  explicit successful zero-count evidence; unknown or partial content fails closed.
+- Failed jobs and source-reported partial exports are deleted after surfacing an
+  error so retry recreates the same window. Expired jobs are recreated without
+  skipping progress. Local parse/write failures retain the remote export for
+  replay. Successful remote artifacts expire according to Google's 15-day policy.
+- Messages go through `ChatMessageWriter.WriteExternal`, including normal outbox
+  publication. Stable owner/conversation/turn/role identities deduplicate overlaps
+  and replay; unresolved owners preserve their observed email without inventing
+  a connected user. Transcripts carry source `gemini`, provider `google`, model,
+  timestamp, and zero unreported usage. Turn visitation is chronological and
+  archive-order independent; conversation creation uses the earliest observed
+  turn while title/last-activity metadata reflect the latest observed turn.
+  Identical text turns with identical
+  timestamps and no exported request ID cannot be distinguished.
+
+### Export format validation
+
+The conversation parser has been checked locally against a real Google Vault XML
+export. It supports `GeminiUserConversationHistory/User/Email`, conversation and
+turn wrappers, `Prompt/Text`, `PrimaryResponse/{ResponseId,Text}`, request/parent
+IDs, model version, and timestamps. The local input stays outside the repository;
+committed regression fixtures reproduce only its structure with synthetic values.
+Legacy flat element variants remain supported.
+
+Google does not publish an XML schema or concrete XML example on the referenced
+export-contents page. Unknown rich content is rejected without advancing progress.
+Conversation-XML verification is separate from validating a complete export's
+count/error reports and an authenticated API export/download cycle. Unsupported
+layouts require a parser update, not skipping the file.
+
+Sources: [Query](https://developers.google.com/workspace/vault/reference/rest/v1/Query),
+[exports](https://developers.google.com/workspace/vault/guides/exports),
+[Gemini export contents](https://knowledge.workspace.google.com/vault/exports/vault-export-contents).
+
+Platform MCP assessment: no AI integration provider has a Platform MCP tool,
+and Gemini setup needs a service account private key, which agent tools must not
+handle. `listOrgUnits` only serves that setup flow, so it adds no MCP tool either;
+schedule status and pause stay in the shared per-provider schedule API. Command K
+keeps the existing AI Integrations page action; fixed provider entries have no
+separately named resource detail route to index.

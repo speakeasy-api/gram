@@ -39,6 +39,25 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 LIMIT 1;
 
+-- name: GetAgentNameIncludingDeleted :one
+-- Reads an agent's name even after it is deleted, for records written about
+-- it afterwards, such as its runtime's withdrawal in the audit log.
+SELECT name
+FROM agents
+WHERE organization_id = @organization_id
+  AND id = @id
+LIMIT 1;
+
+-- name: ListAgentNamesIncludingDeleted :many
+-- Reads every agent's name in an organization, deleted agents included, for
+-- labelling records written while they existed. The deleted flag lets a
+-- label link to the agent only while it exists, and the owner columns let the
+-- caller apply the agent visibility rule before showing the name.
+SELECT id, name, deleted, owner_user_id, owner_reassignment_required_at
+FROM agents
+WHERE organization_id = @organization_id
+ORDER BY deleted ASC, created_at DESC;
+
 -- name: LockAgentIncludingDeleted :one
 -- Locks an agent whatever its lifecycle, for cleanup that must still run
 -- after the agent is deleted.
@@ -211,6 +230,15 @@ WHERE organization_id = @organization_id
   AND id = @grant_id
 RETURNING id, scope, selectors, created_at, updated_at;
 
+-- name: DeleteAgentPrincipalGrants :exec
+-- Removes every grant naming a deleted agent: its own policy and the server
+-- rules that name it. A deleted agent can never act again, so these decide
+-- nothing, and leaving them makes audience saves resend a principal that no
+-- longer validates.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = concat('agent:', @agent_id::uuid);
+
 -- name: ListManagedAgents :many
 -- Keyset paginated on the same (LOWER(name), id) tuple it orders by, so a page
 -- boundary is a position in that ordering rather than an offset: inserts and
@@ -284,21 +312,81 @@ JOIN organization_user_relationships AS membership
 WHERE u.id = ANY(@owner_user_ids::text[]) AND u.deleted_at IS NULL;
 
 -- name: ListManagedAgentSessions :many
+-- Sessions signed in as the agent, and sessions of workloads that sign in as
+-- it through federation. A workload session's subject is the workload, not the
+-- agent, so it is linked through workload_agent_assignments and resolved the
+-- way ResolveWorkloadAgentAssignment resolves it: exact before wildcard, the
+-- longer stem first. A workload pinned to another agent is not listed here,
+-- even when one of this agent's wildcards also covers it.
 -- All known tenancy sources must agree before legacy fallback.
+WITH assigned AS (
+  SELECT a.workload_issuer_id, a.match_kind, a.subject
+  FROM workload_agent_assignments AS a
+  JOIN workload_issuers AS i ON i.organization_id = a.organization_id AND i.id = a.workload_issuer_id
+  WHERE a.organization_id = @organization_id::text
+    AND a.agent_id = @agent_id::uuid
+    AND a.deleted IS FALSE
+    AND i.deleted IS FALSE
+),
+candidates AS (
+  SELECT agent_session.id FROM user_sessions AS agent_session WHERE agent_session.subject_urn = @agent_subject::text
+  UNION
+  SELECT exact_session.id
+  FROM assigned AS a
+  JOIN user_sessions AS exact_session
+    ON a.match_kind = 'exact'
+   AND exact_session.subject_urn = 'workload:' || a.workload_issuer_id::text || ':' || a.subject
+  UNION
+  -- Wildcard stems cannot use the subject index, so the scan stays inside
+  -- the organization's own sessions.
+  SELECT wildcard_session.id
+  FROM assigned AS a
+  JOIN user_sessions AS wildcard_session
+    ON a.match_kind = 'wildcard'
+   AND a.subject LIKE '%*'
+   AND length(a.subject) > 1
+   AND wildcard_session.organization_id = @organization_id::text
+   AND starts_with(wildcard_session.subject_urn, 'workload:' || a.workload_issuer_id::text || ':' || left(a.subject, length(a.subject) - 1))
+)
 SELECT s.id, s.project_id, s.user_session_issuer_id, iss.slug AS issuer_slug,
        c.client_name, s.authorizer_user_id, s.created_at, s.expires_at,
-       s.refresh_expires_at, s.last_used_at
-FROM user_sessions AS s
+       s.refresh_expires_at, s.last_used_at, s.subject_urn
+FROM candidates
+JOIN user_sessions AS s ON s.id = candidates.id
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 LEFT JOIN projects AS p ON p.id = iss.project_id
 LEFT JOIN projects AS session_project ON session_project.id = s.project_id
 LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = iss.id
+LEFT JOIN LATERAL (
+  -- `workload:` is 9 characters and the issuer id a 36-character UUID, so the
+  -- issuer id starts at 10 and the external subject at 47.
+  SELECT wa.agent_id
+  FROM workload_agent_assignments AS wa
+  JOIN workload_issuers AS wi ON wi.organization_id = wa.organization_id AND wi.id = wa.workload_issuer_id
+  WHERE starts_with(s.subject_urn, 'workload:')
+    AND wa.organization_id = @organization_id::text
+    AND wa.workload_issuer_id::text = substring(s.subject_urn FROM 10 FOR 36)
+    AND wa.deleted IS FALSE
+    AND wi.deleted IS FALSE
+    AND (
+      (wa.match_kind = 'exact' AND wa.subject = substring(s.subject_urn FROM 47))
+      OR (
+        wa.match_kind = 'wildcard'
+        AND wi.allow_wildcard_admission
+        AND wa.subject LIKE '%*'
+        AND length(wa.subject) > 1
+        AND starts_with(substring(s.subject_urn FROM 47), left(wa.subject, length(wa.subject) - 1))
+      )
+    )
+  ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
+  LIMIT 1
+) AS workload_agent ON TRUE
 WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id, session_project.organization_id) = @organization_id::text
   AND (s.organization_id IS NULL OR s.organization_id = @organization_id::text)
   AND (iss.organization_id IS NULL OR iss.organization_id = @organization_id::text)
   AND (p.organization_id IS NULL OR p.organization_id = @organization_id::text)
   AND (session_project.organization_id IS NULL OR session_project.organization_id = @organization_id::text)
-  AND s.subject_urn = @agent_subject::text
+  AND (s.subject_urn = @agent_subject::text OR workload_agent.agent_id = @agent_id::uuid)
   AND s.deleted IS FALSE
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
 ORDER BY s.id DESC
@@ -479,3 +567,14 @@ WHERE a.organization_id = @organization_id
     OR (s.access_expires_at IS NOT NULL AND s.access_expires_at <= now()
       AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= now()))
   );
+
+-- name: ListOwnedAgentIDs :many
+-- The agents whose activity counts as the user's own. Ownership follows the
+-- agent-management rule: an owner whose agent is latched for reassignment no
+-- longer answers for it, so its sessions and logs stop being theirs.
+SELECT a.id
+FROM agents a
+WHERE a.organization_id = @organization_id
+  AND a.owner_user_id = @owner_user_id
+  AND a.owner_reassignment_required_at IS NULL
+  AND a.deleted IS FALSE;

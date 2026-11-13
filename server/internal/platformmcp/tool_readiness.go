@@ -8,7 +8,7 @@ import (
 )
 
 type GetMCPReadinessToolInput struct {
-	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional project slug that owns the MCP registration; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
+	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional owning project slug; defaults to the organization's default project (a project assistant always uses its own)"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
 	Force          bool   `json:"force,omitempty" jsonschema:"force one authenticated provider readiness probe; limited to three probes per minute for this registration; unavailable to managed project assistants"`
 }
@@ -43,7 +43,7 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_readiness",
 		Title:       "Check If an MCP Server Is Working",
-		Description: "Say whether one MCP server is working, from the last stored check, when its registration ID is known. A server with no current stored check, because it has never been checked or its last check expired, is checked once on read, counting toward the same three-per-minute limit as a forced check; if that check is refused or fails, the result reports the last stored check as stale, or the server as unchecked when it has never been checked. Without a project named, it looks in the organization's default project; project_slug in the result says which project was read. Constraints: forcing a fresh authenticated check is limited to three per minute for that MCP server; managed project assistants cannot force a check and read only the last stored check.",
+		Description: "Say whether one MCP server is working, by registration ID, from its last stored check. With no current stored check (never checked, or expired) it is checked once on read; if that check is refused or fails, the result reports the last stored check as stale, or the server as unchecked. Without a project named it reads the organization's default project; project_slug in the result names it. On-read and forced authenticated checks share a limit of three per minute per MCP server; managed project assistants cannot force a check and read only the last stored check.",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
@@ -84,7 +84,7 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_repair_plan",
-		Title:       "What to Fix on an MCP Server",
+		Title:       "Find What to Fix on an MCP Server",
 		Description: "List the safe next actions for one MCP server that is not working, from the last stored check, when its registration ID is known. Constraints: managed project assistants read only their own actor-scoped evidence.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{

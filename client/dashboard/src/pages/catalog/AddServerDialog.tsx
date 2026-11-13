@@ -1,5 +1,9 @@
+import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
-import { catalogLogoClassName } from "./logo";
+import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
+import { salesforceSetupInstallServer } from "./provider-setup/salesforce";
+import { useNavigate } from "react-router";
+import { CatalogLogo } from "./CatalogLogo";
 import { CatalogGuardrailsPhase } from "./CatalogGuardrailsPhase";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
@@ -25,7 +29,7 @@ import { invalidateAllListMCPCatalog } from "@gram/client/react-query/listMCPCat
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -36,14 +40,13 @@ import {
   ArrowRight,
   Check,
   Circle,
-  Loader2,
   Plug,
   Plus,
   Server as ServerIcon,
   TriangleAlert,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type CompletePhase,
   type ConfigurePhase,
@@ -60,9 +63,11 @@ import {
   getRemoteDisplayInfo,
   isFigmaCatalogServer,
 } from "./remotes";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 
 export interface AddServerDialogProps {
-  servers: PulseMCPServer[];
+  servers: CatalogServer[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onServersAdded?: () => void;
@@ -80,6 +85,8 @@ export interface AddServerDialogProps {
   projectSlug?: string;
   /** When true, shows a summary view instead of individual name inputs in the configure phase. */
   bulk?: boolean;
+  /** Catalog-only handoff; headless, gateway and plugin callers retain their workflow. */
+  openProviderSetup?: boolean;
   /** When true, starts the install as soon as the default configuration is ready. */
   autoStartInstall?: boolean;
   /** When true, runs the workflow without rendering the dialog UI. */
@@ -92,10 +99,10 @@ export interface AddServerDialogProps {
  * strip their headers, so the details call is the authoritative source for the
  * endpoint data the install flow needs.
  */
-const EMPTY_SERVERS: PulseMCPServer[] = [];
+const EMPTY_SERVERS: CatalogServer[] = [];
 
 function useEnrichedServers(
-  servers: PulseMCPServer[],
+  servers: CatalogServer[],
   open: boolean,
   targetProjectSlug?: string,
 ) {
@@ -138,11 +145,7 @@ function useEnrichedServers(
                 return current;
               })
             : details.remotes;
-          return filterToHttpRemotes({
-            ...server,
-            tools: details.tools,
-            remotes,
-          });
+          return filterToHttpRemotes({ ...server, remotes });
         }),
       ),
   });
@@ -184,9 +187,15 @@ export function AddServerDialog({
   onInstallFinished,
   projectSlug,
   bulk,
+  openProviderSetup = false,
   autoStartInstall,
   headless,
 }: AddServerDialogProps): JSX.Element | null {
+  const navigate = useNavigate();
+  const routes = useRoutes();
+  const providerSetupRollout = useProviderSetupRollout();
+  const setupHandoffRef = useRef(false);
+
   // Fetch server details (including remotes) when dialog opens
   const {
     enrichedServers,
@@ -194,6 +203,36 @@ export function AddServerDialog({
     error: detailsError,
     beforeInstall,
   } = useEnrichedServers(servers, open, projectSlug);
+
+  const [salesforceIdentity, setSalesforceIdentity] = useState<
+    Pick<ServerConfig, "identityMode" | "name"> | undefined
+  >();
+  const salesforceEntry = useMemo(() => {
+    if (
+      !openProviderSetup ||
+      bulk ||
+      headless ||
+      autoStartInstall ||
+      enrichedServers.length !== 1
+    )
+      return null;
+    return salesforceSetupInstallServer(enrichedServers[0]!);
+  }, [openProviderSetup, bulk, headless, autoStartInstall, enrichedServers]);
+  const salesforceSetupEnabled =
+    providerSetupRollout === "enabled" && !!salesforceEntry;
+  const guidedSalesforce =
+    salesforceSetupEnabled &&
+    (salesforceIdentity?.identityMode ?? "user") === "user";
+  const installServers = useMemo(
+    () =>
+      guidedSalesforce && salesforceEntry ? [salesforceEntry] : enrichedServers,
+    [guidedSalesforce, salesforceEntry, enrichedServers],
+  );
+  const initialConfiguration = useMemo(() => {
+    if (providerSetupRollout !== "enabled" || !salesforceEntry)
+      return undefined;
+    return salesforceIdentity ?? { identityMode: "user" as const };
+  }, [providerSetupRollout, salesforceEntry, salesforceIdentity]);
 
   // Use enriched servers (with remotes) for the workflow. Callers that run
   // without a visible dialog can never answer the selectRemotes phase, so
@@ -204,8 +243,9 @@ export function AddServerDialog({
   const { hasScope } = useRBAC();
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
-  const releaseState = useRemoteMcpInstallWorkflow({
-    servers: enrichedServers,
+  const workflow = useRemoteMcpInstallWorkflow({
+    servers: installServers,
+    initialConfiguration,
     beforeInstall,
     projectSlug,
     autoSelectRemotes: !!(autoStartInstall || headless),
@@ -217,6 +257,26 @@ export function AddServerDialog({
       // Unproxied servers (e.g. Figma) never pass through Speakeasy.
       enrichedServers.some((server) => !isFigmaCatalogServer(server)),
   });
+  const releaseState = useMemo<RemoteMcpInstallWorkflow>(
+    () =>
+      salesforceSetupEnabled && workflow.phase === "configure"
+        ? {
+            ...workflow,
+            updateServerConfig: (index, updates) => {
+              if (
+                updates.identityMode &&
+                (updates.identityMode === "user") !== guidedSalesforce
+              ) {
+                setSalesforceIdentity({
+                  identityMode: updates.identityMode,
+                  name: workflow.serverConfigs[index]!.name,
+                });
+              } else workflow.updateServerConfig(index, updates);
+            },
+          }
+        : workflow,
+    [salesforceSetupEnabled, guidedSalesforce, workflow],
+  );
   const serversKey = servers.map((s) => s.registrySpecifier).join(",");
   const autoStartRef = useRef(false);
   const finishedRef = useRef(false);
@@ -224,6 +284,8 @@ export function AddServerDialog({
   // Reset when dialog closes
   useEffect(() => {
     if (!open) {
+      setSalesforceIdentity(undefined);
+      setupHandoffRef.current = false;
       releaseState.reset();
       autoStartRef.current = false;
       finishedRef.current = false;
@@ -300,6 +362,7 @@ export function AddServerDialog({
   useEffect(() => {
     autoStartRef.current = false;
     finishedRef.current = false;
+    setSalesforceIdentity(undefined);
   }, [projectSlug, serversKey]);
 
   useEffect(() => {
@@ -325,6 +388,38 @@ export function AddServerDialog({
       document.body.style.removeProperty("pointer-events");
     };
   }, []);
+
+  useEffect(() => {
+    if (
+      providerSetupRollout !== "enabled" ||
+      !openProviderSetup ||
+      !open ||
+      headless ||
+      autoStartInstall ||
+      setupHandoffRef.current ||
+      releaseState.phase !== "complete"
+    )
+      return;
+    const target = providerSetupInstallTarget(
+      enrichedServers,
+      releaseState.statuses,
+    );
+    if (!target) return;
+    setupHandoffRef.current = true;
+    onOpenChange(false);
+    void navigate(routes.mcp.details.setup.href(target));
+  }, [
+    providerSetupRollout,
+    openProviderSetup,
+    open,
+    headless,
+    autoStartInstall,
+    releaseState,
+    enrichedServers,
+    onOpenChange,
+    navigate,
+    routes,
+  ]);
 
   // Notify parent when all installs are done
   const allInstallsDone =
@@ -442,7 +537,10 @@ export function AddServerDialog({
   if (headless) return null;
 
   // Show loading state while fetching server details
-  if (isLoadingDetails) {
+  if (
+    isLoadingDetails ||
+    (salesforceEntry && providerSetupRollout === "loading")
+  ) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <Dialog.Content className="gap-2">
@@ -450,9 +548,12 @@ export function AddServerDialog({
             <Dialog.Title>Loading...</Dialog.Title>
             <Dialog.Description>Fetching server details...</Dialog.Description>
           </Dialog.Header>
-          <div className="flex items-center justify-center gap-2 py-8">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-            <Text muted>Loading server configuration...</Text>
+          <div className="py-4">
+            <Skeleton label="Loading server configuration">
+              <div className="h-5 w-48" />
+              <div className="h-9 w-full" />
+              <div className="h-9 w-full" />
+            </Skeleton>
           </div>
         </Dialog.Content>
       </Dialog>
@@ -496,7 +597,8 @@ export function AddServerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="gap-2">
+      {/* Pin the column to the dialog width so long URLs truncate instead of widening it. */}
+      <Dialog.Content className="grid-cols-[minmax(0,1fr)] gap-2">
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>
@@ -660,18 +762,14 @@ function SelectRemotesPhaseContent({
         {/* Server icon and info */}
         <div className="flex items-center gap-3">
           <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center">
-            {currentConfig.server.iconUrl ? (
-              <img
-                src={currentConfig.server.iconUrl}
-                alt=""
-                className={cn(
-                  "h-6 w-6",
-                  catalogLogoClassName(currentConfig.server.registrySpecifier),
-                )}
-              />
-            ) : (
-              <ServerIcon className="text-muted-foreground h-5 w-5" />
-            )}
+            <CatalogLogo
+              server={currentConfig.server}
+              alt=""
+              className={cn("h-6 w-6")}
+              fallback={
+                <ServerIcon className="text-muted-foreground h-5 w-5" />
+              }
+            />
           </div>
           <div className="min-w-0 flex-1">
             <Text className="truncate font-medium">
@@ -865,7 +963,7 @@ function ConfigurePhaseContent({
   ) {
     return (
       <div className="flex items-center justify-center gap-2 py-4">
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Spinner className="mr-0" />
         <Text small muted>
           Starting install...
         </Text>
@@ -1184,18 +1282,14 @@ function BatchServerConfig({
           >
             <div className="flex items-center gap-3">
               <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center">
-                {config.server.iconUrl ? (
-                  <img
-                    src={config.server.iconUrl}
-                    alt=""
-                    className={cn(
-                      "h-4 w-4",
-                      catalogLogoClassName(config.server.registrySpecifier),
-                    )}
-                  />
-                ) : (
-                  <ServerIcon className="text-muted-foreground h-3 w-3" />
-                )}
+                <CatalogLogo
+                  server={config.server}
+                  alt=""
+                  className={cn("h-4 w-4")}
+                  fallback={
+                    <ServerIcon className="text-muted-foreground h-3 w-3" />
+                  }
+                />
               </div>
               <div className="min-w-0 flex-1">
                 <Input
@@ -1645,9 +1739,7 @@ function InstallStatusIcon({
     case "pending":
       return <Circle className="text-muted-foreground h-4 w-4 shrink-0" />;
     case "creating":
-      return (
-        <Loader2 className="text-muted-foreground h-4 w-4 shrink-0 animate-spin" />
-      );
+      return <Spinner className="text-muted-foreground mr-0 shrink-0" />;
     case "completed":
       return <Check className="h-4 w-4 shrink-0 text-emerald-500" />;
     case "failed":
@@ -1678,14 +1770,14 @@ function AddedServerCard({
         className="min-h-[128px] cursor-pointer [&_*]:no-underline"
         iconRailClassName="w-32"
         icon={
-          server?.iconUrl ? (
-            <img
-              src={server.iconUrl}
+          server ? (
+            <CatalogLogo
+              server={server}
               alt=""
-              className={cn(
-                "h-10 w-10 object-contain",
-                catalogLogoClassName(server.registrySpecifier),
-              )}
+              className={cn("h-10 w-10 object-contain")}
+              fallback={
+                <ServerIcon className="text-muted-foreground h-8 w-8" />
+              }
             />
           ) : (
             <ServerIcon className="text-muted-foreground h-8 w-8" />

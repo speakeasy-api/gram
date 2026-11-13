@@ -461,20 +461,31 @@ linters:
         # providers, encryption clients, infra launchers). It must not import
         # domain packages, otherwise internal tests in those packages can no
         # longer use testenv. Per-domain test helpers belong in sibling
-        # packages such as `externalmcptest` and `functionstest`.
+        # packages such as `functionstest`.
         testenv-no-domain-imports:
           list-mode: lax
           files:
             - "**/internal/testenv/*.go"
           deny:
             - pkg: "github.com/speakeasy-api/gram/server/internal/externalmcp"
-              desc: Move helpers that need externalmcp to internal/externalmcptest.
+              desc: Move helpers that need externalmcp to a per-domain test package.
             - pkg: "github.com/speakeasy-api/gram/server/internal/functions"
               desc: Move helpers that need functions to internal/functionstest.
             - pkg: "github.com/speakeasy-api/gram/server/internal/assets"
               desc: Move helpers that need assets to a per-domain test package.
             - pkg: "github.com/speakeasy-api/gram/server/internal/authz"
               desc: testenv must not depend on authz; tests in package authz import testenv.
+        # mv/orgaccount exists so lightweight callers (auth/sessions and, through
+        # it, testenv) can describe an organization without compiling all of
+        # mv. Importing mv here would restore that dependency without any
+        # compile error.
+        mv-orgaccount-no-mv:
+          list-mode: lax
+          files:
+            - "**/internal/mv/orgaccount/*.go"
+          deny:
+            - pkg: "github.com/speakeasy-api/gram/server/internal/mv$"
+              desc: mv/orgaccount must not import mv; move shared helpers into mv/orgaccount instead.
     importas:
       no-unaliased: true
       alias:
@@ -538,6 +549,7 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).ShouldEnforce("
         - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("
+        - "github.com/speakeasy-api/gram/server/internal/environments.ResolveReadableEnvironment("
         - "github.com/speakeasy-api/gram/server/internal/organizations/orgprovision.ValidateName("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).AuthorizeWithHandlerProjectAccess("
@@ -547,6 +559,7 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/openapi.ToolExtractor).Do("
         - "(*github.com/speakeasy-api/gram/server/internal/functions.ToolExtractor).Do("
         - "github.com/speakeasy-api/gram/server/internal/mv.ToolVariationsGroupName("
+        - "github.com/speakeasy-api/gram/server/internal/mv/orgaccount.Describe("
         - "(*github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api.Client).Call("
         - "(*github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api.Client).CallWithToken("
 

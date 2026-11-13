@@ -113,12 +113,22 @@ func harnessForClient(clientID string) string {
 
 // discoveryModeFor resolves the surface for one request. Every failure serves
 // the full catalogue, the pre-rollout behaviour.
+//
+// ChatGPT always gets the full catalogue, whatever the flag says. The ChatGPT
+// app directory requires every model-callable operation to be listed upfront
+// as its own tool, so the meta-tools that run other tools by name fail its
+// review. ChatGPT connectors share one client_id per MCP server origin, so the
+// reviewed app cannot be told apart from other ChatGPT connections.
 func (r *Runtime) discoveryModeFor(ctx context.Context, logger *slog.Logger, principal Principal) discoveryMode {
 	if r.discovery.Flags == nil || principal.OrganizationID == "" {
 		return discoveryFull
 	}
+	harness := harnessForClient(principal.ClientID)
+	if harness == chatGPTProductID {
+		return discoveryFull
+	}
 	variant, err := feature.FlagVariantLocal(ctx, r.discovery.Flags, feature.FlagPlatformMCPDiscoveryMode, principal.OrganizationID, nil, map[string]string{
-		"harness":         harnessForClient(principal.ClientID),
+		"harness":         harness,
 		"organization_id": principal.OrganizationID,
 	})
 	if err != nil {
@@ -257,6 +267,23 @@ func firstRunToolsFor(ctx context.Context, next mcp.MethodHandler, method string
 	return tools, nil
 }
 
+// smallSurfaceInstructionBudget is the instructions size hosts on the small
+// surface keep; Codex cuts the rest.
+const smallSurfaceInstructionBudget = 1 << 10
+
+// instructionBudget reports the instructions size a caller's host keeps, or
+// zero when it keeps them whole. Middleware outside discovery cannot read the
+// mode from its context, so it asks the same way discovery does.
+func (r *Runtime) instructionBudget(logger *slog.Logger) func(context.Context) int {
+	return func(ctx context.Context) int {
+		principal, ok := PrincipalFromContext(ctx)
+		if !ok || r.discoveryModeFor(ctx, logger, principal) == discoveryFull {
+			return 0
+		}
+		return smallSurfaceInstructionBudget
+	}
+}
+
 // discoveryInstructions replace the full server instructions, which Codex cuts
 // to 1 KB. Tool-specific rules travel with describe_platform_tool instead.
 func discoveryInstructions(mode discoveryMode) string {
@@ -276,60 +303,64 @@ var (
 	executePlatformCodeSchema  = json.RawMessage(`{"type":"object","properties":{"code":{"type":"string","minLength":1,"maxLength":65536,"description":"Python program; its final JSON-compatible expression is returned."},"tools":{"type":"array","maxItems":10000,"uniqueItems":true,"items":{"type":"string"},"description":"Optional exact platform--<tool> allowlist narrowing this execution. Omit for every permitted tool; [] permits none."}},"required":["code"],"additionalProperties":false}`)
 )
 
-const executePlatformCodeDescription = `Execute Python against every Platform tool you may use. Top-level await works; await every helper. Fresh state each run; the final expression returns JSON.
+const executePlatformCodeDescription = `Run Python against every Platform tool you may use. Await every helper. Each run starts fresh and returns its final expression as JSON.
 
-Discover, then inspect:
+Search and describe in one run:
 
     page = await tools.search("add an MCP server from the catalog")
-    details = await tools.describe(page["items"][0]["path"]) if page["items"] else None
-    {"page": page, "details": details}
+    await tools.describe(page["items"][0]["path"]) if page["items"] else page
 
 Next run, call with the described inputSchema:
 
     r = await tools.call("platform--search_mcp_catalog", {"query": "linear"})
     r["data"] if r["ok"] else r
 
-Paths are platform--<tool name>. search(query="", limit=10, cursor=None), max limit 50; empty query lists tools; paginate with next_cursor. Calls return {ok, data, content, outcome, error?}; check ok. A refused call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and the reason in content.
+Paths are platform--<tool name>. search(query="", limit=10, cursor=None): an empty query lists every tool, limit is at most 50, page with next_cursor. call returns {ok, data, content, outcome, error?}; check ok. A refused call gives ok False, error "tool_call_rejected" and the reason in content.
 
-Write tools keep their own safeguards: preview with confirmed false and get the user's explicit confirmation before a confirmed call. Errors and cancellation never undo writes; when an outcome is unknown, read the state again and never replay automatically.
+Write tools keep their safeguards: preview with confirmed false and make a confirmed call only after the user explicitly agrees. Errors and cancellation never undo writes; on an unknown outcome read the state again, never replay.
 
-Python subset; import asyncio enables await asyncio.gather(...). No external packages, filesystem, environment, network or sleep. Limits: 64 KiB source, 30 s wall, 64 helper calls, 256 KiB result.`
+Python subset; import asyncio for asyncio.gather. No packages, filesystem, environment, network or sleep. Limits: 64 KiB source, 30 s wall, 64 helper calls, 256 KiB result.`
 
 // discoveryTools are the meta-tools every caller in the small surface lists.
 // The first-run tools listed next to them depend on the caller; for every other
 // tool, what a caller may use is decided when it searches, describes or calls.
 func discoveryTools(mode discoveryMode) []*mcp.Tool {
-	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: new(false)}
+	readOnly := readOnlyAnnotations()
 	tools := []*mcp.Tool{
 		{
 			Name:        searchPlatformToolsName,
-			Title:       "Search Platform tools",
+			Title:       "Search Speakeasy Tools",
 			Description: "Search the Speakeasy Platform tools you may use, ranked for a plain-language query. Returns names and short descriptions; describe a tool before calling it.",
 			InputSchema: searchPlatformToolsSchema,
 			Annotations: readOnly,
 		},
 		{
 			Name:        describePlatformToolName,
-			Title:       "Describe Platform tools",
+			Title:       "Get Speakeasy Tool Details",
 			Description: "Return the full description, input schema, annotations and usage rules of named Platform tools. Names you may not use come back in not_found.",
 			InputSchema: describePlatformToolSchema,
 			Annotations: readOnly,
 		},
 		{
 			Name:        callPlatformToolName,
-			Title:       "Call a Platform tool",
+			Title:       "Speakeasy Tool",
 			Description: "Run one Platform tool by exact name with arguments matching its input schema. The tool keeps its own authorization, confirmation, idempotency and audit rules, and returns its own result.",
 			InputSchema: callPlatformToolSchema,
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), OpenWorldHint: new(true)},
+			// A host draws a card only for a tool whose spec links the card
+			// view, so the meta-tools link it for the card tools they reach.
+			// A result without a card collapses the view to nothing.
+			Meta: cardToolMeta(),
 		},
 	}
 	if mode == discoveryCode {
 		tools = append(tools, &mcp.Tool{
 			Name:        executePlatformCodeName,
-			Title:       "Execute Python against Platform tools",
+			Title:       "Speakeasy Code",
 			Description: executePlatformCodeDescription,
 			InputSchema: executePlatformCodeSchema,
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), OpenWorldHint: new(true)},
+			Meta:        cardToolMeta(),
 		})
 	}
 	return tools
@@ -551,11 +582,15 @@ func (s *discoverySurface) execute(ctx context.Context, arguments json.RawMessag
 	if err != nil {
 		return nil, fmt.Errorf("encode code execution: %w", err)
 	}
-	return &mcp.CallToolResult{
+	result := &mcp.CallToolResult{
 		Content:           []mcp.Content{&mcp.TextContent{Text: string(structured)}},
 		StructuredContent: json.RawMessage(structured),
 		IsError:           execution.Error != nil,
-	}, nil
+	}
+	if card, ok := backend.card(); ok {
+		result.Meta = mcp.Meta{cardMetaKey: card}
+	}
+	return result, nil
 }
 
 // codeAdmissionMessage explains why a program was never submitted. Every one
@@ -580,6 +615,22 @@ func codeAdmissionMessage(ctx context.Context, logger *slog.Logger, err error) s
 // call carries the request's identity, grants and audit attribution.
 type codeBackend struct {
 	surface *discoverySurface
+
+	// cards are the result cards the program's calls returned. Helpers may
+	// run concurrently, so mu guards them.
+	mu    sync.Mutex
+	cards []string
+}
+
+// card is the one card the program's calls returned. The execute result shows
+// it only when there is exactly one, so it never has to pick between them.
+func (b *codeBackend) card() (string, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.cards) != 1 {
+		return "", false
+	}
+	return b.cards[0], true
 }
 
 var _ codemode.Backend = (*codeBackend)(nil)
@@ -631,6 +682,11 @@ func (b *codeBackend) Call(ctx context.Context, path string, arguments json.RawM
 	}
 	if rejection != "" {
 		return nil, &codemode.DispatchError{Rejection: rejection}
+	}
+	if card, ok := result.Meta[cardMetaKey].(string); ok {
+		b.mu.Lock()
+		b.cards = append(b.cards, card)
+		b.mu.Unlock()
 	}
 	raw, err := json.Marshal(result)
 	if err != nil {

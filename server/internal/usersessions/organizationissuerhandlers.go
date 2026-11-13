@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -47,7 +49,10 @@ func (s *Service) requireOrganizationIssuerScope(ctx context.Context, scope auth
 
 var errTrustedRemoteSessionClientConfiguration = errors.New("invalid trusted remote session client configuration")
 
-func lockTrustedRemoteSessionIssuer(ctx context.Context, q *remotesessionsrepo.Queries, issuerID uuid.UUID, organizationID string) error {
+var errTrustedRemoteSessionIssuerHasNoJWKS = errors.New("trusted remote session issuer has no jwks_uri")
+
+// lockTrustedRemoteSessionIssuer locks an inbound-only link's issuer; requireJWKS refuses one inbound EMA cannot verify.
+func lockTrustedRemoteSessionIssuer(ctx context.Context, q *remotesessionsrepo.Queries, issuerID uuid.UUID, organizationID string, requireJWKS bool) error {
 	getParams := remotesessionsrepo.GetTrustedRemoteSessionIssuerForOrganizationParams{
 		ID:             issuerID,
 		OrganizationID: organizationID,
@@ -58,11 +63,15 @@ func lockTrustedRemoteSessionIssuer(ctx context.Context, q *remotesessionsrepo.Q
 	if err := q.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return fmt.Errorf("lock trusted remote session issuer: %w", err)
 	}
-	if _, err := q.LockTrustedRemoteSessionIssuerForOrganization(ctx, remotesessionsrepo.LockTrustedRemoteSessionIssuerForOrganizationParams{
+	locked, err := q.LockTrustedRemoteSessionIssuerForOrganization(ctx, remotesessionsrepo.LockTrustedRemoteSessionIssuerForOrganizationParams{
 		ID:             issuerID,
 		OrganizationID: organizationID,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("lock trusted remote session issuer row: %w", err)
+	}
+	if requireJWKS && !idjag.JWKSURIConfigured(locked.JwksUri) {
+		return errTrustedRemoteSessionIssuerHasNoJWKS
 	}
 	return nil
 }
@@ -171,16 +180,28 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// Whether the organization has one organization-level issuer decides
+	// whether its organization gateway fronts every server, so this change
+	// re-decides associations in every project. Their writer scope precedes
+	// every row lock.
+	reconcileScope, err := upstreamclients.LockOrganizationScope(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock organization upstream client writer scope").LogError(ctx, logger)
+	}
+
 	if trustedIssuerID.Valid {
 		var trustErr error
 		if trustedClientID.Valid {
 			trustErr = lockTrustedRemoteSessionPair(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, trustedClientID.UUID, authCtx.ActiveOrganizationID)
 		} else {
-			trustErr = lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, authCtx.ActiveOrganizationID)
+			trustErr = lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), trustedIssuerID.UUID, authCtx.ActiveOrganizationID, true)
 		}
 		if trustErr != nil {
 			if errors.Is(trustErr, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeNotFound, trustErr, "trusted remote session issuer or issuer/client pair not found").LogError(ctx, logger)
+			}
+			if errors.Is(trustErr, errTrustedRemoteSessionIssuerHasNoJWKS) {
+				return nil, oops.E(oops.CodeBadRequest, trustErr, "This identity provider has no key set URL, so Speakeasy can't check what it signs. Add its JWKS URL first.").LogWarn(ctx, logger)
 			}
 			if errors.Is(trustErr, errTrustedRemoteSessionClientConfiguration) {
 				return nil, oops.E(oops.CodeBadRequest, trustErr, "trusted remote session client is not eligible for identity-provider login: %v", trustErr).LogError(ctx, logger)
@@ -212,6 +233,12 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 		UserSessionIssuerSnapshotAfter: UserSessionIssuerView(row),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log organization user session issuer creation").LogError(ctx, logger)
+	}
+	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
+		if errors.Is(err, upstreamclients.ErrScopeChanged) {
+			return nil, err //nolint:wrapcheck // oops errors pass through.
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -359,6 +386,17 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *orggen.ListMcpSer
 
 // UpdateIssuer patches an organization-owned issuer.
 func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuerPayload) (*types.UserSessionIssuer, error) {
+	return s.updateIssuer(ctx, payload, nil)
+}
+
+// UpdateIssuerIfTrusting is UpdateIssuer that applies only while the issuer
+// still trusts expectedTrustedRemoteSessionIssuerID ("" for none), checked
+// under the issuer's lock; otherwise it fails with a conflict.
+func (s *Service) UpdateIssuerIfTrusting(ctx context.Context, payload *orggen.UpdateIssuerPayload, expectedTrustedRemoteSessionIssuerID string) (*types.UserSessionIssuer, error) {
+	return s.updateIssuer(ctx, payload, &expectedTrustedRemoteSessionIssuerID)
+}
+
+func (s *Service) updateIssuer(ctx context.Context, payload *orggen.UpdateIssuerPayload, expectedTrustedIssuerID *string) (*types.UserSessionIssuer, error) {
 	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
 		return nil, err
@@ -421,6 +459,15 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, logger)
 	}
+	if expectedTrustedIssuerID != nil {
+		currentTrusted := ""
+		if existing.TrustedRemoteSessionIssuerID.Valid {
+			currentTrusted = existing.TrustedRemoteSessionIssuerID.UUID.String()
+		}
+		if currentTrusted != *expectedTrustedIssuerID {
+			return nil, oops.E(oops.CodeConflict, nil, "this issuer's trusted identity provider changed since it was read").LogWarn(ctx, logger)
+		}
+	}
 	beforeView := UserSessionIssuerView(existing)
 
 	// Settings and trust changes leave identity-chaining bindings intact:
@@ -436,6 +483,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 	if payload.TrustedRemoteSessionClientID != nil {
 		resultingTrustedClientID = trustedClientID
 	}
+
 	if resultingTrustedClientID.Valid && !resultingTrustedIssuerID.Valid {
 		return nil, oops.E(oops.CodeBadRequest, nil, "trusted_remote_session_client_id requires trusted_remote_session_issuer_id").LogError(ctx, logger)
 	}
@@ -444,11 +492,15 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 		if resultingTrustedClientID.Valid {
 			trustErr = lockTrustedRemoteSessionPair(ctx, remotesessionsrepo.New(dbtx), resultingTrustedIssuerID.UUID, resultingTrustedClientID.UUID, authCtx.ActiveOrganizationID)
 		} else {
-			trustErr = lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), resultingTrustedIssuerID.UUID, authCtx.ActiveOrganizationID)
+			// Only a change to the link is checked, so other edits keep working.
+			trustErr = lockTrustedRemoteSessionIssuer(ctx, remotesessionsrepo.New(dbtx), resultingTrustedIssuerID.UUID, authCtx.ActiveOrganizationID, payload.TrustedRemoteSessionIssuerID != nil || payload.TrustedRemoteSessionClientID != nil)
 		}
 		if trustErr != nil {
 			if errors.Is(trustErr, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeNotFound, trustErr, "trusted remote session issuer or issuer/client pair not found").LogError(ctx, logger)
+			}
+			if errors.Is(trustErr, errTrustedRemoteSessionIssuerHasNoJWKS) {
+				return nil, oops.E(oops.CodeBadRequest, trustErr, "This identity provider has no key set URL, so Speakeasy can't check what it signs. Add its JWKS URL first.").LogWarn(ctx, logger)
 			}
 			if errors.Is(trustErr, errTrustedRemoteSessionClientConfiguration) {
 				return nil, oops.E(oops.CodeBadRequest, trustErr, "trusted remote session client is not eligible for identity-provider login: %v", trustErr).LogError(ctx, logger)
@@ -549,6 +601,14 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuer
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	// Whether the organization has one organization-level issuer decides
+	// whether its organization gateway fronts every server, so this change
+	// re-decides associations in every project. Their writer scope precedes
+	// every row lock.
+	reconcileScope, err := upstreamclients.LockOrganizationScope(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock organization upstream client writer scope").LogError(ctx, logger)
+	}
 	txRepo := repo.New(dbtx)
 	if err := guardUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
 		return err
@@ -599,6 +659,12 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuer
 		Slug:                 deleted.Slug,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log organization user session issuer deletion").LogError(ctx, logger)
+	}
+	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
+		if errors.Is(err, upstreamclients.ErrScopeChanged) {
+			return err //nolint:wrapcheck // oops errors pass through.
+		}
+		return oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)

@@ -73,3 +73,50 @@ LIMIT 1;
 UPDATE audit_logs
 SET created_at = @created_at
 WHERE id = @id;
+
+-- name: GetLatestSecurityAuditLogByAction :one
+-- Same columns as GetLatestAuditLogByAction, so the rows convert.
+SELECT
+  action,
+  organization_id,
+  project_id,
+  actor_id,
+  actor_type,
+  actor_display_name,
+  actor_slug,
+  subject_id,
+  subject_type,
+  subject_display_name,
+  subject_slug,
+  metadata,
+  before_snapshot,
+  after_snapshot,
+  acting_surface,
+  acting_client_id
+FROM security_audit_logs
+WHERE action = @action
+ORDER BY seq DESC
+LIMIT 1;
+
+-- name: CountSecurityAuditLogsByAction :one
+SELECT COUNT(*)
+FROM security_audit_logs
+WHERE action = @action;
+
+-- name: BackdateSecurityAuditLog :exec
+-- Test-only: BackdateAuditLog for security_audit_logs.
+UPDATE security_audit_logs
+SET created_at = @created_at
+WHERE id = @id;
+
+-- name: GetAuditLogInternalBySubject :one
+SELECT is_internal FROM audit_logs WHERE subject_id = @subject_id;
+
+-- name: GetSecurityAuditLogInternal :one
+SELECT is_internal FROM security_audit_logs WHERE id = @id;
+
+-- name: CountPublishOutboxByOrg :one
+SELECT count(*) FROM publish_outbox WHERE organization_id = @organization_id;
+
+-- name: CountPublishOutboxByOrgAndEvent :one
+SELECT count(*) FROM publish_outbox WHERE organization_id = @organization_id AND attributes->>'event_type' = @event_type::text;

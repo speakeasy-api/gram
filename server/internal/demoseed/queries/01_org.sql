@@ -334,7 +334,6 @@ INSERT INTO organization_setup_tasks
   (organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at)
 VALUES
   (@org_id::text, 'identity-provider', 'todo', NULL, NULL, NULL),
-  (@org_id::text, 'create-marketplace', 'todo', NULL, NULL, NULL),
   (@org_id::text, 'distribute-servers', 'todo', NULL, NULL, NULL),
   (@org_id::text, 'enable-logging', 'todo', NULL, NULL, NULL),
   (@org_id::text, 'anthropic-observability', 'todo', NULL, NULL, NULL),
@@ -352,6 +351,17 @@ VALUES
 DELETE FROM principal_grants
 WHERE organization_id = @org_id::text
   AND principal_urn LIKE 'agent:%';
+
+-- name: OrgDeleteAuthPermissionProvisions :exec
+-- The default auth permission ledger keeps every grant the backfill ever
+-- provisioned, so it never re-grants one an admin removed. The seed deletes
+-- and recreates agent and custom role grants, so it resets their ledger rows
+-- with them; otherwise a reseed would leave the recreated principals without
+-- their default mcp:auth grants. Human grants survive a reseed, and so do
+-- their ledger rows.
+DELETE FROM auth_permission_provisions
+WHERE organization_id = @org_id::text
+  AND (principal_urn LIKE 'agent:%' OR principal_urn LIKE 'role:organization:%');
 
 -- name: OrgDeleteAgents :exec
 -- Agents RESTRICT owner membership deletion and are not project children.
@@ -385,8 +395,10 @@ VALUES
    'Support triage', now() - interval '2 days', NULL),
   (@agent3::uuid, @org_id::text, @owner3::text,
    'Retired documentation bot', NULL, now() - interval '5 days'),
-  (@agent4::uuid, @org_id::text, @owner1::text,
-   'Release notes assistant', NULL, NULL);
+  (@agent4::uuid, @org_id::text, @owner2::text,
+   'Release notes assistant', NULL, NULL),
+  (@agent5::uuid, @org_id::text, @owner5::text,
+   'Deploy watcher', NULL, NULL);
 
 -- name: OrgGlobalRoleURN :one
 -- Global roles are synced from WorkOS in real envs; tolerate their absence
@@ -401,3 +413,38 @@ DELETE FROM organization_role_assignments WHERE organization_id = @org_id::text;
 INSERT INTO organization_role_assignments
   (organization_id, workos_user_id, user_id, role_urn, workos_updated_at)
 VALUES (@org_id::text, @workos_user_id::text, @user_id::text, @role_urn::text, now());
+
+-- name: OrgSeedCustomDomain :exec
+INSERT INTO custom_domains (id, organization_id, domain, verified, activated, provisioner_kind,
+ dns_target_token, dns_configuration_status, dns_routing_method, dns_checked_at, health_status, health_checked_at)
+VALUES (@id, @org_id, @domain, TRUE, FALSE, 'local', @dns_target_token, 'unconfirmed', 'unknown', statement_timestamp(), 'healthy', statement_timestamp());
+
+-- name: OrgDeleteCustomDomains :exec
+DELETE FROM custom_domains WHERE organization_id = @org_id;
+
+-- name: OrgCountCustomDomainDiagnostics :one
+SELECT count(*) FROM custom_domains WHERE organization_id = @org_id
+ AND domain = @domain AND dns_configuration_status = 'unconfirmed' AND health_status = 'healthy'
+ AND dns_target_token IS NOT NULL AND dns_checked_at = health_checked_at;
+
+-- name: OrgPlantCustomDomainDependents :one
+-- Test fixture: both SET NULL references must disappear before domain deletion.
+WITH target AS MATERIALIZED (
+  SELECT d.id AS domain_id, m.id AS meta_id, m.project_id, d.organization_id
+  FROM custom_domains d
+  JOIN meta_mcp_servers m ON m.organization_id = d.organization_id
+  WHERE d.organization_id = @org_id::text AND d.deleted IS FALSE
+    AND m.project_id = @project_id::uuid AND m.deleted IS FALSE
+  ORDER BY m.id LIMIT 1
+), endpoint AS (
+  INSERT INTO mcp_endpoints (project_id, custom_domain_id, meta_mcp_server_id, slug, is_domain_root)
+  SELECT project_id, domain_id, meta_id, 'reseed-domain-root', TRUE FROM target
+  RETURNING id
+), tools AS (
+  INSERT INTO toolsets (organization_id, project_id, name, slug, mcp_slug, custom_domain_id)
+  SELECT organization_id, project_id, 'Reseed domain ordering', 'reseed-domain-' || kind,
+    'reseed-' || md5(organization_id), CASE WHEN kind = 'custom' THEN domain_id ELSE NULL END
+  FROM target CROSS JOIN (VALUES ('custom'), ('shared')) AS variants(kind)
+  RETURNING id
+)
+SELECT ((SELECT count(*) FROM endpoint) + (SELECT count(*) FROM tools))::integer AS planted;

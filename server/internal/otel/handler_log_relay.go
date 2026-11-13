@@ -42,6 +42,8 @@ type LogRelayHandler struct {
 	recordsDropped metric.Int64Counter
 	recordsFailed  metric.Int64Counter
 	relay          *signalRelay
+	// connectionLogRelay carries connection attempts to their own route, off the same subscription.
+	connectionLogRelay *signalRelay
 }
 
 type logProvenanceKey struct {
@@ -96,6 +98,14 @@ func NewLogRelayHandler(
 			"/v1/logs",
 			"log",
 		),
+		connectionLogRelay: newSignalRelay(
+			db,
+			encryptionClient,
+			policy,
+			dataexports.DataSourceMCPConnectionLogs,
+			"/v1/logs",
+			"connection log",
+		),
 	}
 }
 
@@ -116,11 +126,15 @@ func (h *LogRelayHandler) HandleBatchWithResult(
 }
 
 func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMessage) error {
-	logger := h.logger
-	messages, excluded := withoutGatewayToolCallRecords(messages)
+	telemetry, connectionLogs, excluded := splitLogRelayMessages(messages)
 	if excluded > 0 {
 		h.recordDroppedLogs(ctx, excluded, relayReasonExcluded)
 	}
+	return errors.Join(h.deliver(ctx, h.relay, telemetry), h.deliver(ctx, h.connectionLogRelay, connectionLogs))
+}
+
+func (h *LogRelayHandler) deliver(ctx context.Context, relay *signalRelay, messages []logRelayMessage) error {
+	logger := h.logger
 	groups, invalid := groupLogsByProvenance(messages)
 	if invalid > 0 {
 		h.recordDroppedLogs(ctx, invalid, relayReasonInvalid)
@@ -144,7 +158,7 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 		}
 		result, ok := destinations[routeKey]
 		if !ok {
-			result.destination, result.err = h.relay.destinationForRoute(ctx, routeKey)
+			result.destination, result.err = relay.destinationForRoute(ctx, routeKey)
 			destinations[routeKey] = result
 		}
 		if result.err != nil {
@@ -166,12 +180,19 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 			h.recordDroppedLogs(ctx, len(provenanceGroup.messages), relayReasonNoDestination)
 			continue
 		}
+		kept, belowSeverity := filterLogsBelowSeverity(provenanceGroup.messages, result.destination.minSeverity)
+		if belowSeverity > 0 {
+			h.recordDroppedLogs(ctx, belowSeverity, relayReasonBelowSeverity)
+		}
+		if len(kept) == 0 {
+			continue
+		}
 
-		batches, err := rightSizeProtoBatches(provenanceGroup.messages, maxLogRelayExportBytes, func(messages []logRelayMessage) (*collectorlogsv1.ExportLogsServiceRequest, error) {
+		batches, err := rightSizeProtoBatches(kept, maxLogRelayExportBytes, func(messages []logRelayMessage) (*collectorlogsv1.ExportLogsServiceRequest, error) {
 			return buildLogRelayExport(messages, result.destination.includeSensitiveData)
 		})
 		if err != nil {
-			h.recordDroppedLogs(ctx, len(provenanceGroup.messages), relayReasonInvalid)
+			h.recordDroppedLogs(ctx, len(kept), relayReasonInvalid)
 			logger.ErrorContext(
 				ctx,
 				"build log relay exports",
@@ -244,19 +265,44 @@ func (h *LogRelayHandler) recordFailedLogs(ctx context.Context, count int, reaso
 	h.recordsFailed.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
 }
 
-// withoutGatewayToolCallRecords drops gateway tool call records: the tool-call
-// log relay off telemetry_logs already delivers those calls, until DNO-1310.
-func withoutGatewayToolCallRecords(messages []logRelayMessage) ([]logRelayMessage, int) {
-	kept := messages[:0]
-	excluded := 0
+// splitLogRelayMessages separates connection logs, which go to their own route,
+// from product telemetry. It drops gateway tool call records: the tool-call log
+// relay off telemetry_logs already delivers those calls, until DNO-1310.
+func splitLogRelayMessages(messages []logRelayMessage) (telemetry, connectionLogs []logRelayMessage, excluded int) {
+	telemetry = messages[:0]
 	for _, message := range messages {
-		if logOriginalScopeName(message.record) == dialect.GatewayLogScope {
+		switch {
+		case isConnectionLogRecord(message.record):
+			connectionLogs = append(connectionLogs, message)
+		case logOriginalScopeName(message.record) == dialect.GatewayLogScope:
 			excluded++
+		default:
+			telemetry = append(telemetry, message)
+		}
+	}
+	return telemetry, connectionLogs, excluded
+}
+
+// filterLogsBelowSeverity drops records below the route's minimum level.
+func filterLogsBelowSeverity(messages []logRelayMessage, minSeverity otelv1.LogRecord_SeverityNumber) ([]logRelayMessage, int) {
+	if minSeverity == otelv1.LogRecord_SEVERITY_NUMBER_UNSPECIFIED {
+		return messages, 0
+	}
+	kept := make([]logRelayMessage, 0, len(messages))
+	for _, message := range messages {
+		if message.record.GetSeverityNumber() < minSeverity {
 			continue
 		}
 		kept = append(kept, message)
 	}
-	return kept, excluded
+	return kept, len(messages) - len(kept)
+}
+
+// isConnectionLogRecord reports a record only the connection logs route carries, until AIM-960 adds them to the feed.
+// It reads the provenance source, which the ingest edges stamp, rather than the
+// scope, which any producer can set.
+func isConnectionLogRecord(record *otelv1.LogRecord) bool {
+	return record.GetProvenance().GetSource() == dialect.ConnectionLogSource
 }
 
 // logOriginalScopeName is the producer's scope as the transform preserved it.

@@ -1,4 +1,4 @@
-import { AssistantTool } from "@assistant-ui/react";
+import type { AssistantTool } from "@assistant-ui/react";
 import type { FrontendTools } from "@/elements/types";
 
 export function FrontendTools({

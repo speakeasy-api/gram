@@ -8,12 +8,13 @@ import { Page } from "@/components/page-layout";
 import { Icon } from "@/components/ui/Icon";
 import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
-import { Plugin } from "@gram/client/models/components/plugin.js";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { useCreatePluginMutation } from "@gram/client/react-query/createPlugin";
 import {
   invalidateAllPlugins,
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/Dropdown";
 import { MoreActions } from "@/components/ui/MoreActions";
 import { Stack } from "@/components/ui/Stack";
+import { Label } from "@/components/ui/Label";
 import { Switch } from "@/components/ui/Switch";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Activity, Network } from "lucide-react";
@@ -74,7 +76,7 @@ export default function Plugins(): JSX.Element | null {
   const { hasScope, isLoading } = useRBAC();
   const organization = useOrganization();
   const canWritePlugin = usePluginWriteAccess();
-  if (isLoading) return null;
+  if (isLoading) return <SplashScreen />;
   if (!canWritePlugin && !hasScope("org:read", organization.id)) return null;
   return hasScope("org:admin", organization.id) ? (
     <PluginsWithMarketplaceSettings />
@@ -101,6 +103,7 @@ function PluginsContent({
   >["data"];
 }): JSX.Element {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [createAutoSyncEnabled, setCreateAutoSyncEnabled] = useState(true);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isManageCollaboratorsOpen, setIsManageCollaboratorsOpen] =
     useState(false);
@@ -223,10 +226,26 @@ function PluginsContent({
         createPluginForm: {
           name,
           description: description || undefined,
+          autoSyncEnabled: createAutoSyncEnabled,
         },
       },
     });
   };
+
+  const openCreateDialog = () => {
+    setCreateAutoSyncEnabled(true);
+    setIsCreateDialogOpen(true);
+  };
+
+  // Plugins whose auto sync is off only publish their changes on a manual
+  // sync, so the marketplace card says so.
+  const pausedPluginNames = useMemo(
+    () =>
+      (data?.plugins ?? [])
+        .filter((plugin) => plugin.autoSyncEnabled === false)
+        .map((plugin) => plugin.name),
+    [data?.plugins],
+  );
 
   // Destructure mutate so the dep array references the stable function
   // directly (TanStack Query keeps mutate referentially stable, but the
@@ -385,7 +404,7 @@ function PluginsContent({
         }
         primaryAction={
           canWritePlugin ? (
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <Button onClick={openCreateDialog}>
               <Button.LeftIcon>
                 <Icon name="plus" />
               </Button.LeftIcon>
@@ -440,6 +459,7 @@ function PluginsContent({
                     observabilityEnabled={
                       marketplaceSettings.observabilityEnabled
                     }
+                    pausedPluginNames={pausedPluginNames}
                   />
                 </>
               )
@@ -552,6 +572,22 @@ function PluginsContent({
           <form onSubmit={handleCreate} className="flex flex-col gap-4">
             <InputField label="Name" name="name" required autoFocus />
             <InputField label="Description" name="description" />
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <Label id="create-plugin-auto-sync-label">
+                  Sync changes automatically
+                </Label>
+                <Text small muted>
+                  When off, the plugin reaches your marketplace only when
+                  someone clicks Sync changes.
+                </Text>
+              </div>
+              <Switch
+                aria-labelledby="create-plugin-auto-sync-label"
+                checked={createAutoSyncEnabled}
+                onCheckedChange={setCreateAutoSyncEnabled}
+              />
+            </div>
             <Dialog.Footer>
               <Button
                 variant="secondary"

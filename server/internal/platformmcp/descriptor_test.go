@@ -240,7 +240,7 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"search_speakeasy_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
 		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
-		"list_my_sessions", "continue_session", searchChatsToolName, readChatToolName,
+		"list_my_sessions", "continue_session", "create_session_handoff_link", searchChatsToolName, readChatToolName,
 		// The analytics reads hold the caller to project:read in the handler.
 		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
 		// The widget tools hold the caller to project:read in the handler; the
@@ -426,22 +426,25 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	// get_xaa_readiness reads an org-wide snapshot under live member org-admin
 	// authority, which managed assistants do not have; it stays external-only.
 	for _, name := range []string{
-		upgradeAssistantIdentityToolName,
 		"get_network_ingress",
+		"get_custom_domain_status",
 		"get_xaa_readiness",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
 		operationSetPluginAssignments,
 		operationCreatePlugin,
 		operationRenamePlugin,
+		operationSetPluginAutoSync,
 		operationRepublishPlugin,
 		"list_my_sessions",
 		"continue_session",
+		"create_session_handoff_link",
 		searchChatsToolName, readChatToolName,
 		"list_data_exports",
 		"create_data_export",
 		pauseDataExportToolName,
 		resumeDataExportToolName,
+		setDataExportMinSeverityToolName,
 		// Changing which tools a server exposes republishes every plugin that
 		// carries it to everyone holding one, so it stays on the surface an
 		// administrator drives directly, like the other distribution writes.
@@ -690,7 +693,7 @@ func TestAdvertisedInventoryBackendKindIsClosed(t *testing.T) {
 	require.NotNil(t, mcps.Items)
 	backendKind := mcps.Items.Properties["backend_kind"]
 	require.NotNil(t, backendKind)
-	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "built_in", "legacy"}, backendKind.Enum)
+	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "legacy"}, backendKind.Enum)
 }
 
 func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -40,6 +41,9 @@ type AuthClientTokenRequest struct {
 	Subject             urn.SessionSubject
 	RegistrationID      uuid.UUID
 	SkipUnusable        bool
+
+	// Attribution says where a refresh's connection row goes.
+	Attribution RefreshAttribution
 }
 
 // ResolveAuthClientAccessTokens resolves the caller's credential for the
@@ -57,16 +61,21 @@ func (m *ChallengeManager) ResolveAuthClientAccessTokens(ctx context.Context, re
 	if req.ProjectID == uuid.Nil || req.OrganizationID == "" || req.RegistrationID == uuid.Nil || req.Subject.IsZero() {
 		return nil, ErrInvalidAuthorizationRequest
 	}
-	if attached, err := attachedCaller(ctx, req.Subject); err != nil {
-		return nil, err
-	} else if attached {
-		return m.ResolveClientAccessTokens(ctx, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable)
-	}
-	client, err := m.reachableClient(ctx, req.ProjectID, req.OrganizationID, req.RegistrationID)
+	attached, err := attachedCaller(ctx, req.Subject)
 	if err != nil {
 		return nil, err
 	}
-	return m.resolveClientTokens(ctx, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.SkipUnusable)
+	client, err := m.reachableClient(ctx, req.ProjectID, req.OrganizationID, req.RegistrationID)
+	switch {
+	case attached && (errors.Is(err, ErrChosenClientUnbound) || (err == nil && client.CredentialOwner != string(CredentialOwnerSelf))):
+		// An attached caller reaches a person's connection through its
+		// attachment. A service account's token belongs to nobody, so no
+		// attachment applies to it.
+		return m.ResolveClientAccessTokens(ctx, req.Attribution, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable)
+	case err != nil:
+		return nil, err
+	}
+	return m.resolveClientTokens(ctx, req.Attribution, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.SkipUnusable)
 }
 
 // AuthClientNeedsReconnect is RemoteSessionsNeedReconnect for the one
@@ -77,9 +86,14 @@ func (m *ChallengeManager) AuthClientNeedsReconnect(ctx context.Context, req Aut
 	if req.ProjectID == uuid.Nil || req.OrganizationID == "" || req.RegistrationID == uuid.Nil || req.Subject.IsZero() {
 		return false, ErrInvalidAuthorizationRequest
 	}
-	if attached, err := attachedCaller(ctx, req.Subject); err != nil {
+	attached, err := attachedCaller(ctx, req.Subject)
+	if err != nil {
 		return false, err
-	} else if attached {
+	}
+	client, reachErr := m.reachableClient(ctx, req.ProjectID, req.OrganizationID, req.RegistrationID)
+	// As ResolveAuthClientAccessTokens: a self-held credential belongs to
+	// nobody, so no attachment applies to it.
+	if attached && (errors.Is(reachErr, ErrChosenClientUnbound) || (reachErr == nil && client.CredentialOwner != string(CredentialOwnerSelf))) {
 		clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, false)
 		if err != nil {
 			return false, fmt.Errorf("list remote_session_clients: %w", err)
@@ -92,12 +106,11 @@ func (m *ChallengeManager) AuthClientNeedsReconnect(ctx context.Context, req Aut
 		}
 		return m.storedGrantsNeedReconnect(ctx, lookupSignIn, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, chosen, req.Subject)
 	}
-	client, err := m.reachableClient(ctx, req.ProjectID, req.OrganizationID, req.RegistrationID)
 	switch {
-	case errors.Is(err, ErrChosenClientUnbound):
+	case errors.Is(reachErr, ErrChosenClientUnbound):
 		return true, nil
-	case err != nil:
-		return false, err
+	case reachErr != nil:
+		return false, reachErr
 	}
 	return m.storedGrantsNeedReconnect(ctx, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.Subject)
 }
@@ -146,7 +159,91 @@ func (m *ChallengeManager) AuthClientRemoteSessionStatuses(ctx context.Context, 
 	for _, row := range rows {
 		states = append(states, remotesessions_repo.ListRemoteSessionStatusesForSubjectRow(row))
 	}
-	return remoteSessionStates(states), nil
+	return m.remoteSessionStates(states), nil
+}
+
+// DisconnectAuthClientRemoteSession is DisconnectRemoteSession for a
+// registration a server offers through an auth client, which no user session
+// issuer need link. The caller has checked that offer, which authorizes the
+// registration in place of the link; the subject's own grant is then reached
+// only within the project's or organization's reach, and only when its consent
+// came through a sign-in of that organization.
+//
+// Returns the number of grants disconnected; zero means there was nothing to
+// disconnect and nothing is sent upstream.
+func (m *ChallengeManager) DisconnectAuthClientRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID) (int64, error) {
+	if projectID == uuid.Nil || organizationID == "" || registrationID == uuid.Nil || subject.IsZero() {
+		return 0, ErrInvalidAuthorizationRequest
+	}
+	disconnected, err := remotesessions_repo.New(m.db).SoftDeleteRemoteSessionBySubjectAndClientInTenant(ctx, remotesessions_repo.SoftDeleteRemoteSessionBySubjectAndClientInTenantParams{
+		SubjectUrn:            subject,
+		RemoteSessionClientID: registrationID,
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("disconnect remote session in tenant: %w", err)
+	}
+
+	for _, row := range disconnected {
+		m.revoker.RevokeDetached(ctx, RevokedCredentials{
+			RemoteSessionClientID: row.RemoteSessionClientID,
+			AccessTokenEncrypted:  row.AccessTokenEncrypted,
+			RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+		})
+	}
+
+	return int64(len(disconnected)), nil
+}
+
+// RefreshAuthClientRemoteSession is RefreshRemoteSession for a registration a
+// server offers through an auth client, authorized by that offer instead of a
+// user session issuer link. A registration that is gone or out of the
+// project's reach, and a grant consented in another organization, fail closed
+// with ErrRemoteSessionNotRefreshable.
+func (m *ChallengeManager) RefreshAuthClientRemoteSession(ctx context.Context, attribution RefreshAttribution, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID) (RefreshResult, error) {
+	var zero RefreshResult
+	if projectID == uuid.Nil || organizationID == "" || registrationID == uuid.Nil || subject.IsZero() {
+		return zero, ErrInvalidAuthorizationRequest
+	}
+
+	session, err := remotesessions_repo.New(m.db).GetActiveRemoteSessionInTenant(ctx, remotesessions_repo.GetActiveRemoteSessionInTenantParams{
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+		SubjectUrn:            subject,
+		RemoteSessionClientID: registrationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return zero, ErrRemoteSessionNotRefreshable
+	}
+	if err != nil {
+		return zero, fmt.Errorf("get consent remote session in tenant: %w", err)
+	}
+	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
+		return zero, ErrRemoteSessionNotRefreshable
+	}
+
+	return m.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual, attribution)
+}
+
+// SetAuthClientRemoteSessionAutoRefresh is SetRemoteSessionAutoRefresh for a
+// registration a server offers through an auth client. Returns rows affected;
+// zero means the subject holds no grant for it within the tenant.
+func (m *ChallengeManager) SetAuthClientRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID, enabled bool) (int64, error) {
+	if projectID == uuid.Nil || organizationID == "" || registrationID == uuid.Nil || subject.IsZero() {
+		return 0, ErrInvalidAuthorizationRequest
+	}
+	n, err := remotesessions_repo.New(m.db).SetRemoteSessionAutoRefreshInTenant(ctx, remotesessions_repo.SetRemoteSessionAutoRefreshInTenantParams{
+		AutoRefresh:           enabled,
+		SubjectUrn:            subject,
+		RemoteSessionClientID: registrationID,
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("set remote session auto refresh in tenant: %w", err)
+	}
+	return n, nil
 }
 
 // attachedCaller reports whether the caller resolves through an agent
@@ -160,6 +257,11 @@ func attachedCaller(ctx context.Context, subject urn.SessionSubject) (bool, erro
 		return false, ErrInvalidAuthorizationRequest
 	}
 	if _, ok := principalcredential.FromContext(ctx); ok {
+		return false, nil
+	}
+	// A principal-backed key asking for its authorizer's own connection reads
+	// it directly; any other subject keeps the key's attachment.
+	if _, ok := principalAPIKeyAuthorizer(ctx, subject); ok {
 		return false, nil
 	}
 	_, attached, err := remoteSessionCallerPrincipal(ctx, subject)

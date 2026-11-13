@@ -247,6 +247,7 @@ func TestIsOrgWidePluginHooksAPIKey(t *testing.T) {
 		{testName: "fractional seconds", keyName: "plugins-hooks-20260713-104500.5-abcdef", want: false},
 		{testName: "invalid timestamp", keyName: "plugins-hooks-20261340-256199-abcdef", want: false},
 		{testName: "mcp purpose", keyName: "plugins-mcp-20260713-104500-abcdef", want: false},
+		{testName: "member claude web hooks key", keyName: "plugins-claude-web-hooks-20261102-120102-abc123", key: "gram_live_abc123abcdef", keyPrefix: "gram_live_abc12", want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.testName, func(t *testing.T) {

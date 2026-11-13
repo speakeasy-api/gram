@@ -3,9 +3,59 @@
   "title": "Speakeasy AI Control Plane metadata extensions",
   "type": "object",
   "properties": {
+    "com.speakeasy.ai/icons": false,
+    "server": {
+      "properties": {
+        "_meta": {
+          "properties": { "com.speakeasy.ai/icons": false }
+        }
+      }
+    },
     "_meta": {
       "type": "object",
       "properties": {
+        "com.speakeasy.ai/icons": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "object",
+              "properties": {
+                "src": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048
+                },
+                "mimeType": {
+                  "const": "image/svg+xml"
+                },
+                "sizes": {
+                  "const": ["any"]
+                }
+              },
+              "required": ["src", "mimeType", "sizes"],
+              "additionalProperties": false
+            },
+            "dark": {
+              "type": "object",
+              "properties": {
+                "src": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048
+                },
+                "mimeType": {
+                  "const": "image/svg+xml"
+                },
+                "sizes": {
+                  "const": ["any"]
+                }
+              },
+              "required": ["src", "mimeType", "sizes"],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
         "com.speakeasy.ai/registry": {
           "type": "object",
           "description": "Backend-owned first recorded publication. Historical publication dates may be unknown.",
@@ -31,7 +81,7 @@
             },
             "supportsDcr": {
               "type": "boolean",
-              "description": "Staff-curated record of whether the server's authorization server publishes an OAuth dynamic client registration endpoint. Native catalog listings use an explicit value for automatic-setup eligibility, overriding legacy discovery metadata; when absent, listings fall back to legacy discovery metadata. This is not proof of live OAuth readiness: installation still validates the server. Okta server suggestions default to per-user OAuth when true and treat absence as false."
+              "description": "Staff-curated record of whether the server's authorization server publishes an OAuth dynamic client registration endpoint. A true value is a positive automatic-setup eligibility hint. Missing or false values do not establish no-auth or manual setup; consult authSetup and authDiscoveryStatus. No other metadata namespace supplies a fallback. This is not proof of live OAuth readiness: installation still validates the server. Okta server suggestions default to per-user OAuth when true and treat absence as false."
             },
             "supportsCimd": {
               "type": "boolean",

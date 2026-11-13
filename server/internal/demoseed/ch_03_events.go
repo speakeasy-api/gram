@@ -9,6 +9,8 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 )
 
 // chCheck is one postflight assert. cond is a ClickHouse boolean expression
@@ -45,8 +47,11 @@ func (s *seeder) chCheckArgs() []any {
 		clickhouse.Named("proj", s.projectID().String()),
 		clickhouse.Named("marker", s.spec.Marker),
 		clickhouse.Named("github", s.det("mcpserver-github").String()),
+		clickhouse.Named("orggateway", orggateway.GatewayID(s.orgID()).String()),
 		clickhouse.Named("gateway_suffix", "/mcp/"+s.spec.OrgSlug+"-gateway"),
 		clickhouse.Named("tunnel_source", s.tunnelSourceID().String()),
+		clickhouse.Named("owner_agent", s.ownerAgentID().String()),
+		clickhouse.Named("owner_user", s.userID(demoAgentOwner.handle)),
 	}
 }
 
@@ -129,6 +134,14 @@ func (s *seeder) chTelemetryChecks() []chCheck {
 		{
 			cond: `(SELECT count() FROM telemetry_logs
    WHERE gram_project_id = toUUID(@proj)
+     AND meta_mcp_server_id = @orggateway
+     AND event_source = 'tool_call') < 120`,
+			settings: "",
+			msg:      "demo seed postflight: organization gateway dispatches missing",
+		},
+		{
+			cond: `(SELECT count() FROM telemetry_logs
+   WHERE gram_project_id = toUUID(@proj)
      AND event_source = 'hook'
      AND endsWith(toString(attributes.gram.mcp.server_url), @gateway_suffix)) < 40`,
 			settings: "",
@@ -153,6 +166,31 @@ func (s *seeder) chTelemetryChecks() []chCheck {
      AND agent_id != '') < 80`,
 			settings: "",
 			msg:      "demo seed postflight: agent-sent hook calls missing",
+		},
+		// The staff hooks fleet view reads one install per machine.
+		{
+			cond: `(SELECT count() FROM (SELECT 1 FROM hook_install_summaries
+   WHERE organization_id = @org
+   GROUP BY gram_project_id, user_email, hostname, harness)) != 7`,
+			settings: "",
+			msg:      "demo seed postflight: expected 7 hooks fleet installs",
+		},
+		// The owner-scoped Tool Logs read matches the persona's agent by
+		// actor id and the persona by user id; a row that lost either, or
+		// that still named a human on an agent call, would fall outside it.
+		{
+			cond: `(SELECT uniqExact(trace_id) FROM trace_summaries
+   WHERE gram_project_id = toUUID(@proj)
+     AND agent_id = @owner_agent AND user_email = '' AND user_id = '') != ` + strconv.Itoa(ownerAgentTraces()),
+			settings: "",
+			msg:      "demo seed postflight: agent owner's agent tool calls missing or attributed to a person",
+		},
+		{
+			cond: `(SELECT uniqExact(trace_id) FROM trace_summaries
+   WHERE gram_project_id = toUUID(@proj)
+     AND user_id = @owner_user AND event_source = 'tool_call') != ` + strconv.Itoa(ownerHumanTraces()),
+			settings: "",
+			msg:      "demo seed postflight: agent owner's own tool calls missing",
 		},
 		{
 			cond:     `(SELECT uniqExact(chat_id) FROM chat_session_summaries WHERE gram_project_id = toUUID(@proj)) < 180`,

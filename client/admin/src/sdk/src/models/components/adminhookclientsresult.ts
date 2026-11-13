@@ -33,7 +33,7 @@ export type AdminHookClientsResult = {
    */
   deviceAgents: Array<AdminDeviceAgentCell>;
   /**
-   * True when the grids came from the cache rather than a fresh ClickHouse read. Cached grids last 24 hours and refresh in the background once an hour old.
+   * True when the grids came from the cache rather than a fresh ClickHouse read. Cached grids last 48 hours and refresh in the background once an hour old. The default window is also refreshed nightly.
    */
   fromCache: boolean;
   /**

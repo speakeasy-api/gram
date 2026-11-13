@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -55,8 +58,9 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-// server seeds a remote server the assistant reaches.
-func (f *fixture) server(requiresAuth pgtype.Bool) uuid.UUID {
+// server seeds a remote server the assistant reaches. stored is the
+// server's stored requires_upstream_auth, which nothing reads.
+func (f *fixture) server(stored pgtype.Bool) uuid.UUID {
 	f.t.Helper()
 	ctx := f.t.Context()
 	id, remoteID := uuid.New(), uuid.New()
@@ -66,7 +70,7 @@ func (f *fixture) server(requiresAuth pgtype.Bool) uuid.UUID {
 		ProjectID:            f.projectID,
 		Slug:                 pgtype.Text{String: "s-" + id.String()[:8], Valid: true},
 		RemoteMcpServerID:    uuid.NullUUID{UUID: remoteID, Valid: true},
-		RequiresUpstreamAuth: requiresAuth,
+		RequiresUpstreamAuth: stored,
 	}))
 	require.NoError(f.t, f.q.SeedAssistantServerFixture(ctx, SeedAssistantServerFixtureParams{AssistantID: f.assistant, McpServerID: id, ProjectID: f.projectID}))
 	return id
@@ -136,43 +140,57 @@ func (f *fixture) choices(versionID uuid.UUID) map[uuid.UUID]uuid.UUID {
 	return out
 }
 
-var undecided = pgtype.Bool{Bool: false, Valid: false}
+var unstored = pgtype.Bool{Bool: false, Valid: false}
 
 func TestBindDecidesOnlyWhatConfigurationDecides(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	personal := f.server(undecided)
+	personal := f.server(unstored)
 	personalClient := f.authClient(personal, typeRemoteSession, f.registration(personal))
-	shared := f.server(undecided)
+	shared := f.server(unstored)
 	sharedClient := f.authClient(shared, typeServiceAccount, f.registration(shared))
-	headers := f.server(undecided)
+	headers := f.server(unstored)
 	headerClient := f.authClient(headers, typeStaticCredential, uuid.Nil)
-	open := f.server(pgtype.Bool{Bool: false, Valid: true})
-	incomplete := f.server(pgtype.Bool{Bool: true, Valid: true})
-	several := f.server(undecided)
-	f.registration(several)
-	f.registration(several)
-	unset := f.server(undecided)
+	open := f.server(unstored)
+	// A stored requirement is never read: a server with no auth client needs
+	// none.
+	storedRequired := f.server(pgtype.Bool{Bool: true, Valid: true})
+	// A stored no-auth requirement never overrides an enabled client.
+	storedNone := f.server(pgtype.Bool{Bool: false, Valid: true})
+	storedNoneClient := f.authClient(storedNone, typeStaticCredential, uuid.Nil)
+	disabled := f.server(unstored)
+	require.NoError(t, f.q.DisableAuthClientFixture(t.Context(), DisableAuthClientFixtureParams{ID: f.authClient(disabled, typeStaticCredential, uuid.Nil), OrganizationID: f.orgID}))
+	detached := f.server(unstored)
+	require.NoError(t, f.q.DetachAuthClientFixture(t.Context(), DetachAuthClientFixtureParams{McpServerID: detached, AuthClientID: f.authClient(detached, typeServiceAccount, f.registration(detached)), OrganizationID: f.orgID}))
+	// An upstream OAuth client no auth client records yet.
+	pending := f.server(unstored)
+	f.registration(pending)
+	several := f.server(unstored)
+	f.authClient(several, typeStaticCredential, uuid.Nil)
+	f.authClient(several, typePassThrough, uuid.Nil)
 
 	binding := f.bind(ContextUserBacked)
 	require.Equal(t, int64(1), binding.Version)
 	require.Equal(t, map[uuid.UUID]uuid.UUID{
-		personal: personalClient,
-		shared:   sharedClient,
-		headers:  headerClient,
-		open:     uuid.Nil,
+		personal:       personalClient,
+		shared:         sharedClient,
+		headers:        headerClient,
+		open:           uuid.Nil,
+		storedRequired: uuid.Nil,
+		storedNone:     storedNoneClient,
+		disabled:       uuid.Nil,
+		detached:       uuid.Nil,
 	}, f.choices(binding.VersionID))
 	require.ElementsMatch(t, []Gap{
-		{MCPServerID: incomplete, Reason: GapSetupIncomplete},
+		{MCPServerID: pending, Reason: GapSetupIncomplete},
 		{MCPServerID: several, Reason: GapSelectionRequired},
-		{MCPServerID: unset, Reason: GapUpstreamAuthUndecided},
 	}, binding.Gaps)
 }
 
 func TestBindTreatsEMAAsPersonal(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	server := f.server(undecided)
+	server := f.server(unstored)
 	registration := f.registration(server)
 	emaClient := f.authClient(server, typeEMA, registration)
 
@@ -188,7 +206,7 @@ func TestBindTreatsEMAAsPersonal(t *testing.T) {
 func TestBindTreatsAnEMAAndAPersonalClientAsAmbiguous(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	server := f.server(undecided)
+	server := f.server(unstored)
 	registration := f.registration(server)
 	f.authClient(server, typeRemoteSession, registration)
 	f.authClient(server, typeEMA, registration)
@@ -204,10 +222,10 @@ func TestBindTreatsAnEMAAndAPersonalClientAsAmbiguous(t *testing.T) {
 func TestBindConcurrentTurnsDecideOneVersion(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	first := f.server(undecided)
+	first := f.server(unstored)
 	f.authClient(first, typeServiceAccount, f.registration(first))
 	v1 := f.bind(ContextUserBacked)
-	second := f.server(undecided)
+	second := f.server(unstored)
 	f.authClient(second, typeServiceAccount, f.registration(second))
 
 	const turns = 4
@@ -238,7 +256,7 @@ func TestBindConcurrentTurnsDecideOneVersion(t *testing.T) {
 func TestBackfillDryRunWritesNothing(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	server := f.server(undecided)
+	server := f.server(unstored)
 	f.authClient(server, typeServiceAccount, f.registration(server))
 	f.workloadBinding()
 
@@ -246,6 +264,7 @@ func TestBackfillDryRunWritesNothing(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, dry.Targets)
 	require.Equal(t, len(Contexts), dry.VersionsWritten)
+	require.Equal(t, len(Contexts), dry.FirstVersions, "no turn has run under either profile")
 	for _, execCtx := range Contexts {
 		_, err := f.q.GetProfile(t.Context(), GetProfileParams{
 			OrganizationID: f.orgID, ProjectID: f.projectID, AssistantID: f.assistant,
@@ -257,18 +276,27 @@ func TestBackfillDryRunWritesNothing(t *testing.T) {
 	applied, err := Backfill(t.Context(), f.pool, f.orgID, true)
 	require.NoError(t, err)
 	require.Equal(t, len(Contexts), applied.VersionsWritten)
+	require.Equal(t, len(Contexts), applied.FirstVersions)
 
 	again, err := Backfill(t.Context(), f.pool, f.orgID, false)
 	require.NoError(t, err)
 	require.Zero(t, again.VersionsWritten)
+	require.Zero(t, again.FirstVersions)
+
+	added := f.server(unstored)
+	f.authClient(added, typeServiceAccount, f.registration(added))
+	stale, err := Backfill(t.Context(), f.pool, f.orgID, false)
+	require.NoError(t, err)
+	require.Equal(t, len(Contexts), stale.VersionsWritten, "a recorded profile gains a choice for the new server")
+	require.Zero(t, stale.FirstVersions)
 }
 
 func TestBindNeverGivesAUserlessTurnAPersonalClient(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	personal := f.server(undecided)
+	personal := f.server(unstored)
 	f.authClient(personal, typeRemoteSession, f.registration(personal))
-	shared := f.server(undecided)
+	shared := f.server(unstored)
 	registration := f.registration(shared)
 	f.authClient(shared, typeRemoteSession, registration)
 	sharedClient := f.authClient(shared, typeServiceAccount, registration)
@@ -285,7 +313,7 @@ func TestBindNeverGivesAUserlessTurnAPersonalClient(t *testing.T) {
 func TestBindKeepsEveryChoiceAndVersionsOnlyNewOnes(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	first := f.server(undecided)
+	first := f.server(unstored)
 	firstClient := f.authClient(first, typeServiceAccount, f.registration(first))
 
 	v1 := f.bind(ContextUserBacked)
@@ -295,11 +323,88 @@ func TestBindKeepsEveryChoiceAndVersionsOnlyNewOnes(t *testing.T) {
 	// A second client on the first server would make it ambiguous now, but
 	// its choice is kept.
 	f.authClient(first, typeServiceAccount, f.registration(first))
-	second := f.server(undecided)
+	second := f.server(unstored)
 	secondClient := f.authClient(second, typeServiceAccount, f.registration(second))
 
 	v2 := f.bind(ContextUserBacked)
 	require.Equal(t, int64(2), v2.Version)
 	require.Equal(t, map[uuid.UUID]uuid.UUID{first: firstClient, second: secondClient}, f.choices(v2.VersionID))
 	require.Equal(t, map[uuid.UUID]uuid.UUID{first: firstClient}, f.choices(v1.VersionID), "an earlier version never changes")
+}
+
+func (f *fixture) enforce() {
+	f.t.Helper()
+	_, err := productfeaturesrepo.New(f.pool).EnableFeature(f.t.Context(), productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: f.orgID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(f.t, err)
+}
+
+// offerOnly seeds an auth client linked to serverID whose upstream OAuth
+// client the server has no association with.
+func (f *fixture) offerOnly(serverID uuid.UUID, clientType string) uuid.UUID {
+	f.t.Helper()
+	return f.authClient(serverID, clientType, f.registration(f.server(unstored)))
+}
+
+func TestBindDecidesFromOfferedClientsUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	// An OAuth client the server offers with no association.
+	offered := f.server(unstored)
+	offeredClient := f.offerOnly(offered, typeServiceAccount)
+	// A leftover association whose client the server no longer offers.
+	leftover := f.server(unstored)
+	f.registration(leftover)
+	leftoverClient := f.authClient(leftover, typeStaticCredential, uuid.Nil)
+	several := f.server(unstored)
+	f.offerOnly(several, typeServiceAccount)
+	f.offerOnly(several, typeServiceAccount)
+	personal := f.server(unstored)
+	f.offerOnly(personal, typeRemoteSession)
+	// An OAuth client beside a header client: either could serve the server.
+	mixed := f.server(unstored)
+	f.offerOnly(mixed, typeServiceAccount)
+	f.authClient(mixed, typeStaticCredential, uuid.Nil)
+	// A personal client beside a header client: a userless turn can use one.
+	personalOrHeaders := f.server(unstored)
+	f.authClient(personalOrHeaders, typeRemoteSession, f.registration(personalOrHeaders))
+	personalOrHeadersClient := f.authClient(personalOrHeaders, typeStaticCredential, uuid.Nil)
+
+	// The servers holding the offered clients' associations are gaps of their
+	// own, so only these servers' gaps are compared.
+	reasons := func(binding Binding) map[uuid.UUID]GapReason {
+		out := map[uuid.UUID]GapReason{}
+		for _, gap := range binding.Gaps {
+			if slices.Contains([]uuid.UUID{offered, leftover, several, personal, mixed, personalOrHeaders}, gap.MCPServerID) {
+				out[gap.MCPServerID] = gap.Reason
+			}
+		}
+		return out
+	}
+
+	before := f.bind(ContextUserless)
+	require.Equal(t, map[uuid.UUID]GapReason{
+		offered:  GapSelectionRequired,
+		leftover: GapNoClient,
+		several:  GapSelectionRequired,
+		personal: GapSelectionRequired,
+		mixed:    GapSelectionRequired,
+		// The associated OAuth client is the server's own, and only a user can
+		// use the personal one.
+		personalOrHeaders: GapPersonalRequiresUser,
+	}, reasons(before), "associations decide while the organization does not enforce")
+
+	f.enforce()
+	binding := f.bind(ContextUserless)
+	choices := f.choices(binding.VersionID)
+	require.Equal(t, offeredClient, choices[offered])
+	require.Equal(t, leftoverClient, choices[leftover])
+	require.Equal(t, personalOrHeadersClient, choices[personalOrHeaders])
+	require.Equal(t, map[uuid.UUID]GapReason{
+		several:  GapSelectionRequired,
+		personal: GapPersonalRequiresUser,
+		mixed:    GapSelectionRequired,
+	}, reasons(binding))
 }

@@ -28,6 +28,7 @@ import {
 import { errorMessage } from "@/lib/gramAdminApi";
 import { needsMigrationRun } from "@/lib/upstreamOAuthMigration";
 import {
+  backfillMcpAuthGrants,
   disableUpstreamAuthEnforcement,
   enableUpstreamAuthEnforcement,
   runUpstreamOAuthMigration,
@@ -48,6 +49,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(
     null,
   );
+  const [backfilling, setBackfilling] = useState(false);
 
   const all = organizations.data?.organizations ?? [];
   const term = filter.trim().toLowerCase();
@@ -216,6 +218,25 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
     }
   }
 
+  async function backfillAuthGrants() {
+    const ok = await confirm({
+      title: "Grant mcp:auth to everyone with mcp:connect?",
+      description:
+        "Every principal holding any mcp:connect grant, in every organization, gets unrestricted mcp:auth. It only adds grants and is safe to run again.",
+      confirmLabel: "Grant",
+    });
+    if (!ok) return;
+    setBackfilling(true);
+    try {
+      const result = await backfillMcpAuthGrants();
+      toast.success(`Granted mcp:auth to ${result.granted} principals`);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setBackfilling(false);
+    }
+  }
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-start justify-between gap-4">
@@ -230,19 +251,30 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
             the rest.
           </p>
         </div>
-        <Button
-          onClick={() => void migrateAllPending()}
-          disabled={
-            bulk !== null ||
-            all.length === 0 ||
-            settled < all.length ||
-            pendingCount === 0
-          }
-        >
-          {bulk
-            ? `Migrating ${bulk.done} of ${bulk.total}`
-            : "Migrate all pending"}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => void backfillAuthGrants()}
+            disabled={backfilling}
+          >
+            {backfilling
+              ? "Granting mcp:auth"
+              : "Grant mcp:auth from mcp:connect"}
+          </Button>
+          <Button
+            onClick={() => void migrateAllPending()}
+            disabled={
+              bulk !== null ||
+              all.length === 0 ||
+              settled < all.length ||
+              pendingCount === 0
+            }
+          >
+            {bulk
+              ? `Migrating ${bulk.done} of ${bulk.total}`
+              : "Migrate all pending"}
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-4">
@@ -385,6 +417,11 @@ function MigrationStatus({
     s.reconnectCredentials > 0
       ? `${s.reconnectCredentials} ${s.reconnectCredentials === 1 ? "credential" : "credentials"} will be asked to reconnect`
       : null;
+  const consentScopedSelections = s.consentScopedSelections ?? 0;
+  const consentScoped =
+    consentScopedSelections > 0
+      ? `${consentScopedSelections} ${consentScopedSelections === 1 ? "choice" : "choices"} outside what a gateway connection approved, no action needed`
+      : null;
   if (s.migrated) {
     return (
       <div className="space-y-1">
@@ -394,6 +431,9 @@ function MigrationStatus({
         </span>
         {reconnect ? (
           <p className="text-muted-foreground text-xs">{reconnect}</p>
+        ) : null}
+        {consentScoped ? (
+          <p className="text-muted-foreground text-xs">{consentScoped}</p>
         ) : null}
         {authClients}
       </div>
@@ -438,6 +478,9 @@ function MigrationStatus({
       ) : null}
       {reconnect ? (
         <p className="text-muted-foreground text-xs">{reconnect}</p>
+      ) : null}
+      {consentScoped ? (
+        <p className="text-muted-foreground text-xs">{consentScoped}</p>
       ) : null}
       {authClients}
     </div>
@@ -487,9 +530,6 @@ function AuthClientStatus({
       : null,
     a.pendingRetirements > 0
       ? `${a.pendingRetirements} stale ${a.pendingRetirements === 1 ? "record" : "records"} to retire`
-      : null,
-    a.pendingMarkedServers > 0
-      ? `${a.pendingMarkedServers} ${a.pendingMarkedServers === 1 ? "server" : "servers"} to mark as needing upstream auth`
       : null,
     a.unresolved > 0 ? `${a.unresolved} need attention` : null,
     (a.attachmentsWaiting ?? 0) > 0
@@ -657,14 +697,26 @@ function ExecutionProfileStatus({
   if (p.targets === 0) {
     return null;
   }
+  const unexercisedVersions = p.unexercisedVersions ?? 0;
+  const unexercised =
+    unexercisedVersions > 0 ? (
+      <p className="text-muted-foreground text-xs">
+        {unexercisedVersions}{" "}
+        {unexercisedVersions === 1 ? "profile" : "profiles"} with no version
+        recorded yet, recorded on first use
+      </p>
+    ) : null;
   if (p.complete) {
     return (
-      <p className="text-muted-foreground text-xs">
-        Assistant profiles: recorded for {p.targets}{" "}
-        {p.targets === 1
-          ? "assistant and trigger pair"
-          : "assistant and trigger pairs"}
-      </p>
+      <div className="space-y-1">
+        <p className="text-muted-foreground text-xs">
+          Assistant profiles: recorded for {p.targets}{" "}
+          {p.targets === 1
+            ? "assistant and trigger pair"
+            : "assistant and trigger pairs"}
+        </p>
+        {unexercised}
+      </div>
     );
   }
   return (
@@ -675,6 +727,7 @@ function ExecutionProfileStatus({
           ? `${p.pendingVersions} to record`
           : "every profile recorded"}
       </p>
+      {unexercised}
       {p.gaps.length > 0 ? (
         <ul className="text-muted-foreground text-xs">
           {p.gaps.map((gap) => (

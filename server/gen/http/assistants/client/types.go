@@ -40,18 +40,6 @@ type CreateAssistantRequestBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 }
 
-// UpgradeAssistantIdentityRequestBody is the type of the "assistants" service
-// "upgradeAssistantIdentity" endpoint HTTP request body.
-type UpgradeAssistantIdentityRequestBody struct {
-	// The assistant ID.
-	ID string `form:"id" json:"id" xml:"id"`
-	// An existing agent of the project to use instead of creating one. Requires
-	// owning the agent or agent:authorize on it.
-	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The name of the new agent. Cannot be combined with agent_id.
-	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
-}
-
 // UpdateAssistantRequestBody is the type of the "assistants" service
 // "updateAssistant" endpoint HTTP request body.
 type UpdateAssistantRequestBody struct {
@@ -113,6 +101,29 @@ type InterruptTurnRequestBody struct {
 	ChatID string `form:"chat_id" json:"chat_id" xml:"chat_id"`
 }
 
+// SetExecutionProfileChoiceRequestBody is the type of the "assistants" service
+// "setExecutionProfileChoice" endpoint HTTP request body.
+type SetExecutionProfileChoiceRequestBody struct {
+	// The assistant ID.
+	AssistantID string `form:"assistant_id" json:"assistant_id" xml:"assistant_id"`
+	// The root trigger.
+	TriggerInstanceID string `form:"trigger_instance_id" json:"trigger_instance_id" xml:"trigger_instance_id"`
+	// Whether the turns act for the user their event identified.
+	ExecutionContext string `form:"execution_context" json:"execution_context" xml:"execution_context"`
+	// The MCP server.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The auth client to use.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+	// Use no upstream authentication.
+	NoAuth *bool `form:"no_auth,omitempty" json:"no_auth,omitempty" xml:"no_auth,omitempty"`
+	// Remove the choice so the next turn makes it from the server's configuration.
+	Automatic *bool `form:"automatic,omitempty" json:"automatic,omitempty" xml:"automatic,omitempty"`
+	// The profile version the change was decided from, from a fresh
+	// listExecutionProfiles read. A profile that changed since is refused with a
+	// conflict.
+	ExpectedVersion int64 `form:"expected_version" json:"expected_version" xml:"expected_version"`
+}
+
 // ListAssistantsResponseBody is the type of the "assistants" service
 // "listAssistants" endpoint HTTP response body.
 type ListAssistantsResponseBody struct {
@@ -167,50 +178,6 @@ type GetAssistantResponseBody struct {
 // CreateAssistantResponseBody is the type of the "assistants" service
 // "createAssistant" endpoint HTTP response body.
 type CreateAssistantResponseBody struct {
-	// The assistant ID.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The project ID owning the assistant.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The ID of the user who created the assistant, if known.
-	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
-	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
-	// revoked, or deleted. This is configuration state, not permission to execute.
-	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The assistant's dedicated agent ID, when it has one.
-	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The assistant name.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The model identifier used by the assistant.
-	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
-	// The system instructions for the assistant.
-	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
-	// slug.
-	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached to the assistant that are not hosted (toolset-backed);
-	// hosted servers are listed under toolsets.
-	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
-	// Skills attached to the assistant.
-	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
-	// Warm runtime TTL in seconds.
-	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
-	// Maximum active warm runtimes for the assistant.
-	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
-	// Desired runtime protocol version: 2 is the default runtime, 3 is Kit.
-	// Runtime changes require a settled assistant and available destination.
-	RuntimeVersion *int `form:"runtime_version,omitempty" json:"runtime_version,omitempty" xml:"runtime_version,omitempty"`
-	// The assistant status.
-	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// Creation timestamp.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// Last update timestamp.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
-// UpgradeAssistantIdentityResponseBody is the type of the "assistants" service
-// "upgradeAssistantIdentity" endpoint HTTP response body.
-type UpgradeAssistantIdentityResponseBody struct {
 	// The assistant ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID owning the assistant.
@@ -407,6 +374,28 @@ type EnsureManagedAssistantResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Last update timestamp.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ListExecutionProfilesResponseBody is the type of the "assistants" service
+// "listExecutionProfiles" endpoint HTTP response body.
+type ListExecutionProfilesResponseBody struct {
+	// Each root trigger and execution context.
+	Profiles []*AssistantExecutionProfileResponseBody `form:"profiles,omitempty" json:"profiles,omitempty" xml:"profiles,omitempty"`
+}
+
+// SetExecutionProfileChoiceResponseBody is the type of the "assistants"
+// service "setExecutionProfileChoice" endpoint HTTP response body.
+type SetExecutionProfileChoiceResponseBody struct {
+	// The root trigger.
+	TriggerInstanceID *string `form:"trigger_instance_id,omitempty" json:"trigger_instance_id,omitempty" xml:"trigger_instance_id,omitempty"`
+	// The root trigger's name.
+	TriggerName *string `form:"trigger_name,omitempty" json:"trigger_name,omitempty" xml:"trigger_name,omitempty"`
+	// Whether the turns act for the user their event identified.
+	ExecutionContext *string `form:"execution_context,omitempty" json:"execution_context,omitempty" xml:"execution_context,omitempty"`
+	// The latest version; 0 before the first turn or change.
+	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Each server the turns reach.
+	Servers []*ExecutionProfileServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 }
 
 // ListAssistantsUnauthorizedResponseBody is the type of the "assistants"
@@ -946,196 +935,6 @@ type CreateAssistantUnexpectedResponseBody struct {
 // service "createAssistant" endpoint HTTP response body for the
 // "gateway_error" error.
 type CreateAssistantGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpgradeAssistantIdentityUnauthorizedResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "unauthorized" error.
-type UpgradeAssistantIdentityUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpgradeAssistantIdentityForbiddenResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "forbidden" error.
-type UpgradeAssistantIdentityForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpgradeAssistantIdentityBadRequestResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "bad_request" error.
-type UpgradeAssistantIdentityBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpgradeAssistantIdentityNotFoundResponseBody is the type of the "assistants"
-// service "upgradeAssistantIdentity" endpoint HTTP response body for the
-// "not_found" error.
-type UpgradeAssistantIdentityNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpgradeAssistantIdentityConflictResponseBody is the type of the "assistants"
-// service "upgradeAssistantIdentity" endpoint HTTP response body for the
-// "conflict" error.
-type UpgradeAssistantIdentityConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpgradeAssistantIdentityUnsupportedMediaResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "unsupported_media" error.
-type UpgradeAssistantIdentityUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpgradeAssistantIdentityInvalidResponseBody is the type of the "assistants"
-// service "upgradeAssistantIdentity" endpoint HTTP response body for the
-// "invalid" error.
-type UpgradeAssistantIdentityInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpgradeAssistantIdentityInvariantViolationResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "invariant_violation" error.
-type UpgradeAssistantIdentityInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpgradeAssistantIdentityUnexpectedResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "unexpected" error.
-type UpgradeAssistantIdentityUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// UpgradeAssistantIdentityGatewayErrorResponseBody is the type of the
-// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
-// for the "gateway_error" error.
-type UpgradeAssistantIdentityGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2269,6 +2068,386 @@ type EnsureManagedAssistantGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListExecutionProfilesUnauthorizedResponseBody is the type of the
+// "assistants" service "listExecutionProfiles" endpoint HTTP response body for
+// the "unauthorized" error.
+type ListExecutionProfilesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExecutionProfilesForbiddenResponseBody is the type of the "assistants"
+// service "listExecutionProfiles" endpoint HTTP response body for the
+// "forbidden" error.
+type ListExecutionProfilesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExecutionProfilesBadRequestResponseBody is the type of the "assistants"
+// service "listExecutionProfiles" endpoint HTTP response body for the
+// "bad_request" error.
+type ListExecutionProfilesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExecutionProfilesNotFoundResponseBody is the type of the "assistants"
+// service "listExecutionProfiles" endpoint HTTP response body for the
+// "not_found" error.
+type ListExecutionProfilesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExecutionProfilesConflictResponseBody is the type of the "assistants"
+// service "listExecutionProfiles" endpoint HTTP response body for the
+// "conflict" error.
+type ListExecutionProfilesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExecutionProfilesUnsupportedMediaResponseBody is the type of the
+// "assistants" service "listExecutionProfiles" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListExecutionProfilesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExecutionProfilesInvalidResponseBody is the type of the "assistants"
+// service "listExecutionProfiles" endpoint HTTP response body for the
+// "invalid" error.
+type ListExecutionProfilesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExecutionProfilesInvariantViolationResponseBody is the type of the
+// "assistants" service "listExecutionProfiles" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListExecutionProfilesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExecutionProfilesUnexpectedResponseBody is the type of the "assistants"
+// service "listExecutionProfiles" endpoint HTTP response body for the
+// "unexpected" error.
+type ListExecutionProfilesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListExecutionProfilesGatewayErrorResponseBody is the type of the
+// "assistants" service "listExecutionProfiles" endpoint HTTP response body for
+// the "gateway_error" error.
+type ListExecutionProfilesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetExecutionProfileChoiceUnauthorizedResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetExecutionProfileChoiceUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetExecutionProfileChoiceForbiddenResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "forbidden" error.
+type SetExecutionProfileChoiceForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetExecutionProfileChoiceBadRequestResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "bad_request" error.
+type SetExecutionProfileChoiceBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetExecutionProfileChoiceNotFoundResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "not_found" error.
+type SetExecutionProfileChoiceNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetExecutionProfileChoiceConflictResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "conflict" error.
+type SetExecutionProfileChoiceConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetExecutionProfileChoiceUnsupportedMediaResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetExecutionProfileChoiceUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetExecutionProfileChoiceInvalidResponseBody is the type of the "assistants"
+// service "setExecutionProfileChoice" endpoint HTTP response body for the
+// "invalid" error.
+type SetExecutionProfileChoiceInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetExecutionProfileChoiceInvariantViolationResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetExecutionProfileChoiceInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetExecutionProfileChoiceUnexpectedResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "unexpected" error.
+type SetExecutionProfileChoiceUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetExecutionProfileChoiceGatewayErrorResponseBody is the type of the
+// "assistants" service "setExecutionProfileChoice" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetExecutionProfileChoiceGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AssistantResponseBody is used to define fields on response body types.
 type AssistantResponseBody struct {
 	// The assistant ID.
@@ -2378,6 +2557,54 @@ type SendMessageAttachmentRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
+// AssistantExecutionProfileResponseBody is used to define fields on response
+// body types.
+type AssistantExecutionProfileResponseBody struct {
+	// The root trigger.
+	TriggerInstanceID *string `form:"trigger_instance_id,omitempty" json:"trigger_instance_id,omitempty" xml:"trigger_instance_id,omitempty"`
+	// The root trigger's name.
+	TriggerName *string `form:"trigger_name,omitempty" json:"trigger_name,omitempty" xml:"trigger_name,omitempty"`
+	// Whether the turns act for the user their event identified.
+	ExecutionContext *string `form:"execution_context,omitempty" json:"execution_context,omitempty" xml:"execution_context,omitempty"`
+	// The latest version; 0 before the first turn or change.
+	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Each server the turns reach.
+	Servers []*ExecutionProfileServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+}
+
+// ExecutionProfileServerResponseBody is used to define fields on response body
+// types.
+type ExecutionProfileServerResponseBody struct {
+	// The MCP server.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Whether the server has a choice.
+	Chosen *bool `form:"chosen,omitempty" json:"chosen,omitempty" xml:"chosen,omitempty"`
+	// The chosen auth client. Absent with a choice means no upstream
+	// authentication.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+	// How the choice was made: admin, issuance, backfill, or automatic for one the
+	// next turn makes on its own.
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Whether the server offers no enabled auth client and has no upstream
+	// credentials left to record as one, so no-auth can be chosen.
+	NoAuthAllowed *bool `form:"no_auth_allowed,omitempty" json:"no_auth_allowed,omitempty" xml:"no_auth_allowed,omitempty"`
+	// Why a server without a choice gets none on its own.
+	GapReason *string `form:"gap_reason,omitempty" json:"gap_reason,omitempty" xml:"gap_reason,omitempty"`
+	// The credentials that can be chosen.
+	Options []*ExecutionProfileOptionResponseBody `form:"options,omitempty" json:"options,omitempty" xml:"options,omitempty"`
+}
+
+// ExecutionProfileOptionResponseBody is used to define fields on response body
+// types.
+type ExecutionProfileOptionResponseBody struct {
+	// The auth client.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+	// The auth client's name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The auth client's type.
+	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+}
+
 // NewCreateAssistantRequestBody builds the HTTP request body from the payload
 // of the "createAssistant" endpoint of the "assistants" service.
 func NewCreateAssistantRequestBody(p *assistants.CreateAssistantPayload) *CreateAssistantRequestBody {
@@ -2410,18 +2637,6 @@ func NewCreateAssistantRequestBody(p *assistants.CreateAssistantPayload) *Create
 			}
 			body.McpServers[i] = marshalTypesAssistantMCPServerRefToAssistantMCPServerRefRequestBody(val)
 		}
-	}
-	return body
-}
-
-// NewUpgradeAssistantIdentityRequestBody builds the HTTP request body from the
-// payload of the "upgradeAssistantIdentity" endpoint of the "assistants"
-// service.
-func NewUpgradeAssistantIdentityRequestBody(p *assistants.UpgradeAssistantIdentityPayload) *UpgradeAssistantIdentityRequestBody {
-	body := &UpgradeAssistantIdentityRequestBody{
-		ID:        p.ID,
-		AgentID:   p.AgentID,
-		AgentName: p.AgentName,
 	}
 	return body
 }
@@ -2497,6 +2712,23 @@ func NewInterruptTurnRequestBody(p *assistants.InterruptTurnPayload) *InterruptT
 	body := &InterruptTurnRequestBody{
 		AssistantID: p.AssistantID,
 		ChatID:      p.ChatID,
+	}
+	return body
+}
+
+// NewSetExecutionProfileChoiceRequestBody builds the HTTP request body from
+// the payload of the "setExecutionProfileChoice" endpoint of the "assistants"
+// service.
+func NewSetExecutionProfileChoiceRequestBody(p *assistants.SetExecutionProfileChoicePayload) *SetExecutionProfileChoiceRequestBody {
+	body := &SetExecutionProfileChoiceRequestBody{
+		AssistantID:       p.AssistantID,
+		TriggerInstanceID: p.TriggerInstanceID,
+		ExecutionContext:  p.ExecutionContext,
+		McpServerID:       p.McpServerID,
+		AuthClientID:      p.AuthClientID,
+		NoAuth:            p.NoAuth,
+		Automatic:         p.Automatic,
+		ExpectedVersion:   p.ExpectedVersion,
 	}
 	return body
 }
@@ -3049,203 +3281,6 @@ func NewCreateAssistantUnexpected(body *CreateAssistantUnexpectedResponseBody) *
 // NewCreateAssistantGatewayError builds a assistants service createAssistant
 // endpoint gateway_error error.
 func NewCreateAssistantGatewayError(body *CreateAssistantGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpgradeAssistantIdentityAssistantOK builds a "assistants" service
-// "upgradeAssistantIdentity" endpoint result from a HTTP "OK" response.
-func NewUpgradeAssistantIdentityAssistantOK(body *UpgradeAssistantIdentityResponseBody) *types.Assistant {
-	v := &types.Assistant{
-		ID:              *body.ID,
-		ProjectID:       *body.ProjectID,
-		CreatedByUserID: body.CreatedByUserID,
-		IdentityState:   body.IdentityState,
-		AgentID:         body.AgentID,
-		Name:            *body.Name,
-		Model:           *body.Model,
-		Instructions:    *body.Instructions,
-		WarmTTLSeconds:  *body.WarmTTLSeconds,
-		MaxConcurrency:  *body.MaxConcurrency,
-		RuntimeVersion:  *body.RuntimeVersion,
-		Status:          *body.Status,
-		CreatedAt:       *body.CreatedAt,
-		UpdatedAt:       *body.UpdatedAt,
-	}
-	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
-	for i, val := range body.Toolsets {
-		if val == nil {
-			v.Toolsets[i] = nil
-			continue
-		}
-		v.Toolsets[i] = unmarshalAssistantToolsetRefResponseBodyToTypesAssistantToolsetRef(val)
-	}
-	v.McpServers = make([]*types.AssistantMCPServerRef, len(body.McpServers))
-	for i, val := range body.McpServers {
-		if val == nil {
-			v.McpServers[i] = nil
-			continue
-		}
-		v.McpServers[i] = unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(val)
-	}
-	v.Skills = make([]*types.AssistantSkillRef, len(body.Skills))
-	for i, val := range body.Skills {
-		if val == nil {
-			v.Skills[i] = nil
-			continue
-		}
-		v.Skills[i] = unmarshalAssistantSkillRefResponseBodyToTypesAssistantSkillRef(val)
-	}
-
-	return v
-}
-
-// NewUpgradeAssistantIdentityUnauthorized builds a assistants service
-// upgradeAssistantIdentity endpoint unauthorized error.
-func NewUpgradeAssistantIdentityUnauthorized(body *UpgradeAssistantIdentityUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpgradeAssistantIdentityForbidden builds a assistants service
-// upgradeAssistantIdentity endpoint forbidden error.
-func NewUpgradeAssistantIdentityForbidden(body *UpgradeAssistantIdentityForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpgradeAssistantIdentityBadRequest builds a assistants service
-// upgradeAssistantIdentity endpoint bad_request error.
-func NewUpgradeAssistantIdentityBadRequest(body *UpgradeAssistantIdentityBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpgradeAssistantIdentityNotFound builds a assistants service
-// upgradeAssistantIdentity endpoint not_found error.
-func NewUpgradeAssistantIdentityNotFound(body *UpgradeAssistantIdentityNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpgradeAssistantIdentityConflict builds a assistants service
-// upgradeAssistantIdentity endpoint conflict error.
-func NewUpgradeAssistantIdentityConflict(body *UpgradeAssistantIdentityConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpgradeAssistantIdentityUnsupportedMedia builds a assistants service
-// upgradeAssistantIdentity endpoint unsupported_media error.
-func NewUpgradeAssistantIdentityUnsupportedMedia(body *UpgradeAssistantIdentityUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpgradeAssistantIdentityInvalid builds a assistants service
-// upgradeAssistantIdentity endpoint invalid error.
-func NewUpgradeAssistantIdentityInvalid(body *UpgradeAssistantIdentityInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpgradeAssistantIdentityInvariantViolation builds a assistants service
-// upgradeAssistantIdentity endpoint invariant_violation error.
-func NewUpgradeAssistantIdentityInvariantViolation(body *UpgradeAssistantIdentityInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpgradeAssistantIdentityUnexpected builds a assistants service
-// upgradeAssistantIdentity endpoint unexpected error.
-func NewUpgradeAssistantIdentityUnexpected(body *UpgradeAssistantIdentityUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewUpgradeAssistantIdentityGatewayError builds a assistants service
-// upgradeAssistantIdentity endpoint gateway_error error.
-func NewUpgradeAssistantIdentityGatewayError(body *UpgradeAssistantIdentityGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4323,6 +4358,344 @@ func NewEnsureManagedAssistantGatewayError(body *EnsureManagedAssistantGatewayEr
 	return v
 }
 
+// NewListExecutionProfilesResultOK builds a "assistants" service
+// "listExecutionProfiles" endpoint result from a HTTP "OK" response.
+func NewListExecutionProfilesResultOK(body *ListExecutionProfilesResponseBody) *assistants.ListExecutionProfilesResult {
+	v := &assistants.ListExecutionProfilesResult{}
+	v.Profiles = make([]*assistants.AssistantExecutionProfile, len(body.Profiles))
+	for i, val := range body.Profiles {
+		if val == nil {
+			v.Profiles[i] = nil
+			continue
+		}
+		v.Profiles[i] = unmarshalAssistantExecutionProfileResponseBodyToAssistantsAssistantExecutionProfile(val)
+	}
+
+	return v
+}
+
+// NewListExecutionProfilesUnauthorized builds a assistants service
+// listExecutionProfiles endpoint unauthorized error.
+func NewListExecutionProfilesUnauthorized(body *ListExecutionProfilesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExecutionProfilesForbidden builds a assistants service
+// listExecutionProfiles endpoint forbidden error.
+func NewListExecutionProfilesForbidden(body *ListExecutionProfilesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExecutionProfilesBadRequest builds a assistants service
+// listExecutionProfiles endpoint bad_request error.
+func NewListExecutionProfilesBadRequest(body *ListExecutionProfilesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExecutionProfilesNotFound builds a assistants service
+// listExecutionProfiles endpoint not_found error.
+func NewListExecutionProfilesNotFound(body *ListExecutionProfilesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExecutionProfilesConflict builds a assistants service
+// listExecutionProfiles endpoint conflict error.
+func NewListExecutionProfilesConflict(body *ListExecutionProfilesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExecutionProfilesUnsupportedMedia builds a assistants service
+// listExecutionProfiles endpoint unsupported_media error.
+func NewListExecutionProfilesUnsupportedMedia(body *ListExecutionProfilesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExecutionProfilesInvalid builds a assistants service
+// listExecutionProfiles endpoint invalid error.
+func NewListExecutionProfilesInvalid(body *ListExecutionProfilesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExecutionProfilesInvariantViolation builds a assistants service
+// listExecutionProfiles endpoint invariant_violation error.
+func NewListExecutionProfilesInvariantViolation(body *ListExecutionProfilesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExecutionProfilesUnexpected builds a assistants service
+// listExecutionProfiles endpoint unexpected error.
+func NewListExecutionProfilesUnexpected(body *ListExecutionProfilesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListExecutionProfilesGatewayError builds a assistants service
+// listExecutionProfiles endpoint gateway_error error.
+func NewListExecutionProfilesGatewayError(body *ListExecutionProfilesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetExecutionProfileChoiceAssistantExecutionProfileOK builds a
+// "assistants" service "setExecutionProfileChoice" endpoint result from a HTTP
+// "OK" response.
+func NewSetExecutionProfileChoiceAssistantExecutionProfileOK(body *SetExecutionProfileChoiceResponseBody) *assistants.AssistantExecutionProfile {
+	v := &assistants.AssistantExecutionProfile{
+		TriggerInstanceID: *body.TriggerInstanceID,
+		TriggerName:       *body.TriggerName,
+		ExecutionContext:  *body.ExecutionContext,
+		Version:           *body.Version,
+	}
+	v.Servers = make([]*assistants.ExecutionProfileServer, len(body.Servers))
+	for i, val := range body.Servers {
+		if val == nil {
+			v.Servers[i] = nil
+			continue
+		}
+		v.Servers[i] = unmarshalExecutionProfileServerResponseBodyToAssistantsExecutionProfileServer(val)
+	}
+
+	return v
+}
+
+// NewSetExecutionProfileChoiceUnauthorized builds a assistants service
+// setExecutionProfileChoice endpoint unauthorized error.
+func NewSetExecutionProfileChoiceUnauthorized(body *SetExecutionProfileChoiceUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetExecutionProfileChoiceForbidden builds a assistants service
+// setExecutionProfileChoice endpoint forbidden error.
+func NewSetExecutionProfileChoiceForbidden(body *SetExecutionProfileChoiceForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetExecutionProfileChoiceBadRequest builds a assistants service
+// setExecutionProfileChoice endpoint bad_request error.
+func NewSetExecutionProfileChoiceBadRequest(body *SetExecutionProfileChoiceBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetExecutionProfileChoiceNotFound builds a assistants service
+// setExecutionProfileChoice endpoint not_found error.
+func NewSetExecutionProfileChoiceNotFound(body *SetExecutionProfileChoiceNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetExecutionProfileChoiceConflict builds a assistants service
+// setExecutionProfileChoice endpoint conflict error.
+func NewSetExecutionProfileChoiceConflict(body *SetExecutionProfileChoiceConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetExecutionProfileChoiceUnsupportedMedia builds a assistants service
+// setExecutionProfileChoice endpoint unsupported_media error.
+func NewSetExecutionProfileChoiceUnsupportedMedia(body *SetExecutionProfileChoiceUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetExecutionProfileChoiceInvalid builds a assistants service
+// setExecutionProfileChoice endpoint invalid error.
+func NewSetExecutionProfileChoiceInvalid(body *SetExecutionProfileChoiceInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetExecutionProfileChoiceInvariantViolation builds a assistants service
+// setExecutionProfileChoice endpoint invariant_violation error.
+func NewSetExecutionProfileChoiceInvariantViolation(body *SetExecutionProfileChoiceInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetExecutionProfileChoiceUnexpected builds a assistants service
+// setExecutionProfileChoice endpoint unexpected error.
+func NewSetExecutionProfileChoiceUnexpected(body *SetExecutionProfileChoiceUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetExecutionProfileChoiceGatewayError builds a assistants service
+// setExecutionProfileChoice endpoint gateway_error error.
+func NewSetExecutionProfileChoiceGatewayError(body *SetExecutionProfileChoiceGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateListAssistantsResponseBody runs the validations defined on
 // ListAssistantsResponseBody
 func ValidateListAssistantsResponseBody(body *ListAssistantsResponseBody) (err error) {
@@ -4441,105 +4814,6 @@ func ValidateGetAssistantResponseBody(body *GetAssistantResponseBody) (err error
 // ValidateCreateAssistantResponseBody runs the validations defined on
 // CreateAssistantResponseBody
 func ValidateCreateAssistantResponseBody(body *CreateAssistantResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Model == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("model", "body"))
-	}
-	if body.Instructions == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("instructions", "body"))
-	}
-	if body.Toolsets == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
-	}
-	if body.McpServers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_servers", "body"))
-	}
-	if body.Skills == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("skills", "body"))
-	}
-	if body.WarmTTLSeconds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("warm_ttl_seconds", "body"))
-	}
-	if body.MaxConcurrency == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
-	}
-	if body.RuntimeVersion == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("runtime_version", "body"))
-	}
-	if body.Status == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-	}
-	if body.IdentityState != nil {
-		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
-		}
-	}
-	if body.AgentID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
-	}
-	for _, e := range body.Toolsets {
-		if e != nil {
-			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.McpServers {
-		if e != nil {
-			if err2 := ValidateAssistantMCPServerRefResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	for _, e := range body.Skills {
-		if e != nil {
-			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	if body.RuntimeVersion != nil {
-		if !(*body.RuntimeVersion == 2 || *body.RuntimeVersion == 3) {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.runtime_version", *body.RuntimeVersion, []any{2, 3}))
-		}
-	}
-	if body.Status != nil {
-		if !(*body.Status == "active" || *body.Status == "paused") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
-		}
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
-	}
-	return
-}
-
-// ValidateUpgradeAssistantIdentityResponseBody runs the validations defined on
-// UpgradeAssistantIdentityResponseBody
-func ValidateUpgradeAssistantIdentityResponseBody(body *UpgradeAssistantIdentityResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -4962,6 +5236,58 @@ func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResp
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListExecutionProfilesResponseBody runs the validations defined on
+// ListExecutionProfilesResponseBody
+func ValidateListExecutionProfilesResponseBody(body *ListExecutionProfilesResponseBody) (err error) {
+	if body.Profiles == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("profiles", "body"))
+	}
+	for _, e := range body.Profiles {
+		if e != nil {
+			if err2 := ValidateAssistantExecutionProfileResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSetExecutionProfileChoiceResponseBody runs the validations defined
+// on SetExecutionProfileChoiceResponseBody
+func ValidateSetExecutionProfileChoiceResponseBody(body *SetExecutionProfileChoiceResponseBody) (err error) {
+	if body.TriggerInstanceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trigger_instance_id", "body"))
+	}
+	if body.TriggerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trigger_name", "body"))
+	}
+	if body.ExecutionContext == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("execution_context", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	if body.TriggerInstanceID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trigger_instance_id", *body.TriggerInstanceID, goa.FormatUUID))
+	}
+	if body.ExecutionContext != nil {
+		if !(*body.ExecutionContext == "user_backed" || *body.ExecutionContext == "userless") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.execution_context", *body.ExecutionContext, []any{"user_backed", "userless"}))
+		}
+	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateExecutionProfileServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -5665,248 +5991,6 @@ func ValidateCreateAssistantUnexpectedResponseBody(body *CreateAssistantUnexpect
 // ValidateCreateAssistantGatewayErrorResponseBody runs the validations defined
 // on createAssistant_gateway_error_response_body
 func ValidateCreateAssistantGatewayErrorResponseBody(body *CreateAssistantGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpgradeAssistantIdentityUnauthorizedResponseBody runs the
-// validations defined on upgradeAssistantIdentity_unauthorized_response_body
-func ValidateUpgradeAssistantIdentityUnauthorizedResponseBody(body *UpgradeAssistantIdentityUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpgradeAssistantIdentityForbiddenResponseBody runs the validations
-// defined on upgradeAssistantIdentity_forbidden_response_body
-func ValidateUpgradeAssistantIdentityForbiddenResponseBody(body *UpgradeAssistantIdentityForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpgradeAssistantIdentityBadRequestResponseBody runs the validations
-// defined on upgradeAssistantIdentity_bad_request_response_body
-func ValidateUpgradeAssistantIdentityBadRequestResponseBody(body *UpgradeAssistantIdentityBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpgradeAssistantIdentityNotFoundResponseBody runs the validations
-// defined on upgradeAssistantIdentity_not_found_response_body
-func ValidateUpgradeAssistantIdentityNotFoundResponseBody(body *UpgradeAssistantIdentityNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpgradeAssistantIdentityConflictResponseBody runs the validations
-// defined on upgradeAssistantIdentity_conflict_response_body
-func ValidateUpgradeAssistantIdentityConflictResponseBody(body *UpgradeAssistantIdentityConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpgradeAssistantIdentityUnsupportedMediaResponseBody runs the
-// validations defined on
-// upgradeAssistantIdentity_unsupported_media_response_body
-func ValidateUpgradeAssistantIdentityUnsupportedMediaResponseBody(body *UpgradeAssistantIdentityUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpgradeAssistantIdentityInvalidResponseBody runs the validations
-// defined on upgradeAssistantIdentity_invalid_response_body
-func ValidateUpgradeAssistantIdentityInvalidResponseBody(body *UpgradeAssistantIdentityInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpgradeAssistantIdentityInvariantViolationResponseBody runs the
-// validations defined on
-// upgradeAssistantIdentity_invariant_violation_response_body
-func ValidateUpgradeAssistantIdentityInvariantViolationResponseBody(body *UpgradeAssistantIdentityInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpgradeAssistantIdentityUnexpectedResponseBody runs the validations
-// defined on upgradeAssistantIdentity_unexpected_response_body
-func ValidateUpgradeAssistantIdentityUnexpectedResponseBody(body *UpgradeAssistantIdentityUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateUpgradeAssistantIdentityGatewayErrorResponseBody runs the
-// validations defined on upgradeAssistantIdentity_gateway_error_response_body
-func ValidateUpgradeAssistantIdentityGatewayErrorResponseBody(body *UpgradeAssistantIdentityGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7369,6 +7453,489 @@ func ValidateEnsureManagedAssistantGatewayErrorResponseBody(body *EnsureManagedA
 	return
 }
 
+// ValidateListExecutionProfilesUnauthorizedResponseBody runs the validations
+// defined on listExecutionProfiles_unauthorized_response_body
+func ValidateListExecutionProfilesUnauthorizedResponseBody(body *ListExecutionProfilesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExecutionProfilesForbiddenResponseBody runs the validations
+// defined on listExecutionProfiles_forbidden_response_body
+func ValidateListExecutionProfilesForbiddenResponseBody(body *ListExecutionProfilesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExecutionProfilesBadRequestResponseBody runs the validations
+// defined on listExecutionProfiles_bad_request_response_body
+func ValidateListExecutionProfilesBadRequestResponseBody(body *ListExecutionProfilesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExecutionProfilesNotFoundResponseBody runs the validations
+// defined on listExecutionProfiles_not_found_response_body
+func ValidateListExecutionProfilesNotFoundResponseBody(body *ListExecutionProfilesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExecutionProfilesConflictResponseBody runs the validations
+// defined on listExecutionProfiles_conflict_response_body
+func ValidateListExecutionProfilesConflictResponseBody(body *ListExecutionProfilesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExecutionProfilesUnsupportedMediaResponseBody runs the
+// validations defined on listExecutionProfiles_unsupported_media_response_body
+func ValidateListExecutionProfilesUnsupportedMediaResponseBody(body *ListExecutionProfilesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExecutionProfilesInvalidResponseBody runs the validations
+// defined on listExecutionProfiles_invalid_response_body
+func ValidateListExecutionProfilesInvalidResponseBody(body *ListExecutionProfilesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExecutionProfilesInvariantViolationResponseBody runs the
+// validations defined on
+// listExecutionProfiles_invariant_violation_response_body
+func ValidateListExecutionProfilesInvariantViolationResponseBody(body *ListExecutionProfilesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExecutionProfilesUnexpectedResponseBody runs the validations
+// defined on listExecutionProfiles_unexpected_response_body
+func ValidateListExecutionProfilesUnexpectedResponseBody(body *ListExecutionProfilesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListExecutionProfilesGatewayErrorResponseBody runs the validations
+// defined on listExecutionProfiles_gateway_error_response_body
+func ValidateListExecutionProfilesGatewayErrorResponseBody(body *ListExecutionProfilesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetExecutionProfileChoiceUnauthorizedResponseBody runs the
+// validations defined on setExecutionProfileChoice_unauthorized_response_body
+func ValidateSetExecutionProfileChoiceUnauthorizedResponseBody(body *SetExecutionProfileChoiceUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetExecutionProfileChoiceForbiddenResponseBody runs the validations
+// defined on setExecutionProfileChoice_forbidden_response_body
+func ValidateSetExecutionProfileChoiceForbiddenResponseBody(body *SetExecutionProfileChoiceForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetExecutionProfileChoiceBadRequestResponseBody runs the validations
+// defined on setExecutionProfileChoice_bad_request_response_body
+func ValidateSetExecutionProfileChoiceBadRequestResponseBody(body *SetExecutionProfileChoiceBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetExecutionProfileChoiceNotFoundResponseBody runs the validations
+// defined on setExecutionProfileChoice_not_found_response_body
+func ValidateSetExecutionProfileChoiceNotFoundResponseBody(body *SetExecutionProfileChoiceNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetExecutionProfileChoiceConflictResponseBody runs the validations
+// defined on setExecutionProfileChoice_conflict_response_body
+func ValidateSetExecutionProfileChoiceConflictResponseBody(body *SetExecutionProfileChoiceConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetExecutionProfileChoiceUnsupportedMediaResponseBody runs the
+// validations defined on
+// setExecutionProfileChoice_unsupported_media_response_body
+func ValidateSetExecutionProfileChoiceUnsupportedMediaResponseBody(body *SetExecutionProfileChoiceUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetExecutionProfileChoiceInvalidResponseBody runs the validations
+// defined on setExecutionProfileChoice_invalid_response_body
+func ValidateSetExecutionProfileChoiceInvalidResponseBody(body *SetExecutionProfileChoiceInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetExecutionProfileChoiceInvariantViolationResponseBody runs the
+// validations defined on
+// setExecutionProfileChoice_invariant_violation_response_body
+func ValidateSetExecutionProfileChoiceInvariantViolationResponseBody(body *SetExecutionProfileChoiceInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetExecutionProfileChoiceUnexpectedResponseBody runs the validations
+// defined on setExecutionProfileChoice_unexpected_response_body
+func ValidateSetExecutionProfileChoiceUnexpectedResponseBody(body *SetExecutionProfileChoiceUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetExecutionProfileChoiceGatewayErrorResponseBody runs the
+// validations defined on setExecutionProfileChoice_gateway_error_response_body
+func ValidateSetExecutionProfileChoiceGatewayErrorResponseBody(body *SetExecutionProfileChoiceGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAssistantResponseBody runs the validations defined on
 // AssistantResponseBody
 func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
@@ -7515,6 +8082,101 @@ func ValidateSendMessageAttachmentRequestBody(body *SendMessageAttachmentRequest
 		if utf8.RuneCountInString(*body.Name) > 255 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 255, false))
 		}
+	}
+	return
+}
+
+// ValidateAssistantExecutionProfileResponseBody runs the validations defined
+// on AssistantExecutionProfileResponseBody
+func ValidateAssistantExecutionProfileResponseBody(body *AssistantExecutionProfileResponseBody) (err error) {
+	if body.TriggerInstanceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trigger_instance_id", "body"))
+	}
+	if body.TriggerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trigger_name", "body"))
+	}
+	if body.ExecutionContext == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("execution_context", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	if body.TriggerInstanceID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trigger_instance_id", *body.TriggerInstanceID, goa.FormatUUID))
+	}
+	if body.ExecutionContext != nil {
+		if !(*body.ExecutionContext == "user_backed" || *body.ExecutionContext == "userless") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.execution_context", *body.ExecutionContext, []any{"user_backed", "userless"}))
+		}
+	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateExecutionProfileServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateExecutionProfileServerResponseBody runs the validations defined on
+// ExecutionProfileServerResponseBody
+func ValidateExecutionProfileServerResponseBody(body *ExecutionProfileServerResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.Chosen == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("chosen", "body"))
+	}
+	if body.Options == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("options", "body"))
+	}
+	if body.NoAuthAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("no_auth_allowed", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	if body.Source != nil {
+		if !(*body.Source == "admin" || *body.Source == "issuance" || *body.Source == "backfill" || *body.Source == "automatic") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"admin", "issuance", "backfill", "automatic"}))
+		}
+	}
+	if body.GapReason != nil {
+		if !(*body.GapReason == "selection_required" || *body.GapReason == "personal_requires_user" || *body.GapReason == "no_client" || *body.GapReason == "setup_incomplete") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.gap_reason", *body.GapReason, []any{"selection_required", "personal_requires_user", "no_client", "setup_incomplete"}))
+		}
+	}
+	for _, e := range body.Options {
+		if e != nil {
+			if err2 := ValidateExecutionProfileOptionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateExecutionProfileOptionResponseBody runs the validations defined on
+// ExecutionProfileOptionResponseBody
+func ValidateExecutionProfileOptionResponseBody(body *ExecutionProfileOptionResponseBody) (err error) {
+	if body.AuthClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auth_client_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ClientType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_type", "body"))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
 	}
 	return
 }

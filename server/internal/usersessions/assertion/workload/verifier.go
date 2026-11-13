@@ -2,6 +2,7 @@ package workload
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -53,6 +54,11 @@ func NewVerifier(keys assertioncore.VerificationKeys, guard assertioncore.Replay
 	return &Verifier{keys: keys, guard: guard}, nil
 }
 
+// WithReplayGuard returns a verifier with the same keys and another replay guard.
+func (v *Verifier) WithReplayGuard(guard assertioncore.ReplayGuard) (*Verifier, error) {
+	return NewVerifier(v.keys, guard)
+}
+
 // Verify checks a signed platform assertion after its issuer and subject
 // have been selected through tenant admission. Its jti or uti is single-use;
 // a platform token with neither can be reused only as identical JWT bytes.
@@ -78,7 +84,8 @@ func (v *Verifier) Verify(ctx context.Context, raw string, expect Expectation) (
 	}
 	var claims jwt.Claims
 	var extra replayIDClaims
-	if err := assertioncore.VerifiedClaims(ctx, v.keys, expect.KeySource, token, &claims, &extra); err != nil {
+	var confirmation confirmationClaims
+	if err := assertioncore.VerifiedClaims(ctx, v.keys, expect.KeySource, token, &claims, &extra, &confirmation); err != nil {
 		if verifiedErr, ok := errors.AsType[*assertioncore.VerificationError](err); ok && verifiedErr.Stage == assertioncore.VerificationKeyResolution {
 			if errors.Is(err, jwks.ErrKeyNotFound) || errors.Is(err, jwks.ErrRefreshRateLimited) || errors.Is(err, jwks.ErrFetchRateLimited) {
 				return nil, rejectWith(ReasonKeyUnknown, err)
@@ -87,31 +94,49 @@ func (v *Verifier) Verify(ctx context.Context, raw string, expect Expectation) (
 		}
 		return nil, rejectWith(ReasonSignatureInvalid, err)
 	}
+	if confirmation.Cnf != nil {
+		return nil, signed(claims.Subject, reject(ReasonTypeNotBearer, "cnf-bound assertions are not bearer assertions"))
+	}
 	if claims.Expiry == nil {
-		return nil, reject(ReasonExpiryMissing, "exp is required")
+		return nil, signed(claims.Subject, reject(ReasonExpiryMissing, "exp is required"))
 	}
 	now := time.Now()
 	if err := claims.ValidateWithLeeway(jwt.Expected{
 		Issuer: expect.Issuer, Subject: expect.Subject, AnyAudience: expect.Audiences,
 		Time: now, ID: "",
 	}, assertioncore.MaxSkew); err != nil {
-		return nil, rejectWith(reasonForClaimError(err), err)
+		return nil, signed(claims.Subject, rejectWith(reasonForClaimError(err), err))
 	}
 	expiresAt := claims.Expiry.Time()
 	if expiresAt.After(now.Add(expect.MaxLifetime + assertioncore.MaxSkew)) {
-		return nil, reject(ReasonLifetimeTooLong, "exp exceeds the configured platform lifetime")
+		return nil, signed(claims.Subject, reject(ReasonLifetimeTooLong, "exp exceeds the configured platform lifetime"))
 	}
 	id, exact := resolveReplayID(claims.ID, extra, raw)
 	claimed, err := assertioncore.Reserve(ctx, v.guard, replay.Key{
 		Issuer: expect.ReplayIssuer, Party: expect.ReplayParty, Subject: expect.Subject, ID: id,
 	}, expiresAt)
 	if err != nil {
-		return nil, rejectWith(ReasonReplayStoreUnavailable, err)
+		return nil, signed(claims.Subject, rejectWith(ReasonReplayStoreUnavailable, err))
 	}
 	if !claimed && exact && !expect.AllowAssertionReuse {
-		return nil, reject(ReasonReplayed, "assertion identifier has already been presented")
+		return nil, signed(claims.Subject, reject(ReasonReplayed, "assertion identifier has already been presented"))
 	}
 	return &Result{ExpiresAt: expiresAt, ReusedAssertion: !claimed}, nil
+}
+
+// signed marks a rejection made after the signature verified, with its verified subject.
+func signed(subject string, err error) error {
+	if typed, ok := errors.AsType[*Error](err); ok {
+		typed.SignatureVerified = true
+		typed.Subject = subject
+	}
+	return err
+}
+
+// confirmationClaims detects a key-bound token (RFC 7800). Any cnf value,
+// including null, marks a credential that must not be exchanged as a bearer.
+type confirmationClaims struct {
+	Cnf json.RawMessage `json:"cnf"`
 }
 
 // checkBearerType refuses a denylisted typ. A missing typ and every other

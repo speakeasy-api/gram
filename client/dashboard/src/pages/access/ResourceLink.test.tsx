@@ -3,14 +3,12 @@ import type { ChallengeBucket } from "@gram/client/models/components/challengebu
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router";
 import { ResourceLink } from "./ResourceLink";
+import type { ResourceLinkToolset } from "./useResourceLinkMaps";
 
 const projectMap = new Map<string, { slug: string; name: string }>([
   ["proj-1", { slug: "default", name: "Default" }],
 ]);
-const emptyToolsetMap = new Map<
-  string,
-  { slug: string; name: string; projectId: string }
->();
+const emptyToolsetMap = new Map<string, ResourceLinkToolset>();
 const emptyMcpServerMap = new Map<
   string,
   { slug?: string; name?: string; projectId: string }
@@ -88,7 +86,32 @@ describe("ResourceLink", () => {
     );
   });
 
-  it("links toolset-backed MCP grants to the toolset's page", () => {
+  it("links toolset-backed MCP grants to their server's /mcp page", () => {
+    renderLink(
+      makeBucket({
+        scope: "mcp:connect",
+        resourceKind: "mcp",
+        resourceId: "toolset-1",
+      }),
+      new Map([
+        [
+          "toolset-1",
+          {
+            slug: "crm",
+            name: "CRM",
+            projectId: "proj-1",
+            server: { id: "server-crm", slug: "crm-server" },
+          },
+        ],
+      ]),
+    );
+    const link = screen.getByRole("link", { name: /CRM/ });
+    expect(link.getAttribute("href")).toBe(
+      "/acme/projects/default/mcp/crm-server",
+    );
+  });
+
+  it("links a toolset no known server serves to its /toolsets redirect", () => {
     renderLink(
       makeBucket({
         scope: "mcp:connect",

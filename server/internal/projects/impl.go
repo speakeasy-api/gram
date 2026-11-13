@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
@@ -530,8 +531,7 @@ func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.Set
 	}
 
 	// Check that the API key is from the speakeasy-team organization
-	const speakeasyTeamOrgID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
-	if authCtx.ActiveOrganizationID != speakeasyTeamOrgID {
+	if authCtx.ActiveOrganizationID != constants.SpeakeasyTeamOrganizationID {
 		return oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can set organization whitelist status").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 

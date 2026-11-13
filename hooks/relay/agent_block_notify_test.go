@@ -46,13 +46,19 @@ func startBlockReportSocket(t *testing.T, status int, delay time.Duration) (stri
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-socket fixture is POSIX-only")
 	}
-	capture := &blockReportCapture{mu: sync.Mutex{}, reports: nil, status: status, delay: delay}
 	// Not t.TempDir(): it embeds the test name and can blow the ~104-byte
 	// sockaddr_un path limit on macOS.
 	dir, err := os.MkdirTemp("", "sk")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	socket := filepath.Join(dir, "agent.sock")
+	return socket, serveBlockReportSocket(t, socket, status, delay)
+}
+
+// serveBlockReportSocket is startBlockReportSocket at a caller-chosen path.
+func serveBlockReportSocket(t *testing.T, socket string, status int, delay time.Duration) *blockReportCapture {
+	t.Helper()
+	capture := &blockReportCapture{mu: sync.Mutex{}, reports: nil, status: status, delay: delay}
 	ln, err := net.Listen("unix", socket)
 	require.NoError(t, err)
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +84,7 @@ func startBlockReportSocket(t *testing.T, status int, delay time.Duration) (stri
 	})}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })
-	return socket, capture
+	return capture
 }
 
 func requestableBlockEffects(components.IngestRequestBody) map[string]any {
@@ -226,6 +232,31 @@ func TestDenyNotifySwallowsAbsentSocket(t *testing.T) {
 
 	res := invoke(t, authedConfig(t, fs.URL), agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+}
+
+// Under a temporary $HOME holding a stale socket file, the report still
+// reaches the live daemon under the account's home, exactly once.
+func TestDenyNotifyReachesDaemonUnderAccountHome(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-socket fixture is POSIX-only")
+	}
+	fs := denyWithEffects(t, requestableBlockEffects)
+	t.Setenv("SPEAKEASY_SOCKET", "")
+	moved := shortTempDir(t)
+	stale := homeSocketPath(moved)
+	require.NoError(t, os.MkdirAll(filepath.Dir(stale), 0o755))
+	require.NoError(t, os.WriteFile(stale, nil, 0o600))
+	account := shortTempDir(t)
+	stubAccountHome(t, account)
+	live := homeSocketPath(account)
+	require.NoError(t, os.MkdirAll(filepath.Dir(live), 0o755))
+	capture := serveBlockReportSocket(t, live, http.StatusAccepted, 0)
+	cfg := authedConfig(t, fs.URL)
+	t.Setenv("HOME", moved)
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	require.Equal(t, 1, capture.count(), "exactly one report, to the live daemon")
 }
 
 // A hung daemon costs at most the notify budget, never the provider's

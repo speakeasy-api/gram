@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -164,6 +166,11 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 	// Discovery is outside the allowlist and catalogue, so a meta-tool's
 	// dispatched call passes through both like a direct call.
 	middlewares := []mcp.Middleware{discoveryMiddleware(runtime, logger), clientToolAllowlistMiddleware(registrar), capabilityCatalogueMiddleware(registrar)}
+	// Outside discovery, which replaces the instructions in its small modes:
+	// the caller's servers are appended to whichever instructions it chose.
+	if postgresReader, ok := reader.(*PostgresReader); ok && postgresReader.gatewayProxy.valid() {
+		middlewares = append([]mcp.Middleware{gatewayServersInstructionsMiddleware(postgresReader.gatewayProxy, logger, runtime.instructionBudget(logger))}, middlewares...)
+	}
 	if readiness != nil {
 		middlewares = append([]mcp.Middleware{readinessMiddleware(runtime, logger)}, middlewares...)
 	}
@@ -294,6 +301,16 @@ func mustPrincipal(ctx context.Context) Principal {
 func (r *Runtime) WithOAuthTelemetry(telemetry OAuthTelemetry) *Runtime {
 	if telemetry != nil {
 		r.telemetry = telemetry
+	}
+	return r
+}
+
+// WithDashboardLinks lets result cards link to dashboard pages on the
+// dashboard the request arrived for. db resolves a project ID to its slug in
+// the caller's organization; it may be nil.
+func (r *Runtime) WithDashboardLinks(dashboardURL, serverURL *url.URL, db platformrepo.DBTX) *Runtime {
+	if r != nil && r.registrar != nil {
+		r.registrar.withDashboardLinks(newCardLinks(dashboardURL, serverURL, db))
 	}
 	return r
 }

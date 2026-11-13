@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -70,6 +71,7 @@ func TestPrincipalCredentialAdmissionRejectsEachParentGate(t *testing.T) {
 			mutate(t, fixture)
 			_, err := fixture.engine.PrepareContext(fixture.requestContext)
 			requireUnauthorized(t, err)
+			require.ErrorIs(t, err, ErrPrincipalNotAdmitted)
 		})
 	}
 }
@@ -87,8 +89,8 @@ func TestPrincipalAPIKeyAdmissionRevalidatesCredentialActivity(t *testing.T) {
 		},
 		"expired": func(t *testing.T, fixture credentialAdmissionFixture, keyID uuid.UUID) {
 			t.Helper()
-			//nolint:glint // notestingrawsql: simulate expiry after the credential profile was loaded
-			_, err := fixture.db.Exec(t.Context(), `UPDATE api_keys SET expires_at = statement_timestamp() - INTERVAL '1 second' WHERE id = $1 AND organization_id = $2`, keyID, fixture.organizationID)
+			// Simulate expiry after the credential profile was loaded.
+			err := testrepo.New(fixture.db).ExpireAPIKeyAtStatementFixture(t.Context(), testrepo.ExpireAPIKeyAtStatementFixtureParams{ID: keyID, OrganizationID: fixture.organizationID})
 			require.NoError(t, err)
 		},
 	} {
@@ -342,6 +344,7 @@ func TestPrincipalCredentialsHonorLiveServerRestriction(t *testing.T) {
 			actor := urn.NewPrincipal(urn.PrincipalTypeAgent, fixture.agentID.String())
 			for _, principal := range []urn.Principal{actor, urn.NewPrincipal(urn.PrincipalTypeUser, fixture.ownerUserID)} {
 				seedGrant(t, t.Context(), fixture.db, fixture.organizationID, principal, authz.ScopeMCPWrite, "*")
+				seedGrant(t, t.Context(), fixture.db, fixture.organizationID, principal, authz.ScopeMCPConnect, "*")
 			}
 			policy, err := NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, "*")})
 			require.NoError(t, err)

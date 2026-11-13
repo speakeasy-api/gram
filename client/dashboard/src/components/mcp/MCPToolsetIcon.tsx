@@ -1,4 +1,5 @@
-import { useCatalogIconMap } from "../sources/sources-hooks";
+import { useListMCPCatalog } from "@/pages/catalog/hooks";
+import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
 import { primaryExternalMcpSlug } from "../sources/external-mcp-oauth";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
@@ -37,7 +38,7 @@ export function ExternalMcpIcon({
   className?: string;
   fallbackClassName?: string;
 }): JSX.Element {
-  const catalogIconMap = useCatalogIconMap();
+  const { data: catalog } = useListMCPCatalog();
   const { data: deploymentResult } = useLatestDeployment();
 
   const externalMcpLogoUrl = useMemo(() => {
@@ -47,15 +48,20 @@ export function ExternalMcpIcon({
       (mcp) => mcp.slug === externalMcpSlug,
     );
     return matchingMcp?.registryServerSpecifier
-      ? catalogIconMap.get(matchingMcp.registryServerSpecifier)
+      ? catalog?.servers.find(
+          (s) => s.registrySpecifier === matchingMcp.registryServerSpecifier,
+        )
       : undefined;
-  }, [externalMcpSlug, catalogIconMap, deploymentResult]);
+  }, [externalMcpSlug, catalog, deploymentResult]);
 
   return externalMcpLogoUrl ? (
-    <img
-      src={externalMcpLogoUrl}
+    <CatalogLogo
+      server={externalMcpLogoUrl}
       alt={alt}
       className={cn("object-contain", className)}
+      fallback={
+        <Network className={cn("text-muted-foreground", fallbackClassName)} />
+      }
     />
   ) : (
     <Network className={cn("text-muted-foreground", fallbackClassName)} />

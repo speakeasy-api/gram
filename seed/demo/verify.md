@@ -48,6 +48,19 @@ where a value is expected.
    mutation section. Confirm there is no ingress row, credential, or related
    console/network error.
 
+0b. **Custom domain diagnostics**: run `mise run seed` twice, then open the
+organization's `/domains` page in both the local organization and `acme-demo`.
+Confirm the seeded reserved example hostname is verified but not activated.
+DNS configuration must explain that the routing target could not be confirmed
+from public DNS, separately from **Infrastructure: Ready**, with no infrastructure outage warning and no
+**Check again** action for this inactive fixture. Open its DNS records and
+confirm the CNAME destination is shown (the designated destination when a suffix
+is configured, otherwise the shared destination). Repeat at a narrow viewport
+and confirm record values and actions remain readable without horizontal page
+overflow. Check the console for errors. The fixture must not create a public
+route or certificate. Run the demo seed safety tests to verify tenant isolation
+and repeatable delete/reinsert behavior.
+
 0a. **Inbound MCP network traffic seed**: after `mise run seed:demo`, confirm
 `mcp_network_traffic_hourly_summaries` has public and private rows for both
 `mcp` and `meta` server kinds in the demo project, with non-zero request
@@ -585,10 +598,26 @@ open their effective assignments; the dropdown always offers compact member sear
     - Open Acme Wiki's page. It shows Acme Identity's issuer URL
       `https://login.acme-identity.example` to copy, and the saved order with
       **Use default**.
-    - **MCP → Acme Tracker → Settings** has no Enterprise Managed
-      Authorization section: `acme-workforce` does not trust Acme Identity,
-      on purpose, so interactive sign-in through it (GitHub, the organization
-      gateway) keeps working.
+    - `acme-workforce` trusts Acme Identity for inbound EMA (ID-JAGs) only.
+      Its sign-in client is unset on purpose, so interactive sign-in through
+      it (GitHub, the organization gateway) keeps working, and the trust
+      changes nothing outbound: **MCP → Acme Tracker → Settings** still has no
+      Enterprise Managed Authorization section, and Acme Identity is not
+      offered as a provider a service can accept on the strength of this
+      trust.
+    - Call the Platform MCP `get_inbound_ema_trust` tool. It must report:
+      - `acme-workforce` trusting Acme Identity: `issuer_url`
+        `https://login.acme-identity.example`, and a `key_set_url` that is a
+        full URL on that host ending in `/oauth2/v1/keys` (record the URL it
+        returns).
+      - `audience` set to the workforce shared authorization server's issuer
+        URL.
+      - `organization_gateway_url` on `acme-workforce`: the URL ending in
+        `/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy`
+        after `mise run seed` (enable the organization gateway first, as in
+        step 31).
+      - `directory.resolvable_directory_users` greater than zero and
+        `directory.synced` true.
     - Both servers are seeded disabled. Connect through the organization
       gateway: its consent page must not list Acme Tracker or Acme Wiki.
 
@@ -650,6 +679,26 @@ open their effective assignments; the dropdown always offers compact member sear
       off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
       returns to the server or gateway overview, and the skill page has no
       "Served over MCP" section.
+35. **Owner-scoped inspection (local seed only)** — the shared demo visitor
+    holds every scope, so only a session as the persona shows the owner view.
+    The persona's user row and membership exist locally (`kwame@` the local
+    seed domain), and the dev-idp can sign in as them: call `users.create`
+    with that email and `display_name: Kwame Mensah`, pass the returned
+    `user_id` and the `speakeasy` organization's UUID to `memberships.create`,
+    then pass that `user_id` to `devIdp.setCurrentUser` (mode `oauth2-1`), or
+    pick the user in the dev-idp dashboard's Local mode pane. Login resolves
+    users by email, so the session lands on the seeded row.
+    - **Team → Members** lists Kwame Mensah with the Member role only.
+    - **Agents** lists **Deploy watcher** as Active, owned by Kwame Mensah.
+    - **Agent Sessions** as the persona shows exactly five sessions: the three
+      Deploy watcher sessions (actor is the agent, no user) and the two the
+      persona ran. Opening a Deploy watcher session shows the prompt, the
+      tool calls with their JSON results, and the answer.
+    - **Tool Logs** as the persona lists only the `tools:http:acme:*` calls of
+      those five sessions: the agent's rows name Deploy watcher as actor with
+      no person, the persona's rows name them.
+    - As the local admin (who holds both scopes) the same rows appear among
+      everyone else's, and no other member's sessions appear as the persona.
 
 ## On failure
 

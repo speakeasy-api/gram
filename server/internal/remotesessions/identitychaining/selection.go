@@ -105,7 +105,7 @@ func (g *Governor) selectBindingWith(ctx context.Context, logger *slog.Logger, r
 		ProjectID:             req.ProjectID,
 		OrganizationID:        req.OrganizationID,
 		UserSessionIssuerID:   req.UserSessionIssuerID,
-		UpstreamResource:      strings.TrimRight(resource.Resource, "/"),
+		UpstreamResource:      resource.Resource,
 		RemoteSessionIssuerID: req.RemoteSessionIssuerID,
 		RemoteSessionClientID: req.RemoteSessionClientID,
 	})

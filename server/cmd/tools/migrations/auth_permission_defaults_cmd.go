@@ -158,7 +158,7 @@ func runAuthPermissionDefaults(args []string, stdout io.Writer, getenv func(stri
 		return code
 	}
 	report, err := backfillAuthPermissionDefaults(organizationIDs, func(organizationID string) (authclientbackfill.Report, error) {
-		result, err := authclientbackfill.RunGrants(ctx, pool, authclientbackfill.Options{OrganizationID: organizationID, Apply: cfg.apply, PageSize: 0})
+		result, err := authclientbackfill.RunGrants(ctx, pool, authclientbackfill.Options{OrganizationID: organizationID, Apply: cfg.apply, PageSize: 0, TypedOnly: false})
 		if err != nil {
 			return result, fmt.Errorf("grant default auth permissions: %w", err)
 		}

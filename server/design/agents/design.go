@@ -301,7 +301,7 @@ var _ = Service("agents", func() {
 	})
 
 	Method("listDelegableGrants", func() {
-		Description("List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.")
+		Description("List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.")
 		Meta("openapi:operationId", "listAgentDelegableGrants")
 		Meta("openapi:extension:x-speakeasy-name-override", "listDelegableGrants")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAgentDelegableGrants"}`)
@@ -310,6 +310,7 @@ var _ = Service("agents", func() {
 			Extend(AgentIDForm)
 			Attribute("toolset_id", String, "Optional MCP authorization resource identifier: the toolset ID when present, otherwise the MCP server ID. Narrows discovery to this server and its project before evaluating exclusions.", func() { Format(FormatUUID) })
 			Attribute("toolset_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Optional MCP authorization resource identifiers, discovered in one request. Each narrows discovery like toolset_id; the result is the union of candidates across all of them.", func() { MaxLength(100) })
+			Attribute("carry_exclusions", Boolean, "Keep a wildcard candidate that a narrower exclusion overlaps, and return that exclusion beside it as a blocklist-scope grant, instead of omitting the candidate. Requesting both on a key needs delegated grants version 4 or later.", func() { Default(false) })
 		})
 		Result(ArrayOf(PolicyGrantForm))
 		HTTP(func() {
@@ -317,6 +318,7 @@ var _ = Service("agents", func() {
 			Param("agent_id")
 			Param("toolset_id")
 			Param("toolset_ids")
+			Param("carry_exclusions")
 			security.SessionHeader()
 			Response(StatusOK)
 		})

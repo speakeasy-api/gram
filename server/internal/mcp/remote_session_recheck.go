@@ -23,8 +23,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -373,7 +375,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 		}
 		subject := sess.SubjectUrn
 		// A synthetic first-party state: the probe reads only the subject, the id it keys its session on, and the endpoint.
-		state := AuthnChallengeState{WorkloadReconnect: nil, ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
+		state := AuthnChallengeState{ConnectPendingSignIn: false, CodeReconnect: nil, WorkloadReconnect: nil, ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 			Browser:                  nil,
 			Federation:               nil,
 			ID:                       "keepalive:" + sess.ID.String(),
@@ -399,7 +401,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			AutoConnectDone:          false,
 			FocusServer:              "",
 		}
-		clients, err := s.listEndpointClients(ctx, endpoint, state)
+		clients, offered, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, state)
 		if err != nil {
 			logger.ErrorContext(ctx, "list clients for remote session re-check", attr.SlogError(err))
 			continue
@@ -411,7 +413,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			continue
 		}
 		// The probe logs its own refusals; only a dialled probe ends the search.
-		err = s.probeRemoteSession(ctx, logger, endpoint, state, *client, nil, remotesessionmetrics.ValidationTriggerKeepalive)
+		err = s.probeRemoteSession(ctx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppBackground)), logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, *client, offered, nil, remotesessionmetrics.ValidationTriggerKeepalive)
 		switch {
 		case errors.Is(err, errRemoteSessionRecheckRateLimited):
 			// Stay inside this probe's budget; a detached cleanup would extend the shutdown drain.
@@ -457,7 +459,7 @@ func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Lo
 		// Addressed by organization slug; the synthetic id is what the
 		// resolver checks the ref against.
 		ref.RouteBase = mcproute.OrganizationGateway
-		ref.MetaMcpServerID = uuid.NullUUID{UUID: organizationGatewayID(organizationID), Valid: true}
+		ref.MetaMcpServerID = uuid.NullUUID{UUID: orggateway.GatewayID(organizationID), Valid: true}
 	}
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, ref)
 	if errors.Is(err, mcpendpoints.ErrPolicyDenied) {

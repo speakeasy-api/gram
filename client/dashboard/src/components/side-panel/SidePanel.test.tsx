@@ -9,6 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ useIsMobile: vi.fn() }));
 
+vi.mock("@/pages/catalog/hooks", () => ({
+  useListMCPCatalog: () => ({ data: undefined }),
+}));
+
 vi.mock("./panel-kinds", () => ({
   SidePanelKind: ({ descriptor }: { descriptor: { kind: string } }) => (
     <div data-testid="panel-body">rendered {descriptor.kind}</div>

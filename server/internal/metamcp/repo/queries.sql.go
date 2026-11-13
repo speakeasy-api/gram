@@ -15,12 +15,20 @@ import (
 const autoAttachMemberProviderClient = `-- name: AutoAttachMemberProviderClient :execrows
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
 SELECT c.id, $1
-FROM remote_session_clients AS c
-JOIN remote_session_client_user_session_issuers AS l
-  ON l.remote_session_client_id = c.id
+FROM mcp_server_remote_session_clients AS a
+JOIN remote_session_clients AS c
+  ON c.id = a.remote_session_client_id
+JOIN mcp_servers AS s
+  ON s.id = a.mcp_server_id
+ AND s.project_id = a.project_id
 JOIN projects AS p
   ON p.id = $2
-WHERE l.user_session_issuer_id = $3
+LEFT JOIN remote_session_client_user_session_issuers AS own
+  ON own.remote_session_client_id = c.id
+ AND own.user_session_issuer_id = s.user_session_issuer_id
+WHERE a.mcp_server_id = $3
+  AND a.project_id = $2
+  AND a.deleted IS FALSE
   AND c.remote_session_issuer_id = $4
   AND c.deleted IS FALSE
   AND (c.project_id = $2
@@ -34,7 +42,7 @@ WHERE l.user_session_issuer_id = $3
     WHERE l2.user_session_issuer_id = $1
       AND c2.remote_session_issuer_id = $4
   )
-ORDER BY c.created_at
+ORDER BY own.remote_session_client_id IS NULL, c.created_at
 LIMIT 1
 ON CONFLICT DO NOTHING
 `
@@ -42,20 +50,22 @@ ON CONFLICT DO NOTHING
 type AutoAttachMemberProviderClientParams struct {
 	GatewayIssuerID uuid.UUID
 	ProjectID       uuid.UUID
-	MemberIssuerID  uuid.UUID
+	MemberServerID  uuid.UUID
 	RemoteIssuerID  uuid.UUID
 }
 
-// Bind the member's upstream OAuth client to the gateway's issuer so consent
-// can offer the member's provider. No-op when the gateway's issuer already
-// holds a client for that upstream (one client per upstream per issuer), or
-// when the member has no derivable client. Tenancy mirrors the resync
+// Bind the client the member is associated with to the gateway's issuer so
+// consent can offer the member's provider. A member can hold several clients
+// of one upstream, one per gateway it joined, so the client on its own issuer
+// wins, then the oldest. No-op when the gateway's issuer already holds a client
+// for that upstream (one client per upstream per issuer), or when the member
+// has no live association to the upstream. Tenancy mirrors the resync
 // derivation: the member's own project client, or an org-level client.
 func (q *Queries) AutoAttachMemberProviderClient(ctx context.Context, arg AutoAttachMemberProviderClientParams) (int64, error) {
 	result, err := q.db.Exec(ctx, autoAttachMemberProviderClient,
 		arg.GatewayIssuerID,
 		arg.ProjectID,
-		arg.MemberIssuerID,
+		arg.MemberServerID,
 		arg.RemoteIssuerID,
 	)
 	if err != nil {
@@ -76,24 +86,28 @@ WHERE l.remote_session_client_id = c.id
     -- the anti-join off a cross-tenant sequential scan.
     SELECT 1
     FROM mcp_servers AS s
+    JOIN mcp_server_remote_session_clients AS a
+      ON a.mcp_server_id = s.id
+     AND a.project_id = s.project_id
+     AND a.deleted IS FALSE
+    JOIN remote_session_clients AS consumer_client
+      ON consumer_client.id = a.remote_session_client_id
+     AND consumer_client.remote_session_issuer_id = $2
+     AND consumer_client.deleted IS FALSE
+    JOIN remote_session_issuers AS provider
+      ON provider.id = consumer_client.remote_session_issuer_id
+     AND provider.deleted IS FALSE
+    JOIN meta_mcp_server_members AS m
+      ON m.project_id = s.project_id
+     AND m.mcp_server_id = s.id
+     AND m.deleted IS FALSE
+    JOIN meta_mcp_servers AS mm
+      ON mm.project_id = m.project_id
+     AND mm.id = m.meta_mcp_server_id
+     AND mm.deleted IS FALSE
     WHERE s.deleted IS FALSE
       AND s.project_id = $3
-      AND s.remote_session_issuer_id = $2
-      AND (
-        s.user_session_issuer_id = $1
-        OR EXISTS (
-          SELECT 1
-          FROM meta_mcp_server_members AS m
-          JOIN meta_mcp_servers AS mm
-            ON mm.project_id = m.project_id
-           AND mm.id = m.meta_mcp_server_id
-           AND mm.deleted IS FALSE
-          WHERE m.project_id = s.project_id
-            AND m.mcp_server_id = s.id
-            AND m.deleted IS FALSE
-            AND mm.user_session_issuer_id = $1
-        )
-      )
+      AND mm.user_session_issuer_id = $1
   )
 `
 
@@ -106,9 +120,10 @@ type AutoDetachMemberProviderClientParams struct {
 // Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
 // client(s) for a removed member's upstream so the provider stops appearing on
 // the gateway's consent screen. The binding is scoped to the user_session_issuer,
-// so it must survive as long as ANY live consumer of that issuer still fronts
-// the upstream — a live member of a meta server on the issuer, or a server
-// directly issuer-gated to it (issuers can be shared across gateways/servers).
+// so it must survive as long as ANY live member of a meta server on the issuer
+// (issuers can be shared across gateways) still fronts the upstream. Callers
+// must check CountServersOnGatewayIssuer first: a server directly on the issuer
+// has no association to prove which provider it uses.
 // Run after the member row is soft-deleted so the just-removed member is
 // already excluded by the deleted filter below.
 func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDetachMemberProviderClientParams) (int64, error) {
@@ -163,6 +178,32 @@ func (q *Queries) CountMetaMCPMembersSharingBackend(ctx context.Context, arg Cou
 		arg.ToolsetID,
 		arg.UnproxiedMcpServerID,
 	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countServersOnGatewayIssuer = `-- name: CountServersOnGatewayIssuer :one
+SELECT count(*)
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE s.user_session_issuer_id = $2
+  AND s.deleted IS FALSE
+`
+
+type CountServersOnGatewayIssuerParams struct {
+	OrganizationID  string
+	GatewayIssuerID uuid.NullUUID
+}
+
+// Live servers signing in directly through a gateway's issuer, across the
+// organization because an issuer can be organization-level. A gateway's issuer
+// is expected to serve only gateways, so this should be zero.
+func (q *Queries) CountServersOnGatewayIssuer(ctx context.Context, arg CountServersOnGatewayIssuerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countServersOnGatewayIssuer, arg.OrganizationID, arg.GatewayIssuerID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -311,7 +352,9 @@ WHERE meta_mcp_servers.id = meta_mcp_server_members.meta_mcp_server_id
   AND meta_mcp_server_members.mcp_server_id = $1
   AND meta_mcp_server_members.project_id = $2
   AND meta_mcp_server_members.deleted IS FALSE
-RETURNING meta_mcp_server_members.id, meta_mcp_server_members.project_id, meta_mcp_server_members.meta_mcp_server_id, meta_mcp_server_members.mcp_server_id, meta_mcp_server_members.sort_order, meta_mcp_server_members.created_at, meta_mcp_server_members.updated_at, meta_mcp_server_members.deleted_at, meta_mcp_server_members.deleted, meta_mcp_servers.name AS meta_mcp_server_name
+RETURNING meta_mcp_server_members.id, meta_mcp_server_members.project_id, meta_mcp_server_members.meta_mcp_server_id, meta_mcp_server_members.mcp_server_id, meta_mcp_server_members.sort_order, meta_mcp_server_members.created_at, meta_mcp_server_members.updated_at, meta_mcp_server_members.deleted_at, meta_mcp_server_members.deleted,
+          meta_mcp_servers.name AS meta_mcp_server_name,
+          meta_mcp_servers.user_session_issuer_id AS meta_mcp_server_user_session_issuer_id
 `
 
 type DeleteMetaMCPMembersByMCPServerIDParams struct {
@@ -320,16 +363,17 @@ type DeleteMetaMCPMembersByMCPServerIDParams struct {
 }
 
 type DeleteMetaMCPMembersByMCPServerIDRow struct {
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
-	MetaMcpServerID   uuid.UUID
-	McpServerID       uuid.UUID
-	SortOrder         int32
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	DeletedAt         pgtype.Timestamptz
-	Deleted           bool
-	MetaMcpServerName string
+	ID                               uuid.UUID
+	ProjectID                        uuid.UUID
+	MetaMcpServerID                  uuid.UUID
+	McpServerID                      uuid.UUID
+	SortOrder                        int32
+	CreatedAt                        pgtype.Timestamptz
+	UpdatedAt                        pgtype.Timestamptz
+	DeletedAt                        pgtype.Timestamptz
+	Deleted                          bool
+	MetaMcpServerName                string
+	MetaMcpServerUserSessionIssuerID uuid.NullUUID
 }
 
 // Soft-delete all live memberships that reference a generic MCP server. Used
@@ -357,6 +401,7 @@ func (q *Queries) DeleteMetaMCPMembersByMCPServerID(ctx context.Context, arg Del
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.MetaMcpServerName,
+			&i.MetaMcpServerUserSessionIssuerID,
 		); err != nil {
 			return nil, err
 		}
@@ -611,18 +656,40 @@ func (q *Queries) GetMetaMCPServerByIDAndProjectID(ctx context.Context, arg GetM
 }
 
 const listMemberProviderIdentities = `-- name: ListMemberProviderIdentities :many
-SELECT DISTINCT s.remote_session_issuer_id, s.user_session_issuer_id
-FROM meta_mcp_server_members m
-JOIN mcp_servers s
-  ON s.id = m.mcp_server_id
- AND s.project_id = m.project_id
- AND s.deleted IS FALSE
-WHERE m.meta_mcp_server_id = $1
-  AND m.project_id = $2
-  AND m.deleted IS FALSE
-  AND s.remote_session_issuer_id IS NOT NULL
-  AND s.user_session_issuer_id IS NOT NULL
-ORDER BY s.remote_session_issuer_id, s.user_session_issuer_id
+WITH members AS (
+    SELECT s.id AS mcp_server_id,
+           ARRAY(
+               SELECT DISTINCT c.remote_session_issuer_id
+               FROM mcp_server_remote_session_clients AS a
+               JOIN remote_session_clients AS c
+                 ON c.id = a.remote_session_client_id
+                AND c.deleted IS FALSE
+                AND (c.project_id = a.project_id
+                     OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+               JOIN remote_session_issuers AS provider
+                 ON provider.id = c.remote_session_issuer_id
+                AND provider.deleted IS FALSE
+                AND (provider.project_id = a.project_id
+                     OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+               WHERE a.mcp_server_id = s.id
+                 AND a.deleted IS FALSE
+           )::uuid[] AS association_provider_ids
+    FROM meta_mcp_server_members m
+    JOIN mcp_servers s
+      ON s.id = m.mcp_server_id
+     AND s.project_id = m.project_id
+     AND s.deleted IS FALSE
+    WHERE m.meta_mcp_server_id = $1
+      AND m.project_id = $2
+      AND m.deleted IS FALSE
+      AND s.user_session_issuer_id IS NOT NULL
+)
+SELECT i.id AS remote_session_issuer_id, members.mcp_server_id
+FROM members
+JOIN remote_session_issuers AS i
+  ON cardinality(members.association_provider_ids) = 1
+ AND i.id = members.association_provider_ids[1]
+ORDER BY i.id, members.mcp_server_id
 `
 
 type ListMemberProviderIdentitiesParams struct {
@@ -631,13 +698,14 @@ type ListMemberProviderIdentitiesParams struct {
 }
 
 type ListMemberProviderIdentitiesRow struct {
-	RemoteSessionIssuerID uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
+	RemoteSessionIssuerID uuid.UUID
+	McpServerID           uuid.UUID
 }
 
-// Distinct provider identity pairs across a meta server's live members, for
-// re-running consent wiring when the gateway's issuer changes. Ordered so
-// callers take the per-remote-issuer binding locks deterministically.
+// Each live member's provider, for re-running consent wiring when the gateway's issuer changes. The provider
+// comes from the member's live client associations; a member with none or
+// several is left out. Ordered so callers take the per-remote-issuer binding
+// locks deterministically.
 func (q *Queries) ListMemberProviderIdentities(ctx context.Context, arg ListMemberProviderIdentitiesParams) ([]ListMemberProviderIdentitiesRow, error) {
 	rows, err := q.db.Query(ctx, listMemberProviderIdentities, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
@@ -647,7 +715,7 @@ func (q *Queries) ListMemberProviderIdentities(ctx context.Context, arg ListMemb
 	var items []ListMemberProviderIdentitiesRow
 	for rows.Next() {
 		var i ListMemberProviderIdentitiesRow
-		if err := rows.Scan(&i.RemoteSessionIssuerID, &i.UserSessionIssuerID); err != nil {
+		if err := rows.Scan(&i.RemoteSessionIssuerID, &i.McpServerID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -830,12 +898,29 @@ WHERE m.meta_mcp_server_id = $1
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND EXISTS (
-    SELECT 1
-    FROM mcp_server_remote_session_clients AS a
-    WHERE a.mcp_server_id = s.id
-      AND a.remote_session_client_id = $3
-      AND a.deleted IS FALSE
+  AND (
+    (NOT $3::boolean AND EXISTS (
+      SELECT 1
+      FROM mcp_server_remote_session_clients AS a
+      WHERE a.mcp_server_id = s.id
+        AND a.remote_session_client_id = $4
+        AND a.deleted IS FALSE
+    ))
+    OR ($3::boolean AND EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS link
+      JOIN mcp_auth_clients AS c
+        ON c.id = link.auth_client_id
+       AND c.organization_id = link.organization_id
+       AND (c.project_id IS NULL OR c.project_id = s.project_id)
+       AND c.deleted IS FALSE
+       AND c.enabled
+      WHERE link.mcp_server_id = s.id
+        AND link.project_id = s.project_id
+        AND link.deleted IS FALSE
+        AND c.remote_session_client_id = $4
+        AND c.client_type IN ('remote_session', 'ema')
+    ))
   )
 ORDER BY m.sort_order, m.created_at, m.id
 `
@@ -843,6 +928,7 @@ ORDER BY m.sort_order, m.created_at, m.id
 type ListMetaMCPMembersForRemoteSessionClientParams struct {
 	MetaMcpServerID       uuid.UUID
 	ProjectID             uuid.UUID
+	TypedOffers           bool
 	RemoteSessionClientID uuid.UUID
 }
 
@@ -861,12 +947,22 @@ type ListMetaMCPMembersForRemoteSessionClientRow struct {
 // caller still fails closed on none or several, since a grant records one
 // resource.
 //
+// With typed_offers, a member is associated with the client when it offers
+// the client's registration through an enabled personal or identity-provider
+// auth client, the offers ListServerConsentAuthClients lists, rather than
+// through mcp_server_remote_session_clients.
+//
 // upstream_url is the member's RFC 8707 resource: the remote server URL or
 // the tunneled server's recorded resource identifier (empty when a tunneled
 // member records none — the claim still lands, minting an unqualified grant).
 // Hosted and unproxied members have no upstream and cannot claim.
 func (q *Queries) ListMetaMCPMembersForRemoteSessionClient(ctx context.Context, arg ListMetaMCPMembersForRemoteSessionClientParams) ([]ListMetaMCPMembersForRemoteSessionClientRow, error) {
-	rows, err := q.db.Query(ctx, listMetaMCPMembersForRemoteSessionClient, arg.MetaMcpServerID, arg.ProjectID, arg.RemoteSessionClientID)
+	rows, err := q.db.Query(ctx, listMetaMCPMembersForRemoteSessionClient,
+		arg.MetaMcpServerID,
+		arg.ProjectID,
+		arg.TypedOffers,
+		arg.RemoteSessionClientID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -913,11 +1009,30 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = m.project_id
  AND t.deleted IS FALSE
-JOIN mcp_server_remote_session_clients a
-  ON a.mcp_server_id = s.id
- AND a.deleted IS FALSE
-WHERE m.meta_mcp_server_id = $1
-  AND m.project_id = $2
+CROSS JOIN LATERAL (
+  SELECT assoc.remote_session_client_id
+  FROM mcp_server_remote_session_clients AS assoc
+  WHERE NOT $1::boolean
+    AND assoc.mcp_server_id = s.id
+    AND assoc.deleted IS FALSE
+  UNION
+  SELECT c.remote_session_client_id
+  FROM mcp_server_auth_clients AS link
+  JOIN mcp_auth_clients AS c
+    ON c.id = link.auth_client_id
+   AND c.organization_id = link.organization_id
+   AND (c.project_id IS NULL OR c.project_id = s.project_id)
+   AND c.deleted IS FALSE
+   AND c.enabled
+  WHERE $1::boolean
+    AND link.mcp_server_id = s.id
+    AND link.project_id = s.project_id
+    AND link.deleted IS FALSE
+    AND c.remote_session_client_id IS NOT NULL
+    AND c.client_type IN ('remote_session', 'ema')
+) AS a
+WHERE m.meta_mcp_server_id = $2
+  AND m.project_id = $3
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
@@ -925,6 +1040,7 @@ ORDER BY m.sort_order, m.created_at, m.id, a.remote_session_client_id
 `
 
 type ListMetaMCPProxiedMemberResourcesParams struct {
+	TypedOffers     bool
 	MetaMcpServerID uuid.UUID
 	ProjectID       uuid.UUID
 }
@@ -938,11 +1054,12 @@ type ListMetaMCPProxiedMemberResourcesRow struct {
 }
 
 // Every proxied member's associated clients and RFC 8707 resource, one row
-// per member and associated client, with the member filters of
-// ListMetaMCPMembersForRemoteSessionClient, so a consent render resolves
-// resource display ownership for every card from one read.
+// per member and associated client, with the member filters and the
+// typed_offers reading of ListMetaMCPMembersForRemoteSessionClient, so a
+// consent render resolves resource display ownership for every card from one
+// read.
 func (q *Queries) ListMetaMCPProxiedMemberResources(ctx context.Context, arg ListMetaMCPProxiedMemberResourcesParams) ([]ListMetaMCPProxiedMemberResourcesRow, error) {
-	rows, err := q.db.Query(ctx, listMetaMCPProxiedMemberResources, arg.MetaMcpServerID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listMetaMCPProxiedMemberResources, arg.TypedOffers, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -967,29 +1084,52 @@ func (q *Queries) ListMetaMCPProxiedMemberResources(ctx context.Context, arg Lis
 	return items, nil
 }
 
-const listMetaMCPServerNamesForTelemetryByProjectID = `-- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
-SELECT id, name
-FROM meta_mcp_servers
-WHERE project_id = $1
-ORDER BY deleted ASC, created_at DESC
+const listMetaMCPServerLabelsForTelemetry = `-- name: ListMetaMCPServerLabelsForTelemetry :many
+SELECT ms.id, ms.name, ms.project_id, ms.deleted, p.slug AS project_slug, p.deleted AS project_deleted
+FROM meta_mcp_servers ms
+JOIN projects p ON p.id = ms.project_id
+WHERE ms.organization_id = $1
+  AND p.organization_id = $1
+  AND ms.id = ANY($2::uuid[])
 `
 
-type ListMetaMCPServerNamesForTelemetryByProjectIDRow struct {
-	ID   uuid.UUID
-	Name string
+type ListMetaMCPServerLabelsForTelemetryParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
 }
 
-// Gateway names for telemetry labels, deleted gateways included.
-func (q *Queries) ListMetaMCPServerNamesForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPServerNamesForTelemetryByProjectIDRow, error) {
-	rows, err := q.db.Query(ctx, listMetaMCPServerNamesForTelemetryByProjectID, projectID)
+type ListMetaMCPServerLabelsForTelemetryRow struct {
+	ID             uuid.UUID
+	Name           string
+	ProjectID      uuid.UUID
+	Deleted        bool
+	ProjectSlug    string
+	ProjectDeleted bool
+}
+
+// Names the stored gateways among telemetry ids, deleted gateways included: a
+// member's calls are logged in the member's project, which need not be the
+// gateway's. Ids that are not stored gateways (agent and organization gateways
+// stamp derived ids) simply match nothing. The project and deleted flags let a
+// label link to the gateway's page while it still has one, and say which
+// project the caller must be able to read to see the name.
+func (q *Queries) ListMetaMCPServerLabelsForTelemetry(ctx context.Context, arg ListMetaMCPServerLabelsForTelemetryParams) ([]ListMetaMCPServerLabelsForTelemetryRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPServerLabelsForTelemetry, arg.OrganizationID, arg.Ids)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListMetaMCPServerNamesForTelemetryByProjectIDRow
+	var items []ListMetaMCPServerLabelsForTelemetryRow
 	for rows.Next() {
-		var i ListMetaMCPServerNamesForTelemetryByProjectIDRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		var i ListMetaMCPServerLabelsForTelemetryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ProjectID,
+			&i.Deleted,
+			&i.ProjectSlug,
+			&i.ProjectDeleted,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1084,12 +1224,30 @@ WHERE p.organization_id = $1
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND EXISTS (
-    SELECT 1
-    FROM mcp_server_remote_session_clients AS a
-    WHERE a.mcp_server_id = s.id
-      AND a.remote_session_client_id = $3
-      AND a.deleted IS FALSE
+  AND (
+    (NOT $3::boolean AND EXISTS (
+      SELECT 1
+      FROM mcp_server_remote_session_clients AS a
+      WHERE a.mcp_server_id = s.id
+        AND a.remote_session_client_id = $4
+        AND a.deleted IS FALSE
+    ))
+    OR ($3::boolean AND EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS link
+      JOIN mcp_auth_clients AS c
+        ON c.id = link.auth_client_id
+       AND c.organization_id = link.organization_id
+       AND (c.project_id IS NULL OR c.project_id = s.project_id)
+       AND c.deleted IS FALSE
+       AND c.enabled
+      WHERE link.mcp_server_id = s.id
+        AND link.project_id = s.project_id
+        AND link.organization_id = p.organization_id
+        AND link.deleted IS FALSE
+        AND c.remote_session_client_id = $4
+        AND c.client_type IN ('remote_session', 'ema')
+    ))
   )
 ORDER BY s.project_id, s.slug
 `
@@ -1097,6 +1255,7 @@ ORDER BY s.project_id, s.slug
 type ListOrganizationMCPServersForRemoteSessionClientParams struct {
 	OrganizationID        string
 	ProjectID             uuid.NullUUID
+	TypedOffers           bool
 	RemoteSessionClientID uuid.UUID
 }
 
@@ -1113,8 +1272,8 @@ type ListOrganizationMCPServersForRemoteSessionClientRow struct {
 // ListMetaMCPMembersForRemoteSessionClient: the organization's proxied servers
 // associated with a given upstream OAuth client, filtered as
 // ListServableMCPServersByOrganizationID so a server the gateway cannot serve
-// cannot claim a credential either. Returns the same columns, so callers
-// treat both alike.
+// cannot claim a credential either. Returns the same columns and reads
+// typed_offers the same way, so callers treat both alike.
 //
 // project_id narrows the claim to one project's servers, for a client that a
 // project owns: that client's grant routes only to its own project's members.
@@ -1122,7 +1281,12 @@ type ListOrganizationMCPServersForRemoteSessionClientRow struct {
 // apply each server's network access mode for the request's surface, as the
 // member snapshot does.
 func (q *Queries) ListOrganizationMCPServersForRemoteSessionClient(ctx context.Context, arg ListOrganizationMCPServersForRemoteSessionClientParams) ([]ListOrganizationMCPServersForRemoteSessionClientRow, error) {
-	rows, err := q.db.Query(ctx, listOrganizationMCPServersForRemoteSessionClient, arg.OrganizationID, arg.ProjectID, arg.RemoteSessionClientID)
+	rows, err := q.db.Query(ctx, listOrganizationMCPServersForRemoteSessionClient,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.TypedOffers,
+		arg.RemoteSessionClientID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1167,16 +1331,41 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = s.project_id
  AND t.deleted IS FALSE
-JOIN mcp_server_remote_session_clients a
-  ON a.mcp_server_id = s.id
- AND a.deleted IS FALSE
-WHERE p.organization_id = $1
+CROSS JOIN LATERAL (
+  SELECT assoc.remote_session_client_id
+  FROM mcp_server_remote_session_clients AS assoc
+  WHERE NOT $1::boolean
+    AND assoc.mcp_server_id = s.id
+    AND assoc.deleted IS FALSE
+  UNION
+  SELECT c.remote_session_client_id
+  FROM mcp_server_auth_clients AS link
+  JOIN mcp_auth_clients AS c
+    ON c.id = link.auth_client_id
+   AND c.organization_id = link.organization_id
+   AND (c.project_id IS NULL OR c.project_id = s.project_id)
+   AND c.deleted IS FALSE
+   AND c.enabled
+  WHERE $1::boolean
+    AND link.mcp_server_id = s.id
+    AND link.project_id = s.project_id
+    AND link.organization_id = p.organization_id
+    AND link.deleted IS FALSE
+    AND c.remote_session_client_id IS NOT NULL
+    AND c.client_type IN ('remote_session', 'ema')
+) AS a
+WHERE p.organization_id = $2
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
 ORDER BY s.project_id, s.slug, a.remote_session_client_id
 `
+
+type ListOrganizationProxiedMCPServerResourcesParams struct {
+	TypedOffers    bool
+	OrganizationID string
+}
 
 type ListOrganizationProxiedMCPServerResourcesRow struct {
 	RemoteSessionClientID      uuid.UUID
@@ -1188,11 +1377,11 @@ type ListOrganizationProxiedMCPServerResourcesRow struct {
 
 // The organization gateway's counterpart to ListMetaMCPProxiedMemberResources,
 // over the servers ListOrganizationMCPServersForRemoteSessionClient considers:
-// one row per server and associated client. Each row carries its server's
-// project and network access mode, which the caller matches against a card's
-// client and the request's surface.
-func (q *Queries) ListOrganizationProxiedMCPServerResources(ctx context.Context, organizationID string) ([]ListOrganizationProxiedMCPServerResourcesRow, error) {
-	rows, err := q.db.Query(ctx, listOrganizationProxiedMCPServerResources, organizationID)
+// one row per server and associated client, read by typed_offers the same
+// way. Each row carries its server's project and network access mode, which
+// the caller matches against a card's client and the request's surface.
+func (q *Queries) ListOrganizationProxiedMCPServerResources(ctx context.Context, arg ListOrganizationProxiedMCPServerResourcesParams) ([]ListOrganizationProxiedMCPServerResourcesRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationProxiedMCPServerResources, arg.TypedOffers, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -1232,6 +1421,22 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    ARRAY(
+        SELECT DISTINCT c.remote_session_issuer_id
+        FROM mcp_server_remote_session_clients AS a
+        JOIN remote_session_clients AS c
+          ON c.id = a.remote_session_client_id
+         AND c.deleted IS FALSE
+         AND (c.project_id = a.project_id
+              OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+        JOIN remote_session_issuers AS provider
+          ON provider.id = c.remote_session_issuer_id
+         AND provider.deleted IS FALSE
+         AND (provider.project_id = a.project_id
+              OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+        WHERE a.mcp_server_id = s.id
+          AND a.deleted IS FALSE
+    )::uuid[] AS mcp_server_association_provider_ids,
     COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
@@ -1256,20 +1461,21 @@ type ListServableMetaMCPMembersParams struct {
 }
 
 type ListServableMetaMCPMembersRow struct {
-	ID                             uuid.UUID
-	McpServerID                    uuid.UUID
-	SortOrder                      int32
-	McpServerName                  pgtype.Text
-	McpServerSlug                  pgtype.Text
-	McpServerVisibility            string
-	McpServerToolsetID             uuid.NullUUID
-	McpServerRemoteMcpServerID     uuid.NullUUID
-	McpServerTunneledMcpServerID   uuid.NullUUID
-	McpServerUnproxiedMcpServerID  uuid.NullUUID
-	McpServerEnvironmentID         uuid.NullUUID
-	McpServerToolVariationsGroupID uuid.NullUUID
-	McpServerRemoteSessionIssuerID uuid.NullUUID
-	TunneledResourceIdentifier     string
+	ID                              uuid.UUID
+	McpServerID                     uuid.UUID
+	SortOrder                       int32
+	McpServerName                   pgtype.Text
+	McpServerSlug                   pgtype.Text
+	McpServerVisibility             string
+	McpServerToolsetID              uuid.NullUUID
+	McpServerRemoteMcpServerID      uuid.NullUUID
+	McpServerTunneledMcpServerID    uuid.NullUUID
+	McpServerUnproxiedMcpServerID   uuid.NullUUID
+	McpServerEnvironmentID          uuid.NullUUID
+	McpServerToolVariationsGroupID  uuid.NullUUID
+	McpServerRemoteSessionIssuerID  uuid.NullUUID
+	McpServerAssociationProviderIds []uuid.UUID
+	TunneledResourceIdentifier      string
 }
 
 // Serving-path variant of ListMetaMCPMembers: additionally hides members
@@ -1283,6 +1489,8 @@ type ListServableMetaMCPMembersRow struct {
 // identifier so credential routing needs no second read per dial. A member
 // whose tunneled source is soft-deleted reads as no identifier and routes
 // anonymously; the dial then fails member-scoped on the missing tunnel.
+// association_provider_ids are the distinct live providers of the member's
+// live client associations.
 func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServableMetaMCPMembersParams) ([]ListServableMetaMCPMembersRow, error) {
 	rows, err := q.db.Query(ctx, listServableMetaMCPMembers, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
@@ -1306,6 +1514,7 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 			&i.McpServerEnvironmentID,
 			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
+			&i.McpServerAssociationProviderIds,
 			&i.TunneledResourceIdentifier,
 		); err != nil {
 			return nil, err
@@ -1390,7 +1599,10 @@ const lockUserSessionIssuerForMetaMCP = `-- name: LockUserSessionIssuerForMetaMC
 SELECT id
 FROM user_session_issuers
 WHERE id = $1
-  AND project_id = $2::uuid
+  AND (
+    project_id = $2::uuid
+    OR (project_id IS NULL AND organization_id = $3::text)
+  )
   AND deleted IS FALSE
 FOR UPDATE
 `
@@ -1398,13 +1610,14 @@ FOR UPDATE
 type LockUserSessionIssuerForMetaMCPParams struct {
 	UserSessionIssuerID uuid.UUID
 	ProjectID           uuid.UUID
+	OrganizationID      string
 }
 
-// Lock a live user session issuer in the caller's project. Meta MCP
-// create/update hold this lock while validating the reference so a concurrent
-// issuer delete cannot race the attach.
+// Lock a live issuer owned by the caller's project or shared by its organization.
+// Gateway create/update hold this lock while validating the reference so a
+// concurrent issuer delete cannot race the attach.
 func (q *Queries) LockUserSessionIssuerForMetaMCP(ctx context.Context, arg LockUserSessionIssuerForMetaMCPParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, lockUserSessionIssuerForMetaMCP, arg.UserSessionIssuerID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, lockUserSessionIssuerForMetaMCP, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -1517,4 +1730,34 @@ func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServ
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const updateMetaMCPServerNetworkAccessMode = `-- name: UpdateMetaMCPServerNetworkAccessMode :execrows
+UPDATE meta_mcp_servers
+SET network_access_mode = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id = $4
+  AND deleted IS FALSE
+`
+
+type UpdateMetaMCPServerNetworkAccessModeParams struct {
+	NetworkAccessMode pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+}
+
+func (q *Queries) UpdateMetaMCPServerNetworkAccessMode(ctx context.Context, arg UpdateMetaMCPServerNetworkAccessModeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateMetaMCPServerNetworkAccessMode,
+		arg.NetworkAccessMode,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

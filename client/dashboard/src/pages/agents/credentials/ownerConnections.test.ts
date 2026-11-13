@@ -1,10 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+// @vitest-environment node
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AuthClient } from "@gram/client/models/components/authclient.js";
+import type { McpServerAuthentication } from "@gram/client/models/components/mcpserverauthentication.js";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import {
   attachOwnerConnections,
   connectionSelectable,
+  offersPersonalSignIn,
   serverConnection,
+  serverSignIns,
   type ConnectionApi,
 } from "./ownerConnections";
 import type { InventoryServer } from "./useServerInventory";
@@ -12,6 +17,16 @@ import type { InventoryServer } from "./useServerInventory";
 const now = Date.parse("2026-10-23T12:00:00Z");
 const later = new Date(now + 86_400_000 * 7);
 const earlier = new Date(now - 60_000);
+
+// Expiry checks read the clock, so pin it to the fixtures' day; otherwise
+// `later` falls into the past a week after these dates were written.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(now);
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function client(id: string, credentialOwner = "subject") {
   return { id, credentialOwner } as RemoteSessionClient;
@@ -43,6 +58,57 @@ const server: InventoryServer = {
   issuerId: "issuer_one",
   kind: "Remote",
 };
+
+function authClient(clientType: string, enabled = true): AuthClient {
+  return { id: `auth_${clientType}`, clientType, enabled } as AuthClient;
+}
+
+function authentication(
+  clients: AuthClient[],
+  status = clients.some((c) => c.enabled) ? "configured" : "no_auth_required",
+): McpServerAuthentication {
+  return { status, clients } as McpServerAuthentication;
+}
+
+describe("offersPersonalSignIn", () => {
+  it("is false for a server that offers only a shared credential", () => {
+    expect(
+      offersPersonalSignIn(authentication([authClient("static_credential")])),
+    ).toBe(false);
+  });
+
+  it("is true for a server that offers each person's own sign-in", () => {
+    expect(
+      offersPersonalSignIn(
+        authentication([
+          authClient("static_credential"),
+          authClient("remote_session"),
+        ]),
+      ),
+    ).toBe(true);
+  });
+
+  it("ignores a personal sign-in that is disabled", () => {
+    expect(
+      offersPersonalSignIn(
+        authentication([
+          authClient("static_credential"),
+          authClient("remote_session", false),
+        ]),
+      ),
+    ).toBe(false);
+  });
+
+  it("is false for a server that needs no upstream sign-in", () => {
+    expect(offersPersonalSignIn(authentication([]))).toBe(false);
+  });
+
+  it("defers to the issuer while setup is incomplete", () => {
+    expect(offersPersonalSignIn(authentication([], "setup_incomplete"))).toBe(
+      true,
+    );
+  });
+});
 
 describe("serverConnection", () => {
   it("does not offer a session whose authorization ended before its tokens", () => {
@@ -132,6 +198,7 @@ describe("serverConnection", () => {
 });
 
 function api(options: {
+  auth?: (mcpServerId: string) => Promise<McpServerAuthentication>;
   clients: RemoteSessionClient[];
   candidates: RemoteSession[];
   bindings: Array<{
@@ -144,7 +211,13 @@ function api(options: {
   const detachBinding = vi.fn().mockResolvedValue(undefined);
   const pages = <T>(items: T[]) =>
     Promise.resolve([{ result: { items } }]) as never;
+  const getMcpServerAuthentication = vi.fn(
+    ({ mcpServerId }: { mcpServerId: string }) =>
+      options.auth?.(mcpServerId) ??
+      Promise.resolve(authentication([authClient("remote_session")])),
+  );
   const fake = {
+    authClients: { getMcpServerAuthentication },
     remoteSessionClients: { list: vi.fn(() => pages(options.clients)) },
     remoteSessions: {
       list: vi.fn(() => pages(options.candidates)),
@@ -153,7 +226,7 @@ function api(options: {
       detachBinding,
     },
   } as unknown as ConnectionApi;
-  return { fake, attachBinding, detachBinding };
+  return { fake, attachBinding, detachBinding, getMcpServerAuthentication };
 }
 
 describe("attachOwnerConnections", () => {
@@ -181,6 +254,73 @@ describe("attachOwnerConnections", () => {
       undefined,
       expect.anything(),
     );
+  });
+
+  describe("on an issuer shared with another server", () => {
+    // The issuer lists another server's registration; this server's own
+    // credential signs in through client_one, which the owner connected.
+    const own = {
+      ...authClient("remote_session"),
+      personal: true,
+      remoteSessionClientId: "client_one",
+    } as AuthClient;
+    const shared = () =>
+      api({
+        auth: () => Promise.resolve(authentication([own])),
+        clients: [client("client_other_server")],
+        candidates: [session({})],
+        bindings: [],
+      });
+
+    it("attaches the server's own sign-in when upstream auth is enforced", async () => {
+      const { fake, attachBinding } = shared();
+      const missing = await attachOwnerConnections(
+        fake,
+        "agent_new",
+        [server],
+        undefined,
+        false,
+        true,
+      );
+      expect(missing).toEqual([]);
+      expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
+        attachBindingRequestBody: { remoteSessionId: "session_mine" },
+      });
+      expect(fake.remoteSessionClients.list).not.toHaveBeenCalled();
+    });
+
+    it("asks for the issuer's sign-ins when enforced but its personal sign-in names no registration", async () => {
+      const { fake, attachBinding } = api({
+        auth: () =>
+          Promise.resolve(
+            authentication([{ ...own, remoteSessionClientId: undefined }]),
+          ),
+        clients: [client("client_one")],
+        candidates: [session({})],
+        bindings: [],
+      });
+      const missing = await attachOwnerConnections(
+        fake,
+        "agent_new",
+        [server],
+        undefined,
+        false,
+        true,
+      );
+      expect(missing).toEqual([]);
+      expect(fake.remoteSessionClients.list).toHaveBeenCalled();
+      expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
+        attachBindingRequestBody: { remoteSessionId: "session_mine" },
+      });
+    });
+
+    it("asks for the issuer's sign-ins when it is not, as the issuer routes the call", async () => {
+      const { fake, attachBinding } = shared();
+      await expect(
+        attachOwnerConnections(fake, "agent_new", [server]),
+      ).rejects.toThrow(/no longer available/);
+      expect(attachBinding).not.toHaveBeenCalled();
+    });
   });
 
   it("keeps another person’s valid attachment even without a personal candidate", async () => {
@@ -274,5 +414,111 @@ describe("attachOwnerConnections", () => {
       attachOwnerConnections(fake, "agent_new", [server]),
     ).rejects.toThrow(/Your connection to Linear is no longer available/);
     expect(attachBinding).not.toHaveBeenCalled();
+  });
+
+  it("skips a server whose own auth offers only a shared credential, even with an issuer", async () => {
+    const { fake, attachBinding } = api({
+      auth: () =>
+        Promise.resolve(authentication([authClient("static_credential")])),
+      // The issuer's personal sign-in belongs to another server.
+      clients: [client("client_one")],
+      candidates: [],
+      bindings: [],
+    });
+    await expect(
+      attachOwnerConnections(fake, "agent_new", [server]),
+    ).resolves.toEqual([]);
+    expect(fake.remoteSessionClients.list).not.toHaveBeenCalled();
+    expect(attachBinding).not.toHaveBeenCalled();
+  });
+
+  it("attaches nothing to a server whose auth cannot be read", async () => {
+    const { fake, attachBinding } = api({
+      auth: () => Promise.reject(new Error("network down")),
+      clients: [client("client_one")],
+      candidates: [session({})],
+      bindings: [],
+    });
+    await expect(
+      attachOwnerConnections(fake, "agent_new", [server]),
+    ).rejects.toThrow("Could not check how Linear signs in. Try again.");
+    expect(attachBinding).not.toHaveBeenCalled();
+  });
+
+  it("reports a server whose auth cannot be read as missing during bulk selection", async () => {
+    const { fake, attachBinding } = api({
+      auth: (id) =>
+        id === "server_linear"
+          ? Promise.reject(new Error("network down"))
+          : Promise.resolve(authentication([authClient("remote_session")])),
+      clients: [client("client_one")],
+      candidates: [session({})],
+      bindings: [],
+    });
+    await expect(
+      attachOwnerConnections(
+        fake,
+        "agent_new",
+        [
+          server,
+          {
+            ...server,
+            id: "server_other",
+            name: "GitHub",
+            issuerId: "issuer_two",
+          },
+        ],
+        undefined,
+        true,
+      ),
+    ).resolves.toEqual(["Linear"]);
+    expect(attachBinding).toHaveBeenCalledTimes(1);
+    expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
+      attachBindingRequestBody: { userSessionIssuerId: "issuer_two" },
+    });
+  });
+});
+
+describe("serverSignIns", () => {
+  const base = {
+    clientType: "remote_session",
+    enabled: true,
+    personal: true,
+    remoteSessionClientId: "client_own",
+  } as McpServerAuthentication["clients"][number];
+
+  it("lists the registrations of the server's enabled personal auth clients", () => {
+    expect(
+      serverSignIns({
+        status: "configured",
+        clients: [
+          base,
+          { ...base, remoteSessionClientId: "client_disabled", enabled: false },
+          { ...base, remoteSessionClientId: "client_shared", personal: false },
+          { ...base, remoteSessionClientId: undefined, personal: false },
+        ],
+      }),
+    ).toEqual([{ id: "client_own", credentialOwner: "subject" }]);
+  });
+
+  it("has no answer while a personal auth client names no registration", () => {
+    expect(
+      serverSignIns({
+        status: "configured",
+        clients: [{ ...base, remoteSessionClientId: undefined }],
+      }),
+    ).toBeUndefined();
+    expect(
+      serverSignIns({
+        status: "configured",
+        clients: [base, { ...base, remoteSessionClientId: undefined }],
+      }),
+    ).toBeUndefined();
+  });
+
+  it("has no answer while setup is incomplete", () => {
+    expect(
+      serverSignIns({ status: "setup_incomplete", clients: [base] }),
+    ).toBeUndefined();
   });
 });

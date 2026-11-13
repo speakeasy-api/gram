@@ -7,6 +7,7 @@ import {
   SettingsSection,
 } from "@/components/detail/settings-section";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
@@ -54,7 +55,6 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { NetworkTrafficPanel } from "./NetworkTrafficPanel";
@@ -631,7 +631,7 @@ function NetworkAccessSectionContent({
             >
               {isUpdating && (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0" />
                 </Button.LeftIcon>
               )}
               <Button.Text>Make private only</Button.Text>

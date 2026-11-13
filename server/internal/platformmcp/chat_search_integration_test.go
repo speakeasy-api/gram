@@ -149,7 +149,10 @@ func TestChatSearchFindsOtherOwnersCommandsAndReadsContext(t *testing.T) {
 	require.EqualValues(t, 3, count)
 }
 
-func TestChatSearchRequiresExplicitTranscriptGrant(t *testing.T) {
+// Someone else's chat needs the unrestricted transcript grant. Without it a
+// member is not refused outright: a search stays inside their own scope and
+// only a read of another person's chat names the missing scope.
+func TestChatSearchRequiresExplicitTranscriptGrantForOthersChats(t *testing.T) {
 	t.Parallel()
 	f := newChatSearchFixture(t)
 	ctx := f.context(t.Context())
@@ -157,16 +160,20 @@ func TestChatSearchRequiresExplicitTranscriptGrant(t *testing.T) {
 	anchor := seedRecallMessage(t, ctx, f.db, chatID, f.project.ID, recallMessageSeed{role: "user", content: "needle", at: f.base})
 	for _, scope := range []authz.Scope{authz.ScopeOrgAdmin, authz.ScopeProjectRead} {
 		denied := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(scope, authz.WildcardResource)})
-		_, err := f.service.Search(denied, f.principal, f.search("needle"))
+		output, err := f.service.Search(denied, f.principal, f.search("needle"))
+		require.NoError(t, err)
+		require.Empty(t, output.Hits, "%s does not reach another member's chat", scope)
+		_, err = f.service.Read(denied, f.principal, ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chatID.String(), MessageID: anchor.String()})
 		var permission *ExternalAuthorizationError
 		require.ErrorAs(t, err, &permission)
 		require.Equal(t, "chat:read", permission.RequiredScope)
-		_, err = f.service.Read(denied, f.principal, ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chatID.String(), MessageID: anchor.String()})
-		require.ErrorAs(t, err, &permission)
 	}
-	// A project-scoped grant is not the unrestricted grant the tools require.
+	// A project-scoped grant is not the unrestricted grant project-wide reads require.
 	projectOnly := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeChatRead, f.project.ID.String())})
-	_, err := f.service.Search(projectOnly, f.principal, f.search("needle"))
+	output, err := f.service.Search(projectOnly, f.principal, f.search("needle"))
+	require.NoError(t, err)
+	require.Empty(t, output.Hits)
+	_, err = f.service.Read(projectOnly, f.principal, ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chatID.String()})
 	var permission *ExternalAuthorizationError
 	require.ErrorAs(t, err, &permission)
 	assistant := f.principal
@@ -188,7 +195,7 @@ func TestChatSearchRequiresExplicitTranscriptGrant(t *testing.T) {
 	require.Zero(t, count)
 
 	writeCtx := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeChatWrite, authz.WildcardResource)})
-	output, err := f.service.Search(writeCtx, f.principal, f.search("needle"))
+	output, err = f.service.Search(writeCtx, f.principal, f.search("needle"))
 	require.NoError(t, err)
 	require.Equal(t, []string{anchor.String()}, hitIDs(output.Hits))
 }
@@ -610,4 +617,29 @@ func TestChatSearchKeepsNumericUsageCounters(t *testing.T) {
 	require.Contains(t, text, "1e1000")
 	require.NotContains(t, text, "123456")
 	require.NotContains(t, text, "456789")
+}
+
+// A cron chat captured before cron titles stored its raw envelope; search and
+// read name it after its job, as the dashboard does.
+func TestChatSearchNamesStoredCronEnvelopesAfterTheirJob(t *testing.T) {
+	t.Parallel()
+	f := newChatSearchFixture(t)
+	ctx := f.context(t.Context())
+	chatID := f.chat(t, ctx, "user_fixture_cron_owner", "[cron:0f0e0d0c-0b0a-4908-8706-050403020100 weekly-skill-review] Review the skills")
+	anchor := seedRecallMessage(t, ctx, f.db, chatID, f.project.ID, recallMessageSeed{role: "user", content: "Review the skill collection", at: f.base})
+
+	output, err := f.service.Search(ctx, f.principal, f.search("skill collection"))
+	require.NoError(t, err)
+	require.Len(t, output.Hits, 1)
+	require.Equal(t, "Cron: weekly-skill-review", output.Hits[0].ChatTitle)
+
+	// The title as shown matches too, though the stored envelope reads otherwise.
+	output, err = f.service.Search(ctx, f.principal, f.search("Cron: weekly-skill"))
+	require.NoError(t, err)
+	require.Len(t, output.Hits, 1)
+	require.Equal(t, anchor.String(), output.Hits[0].MessageID)
+
+	read, err := f.service.Read(ctx, f.principal, ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chatID.String(), MessageID: anchor.String()})
+	require.NoError(t, err)
+	require.Equal(t, "Cron: weekly-skill-review", read.ChatTitle)
 }

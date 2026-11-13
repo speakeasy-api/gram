@@ -14,6 +14,7 @@ import { remoteSessionsList } from "../funcs/remoteSessionsList.js";
 import { remoteSessionsListBindings } from "../funcs/remoteSessionsListBindings.js";
 import { remoteSessionsListServerClientAssociations } from "../funcs/remoteSessionsListServerClientAssociations.js";
 import { remoteSessionsRevoke } from "../funcs/remoteSessionsRevoke.js";
+import { remoteSessionsTestServerConnection } from "../funcs/remoteSessionsTestServerConnection.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BindingRefreshAttempt } from "../models/components/bindingrefreshattempt.js";
 import { BindingRefreshResult } from "../models/components/bindingrefreshresult.js";
@@ -22,6 +23,7 @@ import { CountRemoteSessionsResult } from "../models/components/countremotesessi
 import { ListBindingsResponseBody } from "../models/components/listbindingsresponsebody.js";
 import { ListServerClientAssociationsResult } from "../models/components/listserverclientassociationsresult.js";
 import { PrincipalRemoteSessionBinding } from "../models/components/principalremotesessionbinding.js";
+import { ServerConnectionTestResult } from "../models/components/serverconnectiontestresult.js";
 import { ServerIdentityImpactResult } from "../models/components/serveridentityimpactresult.js";
 import {
   AttachBindingRequest,
@@ -72,6 +74,10 @@ import {
   RevokeRemoteSessionRequest,
   RevokeRemoteSessionSecurity,
 } from "../models/operations/revokeremotesession.js";
+import {
+  TestServerConnectionRequest,
+  TestServerConnectionSecurity,
+} from "../models/operations/testserverconnection.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -194,7 +200,7 @@ export class RemoteSessions extends ClientSDK {
    * detachServerClientAssociation remoteSessions
    *
    * @remarks
-   * Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding and is refused here with a conflict: turn off User Identity on the server instead. Requires mcp:write on the server.
+   * Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server's issuer) and synchronizes the backfill-derived typed links. Administrator-owned typed links are untouched. Requires mcp:write on the server.
    */
   async detachServerClientAssociation(
     request: DetachServerClientAssociationRequest,
@@ -297,6 +303,25 @@ export class RemoteSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteSessionsRevoke(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * testServerConnection remoteSessions
+   *
+   * @remarks
+   * Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused. Requires the staff-managed provider_setup organization feature, disabled by default; unavailable organizations receive HTTP 404.
+   */
+  async testServerConnection(
+    request: TestServerConnectionRequest,
+    security?: TestServerConnectionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ServerConnectionTestResult> {
+    return unwrapAsync(remoteSessionsTestServerConnection(
       this,
       request,
       security,

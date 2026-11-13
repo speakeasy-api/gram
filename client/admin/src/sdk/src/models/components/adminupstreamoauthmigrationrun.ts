@@ -29,7 +29,7 @@ export type AdminUpstreamOAuthMigrationRun = {
    */
   authClientLinksWritten?: number | undefined;
   /**
-   * Why recording typed auth clients failed, when it did. The upstream OAuth migration itself is unaffected.
+   * Why recording typed auth clients failed, when it did. For an organization enforcing upstream auth, the run recorded no credential choices, since those are decided from the typed auth clients. Otherwise the upstream OAuth migration itself is unaffected.
    */
   authClientsError?: string | undefined;
   /**
@@ -53,7 +53,7 @@ export type AdminUpstreamOAuthMigrationRun = {
    */
   selectionsWritten: number;
   /**
-   * Servers marked as needing upstream authentication because they offer a backfilled auth client.
+   * Deprecated: always omitted. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.
    */
   serversMarkedRequiringUpstreamAuth?: number | undefined;
   /**

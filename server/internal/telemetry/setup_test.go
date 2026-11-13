@@ -90,7 +90,7 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -102,9 +102,13 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok, "auth context should be set")
 
-	// log:read is held by no system role, so the admin fixture is granted it on
-	// its project explicitly, as an administrator would through a custom role.
-	ctx = authztest.WithAdminGrants(ctx, authz.NewGrant(authz.ScopeLogRead, authCtx.ProjectID.String()))
+	// log:read and chat:read are held by no system role, so the admin fixture is
+	// granted them on its project explicitly, as an administrator would through
+	// a custom role.
+	ctx = authztest.WithAdminGrants(ctx,
+		authz.NewGrant(authz.ScopeLogRead, authCtx.ProjectID.String()),
+		authz.NewGrant(authz.ScopeChatRead, authCtx.ProjectID.String()),
+	)
 
 	disabledLogsOrgID := uuid.New().String()
 	logsEnabled := func(_ context.Context, orgID string) (bool, error) {

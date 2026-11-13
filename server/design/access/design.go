@@ -5,6 +5,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 var _ = Service("access", func() {
@@ -490,6 +492,27 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "listScopes")
 		Meta("openapi:extension:x-speakeasy-name-override", "listScopes")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListScopes"}`)
+	})
+
+	Method("listAgentPolicyScopes", func() {
+		Description("List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListAgentPolicyScopesResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAgentPolicyScopes")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAgentPolicyScopes")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAgentPolicyScopes")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAgentPolicyScopes"}`)
 	})
 
 	Method("listMembers", func() {
@@ -1031,6 +1054,9 @@ var _ = Service("access", func() {
 			})
 			Attribute("principal_urn", String, "Filter by principal URN.")
 			Attribute("scope", String, "Filter by scope.")
+			Attribute("exclude_scopes", ArrayOf(String), "Leave out checks of these scopes, from the rows and from the total.", func() {
+				MaxLength(20)
+			})
 			Attribute("project_id", String, "Filter to a specific project.")
 			Attribute("resolved", Boolean, "Filter by resolution state. True = only resolved, false = only unresolved.")
 			Attribute("ids", ArrayOf(String), "Fetch specific challenges by ID. When set, other filters and pagination are ignored.")
@@ -1062,6 +1088,7 @@ var _ = Service("access", func() {
 			Param("outcome")
 			Param("principal_urn")
 			Param("scope")
+			Param("exclude_scopes")
 			Param("project_id")
 			Param("resolved")
 			Param("ids")
@@ -1184,6 +1211,103 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "IdentityAccess"}`)
 	})
 
+	Method("createTemporaryGrant", func() {
+		Description("Give one principal (a member, role, agent, or everyone) a scope on a resource or activity boundary until a deadline, without changing role assignments. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the principal already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(CreateTemporaryGrantForm)
+			security.SessionPayload()
+		})
+
+		Result(TemporaryGrantModel)
+
+		HTTP(func() {
+			POST("/rpc/access.createTemporaryGrant")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "createTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateTemporaryGrant", "type": "mutation"}`)
+	})
+
+	Method("listTemporaryGrants", func() {
+		Description("List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("principal_urn", String, "The principal whose grants to list, e.g. user:<id>, role:organization:<id> or agent:<id>. Members who are not organization administrators may only pass their own user URN.")
+			Attribute("include_expired", Boolean, "Include grants whose deadline has passed.", func() {
+				Default(false)
+			})
+			Required("principal_urn")
+			security.SessionPayload()
+		})
+
+		Result(ListTemporaryGrantsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listTemporaryGrants")
+			Param("principal_urn")
+			Param("include_expired")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listTemporaryGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "listTemporaryGrants")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TemporaryGrants"}`)
+	})
+
+	Method("renewTemporaryGrant", func() {
+		Description("Move an active temporary grant's deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(RenewTemporaryGrantForm)
+			security.SessionPayload()
+		})
+
+		Result(TemporaryGrantModel)
+
+		HTTP(func() {
+			POST("/rpc/access.renewTemporaryGrant")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "renewTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "renewTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RenewTemporaryGrant", "type": "mutation"}`)
+	})
+
+	Method("revokeTemporaryGrant", func() {
+		Description("End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the principal's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given directly to themselves.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("id", String, "The temporary grant to end.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+		})
+
+		Result(TemporaryGrantModel)
+
+		HTTP(func() {
+			POST("/rpc/access.revokeTemporaryGrant")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revokeTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "revokeTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeTemporaryGrant", "type": "mutation"}`)
+	})
+
 })
 
 var SelectorModel = Type("Selector", func() {
@@ -1228,7 +1352,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum(conv.AnySlice(authz.ScopeNames())...)
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -1242,13 +1366,13 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum(conv.AnySlice(authz.ScopeNames())...)
 	})
 
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
+			Enum(conv.AnySlice(authz.ScopeNames())...)
 		})
 	})
 
@@ -1287,17 +1411,28 @@ var ListRolesResult = Type("ListRolesResult", func() {
 })
 
 var ScopeModel = Type("ScopeDefinition", func() {
-	Required("slug", "description", "resource_type", "visibility", "agent_eligible")
+	Required("slug", "label", "description", "resource_type", "category", "visibility", "agent_eligible", "sensitive", "sub_scopes")
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "mcp:auth", "mcp:blocked_auth", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum(conv.AnySlice(authz.ScopeNames())...)
 	})
-	Attribute("description", String, "What this scope protects.")
+	Attribute("label", String, "Short name for the permission as people see it, e.g. \"View tool logs\".")
+	Attribute("description", String, "What a holder of this scope can do and, where it matters, what the scope does not include.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
 		Enum("org", "project", "mcp", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "workload", "mcp_auth_client")
 	})
+	Attribute("category", String, func() {
+		Description("How the dashboard groups the permission. Differs from resource_type where one resource type carries several permission families: plugins and tool logs are checked against a project but are not project permissions.")
+		Enum("org", "project", "mcp", "mcp_auth_client", "environment", "skill", "plugin", "assistant", "risk_policy", "session", "inference", "log", "agent", "workload")
+	})
+	Attribute("sensitive", Boolean, "Whether granting this scope exposes other members' private activity or allows destructive administration. Clients warn before granting it.")
+	Attribute("sensitivity", String, func() {
+		Description("Why the scope is sensitive. Absent when sensitive is false.")
+		Enum("conversations", "tool_logs", "destructive_admin")
+	})
+	Attribute("sub_scopes", ArrayOf(String), "User-visible scopes a grant of this scope also satisfies, one step down: org:admin also satisfies org:read. Empty when the scope implies nothing else.")
 	Attribute("visibility", String, func() {
 		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
 		Enum("user_visible", "internal")
@@ -1305,13 +1440,35 @@ var ScopeModel = Type("ScopeDefinition", func() {
 	Attribute("agent_eligible", Boolean, "Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.")
 	Attribute("exclusion_scope", String, func() {
 		Description("The scope used to store exception rules for this scope.")
-		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "mcp:blocked_auth", "environment:blocked_read", "environment:blocked_write", "skill:blocked_read", "skill:blocked_write", "assistant:blocked_read", "assistant:blocked_write", "plugin:blocked_write", "risk_policy:bypass", "workload:blocked_read", "workload:blocked_write")
+		Enum(conv.AnySlice(authz.ExclusionScopeNames())...)
+	})
+})
+
+var ScopeTaskModel = Type("ScopeTask", func() {
+	Required("slug", "label", "scopes")
+
+	Attribute("slug", String, "Stable identifier of the task.", func() {
+		Example("session_review")
+	})
+	Attribute("label", String, "What a person is trying to do.", func() {
+		Example("Review other members' sessions")
+	})
+	Attribute("scopes", ArrayOf(String, func() {
+		Enum(conv.AnySlice(authz.ScopeNames())...)
+	}), "Every scope the task needs end to end.", func() {
+		Example([]string{"chat:read", "log:read"})
 	})
 })
 
 var ListScopesResult = Type("ListScopesResult", func() {
-	Required("scopes")
+	Required("scopes", "tasks")
 	Attribute("scopes", ArrayOf(ScopeModel), "The scopes available in access control.")
+	Attribute("tasks", ArrayOf(ScopeTaskModel), "Tasks that need more than one scope, so a missing scope can be explained in context.")
+})
+
+var ListAgentPolicyScopesResult = Type("ListAgentPolicyScopesResult", func() {
+	Required("scopes")
+	Attribute("scopes", ArrayOf(ScopeModel), "The scopes an agent policy may hold, in catalogue order.")
 })
 
 var CreateRoleForm = Type("CreateRoleForm", func() {
@@ -2002,7 +2159,7 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope being requested.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all")
 	})
 	Attribute("resource_id", String, "Optional resource ID the scope applies to.")
 	Attribute("resource_name", String, "Optional human-readable name for the resource (e.g. project name, MCP server name).")
@@ -2336,4 +2493,59 @@ var DirectoryReviewSettingsModel = Type("DirectoryReviewSettings", func() {
 	Required("emails_enabled")
 
 	Attribute("emails_enabled", Boolean, "Whether organization admins are emailed when directory changes are waiting for a decision. On by default.")
+})
+
+var CreateTemporaryGrantForm = Type("CreateTemporaryGrantForm", func() {
+	Required("principal_urn", "scope", "expires_at")
+
+	Attribute("principal_urn", String, "The principal receiving the access: an organization member (user:<id>), everyone (user:all), a role (role:organization:<id> or role:global:<id>) or an active agent (agent:<id>).")
+	Attribute("scope", String, "The scope to give, e.g. chat:read or log:read. Only scopes that grant access to read, use or manage resources can be given temporarily; org:admin, blocklist, auth client, risk policy and machine scopes cannot.")
+	Attribute("selector", SelectorModel, "The resource or activity boundary. Omit to cover every resource of the scope's kind.")
+	Attribute("expires_at", String, "When the grant stops authorizing new requests. At least five minutes and at most 24 hours from now.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("reason", String, "Why the access is needed, recorded in the audit log.", func() {
+		MaxLength(1000)
+	})
+})
+
+var RenewTemporaryGrantForm = Type("RenewTemporaryGrantForm", func() {
+	Required("id", "expires_at")
+
+	Attribute("id", String, "The temporary grant to renew.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("expires_at", String, "The new deadline. At least five minutes and at most 24 hours from now.", func() {
+		Format(FormatDateTime)
+	})
+})
+
+var TemporaryGrantModel = Type("TemporaryGrant", func() {
+	Required("id", "principal_urn", "scope", "selector", "expires_at", "status", "remaining_seconds", "other_access", "created_at", "updated_at")
+
+	Attribute("id", String, "Temporary grant ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("principal_urn", String, "Canonical principal URN holding the access.")
+	Attribute("scope", String, "The scope given.")
+	Attribute("selector", SelectorModel, "The resource or activity boundary.")
+	Attribute("expires_at", String, "When the grant stops, or stopped, authorizing new requests.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("status", String, "active: authorizing requests. expired: its deadline passed. revoked: ended early by this request.", func() {
+		Enum("active", "expired", "revoked")
+	})
+	Attribute("remaining_seconds", Int64, "Seconds until the deadline while active; 0 once ended.")
+	Attribute("other_access", ArrayOf(String), "For an active grant, the principal URNs of the holder's other grants that already give the same access: for a member or agent, a role, everyone (user:all), or the holder itself for a grant made to it directly; for a role or everyone, only that principal's own other grants. Access through these remains when this grant ends. Empty for ended grants and when this grant is the only route.")
+	Attribute("created_at", String, "When the grant was given, or restarted after expiring.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ListTemporaryGrantsResult = Type("ListTemporaryGrantsResult", func() {
+	Required("grants")
+	Attribute("grants", ArrayOf(TemporaryGrantModel), "Temporary grants, soonest deadline first. At most 500 are returned.")
 })

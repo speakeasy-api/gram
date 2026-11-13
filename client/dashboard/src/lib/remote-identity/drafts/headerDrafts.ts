@@ -63,7 +63,7 @@ export function headerDraftFromServer(
 // Inbound headers a pass-through row may not read from; mirrors the proxy.
 // Authorization may carry the caller's Speakeasy credential, so an upstream
 // credential must arrive in a header of its own.
-const DENIED_PASS_THROUGH_SOURCES = new Set([
+export const DENIED_PASS_THROUGH_SOURCES: ReadonlySet<string> = new Set([
   "authorization",
   "cookie",
   "set-cookie",

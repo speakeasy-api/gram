@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/url"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -51,6 +51,10 @@ type xaaReadinessService struct {
 	// describe: orgs without one, and servers Speakeasy may vouch for.
 	emaEnabled FeatureChecker
 	servers    xaaServerReader
+
+	// flags decides per organization whether identity chaining resource
+	// ownership comes from client associations; nil keeps issuer bindings.
+	flags feature.Provider
 }
 
 // xaaServer is one eligible server and whether Speakeasy vouches for it.
@@ -97,7 +101,7 @@ func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, sign
 			return flags.IsFlagEnabled(ctx, flag, orgID, feature.OrgProjectGroups(slug, ""))
 		}
 	}
-	r.xaaReadiness = &xaaReadinessService{logger: r.logger, connections: connections, signIn: signIn, enabled: flagChecker(feature.FlagOktaConnections), identity: nil, emaEnabled: flagChecker(feature.FlagEMAProviders), servers: nil}
+	r.xaaReadiness = &xaaReadinessService{logger: r.logger, connections: connections, signIn: signIn, enabled: flagChecker(feature.FlagOktaConnections), identity: nil, emaEnabled: flagChecker(feature.FlagEMAProviders), servers: nil, flags: flags}
 	return r
 }
 
@@ -106,8 +110,8 @@ func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, sign
 // for clients that recorded none.
 func (r *PostgresReader) WithXAAIdentityChaining(governor IdentityChainingGovernor, outbound *url.URL) *PostgresReader {
 	if r.xaaReadiness != nil && r.db != nil {
-		r.xaaReadiness.identity = &postgresXAAIdentityInspector{logger: r.logger, db: r.db, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil}}
-		r.xaaReadiness.servers = &postgresXAAServerReader{reader: r}
+		r.xaaReadiness.identity = &postgresXAAIdentityInspector{logger: r.logger, db: r.db, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil}, flags: r.xaaReadiness.flags}
+		r.xaaReadiness.servers = &postgresXAAServerReader{reader: r, authEnforcement: authenforcement.NewGate(r.db)}
 	}
 	return r
 }
@@ -116,6 +120,11 @@ func (r *PostgresReader) WithXAAIdentityChaining(governor IdentityChainingGovern
 // WithAuthorization may compose after WithXAAIdentityChaining.
 type postgresXAAServerReader struct {
 	reader *PostgresReader
+
+	// authEnforcement reads which organizations choose upstream
+	// authentication through typed auth clients, where a server's
+	// authorization server comes from what it offers.
+	authEnforcement *authenforcement.Gate
 }
 
 func (s *postgresXAAServerReader) Server(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) (xaaServer, bool, error) {
@@ -124,7 +133,11 @@ func (s *postgresXAAServerReader) Server(ctx context.Context, organizationID str
 	if engine == nil {
 		return none, false, ErrUnavailable
 	}
-	row, err := oktarepo.New(s.reader.db).GetEligibleServer(ctx, oktarepo.GetEligibleServerParams{OrganizationID: organizationID, McpServerID: serverID})
+	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
+	if err != nil {
+		return none, false, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
+	row, err := oktarepo.New(s.reader.db).GetEligibleServer(ctx, oktarepo.GetEligibleServerParams{OrganizationID: organizationID, McpServerID: serverID, TypedAuthEnforced: enforced})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, false, nil
@@ -475,6 +488,10 @@ type postgresXAAIdentityInspector struct {
 	db       *pgxpool.Pool
 	governor IdentityChainingGovernor
 	origins  remotesessions.CallbackOrigins
+
+	// flags decides per organization whether resource ownership comes from
+	// client associations; nil keeps issuer bindings.
+	flags feature.Provider
 }
 
 type identityChainingResourceResolver interface {
@@ -520,8 +537,8 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 		out.NotServedReason = new(xaaNotRoutable)
 		return out, callback, nil
 	}
-	req, routable := identitychaining.NewUpstreamRequest(organizationID, projectID, userIssuerID, resource, server.TunneledMcpServerID.Valid, server.RemoteSessionIssuerID)
 	scope := uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true}
+	req, routable := identitychaining.NewUpstreamRequest(organizationID, projectID, userIssuerID, resource, server.TunneledMcpServerID.Valid, scope)
 	resources := []string{resource}
 	discoveryFailed := false
 	if routable {
@@ -540,9 +557,7 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 					return out, callback, fmt.Errorf("read XAA diagnostic candidates: %w", readErr)
 				}
 				for _, candidate := range candidates {
-					if identitychaining.MatchesDiagnosticOrigin(resource, candidate) && !slices.ContainsFunc(resources, func(existing string) bool {
-						return strings.TrimRight(existing, "/") == strings.TrimRight(candidate, "/")
-					}) {
+					if identitychaining.MatchesDiagnosticOrigin(resource, candidate) && !slices.Contains(resources, candidate) {
 						resources = append(resources, candidate)
 					}
 				}
@@ -558,7 +573,7 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 	for _, diagnosticResource := range resources {
 		// Every deployment serving Platform MCP wires a protected resource
 		// prober into logins, so their scope requests consult resource rows.
-		results, err := remotesessions.InspectIdentityChainingForTenant(ctx, i.db, projectID, organizationID, userIssuerID, scope, diagnosticResource, true)
+		results, err := remotesessions.InspectIdentityChainingForTenant(ctx, i.db, projectID, organizationID, userIssuerID, scope, diagnosticResource, true, feature.UpstreamIssuerFromAssociations(ctx, i.flags, organizationID))
 		if err != nil {
 			return out, nil, fmt.Errorf("inspect XAA readiness identity chaining: %w", err)
 		}

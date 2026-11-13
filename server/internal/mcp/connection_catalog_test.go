@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -27,8 +28,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -36,6 +40,8 @@ import (
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -54,6 +60,8 @@ type catalogUpstream struct {
 	future      atomic.Bool
 	tools       int
 	callHeader  atomic.Value
+	// callAuthorization is the Authorization header of the last tools/call.
+	callAuthorization atomic.Value
 	// holdNextList parks the next tools/list until its release closes.
 	holdNextList atomic.Pointer[catalogListHold]
 }
@@ -112,6 +120,7 @@ func newCatalogUpstream(t *testing.T, tools int) *catalogUpstream {
 			result = map[string]any{"tools": tools}
 		case "tools/call":
 			upstream.callHeader.Store(r.Header.Get("X-Typed-Key"))
+			upstream.callAuthorization.Store(r.Header.Get("Authorization"))
 			upstream.calls.Add(1)
 			result = map[string]any{"content": []map[string]any{{"type": "text", "text": "executed live"}}}
 		case "ping":
@@ -136,15 +145,18 @@ type catalogConnection struct {
 func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		kind  string
-		mode  toolfilter.CatalogMode
-		oauth string
+		kind   string
+		mode   toolfilter.CatalogMode
+		oauth  string
+		source string
 	}{
-		{"remote_session", toolfilter.CatalogModeCached, ""}, {"static_credential", toolfilter.CatalogModeCached, ""},
-		{"remote_session", toolfilter.CatalogModeLive, ""}, {"static_credential", toolfilter.CatalogModeLive, ""},
-		{"static_credential", toolfilter.CatalogModeCached, "bound"}, {"static_credential", toolfilter.CatalogModeCached, "unbound"},
+		{"remote_session", toolfilter.CatalogModeCached, "", "backfill"}, {"static_credential", toolfilter.CatalogModeCached, "", "backfill"},
+		{"remote_session", toolfilter.CatalogModeLive, "", "backfill"}, {"static_credential", toolfilter.CatalogModeLive, "", "backfill"},
+		{"static_credential", toolfilter.CatalogModeCached, "bound", "backfill"}, {"static_credential", toolfilter.CatalogModeCached, "unbound", "backfill"},
+		{"remote_session", toolfilter.CatalogModeCached, "", "admin"}, {"static_credential", toolfilter.CatalogModeCached, "", "admin"},
+		{"remote_session", toolfilter.CatalogModeCached, "", "admin-unlinked"},
 	} {
-		t.Run(tc.kind+"/"+string(tc.mode)+"/"+tc.oauth, func(t *testing.T) {
+		t.Run(tc.kind+"/"+string(tc.mode)+"/"+tc.oauth+"/"+tc.source, func(t *testing.T) {
 			kind := tc.kind
 			t.Parallel()
 			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
@@ -156,9 +168,18 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 			serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
 			registration := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 			if kind == "remote_session" {
-				registration = uuid.NullUUID{UUID: createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "typed-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID}), Valid: true}
-				_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration.UUID})
-				require.NoError(t, err)
+				// An administrator's client is offered without the association
+				// a backfilled one mirrors, and need not be linked to the
+				// gateway's sign-in.
+				linked := []uuid.UUID{issuer.ID}
+				if tc.source == "admin-unlinked" {
+					linked = nil
+				}
+				registration = uuid.NullUUID{UUID: createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "typed-"+uuid.NewString()[:8], "", linked), Valid: true}
+				if tc.source == "backfill" {
+					_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration.UUID})
+					require.NoError(t, err)
+				}
 				insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration.UUID, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", upstream.url)
 			}
 			if tc.oauth != "" {
@@ -171,7 +192,8 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				require.NoError(t, err)
 			}
 			fixtures := authclientfixtures.New(ti.conn)
-			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: "admin", RemoteSessionClientID: registration})
+			source := strings.TrimSuffix(tc.source, "-unlinked")
+			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: source, RemoteSessionClientID: registration})
 			require.NoError(t, err)
 			if kind == "static_credential" {
 				server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *auth.ProjectID})
@@ -180,7 +202,14 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: authClientID, OrganizationID: auth.ActiveOrganizationID, Name: "X-Fixture-Key", Value: pgtype.Text{String: "fixture-key", Valid: true}}))
 			}
-			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: authClientID}))
+			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: authClientID, Source: source}))
+			if kind == "remote_session" && strings.HasPrefix(tc.source, "admin") {
+				// Only enforced typed resolution serves a client offered
+				// without the association a backfilled one mirrors.
+				_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+				require.NoError(t, err)
+			}
+			callers := ti.service.RecordAuthClientPermitCallers()
 			ti.service.manual = true
 			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, tc.mode, metamcp.DiscoveryModeDirect, nil)
 			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
@@ -193,6 +222,10 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 			require.Equal(t, uuid.NullUUID{UUID: authClientID, Valid: true}, selected[0].AuthClientID)
 			require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), "executed live")
 			require.EqualValues(t, 1, upstream.calls.Load())
+			require.NotEmpty(t, callers())
+			for _, user := range callers() {
+				require.Equal(t, mockidp.MockUserID, user, "credential permission is judged for the consenting person")
+			}
 		})
 	}
 }
@@ -225,11 +258,13 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				require.NoError(t, err)
 				insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", upstream.url)
 				fixtures := authclientfixtures.New(ti.conn)
-				seedClient := func(value string) uuid.UUID {
-					id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+				// A backfilled client carries copies of the server's headers,
+				// which go stale when the server's headers change.
+				seedClient := func(value, origin string) uuid.UUID {
+					id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: origin, RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 					require.NoError(t, err)
 					require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: id, OrganizationID: auth.ActiveOrganizationID, Name: "X-Typed-Key", Value: pgtype.Text{String: value, Valid: true}}))
-					require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id}))
+					require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id, Source: origin}))
 					return id
 				}
 				source, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *auth.ProjectID})
@@ -240,7 +275,7 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				if staleHeaders {
 					copiedValue = "stale-key"
 				}
-				original := seedClient(copiedValue)
+				original := seedClient(copiedValue, "backfill")
 				var permitted atomic.Bool
 				permitted.Store(true)
 				ti.service.SetAuthClientPermission(permitted.Load)
@@ -264,14 +299,14 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 				require.Contains(t, call(), "don't have access")
 				require.Equal(t, before, upstream.requests.Load(), "revocation must refuse before any upstream request")
 				permitted.Store(true)
-				replacement := seedClient("replacement-key")
+				replacement := seedClient("replacement-key", "admin")
 				require.NotEqual(t, original, replacement)
 				claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
 				require.NoError(t, err)
 				session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer.ID, Jti: claims.ID})
 				require.NoError(t, err)
 				require.NoError(t, fixtures.SwapUpstreamAuthClientFixture(ctx, authclientfixtures.SwapUpstreamAuthClientFixtureParams{AuthClientID: uuid.NullUUID{UUID: replacement, Valid: true}, CredentialID: session.ID, McpServerID: serverID}))
-				require.Contains(t, call(), "authentication changed")
+				require.Contains(t, call(), `The sign-in for the \"source\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`)
 				require.Equal(t, before, upstream.requests.Load(), "a different typed client cannot inherit approval")
 			})
 		}
@@ -295,7 +330,7 @@ func TestGatewayConsentAmbiguousTypedClientRequiresSetup(t *testing.T) {
 	for range 2 {
 		id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 		require.NoError(t, err)
-		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id}))
+		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
 	}
 	ti.service.manual = true
 	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
@@ -308,7 +343,7 @@ func TestGatewayConsentAmbiguousTypedClientRequiresSetup(t *testing.T) {
 	require.Zero(t, upstream.requests.Load(), "an ambiguous typed choice never reaches an upstream through legacy auth")
 }
 
-func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, client usersessionsrepo.UserSessionClient, gatewayID uuid.UUID, slug string, mode toolfilter.CatalogMode, discovery metamcp.DiscoveryMode, tools []string) catalogConnection {
+func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, client usersessionsrepo.UserSessionClient, gatewayID uuid.UUID, slug string, mode toolfilter.CatalogMode, discovery metamcp.DiscoveryMode, tools []string, annotations ...string) catalogConnection {
 	t.Helper()
 	stateID, csrf := seedGatewayConsentChallenge(t, ctx, ti, issuerID, client, gatewayID, slug)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
@@ -320,7 +355,13 @@ func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, 
 		form.Set("tool_filtering", "on")
 		form["tools"] = tools
 	}
-	request := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
+	if len(annotations) > 0 {
+		form.Set("tool_filtering", "on")
+		form["tool_annotations"] = annotations
+	}
+	// The approval arrives from the person's browser, which carries no
+	// Speakeasy request authentication; the challenge names the person.
+	request := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(t.Context())
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	require.NoError(t, ti.service.ServeConsent(response, request, endpoint))
@@ -375,7 +416,7 @@ func TestConnectionCatalogCachedDiscoveryNeverContactsUpstream(t *testing.T) {
 					if code == "discover" {
 						servers, err := host.Servers(ctx, codemode.PageArgs{})
 						require.NoError(t, err)
-						require.Equal(t, []codemode.Server{{Slug: memberSlug, Name: "Source"}}, servers.Items)
+						require.Equal(t, []codemode.Server{{Slug: memberSlug, Name: "Source", Connection: &codemode.ConnectionState{Consent: "approved", Authentication: "verified_at_consent"}}}, servers.Items)
 						page, err := host.Search(ctx, codemode.SearchArgs{Query: "tool_000"})
 						require.NoError(t, err)
 						require.NotEmpty(t, page.Items)
@@ -417,12 +458,7 @@ func TestConnectionCatalogCachedDiscoveryNeverContactsUpstream(t *testing.T) {
 						require.Len(t, listed.Result.Tools, 1)
 						require.Empty(t, listed.Result.NextCursor)
 					} else {
-						require.Len(t, listed.Result.Tools, 100)
-						page, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{"cursor": listed.Result.NextCursor}), connection.token, nil)
-						require.NoError(t, err)
-						listed.Result.NextCursor = ""
-						require.NoError(t, json.Unmarshal(page.Body.Bytes(), &listed))
-						require.Len(t, listed.Result.Tools, 50)
+						require.Len(t, listed.Result.Tools, 150)
 						require.Empty(t, listed.Result.NextCursor)
 					}
 				}
@@ -784,9 +820,11 @@ func TestConnectionCatalogProtocolLoadCost(t *testing.T) {
 				response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, method, params), connection.token, nil)
 				require.NoError(t, err)
 				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-				require.Zero(t, counted.loads.Load(), "protocol setup does not read the catalog")
+				// Initialize reads the record once to name only approved servers.
+				require.Equal(t, int32(1), counted.loads.Load(), "initialize reads the catalog once and ping not at all")
 				require.LessOrEqual(t, ti.conn.Stat().AcquireCount()-before, int64(20), "protocol setup DB work is independent of the catalog size")
 			}
+			counted.loads.Store(0)
 			beforeDB := ti.conn.Stat().AcquireCount()
 			response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
 			require.NoError(t, err)
@@ -902,11 +940,25 @@ func TestConnectionCatalogProgressiveListsOnlySelectedServers(t *testing.T) {
 	require.NotContains(t, listed, `\"slug\":\"other\"`)
 	require.Contains(t, callGatewayTool(t, ti, slug, specific.token, "describe_server", map[string]any{"server": "other"}), "unknown server")
 	require.Contains(t, callGatewayTool(t, ti, slug, all.token, "list_servers", map[string]any{}), `\"slug\":\"other\"`)
+
+	instructions := func(token string) string {
+		response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, mcpversions.MethodInitialize, map[string]any{"protocolVersion": mcpversions.Version20250326}), token, nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var result struct {
+			Instructions string `json:"instructions"`
+		}
+		require.NoError(t, json.Unmarshal(decodeRPCResponse(t, response)["result"], &result))
+		return result.Instructions
+	}
+	require.True(t, strings.HasPrefix(instructions(specific.token), `Tools from these servers: "Chosen".`+"\n\n"), "a connection names only the servers it approved")
+	require.True(t, strings.HasPrefix(instructions(all.token), `Tools from these servers: "Chosen", "Other".`+"\n\n"))
 }
 
 func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	logs := &syncBuffer{}
+	ctx, ti := newTestMCPServiceWithLogger(t, slog.New(slog.NewJSONHandler(logs, nil)))
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	slug := "catalog-config-" + uuid.NewString()
@@ -915,12 +967,17 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
 	// Code Mode helpers name the changed member as needing a new consent
 	// instead of silently dropping it.
+	enableCodeMode(t, ctx, ti)
 	var codeChecked atomic.Bool
 	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{mu: sync.Mutex{}, scopes: nil, run: func(ctx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
-		enableCodeMode(t, ctx, ti)
 		servers, err := host.Servers(ctx, codemode.PageArgs{})
 		require.NoError(t, err)
-		require.Equal(t, []codemode.Server{{Slug: "source", Name: "Source"}}, servers.Items)
+		require.Len(t, servers.Items, 1)
+		require.Equal(t, "source", servers.Items[0].Slug)
+		require.Equal(t, "Source", servers.Items[0].Name)
+		require.Equal(t, "required", servers.Items[0].Connection.Consent)
+		require.Equal(t, "unknown", servers.Items[0].Connection.Authentication)
+		require.NotEmpty(t, servers.Items[0].Connection.Instructions)
 		page, err := host.Search(ctx, codemode.SearchArgs{})
 		require.NoError(t, err)
 		require.True(t, page.Incomplete)
@@ -948,13 +1005,26 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	require.NotContains(t, listed.Body.String(), `"name":"source--tool_000"`)
 	require.Equal(t, before, upstream.requests.Load())
 	require.Zero(t, replacement.requests.Load())
-	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), "configuration changed")
+	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), `The settings for the \"source\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`)
 	require.Zero(t, replacement.calls.Load())
 	status, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "connection_status", "arguments": map[string]any{}}), progressive.token, nil)
 	require.NoError(t, err)
-	require.Contains(t, status.Body.String(), "configuration changed")
+	require.Contains(t, status.Body.String(), "The settings for this server changed since you approved it.")
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	beforeCode := strings.Count(logs.String(), "gateway consent validation failed")
 	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
+	require.Equal(t, beforeCode+1, strings.Count(logs.String(), "gateway consent validation failed"), "all helpers share one diagnostic per stale member")
+	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
+	require.Equal(t, beforeCode+2, strings.Count(logs.String(), "gateway consent validation failed"), "a new execution has its own diagnostic scope")
 	require.True(t, codeChecked.Load())
+	// Each execution's refused call writes one row; describe writes none.
+	require.Len(t, rec.Rows(), 2)
+	for _, row := range rec.Rows() {
+		require.Equal(t, mcpconnectionattempts.CodeConsentNotApproved.String(), row.Reason)
+		require.Equal(t, "configuration_changed", row.SubReason)
+		require.Equal(t, memberID.String(), row.MemberID)
+	}
 	require.Zero(t, replacement.calls.Load())
 }
 
@@ -977,8 +1047,14 @@ func TestConnectionCatalogTransportChangeRequiresConsent(t *testing.T) {
 	require.NotEqual(t, "sse", remote.TransportType)
 	_, err = remotemcprepo.New(ti.conn).UpdateServer(ctx, remotemcprepo.UpdateServerParams{ID: remote.ID, ProjectID: remote.ProjectID, Name: remote.Name, Slug: remote.Slug, TransportType: "sse", Url: remote.Url})
 	require.NoError(t, err)
-	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), "configuration changed")
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), `The settings for the \"source\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`)
 	require.Zero(t, upstream.calls.Load())
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeConsentNotApproved)
+	require.Equal(t, "configuration_changed", row.SubReason)
+	require.Equal(t, memberID.String(), row.MemberID)
+	require.Len(t, rec.Rows(), 1)
 }
 
 // A cached connection reports the members its consent did not approve,
@@ -1111,4 +1187,31 @@ func TestGatewayConsentPreselectsProgressiveWhenSavedCodeModeUnavailable(t *test
 	require.Contains(t, page, `<option value="progressive" selected>Progressive</option>`)
 	require.NotContains(t, page, `<option value="code_mode"`)
 	require.Contains(t, page, "The code runtime is unavailable. Progressive discovery is available for this connection.")
+}
+
+// Initial issuance must not create choices for a second gateway merely because
+// both gateways use the same inbound issuer.
+func TestConnectionCatalogChoicesStayWithinApprovedGateway(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "catalog-scope-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+	other := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "other-"+uuid.NewString(), issuer.ID)
+	upstream := newCatalogUpstream(t, 1)
+	approvedID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Approved", "approved", 1, upstream.url)
+	unrelatedID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, other.ID, "Unrelated", "unrelated", 1, upstream.url)
+	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
+	require.NoError(t, err)
+	session, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer.ID, Jti: claims.ID})
+	require.NoError(t, err)
+	choices, err := upstreamclientsrepo.New(ti.conn).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
+		OrganizationID: auth.ActiveOrganizationID, CredentialKind: upstreamclients.CredentialKindUserSession,
+		CredentialID: session.CredentialID, McpServerIds: []uuid.UUID{approvedID, unrelatedID},
+	})
+	require.NoError(t, err)
+	require.Len(t, choices, 1)
+	require.Equal(t, approvedID, choices[0].McpServerID)
 }

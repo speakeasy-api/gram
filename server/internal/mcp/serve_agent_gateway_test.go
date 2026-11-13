@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -26,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -37,6 +42,7 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -99,12 +105,28 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, agentPrincipal, grantedServer)
 
-	// Credential policy: the immutable ceiling on this one key.
+	token := mintAgentGatewayKey(t, ctx, ti, agent.ID, grantedServer)
+
+	return agentGatewayFixture{
+		agent: agent, token: token,
+		granted: grantedSlug, grantedProject: project.Slug,
+		denied: deniedSlug, open: publicSlug,
+	}
+}
+
+// mintAgentGatewayKey issues an agent key whose credential policy, the
+// immutable ceiling on this one key, admits only resourceID in the caller's
+// project.
+func mintAgentGatewayKey(t *testing.T, ctx context.Context, ti *testInstance, agentID, resourceID uuid.UUID) string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 	policy, err := runtimepolicy.NewDelegatedPolicyV1([]authz.Grant{{
 		Scope: authz.ScopeMCPConnect,
 		Selector: authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
-			authz.SelectorKeyResourceID:   grantedServer.String(),
+			authz.SelectorKeyResourceID:   resourceID.String(),
 			authz.SelectorKeyProjectID:    authCtx.ProjectID.String(),
 		},
 	}})
@@ -120,18 +142,13 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 		Name:                   "gateway key " + uuid.NewString()[:8],
 		KeyPrefix:              prefix,
 		KeyHash:                hash,
-		SubjectUrn:             pgtype.Text{String: urn.NewAgentSubject(agent.ID).String(), Valid: true},
+		SubjectUrn:             pgtype.Text{String: urn.NewAgentSubject(agentID).String(), Valid: true},
 		DelegatedGrants:        delegated,
 		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true},
 		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	require.NoError(t, err)
-
-	return agentGatewayFixture{
-		agent: agent, token: token,
-		granted: grantedSlug, grantedProject: project.Slug,
-		denied: deniedSlug, open: publicSlug,
-	}
+	return token
 }
 
 // serveAgentGatewayHTTP drives the handler the way the router does, including
@@ -475,8 +492,115 @@ func TestServeAgentGateway_ListsPrivateOnlyMembersOnPrivateIngress(t *testing.T)
 	require.NotContains(t, w.Body.String(), fx.open)
 }
 
-func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
+// "All servers" is a project wildcard on the key as well as on the agent, so
+// a server added after the key was issued is listed without issuing a new
+// key. The owner's exclusion is carried into the key beside the wildcard, as
+// discovery hands it to the dashboard, and the blocked server stays hidden.
+func TestServeAgentGateway_AllServersKeyReachesServersAddedLater(t *testing.T) {
 	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, "meta-"+uuid.NewString(), uuid.Nil)
+	keptSlug := "kept-" + uuid.NewString()[:8]
+	blockedSlug := "blocked-" + uuid.NewString()[:8]
+	seedMetaMember(t, ctx, ti.conn, projectID, meta.ID, "kept member", keptSlug, 0, mcpservers.VisibilityPrivate)
+	seedMetaMember(t, ctx, ti.conn, projectID, meta.ID, "blocked member", blockedSlug, 1, mcpservers.VisibilityPrivate)
+	blockedServer := mcpServerBySlug(t, ctx, ti, projectID, blockedSlug)
+
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: orgID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "All servers agent " + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+	ownerPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+
+	projectWildcard := authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource)
+	projectWildcard[authz.SelectorKeyProjectID] = projectID.String()
+	selectors, err := projectWildcard.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   agentPrincipal,
+		Scope:          string(authz.ScopeMCPConnect),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, orgID, authCtx.UserID, authz.WildcardResource)
+	seedPrincipalGrant(t, ctx, ti, orgID, ownerPrincipal, authz.ScopeMCPBlockedConnect, blockedServer.String())
+
+	// The key's policy is what discovery offers the dashboard for this agent.
+	agentPolicy, err := runtimepolicy.LoadAgentPolicy(ctx, ti.conn, orgID, agentPrincipal)
+	require.NoError(t, err)
+	ownerPolicy, err := authz.LoadGrants(ctx, ti.conn, orgID, []urn.Principal{ownerPrincipal})
+	require.NoError(t, err)
+	delegable, err := runtimepolicy.DelegableGrantsWithExclusionsFor(authCtx.UserID, agentPolicy, ownerPolicy, ownerPolicy)
+	require.NoError(t, err)
+	requested := make([]authz.Grant, 0, len(delegable))
+	for _, grant := range delegable {
+		if grant.Scope == authz.ScopeMCPConnect || grant.Scope == authz.ScopeMCPBlockedConnect {
+			requested = append(requested, grant)
+		}
+	}
+	version := runtimepolicy.IssuedDelegatedPolicyVersion
+	policy, err := runtimepolicy.NewDelegatedPolicy(version, requested)
+	require.NoError(t, err)
+	contained, err := runtimepolicy.DelegationContainedFor(authCtx.UserID, policy, agentPolicy, ownerPolicy, ownerPolicy)
+	require.NoError(t, err)
+	require.True(t, contained, "issuance must accept the wildcard with its carried exclusion")
+	require.True(t, slices.ContainsFunc(policy.Requested, func(grant runtimepolicy.DelegatedPolicyGrant) bool {
+		return grant.Scope == authz.ScopeMCPConnect && grant.Selector[authz.SelectorKeyResourceID] == authz.WildcardResource
+	}), "the key stores the wildcard, not today's servers")
+	delegated, err := runtimepolicy.EncodeDelegatedPolicy(version, policy)
+	require.NoError(t, err)
+
+	token, hash, prefix, err := auth.GenerateAPIKeyMaterial(auth.APIKeyPrefix("test"))
+	require.NoError(t, err)
+	_, err = keysrepo.New(ti.conn).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{
+		OrganizationID:         orgID,
+		CreatedByUserID:        authCtx.UserID,
+		Name:                   "all servers key " + uuid.NewString()[:8],
+		KeyPrefix:              prefix,
+		KeyHash:                hash,
+		SubjectUrn:             pgtype.Text{String: urn.NewAgentSubject(agent.ID).String(), Valid: true},
+		DelegatedGrants:        delegated,
+		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(version), Valid: true},
+		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+
+	laterSlug := "later-" + uuid.NewString()[:8]
+	seedMetaMember(t, ctx, ti.conn, projectID, meta.ID, "later member", laterSlug, 2, mcpservers.VisibilityPrivate)
+
+	w, err := serveAgentGatewayHTTP(t, ti, agent.ID.String(), token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "list_servers",
+		"arguments": map[string]any{},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	body := w.Body.String()
+	require.Contains(t, body, keptSlug)
+	require.Contains(t, body, laterSlug, "a server added after the key was issued is listed")
+	require.NotContains(t, body, blockedSlug, "the owner's exclusion still hides the blocked server")
+}
+
+// ownerAttachedMember is an agent gateway whose granted member signs in
+// through its owner's connection, attached to the agent.
+type ownerAttachedMember struct {
+	ti       *testInstance
+	fx       agentGatewayFixture
+	upstream *recordingUpstream
+	binding  remotesessionsrepo.AttachPrincipalRemoteSessionBindingRow
+}
+
+func seedOwnerAttachedMember(t *testing.T) (context.Context, ownerAttachedMember) {
+	t.Helper()
 	ctx, ti := newTestMCPService(t)
 	fx := seedAgentGateway(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -494,12 +618,21 @@ func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
 	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{ProjectID: conv.ToNullUUID(projectID), RemoteSessionIssuerID: provider.ID, ClientID: "gateway-owner-client"})
 	require.NoError(t, err)
 	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: issuerID}))
+	// Shared issuers do not make a client eligible for every member.
+	require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: serverID, RemoteSessionClientID: client.ID}))
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, client.ID, urn.NewUserSubject(authCtx.UserID), "owner-assigned-token", upstream.url)
 	sessions, err := q.ListPrincipalRemoteSessionCandidates(ctx, remotesessionsrepo.ListPrincipalRemoteSessionCandidatesParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, UserSessionIssuerID: issuerID, SubjectUrn: urn.NewUserSubject(authCtx.UserID)})
 	require.NoError(t, err)
 	require.Len(t, sessions, 1)
 	binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, remotesessionsrepo.AttachPrincipalRemoteSessionBindingParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, PrincipalID: fx.agent.ID, UserSessionIssuerID: issuerID, SubjectUrn: urn.NewUserSubject(authCtx.UserID).String(), RemoteSessionID: sessions[0].RemoteSession.ID})
 	require.NoError(t, err)
+	return ctx, ownerAttachedMember{ti: ti, fx: fx, upstream: upstream, binding: binding}
+}
+
+func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
+	t.Parallel()
+	ctx, seeded := seedOwnerAttachedMember(t)
+	ti, fx, upstream, binding := seeded.ti, seeded.fx, seeded.upstream, seeded.binding
 	body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
 	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
 	require.NoError(t, err)
@@ -514,4 +647,225 @@ func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
 	_, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
 	require.NoError(t, err)
 	upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
+}
+
+// An agent whose delegated connection stops working cannot sign in itself.
+// The tool error and connection_status send it to someone who can edit it,
+// with the agent's MCP sign-in page, and never to a gateway administrator.
+// They name no one and hand the agent no credential.
+func TestServeAgentGateway_BrokenConnectionLinksAgentSignIn(t *testing.T) {
+	t.Parallel()
+	ctx, seeded := seedOwnerAttachedMember(t)
+	ti, fx := seeded.ti, seeded.fx
+	_, err := testrepo.New(ti.conn).RevokeAttachmentByIDFixture(ctx, seeded.binding.ID)
+	require.NoError(t, err)
+
+	agent, err := agentsrepo.New(ti.conn).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: fx.agent.OrganizationID, ID: fx.agent.ID})
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectSlug := conv.PtrValOr(authCtx.ProjectSlug, "")
+	if agent.ProjectID.Valid {
+		project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, agent.ProjectID.UUID)
+		require.NoError(t, err)
+		projectSlug = project.Slug
+	}
+	require.NotEmpty(t, projectSlug)
+	link := fmt.Sprintf("/%s/projects/%s/identities/agent:%s/mcp-sign-in", authCtx.OrganizationSlug, projectSlug, fx.agent.ID)
+	editors := "Ask someone who can edit this agent"
+
+	call := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, call)
+	require.NoError(t, err)
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+	require.True(t, isError, text)
+	require.Contains(t, text, fmt.Sprintf("server %q needs re-authentication", fx.granted))
+	require.Contains(t, text, editors+" to open ")
+	require.Contains(t, text, link+" and reconnect it, then retry")
+	require.NotContains(t, text, "administrator")
+	require.NotContains(t, text, "owner-assigned-token")
+
+	status := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "connection_status", "arguments": map[string]any{}})
+	response, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, status)
+	require.NoError(t, err)
+	rpc := decodeRPCResponse(t, response)
+	text, isError = metaToolResultText(t, rpc)
+	require.False(t, isError, text)
+	require.Contains(t, text, "that this agent cannot give itself. "+editors+" to open ")
+	require.NotContains(t, text, "administrator")
+	require.NotContains(t, text, "sign-in page")
+	require.NotContains(t, text, "its owner")
+	var result struct {
+		StructuredContent metamcp.ConnectionStatusResult `json:"structuredContent"`
+	}
+	require.NoError(t, json.Unmarshal(rpc["result"], &result))
+	require.Equal(t, metamcp.ConnectionStatusAudienceAgentEditors, result.StructuredContent.Audience)
+	require.True(t, strings.HasSuffix(result.StructuredContent.ConnectURL, link), result.StructuredContent.ConnectURL)
+	row := slices.IndexFunc(result.StructuredContent.Servers, func(s metamcp.ConnectionStatusServer) bool { return s.Slug == fx.granted })
+	require.GreaterOrEqual(t, row, 0)
+	require.True(t, result.StructuredContent.Servers[row].Reconnect, "the agent's sign-in step fixes the broken connection")
+	require.Equal(t, "needs re-authentication", result.StructuredContent.Servers[row].Detail)
+	seeded.upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
+}
+
+// A server with no OAuth sign-in whose upstream refuses the call needs a
+// credential configured on the server. Routing finds the agent no connection
+// of its own for it (agentOAuthSignIn), so the refusal asks an admin of the
+// server's project, never the agent's sign-in step.
+func TestServeAgentGateway_ServerWithoutSignInAsksProjectAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	// Counted, so the test proves the upstream's own 401 led to the advice.
+	var refusals atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		refusals.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(upstream.Close)
+	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{ProjectID: projectID, TransportType: "streamable-http", Url: upstream.URL})
+	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
+	_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: serverID, ProjectID: projectID, Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted), RemoteMcpServerID: conv.ToNullUUID(remote.ID), Visibility: mcpservers.VisibilityPrivate})
+	require.NoError(t, err)
+
+	call := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, call)
+	require.NoError(t, err)
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+	require.True(t, isError, text)
+	require.Contains(t, text, fmt.Sprintf("server %q needs a credential configured for it in Speakeasy", fx.granted))
+	require.Contains(t, text, "Ask an admin of the server's project to add or fix the server's credential, then retry")
+	require.NotContains(t, text, "/mcp-sign-in", "the agent's MCP sign-in tab cannot add a server's credential")
+	require.NotContains(t, text, "re-authentication")
+	require.NotContains(t, text, "administrator")
+	require.Positive(t, refusals.Load(), "the upstream answered the call with its 401")
+}
+
+// A platform tool runs in its server's project, but the agent gateway is
+// organization-wide: execute_tool must hand the platform runtime the member's
+// project instead of the gateway's none.
+func TestServeAgentGateway_ExecutesPlatformToolOnHostedMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "platform-member-"+uuid.NewString()[:8])
+	_, err := toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
+		ToolsetID:     toolset.ID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "user-sessions", "list")},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	// Serve the granted wrapper from the toolset. Toolset-backed grants key on
+	// the toolset, so grant the owner, the agent and a new key on it.
+	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
+	_, err = mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		ID: serverID, ProjectID: projectID,
+		Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted),
+		ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID.String())
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), toolset.ID)
+	token := mintAgentGatewayKey(t, ctx, ti, fx.agent.ID, toolset.ID)
+
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": "execute_tool",
+		"arguments": map[string]any{
+			"name": fx.granted + "--platform_list_user_sessions", "arguments": map[string]any{},
+		},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+	require.False(t, isError, text)
+	require.NotContains(t, text, "platform tool requires project auth context")
+}
+
+// A Slack platform tool on a server with no Slack token is a configuration
+// gap, not an internal error: the agent gets a tool error that names the
+// missing variable and who adds it, instead of a bare JSON-RPC -32603.
+func TestServeAgentGateway_PlatformToolMissingSlackTokenSaysWhatToConfigure(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "slack-member-"+uuid.NewString()[:8])
+	_, err := toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
+		ToolsetID:     toolset.ID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "slack", "search_channels")},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
+	_, err = mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		ID: serverID, ProjectID: projectID,
+		Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted),
+		ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID.String())
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), toolset.ID)
+	token := mintAgentGatewayKey(t, ctx, ti, fx.agent.ID, toolset.ID)
+
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": "execute_tool",
+		"arguments": map[string]any{
+			"name": fx.granted + "--platform_slack_search_channels", "arguments": map[string]any{},
+		},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	rpc := decodeRPCResponse(t, response)
+	require.NotContains(t, rpc, "error", "a missing token is not an internal error")
+	text, isError := metaToolResultText(t, rpc)
+	require.True(t, isError, text)
+	require.Contains(t, text, fmt.Sprintf("server %q failed to execute %q: server not configured: missing environment variable SLACK_BOT_TOKEN (or SLACK_USER_TOKEN or SLACK_TOKEN).", fx.granted, "platform_slack_search_channels"))
+	require.Contains(t, text, "An admin of the server's project must add it in the server's environment in Speakeasy, or the client must send it in its MCP headers.")
+}
+
+// Called directly at /mcp/{slug}, the same Slack configuration gap answers
+// with its own failed precondition, not the generic rejection.
+func TestServePublic_PlatformToolMissingSlackTokenSaysWhatToConfigure(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "slack-direct-"+uuid.NewString()[:8])
+	_, err := toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
+		ToolsetID:     toolset.ID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "slack", "search_channels")},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": "platform_slack_search_channels", "arguments": map[string]any{},
+	}), ti.createTestAPIKey(ctx, t), nil)
+	require.NoError(t, err)
+	var response struct {
+		Error struct {
+			Code    oops.MCPCode `json:"code"`
+			Message string       `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response), w.Body.String())
+	require.Equal(t, oops.CodeFailedPrecondition.MCPCode(), response.Error.Code)
+	require.Equal(t, "server not configured: missing environment variable SLACK_BOT_TOKEN (or SLACK_USER_TOKEN or SLACK_TOKEN). An admin of the server's project must add it in the server's environment in Speakeasy, or the client must send it in its MCP headers.", response.Error.Message)
 }

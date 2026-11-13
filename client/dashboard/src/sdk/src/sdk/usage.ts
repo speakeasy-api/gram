@@ -14,6 +14,7 @@ import { usageGetMeterUsage } from "../funcs/usageGetMeterUsage.js";
 import { usageGetPaygBillingSummary } from "../funcs/usageGetPaygBillingSummary.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
 import { usageGetSpendBreakdown } from "../funcs/usageGetSpendBreakdown.js";
+import { usageGetStripeCheckoutStatus } from "../funcs/usageGetStripeCheckoutStatus.js";
 import { usageGetStripeSubscription } from "../funcs/usageGetStripeSubscription.js";
 import { usageGetTokensUnderManagement } from "../funcs/usageGetTokensUnderManagement.js";
 import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
@@ -23,12 +24,14 @@ import { usageSetBillingMetadata } from "../funcs/usageSetBillingMetadata.js";
 import { usageSetSpendCap } from "../funcs/usageSetSpendCap.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BillingEmail } from "../models/components/billingemail.js";
+import { GetStripeCheckoutStatusResponseBody } from "../models/components/getstripecheckoutstatusresponsebody.js";
 import { InferenceSpendCap } from "../models/components/inferencespendcap.js";
 import { MeterUsageResponse } from "../models/components/meterusageresponse.js";
 import { PaygBillingSummary } from "../models/components/paygbillingsummary.js";
 import { PeriodUsage } from "../models/components/periodusage.js";
 import { SpendBreakdownResponse } from "../models/components/spendbreakdownresponse.js";
 import { SpendCap } from "../models/components/spendcap.js";
+import { StripeEmbeddedCheckout } from "../models/components/stripeembeddedcheckout.js";
 import { StripeSubscription } from "../models/components/stripesubscription.js";
 import { TokensUnderManagement } from "../models/components/tokensundermanagement.js";
 import { UsageTiers } from "../models/components/usagetiers.js";
@@ -80,6 +83,10 @@ import {
   GetSpendBreakdownRequest,
   GetSpendBreakdownSecurity,
 } from "../models/operations/getspendbreakdown.js";
+import {
+  GetStripeCheckoutStatusRequest,
+  GetStripeCheckoutStatusSecurity,
+} from "../models/operations/getstripecheckoutstatus.js";
 import {
   GetStripeSubscriptionRequest,
   GetStripeSubscriptionSecurity,
@@ -168,13 +175,13 @@ export class Usage extends ClientSDK {
    * createStripeCheckout usage
    *
    * @remarks
-   * Create a Stripe Checkout link for starting PAYG billing
+   * Create an embedded Stripe Checkout session for starting PAYG billing
    */
   async createStripeCheckout(
     request?: CreateStripeCheckoutRequest | undefined,
     security?: CreateStripeCheckoutSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<string> {
+  ): Promise<StripeEmbeddedCheckout> {
     return unwrapAsync(usageCreateStripeCheckout(
       this,
       request,
@@ -328,6 +335,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SpendBreakdownResponse> {
     return unwrapAsync(usageGetSpendBreakdown(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getStripeCheckoutStatus usage
+   *
+   * @remarks
+   * Read the current status of a Stripe Checkout session owned by the active organization
+   */
+  async getStripeCheckoutStatus(
+    request: GetStripeCheckoutStatusRequest,
+    security?: GetStripeCheckoutStatusSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetStripeCheckoutStatusResponseBody> {
+    return unwrapAsync(usageGetStripeCheckoutStatus(
       this,
       request,
       security,

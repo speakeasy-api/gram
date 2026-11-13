@@ -84,6 +84,8 @@ func (s *seeder) chPurgeAndTelemetry(ctx context.Context, ch driver.Conn) error 
 		{"cursor usage metrics", s.chCursorUsageRows},
 		{"cursor hook rows", s.chCursorHookRows},
 		{"work units scores", s.chWorkUnitRows},
+		{"hooks fleet rows", s.chHookFleetRows},
+		{"agent owner session rows", s.chOwnerSessionRows},
 	}
 	for _, ins := range inserts {
 		if err := s.chInsertTelemetry(ctx, ch, ins.rows()); err != nil {
@@ -127,6 +129,11 @@ var chPurgeOrgTables = []string{
 	"agent_events",
 	"sigint_readings",
 	"sigint_readings_v2",
+	"mcp_connection_events",
+	// Target of mcp_connection_attempt_summaries_mv.
+	"mcp_connection_attempt_summaries",
+	// Target of hook_install_summaries_mv.
+	"hook_install_summaries",
 }
 
 // chPurge runs the scoped deletes: telemetry source + every MV target + the
@@ -161,7 +168,10 @@ func (s *seeder) chPurge(ctx context.Context, ch driver.Conn) error {
 				+ (SELECT count() FROM billing_meter_daily_summaries WHERE organization_id = ?)
 				+ (SELECT count() FROM sigint_readings WHERE organization_id = ?)
 				+ (SELECT count() FROM sigint_readings_v2 WHERE organization_id = ?)
-		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
+				+ (SELECT count() FROM mcp_connection_events WHERE organization_id = ?)
+				+ (SELECT count() FROM mcp_connection_attempt_summaries WHERE organization_id = ?)
+				+ (SELECT count() FROM hook_install_summaries WHERE organization_id = ?)
+		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
 		if err != nil {
 			return 0, fmt.Errorf("count remaining demo telemetry, meter ledger, summary, and sensor reading rows: %w", err)
 		}
@@ -257,14 +267,17 @@ var chRolesJSON = []string{
 
 // chIdentityAttrs is the WorkOS-style identity block (division through
 // hostname) a row carries for demo user idx.
-func chIdentityAttrs(idx int) string {
-	u := demoUsers[idx]
+func chIdentityAttrs(idx int) string { return chUserIdentityAttrs(demoUsers[idx], chRolesJSON[idx]) }
+
+// chUserIdentityAttrs is chIdentityAttrs for any member, with roles as the
+// user.roles JSON array.
+func chUserIdentityAttrs(u demoUser, roles string) string {
 	return `,"user.attributes.division_name":"` + u.division + `"` +
 		`,"user.attributes.department_name":"` + u.department + `"` +
 		`,"user.attributes.job_title":"` + u.title + `"` +
 		`,"user.attributes.employee_type":"` + u.empType + `"` +
 		`,"user.attributes.cost_center_name":"` + u.costCenter + `"` +
-		`,"user.roles":` + chRolesJSON[idx] +
+		`,"user.roles":` + roles +
 		`,"user.groups":["` + u.team + `"]` +
 		`,"gram.hook.hostname":"` + u.hostname + `"`
 }
@@ -463,6 +476,17 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 				attrs += `,"gram.event.source":"tool_call","gram.authorization.actor.type":"agent","gram.authorization.actor.id":"` + managedAgentID + `"`
 				if hash64("authz", i)%3 != 0 {
 					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
+				}
+				// How the gateway signed the call in upstream: the person's
+				// own Linear connection, the shared engineering token, or
+				// nothing for calls recorded before the gateway named it, so
+				// the Tool Logs row shows all three renderings. The ids are
+				// seeded auth clients, so the id a row names resolves to one.
+				switch hash64("upstreamcred", i) % 3 {
+				case 1:
+					attrs += `,"gram.auth_client.type":"remote_session","gram.auth_client.id":"` + s.det("auth-client-linear").String() + `","gram.auth_client.connection_owner_user_id":"` + s.userID(u.handle) + `"`
+				case 2:
+					attrs += `,"gram.auth_client.type":"static_credential","gram.auth_client.id":"` + s.det("auth-client-github-token").String() + `"`
 				}
 			}
 			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"`

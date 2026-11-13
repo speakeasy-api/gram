@@ -16,6 +16,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -208,6 +209,42 @@ func TestDistributionServiceTargetsTheNamedPluginAndRefusesAnUnmatchedOne(t *tes
 		McpServerID: target.McpServerID,
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+// The publish a distribution runs is an automatic one, which keeps a plugin
+// whose auto sync is off as it was last published. Sharing a server into such
+// a plugin, or taking it back out, reports that the change waits for a manual
+// sync even though that publish succeeded.
+func TestDistributionServiceReportsAPluginWhoseAutoSyncIsOff(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_distribution_paused_plugin")
+	require.NoError(t, err)
+
+	principal, project := seedReadyDistributionTarget(t, ctx, conn)
+	seedPluginWithAutoSync(t, ctx, conn, principal.OrganizationID, project.ID, "Held Tools", "held", pgtype.Bool{Bool: false, Valid: true})
+	seedPluginWithAutoSync(t, ctx, conn, principal.OrganizationID, project.ID, "Live Tools", "live", pgtype.Bool{})
+	inventory := testPluginTargets(conn).WithPublicationEvidence(slugPublicationEvidence{
+		fresh: map[string]*bool{"held": new(false), "live": new(true)}, paused: map[string]bool{"held": true},
+	})
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, inventory).WithManualSyncEvidence(inventory)
+
+	held, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: 0})
+	require.NoError(t, err)
+	require.True(t, held.AttachmentLive)
+	require.Equal(t, publicationStateCurrent, held.PublicationState, "the automatic publish itself succeeded")
+	require.True(t, held.AwaitingManualSync)
+	require.Contains(t, distributionOutcomeMessage(held, false), "get it only after its project is synced by hand")
+
+	removed, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: held.Version})
+	require.NoError(t, err)
+	require.True(t, removed.AwaitingManualSync)
+
+	live, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "live", ExpectedVersion: 0})
+	require.NoError(t, err)
+	require.False(t, live.AwaitingManualSync)
+	require.Contains(t, distributionOutcomeMessage(live, false), "the people it is shared with will get it")
 }
 
 func TestDistributionServicePreservesAdminReplacementOnRemoval(t *testing.T) {
@@ -648,4 +685,61 @@ func TestDistributeToolChecksTheNamedServerWhenNoCheckIsStored(t *testing.T) {
 	require.NotEmpty(t, refusal.MCPServer)
 	require.Equal(t, int32(2), probes.Load())
 	require.ErrorIs(t, attachment(broken.McpServerID), pgx.ErrNoRows, "a server that is not working must not be shared")
+}
+
+func TestDistributionServiceClearsManualSyncWaitWhenPausedPluginIsCurrent(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_distribution_current_paused_plugin")
+	require.NoError(t, err)
+	principal, project := seedReadyDistributionTarget(t, ctx, conn)
+	seedPausedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Held Tools", "held")
+	fresh := new(false)
+	inventory := testPluginTargets(conn).WithPublicationEvidence(slugPublicationEvidence{
+		fresh: map[string]*bool{"held": fresh}, paused: map[string]bool{"held": true},
+	})
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, inventory).WithManualSyncEvidence(inventory)
+	distributed, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: 0})
+	require.NoError(t, err)
+	require.True(t, distributed.AwaitingManualSync)
+	*fresh = true // A completed manual sync makes the held package current.
+	current, err := service.Current(ctx, principal, project.Slug, uuid.Nil, "held")
+	require.NoError(t, err)
+	require.False(t, current.AwaitingManualSync)
+	idempotent, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: distributed.Version})
+	require.NoError(t, err)
+	require.False(t, idempotent.AwaitingManualSync)
+	inventory.WithPublicationEvidence(stubPluginPublicationEvidence{err: errors.New("evidence unavailable")})
+	current, err = service.Current(ctx, principal, project.Slug, uuid.Nil, "held")
+	require.NoError(t, err)
+	require.False(t, current.AwaitingManualSync, "unavailable evidence cannot establish that a manual sync is required")
+	require.Equal(t, publicationStatePending, current.PublicationState)
+	require.Contains(t, distributionOutcomeMessage(current, false), "has not finished updating yet")
+	ctx = withOrganizationGrant(ctx, authz.ScopeOrgAdmin, principal.OrganizationID)
+	plugin, err := inventory.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "held"})
+	require.NoError(t, err)
+	require.NotNil(t, plugin.PublicationEvidence)
+	require.True(t, plugin.PublicationEvidence.Unavailable)
+
+	idempotent, err = service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: distributed.Version})
+	require.NoError(t, err)
+	require.False(t, idempotent.AwaitingManualSync)
+	require.Equal(t, publicationStatePending, idempotent.PublicationState)
+	require.Contains(t, distributionOutcomeMessage(idempotent, false), "has not finished updating yet")
+
+	removed, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: idempotent.Version})
+	require.NoError(t, err)
+	require.False(t, removed.AwaitingManualSync)
+	require.Equal(t, publicationStatePending, removed.PublicationState)
+	require.Contains(t, distributionOutcomeMessage(removed, true), "has not finished updating yet")
+	replayedRemoval, err := service.Remove(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: removed.Version})
+	require.NoError(t, err)
+	require.Equal(t, publicationStatePending, replayedRemoval.PublicationState)
+	require.Contains(t, distributionOutcomeMessage(replayedRemoval, true), "has not finished updating yet")
+
+	failed := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return errors.New("publication failed") }, inventory).WithManualSyncEvidence(inventory)
+	retry, err := failed.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: "held", ExpectedVersion: removed.Version})
+	require.NoError(t, err)
+	require.False(t, retry.AwaitingManualSync)
+	require.Equal(t, publicationStateRepairRequired, retry.PublicationState, "unknown evidence must preserve a known publication failure")
 }

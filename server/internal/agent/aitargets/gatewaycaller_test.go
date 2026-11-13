@@ -23,6 +23,30 @@ func gatewayTarget(id string, gateway aitargets.GatewayClient) aitargets.Target 
 	}
 }
 
+func TestPiMetadataDocumentsMatchEnforceableDefault(t *testing.T) {
+	t.Parallel()
+
+	targets := aitargets.Defaults()
+	for _, clientID := range []string{
+		"https://pi.dev/oauth/client.json",
+		"https://pi.dev/oauth/epMNJ6P1xGQ9/client.json",
+	} {
+		t.Run(clientID, func(t *testing.T) {
+			t.Parallel()
+			preset, ok := admission.CatalogPreset(clientID)
+			require.True(t, ok)
+			target, matched := aitargets.MatchGatewayCaller(targets, aitargets.GatewayCaller{
+				OAuthClientID:  clientID,
+				CIMDVendorKey:  preset.VendorKey,
+				CIMDCatalogURL: preset.URL,
+			})
+			require.True(t, matched)
+			require.Equal(t, "pi", target.ID)
+			require.True(t, aitargets.Enforceable(target))
+		})
+	}
+}
+
 func TestMatchGatewayCallerPrefersLiteralClientIDOverCatalogEntry(t *testing.T) {
 	t.Parallel()
 

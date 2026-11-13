@@ -1,4 +1,5 @@
 import { datadogRum } from "@datadog/browser-rum";
+import { getServerURL, isProdHost } from "@/lib/utils";
 import { DATADOG_CONFIG } from "./errorTracking.config";
 
 let initialized = false;
@@ -21,6 +22,12 @@ export interface ErrorContext {
  * Should be called once when the ElementsProvider mounts.
  */
 export function initErrorTracking(config: ErrorTrackingConfig = {}): void {
+  // Only collect production sessions, even when a preview has RUM credentials.
+  if (!isProdHost(getServerURL())) {
+    enabled = false;
+    return;
+  }
+
   // Check if explicitly disabled
   if (config.enabled === false) {
     enabled = false;

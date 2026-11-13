@@ -24,16 +24,10 @@ import (
 
 func TestToolDirectoryMatchesRegisteredToolsAcrossPages(t *testing.T) {
 	t.Parallel()
-	operations := make(map[WriteOperation]bool)
-	for _, op := range AllWriteOperations {
-		if op.implemented() {
-			operations[op] = true
-		}
-	}
 	runtime := NewRuntime(nil, "https://admin.example.test/admin-mcp")
 	runtime.catalogPromotions = &catalogpromotion.Service{}
-	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
-	require.NoError(t, AttachWrites(runtime, &StaffOAuth{Approval: &StaffProposalApproval{}}, deps, WriteConfig{Enabled: true, Operations: operations}))
+	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ProjectRedeployer: &fakeProjectRedeployer{}, ImageUploads: &fakeImageUploads{}}
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true}))
 	verifier := &fakeAdminVerifier{result: &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: "staff@example.test"}}
 	session := &StaffOAuthAuthorization{verifier: verifier}
 	request := httptest.NewRequest(http.MethodGet, Path+"/tools", nil)
@@ -65,18 +59,21 @@ func TestToolDirectoryMatchesRegisteredToolsAcrossPages(t *testing.T) {
 		require.Equal(t, tool.Title, actual.Title)
 		require.Equal(t, tool.Description, actual.Description)
 	}
-	require.Equal(t, directoryApproval, byName["prepare_registry_promotion_curation"].Access)
-	require.Equal(t, directoryApproval, byName["execute_admin_proposal"].Access)
-	require.Equal(t, directoryRead, byName["get_admin_proposal_status"].Access)
+	require.Equal(t, directoryWrite, byName["curate_registry_promotion_candidate"].Access)
+	require.NotContains(t, byName, "execute_admin_proposal")
+	require.NotContains(t, byName, "get_admin_proposal_status")
 	require.Equal(t, directoryRead, byName["list_audit_log_entries"].Access)
 	require.Contains(t, byName["list_audit_log_entries"].Description, "confidential")
 	require.Equal(t, directoryWrite, byName["create_image_upload_url"].Access)
+	require.Contains(t, byName["create_image_upload_url"].Description, writeConfirmationNotice)
+	require.Contains(t, byName["create_image_upload_url"].Description, "publicly served immediately and stays stored")
+	require.Contains(t, byName["create_image_upload_url"].Description, "local clip paths")
 }
 
 func TestToolDirectoryReflectsDisabledWritesAndRegistryChanges(t *testing.T) {
 	t.Parallel()
 	runtime := NewRuntime(nil, "https://admin.example.test/admin-mcp")
-	require.NoError(t, AttachWrites(runtime, &StaffOAuth{Approval: &StaffProposalApproval{}}, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, WriteConfig{}))
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, WriteConfig{}))
 	directory, err := runtime.toolDirectory(t.Context())
 	require.NoError(t, err)
 	require.NotEmpty(t, directory.Tools)
@@ -133,13 +130,11 @@ func TestToolDirectoryRejectsMutationRequests(t *testing.T) {
 	require.Equal(t, http.MethodGet, response.Header().Get("Allow"))
 }
 
-func TestToolDirectoryListsOnlyEnabledWriteOperations(t *testing.T) {
+func TestToolDirectoryListsOnlyImplementedWriteOperations(t *testing.T) {
 	t.Parallel()
 	runtime := NewRuntime(nil, "https://admin.example.test/admin-mcp")
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}
-	writes := WriteConfig{Enabled: true, Operations: make(map[WriteOperation]bool)}
-	writes.Operations[OperationSetOrganizationFeature] = true
-	require.NoError(t, AttachWrites(runtime, &StaffOAuth{Approval: &StaffProposalApproval{}}, deps, writes))
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true}))
 	directory, err := runtime.toolDirectory(t.Context())
 	require.NoError(t, err)
 	mutatingNames := []string{}
@@ -148,7 +143,21 @@ func TestToolDirectoryListsOnlyEnabledWriteOperations(t *testing.T) {
 			mutatingNames = append(mutatingNames, tool.Name)
 		}
 	}
-	require.Equal(t, []string{"execute_admin_proposal", "prepare_set_organization_feature"}, mutatingNames)
+	require.Contains(t, mutatingNames, string(OperationSetOrganizationFeature))
+	require.NotContains(t, mutatingNames, string(OperationUploadPlatformImage), "image uploads need asset storage")
+	require.NotContains(t, mutatingNames, string(OperationPromoteRegistryCandidate), "promotions need the catalogue service")
+}
+
+func TestToolDirectoryHidesWriteOperationsWhenSwitchedOff(t *testing.T) {
+	t.Parallel()
+	runtime := NewRuntime(nil, "https://admin.example.test/admin-mcp")
+	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{}))
+	directory, err := runtime.toolDirectory(t.Context())
+	require.NoError(t, err)
+	for _, tool := range directory.Tools {
+		require.Equal(t, directoryRead, tool.Access, tool.Name)
+	}
 }
 
 func TestToolDirectoryVerifierUnavailable(t *testing.T) {

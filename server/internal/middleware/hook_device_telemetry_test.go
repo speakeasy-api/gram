@@ -59,6 +59,10 @@ func TestHookDeviceTelemetryStampsSpanAttributes(t *testing.T) {
 	req.Header.Set("X-Gram-Device-Harness-Variant", "cli")
 	req.Header.Set("X-Gram-Device-Harness-Version", "2.0.1")
 	req.Header.Set("X-Gram-Device-Elapsed-Ms", "42")
+	req.Header.Set("X-Gram-Device-Install-Route", "marketplace")
+	req.Header.Set("X-Gram-Device-Fail-Open", "true")
+	req.Header.Set("X-Gram-Device-Debug-Log", "false")
+	req.Header.Set("X-Gram-Device-Spool-Depth", "3")
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -72,6 +76,10 @@ func TestHookDeviceTelemetryStampsSpanAttributes(t *testing.T) {
 	require.Equal(t, "cli", attrs[attr.HookDeviceHarnessVariantKey].AsString())
 	require.Equal(t, "2.0.1", attrs[attr.HookDeviceHarnessVersionKey].AsString())
 	require.Equal(t, int64(42), attrs[attr.HookDeviceElapsedMsKey].AsInt64())
+	require.Equal(t, "marketplace", attrs[attr.HookDeviceInstallRouteKey].AsString())
+	require.Equal(t, "true", attrs[attr.HookDeviceFailOpenKey].AsString())
+	require.Equal(t, "false", attrs[attr.HookDeviceDebugLogKey].AsString())
+	require.Equal(t, "3", attrs[attr.HookDeviceSpoolDepthKey].AsString())
 }
 
 func TestHookDeviceTelemetrySanitizesUntrustedValues(t *testing.T) {
@@ -170,4 +178,40 @@ func TestHookDeviceTelemetryLeavesContextEmptyWithoutHeaders(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	require.Nil(t, device, "a request without device headers carries no device attributes")
+}
+
+func TestHookDeviceTelemetryRecordsEndpointGeneration(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		path    string
+		headers map[string]string
+		want    string
+	}{
+		{"ingest from binary", "/rpc/hooks.ingest", map[string]string{"X-Gram-Device-Binary-Version": "1.2.3"}, middleware.HookEndpointGenerationIngestBinary},
+		{"ingest from script", "/rpc/hooks.ingest", nil, middleware.HookEndpointGenerationIngestScript},
+		{"ingest with unusable version header", "/rpc/hooks.ingest", map[string]string{"X-Gram-Device-Binary-Version": "v\x01"}, middleware.HookEndpointGenerationIngestScript},
+		{"legacy claude without key", "/rpc/hooks.claude", nil, middleware.HookEndpointGenerationLegacyUnkeyed},
+		{"legacy claude with key", "/rpc/hooks.claude", map[string]string{"Gram-Key": "k"}, middleware.HookEndpointGenerationLegacyKeyed},
+		{"legacy cursor with device token", "/rpc/hooks.cursor", map[string]string{"Authorization": "Bearer t"}, middleware.HookEndpointGenerationLegacyKeyed},
+		{"legacy codex with key", "/rpc/hooks.codex", map[string]string{"Gram-Key": "k"}, middleware.HookEndpointGenerationLegacyKeyed},
+		{"non-event hook route", "/rpc/hooks.otel/v1/logs", map[string]string{"Gram-Key": "k"}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var got string
+			handler := middleware.HookDeviceTelemetry(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				got = middleware.HookEndpointGeneration(r.Context())
+			}))
+			req := httptest.NewRequest(http.MethodPost, tt.path, nil)
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+			require.Equal(t, tt.want, got)
+		})
+	}
 }

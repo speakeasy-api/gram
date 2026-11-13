@@ -38,6 +38,7 @@ type RegistrationPersistence interface {
 	ResolveRegistrationCatalogIdentity(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogCandidate, error)
 	ResolveRegistrationDashboardSetup(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (RegistrationDashboardSetup, error)
 	IssueSetupHandoff(ctx context.Context, principal Principal, binding SetupHandoffBinding, now time.Time) (IssuedSetupHandoff, error)
+	GetProviderReadiness(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID) (Readiness, bool, error)
 }
 
 type RegisterCatalogMCPInput struct {
@@ -53,6 +54,9 @@ type IssueSetupHandoffInput struct {
 	RegistrationID string
 	ProviderKey    string
 	CatalogRef     string
+	// NextAction, when set, names the open setup step so the dashboard link
+	// can say what is left. Empty links to the settings page without a step.
+	NextAction string
 }
 
 type RegisterCatalogMCPResult struct {
@@ -63,6 +67,8 @@ type RegisterCatalogMCPResult struct {
 	Receipt             OperationReceipt
 	Registration        string
 	SecretFieldsPending []CatalogConfigurationField
+	// NextAction is the one required setup step left, or nextActionReady.
+	NextAction string
 
 	// ServerName is the display name the MCP server was added under.
 	ServerName string
@@ -97,6 +103,8 @@ type RegistrationService struct {
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
 	logos                      *cardLogos
+	catalogLogos               *catalogLogos
+	signInLinks                *signInConnectLinks
 }
 
 func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
@@ -348,10 +356,27 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 			return "", ErrCatalogRejected
 		}
 	}
-	return s.dashboardSettingsURL(ctx, principal, project, registrationID)
+	return s.dashboardSettingsURL(ctx, principal, project, registrationID, input.NextAction)
 }
 
-func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (string, error) {
+// dashboardSetupStep names the dashboard step a next action leaves open, as
+// the settings page's setup query parameter reads it, or "" for none.
+func dashboardSetupStep(nextAction string) string {
+	switch nextAction {
+	case nextActionSecureDashboardSetup:
+		return "credentials"
+	case nextActionContinueDashboardSetup:
+		// An administrator still has to configure the catalog server's OAuth
+		// client in the dashboard before anyone can sign in.
+		return "oauth-client"
+	case nextActionConnectSignIn:
+		return "sign-in"
+	default:
+		return ""
+	}
+}
+
+func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, nextAction string) (string, error) {
 	if s == nil || s.store == nil || s.dashboardURL == nil || registrationID == uuid.Nil {
 		return "", ErrRegistrationUnavailable
 	}
@@ -362,7 +387,14 @@ func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principa
 	if setup.OrganizationSlug == "" || setup.MCPServerRoute == "" {
 		return "", ErrRegistrationUnavailable
 	}
-	return s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "settings").String() + "#authentication", nil
+	settings := s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "settings")
+	// Every open step (credentials, OAuth client, sign-in) lives in the
+	// Authentication section; the step tells the page which one to explain.
+	if step := dashboardSetupStep(nextAction); step != "" {
+		settings.RawQuery = url.Values{"setup": {step}}.Encode()
+	}
+	settings.Fragment = "authentication"
+	return settings.String(), nil
 }
 
 // DashboardAuthorization is where a user signs in to an MCP server's
@@ -634,16 +666,23 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	setupURL := ""
 	nextAction := "ready"
 	if inspection.RequiresDashboardSetup {
-		setupURL, err = s.dashboardSettingsURL(ctx, principal, project, receipt.RegistrationID.UUID)
-		if err != nil {
-			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
-		}
 		nextAction = nextActionSecureDashboardSetup
 		// Attachment can set up the provider's client automatically, so the
 		// only step left is the user's sign-in, which the agent can connect in
 		// chat. The dashboard link stays as the fallback.
 		if inspection.AttachmentSupported {
 			nextAction = nextActionConnectSignIn
+		}
+		// Only sign-in is a known step here. A remote that needs dashboard
+		// setup may want an OAuth client or an API key, and the inspection
+		// cannot tell which, so that link names no step.
+		linkAction := ""
+		if nextAction == nextActionConnectSignIn {
+			linkAction = nextAction
+		}
+		setupURL, err = s.dashboardSettingsURL(ctx, principal, project, receipt.RegistrationID.UUID, linkAction)
+		if err != nil {
+			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
 		}
 	}
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "direct_remote_registration", Phase: "complete", Outcome: "succeeded", State: ""})
@@ -733,8 +772,20 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		}
 	}
 
+	// A server added before may already be signed in to. The stored check is
+	// the same evidence get_mcp_readiness reports; it is read, never probed.
+	ready := false
+	if receipt.AlreadyRegistered && principal.HasConnection() {
+		readiness, found, err := s.store.GetProviderReadiness(ctx, principal, project.ID, receipt.RegistrationID.UUID)
+		if err != nil {
+			return RegisterCatalogMCPResult{}, fmt.Errorf("read catalog registration readiness: %w", err)
+		}
+		ready = found && readiness.Fresh && readiness.State == ReadinessReady
+	}
+
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: "succeeded", State: ""})
 	return RegisterCatalogMCPResult{
+		NextAction:          catalogNextAction(catalog.ProviderKey, catalog.AuthSetup, len(pendingSecretFields) > 0, ready),
 		Project:             project,
 		ServerName:          configuration.displayName,
 		ProviderKey:         catalog.ProviderKey,
@@ -744,6 +795,30 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		Registration:        receipt.RegistrationID.UUID.String(),
 		SecretFieldsPending: append([]CatalogConfigurationField(nil), pendingSecretFields...),
 	}, nil
+}
+
+// catalogNextAction picks the one required setup step left for a catalogue
+// registration. Sharing through a plugin is optional, so it is never a step.
+func catalogNextAction(providerKey, authSetup string, secretsPending, ready bool) string {
+	switch {
+	case secretsPending:
+		return nextActionSecureDashboardSetup
+	case ready:
+		return nextActionReady
+	case !isBrowserCatalogProviderKey(providerKey):
+		return nextActionStartSetup
+	}
+	switch authSetup {
+	case "none":
+		return nextActionReady
+	case "dcr", "cimd":
+		// The OAuth client is set up automatically, so only the user's
+		// sign-in is left, and the agent can connect it in chat.
+		return nextActionConnectSignIn
+	default:
+		// "manual" needs an administrator in the dashboard; "unknown" may.
+		return nextActionContinueDashboardSetup
+	}
 }
 
 // isDirectRemoteDisplayNameBreak rejects values that change the structure of a

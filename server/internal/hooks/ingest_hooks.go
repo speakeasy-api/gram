@@ -26,8 +26,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -50,6 +52,9 @@ type AuthenticatedIngestOptions struct {
 	boundaryScans   []ahpBoundaryScan
 	// promptPolicyText overrides prompt evidence without changing transcript capture.
 	promptPolicyText *string
+	// promptCorrelationID is a trusted adapter-provided logical message identity.
+	// It affects transcript persistence only, never event/policy deduplication.
+	promptCorrelationID string
 	// ObserveOnly records the event without evaluating enforcement, for
 	// events the sender cannot block.
 	ObserveOnly                  bool
@@ -78,6 +83,7 @@ func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 		contentBoundary:              false,
 		boundaryScans:                nil,
 		promptPolicyText:             nil,
+		promptCorrelationID:          "",
 		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
@@ -104,6 +110,30 @@ const (
 // activations (Codex heuristics) arrive as ordinary events carrying data.skill
 // instead, and are distinguished by isExplicitSkillActivation.
 const eventTypeSkillActivated = "skill.activated"
+
+// toolResultFinishReasonError marks the chat row of a tool.failed result, so
+// a transcript reader can tell a failed call from one that returned output.
+const toolResultFinishReasonError = "error"
+
+// toolFailedWithoutErrorContent is the result recorded for a tool.failed
+// event that carries no error text.
+const toolFailedWithoutErrorContent = "The tool call failed without an error message."
+
+// toolCompletedWithoutOutputContent is the result stored for a completed tool
+// call that reported no output, so the call reads as complete rather than as
+// still running.
+const toolCompletedWithoutOutputContent = "The tool call returned no output."
+
+// isEmptyJSONValue reports whether content is missing or a JSON value that
+// carries nothing: an empty string, object or array, or null.
+func isEmptyJSONValue(content string) bool {
+	switch strings.TrimSpace(content) {
+	case "", `""`, "{}", "[]", "null":
+		return true
+	default:
+		return false
+	}
+}
 
 func isExplicitSkillActivation(payload *gen.IngestPayload) bool {
 	return strings.TrimSpace(payload.Event.Type) == eventTypeSkillActivated
@@ -228,6 +258,15 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		}, nil
 	}
 	orgSlug = authCtx.OrganizationSlug
+	if isInstallCheck(payload) {
+		// The install script's self-test has already proved what it checks:
+		// the plugin ran and the key may send hooks. It is not agent activity,
+		// so no policy runs and nothing is recorded.
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor{UserID: "", Email: ""},
+		}, nil
+	}
 	if payload.Session != nil {
 		if sessionID, changed := scopedSessionPtr(ctx, payload.Session.ID); changed {
 			session := *payload.Session
@@ -274,6 +313,12 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
+	// A tool call that ran after Cowork's permission prompt was allowed by the
+	// person, which confirms the warning that asked for it. A call that ran
+	// and then failed was allowed too.
+	if fromCowork(payload) && toolRan(payload) && !s.isHookDuplicate(ctx) {
+		s.confirmCoworkToolAsk(context.WithoutCancel(ctx), payload, canonicalHookEvent(payload, authCtx, actor, timestamp))
+	}
 	skillCapture, observed, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)
 	if observationErr != nil {
 		logger.WarnContext(ctx, "failed to record skill activation",
@@ -324,6 +369,12 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// cache write failed transiently (the retry arrives already marked
 	// duplicate).
 	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
+	if blockReason != "" && blockEffects.ask {
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAskResult(userReason), skillCapture),
+			Actor:  ResolvedActor(actor),
+		}, nil
+	}
 	if blockReason != "" {
 		return &AuthenticatedIngestResult{
 			Result: withBlockEffect(blockEffects, s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture)),
@@ -676,12 +727,28 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				return auditReason, quarantineTriggerUserReason(scanResult, auditReason)
 			}
 			if scanResult.IsWarnChallenge() && opts.AllowWarnAcknowledgement {
+				if fromCowork(payload) && scanResult.CallFingerprint != "" {
+					// Cowork names the minute a message was sent in the prompt,
+					// so a retry a minute later must still match its challenge.
+					scanResult.CallFingerprint = risk.CoworkPromptCallFingerprint(ev.Prompt)
+				}
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, "") {
 					return "", ""
 				}
-				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
-					auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-					return auditReason, userReason
+				// Cowork cuts the acknowledgement link off and shows it as plain
+				// text, so there the warning leads with a short link.
+				if fromCowork(payload) {
+					if ackURL := s.coworkWarnAckURL(ctx, ev.Event, scanResult); ackURL != "" {
+						s.riskScanner.RecordPolicyChallenge(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, scanResult.PolicyID, "", scanResult.PolicyName, scanResult.Entity, scanResult.RuleID, scanResult.CallFingerprint)
+						auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						return auditReason, coworkWarnUserReason(scanResult, ackURL)
+					}
+				}
+				if !fromCowork(payload) {
+					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ""); ok {
+						auditReason := fmt.Sprintf("Speakeasy challenged this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+						return auditReason, userReason
+					}
 				}
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
@@ -734,6 +801,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 					if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
 						return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, toolInput)
 					}
+					if fromCowork(payload) {
+						if auditReason, userReason, ok := s.askCoworkToolWarn(ctx, payload, ev.Event, scanResult, toolName); ok {
+							return auditReason, userReason
+						}
+					}
 					if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
 						auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 						return auditReason, userReason
@@ -758,6 +830,11 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			if scanResult.IsWarnChallenge() {
 				if s.warnAcknowledged(ctx, ev.Event, scanResult, toolName) {
 					return "", ""
+				}
+				if fromCowork(payload) {
+					if auditReason, userReason, ok := s.askCoworkToolWarn(ctx, payload, ev.Event, scanResult, toolName); ok {
+						return auditReason, userReason
+					}
 				}
 				if _, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, toolName); ok {
 					auditReason := fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
@@ -1131,10 +1208,18 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	teeRows := cloneHookTelemetryRows(rows)
 	if s.telemetryLogger != nil {
 		for _, row := range rows {
-			s.logHookTelemetry(ctx, authCtx, &metadata, row.timestamp, row.toolName, row.attrs)
+			s.logHookTelemetry(ctx, authCtx, &metadata, payload, row.timestamp, row.toolName, row.attrs)
 		}
 	}
 	s.teeCanonicalHookToEventFeed(ctx, payload, authCtx, &metadata, hookSource, blockReason, teeRows)
+	// Cowork also ships the session transcript, so its rows are keyed by the
+	// ids the transcript shares and the two paths store each prompt and tool
+	// call once. See claude_cowork_rows.go.
+	if fromCowork(payload) {
+		s.persistCoworkEventRow(ctx, payload, authCtx, &metadata, hookSource, timestamp)
+		s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, timestamp)
+		return
+	}
 	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 	if err != nil {
 		event := "hooks_ingest_chat_persist_failed"
@@ -1154,7 +1239,13 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	} else if promptCaptured && usesNativeTranscriptFallback(payload.Source.Adapter) {
 		s.markNativePromptSession(ctx, authCtx.ProjectID.String(), canonicalSessionID(payload), payload.Source.Adapter)
 	}
-	if err := s.persistPromptAttachments(ctx, payload, authCtx, &metadata, timestamp); err != nil {
+	s.persistPromptAttachmentsLogged(ctx, payload, authCtx, &metadata, timestamp)
+}
+
+// persistPromptAttachmentsLogged stores the event's prompt attachments and
+// logs, rather than returns, a failure: attachment capture is best effort.
+func (s *Service) persistPromptAttachmentsLogged(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time) {
+	if err := s.persistPromptAttachments(ctx, payload, authCtx, metadata, timestamp); err != nil {
 		event := "hooks_ingest_prompt_attachment_persist_failed"
 		msg := "failed to persist prompt attachments"
 		if errors.Is(err, errChatProjectMismatch) {
@@ -1319,10 +1410,11 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 	rows := make([]hookTelemetryRow, 0, 2)
 
 	hookEventName := telemetryHookEventName(payload)
+	// Only tool events carry a tool name. Prompt, lifecycle, and other
+	// non-tool rows keep gram.tool.name empty (gram.hook.event still names
+	// the event), because tool-call analytics count hook rows by a non-empty
+	// tool name.
 	toolName := canonicalTelemetryToolName(payload)
-	if toolName == "" {
-		toolName = hookEventName
-	}
 
 	attrs := hookTelemetryBaseAttrs(payload, authCtx, hookEventName, hookSource)
 	if blockReason != "" {
@@ -1366,12 +1458,10 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 			attrs[attr.GenAIUsageCostKey] = *usage.Cost
 		}
 	}
+	if server := canonicalTelemetryToolSource(payload); server != "" {
+		attrs[attr.ToolCallSourceKey] = server
+	}
 	if mcp := canonicalMCPData(payload); mcp != nil {
-		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
-			attrs[attr.ToolCallSourceKey] = server
-		} else if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
-			attrs[attr.ToolCallSourceKey] = server
-		}
 		if url := strings.TrimSpace(conv.PtrValOr(mcp.URL, "")); url != "" {
 			attrs[attr.MCPServerURLKey] = url
 			attrs[attr.MCPMatchKey] = url
@@ -1465,16 +1555,17 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 	return attrs
 }
 
-func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
+func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, payload *gen.IngestPayload, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
 	// Device details the speakeasy-hooks binary reported, so rows can be
 	// counted per client version. A spool replay's headers describe the binary
 	// draining the spool, which after an upgrade is not the one that captured
-	// the event, so replayed rows stay unstamped rather than miscounted.
+	// the event, so replayed rows don't take them.
 	if replayed, _ := attrs[attr.HookReplayedKey].(bool); !replayed {
 		for key, value := range middleware.HookDeviceAttributes(ctx) {
 			attrs[key] = value
 		}
 	}
+	stampIngestClientVersion(ctx, payload, attrs)
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: timestamp,
 		ToolInfo: telemetry.ToolInfo{
@@ -1622,7 +1713,11 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			return false, nil
 		}
 		msg = baseMsg("user", content)
-		if correlationID := agentPromptCorrelationID(payload); correlationID != "" {
+		correlationID := authenticatedIngestOptions(ctx).promptCorrelationID
+		if correlationID == "" {
+			correlationID = agentPromptCorrelationID(payload)
+		}
+		if correlationID != "" {
 			msg.MessageID = conv.ToPGText(correlationID)
 		} else {
 			uncorrelatedPrompt = proxiedTranscriptSource(hookSource) || usesNativeTranscriptFallback(payload.Source.Adapter)
@@ -1684,12 +1779,24 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		// recognized as a stand-in; seed the surface placeholder instead.
 		titleContent = canonicalPlaceholderTitle(hookSource)
 	case "tool.completed", "tool.failed":
+		failed := strings.TrimSpace(payload.Event.Type) == "tool.failed"
 		content := canonicalToolResultContent(payload)
+		// A result is an outcome even without text: without a result row the
+		// call would read as still running. An error that is present but
+		// empty ("", {}, [] or null) says no more than a missing one.
+		if failed && isEmptyJSONValue(content) {
+			content = marshalToJSON(toolFailedWithoutErrorContent)
+		}
 		if strings.TrimSpace(content) == "" {
-			return false, nil
+			content = marshalToJSON(toolCompletedWithoutOutputContent)
 		}
 		msg = baseMsg("tool", content)
 		msg.ToolCallID = conv.ToPGTextEmpty(canonicalChatToolCallID(payload))
+		if failed {
+			// The result content is the error, which reads like any output;
+			// the finish reason is what tells a reader the call failed.
+			msg.FinishReason = conv.ToPGText(toolResultFinishReasonError)
+		}
 		titleContent = content
 	default:
 		return false, nil
@@ -1898,10 +2005,50 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	chatID := sessionIDToUUID(sessionID)
 	projectID := *authCtx.ProjectID
 	queries := chatRepo.New(s.db)
+	commit := func() error { return nil }
+	logicalAttachments := authenticatedIngestOptions(ctx).promptCorrelationID != ""
+	if logicalAttachments {
+		// Attachment-only events have no prompt row to create their chat. Do
+		// this before starting a transaction that cannot recover from an FK error.
+		if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
+			return err
+		}
+		// Content parts have no external-ID uniqueness constraint. Serialize
+		// logical AHP attachment writes with the existing project/chat lock.
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin logical prompt attachment transaction: %w", err)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		queries = chatRepo.New(tx)
+		if err := queries.AcquireChatPromptCorrelationLock(ctx, chatRepo.AcquireChatPromptCorrelationLockParams{ProjectID: projectID, ChatID: chatID}); err != nil {
+			return fmt.Errorf("lock logical prompt attachments: %w", err)
+		}
+		commit = func() error {
+			if err := tx.Commit(ctx); err != nil {
+				return fmt.Errorf("commit logical prompt attachments: %w", err)
+			}
+			return nil
+		}
+	}
 
 	parentResolver, err := newPromptAttachmentParentResolver(ctx, queries, chatID, projectID)
 	if err != nil {
 		return err
+	}
+	seen := make(map[string]struct{})
+	if logicalAttachments {
+		existing, err := queries.ListChatContentPartsByChatID(ctx, chatRepo.ListChatContentPartsByChatIDParams{
+			ChatID: chatID, ProjectID: projectID, ParentChatMessageIds: parentResolver.parents, RiskContentPartIds: nil,
+		})
+		if err != nil {
+			return fmt.Errorf("list logical prompt attachments: %w", err)
+		}
+		for _, part := range existing {
+			if part.ExternalID.Valid {
+				seen[part.ExternalID.String] = struct{}{}
+			}
+		}
 	}
 
 	type pendingPromptAttachment struct {
@@ -1915,6 +2062,13 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	for _, attachment := range payload.Data.PromptAttachments {
 		if attachment == nil || strings.TrimSpace(attachment.EntryUUID) == "" || strings.TrimSpace(attachment.Content) == "" {
 			continue
+		}
+		if logicalAttachments {
+			id := strings.TrimSpace(attachment.EntryUUID)
+			if _, exists := seen[id]; exists {
+				continue
+			}
+			seen[id] = struct{}{}
 		}
 		promptSHA256 := strings.ToLower(strings.TrimSpace(conv.PtrValOr(attachment.PromptSha256, "")))
 		createdAt := occurredAt
@@ -1945,8 +2099,10 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		return nil
 	}
 
-	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
-		return err
+	if !logicalAttachments {
+		if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
+			return err
+		}
 	}
 
 	contents := make([][]byte, len(pending))
@@ -1975,8 +2131,10 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		})
 	}
 	if _, err := queries.CreateChatContentPart(ctx, rows); err == nil {
-		return nil
-	} else if !isForeignKeyViolation(err) {
+		return commit()
+	} else if logicalAttachments || !isForeignKeyViolation(err) {
+		// A failed statement aborts the logical-attachment transaction.
+		// Only autocommit writes can use the missing-chat retry below.
 		return fmt.Errorf("insert prompt attachment content parts: %w", err)
 	}
 	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
@@ -1985,12 +2143,13 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	if _, err := queries.CreateChatContentPart(ctx, rows); err != nil {
 		return fmt.Errorf("insert prompt attachment content parts after creating chat: %w", err)
 	}
-	return nil
+	return commit()
 }
 
 type promptAttachmentParentResolver struct {
-	latest uuid.NullUUID
-	byHash map[string]uuid.NullUUID
+	parents []uuid.UUID
+	latest  uuid.NullUUID
+	byHash  map[string]uuid.NullUUID
 }
 
 func newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Queries, chatID uuid.UUID, projectID uuid.UUID) (*promptAttachmentParentResolver, error) {
@@ -2002,10 +2161,12 @@ func newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Qu
 		return nil, fmt.Errorf("list prompt attachment parent candidates: %w", err)
 	}
 	resolver := &promptAttachmentParentResolver{
-		latest: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		byHash: make(map[string]uuid.NullUUID, len(candidates)),
+		parents: make([]uuid.UUID, 0, len(candidates)),
+		latest:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		byHash:  make(map[string]uuid.NullUUID, len(candidates)),
 	}
 	for i, candidate := range candidates {
+		resolver.parents = append(resolver.parents, candidate.ID)
 		id := uuid.NullUUID{UUID: candidate.ID, Valid: true}
 		if i == 0 {
 			resolver.latest = id
@@ -2123,6 +2284,16 @@ func canonicalAllowResult() *gen.IngestHookResult {
 	}
 }
 
+func canonicalAskResult(message string) *gen.IngestHookResult {
+	reason := "policy_warn_ask"
+	return &gen.IngestHookResult{
+		Decision: "ask",
+		Reason:   &reason,
+		Message:  &message,
+		Effects:  nil,
+	}
+}
+
 func canonicalDenyResult(message string) *gen.IngestHookResult {
 	if strings.TrimSpace(message) == "" {
 		message = "Request denied by Speakeasy policy."
@@ -2212,6 +2383,85 @@ func canonicalTelemetryToolName(payload *gen.IngestPayload) string {
 		return "Skill"
 	}
 	return canonicalToolName(payload)
+}
+
+// canonicalTelemetryToolSource resolves the MCP server a hook tool event is
+// attributed to, stored as gram.tool_call.source. Tool-usage analytics
+// classify a hook trace with a source as a shadow MCP call and one without as
+// a local tool call.
+func canonicalTelemetryToolSource(payload *gen.IngestPayload) string {
+	if mcp := canonicalMCPData(payload); mcp != nil {
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
+			return server
+		}
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
+			return server
+		}
+	}
+	return openClawResultMCPServer(payload)
+}
+
+// openClawResultMCPServer reads the server name OpenClaw stamps as
+// details.mcpServer on every MCP tool result. Native tool results never carry
+// it. OpenClaw names MCP tools <server>__<tool>, which no relay decodes into
+// data.mcp, and relays that predate reading this marker send OpenClaw MCP
+// results without data.mcp, so ingest reads the marker from the result too.
+// Only post-call events carry a result: the pre-call row of the same call
+// stays unattributed and shares the call's trace.
+func openClawResultMCPServer(payload *gen.IngestPayload) string {
+	if payload == nil || payload.Source == nil || payload.Event == nil {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "openclaw") {
+		return ""
+	}
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "tool.completed", "tool.failed":
+	default:
+		return ""
+	}
+	tool := canonicalToolCallData(payload)
+	if tool == nil {
+		return ""
+	}
+	for _, result := range []any{tool.Output, tool.Error} {
+		if server := toolResultDetailsMCPServer(result); server != "" {
+			return server
+		}
+	}
+	return ""
+}
+
+// toolResultDetailsMCPServer returns details.mcpServer from a decoded tool
+// result, which arrives either as a JSON value or as JSON-encoded text.
+func toolResultDetailsMCPServer(result any) string {
+	var raw []byte
+	switch r := result.(type) {
+	case nil:
+		return ""
+	case map[string]any:
+		// Already decoded: read the marker without re-encoding the result.
+		details, _ := r["details"].(map[string]any)
+		server, _ := details["mcpServer"].(string)
+		return strings.TrimSpace(server)
+	case string:
+		raw = []byte(r)
+	default:
+		encoded, err := json.Marshal(r)
+		if err != nil {
+			return ""
+		}
+		raw = encoded
+	}
+	var decoded struct {
+		Details struct {
+			MCPServer string `json:"mcpServer"`
+		} `json:"details"`
+	}
+	if json.Unmarshal(raw, &decoded) != nil {
+		return ""
+	}
+	return strings.TrimSpace(decoded.Details.MCPServer)
 }
 
 func canonicalToolCallID(payload *gen.IngestPayload) string {
@@ -2307,8 +2557,8 @@ func canonicalSkillName(payload *gen.IngestPayload) string {
 // an empty string when the source is unknown. The claude-tag wake-envelope
 // rewrite is only applied to Claude-family sources to prevent non-Claude
 // adapters from being labelled as channel sessions.
-// Apart from a channel label the result is a stand-in that title generation
-// later replaces.
+// Apart from a channel label or a cron job name the result is a stand-in that
+// title generation later replaces.
 func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) string {
 	title := canonicalPromptText(payload)
 	if title == "" {
@@ -2324,6 +2574,9 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) str
 				title = "Claude Tag coordination"
 			}
 		}
+	}
+	if cronTitle, ok := chat.CronJobTitle(title); ok {
+		return cronTitle
 	}
 	return chat.DerivedTitle(title)
 }
@@ -2424,5 +2677,62 @@ func jsonString(v any) string {
 			return fmt.Sprint(t)
 		}
 		return string(b)
+	}
+}
+
+// surfaceCowork is session.surface on events sent from inside Claude Cowork.
+// It is the same name the server stores for Cowork sessions.
+const surfaceCowork = agentVariantCowork
+
+// fromCowork reports whether the event came from inside Claude Cowork. Two
+// things differ there. The Stop hook also ships the session transcript, so
+// event rows use the keys the transcript shares (claude_cowork_rows.go).
+// Cowork cannot show the acknowledgement link, so a warned prompt is
+// confirmed by sending it again (cowork_warn_confirm.go).
+func fromCowork(payload *gen.IngestPayload) bool {
+	return payload != nil && payload.Session != nil &&
+		strings.EqualFold(strings.TrimSpace(conv.PtrValOr(payload.Session.Surface, "")), surfaceCowork)
+}
+
+// persistCoworkEventRow stores a Cowork event under the
+// key its transcript entry shares. Events without a shared id are left to the
+// transcript.
+func (s *Service) persistCoworkEventRow(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) {
+	sessionID := canonicalSessionID(payload)
+	if sessionID == "" || authCtx.ProjectID == nil {
+		return
+	}
+	row, ok := coworkEventRow(payload, occurredAt)
+	if !ok {
+		return
+	}
+	enabled, err := s.sessionCaptureEnabled(ctx, metadata, *authCtx.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not resolve session capture for a cowork hook event, skipping its row",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+		)
+		return
+	}
+	if !enabled {
+		return
+	}
+	title := canonicalPlaceholderTitle(hookSource)
+	if row.role == "user" {
+		title = chat.DerivedTitle(row.content)
+	}
+	if _, err := s.writeClaudeRows(ctx, authCtx, metadata, sessionIDToUUID(sessionID), []claudeTranscriptRow{row}, hookSource, "", title); err != nil {
+		event := "hooks_ingest_chat_persist_failed"
+		if errors.Is(err, errChatProjectMismatch) {
+			event = "hooks_ingest_chat_project_mismatch"
+		}
+		s.logger.WarnContext(ctx, "failed to persist cowork hook conversation event",
+			attr.SlogEvent(event),
+			attr.SlogError(err),
+			attr.SlogHookSource(payload.Source.Adapter),
+			attr.SlogHookEvent(payload.Event.Type),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogProjectID(authCtx.ProjectID.String()),
+		)
 	}
 }

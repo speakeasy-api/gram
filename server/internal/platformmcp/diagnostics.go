@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	telemetryservice "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -73,6 +74,10 @@ type CanonicalIdentityGate interface {
 type DiagnosticsProjectReader interface {
 	ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error)
 	ResolveProjectLogRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error)
+	// ResolveProjectLogScope is ResolveProjectLogRead for list_recent_tool_calls
+	// and search_tool_calls: a member without log:read gets their own scope
+	// instead of a refusal. A nil scope means the whole project.
+	ResolveProjectLogScope(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, *telemetryrepo.OwnScope, error)
 	GetMCPForDiagnostics(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error)
 }
 
@@ -103,7 +108,11 @@ type DiagnosticsService struct {
 	readiness       *ReadinessService
 	budget          OperationBudget
 	identityGate    CanonicalIdentityGate
-	now             func() time.Time
+	// authz decides which gateway names a caller's tool calls may carry; nil
+	// gives project gateways and agents the caller does not own the neutral
+	// name, while the organization gateway and owned agents keep theirs.
+	authz *authz.Engine
+	now   func() time.Time
 }
 
 // NewDiagnosticsService composes the overview-first entry points. The bounded
@@ -124,8 +133,17 @@ func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReade
 		readiness:      readiness,
 		budget:         budget,
 		identityGate:   nil,
+		authz:          nil,
 		now:            time.Now,
 	}
+}
+
+// WithAuthorization lets gateway labels name the gateways the caller may read.
+func (s *DiagnosticsService) WithAuthorization(engine *authz.Engine) *DiagnosticsService {
+	if s != nil {
+		s.authz = engine
+	}
+	return s
 }
 
 // WithCanonicalIdentityGate applies the telemetry service's rollout-aware
@@ -248,9 +266,9 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	start, end := window.start.UnixNano(), window.end.UnixNano()
 
 	summary, err := s.telemetry.GetOverviewSummary(ctx, telemetryrepo.GetOverviewSummaryParams{
-		GramProjectID: input.ProjectID,
-		TimeStart:     start,
-		TimeEnd:       end,
+		GramProjectIDs: []string{input.ProjectID},
+		TimeStart:      start,
+		TimeEnd:        end,
 	})
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("read project overview summary: %w", err)
@@ -259,7 +277,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("list project overview MCP servers: %w", err)
 	}
-	metaMCPMatchers, err := telemetryservice.LoadMetaMCPMatchers(ctx, s.db, projectUUID)
+	metaMCPMatchers, err := telemetryservice.LoadMetaMCPMatchers(ctx, s.db, s.authz, principal.OrganizationID, projectUUID)
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("list project overview gateways: %w", err)
 	}

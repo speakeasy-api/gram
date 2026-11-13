@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,22 +30,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/semaphore"
 )
 
 // metaCodeBackend retains admission identity; the runner cannot choose routing
 // or credentials. Current membership and authorization are loaded per operation.
 type metaCodeBackend struct {
-	service  *Service
-	gate     metaGateContext
-	admitted map[string]string
-	meta     *mcprequests.WireMeta
-	boundary authz.AdmissionBoundary
-	refresh  metaCodeGateRefresher
-	endpoint endpointrepo.McpEndpoint
-	issuer   uuid.NullUUID
-	surface  networkaccess.Surface
-	revoked  atomic.Bool
-	sessions *codeSessionScope
+	service     *Service
+	gate        metaGateContext
+	admitted    map[string]string
+	meta        *mcprequests.WireMeta
+	boundary    authz.AdmissionBoundary
+	refresh     metaCodeGateRefresher
+	endpoint    endpointrepo.McpEndpoint
+	issuer      uuid.NullUUID
+	surface     networkaccess.Surface
+	revoked     atomic.Bool
+	sessions    *codeSessionScope
+	connections codeConnections
 }
 
 // metaCodeGateRefresher must re-run endpoint binding and issuer admission using
@@ -56,7 +59,7 @@ var _ codemode.Backend = (*metaCodeBackend)(nil)
 
 func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateContext, members []metaMember, endpoint endpointrepo.McpEndpoint, issuer uuid.NullUUID, meta *mcprequests.WireMeta, refresh metaCodeGateRefresher) (*metaCodeBackend, error) {
 	admitted := make(map[string]string, len(members))
-	for _, member := range members {
+	for _, member := range append(slices.Clone(members), gate.unapprovedMembers...) {
 		admitted[member.slug] = codeMemberDestination(member)
 	}
 	var boundary authz.AdmissionBoundary
@@ -73,7 +76,9 @@ func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateCon
 	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
 		surface = networkaccess.SurfacePrivate
 	}
-	backend := &metaCodeBackend{service: service, gate: *gate, admitted: admitted, meta: meta, boundary: boundary, refresh: refresh, endpoint: endpoint, issuer: issuer, surface: surface, revoked: atomic.Bool{}, sessions: nil}
+	backend := &metaCodeBackend{service: service, gate: *gate, admitted: admitted, meta: meta, boundary: boundary, refresh: refresh, endpoint: endpoint, issuer: issuer, surface: surface, revoked: atomic.Bool{}, sessions: nil, connections: codeConnections{mu: sync.Mutex{}, actions: nil}}
+	backend.gate.consentDiagnostics = &consentDiagnostics{seen: sync.Map{}}
+
 	recheck := func(ctx context.Context, slug string) (context.Context, *metaGateContext, metaMember, error) {
 		ctx, gate, members, err := backend.current(ctx, true)
 		if err != nil {
@@ -113,6 +118,13 @@ func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateCon
 }
 
 func (b *metaCodeBackend) current(ctx context.Context, execute bool) (context.Context, *metaGateContext, []metaMember, error) {
+	return b.currentState(ctx, execute, false)
+}
+
+func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bool) (context.Context, *metaGateContext, []metaMember, error) {
+	// A callback keeps the execution's record of checked servers when its
+	// context carries one, and otherwise records each server it names once.
+	ctx = authz.WithOneChallengePerResource(ctx)
 	if err := ctx.Err(); err != nil {
 		return ctx, nil, nil, fmt.Errorf("callback cancelled: %w", err)
 	}
@@ -170,12 +182,22 @@ func (b *metaCodeBackend) current(ctx context.Context, execute bool) (context.Co
 		return ctx, nil, nil, b.revoke()
 	}
 	// The authenticated reference is unchanged, so reuse this execution's
-	// immutable consent record without another Redis read or upstream discovery.
-	if b.gate.catalog != nil && !time.Now().Before(b.gate.catalog.ExpiresAt) {
-		return ctx, nil, nil, b.revoke()
+	// consent snapshot without another Redis read or upstream discovery.
+	expired := b.gate.catalogRecoveryOnly || (b.gate.catalog != nil && !time.Now().Before(b.gate.catalog.ExpiresAt))
+	if expired && !recovery {
+		return ctx, nil, nil, codemode.ErrConsentRequired
 	}
+	gate.catalogRecoveryOnly = expired
 	gate.catalog = b.gate.catalog
-	gate.execute = execute
+	gate.consentDiagnostics = b.gate.consentDiagnostics
+	if expired {
+		gate.catalog = nil
+	}
+	// Helpers read the live choice so they agree with a call, and write nothing.
+	gate.execute = true
+	if gate.memberChoices != nil {
+		gate.memberChoices.readOnly = !execute || recovery
+	}
 	ctx = b.boundary.Apply(ctx)
 	freshCtx, err = b.service.authz.RefreshContext(ctx)
 	if err != nil {
@@ -187,6 +209,9 @@ func (b *metaCodeBackend) current(ctx context.Context, execute bool) (context.Co
 		return ctx, nil, nil, b.refreshFailure(ctx, err)
 	}
 	ctx = freshCtx
+	if recovery {
+		members = append(members, gate.unapprovedMembers...)
+	}
 	permitted := make([]metaMember, 0, len(members))
 	for _, member := range members {
 		// Calls no longer re-read a member's catalog, so a member that now
@@ -196,17 +221,44 @@ func (b *metaCodeBackend) current(ctx context.Context, execute bool) (context.Co
 		}
 		permitted = append(permitted, member)
 	}
-	permitted = b.service.codeCallableMembers(ctx, gate, permitted, true)
+	if !recovery {
+		permitted = b.service.codeCallableMembers(ctx, gate, permitted, true)
+	}
 	return ctx, gate, permitted, nil
 }
 
-// codeHelperFailure keeps a member that needs a new consent distinguishable
-// from one that is merely unavailable.
-func codeHelperFailure(err error) error {
-	if _, consent := errors.AsType[catalogConsentError](err); consent {
+// catalogConsentCodeRefusal is a Code Mode refusal for a member whose approval no longer matches.
+func catalogConsentCodeRefusal(message string, remedy staleChoiceRemedy) error {
+	if remedy == staleChoiceReconnect {
 		return codemode.ErrConsentRequired
 	}
+	return &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy != staleChoiceAskAdmin}
+}
+
+// helperFailure keeps a member that needs a new consent, or someone else's fix,
+// distinguishable from one that is merely unavailable.
+func (b *metaCodeBackend) helperFailure(ctx context.Context, gate *metaGateContext, member metaMember, err error) error {
+	if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+		message, remedy := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
+		return &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect || remedy == staleChoiceReconnectThenAdmin}
+	}
+	if consent, ok := errors.AsType[catalogConsentError](err); ok {
+		return catalogConsentCodeRefusal(b.service.catalogConsentRefusal(ctx, b.service.logger, gate, member, consent, false))
+	}
 	return codemode.ErrToolUnavailable
+}
+
+// memberCallRefusal records and refuses a call to a member with a stale choice or a changed approval, before dispatch.
+func (b *metaCodeBackend) memberCallRefusal(ctx context.Context, gate *metaGateContext, member metaMember) error {
+	if stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); ok {
+		message, remedy := b.service.refuseStaleChoiceCall(ctx, b.service.logger, gate, member, stale)
+		return &codemode.MemberRefusalError{Message: contextvalues.AppendConnectionReference(ctx, message), ConsentRequired: remedy == staleChoiceReconnect || remedy == staleChoiceReconnectThenAdmin}
+	}
+	if consent, ok := errors.AsType[catalogConsentError](b.service.validateCatalogMember(ctx, gate, member, catalogCheckRecorded)); ok {
+		message, remedy := b.service.refuseCatalogConsentCall(ctx, b.service.logger, gate, member, consent, false)
+		return catalogConsentCodeRefusal(contextvalues.AppendConnectionReference(ctx, message), remedy)
+	}
+	return nil
 }
 
 func (b *metaCodeBackend) revoke() error {
@@ -232,12 +284,14 @@ func (b *metaCodeBackend) Members(ctx context.Context) ([]codemode.Server, codem
 	}
 	servers := make([]codemode.Server, 0, len(members))
 	for _, member := range members {
-		servers = append(servers, codemode.Server{Slug: member.slug, Name: member.name})
+		servers = append(servers, codemode.Server{Slug: member.slug, Name: member.name, Connection: nil})
 	}
 	list := func(callCtx context.Context, slug string) (*codemode.Catalog, error) {
 		bound, cancel := boundToCallback(ctx, callCtx)
 		defer cancel()
-		return b.catalog(bound, gate, members, slug)
+		// The program lists every server here without naming one, so no
+		// authorization check is recorded for any of them.
+		return b.catalog(authz.WithoutChallenges(bound), gate, members, slug)
 	}
 	return servers, list, nil
 }
@@ -255,6 +309,9 @@ func (b *metaCodeBackend) List(ctx context.Context, slug string) (*codemode.Cata
 	if err != nil {
 		return nil, err
 	}
+	if _, ok := b.service.findNamedMember(ctx, gate, members, slug); !ok {
+		return nil, codemode.ErrToolUnavailable
+	}
 	return b.catalog(ctx, gate, members, slug)
 }
 
@@ -263,9 +320,9 @@ func (b *metaCodeBackend) catalog(ctx context.Context, gate *metaGateContext, me
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
-	catalog, err := b.service.describeMetaMember(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member)
+	catalog, err := b.describe(ctx, gate, member)
 	if err != nil {
-		return nil, codeHelperFailure(err)
+		return nil, b.helperFailure(ctx, gate, member, err)
 	}
 	result := &codemode.Catalog{Tools: make([]codemode.Tool, 0, len(catalog.entries)), Incomplete: catalog.incomplete}
 	for _, entry := range catalog.entries {
@@ -280,6 +337,21 @@ func (b *metaCodeBackend) catalog(ctx context.Context, gate *metaGateContext, me
 	return result, nil
 }
 
+// describe loads a member's catalog over the execution's shared sessions,
+// retrying a transient failure as a Direct listing does. The catalog host
+// already bounds concurrent member listings, so this describe takes its own
+// slot, and a member waiting to retry keeps the host's.
+func (b *metaCodeBackend) describe(ctx context.Context, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
+	described := b.service.describeMetaMemberWithRetry(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member, semaphore.NewWeighted(1))
+	if described.err != nil {
+		return nil, described.err
+	}
+	if described.catalog == nil {
+		return nil, codemode.ErrToolUnavailable
+	}
+	return described.catalog, nil
+}
+
 func (b *metaCodeBackend) Describe(ctx context.Context, path string) (*codemode.Tool, error) {
 	ctx, gate, members, err := b.current(ctx, false)
 	if err != nil {
@@ -289,13 +361,16 @@ func (b *metaCodeBackend) Describe(ctx context.Context, path string) (*codemode.
 	if err != nil {
 		return nil, codemode.ErrToolUnavailable
 	}
-	member, ok := findMetaMember(members, slug)
+	member, ok := b.service.findNamedMember(ctx, gate, members, slug)
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
-	catalog, err := b.service.describeMetaMember(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member)
+	catalog, err := b.describe(ctx, gate, member)
 	if err != nil {
-		return nil, codeHelperFailure(err)
+		if stale, ok := errors.AsType[memberStaleChoiceError](err); ok {
+			b.service.noteStaleChoiceCall(ctx, b.service.logger, gate, member, stale)
+		}
+		return nil, b.helperFailure(ctx, gate, member, err)
 	}
 	entry, ok := catalog.byName[name]
 	if !ok {
@@ -315,6 +390,8 @@ func (b *metaCodeBackend) Call(ctx context.Context, path string, arguments json.
 	// different members into one row.
 	ctx, span := b.service.tracer.Start(ctx, "gateway.code.tool_call", trace.WithNewRoot(), trace.WithLinks(trace.LinkFromContext(ctx)), trace.WithAttributes(attr.ToolName(path)))
 	defer span.End()
+	// Calls in one execution run at once, so each keeps its own reference.
+	ctx = contextvalues.WithConnectionReferenceSlot(ctx)
 	result, err := b.call(ctx, path, arguments)
 	if err != nil {
 		span.SetStatus(codes.Error, "code mode tool call failed")
@@ -332,13 +409,13 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 	callGate := *gate
 	if slug, _, splitErr := metamcp.SplitQualifiedName(path); splitErr == nil {
 		if member, ok := findMetaMember(members, slug); ok {
-			if _, consent := errors.AsType[catalogConsentError](b.service.validateCatalogMember(ctx, &callGate, member)); consent {
-				return nil, codemode.ErrConsentRequired
+			if err := b.memberCallRefusal(ctx, &callGate, member); err != nil {
+				return nil, err
 			}
 		}
 	}
 	req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID(uuid.NewString()), Method: "tools/call", Params: nil}
-	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: ""}
+	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
 	ctx = context.WithValue(ctx, metaCodeInvocationKey{}, invocation)
 	ctx = context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions)
 	raw, err := b.service.executeMetaMemberTool(ctx, b.service.logger, &callGate, members, req, path, arguments, b.meta)
@@ -346,6 +423,15 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 		failure := invocation.failure()
 		if refusal, ok := errors.AsType[*codemode.DispatchError](err); ok {
 			failure = refusal
+		}
+		// The member's own remedy names a connect page the program cannot
+		// open; point it at tools.connect, which binds the link to this user.
+		if invocation.credential {
+			if slug, _, splitErr := metamcp.SplitQualifiedName(path); splitErr == nil {
+				if member, ok := findMetaMember(members, slug); ok && codeConnectAvailable(&callGate) && callGate.memberConnectURL(member) != "" {
+					failure = &codemode.ConnectionRequiredError{Server: member.slug, ReferenceLine: contextvalues.ConnectionReferenceLine(ctx)}
+				}
+			}
 		}
 		if invocation.message != "" {
 			level := slog.LevelInfo
@@ -374,12 +460,15 @@ type metaCodeInvocationKey struct{}
 // One invocation owns this state; it is never shared across parallel callbacks.
 type metaCodeInvocation struct {
 	dispatched bool
-	// rejected marks a call refused unexecuted for a reason the program can
-	// fix: the member's own unknown-tool or invalid-params error, a hosted
-	// lookup refusal before dispatch, or hosted input-schema validation.
+	// rejected marks a call refused unexecuted: the member's own unknown-tool
+	// or invalid-params error, a hosted lookup refusal before dispatch, hosted
+	// input-schema validation, or a stale no-auth choice. A program can fix
+	// all but the stale choice.
 	rejected bool
 	// message is the member-scoped failure the program would otherwise lose.
 	message string
+	// credential marks a member failure the user fixes by connecting it.
+	credential bool
 }
 
 func (i *metaCodeInvocation) failure() error {

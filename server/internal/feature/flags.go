@@ -3,9 +3,8 @@ package feature
 type Flag string
 
 const (
-	// FlagGramMCPCatalog temporarily selects the Speakeasy MCP catalog per organization.
-	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
-
+	// FlagChannels gates the Channels rollout for an organization.
+	FlagChannels Flag = "channels"
 	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
 	// based") risk policy MVP. While set, only opted-in organizations can
 	// create or update nl-type risk policies and have them enforced. The
@@ -203,6 +202,16 @@ const (
 	// or an organization group to pause one organization.
 	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
 
+	// FlagWorkloadPlatformGitHubActions offers the GitHub Actions workload
+	// platform to an organization before its catalog entry is enabled, so it
+	// can be tried in production. Evaluated server-side when the platform
+	// catalog is listed (workloadpolicy), so the catalog reports the entry as
+	// enabled and the picker, Command K and preselected setup links offer it.
+	// Targeted by PostHog organization group (org slug). Fails closed: off,
+	// missing or failing, the entry stays "Coming soon". Removed once the entry
+	// is enabled.
+	FlagWorkloadPlatformGitHubActions Flag = "workload-platform-github-actions"
+
 	// FlagAuthClientResolver makes the typed auth client resolver
 	// authoritative for an organization's direct proxied servers. Off, the
 	// upstream client choice keeps serving and is the rollback.
@@ -230,6 +239,18 @@ const (
 	// Targeted the same way as FlagAuthClientResolver.
 	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
 
+	// FlagUpstreamIssuerFromAssociations makes an MCP server's upstream
+	// clients the source of its upstream issuer for an organization: the one
+	// provider among the server's live client associations routes its
+	// credentials and is hashed into its consent evidence, in place of the
+	// denormalized mcp_servers.remote_session_issuer_id. Off, the column
+	// keeps serving and is the rollback. Either way both values are compared
+	// wherever a request reads the server's associations and no credential
+	// choice governs; elsewhere the request is recorded as a governing choice
+	// or as not having read the associations, and keeps the column.
+	// Targeted the same way as FlagAuthClientResolver.
+	FlagUpstreamIssuerFromAssociations Flag = "upstream-issuer-from-associations"
+
 	// FlagAuthClientUpstreamSelectorWrites lets an organization write grants
 	// whose selector names upstream_client: such grants, connection owner
 	// blocks, agent keys copying them and the attachment backfill. Replicas
@@ -249,8 +270,18 @@ const (
 	// aivendors product ID of the connection's verified CIMD client, or
 	// "unknown") and "organization_id". Release conditions match on those
 	// person properties, so a harness joins or leaves the treatment by editing
-	// a condition. Fails closed to the full catalogue.
+	// a condition. Fails closed to the full catalogue. ChatGPT always gets the
+	// full catalogue, because the ChatGPT app directory rejects tools that run
+	// other tools by name.
 	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
+
+	// FlagPlatformMCPGatewayProxy lets a Platform MCP connection use the
+	// person's own MCP servers through list_my_servers, search_my_tools,
+	// describe_tools and execute_tool, which run the organization gateway's
+	// tools as that person, and names those servers in the connection's
+	// instructions. Evaluated server-side on every call with the organization
+	// ID as distinct ID. Off, unavailable or failing, the tools refuse.
+	FlagPlatformMCPGatewayProxy Flag = "platform-mcp-gateway-proxy"
 )
 
 // Variants of FlagPlatformMCPDiscoveryMode. Anything else — no variant, an

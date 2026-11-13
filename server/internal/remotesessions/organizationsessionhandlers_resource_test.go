@@ -1,6 +1,6 @@
 // clientUpstreamResource derives the RFC 8707 resource the org-admin manual
-// refresh sends: exactly one distinct non-empty upstream URL across the
-// client's MCP servers binds the audience; anything else omits it.
+// refresh sends: exactly one distinct non-empty upstream across the client's
+// MCP servers binds the audience; anything else omits it.
 
 package remotesessions
 
@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 func TestClientUpstreamResource_NoRowsReturnsEmpty(t *testing.T) {
@@ -23,68 +21,68 @@ func TestClientUpstreamResource_NoRowsReturnsEmpty(t *testing.T) {
 func TestClientUpstreamResource_SingleURLKeepsTrailingSlash(t *testing.T) {
 	t.Parallel()
 
-	rows := []repo.ListOrganizationMcpServersForClientRow{
-		{Url: "https://mcp.example.com/"},
+	resources := []string{
+		"https://mcp.example.com/",
 	}
-	require.Equal(t, "https://mcp.example.com/", clientUpstreamResource(rows))
+	require.Equal(t, "https://mcp.example.com/", clientUpstreamResource(resources))
 }
 
 func TestClientUpstreamResource_SingleURLWithoutTrailingSlashGainsNone(t *testing.T) {
 	t.Parallel()
 
-	rows := []repo.ListOrganizationMcpServersForClientRow{
-		{Url: "https://mcp.example.com"},
+	resources := []string{
+		"https://mcp.example.com",
 	}
-	require.Equal(t, "https://mcp.example.com", clientUpstreamResource(rows))
+	require.Equal(t, "https://mcp.example.com", clientUpstreamResource(resources))
 }
 
 func TestClientUpstreamResource_DuplicateURLsCollapseToShortestInAnyOrder(t *testing.T) {
 	t.Parallel()
 
-	slashed := repo.ListOrganizationMcpServersForClientRow{Url: "https://mcp.example.com/mcp/"}
-	bare := repo.ListOrganizationMcpServersForClientRow{Url: "https://mcp.example.com/mcp"}
-	require.Equal(t, "https://mcp.example.com/mcp", clientUpstreamResource([]repo.ListOrganizationMcpServersForClientRow{bare, slashed}))
-	require.Equal(t, "https://mcp.example.com/mcp", clientUpstreamResource([]repo.ListOrganizationMcpServersForClientRow{slashed, bare}))
+	slashed := "https://mcp.example.com/mcp/"
+	bare := "https://mcp.example.com/mcp"
+	require.Equal(t, "https://mcp.example.com/mcp", clientUpstreamResource([]string{bare, slashed}))
+	require.Equal(t, "https://mcp.example.com/mcp", clientUpstreamResource([]string{slashed, bare}))
 }
 
 func TestClaimableUpstream_ClaimsUpstreamVerbatim(t *testing.T) {
 	t.Parallel()
 
-	own := []repo.ListOrganizationMcpServersForClientRow{
-		{Url: "https://mcp.example.com/"},
-		{Url: "https://other.example.com/mcp"},
+	own := []string{
+		"https://mcp.example.com/",
+		"https://other.example.com/mcp",
 	}
 	resource, claimable := claimableUpstream(own, "https://mcp.example.com/")
 	require.True(t, claimable)
 	require.Equal(t, "https://mcp.example.com/", resource)
 }
 
-func TestClientUpstreamResource_NonRemoteRowsIgnored(t *testing.T) {
+func TestClientUpstreamResource_EmptyResourcesIgnored(t *testing.T) {
 	t.Parallel()
 
-	rows := []repo.ListOrganizationMcpServersForClientRow{
-		{Url: ""},
-		{Url: "https://mcp.example.com/mcp"},
+	resources := []string{
+		"",
+		"https://mcp.example.com/mcp",
 	}
-	require.Equal(t, "https://mcp.example.com/mcp", clientUpstreamResource(rows))
+	require.Equal(t, "https://mcp.example.com/mcp", clientUpstreamResource(resources))
 }
 
-func TestClientUpstreamResource_AllNonRemoteReturnsEmpty(t *testing.T) {
+func TestClientUpstreamResource_AllEmptyReturnsEmpty(t *testing.T) {
 	t.Parallel()
 
-	rows := []repo.ListOrganizationMcpServersForClientRow{
-		{Url: ""},
-		{Url: ""},
+	resources := []string{
+		"",
+		"",
 	}
-	require.Empty(t, clientUpstreamResource(rows))
+	require.Empty(t, clientUpstreamResource(resources))
 }
 
 func TestClientUpstreamResource_MultipleDistinctURLsReturnsEmpty(t *testing.T) {
 	t.Parallel()
 
-	rows := []repo.ListOrganizationMcpServersForClientRow{
-		{Url: "https://mcp.example.com/mcp"},
-		{Url: "https://other.example.com/mcp"},
+	resources := []string{
+		"https://mcp.example.com/mcp",
+		"https://other.example.com/mcp",
 	}
-	require.Empty(t, clientUpstreamResource(rows))
+	require.Empty(t, clientUpstreamResource(resources))
 }

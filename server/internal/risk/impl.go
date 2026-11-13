@@ -52,7 +52,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
@@ -144,12 +143,6 @@ type Service struct {
 
 	// approvals holds, lists and decides tool approval requests.
 	approvals *approval.Service
-	// publicationRequests records a plugin republish in the transaction that
-	// adds the approvals server to the Default plugin.
-	publicationRequests plugins.PublicationRequests
-	// pluginPublish enqueues that republish after commit. Nil when plugin
-	// publishing is not configured.
-	pluginPublish PluginPublishFunc
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
 	celEng         *celenv.Engine
@@ -167,6 +160,9 @@ type Service struct {
 	// path, the same store the batch analysis activity hydrates parts from.
 	// Optional: when nil, content-part findings are not reconstructible.
 	assetStorage blobio.Reader
+	// sessionAccess answers whether a member may read a finding's chat without
+	// chat:read, by the chat service's own owner rule. Nil in the observer.
+	sessionAccess *chat.SessionAccess
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -217,8 +213,7 @@ func NewObserver(
 		findingsCH:                   nil,
 		findingEvidence:              nil,
 		assetStorage:                 nil,
-		publicationRequests:          plugins.PublicationRequests{Enabled: false},
-		pluginPublish:                nil,
+		sessionAccess:                nil,
 	}
 }
 
@@ -301,12 +296,11 @@ func NewService(
 		findingsCH:                   findingsCH,
 		findingEvidence:              findingEvidence,
 		assetStorage:                 assetStorage,
+		sessionAccess:                chat.NewSessionAccess(logger, db, authzEngine),
 		riskRecorder:                 riskRecorder,
 		platformToolsets:             platformToolsets,
 		stokenCodec:                  stokens.NewCodec(),
 		approvals:                    approvals,
-		publicationRequests:          plugins.PublicationRequests{Enabled: false},
-		pluginPublish:                nil,
 	}
 }
 
@@ -545,7 +539,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "encode approval config").LogError(ctx, s.logger)
 	}
 
-	result, setup, err := s.createPolicy(ctx, authCtx, policycore.CreateMutation{
+	result, err := s.policies.CreatePolicy(ctx, policycore.CreateMutation{
 		Params: repo.CreateRiskPolicyParams{
 			ID:                   id,
 			ProjectID:            *authCtx.ProjectID,
@@ -582,9 +576,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, s.policyMutationError(ctx, err)
 	}
-	return s.policyWithSetup(ctx, result.Row, setup)
+	return s.policyToType(ctx, result.Row)
 }
 
 func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPoliciesPayload) (*gen.ListRiskPoliciesResult, error) {
@@ -1158,7 +1152,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, err
 	}
 
-	result, setup, err := s.updatePolicy(ctx, authCtx, policycore.UpdateMutation{
+	result, err := s.policies.UpdatePolicy(ctx, policycore.UpdateMutation{
 		Current: current,
 		Params: repo.UpdateRiskPolicyParams{
 			ID:                   id,
@@ -1198,9 +1192,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, s.policyMutationError(ctx, err)
 	}
-	return s.policyWithSetup(ctx, result.Row, setup)
+	return s.policyToType(ctx, result.Row)
 }
 
 func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskPolicyPayload) error {
@@ -1567,8 +1561,9 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 
 // UnmaskRiskResult returns the plaintext match for one risk result. Chat-backed
 // findings reconstruct it from chat data; MCP findings read encrypted evidence.
-// Both require chat:read for the result's chat, and successful reveals are
-// audited as discrete access events.
+// Both require chat:read for the result's chat, or that the member owns the
+// chat or owns or edits its agent (see requireChatRead); successful reveals are
+// audited as access events.
 func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskResultPayload) (*gen.RiskUnmaskResultResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -2535,8 +2530,9 @@ func (s *Service) platformToolsetByID(id uuid.UUID) (platformtools.Toolset, bool
 		}
 	}
 	return platformtools.Toolset{
-		Slug:  "",
-		Tools: nil,
+		Slug:          "",
+		Tools:         nil,
+		ActingContext: nil,
 	}, false
 }
 

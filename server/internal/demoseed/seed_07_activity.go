@@ -50,6 +50,41 @@ Channel context stays in the Raw view.
 
 const activityClaudeTagReplyCalls = `[{"id":"demo-tag-reply","type":"function","function":{"name":"mcp__slackbot__reply","arguments":"{\"text\":\"The release improves session transcripts and channel visibility.\",\"thread_ts\":\"demo-message-1\"}"}}]`
 
+// activityMessage is one hand-written transcript message. toolCallID pairs a
+// tool-role message with the assistant call it answers.
+type activityMessage struct {
+	key        string
+	role       string
+	content    string
+	contentRaw []byte
+	toolCalls  []byte
+	source     pgtype.Text
+	model      pgtype.Text
+	age        pgtype.Interval
+	toolCallID pgtype.Text
+}
+
+func (s *seeder) activityInsertMessages(ctx context.Context, chatID uuid.UUID, msgs []activityMessage) error {
+	for _, m := range msgs {
+		if err := s.q.ActivityInsertChatMessage(ctx, repo.ActivityInsertChatMessageParams{
+			ID:         s.det(m.key),
+			ChatID:     chatID,
+			ProjectID:  s.projectID(),
+			Role:       m.role,
+			Content:    m.content,
+			ContentRaw: m.contentRaw,
+			ToolCalls:  m.toolCalls,
+			Source:     m.source,
+			Model:      m.model,
+			ToolCallID: m.toolCallID,
+			Age:        m.age,
+		}); err != nil {
+			return fmt.Errorf("insert demo chat message %s: %w", m.key, err)
+		}
+	}
+	return nil
+}
+
 // seedActivity: Audit feed, hooks, trials, spend rules, widgets.
 func (s *seeder) seedActivity(ctx context.Context) error {
 	org := s.orgID()
@@ -59,6 +94,9 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	// Inserted in chronological order: the feed orders by seq DESC.
 	if err := s.q.ActivityDeleteAuditLogs(ctx, org); err != nil {
 		return fmt.Errorf("delete demo audit logs: %w", err)
+	}
+	if err := s.q.ActivityDeleteSecurityAuditLogs(ctx, org); err != nil {
+		return fmt.Errorf("delete demo security audit logs: %w", err)
 	}
 	for i := 12; i >= 1; i-- {
 		u := demoUsers[i%6]
@@ -93,6 +131,22 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		return fmt.Errorf("insert demo anthropic inference config: %w", err)
 	}
 
+	// A paused Vault connection demonstrates setup without credentials or outbound sync.
+	if err := s.q.ActivityDeleteGeminiComplianceConfig(ctx, org); err != nil {
+		return fmt.Errorf("delete demo Gemini compliance config: %w", err)
+	}
+	if err := s.q.ActivityInsertGeminiComplianceConfig(ctx, repo.ActivityInsertGeminiComplianceConfigParams{
+		ID: s.det("gemini-compliance-config"), OrganizationID: org, ProjectID: proj,
+		MatterID: activityText(s.det("gemini-vault-matter").String()),
+	}); err != nil {
+		return fmt.Errorf("insert demo Gemini compliance config: %w", err)
+	}
+	if err := s.q.ActivityInsertGeminiComplianceSync(ctx, repo.ActivityInsertGeminiComplianceSyncParams{
+		ID: s.det("gemini-compliance-sync"), ConfigID: s.det("gemini-compliance-config"),
+	}); err != nil {
+		return fmt.Errorf("insert demo Gemini compliance sync: %w", err)
+	}
+
 	amara := demoUsers[0]
 	jonas := demoUsers[1]
 
@@ -116,35 +170,6 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		}
 		return nil
 	}
-	type activityMessage struct {
-		key        string
-		role       string
-		content    string
-		contentRaw []byte
-		toolCalls  []byte
-		source     pgtype.Text
-		model      pgtype.Text
-		age        pgtype.Interval
-	}
-	insertMessages := func(chatID uuid.UUID, msgs []activityMessage) error {
-		for _, m := range msgs {
-			if err := s.q.ActivityInsertChatMessage(ctx, repo.ActivityInsertChatMessageParams{
-				ID:         s.det(m.key),
-				ChatID:     chatID,
-				ProjectID:  proj,
-				Role:       m.role,
-				Content:    m.content,
-				ContentRaw: m.contentRaw,
-				ToolCalls:  m.toolCalls,
-				Source:     m.source,
-				Model:      m.model,
-				Age:        m.age,
-			}); err != nil {
-				return fmt.Errorf("insert demo chat message %s: %w", m.key, err)
-			}
-		}
-		return nil
-	}
 
 	// A signed inference hook archives the conversation before the next model call.
 	chatID := s.det("anthropic-inference-chat")
@@ -152,13 +177,26 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		return err
 	}
 	chatSrc, model := activityText("claude-chat"), activityText(activityModel)
-	if err := insertMessages(chatID, []activityMessage{
+	if err := s.activityInsertMessages(ctx, chatID, []activityMessage{
 		{"anthropic-inference-prompt", "user", "Summarize the release checklist.",
-			activityTextRaw("Summarize the release checklist."), nil, chatSrc, model, activityMinutes(20)},
+			activityTextRaw("Summarize the release checklist."), nil, chatSrc, model, activityMinutes(20), activityNull},
 		{"anthropic-inference-reply", "assistant", "The checklist covers tests, rollout, and rollback readiness.",
-			activityTextRaw("The checklist covers tests, rollout, and rollback readiness."), nil, chatSrc, model, activityMinutes(19)},
+			activityTextRaw("The checklist covers tests, rollout, and rollback readiness."), nil, chatSrc, model, activityMinutes(19), activityNull},
 		{"anthropic-inference-followup", "user", "Which checks remain before rollout?",
-			activityTextRaw("Which checks remain before rollout?"), nil, chatSrc, model, activityMinutes(18)},
+			activityTextRaw("Which checks remain before rollout?"), nil, chatSrc, model, activityMinutes(18), activityNull},
+	}); err != nil {
+		return err
+	}
+
+	// Synthetic retained text chat, matching the Vault importer surface/source.
+	geminiChatID := s.det("gemini-compliance-chat")
+	geminiSource := activityText("gemini")
+	if err := insertChat(geminiChatID, jonas, "Gemini: release readiness review", geminiSource, activityNoAgent, activityHours(3), activityHours(2)); err != nil {
+		return err
+	}
+	if err := s.activityInsertMessages(ctx, geminiChatID, []activityMessage{
+		{"gemini-compliance-prompt", "user", "Draft a release readiness checklist for a staged rollout. Include rollback criteria and an owner for each check.", nil, nil, geminiSource, activityText("gemini"), activityHours(3), activityNull},
+		{"gemini-compliance-reply", "assistant", "Before rollout: the release owner confirms tests pass, operations checks dashboards, and support reviews the runbook. Start with a small cohort. Pause the rollout if error rates rise; the release owner approves rollback to the previous stable version.", nil, nil, geminiSource, activityText("gemini"), activityHours(2), activityNull},
 	}); err != nil {
 		return err
 	}
@@ -173,16 +211,16 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		return err
 	}
 	tagSrc := activityText("claude-tag")
-	if err := insertMessages(chatID, []activityMessage{
-		{"claude-tag-prompt", "user", activityClaudeTagPrompt, nil, nil, activityText("Claude In Slack"), model, activityMinutes(10)},
-		{"claude-tag-reply", "assistant", "", nil, []byte(activityClaudeTagReplyCalls), tagSrc, model, activityMinutes(9)},
-		{"claude-tag-ack", "assistant", "Replied in the thread.", nil, nil, tagSrc, model, activityMinutes(9)},
+	if err := s.activityInsertMessages(ctx, chatID, []activityMessage{
+		{"claude-tag-prompt", "user", activityClaudeTagPrompt, nil, nil, activityText("Claude In Slack"), model, activityMinutes(10), activityNull},
+		{"claude-tag-reply", "assistant", "", nil, []byte(activityClaudeTagReplyCalls), tagSrc, model, activityMinutes(9), activityNull},
+		{"claude-tag-ack", "assistant", "Replied in the thread.", nil, nil, tagSrc, model, activityMinutes(9), activityNull},
 		// Standing-owner deliveries preserve sender provenance for each turn.
 		{"claude-tag-owner-1", "user", `<system-reminder>Delivery notes stay in the Raw view.</system-reminder>
 <standing_owner_message sender="U0DEMO00001" ts="demo-standing-1" originating-ask="true">Check the rollout status.</standing_owner_message>`,
-			nil, nil, tagSrc, model, activityMinutes(8)},
+			nil, nil, tagSrc, model, activityMinutes(8), activityNull},
 		{"claude-tag-owner-2", "user", `<standing_owner_message sender="U0DEMO00003" ts="demo-standing-2" originating-ask="true">Review the rollback steps.</standing_owner_message>`,
-			nil, nil, tagSrc, model, activityMinutes(7)},
+			nil, nil, tagSrc, model, activityMinutes(7), activityNull},
 	}); err != nil {
 		return err
 	}
@@ -206,8 +244,8 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	if err := insertChat(helperID, amara, "Release checklist helper", tagSrc, releaseAgent, activityMinutes(6), activityMinutes(5)); err != nil {
 		return err
 	}
-	if err := insertMessages(helperID, []activityMessage{
-		{"claude-tag-helper-reply", "assistant", "The rollback checklist is ready for review.", nil, nil, tagSrc, model, activityMinutes(5)},
+	if err := s.activityInsertMessages(ctx, helperID, []activityMessage{
+		{"claude-tag-helper-reply", "assistant", "The rollback checklist is ready for review.", nil, nil, tagSrc, model, activityMinutes(5), activityNull},
 	}); err != nil {
 		return err
 	}
@@ -220,14 +258,14 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		return fmt.Errorf("insert demo claude tag session link: %w", err)
 	}
 
-	// One dashboard session per assistant: the bound one names its agent and the
-	// member it acted for; the legacy one links to the assistant itself.
-	sessions := []struct{ fixture, title string }{
-		{"bound", "Weekly project activity summary"},
-		{"legacy", "Open risk findings recap"},
+	// The Slackbot session names its agent and the member it acted for; the
+	// legacy dashboard session links to the assistant itself.
+	sessions := []struct{ fixture, title, surface string }{
+		{"bound", "Weekly project activity summary from Slack", "speakeasy-slack"},
+		{"legacy", "Open risk findings recap", ""},
 	}
 	for _, sess := range sessions {
-		if err := insertChat(s.det("assistant-session-"+sess.fixture), jonas, sess.title, activityNull, activityNoAgent, activityMinutes(40), activityMinutes(38)); err != nil {
+		if err := insertChat(s.det("assistant-session-"+sess.fixture), jonas, sess.title, pgtype.Text{String: sess.surface, Valid: sess.surface != ""}, activityNoAgent, activityMinutes(40), activityMinutes(38)); err != nil {
 			return err
 		}
 	}
@@ -242,18 +280,23 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		if m.role == "assistant" {
 			age = activityMinutes(39)
 		}
-		if err := insertMessages(s.det("assistant-session-"+m.fixture), []activityMessage{
-			{"assistant-session-" + m.fixture + "-" + m.role, m.role, m.content, nil, nil, activityNull, activityNull, age},
+		if err := s.activityInsertMessages(ctx, s.det("assistant-session-"+m.fixture), []activityMessage{
+			{"assistant-session-" + m.fixture + "-" + m.role, m.role, m.content, nil, nil, activityNull, activityNull, age, activityNull},
 		}); err != nil {
 			return err
 		}
 	}
 	for _, fixture := range []string{"bound", "legacy"} {
+		sourceKind := "dashboard"
+		if fixture == "bound" {
+			sourceKind = "speakeasy_slack"
+		}
 		if err := s.q.ActivityInsertAssistantThread(ctx, repo.ActivityInsertAssistantThreadParams{
 			ID:            s.det("assistant-thread-" + fixture),
 			AssistantID:   s.det("assistant-" + fixture),
 			ProjectID:     proj,
-			CorrelationID: "demo-dashboard-" + fixture,
+			CorrelationID: "demo-" + sourceKind + "-" + fixture,
+			SourceKind:    sourceKind,
 			ChatID:        s.det("assistant-session-" + fixture),
 		}); err != nil {
 			return fmt.Errorf("insert demo assistant thread %s: %w", fixture, err)
@@ -327,6 +370,39 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		SubjectID:      s.det("killswitch-expired").String(),
 	}); err != nil {
 		return fmt.Errorf("insert demo killswitch expired audit log: %w", err)
+	}
+
+	// Legacy security activity: Kit runtimes used to log admitting and
+	// withdrawing their own workload identity on each start and teardown, and
+	// no longer do. Kept days old so the security log shows historical entries
+	// rather than fresh ones from a producer that no longer writes them. One
+	// admission by another agent in between gives the feed both a grouped run
+	// and a lone entry. Inserted oldest first, since the feed orders by insertion.
+	securityRows := []struct {
+		key, agent, runtime, action string
+		age                         pgtype.Interval
+	}{
+		{"runtime-1-admit", "managed-agent-4", "runtime-1", "workload-admission:admit", activityDays(14)},
+		{"runtime-1-withdraw", "managed-agent-4", "runtime-1", "workload-admission:withdraw", activityDays(13)},
+		{"runtime-2-admit", "managed-agent-1", "runtime-2", "workload-admission:admit", activityDays(12)},
+		{"runtime-3-admit", "managed-agent-4", "runtime-3", "workload-admission:admit", activityDays(11)},
+		{"runtime-3-withdraw", "managed-agent-4", "runtime-3", "workload-admission:withdraw", activityDays(10)},
+		{"runtime-4-admit", "managed-agent-4", "runtime-4", "workload-admission:admit", activityDays(9)},
+	}
+	for _, r := range securityRows {
+		account := s.det("security-" + r.runtime + "-account")
+		if err := s.q.ActivityInsertSecurityAuditLog(ctx, repo.ActivityInsertSecurityAuditLogParams{
+			ID:                 s.det("audit-security-" + r.key),
+			OrganizationID:     org,
+			ProjectID:          proj,
+			ActorID:            s.det(r.agent).String(),
+			Action:             r.action,
+			SubjectID:          s.det("security-" + r.runtime + "-admission").String(),
+			SubjectDisplayName: fmt.Sprintf("system:serviceaccount:assistants:kit-%x", account[:8]),
+			Age:                r.age,
+		}); err != nil {
+			return fmt.Errorf("insert demo security audit log %s: %w", r.key, err)
+		}
 	}
 
 	// Spend rules calibrated to the seeded ClickHouse usage (top spenders in

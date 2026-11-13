@@ -1,6 +1,6 @@
 # Decision
 
-Whether the local hook should allow or deny the action.
+Whether the local hook should allow or deny the action. "ask" (tool calls from Claude Cowork only) asks the person to allow the call in the agent's own permission prompt; a client that does not support it must deny.
 
 ## Example Usage
 
@@ -22,3 +22,4 @@ custom := components.Decision("custom_value")
 | --------------- | --------------- |
 | `DecisionAllow` | allow           |
 | `DecisionDeny`  | deny            |
+| `DecisionAsk`   | ask             |

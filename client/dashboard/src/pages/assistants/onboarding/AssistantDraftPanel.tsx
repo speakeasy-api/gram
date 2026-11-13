@@ -1,3 +1,5 @@
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 import { AssistantSessionsList } from "@/components/assistants/sessions-list";
 import { EditInstructionsDialog } from "@/components/assistants/edit-instructions-dialog";
 import { RequireScope } from "@/components/require-scope";
@@ -17,11 +19,11 @@ import { useTriggers } from "@gram/client/react-query/triggers.js";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
 import { AssistantMCPServersSection } from "./AssistantMCPServersSection";
 import { AssistantIdentitySettings } from "./AssistantIdentitySettings";
+import { AssistantUpstreamCredentials } from "./AssistantUpstreamCredentials";
 import { AssistantOverviewSettings } from "./AssistantOverviewSettings";
 import { useRBAC } from "@/hooks/useRBAC";
 import { AssistantSkillsSection } from "./AssistantSkillsSection";
@@ -134,7 +136,7 @@ export function AssistantDraftPanel(): JSX.Element {
             disabled={del.isPending}
           >
             {del.isPending ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Spinner className="mr-0 h-3 w-3" label="Deleting assistant" />
             ) : (
               <Icon name="trash" className="h-3 w-3" />
             )}
@@ -143,9 +145,16 @@ export function AssistantDraftPanel(): JSX.Element {
       </div>
 
       {!a ? (
-        <Stack align="center" justify="center" className="flex-1 py-12">
-          <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-        </Stack>
+        <div
+          role="status"
+          aria-label="Loading assistant"
+          className="flex-1 space-y-4 px-4 py-4"
+        >
+          <Skeleton className="h-8 w-64 max-w-full" />
+          <Skeleton className="h-5 w-48 max-w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
       ) : (
         <Tabs
           value={activeTab}
@@ -221,11 +230,13 @@ export function AssistantDraftPanel(): JSX.Element {
             value="identity"
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
           >
-            <AssistantIdentitySettings
-              key={a.id}
-              assistant={a}
-              onUpdated={() => void draft.refetchAssistant()}
-            />
+            <Stack gap={6}>
+              <AssistantIdentitySettings key={a.id} assistant={a} />
+              <AssistantUpstreamCredentials
+                assistantId={a.id}
+                canWrite={canWrite}
+              />
+            </Stack>
           </TabsContent>
 
           <TabsContent

@@ -48,7 +48,7 @@ func internalSessionIssuerNextStep(state internalsessionissuers.State, canEnable
 func registerInternalSessionIssuerTool(reg *Registrar, reader Reader) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_internal_session_issuer",
-		Title:       "Get Speakeasy Issuer",
+		Title:       "Get Speakeasy's Sign-In Issuer",
 		Description: "Read this organization's Speakeasy issuer URI for enterprise-managed authorization. An administrator registers that URI with a supported service so Speakeasy can sign in to it for users. Reports the issuer's state and the next step. Read-only: it never signs anything and does not prove the service trusts the issuer. Requires an external organization administrator.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, DiscoveryScopes: nil, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, InternalSessionIssuerStatus, error) {

@@ -5,29 +5,35 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 const (
-	// connectionCatalogVersion identifies the immutable record format.
+	// connectionCatalogVersion identifies the record format.
 	connectionCatalogVersion = 1
-	// connectionCatalogMaxBytes bounds one immutable Redis value to 16 MiB.
+	// connectionCatalogMaxBytes bounds one Redis value to 16 MiB.
 	connectionCatalogMaxBytes = 16 << 20
 )
 
@@ -37,7 +43,40 @@ var errConnectionCatalogExpired = errors.New("connection catalog expired; give c
 var errConnectionCatalogTooLarge = errors.New("approved tool definitions exceed the supported size")
 
 // catalogMemberNotApproved explains a member outside the approved catalog.
-const catalogMemberNotApproved = "This server was not approved. Give consent again to add it."
+const catalogMemberNotApproved = "This server was not approved. Reconnect this gateway in your AI app to add it."
+
+// consentRejectionReason is the log reason for an approval that cannot serve a
+// request. Clients see only a sign-in challenge or consent_required, so these
+// values are how operators tell the causes apart.
+type consentRejectionReason string
+
+const (
+	// consentRejectionNoCatalogReference is a gateway session without an approval reference.
+	consentRejectionNoCatalogReference consentRejectionReason = "catalog_reference_missing"
+
+	// consentRejectionCatalogNotFound is an approval missing from the store. The
+	// store drops a record at its expiry, so this covers both expiry and eviction.
+	consentRejectionCatalogNotFound consentRejectionReason = "catalog_not_found"
+
+	// consentRejectionCatalogUnreadable is a stored approval that is oversized or does not decode.
+	consentRejectionCatalogUnreadable consentRejectionReason = "catalog_unreadable"
+
+	// consentRejectionCatalogBindingMismatch is an approval bound to another
+	// version, organization, issuer, gateway, subject, or OAuth client.
+	consentRejectionCatalogBindingMismatch consentRejectionReason = "catalog_binding_mismatch"
+
+	// consentRejectionCatalogExpired is an approval past its recorded expiry.
+	consentRejectionCatalogExpired consentRejectionReason = "catalog_expired"
+
+	// consentRejectionMemberNotApproved is a member the approval does not name for its current server and project.
+	consentRejectionMemberNotApproved consentRejectionReason = "member_not_approved"
+
+	// consentRejectionAuthenticationChanged is a proxied member whose upstream client or registration changed.
+	consentRejectionAuthenticationChanged consentRejectionReason = "authentication_changed"
+
+	// consentRejectionConfigurationChanged is a member whose stored configuration hash changed.
+	consentRejectionConfigurationChanged consentRejectionReason = "configuration_changed"
+)
 
 // connectionCatalogMember identifies the route and client verified at consent.
 type connectionCatalogMember struct {
@@ -47,9 +86,39 @@ type connectionCatalogMember struct {
 	ProjectID uuid.UUID `json:"project_id"`
 	// BackendHash detects changes to destinations, headers, and server settings.
 	BackendHash string `json:"backend_hash"`
+	// TypedBackendHash detects the same changes without a proxied member's
+	// derived authorization server. It is what the approval is compared on
+	// where typed auth clients choose upstream authentication; an approval
+	// stored before it was recorded has none.
+	TypedBackendHash string `json:"typed_backend_hash,omitempty"`
 	// Auth binds a proxied member's shared-runtime choice; hosted members use
 	// their toolset's authentication and leave this nil.
 	Auth *connectionCatalogAuth `json:"auth,omitempty"`
+}
+
+// configurationChanged reports whether the member's stored configuration
+// differs from the one approved. With typed, the organization chooses
+// upstream authentication through typed auth clients, so an approval that
+// recorded the fingerprint without the derived authorization server is
+// compared on that one.
+func (m connectionCatalogMember) configurationChanged(current memberConfiguration, typed bool) bool {
+	compared := current.forMode(m.typedCompared(typed))
+	return compared == "" || compared != m.approvedHash(typed)
+}
+
+// typedCompared reports whether the member is compared on its typed
+// fingerprint: the organization chooses upstream authentication through typed
+// auth clients and the approval recorded one.
+func (m connectionCatalogMember) typedCompared(typed bool) bool {
+	return typed && m.TypedBackendHash != ""
+}
+
+// approvedHash is the approved fingerprint the member is compared on.
+func (m connectionCatalogMember) approvedHash(typed bool) string {
+	if m.typedCompared(typed) {
+		return m.TypedBackendHash
+	}
+	return m.BackendHash
 }
 
 type connectionCatalogAuth struct {
@@ -57,12 +126,15 @@ type connectionCatalogAuth struct {
 	RegistrationID uuid.NullUUID `json:"registration_id"`
 }
 
-// connectionCatalog is immutable data, bound to one approved OAuth connection.
+// connectionCatalog freezes discovery for one approved OAuth connection.
+// Explicit member reconnect consent can update just that member.
 // Session validation and live authorization remain separate from this record.
 type connectionCatalog struct {
 	// Version controls the stored data contract.
 	Version int `json:"version"`
-	// ID identifies this exact immutable catalog.
+	// ApprovalChallengeID recognizes a committed reconnect after a cache-write failure.
+	ApprovalChallengeID string `json:"approval_challenge_id,omitempty"`
+	// ID identifies this connection's catalog.
 	ID uuid.UUID `json:"id"`
 	// OrganizationID isolates the record's tenant.
 	OrganizationID string `json:"organization_id"`
@@ -90,16 +162,10 @@ func connectionCatalogKey(organizationID string, id uuid.UUID) string {
 
 func (c connectionCatalog) CacheKey() string { return connectionCatalogKey(c.OrganizationID, c.ID) }
 
-// publishConnectionCatalog completes all fallible catalog work while the
+// approveInitialConnectionCatalog completes all fallible catalog work while the
 // challenge remains retryable. A losing approval may leave an unreferenced
 // record, which expires; an authorization code never names a partial record.
-func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, allTools bool, upstreamPicks map[uuid.UUID]uuid.UUID, durationHours int, now time.Time) (*toolfilter.CatalogReference, error) {
-	if inventory == nil || !inventory.Complete || inventory.StateID != state.ID || inventory.Resource != endpointToolSelectionResource(endpoint) {
-		return nil, fmt.Errorf("a completed gateway catalog is required; reload consent")
-	}
-	if state.Subject == nil || state.Subject.IsZero() || (mode != toolfilter.CatalogModeCached && mode != toolfilter.CatalogModeLive) {
-		return nil, fmt.Errorf("invalid connection catalog approval")
-	}
+func (s *Service) approveInitialConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, allTools bool, upstreamPicks map[uuid.UUID]uuid.UUID, durationHours int, now time.Time) (*toolfilter.CatalogReference, error) {
 	issuer, err := usersessionsrepo.New(s.db).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
 		ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 	})
@@ -114,6 +180,75 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 	if durationHours > 0 {
 		lifetime = min(lifetime, time.Duration(durationHours)*time.Hour)
 	}
+	catalog, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.ClientID, inventory, selection, mode, upstreamPicks, now.Add(lifetime+userSessionGrantTTL))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.publishConnectionCatalog(ctx, catalog, now); err != nil {
+		return nil, err
+	}
+	return &toolfilter.CatalogReference{ID: catalog.ID, Mode: mode, AllTools: allTools}, nil
+}
+
+// Publish an immutable snapshot before committing its reference. A losing
+// approval can leave an unreferenced snapshot, which expires naturally.
+func (s *Service) publishConnectionCatalog(ctx context.Context, catalog *connectionCatalog, now time.Time) error {
+	ttl := catalog.ExpiresAt.Sub(now)
+	if ttl <= 0 {
+		return errConnectionCatalogExpired
+	}
+	raw, err := catalog.marshal()
+	if err != nil {
+		return err
+	}
+	conditional, ok := s.connectionCatalogCache.(cache.ConditionalCache)
+	if !ok {
+		return fmt.Errorf("connection catalog store does not support atomic publication")
+	}
+	stored, err := conditional.SetIfAbsent(ctx, catalog.CacheKey(), raw, ttl)
+	if err != nil {
+		return fmt.Errorf("publish connection catalog: %w", err)
+	}
+	if !stored {
+		return fmt.Errorf("connection catalog publication conflict")
+	}
+	return nil
+}
+
+// upstreamChoices records only reviewed members, even when their issuer also
+// serves other gateways. An empty scope must stay non-nil: nil means issuer-wide.
+func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID, typedOnly bool) usersessionsrepo.RecordUpstreamClientSelectionsParams {
+	picks := usersessionsrepo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: c.IssuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        credentialID,
+		Source:              upstreamclients.SelectionSourceIssuance,
+		ScopeMcpServerIds:   make([]uuid.UUID, 0, len(c.Members)),
+		PickedMcpServerIds:  nil,
+		PickedClientIds:     nil,
+		PickedAuthClientIds: nil,
+		TypedOnly:           typedOnly,
+	}
+	for _, member := range c.Members {
+		picks.ScopeMcpServerIds = append(picks.ScopeMcpServerIds, member.ServerID)
+		if member.Auth != nil {
+			picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, member.ServerID)
+			picks.PickedClientIds = append(picks.PickedClientIds, member.Auth.RegistrationID.UUID)
+			picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, member.Auth.ClientID)
+		}
+	}
+	return picks
+}
+
+// freezeConnectionCatalog validates the captured routes, credentials and tool
+// definitions for both initial approval and a member's reconnect approval.
+func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, clientID string, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, upstreamPicks map[uuid.UUID]uuid.UUID, expiresAt time.Time) (*connectionCatalog, error) {
+	if inventory == nil || !inventory.Complete || inventory.StateID != state.ID || inventory.Resource != endpointToolSelectionResource(endpoint) {
+		return nil, fmt.Errorf("a completed gateway catalog is required; reload consent")
+	}
+	if state.Subject == nil || state.Subject.IsZero() || (mode != toolfilter.CatalogModeCached && mode != toolfilter.CatalogModeLive) {
+		return nil, fmt.Errorf("invalid connection catalog approval")
+	}
 	ids := make([]uuid.UUID, 0, len(inventory.MemberBindings))
 	seen := make(map[uuid.UUID]bool, len(inventory.MemberBindings))
 	for _, member := range inventory.MemberBindings {
@@ -123,25 +258,39 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 		seen[member.ServerID] = true
 		ids = append(ids, member.ServerID)
 	}
-	hashes, err := s.catalogMemberConfigurations(ctx, endpoint.OrganizationID, ids)
+	hashes, otherHashes, err := s.catalogMemberConfigurations(ctx, endpoint.OrganizationID, ids)
 	if err != nil {
 		return nil, err
 	}
+	typedChoices, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	// Each member's credential is judged for the consenting person, as their
+	// requests will be.
+	subjectCtx, err := s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("stamp consent subject context: %w", err)
+	}
+	subjectCtx = withMandatoryAdmission(subjectCtx)
 	members := make(map[string]connectionCatalogMember, len(inventory.MemberBindings))
 	for slug, member := range inventory.MemberBindings {
-		if member.ServerID == uuid.Nil || hashes[member.ServerID] != member.BackendHash {
+		if member.ServerID != uuid.Nil {
+			typedCompared := member.typedCompared(typedChoices)
+			s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+				organizationID: endpoint.OrganizationID,
+				serverID:       member.ServerID,
+				site:           upstreamIssuerReconsentSiteCatalogFreeze,
+				consenter:      state.Subject.String(),
+				outcome:        upstreamIssuerReconsent(member.approvedHash(typedChoices), hashes[member.ServerID].forMode(typedCompared), otherHashes[member.ServerID].forMode(typedCompared), nil),
+			})
+		}
+		if member.ServerID == uuid.Nil || member.configurationChanged(hashes[member.ServerID], typedChoices) {
 			return nil, errConsentConfigurationChanged
 		}
 		if member.Auth != nil {
-			if member.Auth.RegistrationID.UUID != upstreamPicks[member.ServerID] {
-				return nil, errConsentConfigurationChanged
-			}
-			resolved, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.RegistrationID, *state.Subject)
-			if err != nil {
+			if err := s.validateCatalogMemberAuth(subjectCtx, endpoint, *state.Subject, member, upstreamPicks, typedChoices); err != nil {
 				return nil, err
-			}
-			if resolved.outcome == authClientGap || resolved.outcome == authClientNoAccess || resolved.clientID != member.Auth.ClientID {
-				return nil, errConsentConfigurationChanged
 			}
 		}
 		members[slug] = member
@@ -166,58 +315,87 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 	}
 	slices.SortFunc(tools, func(a, b *toolListEntry) int { return strings.Compare(a.Name, b.Name) })
 	catalog := connectionCatalog{
-		Version: connectionCatalogVersion, ID: uuid.New(), OrganizationID: endpoint.OrganizationID,
-		IssuerID: endpoint.UserSessionIssuerID, ClientID: state.ClientID, Subject: *state.Subject,
+		Version: connectionCatalogVersion, ApprovalChallengeID: "", ID: uuid.New(), OrganizationID: endpoint.OrganizationID,
+		IssuerID: endpoint.UserSessionIssuerID, ClientID: clientID, Subject: *state.Subject,
 		Resource: inventory.Resource, Members: members, MemberOutcomes: outcomes, Tools: tools,
-		ExpiresAt: now.Add(lifetime + userSessionGrantTTL),
+		ExpiresAt: expiresAt,
 	}
-	raw, err := json.Marshal(catalog)
+	return &catalog, nil
+}
+
+func (c *connectionCatalog) marshal() ([]byte, error) {
+	raw, err := json.Marshal(c)
 	if err != nil {
 		return nil, fmt.Errorf("encode approved catalog: %w", err)
 	}
 	if len(raw) > connectionCatalogMaxBytes {
-		return nil, fmt.Errorf("%w (%d bytes)", errConnectionCatalogTooLarge, connectionCatalogMaxBytes)
+		return nil, errConnectionCatalogTooLarge
 	}
-	conditional, ok := s.connectionCatalogCache.(cache.ConditionalCache)
-	if !ok {
-		return nil, fmt.Errorf("connection catalog store does not support atomic publication")
-	}
-	stored, err := conditional.SetIfAbsent(ctx, catalog.CacheKey(), raw, catalog.ExpiresAt.Sub(now))
-	if err != nil {
-		return nil, fmt.Errorf("publish connection catalog: %w", err)
-	}
-	if !stored {
-		return nil, fmt.Errorf("connection catalog publication conflict")
-	}
-	return &toolfilter.CatalogReference{ID: catalog.ID, Mode: mode, AllTools: allTools}, nil
+	return raw, nil
 }
 
 // loadConnectionCatalog never substitutes a live upstream fetch for a missing
 // snapshot. A cache outage is an operational error; eviction needs consent.
 func (s *Service) loadConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, reference *toolfilter.CatalogReference, now time.Time) (*connectionCatalog, error) {
 	if reference == nil || reference.ID == uuid.Nil {
-		return nil, errConnectionCatalogExpired
+		return nil, s.rejectConnectionCatalog(ctx, endpoint, reference, consentRejectionNoCatalogReference, nil, time.Time{})
 	}
 	var raw []byte
 	err := s.connectionCatalogCache.Get(ctx, connectionCatalogKey(endpoint.OrganizationID, reference.ID), &raw)
 	if errors.Is(err, redisCache.ErrCacheMiss) {
-		return nil, errConnectionCatalogExpired
+		return nil, s.rejectConnectionCatalog(ctx, endpoint, reference, consentRejectionCatalogNotFound, nil, time.Time{})
 	}
 	if err != nil {
 		return nil, fmt.Errorf("load connection catalog: %w", err)
 	}
 	var catalog connectionCatalog
 	if len(raw) > connectionCatalogMaxBytes || json.Unmarshal(raw, &catalog) != nil {
-		return nil, errConnectionCatalogExpired
-	}
-	if catalog.Version != connectionCatalogVersion || catalog.ID != reference.ID || catalog.OrganizationID != endpoint.OrganizationID || catalog.IssuerID != endpoint.UserSessionIssuerID || catalog.Resource != endpointToolSelectionResource(endpoint) || catalog.Subject != subject || !now.Before(catalog.ExpiresAt) {
-		return nil, errConnectionCatalogExpired
+		return nil, s.rejectConnectionCatalog(ctx, endpoint, reference, consentRejectionCatalogUnreadable, nil, time.Time{})
 	}
 	clientID, _ := contextvalues.GetOAuthClientID(ctx)
-	if catalog.ClientID != clientID {
-		return nil, errConnectionCatalogExpired
+	bindings := map[string]bool{
+		"version_matches":      catalog.Version == connectionCatalogVersion,
+		"id_matches":           catalog.ID == reference.ID,
+		"organization_matches": catalog.OrganizationID == endpoint.OrganizationID,
+		"issuer_matches":       catalog.IssuerID == endpoint.UserSessionIssuerID,
+		"resource_matches":     catalog.Resource == endpointToolSelectionResource(endpoint),
+		"subject_matches":      catalog.Subject == subject,
+		"client_matches":       catalog.ClientID == clientID,
+	}
+	for _, matches := range bindings {
+		if !matches {
+			return nil, s.rejectConnectionCatalog(ctx, endpoint, reference, consentRejectionCatalogBindingMismatch, bindings, catalog.ExpiresAt)
+		}
+	}
+	if !now.Before(catalog.ExpiresAt) {
+		return nil, s.rejectConnectionCatalog(ctx, endpoint, reference, consentRejectionCatalogExpired, nil, catalog.ExpiresAt)
 	}
 	return &catalog, nil
+}
+
+// rejectConnectionCatalog logs why a stored approval cannot serve this request
+// before callers turn it into a bare sign-in challenge. It returns the shared
+// sentinel unchanged: its text reaches clients in WWW-Authenticate.
+func (s *Service) rejectConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, reference *toolfilter.CatalogReference, reason consentRejectionReason, bindings map[string]bool, expiresAt time.Time) error {
+	attrs := []slog.Attr{
+		attr.SlogReason(string(reason)),
+		attr.SlogOrganizationID(endpoint.OrganizationID),
+		attr.SlogProjectID(endpoint.ProjectID.String()),
+	}
+	if endpoint.MetaMcpServerID.Valid {
+		attrs = append(attrs, attr.SlogMetaMcpServerID(endpoint.MetaMcpServerID.UUID.String()))
+	}
+	if reference != nil {
+		attrs = append(attrs, attr.SlogMcpConsentCatalogID(reference.ID.String()), attr.SlogMcpConsentCatalogMode(string(reference.Mode)))
+	}
+	if bindings != nil {
+		attrs = append(attrs, attr.SlogMcpConsentComparisons(bindings))
+	}
+	if !expiresAt.IsZero() {
+		attrs = append(attrs, attr.SlogMcpConsentExpiresAt(expiresAt))
+	}
+	s.logger.LogAttrs(ctx, slog.LevelInfo, "gateway connection catalog rejected", attrs...)
+	return errConnectionCatalogExpired
 }
 
 // describeCachedMember applies current tool permissions to stored definitions.
@@ -303,14 +481,25 @@ func (c *connectionCatalog) approvedMembers(members []metaMember) (approved, una
 	return approved, unapproved
 }
 
+// catalogCheckRecording says whether a member check counts toward the re-consent forecast and writes diagnostics.
+type catalogCheckRecording string
+
+const (
+	// catalogCheckRecorded gates a real list, describe or call.
+	catalogCheckRecorded catalogCheckRecording = "recorded"
+	// catalogCheckUnrecorded only reads a member's state for status.
+	catalogCheckUnrecorded catalogCheckRecording = "unrecorded"
+)
+
 // validateCatalogMember prevents a changed destination from inheriting consent.
-func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateContext, member metaMember) error {
+func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateContext, member metaMember, recording catalogCheckRecording) error {
 	if gate.catalog == nil {
 		return nil
 	}
 	approved, found := gate.catalog.Members[member.slug]
 	if !found || approved.ServerID != member.serverID || approved.ProjectID != member.projectID {
-		return catalogConsentError{&metaMemberError{message: catalogMemberNotApproved}}
+		return s.rejectCatalogMember(ctx, gate, member, recording, consentRejectionMemberNotApproved, catalogMemberNotApproved,
+			map[string]bool{"member_recorded": found, "server_id_matches": found && approved.ServerID == member.serverID, "project_id_matches": found && approved.ProjectID == member.projectID})
 	}
 
 	if member.backend == metaMemberBackendProxied && (gate.execute || gate.catalogRef.Mode == toolfilter.CatalogModeLive) {
@@ -322,32 +511,259 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 			return member.upstreamUnavailable
 		}
 		if approved.Auth == nil || approved.Auth.RegistrationID != member.chosenClientID || approved.Auth.ClientID != clientID {
-			return catalogConsentError{&metaMemberError{message: "This server's authentication changed. Give consent again to approve it."}}
+			return s.rejectCatalogMember(ctx, gate, member, recording, consentRejectionAuthenticationChanged, "This server's authentication changed. Reconnect this gateway in your AI app to approve it.",
+				map[string]bool{"auth_recorded": approved.Auth != nil, "registration_id_matches": approved.Auth != nil && approved.Auth.RegistrationID == member.chosenClientID, "auth_client_id_matches": approved.Auth != nil && approved.Auth.ClientID == clientID})
 		}
 	}
-	if member.configurationHash == "" || member.configurationHash != approved.BackendHash {
-		return catalogConsentError{&metaMemberError{message: "This server's configuration changed. Give consent again to approve it."}}
+	typedChoices, err := s.consentAuthChoicesEnforced(ctx, gate.organizationID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "read upstream auth enforcement for an approved member", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+		return memberDiscoveryError{metaMemberError: &metaMemberError{message: connectionNotCheckedMessage}, status: 0, retryable: false, retryAfter: 0}
+	}
+	typedCompared := approved.typedCompared(typedChoices)
+	if recording == catalogCheckRecorded {
+		s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+			organizationID: gate.organizationID,
+			serverID:       member.serverID,
+			site:           upstreamIssuerReconsentSiteCatalogMember,
+			consenter:      gate.userID,
+			outcome:        upstreamIssuerReconsent(approved.approvedHash(typedChoices), member.configuration.forMode(typedCompared), member.otherConfiguration.forMode(typedCompared), nil),
+		})
+	}
+	if approved.configurationChanged(member.configuration, typedChoices) {
+		return s.rejectCatalogMember(ctx, gate, member, recording, consentRejectionConfigurationChanged, "This server's configuration changed. Reconnect this gateway in your AI app to approve it.",
+			map[string]bool{"configuration_hash_present": member.configuration.hash != "", "approved_hash_recorded": approved.BackendHash != "", "typed_compared": typedCompared})
 	}
 	return nil
 }
 
+// Log before discovery collapses the refusal into consent_required. Keep the
+// record to correlation IDs and comparison results: never log the catalog,
+// credentials, configuration hashes, headers, or tool definitions.
+func (s *Service) rejectCatalogMember(ctx context.Context, gate *metaGateContext, member metaMember, recording catalogCheckRecording, reason consentRejectionReason, message string, comparisons map[string]bool) error {
+	err := catalogConsentError{metaMemberError: &metaMemberError{message: message}, reason: reason}
+	if recording != catalogCheckRecorded {
+		return err
+	}
+	if gate.consentDiagnostics != nil {
+		key := consentDiagnosticKey{catalogID: gate.catalog.ID, memberID: member.serverID, reason: reason}
+		if _, seen := gate.consentDiagnostics.seen.LoadOrStore(key, struct{}{}); seen {
+			return err
+		}
+	}
+	catalogMode := ""
+	if gate.catalogRef != nil {
+		catalogMode = string(gate.catalogRef.Mode)
+	}
+	s.logger.LogAttrs(ctx, slog.LevelInfo, "gateway consent validation failed",
+		attr.SlogMetaMcpServerID(gate.metaServerID.String()),
+		attr.SlogMcpServerID(member.serverID.String()),
+		attr.SlogProjectID(gate.projectID.String()),
+		attr.SlogMcpConsentMemberProjectID(member.projectID.String()),
+		attr.SlogReason(string(reason)),
+		attr.SlogMcpConsentCatalogID(gate.catalog.ID.String()),
+		attr.SlogMcpConsentCatalogMode(catalogMode),
+		attr.SlogMcpConsentDiscoveryMode(string(gate.discoveryMode)),
+		attr.SlogMcpConsentExecute(gate.execute),
+		attr.SlogMcpConsentComparisons(comparisons))
+	return err
+}
+
+// A Code Mode execution can validate the same member concurrently through
+// several helpers. Keep its diagnostic set shared across refreshed gate copies.
+type consentDiagnostics struct{ seen sync.Map }
+
+type consentDiagnosticKey struct {
+	catalogID uuid.UUID
+	memberID  uuid.UUID
+	reason    consentRejectionReason
+}
+
 // catalogConsentError is a member whose approval no longer matches it. Only a
 // new consent fixes it; retrying or changing the call cannot.
-type catalogConsentError struct{ *metaMemberError }
+type catalogConsentError struct {
+	*metaMemberError
+
+	// reason names which part of the approval no longer matches.
+	reason consentRejectionReason
+}
 
 func (e catalogConsentError) Unwrap() error { return e.metaMemberError }
 
-func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID]string, error) {
-	hashes := make(map[uuid.UUID]string, len(ids))
+// needsNewConsent reports a consent mismatch or a stale choice; the latter may need an administrator instead.
+func needsNewConsent(err error) bool {
+	if _, consent := errors.AsType[catalogConsentError](err); consent {
+		return true
+	}
+	_, stale := errors.AsType[memberStaleChoiceError](err)
+	return stale
+}
+
+// catalogConsentRemedy says who can restore a member's approval. A new consent restores it
+// unless consent would offer the person no usable connection; then only an administrator can.
+// It is unchecked when that lookup fails.
+func (s *Service) catalogConsentRemedy(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) staleChoiceRemedy {
+	authentication := gate.authentication
+	switch {
+	case authentication == nil || authentication.subject.Kind != urn.SessionSubjectKindUser:
+		// Whoever approved this connection gives consent again.
+		return staleChoiceReconnect
+	case !authentication.refreshableUserSession, gate.memberChoices == nil:
+		return staleChoiceReconnectThenAdmin
+	case member.backend != metaMemberBackendProxied:
+		return staleChoiceReconnect
+	}
+	fixable, err := s.consentCanReplaceChoice(ctx, gate, member)
+	switch {
+	case err != nil:
+		logger.WarnContext(ctx, "check whether consent can approve a changed member", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+		return staleChoiceUnchecked
+	case fixable:
+		return staleChoiceReconnect
+	}
+	return staleChoiceAskAdmin
+}
+
+// catalogConsentMessage names the server when server is set; Code Mode carries the untrusted slug separately.
+// An unchecked remedy reads as reconnect, then ask an administrator.
+func catalogConsentMessage(server string, reason consentRejectionReason, remedy staleChoiceRemedy, person bool) string {
+	what := "settings"
+	if reason == consentRejectionAuthenticationChanged {
+		what = "sign-in"
+	}
+	subject := fmt.Sprintf("The %s for this server", what)
+	if server != "" {
+		subject = fmt.Sprintf("The %s for the %q server", what, server)
+	}
+	switch {
+	case !person:
+		return subject + " changed since this connection was approved. Ask whoever set up this connection to approve it again."
+	case remedy == staleChoiceAskAdmin:
+		return subject + " changed, and you can't approve it again yourself. Ask your administrator to finish setting it up or give you access."
+	case remedy == staleChoiceReconnectThenAdmin, remedy == staleChoiceUnchecked:
+		return subject + " changed since you approved it. Reconnect this gateway in your AI app and approve it again. If that doesn't help, ask your administrator."
+	}
+	return subject + " changed since you approved it. Reconnect this gateway in your AI app and approve it again."
+}
+
+// catalogConsentRefusal words a member whose approval no longer matches, without recording it.
+func (s *Service) catalogConsentRefusal(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, consent catalogConsentError, named bool) (string, staleChoiceRemedy) {
+	if consent.reason != consentRejectionAuthenticationChanged && consent.reason != consentRejectionConfigurationChanged {
+		return consent.message, staleChoiceReconnect
+	}
+	remedy := s.catalogConsentRemedy(ctx, logger, gate, member)
+	server := ""
+	if named {
+		server = member.slug
+	}
+	person := gate.authentication != nil && gate.authentication.subject.Kind == urn.SessionSubjectKindUser
+	return catalogConsentMessage(server, consent.reason, remedy, person), remedy
+}
+
+// catalogApproval is one check of a member against its catalog; message and remedy are set when changed.
+type catalogApproval struct {
+	err     error
+	changed bool
+	message string
+	remedy  staleChoiceRemedy
+}
+
+// checkCatalogApproval reads member's approval for status and words a changed one, recording nothing.
+func (s *Service) checkCatalogApproval(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) catalogApproval {
+	approval := catalogApproval{err: s.validateCatalogMember(ctx, gate, member, catalogCheckUnrecorded), changed: false, message: "", remedy: staleChoiceReconnect}
+	if consent, ok := errors.AsType[catalogConsentError](approval.err); ok {
+		approval.changed = true
+		approval.message, approval.remedy = s.catalogConsentRefusal(ctx, logger, gate, member, consent, false)
+	}
+	return approval
+}
+
+// refuseCatalogConsentCall records and words a call refused because its approval no longer matches.
+func (s *Service) refuseCatalogConsentCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, consent catalogConsentError, named bool) (string, staleChoiceRemedy) {
+	message, remedy := s.catalogConsentRefusal(ctx, logger, gate, member, consent, named)
+	s.recordMemberFailure(ctx, gate, member, consentRefusalHappened(remedy), mcpconnectionattempts.Detail(string(consent.reason)))
+	return message, remedy
+}
+
+// memberConfiguration is one server's stored-configuration fingerprints.
+type memberConfiguration struct {
+	// hash covers the server's upstream issuer.
+	hash string
+
+	// typedHash leaves a proxied server's upstream issuer out.
+	typedHash string
+}
+
+// forMode is the fingerprint compared in one enforcement mode.
+func (c memberConfiguration) forMode(typed bool) string {
+	if typed {
+		return c.typedHash
+	}
+	return c.hash
+}
+
+// catalogMemberConfigurations returns each server's consent configuration
+// fingerprints with its upstream issuer from the source the organization's
+// flag makes authoritative, and the fingerprints from the other source for the
+// re-consent forecast.
+func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID]memberConfiguration, map[uuid.UUID]memberConfiguration, error) {
+	hashes := make(map[uuid.UUID]memberConfiguration, len(ids))
+	others := make(map[uuid.UUID]memberConfiguration, len(ids))
 	if len(ids) == 0 {
-		return hashes, nil
+		return hashes, others, nil
 	}
 	rows, err := mcpserversrepo.New(s.db).ListMCPServerConsentConfigurations(ctx, mcpserversrepo.ListMCPServerConsentConfigurationsParams{OrganizationID: organizationID, McpServerIds: ids})
 	if err != nil {
-		return nil, fmt.Errorf("read approved server configurations: %w", err)
+		return nil, nil, fmt.Errorf("read approved server configurations: %w", err)
 	}
+	fromAssociations := feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID)
 	for _, row := range rows {
-		hashes[row.ID] = row.ConfigurationHash
+		column := memberConfiguration{hash: row.ConfigurationHash, typedHash: row.TypedConfigurationHash}
+		association := memberConfiguration{hash: row.AssociationConfigurationHash, typedHash: row.TypedAssociationConfigurationHash}
+		hashes[row.ID], others[row.ID] = column, association
+		if fromAssociations {
+			hashes[row.ID], others[row.ID] = association, column
+		}
 	}
-	return hashes, nil
+	return hashes, others, nil
+}
+
+// validateCatalogMemberAuth checks that a member's captured credential can
+// still be used as it was approved. Where typed auth client resolution is
+// enforced the person picked the typed client, so it is checked by itself;
+// elsewhere the captured client must still be the one the person's connected
+// service maps to.
+func (s *Service) validateCatalogMemberAuth(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, member connectionCatalogMember, upstreamPicks map[uuid.UUID]uuid.UUID, typedChoices bool) error {
+	if typedChoices && member.Auth.ClientID == uuid.Nil {
+		// The member was approved needing no upstream authentication.
+		resolved, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject)
+		if err != nil {
+			return err
+		}
+		if resolved.outcome != authClientNoAuth || member.Auth.RegistrationID.Valid {
+			return errConsentConfigurationChanged
+		}
+		return nil
+	}
+	if typedChoices {
+		resolved, err := s.resolveAuthClientChoiceForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.ClientID, subject)
+		if err != nil {
+			return err
+		}
+		if resolved.outcome == authClientGap || resolved.outcome == authClientNoAccess || resolved.choice.clientID != member.Auth.RegistrationID {
+			return errConsentConfigurationChanged
+		}
+		return nil
+	}
+	if member.Auth.RegistrationID.UUID != upstreamPicks[member.ServerID] {
+		return errConsentConfigurationChanged
+	}
+	resolved, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.RegistrationID, subject)
+	if err != nil {
+		return err
+	}
+	if resolved.outcome == authClientGap || resolved.outcome == authClientNoAccess || resolved.clientID != member.Auth.ClientID {
+		return errConsentConfigurationChanged
+	}
+	return nil
 }

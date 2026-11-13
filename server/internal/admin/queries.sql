@@ -516,6 +516,7 @@ SELECT
     m.name,
     m.slug,
     t.name AS toolset_name,
+    r.url AS upstream_url,
     m.visibility,
     m.toolset_id,
     m.remote_mcp_server_id,
@@ -530,6 +531,7 @@ SELECT
 FROM mcp_servers m
 JOIN projects p ON p.id = m.project_id
 LEFT JOIN toolsets t ON t.id = m.toolset_id
+LEFT JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id AND r.project_id = m.project_id AND r.deleted IS FALSE
 LEFT JOIN mcp_endpoints e ON e.mcp_server_id = m.id AND e.deleted IS FALSE
 LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.deleted IS FALSE
     AND d.organization_id = p.organization_id
@@ -1201,3 +1203,216 @@ ORDER BY om.name, om.id;
 SELECT id, name, slug
 FROM organization_metadata
 WHERE id = ANY(@ids::text[]);
+
+-- name: AdminBackfillMCPAuthFromConnect :execrows
+-- Grants unrestricted mcp:auth to every principal holding any mcp:connect
+-- grant, whatever its selectors. Temporary grants are skipped: a permanent
+-- grant must not be derived from access that ends.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT DISTINCT g.organization_id, g.principal_urn, 'mcp:auth', '{"resource_kind":"mcp_auth_client","resource_id":"*"}'::jsonb
+FROM principal_grants AS g
+WHERE g.scope = 'mcp:connect'
+  AND g.expires_at IS NULL
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
+
+-- name: AdminBackfillMCPConnectFromReadWrite :one
+-- Makes the connect access that mcp:read and mcp:write imply explicit, ahead
+-- of removing that implication. Every unexpired mcp:read or mcp:write grant
+-- gets an mcp:connect grant for the same principal and selectors, every
+-- dimension included. Effect is ignored, as grant loading ignores it.
+--
+-- The copy lasts as long as the access it mirrors: the latest expiry among the
+-- grants it is copied from, or permanent when any of them is. An existing
+-- connect grant on the same selectors is kept, and only extended when it would
+-- otherwise end before the access it mirrors.
+--
+-- A connect grant still provisioned by the default auth permission backfill is
+-- inferred and never outranks an inherited block, while the read or write
+-- grant it now stands in for does. Taking it over, as an explicit grant write
+-- does, keeps that precedence. It is not taken over when a temporary grant
+-- would make a permanent connect grant explicit for good.
+--
+-- created_before, when set, limits the copy to grants written before it, so a
+-- rerun after the implication is removed leaves view-only grants alone.
+-- Writes nothing that is already in place, so it is safe to run again.
+--
+-- The source rows are locked FOR SHARE, so a revocation racing the backfill
+-- either commits first, and its grant is skipped, or waits until the backfill
+-- commits, as if it had run after it. A revoked grant is never copied.
+WITH locked AS (
+  SELECT g.organization_id, g.principal_urn, g.selectors, g.expires_at
+  FROM principal_grants AS g
+  WHERE g.scope IN ('mcp:read', 'mcp:write')
+    AND (g.expires_at IS NULL OR g.expires_at > clock_timestamp())
+    AND (sqlc.narg('created_before')::timestamptz IS NULL OR g.created_at < sqlc.narg('created_before')::timestamptz)
+  FOR SHARE
+),
+sources AS (
+  SELECT
+    l.organization_id,
+    l.principal_urn,
+    l.selectors,
+    CASE WHEN bool_or(l.expires_at IS NULL) THEN NULL ELSE max(l.expires_at) END AS expires_at
+  FROM locked AS l
+  GROUP BY l.organization_id, l.principal_urn, l.selectors
+),
+written AS (
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at)
+  SELECT s.organization_id, s.principal_urn, 'mcp:connect', s.selectors, s.expires_at
+  FROM sources AS s
+  ON CONFLICT (organization_id, principal_urn, scope, selectors) DO UPDATE
+  SET expires_at = EXCLUDED.expires_at, updated_at = clock_timestamp()
+  WHERE principal_grants.expires_at IS NOT NULL
+    AND (EXCLUDED.expires_at IS NULL OR EXCLUDED.expires_at > principal_grants.expires_at)
+  RETURNING (xmax = 0) AS inserted
+),
+taken_over AS (
+  UPDATE auth_permission_provisions AS p
+  SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+  FROM sources AS s
+  WHERE p.organization_id = s.organization_id
+    AND p.principal_urn = s.principal_urn
+    AND p.scope = 'mcp:connect'
+    AND p.selectors = s.selectors
+    AND p.taken_over_at IS NULL
+    AND (
+      s.expires_at IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM principal_grants AS c
+        WHERE c.organization_id = s.organization_id
+          AND c.principal_urn = s.principal_urn
+          AND c.scope = 'mcp:connect'
+          AND c.selectors = s.selectors
+          AND c.expires_at IS NULL
+      )
+    )
+  RETURNING p.id
+)
+SELECT
+  (SELECT count(*) FROM written WHERE inserted)::bigint AS inserted,
+  (SELECT count(*) FROM written WHERE NOT inserted)::bigint AS extended,
+  (SELECT count(*) FROM taken_over)::bigint AS taken_over;
+
+-- name: AdminInsertPrincipalGrantFixture :exec
+-- Test fixture: writes a grant row as stored, including temporary, expired,
+-- deny-effect and backdated rows no single writer produces together.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors, expires_at, created_at)
+VALUES (
+  @organization_id,
+  @principal_urn,
+  @scope,
+  sqlc.narg('effect')::text,
+  @selectors,
+  sqlc.narg('expires_at')::timestamptz,
+  COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp())
+);
+
+-- name: AdminInsertAuthPermissionProvisionFixture :exec
+-- Test fixture: records a grant as provisioned by the default auth
+-- permission backfill.
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES (@organization_id, @principal_urn, @scope, @selectors, 'attachment');
+
+-- name: AdminGetConnectGrantExpiryFixture :one
+-- Test fixture: reads the expiry of one principal's connect grant.
+SELECT expires_at
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = 'mcp:connect'
+  AND selectors = @selectors;
+
+-- name: AdminBackdateUserSessionFixture :exec
+-- Test fixture: no writer backdates a session.
+UPDATE user_sessions SET created_at = @created_at WHERE id = @id;
+
+-- name: AdminListPlatformMCPFeedback :many
+-- Expired rows wait for the next submission in their organization to delete
+-- them, so this read hides them itself.
+SELECT
+    f.id,
+    f.organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    f.subject_urn,
+    u.email AS user_email,
+    f.category,
+    f.rating,
+    f.success,
+    f.tool_name,
+    f.failure_category,
+    f.note,
+    f.delivery_state,
+    f.created_at,
+    f.expires_at
+FROM platform_mcp_feedback AS f
+LEFT JOIN organization_metadata AS om ON om.id = f.organization_id
+LEFT JOIN users AS u ON 'user:' || u.id = f.subject_urn
+    AND u.deleted_at IS NULL
+    AND u.workos_deleted_at IS NULL
+WHERE f.expires_at > clock_timestamp()
+ORDER BY f.created_at DESC, f.id DESC
+LIMIT @row_limit;
+
+-- name: AdminInsertPlatformMCPFeedbackFixture :exec
+-- Test fixture: the Platform MCP writer sets its own timestamps and rate limits.
+INSERT INTO platform_mcp_feedback (organization_id, subject_urn, category, rating, tool_name, note, idempotency_key, input_hash, created_at, expires_at)
+VALUES (@organization_id, @subject_urn, @category, @rating, @tool_name, @note, @idempotency_key, 'fixture', @created_at, @expires_at);
+
+-- name: AdminListCustomDomains :many
+-- Staff-wide read across organizations. A domain with no observed routing
+-- method matches the unknown filter, since no supported method was observed.
+SELECT
+    d.id,
+    d.organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    d.domain,
+    d.verified,
+    d.activated,
+    d.dns_target_token,
+    d.dns_routing_method,
+    d.dns_configuration_status,
+    d.dns_checked_at,
+    d.health_status,
+    d.health_issue,
+    d.health_checked_at,
+    d.created_at
+FROM custom_domains d
+JOIN organization_metadata om ON om.id = d.organization_id
+WHERE d.deleted IS FALSE
+  AND (sqlc.narg(organization_id)::text IS NULL OR d.organization_id = sqlc.narg(organization_id)::text)
+  AND (
+    sqlc.narg(dns_routing_method)::text IS NULL
+    OR COALESCE(d.dns_routing_method, 'unknown') = sqlc.narg(dns_routing_method)::text
+  )
+ORDER BY d.domain, d.id;
+
+-- name: AdminListOrganizationAssistants :many
+-- Every live assistant of an organization with its creator's membership, for
+-- the staff identity and runtime migrations. Identity state is read
+-- separately through assistantidentity.States, its single definition.
+SELECT
+    a.id,
+    a.project_id,
+    p.slug AS project_slug,
+    p.name AS project_name,
+    a.name,
+    a.status,
+    a.runtime_version,
+    a.created_by_user_id,
+    u.email AS created_by_user_email,
+    (u.id IS NOT NULL AND u.deleted_at IS NULL AND EXISTS (
+        SELECT 1 FROM organization_user_relationships r
+        WHERE r.organization_id = a.organization_id
+          AND r.user_id = a.created_by_user_id
+          AND r.deleted_at IS NULL
+    ))::boolean AS creator_active,
+    a.created_at
+FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+LEFT JOIN users u ON u.id = a.created_by_user_id
+WHERE a.organization_id = @organization_id
+  AND a.deleted IS FALSE
+ORDER BY p.name, a.name, a.id;

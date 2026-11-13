@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 )
 
 // seeder holds what every seed phase needs: the tenant, the transaction's
@@ -18,9 +19,16 @@ import (
 // shared demo org, the local development org, and the safety test's
 // adversarial tenant.
 type seeder struct {
-	spec   Spec
-	q      *repo.Queries
-	logger *slog.Logger
+	spec Spec
+	// enc is the environment's key, which seals the inert sessions' dummy token.
+	enc *encryption.Client
+	// assistantIssuer is the deployment's signing issuer origin, without a
+	// trailing slash. The seeded assistant trigger trust registration must
+	// name it, or runtime provisioning in the project cannot find or create
+	// its own registration.
+	assistantIssuer string
+	q               *repo.Queries
+	logger          *slog.Logger
 	// now is the Postgres transaction's now(), read once at the start of the
 	// run, so Go-computed timestamps agree with any now() a query still uses
 	// and ClickHouse rows line up with the Postgres ones.
@@ -82,8 +90,11 @@ func (s *seeder) runPostgres(ctx context.Context) error {
 		{"mcp servers", s.seedServers},
 		{"prompts and skills", s.seedSkills},
 		{"risk and chats", s.seedRiskAndChats},
+		{"team memory eval corpus", s.seedMemoryEval},
 		{"activity and billing", s.seedActivity},
+		{"agent owner sessions", s.seedAgentOwnerSessions},
 		{"signal conversations", s.seedSignalConversations},
+		{"channels", s.seedChannels},
 		{"postflight", s.postflight},
 	}
 	for _, p := range phases {

@@ -1,6 +1,7 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Check, Loader2, Plug } from "lucide-react";
+import { AlertCircle, Check, Plug } from "lucide-react";
 import type { VerifyRemoteMcpUrlState } from "./useVerifyRemoteMcpUrl";
 
 // The create form folds verification into its submit button; this standalone
@@ -28,7 +29,7 @@ export function VerifyRemoteMcpUrlButton({
     >
       <Button.LeftIcon>
         {state.isPending ? (
-          <Loader2 className="size-4 animate-spin" />
+          <Spinner className="mr-0 size-4" />
         ) : (
           <Plug className="size-4" />
         )}

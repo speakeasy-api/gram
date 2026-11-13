@@ -477,6 +477,74 @@
       }
     },
     {
+      "id": "cowork-org-instructions",
+      "name": "Cowork organization instructions",
+      "vendor": "Anthropic",
+      "plans": "Team plans: supported; Enterprise plans: unsupported (uses the Compliance API and inference hooks); Personal accounts: unsupported",
+      "facts": {
+        "org": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "supported",
+          "note": "via transcripts",
+          "verify": true
+        },
+        "session-cost": {
+          "status": "unimplemented",
+          "note": "transcripts carry no token counts",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "unimplemented",
+          "note": "transcripts carry no token counts",
+          "verify": false
+        },
+        "cost": {
+          "status": "unimplemented",
+          "note": "transcripts carry no token counts",
+          "verify": false
+        },
+        "tokens": {
+          "status": "unimplemented",
+          "note": "transcripts carry no token counts",
+          "verify": false
+        },
+        "blocking": {
+          "status": "supported",
+          "note": "per-event hooks enforce, as in Claude Code",
+          "verify": true
+        },
+        "mcp-redaction": {
+          "status": "impossible",
+          "note": "tool results are not rewritten in Cowork",
+          "verify": true
+        },
+        "prompt-redaction": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "unimplemented",
+          "note": "tool calls are in the transcript",
+          "verify": true
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": true
+        }
+      }
+    },
+    {
       "id": "litellm",
       "name": "LiteLLM",
       "vendor": "Others",
@@ -597,6 +665,74 @@
         },
         "prompt-redaction": {
           "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        }
+      }
+    },
+    {
+      "id": "cursor-marketplace",
+      "name": "Cursor Team Marketplace",
+      "vendor": "Cursor",
+      "plans": "Teams and Enterprise; personal accounts not possible",
+      "facts": {
+        "org": {
+          "status": "supported",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "supported",
+          "note": "",
+          "verify": true
+        },
+        "session": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "cost": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "tokens": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "blocking": {
+          "status": "supported",
+          "note": "via hooks",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "unimplemented",
+          "note": "",
+          "verify": false
+        },
+        "prompt-redaction": {
+          "status": "impossible",
           "note": "",
           "verify": false
         },

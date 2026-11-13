@@ -53,6 +53,8 @@ const (
 	ScopeChatWrite               Scope = "chat:write"
 	ScopeInferenceExecute        Scope = "inference:execute"
 	ScopeLogRead                 Scope = "log:read"
+	ScopeMemoryRead              Scope = "memory:read"
+	ScopeMemoryWrite             Scope = "memory:write"
 	ScopeAgentRead               Scope = "agent:read"
 	ScopeAgentWrite              Scope = "agent:write"
 	ScopeAgentAuthorize          Scope = "agent:authorize"
@@ -77,6 +79,14 @@ const (
 	ScopeOrgHooksIngest     Scope = "org:hooks_ingest"
 )
 
+// Channels permissions are independent: administration does not imply connecting
+// or reading other members' messages, and MCP grants do not grant channel access.
+const (
+	ScopeChannelsConnect Scope = "channels:connect"
+	ScopeChannelsAdmin   Scope = "channels:admin"
+	ScopeChannelsReadAll Scope = "channels:read_all"
+)
+
 type scopeVisibility int
 
 const (
@@ -90,6 +100,14 @@ const (
 )
 
 var adminScopes = []Scope{
+	ScopeChannelsConnect,
+	ScopeChannelsAdmin,
+	// channels:read_all is intentionally NOT an administrator default. It
+	// discloses the content of other members' private conversations, which
+	// administering Channels does not require: an administrator configures
+	// instances and membership without reading what was said in them. An
+	// organization that does need a transcript reviewer grants the scope
+	// explicitly through a custom role, the same way chat:read is granted.
 	ScopeOrgRead,
 	ScopeOrgAdmin,
 	ScopeProjectRead,
@@ -97,6 +115,7 @@ var adminScopes = []Scope{
 	ScopeMCPRead,
 	ScopeMCPWrite,
 	ScopeMCPConnect,
+	ScopeMCPAuth,
 	ScopeEnvironmentRead,
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
@@ -108,14 +127,21 @@ var adminScopes = []Scope{
 	ScopeAgentWrite,
 	ScopeAgentAuthorize,
 	ScopeAgentTransfer,
-	// Configuring workload identity is an administrator's job, and it sits
-	// beside agent:authorize deliberately: assigning an agent to a workload is
-	// the same delegation as issuing that agent a credential. Neither is a
-	// member default — workload:read alone discloses which machines an
-	// organization recognises, which is its trust policy, so a member who needs
-	// to see it gets an explicit grant through a custom role.
+	// workload:read is a member default (see memberScopes below) so that team
+	// members can view the Access Hub. workload:write remains admin-only:
+	// assigning an agent to a workload is the same delegation as issuing that
+	// agent a credential.
 	ScopeWorkloadRead,
 	ScopeWorkloadWrite,
+	// Organizational Memory is an org-level capability that admins turn on and
+	// curate, so org:admin gets memory:read and memory:write by default.
+	// Members still need an explicit grant because team memory summarizes
+	// every member's sessions in a project. It exposes masked session
+	// summaries, memos and digests, never raw transcripts, so the scope
+	// catalog does not mark it sensitive the way it marks chat:read.
+	// memory:write satisfies memory:read via scopeExpansions.
+	ScopeMemoryRead,
+	ScopeMemoryWrite,
 	// chat:read and chat:write are intentionally NOT defaults for any system
 	// role: reading other members' session transcripts is sensitive, and
 	// mutating them (rename, feedback, delete) is destructive, so both must be
@@ -125,10 +151,6 @@ var adminScopes = []Scope{
 	// handlers regardless. chat:write satisfies chat:read via scopeExpansions,
 	// so a session reviewer who should not be able to delete gets chat:read
 	// alone.
-	//
-	// mcp:auth is NOT a default for any system role either: administering an
-	// organization implies no use of its auth clients, so use is granted
-	// explicitly per client, type, or personal connection.
 	//
 	// log:read is likewise NOT a default for any system role: raw tool-call
 	// logs carry tool arguments, results, prompt text, and hook payloads from
@@ -140,6 +162,9 @@ var adminScopes = []Scope{
 // to clients as a first-class permission or only used internally for storage
 // and evaluation.
 var scopeVisibilityByScope = map[Scope]scopeVisibility{
+	ScopeChannelsConnect:         scopeVisibilityUserVisible,
+	ScopeChannelsAdmin:           scopeVisibilityUserVisible,
+	ScopeChannelsReadAll:         scopeVisibilityUserVisible,
 	ScopeRoot:                    scopeVisibilityInternal,
 	ScopeOrgRead:                 scopeVisibilityUserVisible,
 	ScopeOrgBlockedRead:          scopeVisibilityInternal,
@@ -178,6 +203,8 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeChatWrite:               scopeVisibilityUserVisible,
 	ScopeInferenceExecute:        scopeVisibilityUserVisible,
 	ScopeLogRead:                 scopeVisibilityUserVisible,
+	ScopeMemoryRead:              scopeVisibilityUserVisible,
+	ScopeMemoryWrite:             scopeVisibilityUserVisible,
 	ScopeAgentRead:               scopeVisibilityUserVisible,
 	ScopeAgentWrite:              scopeVisibilityUserVisible,
 	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
@@ -195,8 +222,10 @@ var memberScopes = []Scope{
 	ScopeProjectRead,
 	ScopeMCPRead,
 	ScopeMCPConnect,
+	ScopeMCPAuth,
 	ScopeSkillRead,
 	ScopeAssistantRead,
+	ScopeWorkloadRead,
 	// environment:read is intentionally NOT a default for members: environment
 	// values include secrets, so viewing them must be granted explicitly via a
 	// custom role. Admins retain environment:read/write via adminScopes.
@@ -204,6 +233,10 @@ var memberScopes = []Scope{
 	// Most Observe pages are separately gated on org:admin. The Identities
 	// roster and required-employee-scoped Shadow AI read are project:read
 	// surfaces; identity detail resolution separately requires org:read.
+	//
+	// workload:read is a member default so that team members can view the
+	// Access Hub in preview deployments and development environments.
+	// workload:write remains admin-only since it allows granting machine access.
 }
 
 func (s Scope) Parts() ScopeParts {
@@ -265,9 +298,16 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 // meaning "cannot see or manage". Anything that takes a principal off a
 // server entirely writes all three.
 //
+// mcp:connect is satisfied only by an explicit mcp:connect grant (or root).
+// mcp:read and mcp:write do not imply it: viewing or managing a server is not
+// permission to call its tools, so who may connect is decided per server.
+//
 // mcp:auth is independent of every other scope: server access, authoring and
 // administration imply no use of an auth client.
 var scopeExpansions = map[Scope][]Scope{
+	ScopeChannelsConnect:         nil,
+	ScopeChannelsAdmin:           nil,
+	ScopeChannelsReadAll:         nil,
 	ScopeRoot:                    nil,
 	ScopeOrgRead:                 {ScopeOrgAdmin},
 	ScopeOrgBlockedRead:          nil,
@@ -281,7 +321,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeMCPBlockedRead:          nil,
 	ScopeMCPWrite:                nil,
 	ScopeMCPBlockedWrite:         nil,
-	ScopeMCPConnect:              {ScopeMCPRead, ScopeMCPWrite},
+	ScopeMCPConnect:              nil,
 	ScopeMCPBlockedConnect:       nil,
 	ScopeMCPAuth:                 nil,
 	ScopeMCPBlockedAuth:          nil,
@@ -306,6 +346,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeChatWrite:               nil,
 	ScopeInferenceExecute:        nil,
 	ScopeLogRead:                 nil,
+	ScopeMemoryRead:              {ScopeMemoryWrite},
+	ScopeMemoryWrite:             nil,
 	ScopeAgentRead:               nil,
 	ScopeAgentWrite:              nil,
 	ScopeAgentAuthorize:          nil,
@@ -322,6 +364,9 @@ var scopeExpansions = map[Scope][]Scope{
 // stores exception grants for it. Broader blocklist scopes are handled by
 // scopeExpansions on the blocklist scope itself.
 var scopeExclusions = map[Scope]Scope{
+	ScopeChannelsConnect:         "",
+	ScopeChannelsAdmin:           "",
+	ScopeChannelsReadAll:         "",
 	ScopeRoot:                    "",
 	ScopeOrgRead:                 ScopeOrgBlockedRead,
 	ScopeOrgBlockedRead:          "",
@@ -360,6 +405,8 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeChatWrite:               "",
 	ScopeInferenceExecute:        "",
 	ScopeLogRead:                 "",
+	ScopeMemoryRead:              "",
+	ScopeMemoryWrite:             "",
 	ScopeAgentRead:               "",
 	ScopeAgentWrite:              "",
 	ScopeAgentAuthorize:          "",

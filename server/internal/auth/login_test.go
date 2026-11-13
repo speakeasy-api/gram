@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -633,4 +634,45 @@ func nonceFromLocation(t *testing.T, location string) string {
 	require.NoError(t, json.Unmarshal(raw, &state))
 	require.NotEmpty(t, state.Nonce)
 	return state.Nonce
+}
+
+func TestService_LoginStoresSignupAttribution(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	ctx, instance := newTestAuthService(t, userInfo)
+
+	orgName := "Acme Inc"
+	source, medium, campaign, session := "linkedin", "paid", "q4-mcp-gateway", "sess-123"
+	result, err := instance.service.Login(ctx, &gen.LoginPayload{
+		OrgName:            &orgName,
+		UtmSource:          &source,
+		UtmMedium:          &medium,
+		UtmCampaign:        &campaign,
+		AnalyticsSessionID: &session,
+	})
+	require.NoError(t, err)
+
+	nonce := nonceFromLocation(t, result.Location)
+	var stored identity.SignupAttribution
+	require.NoError(t, instance.nonceStore.Get(ctx, "auth:signup_attribution:"+nonce, &stored))
+	require.Equal(t, "linkedin", stored.UTMSource)
+	require.Equal(t, "paid", stored.UTMMedium)
+	require.Equal(t, "q4-mcp-gateway", stored.UTMCampaign)
+	require.Equal(t, "sess-123", stored.SessionID)
+	require.NotEmpty(t, stored.Host)
+}
+
+func TestService_LoginWithoutAttributionStoresNone(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	ctx, instance := newTestAuthService(t, userInfo)
+
+	result, err := instance.service.Login(ctx, &gen.LoginPayload{})
+	require.NoError(t, err)
+
+	nonce := nonceFromLocation(t, result.Location)
+	var stored identity.SignupAttribution
+	require.ErrorIs(t, instance.nonceStore.Get(ctx, "auth:signup_attribution:"+nonce, &stored), redisCache.ErrCacheMiss)
 }

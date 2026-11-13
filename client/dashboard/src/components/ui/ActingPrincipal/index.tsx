@@ -34,6 +34,7 @@ const LINK_CLASS =
 export function ActingPrincipal({
   agent,
   authorizer,
+  signedInWith,
   className,
   linked = false,
   projectSlug,
@@ -54,6 +55,23 @@ export function ActingPrincipal({
    * is the honest answer rather than picking one or showing none.
    */
   authorizer?: Principal | Principal[] | undefined;
+  /**
+   * How Speakeasy signed the call in upstream, when the row recorded it. It
+   * takes the authorizer's place: the person who issued the agent's key is
+   * not who a call served by a shared credential acted for, so "on behalf
+   * of" them would name the wrong person. A personal connection names its
+   * owner, and their face stands beside the words.
+   */
+  signedInWith?:
+    | {
+        /** The credential in words, such as "Alex Morgan's connection". */
+        label: string;
+        /** The raw values, shown on hover. */
+        detail?: string;
+        /** The person whose own connection served the call. */
+        person?: Principal;
+      }
+    | undefined;
   className?: string;
   /**
    * Whether each half links to its identity page.
@@ -104,7 +122,19 @@ export function ActingPrincipal({
           </span>
         )}
       </span>
-      {first && (
+      {signedInWith ? (
+        // Same indent and arrow as the authorizer line it replaces, so the
+        // credential reads as how the agent above made the call.
+        <span
+          className="text-muted-foreground flex min-w-0 items-center gap-1.5 pl-2 text-xs"
+          title={signedInWith.detail}
+        >
+          <CornerDownRight aria-hidden="true" className="size-3 shrink-0" />
+          {signedInWith.person && <PersonFace person={signedInWith.person} />}
+          <span className="min-w-0 truncate">{signedInWith.label}</span>
+        </span>
+      ) : null}
+      {!signedInWith && first && (
         // Indented under the agent: the relation belongs to the line above
         // it rather than standing as a second subject of its own.
         //
@@ -197,9 +227,16 @@ export function PersonFace({
   );
 }
 
-/** Two letters, matching the member facepile so the two read as one system. */
+/**
+ * Two letters, matching the member facepile so the two read as one system.
+ *
+ * A name can fall back to an email address. Its domain is shared by everyone
+ * in an organization, so only the part before the @ names the person, split
+ * into words the way `IdentityAvatar` does: "j.smith@" is "JS", not "J.".
+ */
 function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const local = name.trim().split("@")[0] ?? "";
+  const parts = local.split(/[.\-_+\s]+/).filter(Boolean);
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();

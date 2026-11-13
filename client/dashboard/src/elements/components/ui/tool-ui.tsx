@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ChevronUpIcon,
+  CircleHelpIcon,
   CopyIcon,
   EyeIcon,
   EyeOffIcon,
@@ -16,7 +17,8 @@ import {
   XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { codeToHtml, BundledLanguage } from "shiki";
+import type { BundledLanguage } from "shiki";
+import { codeToHtml } from "shiki";
 import { Button } from "./button";
 import { Popover, PopoverAnchor, PopoverContent } from "./popover";
 
@@ -34,6 +36,7 @@ const statusVariants = cva(
         complete: "text-green-600 dark:text-green-500",
         error: "text-destructive",
         approval: "text-amber-500",
+        unknown: "text-muted-foreground",
       },
     },
     defaultVariants: {
@@ -46,7 +49,14 @@ const statusVariants = cva(
  * Types
  * -------------------------------------------------------------------------- */
 
-type ToolStatus = "pending" | "running" | "complete" | "error" | "approval";
+type ToolStatus =
+  | "pending"
+  | "running"
+  | "complete"
+  | "error"
+  | "approval"
+  // The call ended without reporting a result, so its outcome is not known.
+  | "unknown";
 
 type ContentItem =
   | { type: "text"; text: string; _meta?: { "getgram.ai/mime-type"?: string } }
@@ -132,6 +142,9 @@ interface ToolUIProps {
   provider?: string;
   /** Current status of the tool execution */
   status?: ToolStatus;
+  /** Optional word shown beside the name to spell the status out (for
+   * example "Pending" or "Failed"), where the icon alone is ambiguous. */
+  statusLabel?: string;
   /** Request/input data - can be string or object */
   request?: string | Record<string, unknown>;
   /** Result/output data - can be string, object, or structured content array */
@@ -248,6 +261,7 @@ function StatusIndicator({
       {status === "running" && <LoaderIcon className="size-4 animate-spin" />}
       {status === "complete" && <CheckIcon className="size-4" />}
       {status === "error" && <XIcon className="size-4" />}
+      {status === "unknown" && <CircleHelpIcon className="size-4" />}
       {status === "approval" && (
         <LoaderIcon className="size-4 animate-spin text-muted-foreground" />
       )}
@@ -944,6 +958,7 @@ function ToolUI({
   icon,
   provider,
   status = "complete",
+  statusLabel,
   request,
   result,
   defaultExpanded = false,
@@ -1040,6 +1055,16 @@ function ToolUI({
         >
           {highlightLabel(displayName, nameQuery, nameActiveOccurrence)}
         </span>
+        {statusLabel && (
+          <span
+            className={cn(
+              "shrink-0 text-xs",
+              status === "error" ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {statusLabel}
+          </span>
+        )}
         {hasContent && (
           <ChevronDownIcon
             className={cn(
@@ -1231,7 +1256,7 @@ interface ToolUIGroupProps {
   /** Optional icon */
   icon?: React.ReactNode;
   /** Overall status of the group */
-  status?: "pending" | "running" | "complete" | "error";
+  status?: "pending" | "running" | "complete" | "error" | "unknown";
   /** Whether the group starts expanded */
   defaultExpanded?: boolean;
   /** Render without the group header, showing children directly. */

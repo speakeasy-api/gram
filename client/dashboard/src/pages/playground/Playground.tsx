@@ -14,8 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
-import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
-import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
@@ -23,10 +21,10 @@ import {
 } from "@/contexts/Telemetry";
 import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
 import { DEFAULT_MODEL } from "@/lib/models";
-import { Tool } from "@/lib/toolTypes";
+import type { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useHideInsightsDock } from "@/components/insights-context";
-import { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
+import type { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
 import { queryKeyInstance } from "@gram/client/react-query/instance.js";
 import {
   queryKeyListToolsets,
@@ -43,7 +41,8 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { ChatProvider } from "./ChatContext";
 import { useChatContext } from "./useChatContext";
-import { EditToolDialog, ToolUpdatePayload } from "./EditToolDialog";
+import type { ToolUpdatePayload } from "./EditToolDialog";
+import { EditToolDialog } from "./EditToolDialog";
 import { ManageToolsDialog } from "./ManageToolsDialog";
 import { PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
@@ -194,8 +193,6 @@ function PlaygroundInner() {
   const [searchParams] = useSearchParams();
   const chat = useChatContext();
   const routes = useRoutes();
-  const project = useProject();
-  const canViewLogs = useCanViewToolLogs();
 
   const { servers, isLoading: isLoadingServers } = usePlaygroundServers();
 
@@ -205,11 +202,9 @@ function PlaygroundInner() {
   const [selectedEnvironment, setSelectedEnvironment] = useState<string | null>(
     searchParams.get("environment") ?? null,
   );
-  const [showLogs, setShowLogs] = useState(false);
-  // The panel is only open while log:read is held, so losing it (a grants
-  // refetch) closes the panel instead of leaving it toggled behind a disabled
-  // button.
-  const logsOpen = showLogs && canViewLogs;
+  // The panel reads this playground session's own logs, which every member
+  // may read, so no permission gates it.
+  const [logsOpen, setLogsOpen] = useState(false);
   const [temperature, setTemperature] = useState(0.5);
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [maxTokens, setMaxTokens] = useState(4096);
@@ -282,21 +277,10 @@ function PlaygroundInner() {
   }
 
   const logsButton = (
-    <RequireScope
-      scope="log:read"
-      resourceId={project.id}
-      level="component"
-      reason="You don't have permission to view this project's tool logs."
-    >
-      <Button
-        size="sm"
-        variant="tertiary"
-        onClick={() => setShowLogs(!logsOpen)}
-      >
-        <ScrollTextIcon className="mr-2 size-4" />
-        {logsOpen ? "Hide" : "Show"} Logs
-      </Button>
-    </RequireScope>
+    <Button size="sm" variant="tertiary" onClick={() => setLogsOpen(!logsOpen)}>
+      <ScrollTextIcon className="mr-2 size-4" />
+      {logsOpen ? "Hide" : "Show"} Logs
+    </Button>
   );
 
   const additionalActions = (
@@ -383,7 +367,7 @@ function PlaygroundInner() {
                     ? selectedServer.toolsetSlug
                     : undefined
                 }
-                onClose={() => setShowLogs(false)}
+                onClose={() => setLogsOpen(false)}
               />
             </ResizablePanel.Pane>
           )}

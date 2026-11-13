@@ -46,7 +46,11 @@ reap_stale_lock() {
     ln -s "$$" "$reap" 2> /dev/null || return 1
     identity="$(readlink "$lock" 2> /dev/null || true)"
     owner="${identity%%:*}"
-    if [ -n "$owner" ] && ! kill -0 "$owner" 2> /dev/null; then
+    # Re-read after the liveness check: the owner may have released and exited
+    # after the first read, letting a new holder in. A dead owner cannot release,
+    # so an unchanged identity stays put until the removal below.
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2> /dev/null \
+        && [ "$(readlink "$lock" 2> /dev/null || true)" = "$identity" ]; then
         echo "Clearing a stack lock left behind by a dead process ($owner)." >&2
         rm -f "$lock"
     fi
@@ -79,6 +83,31 @@ fi
 if pitchfork supervisor status &> /dev/null; then
     pitchfork stop --group application
     pitchfork stop idle-pause
+    pitchfork stop tailscale-cert
+fi
+
+# `mise run playwright` sessions run as detached daemons, each holding a live
+# Chrome, and nothing stops them when the agent that opened them exits. They
+# outlive the stack they were pointed at and pile up at about 1 GB each, so
+# close this worktree's sessions along with the rest of the stack. Best effort:
+# a browser that will not close must not keep the stack running, and a hung
+# close must not hold the stack lock. macOS ships no `timeout`, so a watchdog
+# subshell kills the close after 10 seconds.
+if command -v playwright-cli &> /dev/null; then
+    playwright-cli close-all &> /dev/null &
+    close_pid=$!
+    (
+        sleep 10
+        kill "$close_pid" 2> /dev/null
+    ) 2> /dev/null &
+    watchdog_pid=$!
+    if ! wait "$close_pid" 2> /dev/null; then
+        echo "⚠️  Could not close this worktree's Playwright browsers." >&2
+    fi
+    # Stop the watchdog's pending sleep too, so it does not outlive the pause.
+    pkill -P "$watchdog_pid" 2> /dev/null || true
+    kill "$watchdog_pid" 2> /dev/null || true
+    wait "$watchdog_pid" 2> /dev/null || true
 fi
 
 # Pause before stopping Temporal to avoid catchup after deliberate sleep.

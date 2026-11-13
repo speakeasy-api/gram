@@ -13,6 +13,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/hooks"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
 const (
@@ -91,6 +94,15 @@ func TestScriptIsValidShell(t *testing.T) {
 	}
 }
 
+// The hooks self-test must use the session id the hooks API answers without
+// recording, or every install leaves an empty session under the agent.
+func TestScriptSelfCheckUsesTheUnrecordedSession(t *testing.T) {
+	t.Parallel()
+	// The hooks API matches the whole call, not the session id alone, so the
+	// whole frame is pinned.
+	require.Contains(t, renderScript(t, testParams()), `frame='{"seq":1,"hook":"before_tool_call","event":{"toolName":"exec","toolCallId":"speakeasy-smoke-1","params":{"command":"true"}},"ctx":{"sessionId":"`+hooks.InstallCheckSessionID+`"},"timeoutMs":10000}'`)
+}
+
 // The script interpolates values into a file that runs on someone's machine,
 // so no value may end the quoting and start a command.
 func TestScriptQuotesInterpolatedValues(t *testing.T) {
@@ -119,15 +131,17 @@ func TestScriptEmbedsTheAgentsOpenClawPlugin(t *testing.T) {
 	archive := embeddedPlugin(t, renderScript(t, testParams()))
 
 	var config struct {
-		ServerURL   string `json:"server_url"`
-		Project     string `json:"project"`
-		Org         string `json:"org"`
-		HooksAPIKey string `json:"hooks_api_key"`
-		AgentKey    bool   `json:"agent_key"`
+		ServerURL    string `json:"server_url"`
+		Project      string `json:"project"`
+		Org          string `json:"org"`
+		HooksAPIKey  string `json:"hooks_api_key"`
+		AgentKey     bool   `json:"agent_key"`
+		InstallRoute string `json:"install_route"`
 	}
 	require.NoError(t, json.Unmarshal(zipFile(t, archive, "speakeasy.json"), &config))
 	require.Equal(t, testKey, config.HooksAPIKey)
 	require.True(t, config.AgentKey)
+	require.Equal(t, plugins.InstallRouteAgentInstall, config.InstallRoute)
 	require.Equal(t, testProject, config.Project)
 	require.Equal(t, testServerURL, config.ServerURL)
 	require.Equal(t, testOrgID, config.Org)
@@ -208,7 +222,8 @@ const (
 )
 
 // The stub records its argv, answers --help with $STUB_INSTALL_HELP, and on a
-// real install keeps the archive and, unless $STUB_SKIP_LAYOUT is set, lays
+// real install keeps the archive, prints $STUB_INSTALL_OUTPUT and, unless
+// $STUB_SKIP_LAYOUT is set, lays
 // out the installed plugin the way OpenClaw does, world-readable, with the
 // stub bootstrapper in place of the real one.
 const stubOpenClaw = `#!/bin/sh
@@ -229,6 +244,7 @@ if [ "$1 $2" = "plugins install" ]; then
   esac
   for archive in "$@"; do :; done
   cp "$archive" "$STUB_DIR/installed.zip"
+  [ -n "${STUB_INSTALL_OUTPUT:-}" ] && printf '%s\n' "$STUB_INSTALL_OUTPUT"
   [ -n "$STUB_SKIP_LAYOUT" ] && exit 0
   plugin="${STUB_PLUGIN_DIR:-$OPENCLAW_STATE_DIR/extensions/speakeasy-observability}"
   mkdir -p "$plugin/hooks"
@@ -352,7 +368,7 @@ func TestScriptConfiguresOpenClawAndPassesTheSelfCheck(t *testing.T) {
 	require.Contains(t, out, "Next: restart the OpenClaw Gateway.")
 
 	calls := h.calls(t)
-	require.Len(t, calls, 6, "openclaw calls: %v", calls)
+	require.Len(t, calls, 7, "openclaw calls: %v", calls)
 	require.Equal(t, "config set --help", calls[0])
 	require.True(t, strings.HasPrefix(calls[1], "config set --batch-file "), calls[1])
 	require.Equal(t, "mcp unset gram", calls[2])
@@ -366,6 +382,8 @@ func TestScriptConfiguresOpenClawAndPassesTheSelfCheck(t *testing.T) {
 	require.True(t, strings.HasPrefix(calls[4], "plugins install --force --accept-capabilities "), calls[4])
 	require.True(t, strings.HasSuffix(calls[4], ".zip"), calls[4])
 	require.Equal(t, "config set plugins.entries.speakeasy-observability.hooks.allowConversationAccess true", calls[5])
+	// A reinstall after an uninstall can find the entry left disabled.
+	require.Equal(t, "config set plugins.entries.speakeasy-observability.enabled true", calls[6])
 
 	// OpenClaw got the agent's plugin, and the script cleaned up after itself.
 	installed, err := os.ReadFile(filepath.Join(h.stubDir, "installed.zip"))
@@ -391,6 +409,19 @@ func TestScriptConfiguresOpenClawAndPassesTheSelfCheck(t *testing.T) {
 	require.Equal(t, "key=unset\norg_key=unset\nold_key=unset\nold_org_key=unset\nfail_open=unset\norg_settings=present", h.stubFile(t, "bootstrap.env"))
 }
 
+// Current OpenClaw applies the installed plugin to the running Gateway, and a
+// needless restart note sends the agent off to restart its own Gateway.
+func TestScriptSkipsTheRestartNoteWhenOpenClawAppliedThePlugin(t *testing.T) {
+	t.Parallel()
+	h := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	h.env = append(h.env, "STUB_INSTALL_OUTPUT=Installed plugin: speakeasy-observability\nApplied in Gateway generation 4.")
+	out := h.run(t, renderScript(t, testParams()))
+
+	require.Contains(t, out, "Applied in Gateway generation 4.", "the installer's own output is shown")
+	require.Contains(t, out, "Speakeasy hooks: PASS")
+	require.NotContains(t, out, "restart the OpenClaw Gateway")
+}
+
 // Releases before 2026.8.1 reject --accept-capabilities, so the script asks
 // the installed CLI before passing it.
 func TestScriptOmitsAcceptCapabilitiesForOlderOpenClaw(t *testing.T) {
@@ -400,13 +431,13 @@ func TestScriptOmitsAcceptCapabilitiesForOlderOpenClaw(t *testing.T) {
 	require.Contains(t, out, "Speakeasy hooks: PASS")
 
 	calls := h.calls(t)
-	require.Len(t, calls, 6, "openclaw calls: %v", calls)
+	require.Len(t, calls, 7, "openclaw calls: %v", calls)
 	require.True(t, strings.HasPrefix(calls[4], "plugins install --force "), calls[4])
 	require.NotContains(t, calls[4], "--accept-capabilities")
 }
 
 // The reply is what the pinned hooks binary returns when the hooks API
-// answers 403, which it does for a missing hooks or project grant.
+// answers 403, which it does for a missing hooks grant.
 func TestScriptExplainsAForbiddenHooksKey(t *testing.T) {
 	t.Parallel()
 	reply := `{"seq":1,"output":{"block":true,"blockReason":"permission denied"}}`
@@ -415,7 +446,7 @@ func TestScriptExplainsAForbiddenHooksKey(t *testing.T) {
 
 	require.Contains(t, out, "Speakeasy hooks: FAIL: permission denied")
 	require.Contains(t, out, "org:hooks_ingest")
-	require.Contains(t, out, "project:read")
+	require.NotContains(t, out, "project:read")
 	require.NotContains(t, out, "PASS")
 }
 
@@ -515,7 +546,8 @@ func TestScriptWithoutAProjectConfiguresOpenClawWithoutHooks(t *testing.T) {
 	out := h.run(t, script)
 	require.Contains(t, out, "Configured OpenClaw.")
 	require.Contains(t, out, "Speakeasy hooks: FAIL: this agent has no project, or its project was deleted")
-	require.Contains(t, out, "Next: restart the OpenClaw Gateway.")
+	// OpenClaw applies a gateway entry by itself; only a plugin needs a restart.
+	require.NotContains(t, out, "restart the OpenClaw Gateway")
 
 	calls := h.calls(t)
 	require.Len(t, calls, 3, "openclaw calls: %v", calls)
@@ -611,7 +643,7 @@ func TestScriptOmitsUnsupportedPluginFlags(t *testing.T) {
 	out := h.run(t, renderScript(t, testParams()))
 	require.Contains(t, out, "Speakeasy hooks: PASS")
 	calls := h.calls(t)
-	require.Len(t, calls, 6, "openclaw calls: %v", calls)
+	require.Len(t, calls, 7, "openclaw calls: %v", calls)
 	require.NotContains(t, calls[4], "--force")
 	require.NotContains(t, calls[4], "--accept-capabilities")
 }
@@ -625,6 +657,36 @@ func TestScriptPreservesCodexConfigurationWhenAddingFails(t *testing.T) {
 	require.Contains(t, out, "Could not configure Codex. Its existing entry was kept")
 	require.Contains(t, out, "Configured OpenClaw")
 	require.NotContains(t, h.stubFile(t, "codex.log"), "mcp remove")
+	// Only OpenClaw was configured, and it keeps the key in its own config.
+	require.NotContains(t, out, "was exported for this run only")
+}
+
+// Claude Code and Codex read the key from the environment when they start, so
+// the script says to store it and names only the clients it configured. An
+// OpenClaw-only run says nothing: an agent relays that advice.
+func TestScriptAsksToStoreTheKeyOnlyForClientsThatReadIt(t *testing.T) {
+	t.Parallel()
+	stub := []byte("#!/bin/sh\nexit 0\n")
+	for _, tc := range []struct {
+		clients []string
+		names   string
+	}{
+		{clients: []string{"claude"}, names: "Claude Code can read it"},
+		{clients: []string{"codex"}, names: "Codex can read it"},
+		{clients: []string{"claude", "codex"}, names: "Claude Code and Codex can read it"},
+	} {
+		h := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+		for _, client := range tc.clients {
+			require.NoError(t, os.WriteFile(filepath.Join(h.stubDir, client), stub, 0o700))
+		}
+		out := h.run(t, renderScript(t, testParams()))
+		require.Contains(t, out, "SPEAKEASY_AGENT_KEY was exported for this run only. Store it where\n"+tc.names+" when started.", "clients %v", tc.clients)
+	}
+
+	openClawOnly := newOpenClawHarness(t, helpWithAcceptCapabilities, `{"seq":1}`)
+	out := openClawOnly.run(t, renderScript(t, testParams()))
+	require.Contains(t, out, "Done.")
+	require.NotContains(t, out, "SPEAKEASY_AGENT_KEY")
 }
 
 func TestScriptUsesBSDTarWhenOtherExtractorsAreMissing(t *testing.T) {

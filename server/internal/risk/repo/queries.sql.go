@@ -353,6 +353,72 @@ func (q *Queries) CleanupExpiredMCPFindingEvidenceBatch(ctx context.Context, bat
 	return result.RowsAffected(), nil
 }
 
+const confirmPendingRiskPolicyChallenge = `-- name: ConfirmPendingRiskPolicyChallenge :one
+UPDATE risk_policy_challenges
+SET status = 'acknowledged'
+  , acknowledged_at = clock_timestamp()
+  , expires_at = clock_timestamp() + make_interval(secs => $1::float8)
+  , updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND user_id = $3
+  AND risk_policy_id = $4
+  AND tool_name IS NOT DISTINCT FROM $5::text
+  AND call_fingerprint IS NOT DISTINCT FROM $6::text
+  AND status = 'challenged'
+  AND challenged_at > clock_timestamp() - make_interval(secs => $7::float8)
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, risk_policy_id, user_id, tool_name, status, policy_name, entity, rule_id, call_fingerprint, challenged_at, acknowledged_at, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type ConfirmPendingRiskPolicyChallengeParams struct {
+	GraceSeconds    float64
+	ProjectID       uuid.UUID
+	UserID          string
+	RiskPolicyID    uuid.UUID
+	ToolName        pgtype.Text
+	CallFingerprint pgtype.Text
+	WindowSeconds   float64
+}
+
+// Claude Cowork confirmations: a person who sends a challenged prompt again,
+// or allows a challenged tool call in Cowork's permission prompt, has seen the
+// warning and chosen to go ahead. The pending challenge becomes a short-lived
+// acknowledgement for that same call. Only a recent, still-pending challenge
+// for the identical call qualifies.
+func (q *Queries) ConfirmPendingRiskPolicyChallenge(ctx context.Context, arg ConfirmPendingRiskPolicyChallengeParams) (RiskPolicyChallenge, error) {
+	row := q.db.QueryRow(ctx, confirmPendingRiskPolicyChallenge,
+		arg.GraceSeconds,
+		arg.ProjectID,
+		arg.UserID,
+		arg.RiskPolicyID,
+		arg.ToolName,
+		arg.CallFingerprint,
+		arg.WindowSeconds,
+	)
+	var i RiskPolicyChallenge
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RiskPolicyID,
+		&i.UserID,
+		&i.ToolName,
+		&i.Status,
+		&i.PolicyName,
+		&i.Entity,
+		&i.RuleID,
+		&i.CallFingerprint,
+		&i.ChallengedAt,
+		&i.AcknowledgedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const countEnabledRegexExclusionsInScope = `-- name: CountEnabledRegexExclusionsInScope :one
 SELECT COUNT(*)::BIGINT
 FROM risk_exclusions
@@ -2767,7 +2833,7 @@ func (q *Queries) ListChatProjectsByIDs(ctx context.Context, arg ListChatProject
 }
 
 const listChatTitlesByIDs = `-- name: ListChatTitlesByIDs :many
-SELECT c.id, c.title
+SELECT c.id, c.title, c.title_manually_set
 FROM chats c
 WHERE c.project_id = $1
   AND c.id = ANY($2::uuid[])
@@ -2780,8 +2846,9 @@ type ListChatTitlesByIDsParams struct {
 }
 
 type ListChatTitlesByIDsRow struct {
-	ID    uuid.UUID
-	Title pgtype.Text
+	ID               uuid.UUID
+	Title            pgtype.Text
+	TitleManuallySet bool
 }
 
 // Display enrichment for the ClickHouse-served risk events listing: chat
@@ -2797,7 +2864,7 @@ func (q *Queries) ListChatTitlesByIDs(ctx context.Context, arg ListChatTitlesByI
 	var items []ListChatTitlesByIDsRow
 	for rows.Next() {
 		var i ListChatTitlesByIDsRow
-		if err := rows.Scan(&i.ID, &i.Title); err != nil {
+		if err := rows.Scan(&i.ID, &i.Title, &i.TitleManuallySet); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -4474,6 +4541,29 @@ func (q *Queries) ListUserEmailsByIDs(ctx context.Context, arg ListUserEmailsByI
 	return items, nil
 }
 
+const lockExactRiskPolicyAudienceGrants = `-- name: LockExactRiskPolicyAudienceGrants :exec
+SELECT id
+FROM principal_grants
+WHERE organization_id = $1
+  AND scope = $2
+  AND selectors = $3
+ORDER BY id
+FOR UPDATE
+`
+
+type LockExactRiskPolicyAudienceGrantsParams struct {
+	OrganizationID string
+	Scope          string
+	Selectors      []byte
+}
+
+// Locks existing exact audience grants against generic deletes and updates
+// without blocking concurrent inserts.
+func (q *Queries) LockExactRiskPolicyAudienceGrants(ctx context.Context, arg LockExactRiskPolicyAudienceGrantsParams) error {
+	_, err := q.db.Exec(ctx, lockExactRiskPolicyAudienceGrants, arg.OrganizationID, arg.Scope, arg.Selectors)
+	return err
+}
+
 const lockRiskExclusionMutations = `-- name: LockRiskExclusionMutations :exec
 SELECT pg_advisory_xact_lock(hashtextextended('risk-exclusion:' || $1::text, 0))
 `
@@ -5173,6 +5263,24 @@ type SetChatMessageExternalUserIDForTestParams struct {
 
 func (q *Queries) SetChatMessageExternalUserIDForTest(ctx context.Context, arg SetChatMessageExternalUserIDForTestParams) error {
 	_, err := q.db.Exec(ctx, setChatMessageExternalUserIDForTest, arg.ExternalUserID, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setRiskPolicyApprovalConfigFixture = `-- name: SetRiskPolicyApprovalConfigFixture :exec
+UPDATE risk_policies
+SET approval_config = $1
+WHERE id = $2
+`
+
+type SetRiskPolicyApprovalConfigFixtureParams struct {
+	ApprovalConfig []byte
+	ID             uuid.UUID
+}
+
+// Test fixture: replaces only a policy's approval config, which no production
+// query edits on its own.
+func (q *Queries) SetRiskPolicyApprovalConfigFixture(ctx context.Context, arg SetRiskPolicyApprovalConfigFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRiskPolicyApprovalConfigFixture, arg.ApprovalConfig, arg.ID)
 	return err
 }
 

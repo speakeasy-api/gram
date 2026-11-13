@@ -13,6 +13,7 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useOrganization } from "@/contexts/Auth";
 import {
   clientTypeHint,
@@ -33,11 +34,20 @@ import {
 } from "@gram/client/react-query/authClientAudience.js";
 import { useDetachAuthClientFromMcpServerMutation } from "@gram/client/react-query/detachAuthClientFromMcpServer.js";
 import { useSetAuthClientAudienceMutation } from "@gram/client/react-query/setAuthClientAudience.js";
+import { useSetAuthClientHeadersMutation } from "@gram/client/react-query/setAuthClientHeaders.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { invalidateAuthClientQueries } from "./authClientQueries";
+import { CredentialHeadersEditor } from "./CredentialHeadersEditor";
+import {
+  generatesAuthorization,
+  headerDraftProblem,
+  headerDraftsFrom,
+  headerInputs,
+  type HeaderDraft,
+} from "./credentialHeaders";
 
 type Level = "use" | "blocked";
 
@@ -113,6 +123,12 @@ export function AuthClientSheet({
           ) : null}
 
           <AudienceEditor client={client} canManage={canManage} />
+
+          <HeadersSection
+            client={client}
+            mcpServerId={mcpServerId}
+            canManage={canManage}
+          />
 
           <section className="space-y-3">
             <div className="space-y-1">
@@ -295,9 +311,11 @@ function AudienceEditor({
 
   if (audience.isLoading) {
     return (
-      <Text muted small>
-        Loading who can use this credential…
-      </Text>
+      <Skeleton label="Loading who can use this credential">
+        <div className="h-5 w-48" />
+        <div className="h-9 w-full" />
+        <div className="h-9 w-full" />
+      </Skeleton>
     );
   }
   if (audience.isError || !audience.data) {
@@ -525,5 +543,116 @@ function InheritedRule({
       </div>
       <Text small>{entry.level === "blocked" ? "Blocked" : "Can use"}</Text>
     </li>
+  );
+}
+
+/**
+ * The headers this credential sends. An administrator-created credential
+ * owns them, so they are edited and rotated here; a credential copied from
+ * this server's identity settings follows those settings.
+ */
+function HeadersSection({
+  client,
+  mcpServerId,
+  canManage,
+}: {
+  client: AuthClient;
+  mcpServerId: string;
+  canManage: boolean;
+}): JSX.Element | null {
+  const queryClient = useQueryClient();
+  const others = otherServers(client, mcpServerId);
+  const editable = canManage && client.authClientSource === "admin";
+  const [drafts, setDrafts] = useState<HeaderDraft[] | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const save = useSetAuthClientHeadersMutation({
+    onSuccess: () => {
+      setDrafts(null);
+      setConfirming(false);
+      toast.success(`Saved the headers ${client.name} sends`);
+      void invalidateAuthClientQueries(queryClient);
+    },
+    onError: (error) =>
+      toast.error(
+        error.message || "The headers could not be saved. Try again.",
+      ),
+  });
+
+  if (
+    client.headers.length === 0 &&
+    !editable &&
+    !generatesAuthorization(client.clientType)
+  ) {
+    return null;
+  }
+
+  const shown = drafts ?? headerDraftsFrom(client.headers);
+  const problem =
+    drafts === null ? null : headerDraftProblem(client.clientType, drafts);
+  const commit = () =>
+    save.mutate({
+      request: {
+        setAuthClientHeadersRequestBody: {
+          id: client.id,
+          headers: headerInputs(drafts ?? []),
+        },
+      },
+    });
+
+  return (
+    <section className="space-y-3">
+      <div className="space-y-1">
+        <h3 className="text-sm font-medium">Headers sent upstream</h3>
+        <Text muted small className="block">
+          {client.authClientSource === "admin"
+            ? "Secret values are stored encrypted and never shown. Leave a stored secret empty to keep it."
+            : "This credential follows this server's identity settings above. Change its headers there."}
+        </Text>
+      </div>
+      <CredentialHeadersEditor
+        clientType={client.clientType}
+        drafts={shown}
+        onChange={setDrafts}
+        readOnly={!editable}
+      />
+      {editable && drafts !== null ? (
+        <div className="flex items-center justify-end gap-2">
+          {problem ? (
+            <Text muted small className="mr-auto">
+              {problem}
+            </Text>
+          ) : null}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setDrafts(null)}
+            disabled={save.isPending}
+          >
+            <Button.Text>Discard</Button.Text>
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={save.isPending || !!problem}
+            onClick={() => (others.length > 0 ? setConfirming(true) : commit())}
+          >
+            <Button.Text>{save.isPending ? "Saving…" : "Save"}</Button.Text>
+          </Button>
+        </div>
+      ) : null}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={`Change what ${client.name} sends on every server?`}
+        description="These headers are part of the credential, so the change applies wherever it is used."
+        confirmLabel="Save on every server"
+        isPending={save.isPending}
+        onConfirm={commit}
+        impact={{
+          summary: "It is also used on these servers:",
+          mcpServerNames: others.map(serverLabel),
+        }}
+      />
+    </section>
   );
 }

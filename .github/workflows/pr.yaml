@@ -28,6 +28,10 @@ jobs:
       contents: "read"
       pull-requests: read # paths-filter lists the pull request files
     outputs:
+      # False on pushes to main. Main only moves to commits its merge queue
+      # already ran this workflow on, so jobs that only verify the code skip
+      # there; jobs that publish artifacts or warm main-scoped caches still run.
+      verify: ${{ github.event_name != 'push' }}
       server: ${{ steps.gates.outputs.server }}
       client: ${{ steps.gates.outputs.client }}
       cli: ${{ steps.gates.outputs.cli }}
@@ -45,6 +49,7 @@ jobs:
       otel-collector: ${{ steps.gates.outputs.otel-collector }}
       tunnel: ${{ steps.gates.outputs.tunnel }}
       preview-ui: ${{ steps.filter.outputs.preview-ui }}
+      platform-tool-eval: ${{ steps.filter.outputs.platform-tool-eval }}
       preview-retag-components: ${{ steps.preview-retag.outputs.components }}
       preview-tag: ${{ steps.preview-retag.outputs.tag }}
     steps:
@@ -83,10 +88,33 @@ jobs:
           check server
           check client
           check pystreams
+      # The changesets release pull request is rebuilt on top of main after
+      # every merge, so it gets a new head commit as often as main does. It
+      # only deletes changeset files, bumps "version" fields and appends to
+      # changelogs, none of which the builds, tests or linters below read, and
+      # the merge queue runs the whole workflow before it lands. Anything else
+      # in its diff (or the ci:full label) restores the normal gates.
+      - id: version-pr
+        name: Detect a version-only release pull request
+        if: github.event_name == 'pull_request' && github.head_ref == 'changeset-release/main' && !github.event.pull_request.head.repo.fork
+        run: |
+          set -euo pipefail
+          # HEAD is the pull request merge commit; its first parent is main.
+          git fetch --quiet --depth=2 origin "$GITHUB_SHA"
+          other_files=$(git diff --name-only HEAD^1 HEAD | grep -Ev '^\.changeset/[^/]+\.md$|(^|/)CHANGELOG\.md$|(^|/)package\.json$' || true)
+          other_lines=$(git diff --unified=0 HEAD^1 HEAD -- '*package.json' | grep -E '^[+-]' | grep -Ev '^(\+\+\+|---) |^[+-][[:space:]]*"version": "[^"]+",?$' || true)
+          if [[ -z "$other_files" && -z "$other_lines" ]]; then
+            echo "version-only=true" >> "$GITHUB_OUTPUT"
+            echo "Only version bumps, changelogs and changesets differ from main."
+          else
+            echo "The release pull request carries other changes; running the normal gates."
+            printf '%s\n' "$other_files" "$other_lines"
+          fi
       - id: gates
         name: Set outputs
         env:
           HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+          VERSION_ONLY: ${{ steps.version-pr.outputs.version-only }}
           STACKED_SERVER: ${{ steps.stacked.outputs.server }}
           STACKED_CLIENT: ${{ steps.stacked.outputs.client }}
           STACKED_PYSTREAMS: ${{ steps.stacked.outputs.pystreams }}
@@ -107,6 +135,11 @@ jobs:
           STEPS_FILTER_OUTPUTS_OTEL_COLLECTOR: ${{ steps.filter.outputs.otel-collector }}
           STEPS_FILTER_OUTPUTS_TUNNEL: ${{ steps.filter.outputs.tunnel }}
         run: |
+          if [[ "$VERSION_ONLY" == "true" && "$HAS_FULL_CI_LABEL" != "true" ]]; then
+            echo "Version-only release pull request: path-gated jobs will be skipped. The merge queue runs them all."
+            exit 0
+          fi
+
           if [[ "${STEPS_FILTER_OUTPUTS_SERVER}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_SERVER" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
@@ -227,8 +260,12 @@ jobs:
           PYSTREAMS: ${{ steps.gates.outputs.pystreams }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+          VERSION_ONLY: ${{ steps.version-pr.outputs.version-only }}
         run: |
-          if [[ "$IS_PR" != "true" ]]; then
+          # A version-only release pull request builds no images and has no
+          # main commit with matching paths to alias, so it gets no preview.
+          if [[ "$IS_PR" != "true" || ( "$VERSION_ONLY" == "true" && "$HAS_FULL_CI_LABEL" != "true" ) ]]; then
             echo "components=[]" >> "$GITHUB_OUTPUT"
             echo "tag=" >> "$GITHUB_OUTPUT"
             exit 0
@@ -362,6 +399,8 @@ jobs:
           filters: ${{ matrix.filters }}
           preview-tag: ${{ needs.changes.outputs.preview-tag }}
 
+  # Also runs on pushes to main: it is the only main-branch writer of the pkl
+  # cache that pull request runs restore.
   format-check:
     name: Check formatting with hk
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -406,6 +445,9 @@ jobs:
         with:
           key: pkl-blacksmith-v1-${{ runner.os }}-${{ hashFiles('hk.pkl') }}
           path: ~/.pkl/cache
+
+      - name: Test CI scripts
+        run: node --test .github/scripts/vitest-cache-source.test.mjs .github/scripts/content-mtime.test.mjs
 
       - name: Check formatting
         run: hk check --all
@@ -555,6 +597,9 @@ jobs:
 
   assistant-runtime-image:
     name: assistant-runtime-image
+    # The image is content-addressed by agents/ (the server embeds the same
+    # hash and pulls the runtime image by it), so an unchanged runtime is
+    # re-tagged rather than rebuilt, the same way code-runner-image works.
     # TEMPORARY: on GitHub-hosted runners (and so on upstream checkout/buildx/
     # build-push actions) because Blacksmith runners cannot reach the Ubuntu apt
     # mirrors, which breaks the musl toolchain install below. Move back to
@@ -572,93 +617,41 @@ jobs:
       # This job runs GitHub-hosted, so keep its cache keys out of the
       # Blacksmith-backed CI namespace (see .mise-tasks/github/pre-cache.mts).
       CACHE_NAMESPACE: github-v1
+      IMAGE: gcr.io/linen-analyst-344721/${{ github.repository_owner }}/gram-assistant-runtime
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Setup Mise
-        # Caches restored here also feed the image this job publishes. On
-        # main they can only come from main's own runs: GitHub scopes caches
-        # that PR runs write to the PR's ref, so a PR cannot poison them.
-        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0 # zizmor: ignore[cache-poisoning]
-        with:
-          minimum_release_age: 1d
-          install: true
-          cache: true
-          cache_key_prefix: mise-github-v1
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Install musl toolchain
-        run: |
-          sudo apt-get update -qq -o Acquire::Languages=none
-          sudo apt-get install -y -qq --no-install-recommends musl-tools
-
-      - name: Setup Rust
-        # Same cache scoping as Setup Mise above.
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0 # zizmor: ignore[cache-poisoning]
-        with:
-          target: ${{ env.RUNNER_TARGET }}
-          rust-src-dir: agents/runner
-          # Release-artifact build; the action's -D warnings default would
-          # diverge from the in-image fallback build.
-          rustflags: ""
-          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build assistant runner
-        run: |
-          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${RUNNER_TARGET}
-          mkdir -p ${RUNNER_BINARY_DIR}
-          cp agents/runner/target/${RUNNER_TARGET}/release/gram-assistant-runner ${RUNNER_BINARY_DIR}/gram-assistant-runner
-
-      - name: Smoke test assistant runner binary
-        run: |
-          file -b ${RUNNER_BINARY_DIR}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
-            || { echo "runner binary is not statically linked; it would fail inside the runtime image" >&2; exit 1; }
-          ${RUNNER_BINARY_DIR}/gram-assistant-runner --help
-
-      - name: Generate preview tag
-        id: assistant-preview-tag
+      - name: Compute image tags
+        id: tags
         shell: bash
         env:
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
-            SHORT_SHA=$(echo "${PR_HEAD_SHA}" | cut -c1-8)
-            echo "tag=pr-${PR_NUMBER}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-            echo "enabled=true" >> $GITHUB_OUTPUT
-          else
-            echo "tag=" >> $GITHUB_OUTPUT
-            echo "enabled=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Compute runtime image content hash
-        id: assistant-runtime-hash
-        shell: bash
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          hash=$(mise run hash:assistant-runtime-image)
-          if [ -z "$hash" ]; then
-            echo "runtime image hash is empty" >&2
-            exit 1
+          # Same value as `mise run hash:assistant-runtime-image`.
+          hash=$(git rev-parse HEAD:agents | cut -c1-12)
+          tags=("sha-${GITHUB_SHA}" "sha-${GITHUB_SHA::7}")
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            tags+=("pr-${PR_NUMBER}" "pr-${PR_NUMBER}-${HEAD_SHA::8}")
+          elif [[ "$REF_NAME" == "main" ]]; then
+            tags+=("main")
           fi
-          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          {
+            echo "hash=$hash"
+            echo "aliases=${tags[*]}"
+            echo "push<<EOF"
+            echo "${IMAGE}:${hash}"
+            for tag in "${tags[@]}"; do echo "${IMAGE}:${tag}"; done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Setup Docker builder
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - id: assistantGcrAuth
+      - id: gcrAuth
         name: "Authenticate to Google Cloud"
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
@@ -668,7 +661,7 @@ jobs:
 
       - name: Login to GCR
         env:
-          GCR_TOKEN: ${{ steps.assistantGcrAuth.outputs.access_token }}
+          GCR_TOKEN: ${{ steps.gcrAuth.outputs.access_token }}
         run: |
           max_attempts=3
           for ((i=1; i<=max_attempts; i++)); do
@@ -685,22 +678,89 @@ jobs:
           echo "All login attempts failed"
           exit 1
 
-      - name: Extract assistant runtime metadata for GCR
-        id: assistantMetaGcr
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+      - name: Setup Docker builder
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Find an existing image
+        id: existing
+        env:
+          HASH: ${{ steps.tags.outputs.hash }}
+        run: |
+          if docker buildx imagetools inspect "${IMAGE}:${HASH}" >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tag the existing image
+        if: steps.existing.outputs.found == 'true'
+        env:
+          HASH: ${{ steps.tags.outputs.hash }}
+          ALIASES: ${{ steps.tags.outputs.aliases }}
+        run: |
+          set -euo pipefail
+          args=()
+          for tag in $ALIASES; do args+=(--tag "${IMAGE}:${tag}"); done
+          docker buildx imagetools create "${args[@]}" "${IMAGE}:${HASH}"
+
+      - name: Setup Mise
+        if: steps.existing.outputs.found != 'true'
+        # Caches restored here also feed the image this job publishes. On
+        # main they can only come from main's own runs: GitHub scopes caches
+        # that PR runs write to the PR's ref, so a PR cannot poison them.
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0 # zizmor: ignore[cache-poisoning]
         with:
-          images: ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-assistant-runtime
-          tags: |
-            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
-            type=ref,event=tag
-            type=ref,event=pr
-            type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
-            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
-            type=schedule,pattern=nightly
-            type=sha
-            type=sha,format=long
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-github-v1
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: steps.existing.outputs.found != 'true'
+        run: mise run github
+
+      - name: Install musl toolchain
+        if: steps.existing.outputs.found != 'true'
+        run: |
+          sudo apt-get update -qq -o Acquire::Languages=none
+          sudo apt-get install -y -qq --no-install-recommends musl-tools
+
+      - name: Setup Rust
+        if: steps.existing.outputs.found != 'true'
+        # Same cache scoping as Setup Mise above.
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0 # zizmor: ignore[cache-poisoning]
+        with:
+          target: ${{ env.RUNNER_TARGET }}
+          rust-src-dir: agents/runner
+          # Release-artifact build; the action's -D warnings default would
+          # diverge from the in-image fallback build.
+          rustflags: ""
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build assistant runner
+        if: steps.existing.outputs.found != 'true'
+        run: |
+          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${RUNNER_TARGET}
+          mkdir -p ${RUNNER_BINARY_DIR}
+          cp agents/runner/target/${RUNNER_TARGET}/release/gram-assistant-runner ${RUNNER_BINARY_DIR}/gram-assistant-runner
+
+      - name: Smoke test assistant runner binary
+        if: steps.existing.outputs.found != 'true'
+        run: |
+          file -b ${RUNNER_BINARY_DIR}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
+            || { echo "runner binary is not statically linked; it would fail inside the runtime image" >&2; exit 1; }
+          ${RUNNER_BINARY_DIR}/gram-assistant-runner --help
+
+      - name: Log in to Docker Hub
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push assistant runtime image to GCR
+        if: steps.existing.outputs.found != 'true'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
@@ -712,8 +772,7 @@ jobs:
           file: ./agents/runtime-image/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.assistantMetaGcr.outputs.tags }}
-          labels: ${{ steps.assistantMetaGcr.outputs.labels }}
+          tags: ${{ steps.tags.outputs.push }}
 
   code-runner-image:
     name: code-runner-image
@@ -1126,7 +1185,7 @@ jobs:
 
       # Mise supplies atlas; the SHA-pinned actions download a separate atlas-action wrapper.
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
+        uses: ariga/atlas-action/migrate/lint@be526fa360e6cb745546681470f4760dbbc49cf8 # v1.17.12
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -1138,7 +1197,7 @@ jobs:
           ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
+        uses: ariga/atlas-action/migrate/lint@be526fa360e6cb745546681470f4760dbbc49cf8 # v1.17.12
         with:
           working-directory: server
           dir: file://clickhouse/migrations
@@ -1331,11 +1390,13 @@ jobs:
   # lint and codegen checks. ci-gate still requires server-checks.
   server-build:
     name: server-build
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    # Compilation is mostly served from the Go build cache, so the job spends
+    # more time on setup and the artifact upload than on building.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
-      GOMAXPROCS: 16
+      GOMAXPROCS: 8
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -1381,11 +1442,11 @@ jobs:
 
   server-checks:
     name: server-checks
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.server == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
     env:
-      GOMAXPROCS: 16
+      GOMAXPROCS: 8
     services:
       postgres:
         image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
@@ -1419,6 +1480,34 @@ jobs:
       - name: Test CI tooling
         run: mise run test:ci
 
+      # golangci-lint keeps per-package analysis results, keyed on package
+      # content, in this directory. The lint action's own cache is saved once
+      # a week under a fixed key, so it is stale for nearly every run and the
+      # whole server is analysed from scratch. Restore the newest entry
+      # instead (this branch's, else the one golangci-lint-cache saved for
+      # main) and save a new one whenever the restored one was stale enough
+      # to make the run slow.
+      #
+      # The key names the Go toolchain, the glint plugin and the lint
+      # configuration: golangci-lint's own invalidation does not see analyzer
+      # changes in glint's subdirectories (see .mise-tasks/lint/server.sh).
+      - name: Compute golangci-lint cache key
+        id: lint-cache-key
+        env:
+          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'glint/**') }}
+        run: echo "inputs=$(go env GOVERSION)-${FILES_HASH}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore golangci-lint cache
+        id: lint-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/golangci-lint
+          key: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-
+
+      - name: Start lint timer
+        run: echo "LINT_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
@@ -1426,6 +1515,33 @@ jobs:
           # Skips a JSONSchema fetch from golangci-lint.run on every run.
           verify: false
           working-directory: server
+          # Cached by the steps around this one.
+          skip-cache: true
+        env:
+          # A run that has to analyse most of the server keeps about 10 GiB
+          # live, and with the default GOGC the heap grows to more than twice
+          # that before a collection, close to this runner's 30 GiB. The soft
+          # limit sits just above the live set: at 4 GiB, the value the local
+          # lint task uses, the collector ran continuously here and a cold
+          # run took 322s instead of 138s.
+          GOMEMLIMIT: 12GiB
+
+      - name: Decide whether to save the golangci-lint cache
+        id: lint-cache-save
+        run: |
+          elapsed=$(( $(date +%s) - LINT_STARTED_AT ))
+          echo "golangci-lint step took ${elapsed}s"
+          if (( elapsed > 45 )); then
+            echo "save=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save golangci-lint cache
+        if: steps.lint-cache-save.outputs.save == 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/golangci-lint
+          key: ${{ steps.lint-cache.outputs.cache-primary-key }}
 
       - name: Install Go tools
         run: go install tool
@@ -1454,13 +1570,76 @@ jobs:
           mise run db:migrate --dry
           mise run git:porcelain
 
+  # server-checks is skipped on pushes to main, and a cache saved by a pull
+  # request or merge queue run is only visible to that ref, so without this
+  # job no golangci-lint cache would exist for a new pull request to start
+  # from. It lints main with the previous main cache and saves the result.
+  # Lint findings are the merge queue's business: this job never gates
+  # anything and no job depends on it.
+  golangci-lint-cache:
+    name: Publish main golangci-lint cache
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    needs: changes
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.server == 'true'
+    timeout-minutes: 15
+    continue-on-error: true
+    env:
+      GOMAXPROCS: 8
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      # Keep the key in step with server-checks.
+      - name: Compute golangci-lint cache key
+        id: lint-cache-key
+        env:
+          FILES_HASH: ${{ hashFiles('server/.golangci.yaml', 'server/.custom-gcl.yml', 'glint/**') }}
+        run: echo "inputs=$(go env GOVERSION)-${FILES_HASH}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore golangci-lint cache
+        id: lint-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/golangci-lint
+          key: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: golangci-lint-server-blacksmith-v1-${{ steps.lint-cache-key.outputs.inputs }}-
+
+      - name: Lint with golangci-lint
+        continue-on-error: true
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          install-mode: none
+          verify: false
+          working-directory: server
+          skip-cache: true
+        env:
+          GOMEMLIMIT: 12GiB
+
+      - name: Save golangci-lint cache
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/golangci-lint
+          key: ${{ steps.lint-cache.outputs.cache-primary-key }}
+
   infra-build-lint:
     name: Lint and generate infra
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
     needs: changes
-    if: needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.infra == 'true'
     env:
       GOMAXPROCS: 4
     steps:
@@ -1524,6 +1703,8 @@ jobs:
       - name: Minimize uv cache
         run: uv cache prune --ci
 
+  # Also runs on pushes to main: with infra-build-lint skipped there, it is the
+  # only main-branch writer of the uv cache that pull request runs restore.
   pystreams-build-lint:
     name: Lint and test the pystreams package
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1572,7 +1753,7 @@ jobs:
     name: cli-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.cli == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.cli == 'true'
     env:
       GOMAXPROCS: 4
     services:
@@ -1634,7 +1815,7 @@ jobs:
     name: hooks-build-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.hooks == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.hooks == 'true'
     env:
       GOMAXPROCS: 4
     steps:
@@ -1669,7 +1850,7 @@ jobs:
     name: glint-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.glint == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.glint == 'true'
     env:
       GOMAXPROCS: 4
     steps:
@@ -1701,7 +1882,7 @@ jobs:
     name: plog-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.plog == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.plog == 'true'
     env:
       GOMAXPROCS: 4
     steps:
@@ -1744,17 +1925,71 @@ jobs:
       - name: Check for dirty files
         run: mise run git:porcelain
 
+  # Decides how much of the server suite a run covers and how many shards
+  # that takes. A pull request tests the packages its files belong to and the
+  # packages that import one of those directly, on as few shards as that
+  # needs; packages further down the import graph are left to the merge queue,
+  # so a pull request can pass here and still fail there. The whole suite runs
+  # on five shards in the merge queue, with the ci:full label, and when the
+  # change touches something every package depends on (see the lists in
+  # .mise-tasks/test/server.sh).
+  server-test-plan:
+    name: Plan server tests
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      - name: List changed files
+        id: changed
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full')
+        run: |
+          set -euo pipefail
+          # HEAD is the pull request merge commit; its first parent is the base.
+          # --no-renames lists a moved file under both paths, so the package
+          # it left is selected too.
+          git fetch --quiet --depth=2 origin "$GITHUB_SHA"
+          git diff --name-only --no-renames HEAD^1 HEAD > "${RUNNER_TEMP}/changed-files.txt"
+          echo "arg=--shard-changed=${RUNNER_TEMP}/changed-files.txt" >> "$GITHUB_OUTPUT"
+
+      - name: Plan
+        id: plan
+        env:
+          CHANGED_ARG: ${{ steps.changed.outputs.arg }}
+        run: |
+          set -euo pipefail
+          plan=$(mise run test:server --plan=5 ${CHANGED_ARG:+"$CHANGED_ARG"} -tags=inv.debug ./... | tail -n 1)
+          echo "$plan"
+          echo "shards=$(jq -c .shards <<< "$plan")" >> "$GITHUB_OUTPUT"
+
   server-test:
     name: server-test (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    needs: changes
-    if: needs.changes.outputs.server == 'true'
+    needs: [changes, server-test-plan]
+    # No shards means the change reaches no test package.
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true' && needs.server-test-plan.outputs.shards != '[]'
     strategy:
       # Every shard should report, otherwise a single failure hides the state of
       # the rest of the suite.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: ${{ fromJSON(needs.server-test-plan.outputs.shards) }}
     env:
       GOMAXPROCS: 8
       # The runner VM is destroyed after the job, and the reaper is the one
@@ -1780,16 +2015,40 @@ jobs:
       - name: Install Go deps
         run: mise run install:go
 
+      # The same list server-test-plan sized the shards from; every shard
+      # has to select from it to agree on who tests what.
+      - name: List changed files
+        id: changed
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full')
+        run: |
+          set -euo pipefail
+          git fetch --quiet --depth=2 origin "$GITHUB_SHA"
+          git diff --name-only --no-renames HEAD^1 HEAD > "${RUNNER_TEMP}/changed-files.txt"
+          echo "arg=--shard-changed=${RUNNER_TEMP}/changed-files.txt" >> "$GITHUB_OUTPUT"
+
       - name: Install discovery wire-test dependencies on its shard
         shell: bash
         run: |
-          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL}" -tags=inv.debug ./...)
+          packages=$(mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} --print-shard ${CHANGED_ARG:+"$CHANGED_ARG"} -tags=inv.debug ./...)
           if grep -qx 'github.com/speakeasy-api/gram/server/internal/mcpregistry' <<< "$packages"; then
             aube install --frozen-lockfile --filter . --filter 'dashboard...'
           fi
         env:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
+          CHANGED_ARG: ${{ steps.changed.outputs.arg }}
+
+      # go test keys cached results on the size and modification time of the
+      # files a test reads, and a fresh checkout stamps every file with the
+      # current time. Without this step the packages that read schema.sql,
+      # the OpenAPI document or testdata re-run on every commit.
+      # gotestsum writes its reports into server/. Creating them first keeps
+      # that from changing the directory's time during the run, which the
+      # packages that list server/ would see as a changed input.
+      - name: Give tracked files content-derived modification times
+        run: |
+          touch server/junit-report.xml server/test-timings.json
+          node .github/scripts/content-mtime.mjs
 
       - name: Test
         id: test
@@ -1805,10 +2064,11 @@ jobs:
         # other branches) a failure fails the job as before: those runs mix
         # flakes with the branch's own breakage.
         continue-on-error: ${{ github.event_name == 'merge_group' || github.ref == 'refs/heads/main' }}
-        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} -p=2 ${RACE_FLAG:+"$RACE_FLAG"} -tags=inv.debug ./...
+        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} ${CHANGED_ARG:+"$CHANGED_ARG"} -p=2 ${RACE_FLAG:+"$RACE_FLAG"} -tags=inv.debug ./...
         env:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
+          CHANGED_ARG: ${{ steps.changed.outputs.arg }}
           RACE_FLAG: ${{ (github.event_name == 'merge_group' || github.ref == 'refs/heads/main') && '-race' || '' }}
           # Alongside junit-report.xml, gotestsum writes only the pass, skip,
           # and fail events of 'go test -json' (no output lines) to this file,
@@ -1820,7 +2080,7 @@ jobs:
         # failing runs can be ranked too. Re-running a job replaces its shard's
         # artifact. Read with 'gotestsum tool slowest --jsonfile
         # test-timings.json'; 'mise run ci:shard-timings' turns the JUnit
-        # reports of recent main runs into ci/cmd/shard/timings.txt.
+        # reports of recent merge queue runs into ci/cmd/shard/timings.txt.
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -1853,7 +2113,7 @@ jobs:
     name: demo-seed-safety
     runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.server == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
     env:
       GOMAXPROCS: 8
       TESTCONTAINERS_RYUK_DISABLED: true
@@ -1876,8 +2136,121 @@ jobs:
       - name: Install Go deps
         run: mise run install:go
 
+      # See the same step in server-test.
+      - name: Give tracked files content-derived modification times
+        run: node .github/scripts/content-mtime.mjs
+
+      # The merge queue and main always execute the test (-count=1). A pull
+      # request run may reuse a cached pass when nothing the demoseed package
+      # compiles or reads has changed since.
       - name: Test
-        run: mise run test:server -race -count=1 -tags=demoseed_safety ./internal/demoseed/...
+        run: mise run test:server -race ${COUNT_FLAG:+"$COUNT_FLAG"} -tags=demoseed_safety ./internal/demoseed/...
+        env:
+          COUNT_FLAG: ${{ github.event_name != 'pull_request' && '-count=1' || '' }}
+
+  # Asks a model the Platform MCP tool eval cases that this pull request's
+  # tool, instruction or case changes could move. On the progressive surface
+  # it runs each case three times and fails when a case that passes in
+  # tooleval/baseline.json now fails in most runs; the direct surface runs
+  # once and only reports.
+  # It starts when catalogue.json, a case, the baseline or the eval harness
+  # changes; every tool or instruction change forces a catalogue.json change.
+  # The report goes to the job summary, and the report and an updated
+  # baseline.json to the platform-tool-eval artifact. It spends LLM calls, so it
+  # runs only on pull requests, and skips when the eval key secret is not available (forks, or
+  # before the secret is configured).
+  platform-tool-eval:
+    name: platform-tool-eval
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.platform-tool-eval == 'true'
+    env:
+      TESTCONTAINERS_RYUK_DISABLED: true
+    steps:
+      - name: Check eval key
+        id: key
+        env:
+          EVAL_KEY: ${{ secrets.OPENROUTER_TOOL_EVAL_KEY }}
+        run: |
+          if [ -n "$EVAL_KEY" ]; then
+            echo "configured=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >>"$GITHUB_OUTPUT"
+            echo "::notice::OPENROUTER_TOOL_EVAL_KEY is not available, so the Platform MCP tool eval is skipped."
+          fi
+
+      - name: Checkout
+        if: steps.key.outputs.configured == 'true'
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+        with:
+          # The pull request's merge commit and its first parent, the base
+          # tip, which is what the eval compares against.
+          fetch-depth: 2
+
+      - name: Setup Mise
+        if: steps.key.outputs.configured == 'true'
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        if: steps.key.outputs.configured == 'true'
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      - name: Install Go deps
+        if: steps.key.outputs.configured == 'true'
+        run: mise run install:go
+
+      - name: Prepare output directory
+        if: steps.key.outputs.configured == 'true'
+        run: mkdir -p "$RUNNER_TEMP/platform-tool-eval"
+
+      # The progressive surface is gated: three runs per case against the
+      # committed baseline. It is what most hosts see, and a case costs
+      # cents rather than the direct surface's quarter dollar.
+      - name: Run gated eval (progressive)
+        if: steps.key.outputs.configured == 'true'
+        run: mise run eval:platform-tools --changed-since HEAD^1 --max-cases 60 --surfaces progressive --runs 3 --concurrency 8 --gate --out "$RUNNER_TEMP/platform-tool-eval/progressive.md" --baseline-out "$RUNNER_TEMP/platform-tool-eval/baseline.json"
+        env:
+          # Not OPENROUTER_DEV_KEY: mise.toml sets that to a placeholder,
+          # which would override this inside mise run.
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_TOOL_EVAL_KEY }}
+
+      # The direct surface lists the whole catalogue on every turn, so it
+      # runs once per case and only reports.
+      - name: Run report-only eval (direct)
+        if: always() && steps.key.outputs.configured == 'true'
+        continue-on-error: true
+        run: mise run eval:platform-tools --changed-since HEAD^1 --max-cases 60 --surfaces direct --runs 1 --concurrency 8 --out "$RUNNER_TEMP/platform-tool-eval/direct.md"
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_TOOL_EVAL_KEY }}
+
+      - name: Write summary
+        if: always() && steps.key.outputs.configured == 'true'
+        run: |
+          wrote=false
+          for surface in progressive direct; do
+            report="$RUNNER_TEMP/platform-tool-eval/$surface.md"
+            if [ -f "$report" ]; then
+              cat "$report" >>"$GITHUB_STEP_SUMMARY"
+              wrote=true
+            fi
+          done
+          if [ "$wrote" = false ]; then
+            echo "No Platform MCP tool, instruction or eval case changed, or the eval failed before writing a report." >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload report and baseline
+        if: always() && steps.key.outputs.configured == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: platform-tool-eval
+          path: ${{ runner.temp }}/platform-tool-eval/
+          if-no-files-found: ignore
 
   docker-build-client:
     name: docker-build-client
@@ -1893,54 +2266,11 @@ jobs:
       (needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true')
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
+    outputs:
+      reused: ${{ steps.existing.outputs.found }}
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
-
-      - name: Setup Mise
-        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
-        with:
-          minimum_release_age: 1d
-          install: true
-          cache: true
-          cache_key_prefix: mise-blacksmith-v1
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache aube store
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_AUBE_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_AUBE_KEY }}
-            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
-          path: |
-            ${{ env.AUBE_STORE_PATH }}
-
-      - name: Install dependencies
-        run: aube install --frozen-lockfile
-
-      - name: Build
-        env:
-          NODE_ENV: production
-        run: mise exec --env viteprod -- aube run build
-
-      # Published for upload-dashboard-assets so the CDN bucket receives the
-      # exact assets this image ships with (a rebuild there could hash
-      # differently, e.g. GRAM_GIT_SHA is only set in this job).
-      - name: Upload built assets artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: dashboard-assets
-          path: client/dashboard/dist/assets
-          retention-days: 2
-
-      - name: Upload source maps to DataDog
-        env:
-          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
-        run: mise run datadog:sourcemaps --git-sha "${GITHUB_SHA}"
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
@@ -1967,6 +2297,76 @@ jobs:
           done
           echo "All login attempts failed"
           exit 1
+
+      # The merge queue run for this commit already built both images and
+      # uploaded their assets and source maps, so a push to main skips the
+      # build and only tags the queue images (see the build-push action).
+      - name: Find the merge queue images
+        id: existing
+        env:
+          IMAGES: ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-dashboard ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-admin-dashboard
+        run: |
+          found=false
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            found=true
+            for image in $IMAGES; do
+              docker buildx imagetools inspect "${image}:sha-${GITHUB_SHA}" >/dev/null 2>&1 || found=false
+            done
+          fi
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Mise
+        if: steps.existing.outputs.found != 'true'
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: steps.existing.outputs.found != 'true'
+        run: mise run github
+
+      - name: Cache aube store
+        if: steps.existing.outputs.found != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
+          path: |
+            ${{ env.AUBE_STORE_PATH }}
+
+      - name: Install dependencies
+        if: steps.existing.outputs.found != 'true'
+        run: aube install --frozen-lockfile
+
+      - name: Build
+        if: steps.existing.outputs.found != 'true'
+        env:
+          NODE_ENV: production
+        run: mise exec --env viteprod -- aube run build
+
+      # Published for upload-dashboard-assets so the CDN bucket receives the
+      # exact assets this image ships with (a rebuild there could hash
+      # differently, e.g. GRAM_GIT_SHA is only set in this job).
+      - name: Upload built assets artifact
+        if: steps.existing.outputs.found != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dashboard-assets
+          path: client/dashboard/dist/assets
+          retention-days: 2
+
+      - name: Upload source maps to DataDog
+        if: steps.existing.outputs.found != 'true'
+        env:
+          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+        run: mise run datadog:sourcemaps --git-sha "${GITHUB_SHA}"
+
       # The Speakeasy admin dashboard. It ships as its own image because it is
       # served from the admin origin (same host as the admin API) rather than
       # the app origin. The `pnpm build` step above already produced its dist,
@@ -2009,7 +2409,7 @@ jobs:
           cache-key: gram/dashboard-image
 
       - name: Prune aube store
-        if: success()
+        if: success() && steps.existing.outputs.found != 'true'
         run: aube store prune
 
   upload-dashboard-assets:
@@ -2036,8 +2436,11 @@ jobs:
         include:
           - environment: dev
           - environment: prod
+    # When docker-build-client reused the merge queue images, the queue run
+    # already uploaded their assets to both buckets.
     steps:
       - name: Download built assets artifact
+        if: needs.docker-build-client.outputs.reused != 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: dashboard-assets
@@ -2045,6 +2448,7 @@ jobs:
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
+        if: needs.docker-build-client.outputs.reused != 'true'
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         # Each secret is named outright: indexing secrets[...] with a matrix
         # value would load the whole secrets context into the runner. Of each
@@ -2054,6 +2458,7 @@ jobs:
           service_account: ${{ matrix.environment == 'dev' && secrets.ASSET_BUCKET_SERVICE_ACCOUNT_DEV || '' }}${{ matrix.environment == 'prod' && secrets.ASSET_BUCKET_SERVICE_ACCOUNT_PROD || '' }}
 
       - name: Upload assets to bucket
+        if: needs.docker-build-client.outputs.reused != 'true'
         uses: google-github-actions/upload-cloud-storage@6397bd7208e18d13ba2619ee21b9873edc94427a # v3.0.0
         with:
           path: dist/assets
@@ -2078,6 +2483,7 @@ jobs:
     needs: [changes]
     if: |
       !cancelled() &&
+      needs.changes.outputs.verify == 'true' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
@@ -2146,6 +2552,7 @@ jobs:
     needs: [changes]
     if: |
       !cancelled() &&
+      needs.changes.outputs.verify == 'true' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
@@ -2176,29 +2583,178 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
+      # Restore after installation, which can replace node_modules.
+      - name: Vitest cache key
+        id: vitest-cache-key
+        uses: ./.github/workflows/composite/vitest-cache-key # zizmor: ignore[self-repository]
+
+      - name: Restore Vitest module cache
+        id: vitest-cache
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.vitest-cache
+          key: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}
+          restore-keys: ${{ steps.vitest-cache-key.outputs.prefix }}
+
+      # A pull request run only executes the test files whose module graph
+      # reaches a file the pull request changed (vitest --changed). The whole
+      # suite still runs when anything outside the two apps' sources changed
+      # that the tests could depend on (dependencies, configuration, shared
+      # test setup, this workflow), with the ci:full label, and always in the
+      # merge queue. A fixture a test reads from disk without importing it is
+      # invisible to the module graph; the merge queue is what catches that.
+      - name: Select tests
+        id: select
+        env:
+          SELECTIVE: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+        run: |
+          set -euo pipefail
+          if [[ "$SELECTIVE" != "true" ]]; then
+            echo "Running every test file."
+            exit 0
+          fi
+          # HEAD is the pull request merge commit; its first parent is the base.
+          git fetch --quiet --depth=2 origin "$GITHUB_SHA"
+          watched='^(\.github/|client/|e2e/|sdks/typescript/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig\.json$)'
+          sources='^client/(dashboard|admin)/src/'
+          shared='^client/(dashboard|admin)/src/test/'
+          forcing=$(git diff --name-only HEAD^1 HEAD | grep -E "$watched" | grep -Ev "$sources" || true)
+          forcing+=$(git diff --name-only HEAD^1 HEAD | grep -E "$shared" || true)
+          if [[ -n "$forcing" ]]; then
+            echo "Running every test file because these changed:"
+            head -20 <<< "$forcing"
+            exit 0
+          fi
+          echo "Running only the test files affected by this pull request."
+          echo "args=--changed HEAD^1 --passWithNoTests" >> "$GITHUB_OUTPUT"
+
       - name: Test
-        run: aube run test
+        run: aube exec vitest -- run ${VITEST_ARGS}
         working-directory: client/dashboard
+        env:
+          VITEST_ARGS: ${{ steps.select.outputs.args }}
 
       - name: Test admin
-        run: aube run test
+        run: aube exec vitest -- run ${VITEST_ARGS}
         working-directory: client/admin
+        env:
+          VITEST_ARGS: ${{ steps.select.outputs.args }}
 
-      - name: Test registry editor in Chromium
+      - name: Test registry editor in Chrome
         working-directory: e2e
         run: |
-          aube exec playwright install --with-deps chromium
+          # /usr/bin/google-chrome is the image browser (see
+          # e2e/registry-editor.config.ts). Do not apt-install or download one.
+          /usr/bin/google-chrome --version
           aube run test:registry-editor
+
+      - name: Save Vitest module cache
+        if: success() && steps.vitest-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.vitest-cache
+          key: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}
+
+      # Main reuses the exact successful queue revision instead of running
+      # these suites again. PR artifacts are never eligible for promotion.
+      - name: Upload queue module transforms
+        if: success() && github.event_name == 'merge_group' && startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/')
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: node_modules/.vitest-cache
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 1
 
       - name: Prune aube store
         if: success()
         run: aube store prune
 
-  sdk-gen-check:
-    name: Check SDK is up-to-date
+  # Like the image retagging jobs, publish the queue's output for this exact
+  # main commit rather than repeating work. No required check depends on this.
+  vitest-module-cache:
+    name: Publish main Vitest module cache
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      actions: read # Verify the queue run/job and download its exact artifact.
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Node
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          install_args: node
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Vitest cache key
+        id: vitest-cache-key
+        uses: ./.github/workflows/composite/vitest-cache-key # zizmor: ignore[self-repository]
+
+      - name: Find verified queue artifact
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CACHE_PREFIX: ${{ steps.vitest-cache-key.outputs.prefix }}
+        run: node .github/scripts/vitest-cache-source.mjs
+
+      - name: Download verified module transforms
+        if: steps.source.outputs.artifact-id != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.source.outputs.artifact-id }}
+          run-id: ${{ steps.source.outputs.run-id }}
+          github-token: ${{ github.token }}
+          path: node_modules/.vitest-cache
+          merge-multiple: true
+          digest-mismatch: error
+
+      - name: Check module metadata
+        if: steps.source.outputs.artifact-id != ''
+        run: test -f node_modules/.vitest-cache/_metadata.json
+
+      - name: Save main module transforms
+        if: success() && steps.source.outputs.artifact-id != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.vitest-cache
+          key: ${{ steps.vitest-cache-key.outputs.prefix }}${{ github.sha }}
+
+  # One job per workflow target so the slow dashboard SDK does not serialize
+  # the others. `speakeasy run --parallel` cannot do this in one job: its
+  # targets share .speakeasy/temp, and the first to finish deletes it.
+  sdk-gen-check:
+    name: Check SDK is up-to-date (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
     needs: changes
-    if: needs.changes.outputs.sdk-gen == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.sdk-gen == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: gram-internal
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - target: gram-admin
+            runner: blacksmith-2vcpu-ubuntu-2404
+            checks: true
+          # The overlay tests run here to balance job lengths: they take
+          # about as long as the spec check left in the gram-admin job.
+          - target: hooks-go
+            runner: blacksmith-2vcpu-ubuntu-2404
+            overlay-tests: true
     env:
       SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
     steps:
@@ -2233,22 +2789,29 @@ jobs:
       # The hooks-go target's compile step resolves the root Go module's
       # dependencies, including test dependencies.
       - name: Restore Go module cache
+        if: matrix.target == 'hooks-go' || matrix.checks
         uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
 
       - name: Test generated artifact conflict resolution
+        if: matrix.checks
         run: mise run test:gen-resolve
 
       - name: Test SDK overlays
+        if: matrix.overlay-tests
         run: mise run test:sdk-overlays
 
       - name: Test SDK generation check
+        if: matrix.checks
         run: mise run test:gen-sdk
 
       - name: Check transformed SDK specs
+        if: matrix.checks
         run: mise run gen:sdk --check
 
       - name: Regenerate SDK
-        run: mise run gen:sdk
+        env:
+          TARGET: ${{ matrix.target }}
+        run: mise run gen:sdk --target "$TARGET"
 
       # Prevent perpetual failure for code samples digest.
       - name: Restore .speakeasy/workflow.lock
@@ -2392,39 +2955,6 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
-      - name: Download melange packages artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: functions-packages
-          path: functions/packages
-
-      - name: Build apko image (${{ matrix.runtime }})
-        id: apko
-        env:
-          MELANGE_PUBLIC_KEY: ${{ vars.MELANGE_PUBLIC_KEY }}
-          MATRIX_APKO_CONFIG: ${{ matrix.apko-config }}
-          MATRIX_RUNTIME: ${{ matrix.runtime }}
-        run: |
-          KEY_DIR=$(mktemp -d)
-          KEY_FILE="$KEY_DIR/melange-signing-key.rsa.pub"
-          echo "$MELANGE_PUBLIC_KEY" > "$KEY_FILE"
-
-          mise run build:functions-image \
-            --melange-public-key "$KEY_FILE" \
-            --apko-config ${MATRIX_APKO_CONFIG} \
-            --image "apko-${MATRIX_RUNTIME}:${GITHUB_SHA}" \
-            --tarball-name ${MATRIX_RUNTIME} \
-            --out oci/${MATRIX_RUNTIME}
-
-      - name: Run safety checks
-        run: |
-          mise run test:apko-functions \
-            --image ${STEPS_APKO_OUTPUTS_IMAGE} \
-            --tarball ${STEPS_APKO_OUTPUTS_TARBALL}
-        env:
-          STEPS_APKO_OUTPUTS_IMAGE: ${{ steps.apko.outputs.image }}
-          STEPS_APKO_OUTPUTS_TARBALL: ${{ steps.apko.outputs.tarball }}
-
       - name: "[DEV] Create fly app"
         id: flyCreateDev
         if: github.event.pull_request.user.login != 'dependabot[bot]'
@@ -2457,6 +2987,70 @@ jobs:
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
+      # The merge queue run for this commit already built and pushed this
+      # runtime's image to both registries, so a push to main skips the build
+      # and only tags those images.
+      - name: Find the merge queue images
+        id: existing
+        if: github.event_name == 'push'
+        env:
+          FLY_API_TOKEN_DEV: ${{ secrets.FLY_API_TOKEN_DEV }}
+          FLY_API_TOKEN_PROD: ${{ secrets.FLY_API_TOKEN_PROD }}
+          FLY_APP_REGISTRY_DEV: ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
+          FLY_APP_REGISTRY_PROD: ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
+          MATRIX_RUNTIME: ${{ matrix.runtime }}
+        run: |
+          set -euo pipefail
+          found=true
+          for env in dev prod; do
+            if [[ "$env" == dev ]]; then
+              token=$FLY_API_TOKEN_DEV registry=$FLY_APP_REGISTRY_DEV
+            else
+              token=$FLY_API_TOKEN_PROD registry=$FLY_APP_REGISTRY_PROD
+            fi
+            export DOCKER_CONFIG="${RUNNER_TEMP}/docker-${env}"
+            mkdir -p "$DOCKER_CONFIG"
+            FLY_API_TOKEN=$token fly auth docker
+            docker buildx imagetools inspect "${registry}:${GITHUB_SHA}-${MATRIX_RUNTIME}" >/dev/null 2>&1 || found=false
+          done
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+
+      - name: Download melange packages artifact
+        if: steps.existing.outputs.found != 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: functions-packages
+          path: functions/packages
+
+      - name: Build apko image (${{ matrix.runtime }})
+        id: apko
+        if: steps.existing.outputs.found != 'true'
+        env:
+          MELANGE_PUBLIC_KEY: ${{ vars.MELANGE_PUBLIC_KEY }}
+          MATRIX_APKO_CONFIG: ${{ matrix.apko-config }}
+          MATRIX_RUNTIME: ${{ matrix.runtime }}
+        run: |
+          KEY_DIR=$(mktemp -d)
+          KEY_FILE="$KEY_DIR/melange-signing-key.rsa.pub"
+          echo "$MELANGE_PUBLIC_KEY" > "$KEY_FILE"
+
+          mise run build:functions-image \
+            --melange-public-key "$KEY_FILE" \
+            --apko-config ${MATRIX_APKO_CONFIG} \
+            --image "apko-${MATRIX_RUNTIME}:${GITHUB_SHA}" \
+            --tarball-name ${MATRIX_RUNTIME} \
+            --out oci/${MATRIX_RUNTIME}
+
+      - name: Run safety checks
+        if: steps.existing.outputs.found != 'true'
+        run: |
+          mise run test:apko-functions \
+            --image ${STEPS_APKO_OUTPUTS_IMAGE} \
+            --tarball ${STEPS_APKO_OUTPUTS_TARBALL}
+        env:
+          STEPS_APKO_OUTPUTS_IMAGE: ${{ steps.apko.outputs.image }}
+          STEPS_APKO_OUTPUTS_TARBALL: ${{ steps.apko.outputs.tarball }}
+
       - name: Log in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -2479,7 +3073,7 @@ jobs:
             type=sha,format=long,prefix=,suffix=-${{ matrix.runtime }}
 
       - name: Tag images
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
+        if: steps.existing.outputs.found != 'true' && github.event.pull_request.user.login != 'dependabot[bot]'
         working-directory: functions
         run: |
           set -x
@@ -2504,17 +3098,28 @@ jobs:
               FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
               CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
               FLY_APP_REGISTRY: ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
+              REUSE: ${{ steps.existing.outputs.found }}
+              MATRIX_RUNTIME: ${{ matrix.runtime }}
             run: |
               set -euo pipefail
               mkdir -p "$DOCKER_CONFIG"
               fly auth docker
 
               matched=false
+              retag=()
               while IFS= read -r tag; do
                 [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
-                docker push "$tag"
+                if [[ "$REUSE" == true ]]; then
+                  retag+=(--tag "$tag")
+                else
+                  docker push "$tag"
+                fi
                 matched=true
               done <<< "$CURRENT_TAGS"
+
+              if [[ "$REUSE" == true && "$matched" == true ]]; then
+                docker buildx imagetools create "${retag[@]}" "${FLY_APP_REGISTRY}:${GITHUB_SHA}-${MATRIX_RUNTIME}"
+              fi
 
               if [[ "$matched" != true ]]; then
                 echo "::error::No current image tags matched $FLY_APP_REGISTRY"
@@ -2528,17 +3133,28 @@ jobs:
               FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
               CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
               FLY_APP_REGISTRY: ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
+              REUSE: ${{ steps.existing.outputs.found }}
+              MATRIX_RUNTIME: ${{ matrix.runtime }}
             run: |
               set -euo pipefail
               mkdir -p "$DOCKER_CONFIG"
               fly auth docker
 
               matched=false
+              retag=()
               while IFS= read -r tag; do
                 [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
-                docker push "$tag"
+                if [[ "$REUSE" == true ]]; then
+                  retag+=(--tag "$tag")
+                else
+                  docker push "$tag"
+                fi
                 matched=true
               done <<< "$CURRENT_TAGS"
+
+              if [[ "$REUSE" == true && "$matched" == true ]]; then
+                docker buildx imagetools create "${retag[@]}" "${FLY_APP_REGISTRY}:${GITHUB_SHA}-${MATRIX_RUNTIME}"
+              fi
 
               if [[ "$matched" != true ]]; then
                 echo "::error::No current image tags matched $FLY_APP_REGISTRY"
@@ -2553,7 +3169,7 @@ jobs:
     name: ts-framework-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
-    if: needs.changes.outputs.tsframework == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.tsframework == 'true'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -2609,6 +3225,8 @@ jobs:
   impeccable:
     name: Detect UI anti-patterns
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.verify == 'true'
     # The scan itself takes ~3s; this only guards against a hung npx install.
     # A cold mise cache alone can take >5 minutes on the 2vcpu runner.
     timeout-minutes: 12
@@ -2667,8 +3285,10 @@ jobs:
       - format-check
       - server-build
       - server-checks
+      - server-test-plan
       - server-test
       - demo-seed-safety
+      - platform-tool-eval
       - docker-build-server
       - docker-build-client
       - upload-dashboard-assets
@@ -2720,7 +3340,6 @@ jobs:
   svix-sync-webhooks:
     name: Sync webhook event types to Svix
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs: [server-checks]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
       SVIX_OPENAPI_FILE: server/internal/outbox/events/catalog_gen.yaml
@@ -2839,7 +3458,7 @@ jobs:
     name: Tunnel agent
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
-    if: needs.changes.outputs.tunnel == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.tunnel == 'true'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
