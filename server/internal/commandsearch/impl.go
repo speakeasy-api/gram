@@ -288,7 +288,7 @@ func (s *Service) authorizedKinds(ctx context.Context, organizationID string, pr
 		check authz.Check
 	}{
 		{"environment", authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
-		{"gateway", authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
+		{"gateway", authz.MCPCheck(authz.ScopeMCPRead, authz.WildcardResource, projectID.String())},
 		{"plugin", authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil}},
 		{"rule", authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}},
 	}

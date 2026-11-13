@@ -213,39 +213,33 @@ func TestMatchRankExactThenAliasPrefixThenNamePrefix(t *testing.T) {
 	require.Equal(t, 2, matchRank(&gen.Commandresourceindexitem{Name: "Catalog"}, query))
 }
 
-func TestSearchGatewayCollectionAuthorizationMatchesCanonicalList(t *testing.T) {
+func TestSearchGatewayCollectionAuthorizationUsesProjectAwareWildcard(t *testing.T) {
 	t.Parallel()
 
 	currentProject := uuid.New()
 	tests := []struct {
 		name        string
-		grantTarget string
 		wantGateway bool
 	}{
-		{name: "current project grant", grantTarget: "current-project", wantGateway: true},
-		{name: "other project grant", grantTarget: "other-project", wantGateway: false},
-		{name: "individual gateway grant", grantTarget: "gateway", wantGateway: false},
+		{name: "current project collection grant", wantGateway: true},
+		{name: "other project collection grant", wantGateway: false},
+		{name: "individual gateway grant", wantGateway: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			store := storeWithAllKinds()
-			grantResourceID := map[string]string{
-				"current-project": currentProject.String(),
-				"other-project":   uuid.New().String(),
-				"gateway":         store.gateways[0].ID.String(),
-			}[tt.grantTarget]
 			seenGatewayCheck := false
 			authorizer := fakeAuthz{evaluate: func(check authz.Check) bool {
 				if check.Scope != authz.ScopeMCPRead {
 					return true
 				}
 				seenGatewayCheck = true
-				require.Equal(t, currentProject.String(), check.ResourceID)
+				require.Equal(t, authz.WildcardResource, check.ResourceID)
 				require.Empty(t, check.ResourceKind)
-				require.Nil(t, check.Dimensions)
-				return check.ResourceID == grantResourceID
+				require.Equal(t, map[string]string{authz.SelectorKeyProjectID: currentProject.String()}, check.Dimensions)
+				return tt.wantGateway
 			}}
 			result, err := service(t, store, authorizer).Search(ctxFor(currentProject), &gen.SearchPayload{Q: "ga"})
 			require.NoError(t, err)
