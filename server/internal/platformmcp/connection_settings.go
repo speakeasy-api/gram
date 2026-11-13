@@ -59,6 +59,7 @@ type MCPConnectionPluginMembership struct {
 // MCPUpstreamAuthClient is one way the server authenticates to its upstream.
 // Stored values are never returned.
 type MCPUpstreamAuthClient struct {
+	CredentialProvider    string `json:"credential_provider,omitempty" jsonschema:"oauth_client_credentials or github_app_installation for a service account"`
 	ID                    string `json:"id"`
 	Name                  string `json:"name"`
 	ClientType            string `json:"client_type" jsonschema:"remote_session, service_account, static_credential, pass_through or ema"`
@@ -280,7 +281,14 @@ func upstreamAuthentication(ctx context.Context, db platformrepo.DBTX, organizat
 		for _, srv := range client.Servers {
 			public = public || srv.Public
 		}
+		provider := ""
+		if client.GithubApp != nil {
+			provider = "github_app_installation"
+		} else if client.ClientType == "service_account" {
+			provider = "oauth_client_credentials"
+		}
 		clients = append(clients, MCPUpstreamAuthClient{
+			CredentialProvider:    provider,
 			ID:                    client.ID,
 			Name:                  client.Name,
 			ClientType:            client.ClientType,

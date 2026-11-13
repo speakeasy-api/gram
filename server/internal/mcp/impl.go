@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authclients/githubapp"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -240,6 +241,7 @@ type Service struct {
 	identityValidator      *mcpidentity.ValidatorBoundary
 	chatSessionsManager    *chatsessions.Manager
 	deploymentsRepo        *deployments_repo.Queries
+	githubApps             *githubapp.Provider
 	enc                    *encryption.Client
 	authz                  *authz.Engine
 	shadowMCPClient        *shadowmcp.Client
@@ -687,6 +689,7 @@ func NewService(
 		deviceAgentTokens:      deviceagenttoken.New(callerAssertions, db),
 		sessions:               sessions,
 		chatSessionsManager:    chatSessionsManager,
+		githubApps:             githubapp.New(db, enc, guardianPolicy, tracerProvider),
 		enc:                    enc,
 		authz:                  authzEngine,
 		shadowMCPClient:        shadowMCPClient,

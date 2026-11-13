@@ -144,11 +144,13 @@ func changedMember(serverID uuid.UUID, hosted bool) metaMember {
 // A call refused because its approval no longer matches names the server and records whoever its message tells to act first.
 func TestCatalogConsentCallNamesTheServerAndRecordsTheRemedy(t *testing.T) {
 	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_catalog_call_remedy")
+	require.NoError(t, err)
 	for name, tc := range catalogConsentRemedyCases() {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
-			s := &Service{connections: rec.Recorder, logger: testenv.NewLogger(t), staleNoAuthLog: newOnceLog(), telemLogger: noTelemetryLogs(t)}
+			s := &Service{db: pool, connections: rec.Recorder, logger: testenv.NewLogger(t), staleNoAuthLog: newOnceLog(), telemLogger: noTelemetryLogs(t)}
 			serverID := uuid.New()
 			body := callChangedMember(t, s, tc.gate(s, serverID), changedMember(serverID, tc.hosted), tc.signInChanged)
 			want, err := json.Marshal(tc.text)
@@ -166,11 +168,13 @@ func TestCatalogConsentCallNamesTheServerAndRecordsTheRemedy(t *testing.T) {
 // Describing a changed member, its connection status and its Code Mode helpers give the call's remedy, and record nothing.
 func TestCatalogConsentDescribeAndStatusFollowTheCall(t *testing.T) {
 	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_catalog_describe_remedy")
+	require.NoError(t, err)
 	for name, tc := range catalogConsentRemedyCases() {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
-			s := &Service{connections: rec.Recorder, logger: testenv.NewLogger(t)}
+			s := &Service{db: pool, connections: rec.Recorder, logger: testenv.NewLogger(t)}
 			serverID := uuid.New()
 			member := changedMember(serverID, tc.hosted)
 			gate := tc.gate(s, serverID)
@@ -216,11 +220,13 @@ func TestCatalogConsentDescribeAndStatusFollowTheCall(t *testing.T) {
 // In Code Mode, tools.servers(), tools.connect and a call give a changed member the same remedy, and only the call records it.
 func TestCatalogConsentCodeModeServersConnectAndCallAgree(t *testing.T) {
 	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_catalog_code_remedy")
+	require.NoError(t, err)
 	for name, tc := range catalogConsentRemedyCases() {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
-			s := &Service{connections: rec.Recorder, logger: testenv.NewLogger(t)}
+			s := &Service{db: pool, connections: rec.Recorder, logger: testenv.NewLogger(t)}
 			serverID := uuid.New()
 			member := changedMember(serverID, tc.hosted)
 			gate := tc.gate(s, serverID)
@@ -338,11 +344,13 @@ func reconsentForecastTotal(t *testing.T, reader *sdkmetric.ManualReader) int64 
 // Reading a member's status counts nothing toward the re-consent forecast and writes no diagnostic; a real check does both once.
 func TestCatalogConsentStatusReadsRecordNothing(t *testing.T) {
 	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_catalog_status_remedy")
+	require.NoError(t, err)
 	const diagnostic = "gateway consent validation failed"
 	reader := sdkmetric.NewManualReader()
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
-	s := &Service{logger: logger, staleNoAuthLog: newOnceLog(), upstreamIssuerParityLog: newOnceLog(), metrics: mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), logger)}
+	s := &Service{db: pool, logger: logger, staleNoAuthLog: newOnceLog(), upstreamIssuerParityLog: newOnceLog(), metrics: mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), logger)}
 	serverID := uuid.New()
 	member := changedMember(serverID, false)
 	gate := staleChoiceRemedyGate(s, map[uuid.UUID]bool{serverID: true})
@@ -352,7 +360,7 @@ func TestCatalogConsentStatusReadsRecordNothing(t *testing.T) {
 
 	require.Equal(t, metamcp.SignInNeedsConsent, s.memberSignInStatus(t.Context(), logger, gate, member, nil).Status)
 	require.Equal(t, "required", backend.knownConnectionState(t.Context(), gate, member, nil).Consent)
-	_, err := backend.connectRefusal(t.Context(), gate, member)
+	_, err = backend.connectRefusal(t.Context(), gate, member)
 	require.NoError(t, err)
 	require.Zero(t, reconsentForecastTotal(t, reader))
 	require.NotContains(t, logs.String(), diagnostic)

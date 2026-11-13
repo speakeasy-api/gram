@@ -1,4 +1,10 @@
 import { Spinner } from "@/components/ui/Spinner";
+import {
+  gitHubAppBinding,
+  isGitHubMcpUrl,
+} from "@/lib/remote-identity/model/githubApp";
+import { GitHubAppFields } from "@/lib/remote-identity/components/GitHubAppFields";
+import { useGitHubAppDraft } from "@/lib/remote-identity/drafts/useGitHubAppDraft";
 import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -186,8 +192,33 @@ export function RemoteMcpIdentitySectionBody({
     associationsQuery.isError || (canWrite && !canRead);
   const authorizationHeader = findStaticAuthorizationHeader(headers);
   const passThroughAuthorization = findPassThroughAuthorizationHeader(headers);
+  const githubDraft = useGitHubAppDraft(
+    target.permissionResourceId,
+    sourceQuery.data?.url,
+    sourceQuery.data?.name ?? "GitHub",
+    !rbacLoading && hasScope("org:read"),
+  );
+  const canManageGitHub = !rbacLoading && hasScope("org:admin");
+  const githubBinding = canRead
+    ? gitHubAppBinding(associationsQuery.data)
+    : null;
+  const githubIdentityPresent =
+    githubBinding?.githubAppBound || githubBinding?.githubAppRequired;
+  const githubLookupUnavailable =
+    !githubBinding ||
+    (!!githubIdentityPresent &&
+      (rbacLoading ||
+        !hasScope("org:read") ||
+        githubDraft.error ||
+        (!githubDraft.loading &&
+          githubBinding.githubAppBound &&
+          !githubDraft.bound)));
+
   const identityQueryError =
-    headersQuery.isError || clientsError || associationsUnavailable;
+    headersQuery.isError ||
+    clientsError ||
+    associationsUnavailable ||
+    (!associationsQuery.isLoading && !githubBinding);
   // A service account client (credential_owner self) is bound the same way as
   // a per-user one, but it is the Service Account choice: one credential every
   // caller shares, obtained by the client rather than pasted as a header.
@@ -197,19 +228,22 @@ export function RemoteMcpIdentitySectionBody({
   const subjectClients = ownClients.filter(
     (linked) => linked.credentialOwner !== "self",
   );
-  const actualMode = identityQueryError
-    ? null
-    : selfClient
-      ? "agent"
-      : deriveIdentityMode(subjectClients.length, headers);
+  const actualMode =
+    identityQueryError || githubLookupUnavailable
+      ? null
+      : selfClient || githubBinding?.githubAppBound
+        ? "agent"
+        : deriveIdentityMode(subjectClients.length, headers);
   // A refresh keeps the panel, and what was typed into it, on screen. Save waits
   // for it instead, so nothing commits against a list being rechecked.
   const loading =
     headersQuery.isLoading ||
     (clientsLoading && !clientsRefreshing) ||
     siblingsQuery.isLoading ||
-    associationsQuery.isLoading;
-  const identityResolved = !loading && !identityQueryError;
+    associationsQuery.isLoading ||
+    (!!githubIdentityPresent && githubDraft.loading);
+  const identityResolved =
+    !loading && !identityQueryError && !githubLookupUnavailable;
   const [selectedMode, setSelectedMode] = useState<IdentityMode>("none");
   // Raised by Save when it would remove an existing identity, which is the
   // "after confirmation" AIM-230 asks for.
@@ -228,9 +262,14 @@ export function RemoteMcpIdentitySectionBody({
   const headerDrafts = useHeaderDrafts({
     remoteMcpServerId,
     identity: {
-      mode: selectedMode,
-      managed: managedAuthorizationHeader(selectedMode, headers),
-      isError: !!identityQueryError,
+      // Without organization access, ordinary headers remain editable but
+      // Authorization stays managed: the hidden identity must not be replaced.
+      mode: githubLookupUnavailable ? "agent" : selectedMode,
+      managed: managedAuthorizationHeader(
+        githubLookupUnavailable ? "agent" : selectedMode,
+        headers,
+      ),
+      isError: headersQuery.isError || clientsError,
     },
     readOnly: headersReadOnly,
     suggestions: headerSuggestions,
@@ -250,9 +289,10 @@ export function RemoteMcpIdentitySectionBody({
     createHeader.isPending || updateHeader.isPending || deleteHeader.isPending;
 
   const invalidateHeaders = async () => {
-    await invalidateAllRemoteMcpServerHeaders(queryClient, {
-      refetchType: "all",
-    });
+    await Promise.all([
+      invalidateAllRemoteMcpServerHeaders(queryClient, { refetchType: "all" }),
+      invalidateAllServerClientAssociations(queryClient),
+    ]);
     const refreshed = await headersQuery.refetch();
     return !refreshed.isError && !!refreshed.data;
   };
@@ -299,13 +339,16 @@ export function RemoteMcpIdentitySectionBody({
   );
   const saFormat: ServiceAccountFormat =
     formatPick ??
-    (selfClient
-      ? oauthFormatOf(selfClient)
-      : agentDraft.format === "client-credentials"
-        ? "bearer"
-        : agentDraft.format);
+    (githubDraft.bound
+      ? "github-app"
+      : selfClient
+        ? oauthFormatOf(selfClient)
+        : agentDraft.format === "client-credentials"
+          ? "bearer"
+          : agentDraft.format);
   const oauthFormat =
     selectedMode === "agent" && isOAuthFormat(saFormat) ? saFormat : null;
+  const githubSelected = selectedMode === "agent" && saFormat === "github-app";
   const oauthSelected = oauthFormat !== null;
 
   const detachIssuer = useDetachUserSessionIssuerMutation();
@@ -314,7 +357,8 @@ export function RemoteMcpIdentitySectionBody({
   // Picking a card only changes the draft. Nothing is written, removed or
   // confirmed until Save — the panel has one commit point and this is it.
   const handleModeChange = (next: string) => {
-    if (identityReadOnly || passThroughAuthorization) return;
+    if (identityReadOnly || !identityResolved || passThroughAuthorization)
+      return;
     setSelectedMode(next as IdentityMode);
   };
 
@@ -359,8 +403,14 @@ export function RemoteMcpIdentitySectionBody({
     (!!selfClient &&
       (selectedMode === "user" ||
         (!!oauthFormat && clientDraft.canSave(oauthFormat))));
+  const leavingGitHub = !!githubDraft.bound && !githubSelected;
   const destructive =
-    leavingUser || leavingAgent || replacingSelf || replacingClient;
+    !githubLookupUnavailable &&
+    (leavingUser ||
+      leavingAgent ||
+      replacingSelf ||
+      replacingClient ||
+      leavingGitHub);
 
   // The upstream authorization server is derived per user session issuer, so
   // changing this server's clients can re-point every server sharing the
@@ -389,7 +439,10 @@ export function RemoteMcpIdentitySectionBody({
     .map((server) => server.id);
   const repointLookupPending = sharedIssuerImpact.pending;
   const needsConfirm =
-    destructive || needsSharedIssuerConfirm(sharedIssuerImpact);
+    destructive ||
+    (githubSelected &&
+      (!!selfClient || !!authorizationHeader || actualMode === "user")) ||
+    needsSharedIssuerConfirm(sharedIssuerImpact);
 
   const detachUserIdentity = async (): Promise<boolean> => {
     const userSessionIssuerId = target.userSessionIssuerId;
@@ -498,6 +551,7 @@ export function RemoteMcpIdentitySectionBody({
     !!selfClient &&
     selectedMode === "agent" &&
     !oauthSelected &&
+    !githubSelected &&
     !agentDraft.canSave &&
     !authorizationHeader;
   // Leaving User for a service account client keeps the user client until
@@ -513,66 +567,84 @@ export function RemoteMcpIdentitySectionBody({
       userSwitchBlocked ||
       userEditIncomplete ||
       staticSwitchBlocked ||
-      oauthSwitchBlocked
+      oauthSwitchBlocked ||
+      (leavingGitHub && !canManageGitHub) ||
+      (!identityResolved && !githubLookupUnavailable)
     )
       return;
     setConfirmOpen(false);
     // The draft is reset at most once per save: a reset deletes a created
     // signing key client, and a second one would delete it again.
     let draftReset = false;
+    let replacedGitHub = false;
     try {
-      // Binding a service account client replaces the user clients in the
-      // same commit, so they are only detached here when nothing is bound.
-      if (leavingUser && !oauthFormat) await detachUserIdentity();
-      // Leaving for a static credential unbinds the client only once that
-      // credential is written, below.
-      if (removingSelf) {
-        await detachSelfClient();
-        clientDraft.reset();
-        draftReset = true;
-      }
-      if (oauthFormat) {
-        // Bind first, so a failed commit never leaves the server with no
-        // identity; then drop the static credential the client replaces. An
-        // unchanged bound client has nothing to bind, and a header or pin
-        // edit still goes through.
-        const binding = clientDraft.canSave(oauthFormat);
-        if (binding && !(await clientDraft.save(oauthFormat))) return;
-        if (replacingCredential) await deleteStaticCredential();
-        if (binding) setFormatPick(null);
-      } else if (selectedMode === "user" && leavingAgent) {
-        // Bind the client before dropping the credential, so a failed commit
-        // never leaves the server with no identity; the client outranks the
-        // header while both exist.
-        if (!(await userDraft.save(replaceClientServerIds))) return;
-        await removeAgentCredential();
-      } else {
-        if (leavingAgent) await removeAgentCredential();
-        if (selectedMode === "agent") {
-          const written = await agentDraft.save();
-          if (leavingSelf) {
-            // A failed write has already said so; stop there. Otherwise
-            // unbind only with a credential to fall back on, new or already
-            // on the server, or the server is left with no identity.
-            if (agentDraft.canSave && !written) return;
-            if (written || authorizationHeader) {
-              await detachSelfClient();
-              clientDraft.reset();
-              draftReset = true;
-            }
-          }
-        } else if (
-          selectedMode === "user" &&
-          (actualMode !== "user" || userDraft.canSave)
-        ) {
-          // A header edit alone must not recommit the connected client.
-          await userDraft.save(replaceClientServerIds);
+      // Only custom headers can be committed while the identity is unknown.
+      if (!githubLookupUnavailable && githubSelected) {
+        if (githubDraft.canSave) {
+          if (!canManageGitHub || !(await githubDraft.save())) return;
+          await deleteStaticCredential();
+          setFormatPick(null);
+        } else if (!githubDraft.bound) return;
+      } else if (!githubLookupUnavailable) {
+        // Binding a service account client replaces the user clients in the
+        // same commit, so they are only detached here when nothing is bound.
+        if (leavingUser && !oauthFormat) await detachUserIdentity();
+        // Leaving for a static credential unbinds the client only once that
+        // credential is written, below.
+        if (removingSelf) {
+          await detachSelfClient();
+          clientDraft.reset();
+          draftReset = true;
         }
-      }
-      // A signing key client made for the Service Account choice and left
-      // behind by a save that chose otherwise is never bound, so it goes.
-      if (!oauthFormat && clientDraft.created && !draftReset) {
-        clientDraft.reset();
+        if (oauthFormat) {
+          // Bind first, so a failed commit never leaves the server with no
+          // identity; then drop the static credential the client replaces. An
+          // unchanged bound client has nothing to bind, and a header or pin
+          // edit still goes through.
+          const binding = clientDraft.canSave(oauthFormat);
+          if (binding && !(await clientDraft.save(oauthFormat))) return;
+          replacedGitHub = binding || clientDraft.showingBound(oauthFormat);
+          if (replacingCredential) await deleteStaticCredential();
+          if (binding) setFormatPick(null);
+        } else if (selectedMode === "user" && leavingAgent) {
+          // Bind the client before dropping the credential, so a failed commit
+          // never leaves the server with no identity; the client outranks the
+          // header while both exist.
+          if (!(await userDraft.save(replaceClientServerIds))) return;
+          replacedGitHub = true;
+          await removeAgentCredential();
+        } else {
+          if (leavingAgent) await removeAgentCredential();
+          if (selectedMode === "agent") {
+            const written = await agentDraft.save();
+            if (leavingGitHub && agentDraft.canSave && !written) return;
+            replacedGitHub = written || !!authorizationHeader;
+            if (leavingSelf) {
+              // A failed write has already said so; stop there. Otherwise
+              // unbind only with a credential to fall back on, new or already
+              // on the server, or the server is left with no identity.
+              if (agentDraft.canSave && !written) return;
+              if (written || authorizationHeader) {
+                await detachSelfClient();
+                clientDraft.reset();
+                draftReset = true;
+              }
+            }
+          } else if (
+            selectedMode === "user" &&
+            (actualMode !== "user" || userDraft.canSave)
+          ) {
+            // A pin or header edit alone must not recommit the connected client.
+            replacedGitHub = await userDraft.save(replaceClientServerIds);
+          }
+        }
+        if (leavingGitHub && (replacedGitHub || selectedMode === "none"))
+          await githubDraft.detach();
+        // A signing key client made for the Service Account choice and left
+        // behind by a save that chose otherwise is never bound, so it goes.
+        if (!oauthFormat && clientDraft.created && !draftReset) {
+          clientDraft.reset();
+        }
       }
     } catch (error) {
       toast.error(errorMessage(error, "Failed to save identity"));
@@ -595,6 +667,7 @@ export function RemoteMcpIdentitySectionBody({
       toast.success("Identity removed");
     }
     if (headersSaved) {
+      await invalidateAllServerClientAssociations(queryClient);
       toast.success("Upstream headers updated");
     }
   };
@@ -613,10 +686,14 @@ export function RemoteMcpIdentitySectionBody({
   // mode, and it disappears into a disabled state when there is nothing to do
   // rather than sprouting a button per sub-form.
   let identityCanSave: boolean;
-  if (selectedMode === "user") {
+  if (githubSelected) {
+    identityCanSave = canManageGitHub && githubDraft.canSave;
+  } else if (selectedMode === "user") {
     identityCanSave = userDraft.canSave;
   } else if (oauthFormat) {
-    identityCanSave = clientDraft.canSave(oauthFormat);
+    identityCanSave =
+      clientDraft.canSave(oauthFormat) ||
+      (leavingGitHub && clientDraft.showingBound(oauthFormat));
   } else if (selectedMode === "agent") {
     // Moving to Agent needs a credential; without one there is nothing for
     // the mode to actually be. One already on the server counts: in the
@@ -625,7 +702,7 @@ export function RemoteMcpIdentitySectionBody({
     // the operator to retype one they cannot read.
     identityCanSave =
       agentDraft.canSave ||
-      ((leavingUser || leavingSelf) && !!authorizationHeader);
+      ((leavingUser || leavingSelf || leavingGitHub) && !!authorizationHeader);
   } else {
     // No Identity commits only the removal it implies.
     identityCanSave = destructive;
@@ -636,13 +713,17 @@ export function RemoteMcpIdentitySectionBody({
     headerDrafts.isDirty && headerDrafts.validationError !== null;
   const headersReason = headersBlocked && headerDrafts.reportErrors;
   const canSave =
+    (!leavingGitHub || canManageGitHub) &&
+    (!githubSelected ||
+      (githubDraft.canSave ? canManageGitHub : !!githubDraft.bound)) &&
     !headersBlocked &&
     !userSwitchBlocked &&
     !userEditIncomplete &&
     !staticSwitchBlocked &&
     !oauthSwitchBlocked &&
-    (identityCanSave || headerDrafts.isDirty);
+    ((!githubLookupUnavailable && identityCanSave) || headerDrafts.isDirty);
   const savePending =
+    githubDraft.saving ||
     detachIssuer.isPending ||
     saving ||
     headerDrafts.saving ||
@@ -714,6 +795,30 @@ export function RemoteMcpIdentitySectionBody({
               </Alert>
             ) : null}
 
+            {githubLookupUnavailable && githubIdentityPresent ? (
+              <Alert variant="warning" dismissible={false}>
+                This server has a GitHub App identity requirement. Its
+                configuration is unavailable; identity editing is disabled, but
+                custom headers can still be edited.
+              </Alert>
+            ) : null}
+            {githubDraft.error ? (
+              <Alert variant="warning" dismissible={false}>
+                Could not finish loading GitHub App configuration. Previously
+                loaded data is retained. Other identity choices remain available
+                when this server has no GitHub App requirement.
+                <Button variant="secondary" onClick={githubDraft.retry}>
+                  Retry GitHub App lookup
+                </Button>
+              </Alert>
+            ) : null}
+            {githubBinding?.githubAppRequired &&
+            !githubBinding.githubAppBound ? (
+              <Alert variant="warning" dismissible={false}>
+                Callers' requests are blocked until you save a new identity.
+              </Alert>
+            ) : null}
+
             {passThroughAuthorization ? (
               <Alert variant="warning" dismissible={false}>
                 A legacy pass-through Authorization header is still configured.
@@ -722,7 +827,7 @@ export function RemoteMcpIdentitySectionBody({
               </Alert>
             ) : null}
 
-            {identityQueryError ? (
+            {identityQueryError || githubLookupUnavailable ? (
               <Text muted small>
                 Identity is unavailable.
               </Text>
@@ -742,7 +847,12 @@ export function RemoteMcpIdentitySectionBody({
                     orientation="horizontal"
                     showIndicator={false}
                     value={selectedMode}
-                    disabled={identityReadOnly || scopeDisabled || saving}
+                    disabled={
+                      identityReadOnly ||
+                      !identityResolved ||
+                      scopeDisabled ||
+                      saving
+                    }
                     onValueChange={handleModeChange}
                     className="grid-flow-row grid-cols-1 md:grid-flow-col md:grid-cols-none"
                   >
@@ -837,6 +947,27 @@ export function RemoteMcpIdentitySectionBody({
             <div className="px-6 py-5">
               <ServiceAccountPanel
                 format={saFormat}
+                githubAppFields={
+                  githubDraft.bound || isGitHubMcpUrl(sourceQuery.data?.url) ? (
+                    <div className="space-y-3">
+                      <GitHubAppFields
+                        value={githubDraft.value}
+                        onChange={githubDraft.setDraft}
+                        disabled={
+                          identityReadOnly ||
+                          !canManageGitHub ||
+                          githubDraft.saving
+                        }
+                      />
+                      {!canManageGitHub ? (
+                        <Text small muted>
+                          Organization administrator access is required to
+                          configure a GitHub App.
+                        </Text>
+                      ) : null}
+                    </div>
+                  ) : undefined
+                }
                 onFormatChange={setFormatPick}
                 agentDraft={agentDraft}
                 clientDraft={clientDraft}
@@ -884,7 +1015,7 @@ export function RemoteMcpIdentitySectionBody({
           </Collapsible>
         </div>
 
-        {identityResolved &&
+        {(identityResolved || githubLookupUnavailable) &&
         (selectedMode !== "none" || destructive || headerDrafts.isDirty) ? (
           <SettingsSection.Footer>
             {headersReason ? (
@@ -962,6 +1093,8 @@ export function RemoteMcpIdentitySectionBody({
           <Dialog.Header>
             <Dialog.Title>
               {confirmTitle({
+                leavingGitHub,
+                removingGitHub: selectedMode === "none",
                 removingSelf,
                 replacingSelf,
                 leavingUser,
@@ -974,6 +1107,8 @@ export function RemoteMcpIdentitySectionBody({
             {destructive ? (
               <Dialog.Description>
                 {removalConsequences({
+                  leavingGitHub,
+                  removingGitHub: selectedMode === "none",
                   removingSelf,
                   replacingSelf,
                   leavingUser,
@@ -1051,6 +1186,8 @@ const REPLACE_CREDENTIAL_CONSEQUENCE =
  * dialog has to name both.
  */
 function removalConsequences({
+  leavingGitHub,
+  removingGitHub,
   removingSelf,
   replacingSelf,
   leavingUser,
@@ -1058,6 +1195,8 @@ function removalConsequences({
   replacingClient,
   replacingCredential,
 }: {
+  leavingGitHub: boolean;
+  removingGitHub: boolean;
   removingSelf: boolean;
   replacingSelf: boolean;
   leavingUser: boolean;
@@ -1065,6 +1204,11 @@ function removalConsequences({
   replacingClient: boolean;
   replacingCredential: boolean;
 }): string {
+  if (leavingGitHub) {
+    return removingGitHub
+      ? "The GitHub App will be unbound from this server. No replacement identity will be configured. Callers' requests will be rejected until you save a new identity."
+      : "The GitHub App will be unbound from this server. Requests will use the replacement identity instead of its installation token.";
+  }
   const credentialConsequence = replacingCredential
     ? REPLACE_CREDENTIAL_CONSEQUENCE
     : REMOVE_CREDENTIAL_CONSEQUENCE;
@@ -1087,6 +1231,8 @@ function removalConsequences({
 }
 
 function confirmTitle({
+  leavingGitHub,
+  removingGitHub,
   removingSelf,
   replacingSelf,
   leavingUser,
@@ -1095,6 +1241,8 @@ function confirmTitle({
   destructive,
   upstreamName,
 }: {
+  leavingGitHub: boolean;
+  removingGitHub: boolean;
   removingSelf: boolean;
   replacingSelf: boolean;
   leavingUser: boolean;
@@ -1104,6 +1252,10 @@ function confirmTitle({
   upstreamName: string;
 }): string {
   if (!destructive) return "Change the upstream of other servers?";
+  if (leavingGitHub)
+    return removingGitHub
+      ? "Remove the GitHub App?"
+      : "Replace the GitHub App?";
   if (removingSelf) return "Remove the service account client?";
   if (replacingSelf) return "Replace the service account client?";
   if (replacingClient) return "Replace the connected client?";

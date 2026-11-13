@@ -898,7 +898,11 @@ func authClientBuildOptions(authentication *issuerGateAuthentication) []remotemc
 	case authentication == nil:
 		return nil
 	case authentication.authClient != nil:
-		return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.authClient.headers)}
+		options := []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.authClient.headers)}
+		if credential := authentication.authClient.githubCredential; credential != nil {
+			options = append(options, remotemcp.WithRenewableCredential(credential.Origin, authentication.authClient.githubRenew))
+		}
+		return options
 	case authentication.chainingAuthClient != nil && !authentication.chosenNoAuth:
 		// A no-auth choice sends no client's headers.
 		return []remotemcp.BuildOption{remotemcp.WithAuthClientHeaders(authentication.chainingAuthClient.headers)}

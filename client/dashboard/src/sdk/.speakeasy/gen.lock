@@ -187,6 +187,7 @@ trackedFiles:
   src/funcs/auditlogsListFacets.ts: {}
   src/funcs/authCallback.ts: {}
   src/funcs/authClientsAttachToMcpServer.ts: {}
+  src/funcs/authClientsConfigureGitHubApp.ts: {}
   src/funcs/authClientsCreate.ts: {}
   src/funcs/authClientsDeleteIssuanceProfile.ts: {}
   src/funcs/authClientsDetachFromMcpServer.ts: {}
@@ -1098,6 +1099,7 @@ trackedFiles:
   src/models/components/commitserveridentityconfigurationform.ts: {}
   src/models/components/commitserveridentityconfigurationresult.ts: {}
   src/models/components/completebindingrefreshrequestbody.ts: {}
+  src/models/components/configuregithubappauthclientrequestbody.ts: {}
   src/models/components/confirmoktaresourceconnectionsrequestbody.ts: {}
   src/models/components/confirmoktaresourceconnectionsresult.ts: {}
   src/models/components/countchatsbyuserresult.ts: {}
@@ -1371,6 +1373,7 @@ trackedFiles:
   src/models/components/getunproxiedmcpserveruserusageresult.ts: {}
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
+  src/models/components/githubappconfiguration.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
   src/models/components/hiddenmcpserver.ts: {}
   src/models/components/hideagentmcpserverrequestbody.ts: {}
@@ -2343,6 +2346,7 @@ trackedFiles:
   src/models/operations/compileexpr.ts: {}
   src/models/operations/completebindingrefresh.ts: {}
   src/models/operations/completeorgencryptionkeyswitch.ts: {}
+  src/models/operations/configuregithubappauthclient.ts: {}
   src/models/operations/confirmoktaresourceconnections.ts: {}
   src/models/operations/countchatsbyuser.ts: {}
   src/models/operations/countremotesessions.ts: {}
@@ -3293,6 +3297,7 @@ trackedFiles:
   src/react-query/cloneToolset.ts: {}
   src/react-query/commitServerIdentityConfiguration.ts: {}
   src/react-query/completeOrgEncryptionKeySwitch.ts: {}
+  src/react-query/configureGitHubAppAuthClient.ts: {}
   src/react-query/confirmOktaResourceConnections.ts: {}
   src/react-query/countChatsByUser.core.ts: {}
   src/react-query/countChatsByUser.ts: {}
@@ -5169,6 +5174,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  configureGitHubAppAuthClient:
+    speakeasy-default-configure-git-hub-app-auth-client:
+      requestBody:
+        application/json: {"app_id": "<id>", "installation_id": "<id>", "instance_url": "https://github.com", "mcp_server_id": "f6968669-2b49-48a4-a8c1-661c8f3411a2", "name": "<value>", "private_key": "<value>", "upstream_origin": "https://scratchy-order.net"}
+      responses:
+        "200":
+          application/json: {"client_type": "static_credential", "created_at": "2024-10-09T12:06:14.713Z", "enabled": false, "headers": [{"has_stored_value": false, "is_required": true, "is_secret": false, "name": "<value>"}], "id": "b91ce03c-2e4e-4a1e-94e0-5917bd7d4598", "name": "<value>", "personal": false, "servers": [{"id": "ed5fc648-cabc-4328-8558-48a0372a38ac", "project_id": "95b20792-02ab-4d30-ab91-53b0d06312b9", "public": true}], "source": "backfill", "updated_at": "2025-08-10T13:47:48.263Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   configureSlackApp:
     speakeasy-default-configure-slack-app:
       requestBody:
@@ -11052,7 +11068,7 @@ examples:
           mcp_server_id: "9fe4eeb2-ab23-422d-8b3c-8f84188e6522"
       responses:
         "200":
-          application/json: {"associations": [], "required_client_ids": ["fe4eeb2a-b232-42db-83c8-f84188e65223", "5683a8ef-51a1-46b2-bb89-2537e3be4ecf"]}
+          application/json: {"associations": [], "github_app_bound": false, "github_app_enabled": false, "github_app_required": false, "required_client_ids": ["fe4eeb2a-b232-42db-83c8-f84188e65223", "5683a8ef-51a1-46b2-bb89-2537e3be4ecf"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

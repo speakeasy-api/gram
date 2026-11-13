@@ -1,3 +1,9 @@
+import { useRBAC } from "@/hooks/useRBAC";
+import {
+  gitHubAppBinding,
+  type GitHubAppBinding,
+} from "@/lib/remote-identity/model/githubApp";
+import { useServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import {
   deriveIdentityMode,
   findPassThroughAuthorizationHeader,
@@ -41,6 +47,8 @@ export interface McpServerAuthenticationReadiness {
 export function useMcpServerAuthenticationReadiness(
   mcpServer: McpServer | undefined,
 ): McpServerAuthenticationReadiness {
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const upstreamAuth = useUpstreamAuthEnforcement();
   const remoteMcpServerId = mcpServer?.remoteMcpServerId ?? "";
   const userSessionIssuerId = mcpServer?.userSessionIssuerId;
   // A remote identity provider is attached when this server's issuer has at
@@ -62,17 +70,36 @@ export function useMcpServerAuthenticationReadiness(
     enabled: remoteMcpServerId !== "",
   });
   const remoteHeaders = remoteHeadersResult?.headers ?? [];
+  const canReadBinding =
+    !rbacLoading && hasScope("mcp:read", mcpServer?.id, mcpServer?.projectId);
+  const associationsQuery = useServerClientAssociations(
+    { mcpServerId: mcpServer?.id ?? "" },
+    undefined,
+    {
+      enabled:
+        remoteMcpServerId !== "" && upstreamAuth === "legacy" && canReadBinding,
+      throwOnError: false,
+    },
+  );
+  const githubBinding = canReadBinding
+    ? gitHubAppBinding(associationsQuery.data)
+    : null;
   const remoteIdentityMode = deriveIdentityMode(
     remoteSessionClients.length,
     remoteHeaders,
+    !!githubBinding?.githubAppBound && githubBinding.githubAppEnabled,
   );
   const passThroughAuthorization =
     findPassThroughAuthorizationHeader(remoteHeaders);
   const identityUnavailable =
-    isRemoteSessionClientsError || isRemoteHeadersError;
+    isRemoteSessionClientsError ||
+    isRemoteHeadersError ||
+    (remoteMcpServerId !== "" &&
+      upstreamAuth === "legacy" &&
+      (associationsQuery.isError ||
+        gitHubAppIdentityUnavailable(githubBinding)));
   // Enforcing organizations configure upstream identity through credentials,
   // so the summary reads their status instead of the legacy identity mode.
-  const upstreamAuth = useUpstreamAuthEnforcement();
   const enforcedIdentity =
     remoteMcpServerId !== "" && upstreamAuth === "enforced";
   const upstreamAuthQuery = useMcpServerAuthentication(
@@ -87,11 +114,13 @@ export function useMcpServerAuthenticationReadiness(
     enforcedIdentity
       ? upstreamAuthQuery.data?.status === "no_auth_required"
       : upstreamAuth === "legacy" &&
+          !rbacLoading &&
           !identityUnavailable &&
           remoteIdentityMode === "none" &&
           !passThroughAuthorization &&
           !isLoadingRemoteSessionClients &&
-          !isLoadingRemoteHeaders,
+          !isLoadingRemoteHeaders &&
+          !associationsQuery.isLoading,
   );
 
   const isRemoteBacked = !!mcpServer?.remoteMcpServerId;
@@ -132,6 +161,12 @@ export function useMcpServerAuthenticationReadiness(
     }
   } else if (!legacyRemoteIdentity) {
     description = "The identity status is not available yet.";
+  } else if (
+    githubBinding?.githubAppRequired &&
+    (!githubBinding.githubAppBound || !githubBinding.githubAppEnabled)
+  ) {
+    description =
+      "Callers' requests are blocked until you save a new identity.";
   } else if (remoteIdentityMode === "user" && hasRemoteIdentityProvider) {
     description = "An authorization server is attached to this server.";
   } else if (remoteIdentityMode === "agent" && isRemoteBacked) {
@@ -146,11 +181,14 @@ export function useMcpServerAuthenticationReadiness(
   const ready =
     isUnproxied ||
     remoteIdentitySettled ||
-    (legacyRemoteIdentity && hasRemoteIdentityProvider) ||
+    (!isRemoteBacked && legacyRemoteIdentity && hasRemoteIdentityProvider) ||
     (isTunneledBacked && !!userSessionIssuerId);
 
   const isLoadingRemoteIdentity =
-    isLoadingRemoteSessionClients || isLoadingRemoteHeaders;
+    isLoadingRemoteSessionClients ||
+    isLoadingRemoteHeaders ||
+    rbacLoading ||
+    associationsQuery.isLoading;
   // Whether the answer can still change once the queries settle, so a caller
   // never reports a step as open, or done, before the data is in.
   const loading =
@@ -178,4 +216,16 @@ export function useMcpServerAuthenticationReadiness(
     upstreamAuthQuery,
     identityProbeStatus,
   };
+}
+
+/** Unknown metadata or an unmet requirement must never be probed as anonymous. */
+export function gitHubAppIdentityUnavailable(
+  binding: GitHubAppBinding | null,
+): boolean {
+  return (
+    !binding ||
+    (binding.githubAppBound && !binding.githubAppEnabled) ||
+    (binding.githubAppRequired &&
+      !(binding.githubAppBound && binding.githubAppEnabled))
+  );
 }

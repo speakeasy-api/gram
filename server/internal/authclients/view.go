@@ -46,7 +46,7 @@ func buildAuthClientView(client repo.McpAuthClient, headers []repo.ListAuthClien
 		registrationID = new(client.RemoteSessionClientID.UUID.String())
 	}
 
-	return &types.AuthClient{
+	return &types.AuthClient{GithubApp: nil,
 		ID:                    client.ID.String(),
 		ProjectID:             projectID,
 		ClientType:            client.ClientType,

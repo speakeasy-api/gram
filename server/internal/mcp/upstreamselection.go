@@ -326,14 +326,26 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 		return none, false, oops.E(oops.CodeUnexpected, err, "load upstream client choice").LogError(ctx, s.logger)
 	}
 	mode, err := s.authClientMode(ctx, endpoint.OrganizationID)
+	githubRequired := false
+	if err == nil {
+		githubRequired, err = s.serverRequiresGitHubApp(ctx, endpoint.OrganizationID, endpoint.McpServerID.UUID)
+		if githubRequired {
+			mode = feature.AuthClientResolverEnforced
+		}
+	}
 	if err != nil {
 		return none, true, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, s.logger)
 	}
 	if selector == nil {
-		return s.directPrincipalChoice(ctx, w, authentication, mode)
+		choice, handled, err := s.directPrincipalChoice(ctx, w, authentication, mode)
+		if githubRequired && !handled && err == nil {
+			s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: GitHub App requires typed upstream selection", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeInvalidRemoteSession)
+			return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
+		}
+		return choice, handled, err
 	}
 	if mode == feature.AuthClientResolverEnforced {
-		choice, err := s.enforceAuthClient(ctx, w, authentication, selector)
+		choice, err := s.enforceAuthClientWithCompatibility(ctx, w, authentication, selector, !githubRequired)
 		return choice, true, err
 	}
 	choice, err := selector.forServer(ctx, endpoint.McpServerID.UUID)
@@ -817,6 +829,16 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	var resolved map[uuid.UUID]authClientResolution
 	memberErrors := make(map[uuid.UUID]error)
 	var err error
+	if !typed && !c.unchosen {
+		candidates, readErr := c.selector.resolveAuthClients(ctx, ids)
+		err = readErr
+		resolved = make(map[uuid.UUID]authClientResolution)
+		for id, res := range candidates {
+			if res.githubApp {
+				resolved[id] = res
+			}
+		}
+	}
 	switch {
 	case c.unchosen:
 		resolved, memberErrors, err = c.resolveUnchosenMembers(ctx, ids, projects)
@@ -862,8 +884,9 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	if err != nil {
 		logger.ErrorContext(ctx, "load gateway member upstream client choices", attr.SlogError(err))
 	}
+	permits := make(map[uuid.UUID]authClientPermitRequest)
 	var headerIDs []uuid.UUID
-	if typed && err == nil {
+	if err == nil {
 		for id, res := range resolved {
 			if memberErrors[id] != nil {
 				continue
@@ -877,11 +900,13 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 					continue
 				}
 			}
-			prepared, prepareErr := c.selector.service.checkAuthClientPermission(ctx, authClientPermitRequest{
+			permit := authClientPermitRequest{
 				OrganizationID: c.selector.organizationID, ProjectID: projects[id], ServerID: id, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 				CredentialKind: c.selector.credentialKindOrDefault(), CredentialID: c.selector.credentialID, Subject: c.subject,
 				UserSessionIssuerID: issuerID, ConnectionOwner: "",
-			}, res, nil)
+			}
+			permits[id] = permit
+			prepared, prepareErr := c.selector.service.checkAuthClientPermission(ctx, permit, res, nil)
 			resolved[id] = prepared
 			memberErrors[id] = prepareErr
 			if prepareErr == nil && prepared.sendsClientHeaders() {
@@ -908,7 +933,8 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 		res := gapResolution(authClientReasonMissingChoice)
 		memberErr := err
 		if memberErr == nil {
-			if typed {
+			_, hasProvider := resolved[member.serverID]
+			if typed || hasProvider {
 				if choice, ok := resolved[member.serverID]; ok {
 					res = choice
 				}
@@ -919,7 +945,11 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 						clientHeaders := headers[res.clientID]
 						memberErr = clientHeaders.err
 						if memberErr == nil {
-							res = applyAuthClientHeaders(res, clientHeaders.headers)
+							if res.githubApp {
+								res, memberErr = c.selector.service.prepareGitHubApp(ctx, permits[member.serverID], res, clientHeaders.headers)
+							} else {
+								res = applyAuthClientHeaders(res, clientHeaders.headers)
+							}
 						}
 					}
 				}

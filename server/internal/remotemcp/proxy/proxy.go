@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/httpsorigin"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -269,6 +270,9 @@ type Proxy struct {
 
 	// RemoteURL is the upstream endpoint all requests are forwarded to.
 	RemoteURL string
+
+	// CredentialOrigin pins renewable credentials to their approved HTTPS destination.
+	CredentialOrigin string
 
 	// Headers are applied on top of any forwarded client headers when
 	// constructing the upstream request and checked against HeaderPolicy.
@@ -1252,6 +1256,13 @@ func (p *Proxy) forwardRequest(
 	phaseTimer := time.AfterFunc(p.NonStreamingTimeout, forwardCancel)
 
 	upstreamReq, err := http.NewRequestWithContext(forwardCtx, r.Method, p.RemoteURL, body)
+	if err == nil && p.CredentialOrigin != "" {
+		origin, originErr := httpsorigin.FromURL(upstreamReq.URL.String())
+		if originErr != nil || origin != p.CredentialOrigin {
+			err = fmt.Errorf("upstream destination does not match the service account credential origin")
+		}
+	}
+
 	if err != nil {
 		phaseTimer.Stop()
 		forwardCancel()

@@ -18,6 +18,18 @@ export type ListServerClientAssociationsResult = {
    */
   associations: Array<ServerClientAssociation>;
   /**
+   * Whether this server has a live GitHub App service-account binding, including a disabled credential. Does not disclose the client or its configuration.
+   */
+  githubAppBound: boolean;
+  /**
+   * Whether a live bound GitHub App credential is enabled.
+   */
+  githubAppEnabled: boolean;
+  /**
+   * Whether this server still requires GitHub App identity. Remains true after removal or disablement until a live replacement identity is attached; choosing no identity does not erase this history.
+   */
+  githubAppRequired: boolean;
+  /**
    * The remote_session_client_id of each client bound to the server's user session issuer that its callers need to sign in through. These are its associated clients, or when it has none, the bound clients no other server claims and it has not explicitly detached. Empty when the server requires no upstream sign-in.
    */
   requiredClientIds: Array<string>;
@@ -30,10 +42,16 @@ export const ListServerClientAssociationsResult$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     associations: z.array(ServerClientAssociation$inboundSchema),
+    github_app_bound: z.boolean(),
+    github_app_enabled: z.boolean(),
+    github_app_required: z.boolean(),
     required_client_ids: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "github_app_bound": "githubAppBound",
+      "github_app_enabled": "githubAppEnabled",
+      "github_app_required": "githubAppRequired",
       "required_client_ids": "requiredClientIds",
     });
   }),

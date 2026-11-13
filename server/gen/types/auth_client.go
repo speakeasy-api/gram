@@ -7,8 +7,8 @@
 
 package types
 
-// AuthClient is the result type of the authClients service getAuthClient
-// method.
+// AuthClient is the result type of the authClients service
+// configureGitHubAppAuthClient method.
 type AuthClient struct {
 	// The auth client id.
 	ID string
@@ -27,6 +27,8 @@ type AuthClient struct {
 	// no upstream credentials, and elsewhere, including in shadow mode, an MCP
 	// server's existing upstream configuration keeps serving.
 	Enabled bool
+	// Customer-owned GitHub App provider. Never includes its private key or tokens.
+	GithubApp *GitHubAppConfiguration
 	// The OAuth registration behind remote_session, service_account and ema
 	// clients.
 	RemoteSessionClientID *string

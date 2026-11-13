@@ -3,6 +3,7 @@
  */
 
 import { authClientsAttachToMcpServer } from "../funcs/authClientsAttachToMcpServer.js";
+import { authClientsConfigureGitHubApp } from "../funcs/authClientsConfigureGitHubApp.js";
 import { authClientsCreate } from "../funcs/authClientsCreate.js";
 import { authClientsDeleteIssuanceProfile } from "../funcs/authClientsDeleteIssuanceProfile.js";
 import { authClientsDetachFromMcpServer } from "../funcs/authClientsDetachFromMcpServer.js";
@@ -28,6 +29,10 @@ import {
   AttachAuthClientToMcpServerRequest,
   AttachAuthClientToMcpServerSecurity,
 } from "../models/operations/attachauthclienttomcpserver.js";
+import {
+  ConfigureGitHubAppAuthClientRequest,
+  ConfigureGitHubAppAuthClientSecurity,
+} from "../models/operations/configuregithubappauthclient.js";
 import {
   CreateAuthClientRequest,
   CreateAuthClientSecurity,
@@ -101,6 +106,25 @@ export class AuthClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AuthClient> {
     return unwrapAsync(authClientsAttachToMcpServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * configureGitHubAppAuthClient authClients
+   *
+   * @remarks
+   * Create or rotate a customer-owned GitHub App service account and make it the MCP server's upstream identity. Replaces that server's other auth-client and OAuth-registration associations, without deleting shared clients. Existing connections must reconnect. Verifies the installation before saving. Requires org:admin. Does not grant callers permission to use it.
+   */
+  async configureGitHubApp(
+    request: ConfigureGitHubAppAuthClientRequest,
+    security?: ConfigureGitHubAppAuthClientSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AuthClient> {
+    return unwrapAsync(authClientsConfigureGitHubApp(
       this,
       request,
       security,

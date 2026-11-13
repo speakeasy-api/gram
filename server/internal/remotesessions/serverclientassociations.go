@@ -111,7 +111,18 @@ func (s *Service) ListServerClientAssociations(ctx context.Context, payload *gen
 			AssociatedAt:          row.AssociatedAt.Time.Format(time.RFC3339),
 		})
 	}
-	return &gen.ListServerClientAssociationsResult{Associations: associations, RequiredClientIds: requiredClientIDs}, nil
+	// These booleans expose only server readiness under the existing mcp:read
+	// check, not organization-wide credential metadata or configuration.
+	credentials := authclientsrepo.New(s.db)
+	binding, err := credentials.GetGitHubAppServerBindingState(ctx, authclientsrepo.GetGitHubAppServerBindingStateParams{McpServerID: serverID, OrganizationID: authCtx.ActiveOrganizationID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read GitHub App server binding").LogError(ctx, logger)
+	}
+	required, err := credentials.ListGitHubAppServers(ctx, authclientsrepo.ListGitHubAppServersParams{OrganizationID: authCtx.ActiveOrganizationID, McpServerIds: []uuid.UUID{serverID}})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read GitHub App server requirement").LogError(ctx, logger)
+	}
+	return &gen.ListServerClientAssociationsResult{Associations: associations, RequiredClientIds: requiredClientIDs, GithubAppBound: binding.Bound, GithubAppEnabled: binding.Enabled, GithubAppRequired: len(required) != 0}, nil
 }
 
 // errClientNotDetachable says a server has nothing to detach from a client: it

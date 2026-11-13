@@ -29,6 +29,8 @@ import (
 
 func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_catalog_validation_diagnostics")
+	require.NoError(t, err)
 	upstreamError := errors.New("private upstream error")
 	tests := []struct {
 		name        string
@@ -76,7 +78,7 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			var logs bytes.Buffer
-			s := &Service{logger: slog.New(slog.NewJSONHandler(&logs, nil))}
+			s := &Service{db: pool, logger: slog.New(slog.NewJSONHandler(&logs, nil))}
 			member := metaMember{
 				serverID: uuid.New(), projectID: uuid.New(), slug: "source", name: "private server name",
 				backend: metaMemberBackendProxied, configuration: memberConfiguration{hash: "private configuration hash", typedHash: "private typed configuration hash"},
@@ -124,8 +126,10 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 
 func TestConnectionCatalogDiagnosticsDeduplicateConcurrentGateCopies(t *testing.T) {
 	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_catalog_concurrent_diagnostics")
+	require.NoError(t, err)
 	var logs bytes.Buffer
-	s := &Service{logger: slog.New(slog.NewJSONHandler(&logs, nil))}
+	s := &Service{db: pool, logger: slog.New(slog.NewJSONHandler(&logs, nil))}
 	gate := metaGateContext{catalog: &connectionCatalog{ID: uuid.New(), Members: map[string]connectionCatalogMember{}}, consentDiagnostics: &consentDiagnostics{seen: sync.Map{}}}
 	member := metaMember{serverID: uuid.New()}
 	var calls sync.WaitGroup

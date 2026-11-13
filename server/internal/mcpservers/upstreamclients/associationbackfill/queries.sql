@@ -352,6 +352,13 @@ WHERE s.id = @mcp_server_id::uuid
         AND live.deleted IS FALSE
     )
   ))
+  AND NOT EXISTS (
+    -- A prior GitHub identity is replaced only by an explicit association,
+    -- never by replaying an issuer binding that predates that identity.
+    SELECT 1 FROM mcp_server_auth_clients a
+    JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
+    WHERE a.mcp_server_id = s.id AND a.organization_id = p.organization_id
+  )
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING;
 
 -- name: ListGatewayAssociationCandidates :many
@@ -669,6 +676,13 @@ WHERE s.id = @mcp_server_id::uuid
     FROM mcp_server_remote_session_clients AS recorded
     WHERE recorded.mcp_server_id = s.id
       AND recorded.remote_session_client_id = c.id
+  )
+  AND NOT EXISTS (
+    -- A prior GitHub identity is replaced only by an explicit association,
+    -- never by replaying an issuer binding that predates that identity.
+    SELECT 1 FROM mcp_server_auth_clients a
+    JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
+    WHERE a.mcp_server_id = s.id AND a.organization_id = p.organization_id
   )
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING;
 

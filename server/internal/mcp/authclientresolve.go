@@ -36,6 +36,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authclients/githubapp"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -108,10 +109,13 @@ const (
 // authClientResolution is one credential's typed auth client decision for one
 // server.
 type authClientResolution struct {
-	outcome    authClientOutcome
-	reason     string
-	clientID   uuid.UUID
-	clientType string
+	outcome          authClientOutcome
+	reason           string
+	clientID         uuid.UUID
+	clientType       string
+	githubApp        bool
+	githubCredential *githubapp.Credential
+	githubRenew      func(context.Context) (string, bool, error)
 
 	// serverName names the server in a request-access link.
 	serverName string
@@ -154,7 +158,7 @@ type authClientResolution struct {
 // headersOnly reports a resolved client whose material is its headers alone,
 // with no bearer to acquire.
 func (r *authClientResolution) headersOnly() bool {
-	return r.outcome == authClientResolved && isHeadersOnlyType(r.clientType)
+	return r.outcome == authClientResolved && (isHeadersOnlyType(r.clientType) || r.githubApp)
 }
 
 // staleNoAuth reports a no-auth choice the server has outgrown.
@@ -257,12 +261,13 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 // gapResolution is a choice that cannot be used, for reason.
 func gapResolution(reason string) authClientResolution {
 	none := upstreamChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
-	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthChoice: false, saved: false, noAuthAllowed: false, attachedSession: uuid.Nil, authorizerOwner: "", connectionOwner: ""}
+	return authClientResolution{githubApp: false, githubCredential: nil, githubRenew: nil, outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthChoice: false, saved: false, noAuthAllowed: false, attachedSession: uuid.Nil, authorizerOwner: "", connectionOwner: ""}
 }
 
 // decideAuthClient resolves a recorded choice without side effects.
 func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authClientResolution {
 	res := gapResolution("")
+	res.githubApp = row.GithubApp
 	res.serverName = row.ServerName.String
 	res.tunneled = row.Tunneled
 	res.noAuthAllowed = !row.RequiresUpstreamAuth && !row.UpstreamAuthPending
@@ -321,6 +326,14 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 	res.clientType = row.ClientType.String
 	switch res.clientType {
 	case authClientTypeRemoteSession, authClientTypeServiceAccount:
+		if res.githubApp {
+			if res.clientType != authClientTypeServiceAccount || row.RegistrationID.Valid || row.Tunneled || row.RequiresDeniedSource || row.CredentialHeadersUncovered || row.HeadersStale {
+				res.reason = authClientReasonSetup
+			} else {
+				res.outcome = authClientResolved
+			}
+			return res
+		}
 		switch {
 		case !row.RegistrationID.Valid || !row.RegistrationLive:
 			res.reason = authClientReasonRegistration
@@ -518,7 +531,14 @@ func (s *Service) prepareAuthClient(ctx context.Context, permit authClientPermit
 		if clientHeaders.err != nil {
 			return res, clientHeaders.err
 		}
-		res = applyAuthClientHeaders(res, clientHeaders.headers)
+		if res.githubApp {
+			res, err = s.prepareGitHubApp(ctx, permit, res, clientHeaders.headers)
+			if err != nil {
+				return res, err
+			}
+		} else {
+			res = applyAuthClientHeaders(res, clientHeaders.headers)
+		}
 	}
 	annotateAuthClient(ctx, s.logger, res)
 	return res, nil
@@ -530,7 +550,16 @@ func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClie
 	// A mapped client keeps its permit even when serving falls back to the
 	// registration or current server headers.
 	if res.outcome == authClientResolved || (res.outcome == authClientLegacy && res.clientID != uuid.Nil) {
-		permitter, err := s.authClientPermitFor(ctx, permit.OrganizationID)
+		var permitter authClientPermitter
+		var err error
+		if res.githubApp {
+			if s.authz == nil {
+				return res, errors.New("GitHub App credentials require the authorization engine")
+			}
+			permitter = mandatoryPermitter{engine: s.authz}
+		} else {
+			permitter, err = s.authClientPermitFor(ctx, permit.OrganizationID)
+		}
 		if err != nil {
 			return res, err
 		}
@@ -786,13 +815,19 @@ func annotateAuthClient(ctx context.Context, logger *slog.Logger, res authClient
 // profile's choice has no compatibility path, so one the resolver does not
 // serve itself is a gap.
 func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, selector *upstreamSelector) (upstreamChoice, error) {
+	return s.enforceAuthClientWithCompatibility(ctx, w, authentication, selector, true)
+}
+
+// enforceAuthClientWithCompatibility resolves once and rejects legacy handback
+// before serving when the provider has no legacy credential equivalent.
+func (s *Service) enforceAuthClientWithCompatibility(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, selector *upstreamSelector, allowLegacy bool) (upstreamChoice, error) {
 	var none upstreamChoice
 	endpoint := authentication.endpoint
 	res, err := s.resolveEnforcedAuthClient(ctx, selector, endpoint.McpServerID.UUID, endpoint.ProjectID, connectionSubject(ctx, authentication.subject))
 	if err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "resolve auth client").LogError(ctx, s.logger)
 	}
-	if res.outcome == authClientLegacy && selector.credentialKindOrDefault() != upstreamclients.CredentialKindUserSession {
+	if res.outcome == authClientLegacy && (!allowLegacy || selector.credentialKindOrDefault() != upstreamclients.CredentialKindUserSession) {
 		res.outcome = authClientGap
 	}
 	return s.serveAuthClient(ctx, w, authentication, res)

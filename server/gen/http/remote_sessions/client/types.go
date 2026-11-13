@@ -213,6 +213,15 @@ type ListServerClientAssociationsResponseBody struct {
 	// claims and it has not explicitly detached. Empty when the server requires no
 	// upstream sign-in.
 	RequiredClientIds []string `form:"required_client_ids,omitempty" json:"required_client_ids,omitempty" xml:"required_client_ids,omitempty"`
+	// Whether this server has a live GitHub App service-account binding, including
+	// a disabled credential. Does not disclose the client or its configuration.
+	GithubAppBound *bool `form:"github_app_bound,omitempty" json:"github_app_bound,omitempty" xml:"github_app_bound,omitempty"`
+	// Whether a live bound GitHub App credential is enabled.
+	GithubAppEnabled *bool `form:"github_app_enabled,omitempty" json:"github_app_enabled,omitempty" xml:"github_app_enabled,omitempty"`
+	// Whether this server still requires GitHub App identity. Remains true after
+	// removal or disablement until a live replacement identity is attached;
+	// choosing no identity does not erase this history.
+	GithubAppRequired *bool `form:"github_app_required,omitempty" json:"github_app_required,omitempty" xml:"github_app_required,omitempty"`
 }
 
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
@@ -4602,7 +4611,11 @@ func NewGetServerIdentityImpactGatewayError(body *GetServerIdentityImpactGateway
 // NewListServerClientAssociationsResultOK builds a "remoteSessions" service
 // "listServerClientAssociations" endpoint result from a HTTP "OK" response.
 func NewListServerClientAssociationsResultOK(body *ListServerClientAssociationsResponseBody) *remotesessions.ListServerClientAssociationsResult {
-	v := &remotesessions.ListServerClientAssociationsResult{}
+	v := &remotesessions.ListServerClientAssociationsResult{
+		GithubAppBound:    *body.GithubAppBound,
+		GithubAppEnabled:  *body.GithubAppEnabled,
+		GithubAppRequired: *body.GithubAppRequired,
+	}
 	v.Associations = make([]*remotesessions.ServerClientAssociation, len(body.Associations))
 	for i, val := range body.Associations {
 		if val == nil {
@@ -5582,6 +5595,15 @@ func ValidateListServerClientAssociationsResponseBody(body *ListServerClientAsso
 	}
 	if body.RequiredClientIds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("required_client_ids", "body"))
+	}
+	if body.GithubAppBound == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("github_app_bound", "body"))
+	}
+	if body.GithubAppEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("github_app_enabled", "body"))
+	}
+	if body.GithubAppRequired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("github_app_required", "body"))
 	}
 	for _, e := range body.Associations {
 		if e != nil {

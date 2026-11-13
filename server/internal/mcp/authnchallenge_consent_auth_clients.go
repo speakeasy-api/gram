@@ -15,9 +15,11 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -169,11 +171,13 @@ type consentAuthServer struct {
 // upstream authentication through typed auth clients. Elsewhere the consent
 // screen keeps choosing through its service cards.
 func (s *Service) consentAuthChoicesEnforced(ctx context.Context, organizationID string) (bool, error) {
-	mode, err := s.authClientMode(ctx, organizationID)
+	// Approval is a configuration boundary, not a serving request: a warm
+	// runtime cache must not approve through the previous enforcement mode.
+	enforced, err := authenforcement.ReadEnforced(ctx, s.db, organizationID)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("read upstream auth enforcement: %w", err)
 	}
-	return mode == feature.AuthClientResolverEnforced, nil
+	return enforced, nil
 }
 
 // consentAuthChoices decides, for each server, the clients this person may
@@ -368,7 +372,7 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 	if challengeState.FirstParty || challengeState.Subject == nil || !endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid || endpoint.MetaMcpServerID.Valid {
 		return nil, nil
 	}
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	enforced, err := s.consentDirectAuthChoicesEnforced(ctx, endpoint)
 	if err != nil || !enforced {
 		return nil, err
 	}
@@ -383,7 +387,25 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 	if err != nil {
 		return nil, err
 	}
-	return choices[serverID], nil
+	auth := choices[serverID]
+	requiresApp, err := s.serverRequiresGitHubApp(ctx, endpoint.OrganizationID, serverID)
+	if err != nil {
+		return nil, err
+	}
+	if requiresApp {
+		selected := auth.Selected()
+		if selected == nil {
+			return nil, errConsentConfigurationChanged
+		}
+		_, err := authclientsrepo.New(s.db).GetGitHubAppConfiguration(ctx, authclientsrepo.GetGitHubAppConfigurationParams{OrganizationID: endpoint.OrganizationID, AuthClientID: selected.ID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errConsentConfigurationChanged
+		}
+		if err != nil {
+			return nil, fmt.Errorf("check consent GitHub App selection: %w", err)
+		}
+	}
+	return auth, nil
 }
 
 // errConsentNoUsableConnection refuses an approval no connection could serve.

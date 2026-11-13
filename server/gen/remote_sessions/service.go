@@ -485,6 +485,15 @@ type ListServerClientAssociationsResult struct {
 	// claims and it has not explicitly detached. Empty when the server requires no
 	// upstream sign-in.
 	RequiredClientIds []string
+	// Whether this server has a live GitHub App service-account binding, including
+	// a disabled credential. Does not disclose the client or its configuration.
+	GithubAppBound bool
+	// Whether a live bound GitHub App credential is enabled.
+	GithubAppEnabled bool
+	// Whether this server still requires GitHub App identity. Remains true after
+	// removal or disablement until a live replacement identity is attached;
+	// choosing no identity does not erase this history.
+	GithubAppRequired bool
 }
 
 // PrincipalRemoteSessionBinding is the result type of the remoteSessions

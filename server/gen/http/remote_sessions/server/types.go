@@ -212,6 +212,15 @@ type ListServerClientAssociationsResponseBody struct {
 	// claims and it has not explicitly detached. Empty when the server requires no
 	// upstream sign-in.
 	RequiredClientIds []string `form:"required_client_ids" json:"required_client_ids" xml:"required_client_ids"`
+	// Whether this server has a live GitHub App service-account binding, including
+	// a disabled credential. Does not disclose the client or its configuration.
+	GithubAppBound bool `form:"github_app_bound" json:"github_app_bound" xml:"github_app_bound"`
+	// Whether a live bound GitHub App credential is enabled.
+	GithubAppEnabled bool `form:"github_app_enabled" json:"github_app_enabled" xml:"github_app_enabled"`
+	// Whether this server still requires GitHub App identity. Remains true after
+	// removal or disablement until a live replacement identity is attached;
+	// choosing no identity does not erase this history.
+	GithubAppRequired bool `form:"github_app_required" json:"github_app_required" xml:"github_app_required"`
 }
 
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
@@ -3308,7 +3317,11 @@ func NewGetServerIdentityImpactResponseBody(res *remotesessions.ServerIdentityIm
 // from the result of the "listServerClientAssociations" endpoint of the
 // "remoteSessions" service.
 func NewListServerClientAssociationsResponseBody(res *remotesessions.ListServerClientAssociationsResult) *ListServerClientAssociationsResponseBody {
-	body := &ListServerClientAssociationsResponseBody{}
+	body := &ListServerClientAssociationsResponseBody{
+		GithubAppBound:    res.GithubAppBound,
+		GithubAppEnabled:  res.GithubAppEnabled,
+		GithubAppRequired: res.GithubAppRequired,
+	}
 	if res.Associations != nil {
 		body.Associations = make([]*ServerClientAssociationResponseBody, len(res.Associations))
 		for i, val := range res.Associations {

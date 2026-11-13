@@ -476,3 +476,9 @@ Gemini compliance: AI Integrations includes a paused Gemini connection with no
 credentials or polling schedule. Agent Sessions includes **Gemini: release
 readiness review**, a synthetic two-message text conversation under the `gemini`
 source. The demo never authenticates to Google or creates Vault exports.
+
+### GitHub App service account
+
+The GitHub MCP server offers a disabled **GitHub App (demo — disabled)** service account. Existing attachments keep this option visible regardless of the upstream URL; new setup is limited to the known GitHub HTTPS hosts. Its instance, app, and installation fields illustrate the configuration; its placeholder private key cannot mint a token. Inspect Settings → Identity → Service Account → GitHub App. The provider row is removed through the auth client's project cascade on reseed, and postflight checks require exactly one demo GitHub App row.
+
+- [x] Browser check: on the seeded GitHub server, Settings → Identity shows Service Account → GitHub App, the demo IDs, an empty PEM field, and the disabled credential toggle. Verified locally with Playwright; the placeholder is never used for token exchange.

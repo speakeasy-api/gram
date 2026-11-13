@@ -113,6 +113,17 @@ vi.mock("react-router", async (importOriginal) => ({
     </a>
   ),
 }));
+vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
+  useServerClientAssociations: () => ({
+    data: {
+      githubAppBound: false,
+      githubAppEnabled: false,
+      githubAppRequired: false,
+    },
+    isLoading: false,
+    isError: false,
+  }),
+}));
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
   useGetMcpServer: () => ({ data: state.mcpServer }),
 }));
@@ -543,6 +554,9 @@ describe("remote MCP server Identity summary", () => {
   });
 
   it("keeps the legacy identity mode when enforcement is off", () => {
+    state.grants = [
+      { scope: "mcp:read", selectors: [{ resourceId: "server-a" }] },
+    ];
     state.mcpServer = remote;
     render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     expect(screen.getByRole("link", { name: /Identity: Manual/ })).toBeTruthy();

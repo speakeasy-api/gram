@@ -1,3 +1,5 @@
+import { invalidateAuthClientQueries } from "@/pages/mcp/x/tabs/settings/sections/authentication/authClientQueries";
+import type { GitHubAppDraft } from "@/lib/remote-identity/model/githubApp";
 import {
   deleteSourceCascade,
   fetchLinkedMcpServers,
@@ -35,6 +37,7 @@ export type CreateRemoteMcpSourceVariables = {
   userSessionIssuerId?: string | undefined;
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization?: string;
+  githubApp?: GitHubAppDraft;
 };
 
 export type CreateRemoteMcpSourceData = {
@@ -58,6 +61,7 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
       url,
       identityMode,
       agentAuthorization,
+      githubApp,
       userSessionIssuerId,
     }) => {
       const { remoteMcpServer, mcpServer } =
@@ -76,6 +80,7 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         mcpServer,
         identityMode,
         agentAuthorization,
+        githubApp,
       });
       const configuredMcpServer =
         identityConfiguration.status === "configured"
@@ -96,7 +101,10 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         identityConfiguration,
       };
     },
-    onSuccess: async ({ identityConfiguration }) => {
+    onSuccess: async (
+      { identityConfiguration },
+      { identityMode, githubApp },
+    ) => {
       // refetchType "all" forces the refetch even when there are no active
       // observers — Sources isn't mounted while the create form is, so without
       // this the listServers cache stays stale until the next mount.
@@ -120,6 +128,10 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
             refetchType: "all",
           }),
         );
+      }
+      // Submission can bind the App even if enabling the server then fails.
+      if (identityMode === "agent" && githubApp) {
+        invalidations.push(invalidateAuthClientQueries(queryClient));
       }
       await Promise.all(invalidations);
     },
