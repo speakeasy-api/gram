@@ -52,7 +52,7 @@ func TestAssetConsumersRequireValidSiteURLBeforeConnecting(t *testing.T) {
 
 func TestDemoSeedLocalRequiresValidMockMCPURLBeforeConnecting(t *testing.T) {
 	t.Parallel()
-	for _, raw := range []string{"/mcp", "localhost:4100/mcp", "ftp://localhost/mcp", "http:///mcp", "http://[::1"} {
+	for _, raw := range []string{"/mcp", "localhost:4100/mcp", "ftp://localhost/mcp", "http:///mcp", "http://:4100/mcp", "http://[::1"} {
 		t.Run(raw, func(t *testing.T) {
 			t.Parallel()
 			flags := flag.NewFlagSet("demo-seed", flag.ContinueOnError)

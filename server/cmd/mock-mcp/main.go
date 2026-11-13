@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -30,10 +31,31 @@ func main() {
 	if addr == "" {
 		addr = "127.0.0.1:4100"
 	}
+	if err := requireLoopback(addr); err != nil {
+		logger.Error("mock-mcp refused to start", "error", err)
+		os.Exit(1)
+	}
 	if err := run(addr, logger); err != nil {
 		logger.Error("mock-mcp failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// requireLoopback rejects listen addresses that are not on a loopback
+// interface. The mock has no authentication, so it must never be reachable
+// from another machine.
+func requireLoopback(addr string) error {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("parse GRAM_MOCK_MCP_ADDRESS %q: %w", addr, err)
+	}
+	if host == "localhost" {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf("GRAM_MOCK_MCP_ADDRESS %q must bind a loopback host such as 127.0.0.1", addr)
 }
 
 func run(addr string, logger *slog.Logger) error {
