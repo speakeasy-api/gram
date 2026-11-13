@@ -42,6 +42,7 @@ type Service struct {
 	authz      *authz.Engine
 	audit      *audit.Logger
 	encryption *encryption.Client
+	routeTests *RouteTestCore
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -55,6 +56,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	encryptionClient *encryption.Client,
+	routeTests *RouteTestCore,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("dataexports.api"))
 	return &Service{
@@ -65,6 +67,7 @@ func NewService(
 		authz:      authzEngine,
 		audit:      auditLogger,
 		encryption: encryptionClient,
+		routeTests: routeTests,
 	}
 }
 
@@ -734,6 +737,71 @@ func (s *Service) DeleteRoute(ctx context.Context, payload *gen.DeleteRoutePaylo
 	return nil
 }
 
+func (s *Service) TestRoute(ctx context.Context, payload *gen.TestRoutePayload) (*gen.TestDataExportRouteResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	routeID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid route id")
+	}
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
+	if s.routeTests == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "test events are not available").LogError(ctx, logger)
+	}
+	result, err := s.routeTests.SendTest(ctx, SendRouteTestParams{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		RouteID:          routeID,
+		Expect:           nil,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+	})
+	switch {
+	case err == nil:
+	case errors.Is(err, ErrRouteNotFound):
+		return nil, oops.E(oops.CodeNotFound, err, "This export no longer exists. Reload the page.")
+	case errors.Is(err, ErrRouteTestUnsupported):
+		return nil, oops.E(oops.CodeInvalid, err, "This data source has no test event.")
+	case errors.Is(err, ErrRouteDestinationRequired):
+		return nil, oops.E(oops.CodeInvalid, err, "This export has no destination. Choose one and save first.")
+	case errors.Is(err, ErrRouteDestinationInactive):
+		return nil, oops.E(oops.CodeInvalid, err, "This export's destination was deleted. Choose another and save first.")
+	case errors.Is(err, ErrRouteTestRateLimited):
+		return nil, oops.E(oops.CodeRateLimitExceeded, err, "Too many test events were sent just now. Try again in a minute.")
+	case errors.Is(err, ErrRouteTestUnavailable):
+		return nil, oops.E(oops.CodeUnavailable, err, "Speakeasy can't send test events right now. Try again shortly.").LogError(ctx, logger)
+	default:
+		message := "send test event"
+		if invalid, ok := errors.AsType[*routeDestinationInvalidError](err); ok {
+			message = invalid.reason
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, logger)
+	}
+
+	signals := make([]*gen.TestDataExportRouteSignalResult, len(result.Signals))
+	for i, signal := range result.Signals {
+		signals[i] = &gen.TestDataExportRouteSignalResult{
+			Signal:     string(signal.Signal),
+			Outcome:    string(signal.Outcome),
+			StatusCode: conv.PtrEmpty(signal.StatusCode),
+			Message:    signal.Message,
+		}
+	}
+	return &gen.TestDataExportRouteResult{
+		Outcome:     string(result.Outcome),
+		StatusCode:  conv.PtrEmpty(result.StatusCode),
+		Message:     result.Message,
+		Signals:     signals,
+		TestEventID: result.TestEventID,
+	}, nil
+}
+
 func (s *Service) validateRouteDestination(
 	ctx context.Context,
 	queries *repo.Queries,
@@ -746,7 +814,7 @@ func (s *Service) validateRouteDestination(
 	if err != nil {
 		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, err, "invalid otel_destination_id")
 	}
-	switch err := checkRouteDestination(ctx, queries, s.encryption, organizationID, projectID, ref, enabled); {
+	switch _, err := checkRouteDestination(ctx, queries, s.encryption, organizationID, projectID, ref, enabled); {
 	case err == nil:
 	case errors.Is(err, ErrRouteDestinationRequired):
 		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, err, "otel_destination_id is required when the route is enabled")

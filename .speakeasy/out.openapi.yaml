@@ -21846,6 +21846,126 @@ paths:
       x-speakeasy-name-override: listRoutes
       x-speakeasy-react-hook:
         name: DataExportRoutes
+  /rpc/dataExports.testRoute:
+    post:
+      description: Send a test event straight to a route's destination, one for each signal its data source exports, and report what the destination answered to each. Rate limited per route and per organization.
+      operationId: testDataExportRoute
+      parameters:
+        - allowEmptyValue: true
+          description: Route ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: Route ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestDataExportRouteResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: testRoute dataExports
+      tags:
+        - dataExports
+      x-speakeasy-name-override: testRoute
+      x-speakeasy-react-hook:
+        name: TestDataExportRoute
   /rpc/dataExports.updateDestination:
     post:
       description: Replace a data export destination in the selected project.
@@ -119539,6 +119659,70 @@ components:
         - other_access
         - created_at
         - updated_at
+    TestDataExportRouteResult:
+      type: object
+      properties:
+        message:
+          type: string
+          description: What happened, in plain language.
+        outcome:
+          type: string
+          description: 'accepted when every signal was accepted. Otherwise the worst signal''s outcome, in this order: unreachable, refused, not_found, error.'
+          enum:
+            - accepted
+            - refused
+            - not_found
+            - unreachable
+            - error
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/TestDataExportRouteSignalResult'
+          description: One result for each signal the route's data source exports.
+        status_code:
+          type: integer
+          description: HTTP status of the signal that set the outcome. Omitted when it did not answer.
+          format: int64
+        test_event_id:
+          type: string
+          description: The speakeasy.test_event.id this test's logs and traces carry, to find them in the destination. Metrics carry only speakeasy.test_event=true.
+      description: What the destination answered to a route's test events. Header values and the response body are never returned.
+      required:
+        - outcome
+        - message
+        - signals
+        - test_event_id
+    TestDataExportRouteSignalResult:
+      type: object
+      properties:
+        message:
+          type: string
+          description: What happened, in plain language.
+        outcome:
+          type: string
+          description: 'accepted: a 2xx answer. refused: 401 or 403. not_found: 404. unreachable: no answer, such as a timeout or refused connection, or an address Speakeasy may not send to. error: any other answer.'
+          enum:
+            - accepted
+            - refused
+            - not_found
+            - unreachable
+            - error
+        signal:
+          type: string
+          description: The OTLP signal.
+          enum:
+            - logs
+            - traces
+            - metrics
+        status_code:
+          type: integer
+          description: HTTP status the destination answered with. Omitted when it did not answer.
+          format: int64
+      description: What the destination answered to one signal's test event.
+      required:
+        - signal
+        - outcome
+        - message
     TestDetectionRuleMatch:
       type: object
       properties:

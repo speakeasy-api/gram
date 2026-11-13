@@ -94,11 +94,11 @@ func (s *DataExportRouteToggleService) setMinSeverity(ctx context.Context, princ
 	}
 	// Authorized before any lookup, so a non-admin cannot tell real routes from invented ones.
 	if err := s.admin.RequireLiveOrgAdmin(ctx, principal); err != nil {
-		return SetDataExportMinSeverityOutput{}, dataExportToggleAdminError(err)
+		return SetDataExportMinSeverityOutput{}, dataExportAdminError(err, dataExportLevelUnavailable)
 	}
 	row, err := s.queries.ResolvePlatformMCPProjectByID(ctx, platformrepo.ResolvePlatformMCPProjectByIDParams{OrganizationID: principal.OrganizationID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return SetDataExportMinSeverityOutput{}, dataExportToggleMissing()
+		return SetDataExportMinSeverityOutput{}, dataExportRouteMissing()
 	}
 	if err != nil {
 		return SetDataExportMinSeverityOutput{}, dataExportLevelUnavailable(fmt.Errorf("resolve data export route project: %w", err))
@@ -115,7 +115,7 @@ func (s *DataExportRouteToggleService) setMinSeverity(ctx context.Context, princ
 	charge := func(ctx context.Context) error {
 		if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
 			if errors.Is(err, ErrOperationRateLimited) {
-				return &DataExportToggleError{Code: "rate_limited", Message: "Changing data export levels was asked for too often just now. Try again shortly.", Cause: err}
+				return &DataExportRefusalError{Code: "rate_limited", Message: "Changing data export levels was asked for too often just now. Try again shortly.", Cause: err}
 			}
 			return dataExportLevelUnavailable(err)
 		}
@@ -126,7 +126,7 @@ func (s *DataExportRouteToggleService) setMinSeverity(ctx context.Context, princ
 		IdempotencyKey: key, InputHash: inputHash, Label: "data export " + operationSetDataExportMinSeverity,
 		Invalid: func(error) error { return dataExportLevelInvalid("The request is invalid.") },
 		Conflict: func(message string) error {
-			return &DataExportToggleError{Code: "conflict", Message: message, Cause: ErrDataExportToggleConflict}
+			return &DataExportRefusalError{Code: "conflict", Message: message, Cause: ErrDataExportToggleConflict}
 		},
 		Unavailable:    dataExportLevelUnavailable,
 		ValidateReplay: validDataExportLevelReceipt,
@@ -188,7 +188,7 @@ func validDataExportLevelReceipt(stored []byte) bool {
 
 func validateDataExportLevel(input SetDataExportMinSeverityInput) (uuid.UUID, uuid.UUID, string, string, error) {
 	if !input.Confirmed {
-		return uuid.Nil, uuid.Nil, "", "", &DataExportToggleError{Code: "confirmation_required", Message: "Show the user the exact project, route, its current level, and the new level, then ask them to confirm before changing it.", Cause: ErrDataExportToggleInvalid}
+		return uuid.Nil, uuid.Nil, "", "", &DataExportRefusalError{Code: "confirmation_required", Message: "Show the user the exact project, route, its current level, and the new level, then ask them to confirm before changing it.", Cause: ErrDataExportRequestInvalid}
 	}
 	key := strings.TrimSpace(input.IdempotencyKey)
 	if key == "" || len(key) > 128 {
@@ -212,7 +212,7 @@ func validateDataExportLevel(input SetDataExportMinSeverityInput) (uuid.UUID, uu
 func classifyDataExportLevelError(err error) error {
 	switch {
 	case errors.Is(err, dataexports.ErrRouteNotFound):
-		return dataExportToggleMissing()
+		return dataExportRouteMissing()
 	case errors.Is(err, dataexports.ErrRouteMinSeverityInvalid):
 		return dataExportLevelInvalid("Only mcp_connection_logs routes have a level. Nothing was changed. Choose an mcp_connection_logs route from the current data export list.")
 	default:
@@ -221,13 +221,13 @@ func classifyDataExportLevelError(err error) error {
 }
 
 func dataExportLevelInvalid(message string) error {
-	return &DataExportToggleError{Code: "invalid_input", Message: message, Cause: ErrDataExportToggleInvalid}
+	return &DataExportRefusalError{Code: "invalid_input", Message: message, Cause: ErrDataExportRequestInvalid}
 }
 
 const dataExportLevelUnavailableMessage = "Changing data export levels is temporarily unavailable."
 
 func dataExportLevelUnavailable(cause error) error {
-	return &DataExportToggleError{Code: unavailableCode, Message: dataExportLevelUnavailableMessage, Cause: errors.Join(ErrUnavailable, cause)}
+	return &DataExportRefusalError{Code: unavailableCode, Message: dataExportLevelUnavailableMessage, Cause: errors.Join(ErrUnavailable, cause)}
 }
 
 // levelBoundaryError keeps database text from reaching the caller, like boundaryError.
@@ -238,7 +238,7 @@ func (s *DataExportRouteToggleService) levelBoundaryError(ctx context.Context, e
 	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
 		return err
 	}
-	refusal, ok := errors.AsType[*DataExportToggleError](err)
+	refusal, ok := errors.AsType[*DataExportRefusalError](err)
 	if ok && refusal.Code != unavailableCode {
 		return err
 	}
@@ -250,7 +250,7 @@ func (s *DataExportRouteToggleService) levelBoundaryError(ctx context.Context, e
 		s.logger.ErrorContext(ctx, "platform mcp data export "+operationSetDataExportMinSeverity+" failed", attr.SlogError(cause))
 	}
 	if ok {
-		return &DataExportToggleError{Code: unavailableCode, Message: dataExportLevelUnavailableMessage, Cause: refusal.Cause}
+		return &DataExportRefusalError{Code: unavailableCode, Message: dataExportLevelUnavailableMessage, Cause: refusal.Cause}
 	}
 	return dataExportLevelUnavailable(err)
 }

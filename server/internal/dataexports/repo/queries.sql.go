@@ -202,6 +202,40 @@ func (q *Queries) GetActiveOtelRouteDestination(ctx context.Context, arg GetActi
 	return i, err
 }
 
+const getDataExportRoute = `-- name: GetDataExportRoute :one
+SELECT id, organization_id, project_id, data_source, enabled, otel_destination_id, created_at, updated_at, deleted_at, deleted
+FROM data_export_routes
+WHERE organization_id = $1
+  AND project_id = $2
+  AND id = $3
+  AND deleted IS FALSE
+`
+
+type GetDataExportRouteParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ID             uuid.UUID
+}
+
+// Read one live route without locking it, for a test send that waits on the network.
+func (q *Queries) GetDataExportRoute(ctx context.Context, arg GetDataExportRouteParams) (DataExportRoute, error) {
+	row := q.db.QueryRow(ctx, getDataExportRoute, arg.OrganizationID, arg.ProjectID, arg.ID)
+	var i DataExportRoute
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.DataSource,
+		&i.Enabled,
+		&i.OtelDestinationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getDataExportRouteForUpdate = `-- name: GetDataExportRouteForUpdate :one
 SELECT id, organization_id, project_id, data_source, enabled, otel_destination_id, created_at, updated_at, deleted_at, deleted
 FROM data_export_routes

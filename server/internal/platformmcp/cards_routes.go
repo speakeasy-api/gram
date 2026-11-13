@@ -147,6 +147,7 @@ var cardTools = map[string]cardSpec{
 	"create_data_export":           {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
 	"pause_data_export":            {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
 	"resume_data_export":           {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
+	"send_data_export_test_event":  {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
 	"set_data_export_min_severity": {kind: cardKindReceipt, route: "O/data/exports", label: "Open data exports"},
 
 	// Dashboards and Explore widgets.

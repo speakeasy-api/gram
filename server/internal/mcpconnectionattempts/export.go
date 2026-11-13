@@ -38,6 +38,9 @@ const (
 
 	exportEventName = "speakeasy.mcp_connection"
 
+	// testExportEventName is the one event name every data export test log uses.
+	testExportEventName = "speakeasy.test_event"
+
 	// minAttemptDuration separates a real span from a one-row attempt, whose start and end are the same moment.
 	minAttemptDuration = time.Millisecond
 )
@@ -265,14 +268,13 @@ func exportSeverity(row Row) (log.Severity, string, bool) {
 // destinations that exclude sensitive data redact string bodies. The catalog text is written
 // to the person who hit the failure, so its keys say so.
 func exportRecord(row Row) (log.Record, bool) {
-	var record log.Record
 	severity, severityText, ok := exportSeverity(row)
 	if !ok {
-		return record, false
+		return log.Record{}, false
 	}
 	meaning, ok := MeaningOf(row.Reason)
 	if !ok {
-		return record, false
+		return log.Record{}, false
 	}
 
 	attrs := []attribute.KeyValue{
@@ -315,14 +317,29 @@ func exportRecord(row Row) (log.Record, bool) {
 		}
 	}
 
-	record.SetEventName(exportEventName)
-	record.SetTimestamp(row.EventTime)
+	return newExportRecord(exportEventName, row.EventTime, severity, severityText, attrs), true
+}
+
+// TestExportRecord is the event a destination test sends: the export schema with no
+// attempt, person or server in it, and message as its user message. The route
+// tester adds the body and the test marks.
+func TestExportRecord(at time.Time, message string) log.Record {
+	return newExportRecord(testExportEventName, at, log.SeverityInfo, "INFO", []attribute.KeyValue{
+		attr.LogRecordUID(uuid.NewString()),
+		attr.ExtMcpConnectionUserMessage(message),
+	})
+}
+
+func newExportRecord(eventName string, at time.Time, severity log.Severity, severityText string, attrs []attribute.KeyValue) log.Record {
+	var record log.Record
+	record.SetEventName(eventName)
+	record.SetTimestamp(at)
 	record.SetSeverity(severity)
 	record.SetSeverityText(severityText)
 	for _, kv := range attrs {
 		record.AddAttributes(log.KeyValueFromAttribute(kv))
 	}
-	return record, true
+	return record
 }
 
 // addressNamesTheFailure reports whether the row's host is the external system that failed:

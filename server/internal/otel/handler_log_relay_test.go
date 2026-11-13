@@ -325,7 +325,7 @@ func TestLogRelayDestinationRejectsRequestOverFourMiB(t *testing.T) {
 	}, true)
 	require.NoError(t, err)
 
-	err = destination.exportWithLimit(t.Context(), request, maxLogRelayExportBytes)
+	_, err = destination.export(t.Context(), request, maxLogRelayExportBytes)
 
 	require.ErrorContains(t, err, "limit is 4194304")
 	require.Zero(t, requests.Load())

@@ -98,6 +98,7 @@ export const AUDIT_ACTIONS = [
   "data_export_route:delete",
   "data_export_route:pause",
   "data_export_route:resume",
+  "data_export_route:test",
   "data_export_route:update",
   "deployments:create",
   "deployments:evolve",
@@ -642,6 +643,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "paused data export route";
     case "data_export_route:resume":
       return "resumed data export route";
+    case "data_export_route:test":
+      return "sent a test event for data export route";
 
     case "network_ingress:create":
       return "created private network ingress";

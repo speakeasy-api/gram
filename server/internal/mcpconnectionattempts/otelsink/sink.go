@@ -3,14 +3,19 @@ package otelsink
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
+	"google.golang.org/protobuf/proto"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 )
@@ -24,9 +29,11 @@ var _ mcpconnectionattempts.ExportSink = (*Sink)(nil)
 
 // New is the sink every recorder that exports uses.
 func New(publisher gcp.Publisher[*otelv1.InboundLogRecord], serviceName string) *Sink {
-	return &Sink{logs: otelpub.NewLogger(publisher,
-		resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(serviceName)),
-		dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource))}
+	return &Sink{logs: otelpub.NewLogger(publisher, connectionLogResource(serviceName), dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource))}
+}
+
+func connectionLogResource(serviceName string) *resource.Resource {
+	return resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(serviceName))
 }
 
 func (s *Sink) Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) gcp.PublishResult {
@@ -34,3 +41,34 @@ func (s *Sink) Publish(ctx context.Context, organizationID, projectID, recordID 
 }
 
 func (s *Sink) Close() { s.logs.Close() }
+
+// TestSource builds the MCP connection logs test event exactly as the sink
+// builds real records. It never publishes.
+type TestSource struct {
+	records  *otelpub.RecordBuilder
+	requests *otelsvc.ConnectionLogTestRequestBuilder
+}
+
+var _ otelsvc.RouteTestSource = (*TestSource)(nil)
+
+func NewTestSource(requests *otelsvc.ConnectionLogTestRequestBuilder, serviceName string) *TestSource {
+	return &TestSource{records: otelpub.NewRecordBuilder(connectionLogResource(serviceName), dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource)), requests: requests}
+}
+
+func (s *TestSource) DataSource() string { return dataexports.DataSourceMCPConnectionLogs }
+
+func (s *TestSource) BuildTestRequest(ctx context.Context, signal dataexports.Signal, destination dataexports.TestDestination) (proto.Message, error) {
+	if signal != dataexports.SignalLogs {
+		return nil, fmt.Errorf("%s does not export %s", s.DataSource(), signal)
+	}
+	record := mcpconnectionattempts.TestExportRecord(time.Now(), otelsvc.TestEventMessage)
+	inbound, err := s.records.Prepare(otelpub.WithTenant(ctx, destination.OrganizationID, destination.ProjectID.String()), &record)
+	if err != nil {
+		return nil, fmt.Errorf("prepare connection log test record: %w", err)
+	}
+	request, err := s.requests.Build(ctx, inbound, destination)
+	if err != nil {
+		return nil, fmt.Errorf("build connection log test request: %w", err)
+	}
+	return request, nil
+}

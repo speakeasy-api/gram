@@ -250,6 +250,7 @@ trackedFiles:
   src/funcs/dataExportsListDestinations.ts: {}
   src/funcs/dataExportsListForOrg.ts: {}
   src/funcs/dataExportsListRoutes.ts: {}
+  src/funcs/dataExportsTestRoute.ts: {}
   src/funcs/dataExportsUpdateDestination.ts: {}
   src/funcs/dataExportsUpdateRoute.ts: {}
   src/funcs/deploymentsActive.ts: {}
@@ -2075,6 +2076,8 @@ trackedFiles:
   src/models/components/telemetrylogrecord.ts: {}
   src/models/components/telemetrywindowpayload.ts: {}
   src/models/components/temporarygrant.ts: {}
+  src/models/components/testdataexportrouteresult.ts: {}
+  src/models/components/testdataexportroutesignalresult.ts: {}
   src/models/components/testdetectionrulematch.ts: {}
   src/models/components/testdetectionrulerequestbody.ts: {}
   src/models/components/testdetectionruleresult.ts: {}
@@ -3063,6 +3066,7 @@ trackedFiles:
   src/models/operations/syncdirectorygroups.ts: {}
   src/models/operations/syncidentityproviderconnectionapplications.ts: {}
   src/models/operations/syncslackdirectory.ts: {}
+  src/models/operations/testdataexportroute.ts: {}
   src/models/operations/testdetectionrule.ts: {}
   src/models/operations/testdeviceintegrationconnection.ts: {}
   src/models/operations/testserverconnection.ts: {}
@@ -4270,6 +4274,7 @@ trackedFiles:
   src/react-query/templates.ts: {}
   src/react-query/temporaryGrants.core.ts: {}
   src/react-query/temporaryGrants.ts: {}
+  src/react-query/testDataExportRoute.ts: {}
   src/react-query/testDeviceIntegrationConnection.ts: {}
   src/react-query/testServerConnection.ts: {}
   src/react-query/tokenExchangeExchange.ts: {}
@@ -13805,6 +13810,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  testDataExportRoute:
+    speakeasy-default-test-data-export-route:
+      parameters:
+        query:
+          id: "6ecef0d6-e426-4c4c-bafe-7b477e1a37d3"
+      responses:
+        "200":
+          application/json: {"message": "<value>", "outcome": "unreachable", "signals": [], "test_event_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   testDetectionRule:
     speakeasy-default-test-detection-rule:
       requestBody:

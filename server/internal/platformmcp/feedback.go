@@ -393,6 +393,7 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"create_data_export":                    {},
 	pauseDataExportToolName:                 {},
 	resumeDataExportToolName:                {},
+	sendDataExportTestEventToolName:         {},
 	"list_recent_tool_calls":                {},
 	"search_users":                          {},
 	"get_user_metrics_summary":              {},

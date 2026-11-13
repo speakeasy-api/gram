@@ -242,7 +242,11 @@ func (h *RiskFindingRelayHandler) handleBatch(ctx context.Context, messages []ri
 
 		observedAt := h.now().UTC()
 		batches, err := rightSizeProtoBatches(eligible, maxLogRelayExportBytes, func(batch []riskFindingRelayMessage) (*collectorlogsv1.ExportLogsServiceRequest, error) {
-			return buildRiskFindingRelayExport(batch, observedAt), nil
+			records := make([]*logsv1.LogRecord, len(batch))
+			for i, message := range batch {
+				records[i] = riskFindingLogRecord(message, observedAt)
+			}
+			return buildRiskFindingRelayExport(records), nil
 		})
 		if err != nil {
 			if h.findingsDropped != nil {
@@ -266,7 +270,7 @@ func (h *RiskFindingRelayHandler) handleBatch(ctx context.Context, messages []ri
 	exportGroup.SetLimit(logRelayExportConcurrency)
 	for _, item := range deliveries {
 		exportGroup.Go(func() error {
-			if err := item.destination.exportWithLimit(ctx, item.batch.message, maxLogRelayExportBytes); err != nil {
+			if _, err := item.destination.export(ctx, item.batch.message, maxLogRelayExportBytes); err != nil {
 				reason := relayReasonNetworkError
 				retryable := true
 				if exportErr, ok := errors.AsType[*relayExportError](err); ok && exportErr != nil {
@@ -322,12 +326,8 @@ func groupRiskFindingsByRoute(messages []riskFindingRelayMessage) []riskFindingR
 	return groups
 }
 
-func buildRiskFindingRelayExport(messages []riskFindingRelayMessage, observedAt time.Time) *collectorlogsv1.ExportLogsServiceRequest {
-	records := make([]*logsv1.LogRecord, len(messages))
-	for i, message := range messages {
-		records[i] = riskFindingLogRecord(message, observedAt)
-	}
-
+// buildRiskFindingRelayExport wraps records in the resource and scope every risk finding export carries.
+func buildRiskFindingRelayExport(records []*logsv1.LogRecord) *collectorlogsv1.ExportLogsServiceRequest {
 	return &collectorlogsv1.ExportLogsServiceRequest{
 		ResourceLogs: []*logsv1.ResourceLogs{{
 			Resource: &resourcev1.Resource{

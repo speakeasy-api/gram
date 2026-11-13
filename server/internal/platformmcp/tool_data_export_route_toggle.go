@@ -76,7 +76,7 @@ func unavailableDataExportToggleHandler[In any]() mcp.ToolHandlerFor[In, ToggleD
 	}
 }
 
-type dataExportToggleRefusal struct {
+type dataExportRefusal struct {
 	Code    string `json:"code"`
 	Feature string `json:"feature"`
 	Message string `json:"message"`
@@ -94,8 +94,8 @@ func dataExportRouteToolResult(err error, feature, unavailableMessage string) (*
 	if refusal, ok := externalAuthorizationToolResult(err); ok {
 		return refusal, true
 	}
-	result := dataExportToggleRefusal{Feature: feature}
-	var toggle *DataExportToggleError
+	result := dataExportRefusal{Feature: feature}
+	var toggle *DataExportRefusalError
 	switch {
 	case errors.As(err, &toggle):
 		result.Code, result.Message = toggle.Code, toggle.Message
