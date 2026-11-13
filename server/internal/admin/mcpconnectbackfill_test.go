@@ -198,7 +198,7 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 		"expiredViewer":    {expiredViewer, everyone},
 		"toolViewer":       {toolViewer, operators, everyone},
 		"narrowedViewer":   {narrowedViewer, everyone},
-		"plainViewer":          {plainViewer},
+		"plainViewer":      {plainViewer},
 		"agent":            {agent, viewers},
 		"apiKey":           {apiKey},
 		"workload":         {workload},
