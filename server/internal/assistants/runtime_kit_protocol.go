@@ -38,10 +38,29 @@ var _ runtimeSwitchCoordinator = (*KitRuntimeProtocol)(nil)
 const kitHistoryDroppedNotice = "Earlier messages in this conversation are not available to you. Respond to the current message without assuming what was said before."
 
 func NewKitRuntimeProtocol(c KitRuntimeProtocolConfig) (*KitRuntimeProtocol, error) {
-	if c.Core == nil || c.Projector == nil || c.Endpoint == nil || c.Endpoint.Path != "/acp/v2" || !filepath.IsAbs(c.CWD) {
+	if c.Core == nil || c.Projector == nil || c.Endpoint == nil || !kitProtocolEndpoint(c.Endpoint) || !filepath.IsAbs(c.CWD) {
 		return nil, errors.New("incomplete Kit protocol configuration")
 	}
 	return &KitRuntimeProtocol{config: c}, nil
+}
+
+// Both routes use ACP v2 messages; /acp opts into native Kit session ownership.
+func kitProtocolEndpoint(u *url.URL) bool {
+	return u != nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" &&
+		(u.Path == "/acp" || u.Path == "/acp/v2") && u.RawPath == "" &&
+		u.RawQuery == "" && !u.ForceQuery && u.Fragment == "" && u.RawFragment == "" && u.User == nil && u.Opaque == ""
+}
+
+// Native close awaits durable session cleanup before releasing transport ownership.
+// The gateway retains its resident actor across connections, so leave it untouched.
+func (p *KitRuntimeProtocol) closeSettledSession(ctx context.Context, c *kitacp.Client, session string) error {
+	if p.config.Endpoint.Path != "/acp" {
+		return nil
+	}
+	if _, err := c.Call(ctx, "session/close", map[string]string{"sessionId": session}, session); err != nil {
+		return fmt.Errorf("close settled Kit session: %w", err)
+	}
+	return nil
 }
 
 func kitStatusCapability(raw json.RawMessage) bool {
@@ -378,7 +397,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 						// prompt or detach the projector. Retry while we own it.
 						continue
 					}
-					return nil
+					return p.closeSettledSession(work, c, session.SessionID)
 				case <-work.Done():
 					return fmt.Errorf("kit protocol canceled: %w", work.Err())
 				}
@@ -469,6 +488,9 @@ func (p *KitRuntimeProtocol) PrepareRuntimeSwitch(ctx context.Context, assistant
 		}
 		if !settled {
 			return result, nil
+		}
+		if err := p.closeSettledSession(ctx, c, session.AcpSessionID); err != nil {
+			return result, err
 		}
 	}
 	result.Settled = true

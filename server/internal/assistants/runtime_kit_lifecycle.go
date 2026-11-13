@@ -45,7 +45,7 @@ func kitIdleCheckpointCapability(backend RuntimeBackend, r assistantRuntimeRecor
 }
 
 func kitProductionRuntime(version int16, backend string) bool {
-	return version == 3 && backend == runtimeBackendGKE
+	return version == 3 && (backend == runtimeBackendGKE || backend == runtimeBackendATE)
 }
 
 // sweepIdleKitRuntimes uses the existing durable reaper cadence, not legacy
@@ -97,7 +97,11 @@ func (s *ServiceCore) checkpointIdleKitRuntime(ctx context.Context, projectID, a
 		return false, nil
 	}
 	stopped := false
-	err = s.kitGKELifecycle(ctx, assistantRuntimeRecord{LifecycleTx: nil, Retired: false, AssistantThreadID: uuid.Nil, RuntimeVersion: 0, Backend: "", BackendMetadataJSON: nil, State: "", WarmUntil: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, ID: runtimeID, ProjectID: projectID, AssistantID: assistantID}, func(ctx context.Context, record assistantRuntimeRecord) error {
+	lifecycle := s.kitGKELifecycle
+	if row.Backend == runtimeBackendATE {
+		lifecycle = s.kitATELifecycle
+	}
+	err = lifecycle(ctx, assistantRuntimeRecord{LifecycleTx: nil, Retired: false, AssistantThreadID: uuid.Nil, RuntimeVersion: 0, Backend: "", BackendMetadataJSON: nil, State: "", WarmUntil: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, ID: runtimeID, ProjectID: projectID, AssistantID: assistantID}, func(ctx context.Context, record assistantRuntimeRecord) error {
 		q := assistantrepo.New(record.LifecycleTx)
 		row, err := q.GetAssistantRuntime(ctx, assistantrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
 		if err != nil {

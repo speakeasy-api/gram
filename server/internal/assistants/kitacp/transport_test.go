@@ -21,6 +21,13 @@ import (
 
 func TestTransport(t *testing.T) {
 	t.Parallel()
+	for _, path := range []string{"/acp/v2", "/acp"} {
+		t.Run(path, func(t *testing.T) { testTransport(t, path) })
+	}
+}
+
+func testTransport(t *testing.T, path string) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var mu sync.Mutex
@@ -28,7 +35,7 @@ func TestTransport(t *testing.T) {
 	var canceled, deleted, prompts atomic.Int32
 	promptReceived := make(chan struct{})
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/acp/v2" || r.Header.Get("Authorization") != "Bearer test-secret" {
+		if r.URL.Path != path || r.Header.Get("Authorization") != "Bearer test-secret" {
 			t.Error("bad endpoint/auth")
 		}
 		session := r.Header.Get("Acp-Session-Id")
@@ -68,6 +75,9 @@ func TestTransport(t *testing.T) {
 			case "session/new":
 				result = `{"sessionId":"s1"}`
 			case "session/resume":
+				if !strings.Contains(string(m.Params), `"replayFrom":{"type":"start"}`) {
+					t.Error("missing replay start")
+				}
 				result = `{}`
 			case "session/prompt":
 				prompts.Add(1)
@@ -108,7 +118,7 @@ func TestTransport(t *testing.T) {
 	}))
 	defer s.Close()
 	setup, stopSetup := context.WithCancel(ctx)
-	c, _, err := Dial(setup, s.URL+"/acp/v2", "test-secret", testHTTPClient(t), json.RawMessage(`{"protocolVersion":2,"info":{"name":"test","version":"0"},"capabilities":{}}`))
+	c, _, err := Dial(setup, s.URL+path, "test-secret", testHTTPClient(t), json.RawMessage(`{"protocolVersion":2,"info":{"name":"test","version":"0"},"capabilities":{}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +137,7 @@ func TestTransport(t *testing.T) {
 	if err = c.AttachSession(ctx, "s1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = c.Call(ctx, "session/resume", json.RawMessage(`{"sessionId":"s1","cwd":"/approved","mcpServers":[]}`), "s1"); err != nil {
+	if _, err = c.Call(ctx, "session/resume", json.RawMessage(`{"sessionId":"s1","cwd":"/approved","mcpServers":[],"replayFrom":{"type":"start"}}`), "s1"); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()
@@ -444,6 +454,23 @@ func TestDialClosesConnectionWhenStreamAttachFails(t *testing.T) {
 			}
 			if initialized.Load() != 1 || deleted.Load() != 1 {
 				t.Fatalf("initializations=%d deletions=%d", initialized.Load(), deleted.Load())
+			}
+		})
+	}
+}
+
+func TestTransportRejectsNonExactEndpoints(t *testing.T) {
+	t.Parallel()
+	for _, endpoint := range []string{
+		"http://example.com/", "http://example.com/acp/", "http://example.com/acp/v2/",
+		"http://example.com/acp?", "http://example.com/acp?x=1", "http://example.com/acp#",
+		"http://example.com/acp#fragment", "http://user@example.com/acp", "ftp://example.com/acp",
+		"http://example.com/%61cp", "http://example.com/acp%2fv2", "http://example.com/acp/v3",
+	} {
+		t.Run(endpoint, func(t *testing.T) {
+			_, _, err := Dial(t.Context(), endpoint, "token", testHTTPClient(t), struct{}{})
+			if err == nil || !strings.Contains(err.Error(), "invalid ACP endpoint") {
+				t.Fatalf("expected endpoint rejection: %v", err)
 			}
 		})
 	}

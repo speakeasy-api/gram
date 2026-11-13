@@ -80,6 +80,7 @@ type workloadGrant struct {
 	issuers    *workloadIssuerAdmission
 	identities workloadIdentityLookup
 	verifier   *workload.Verifier
+	ateBinding ateWorkloadBindingCheck
 	// deviceKeys resolves the key registered for a device subject, for issuers
 	// whose assertions verify per device. Nil refuses every such assertion.
 	deviceKeys workloadDeviceKeyLookup
@@ -138,6 +139,7 @@ func newWorkloadGrant(db *pgxpool.Pool, redisClient *redis.Client, policy *guard
 		issuers:    newWorkloadIssuerAdmission(workloadIssuerStoreLookup(db), newWorkloadIssuerLookupBudget(redisClient, meterProvider)),
 		identities: workloadIdentityStoreLookup(db),
 		verifier:   verifier,
+		ateBinding: ateWorkloadStoreBindingCheck(db),
 		deviceKeys: budgetedDeviceKeyLookup(workloadDeviceKeyStoreLookup(db), newWorkloadDeviceKeyLookupBudget(redisClient, meterProvider)),
 	}
 }
@@ -334,6 +336,15 @@ func admitWorkloadAssertion(
 		return presented, refuseWorkloadGrant("subject_not_admitted", err)
 	case err != nil:
 		return presented, workloadGrantStageUnavailable("subject_admission_unavailable", err)
+	}
+
+	if grant.ateBinding != nil {
+		if err := grant.ateBinding(ctx, tenancy, issuer.ID, claims.Subject, token); err != nil {
+			if errors.Is(err, errWorkloadNotAdmitted) {
+				return presented, refuseWorkloadGrant("ate_actor_binding_invalid", err)
+			}
+			return presented, workloadGrantStageUnavailable("ate_actor_binding_unavailable", err)
+		}
 	}
 
 	return presented, nil

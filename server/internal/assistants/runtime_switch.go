@@ -178,7 +178,11 @@ func runtimeSwitchQueries(ctx context.Context, db assistantrepo.DBTX) *assistant
 // rollback leaves no intent; a crash leaves it for the stopped-runtime janitor.
 func (s *ServiceCore) finishRuntimeSwitchRetirement(ctx context.Context, runtime assistantRuntimeRecord) error {
 	if kitProductionRuntime(runtime.RuntimeVersion, runtime.Backend) {
-		return s.kitGKELifecycle(ctx, runtime, func(ctx context.Context, locked assistantRuntimeRecord) error {
+		lifecycle := s.kitGKELifecycle
+		if runtime.Backend == runtimeBackendATE {
+			lifecycle = s.kitATELifecycle
+		}
+		return lifecycle(ctx, runtime, func(ctx context.Context, locked assistantRuntimeRecord) error {
 			if locked.State != "switch_retiring" || !locked.Retired {
 				return nil
 			}
