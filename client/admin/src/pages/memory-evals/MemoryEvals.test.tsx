@@ -34,12 +34,13 @@ vi.mock("./memoryEvalClient", async (importOriginal) => {
     ...actual,
     memoryEvalOptionsQuery: () =>
       queryOptions({
-        queryKey: ["@gram/admin-client", "admin", "getMemoryEvalOptions"],
+        // The real keys, so invalidateMemoryEvals reaches these mocks.
+        queryKey: actual.memoryEvalOptionsQuery().queryKey,
         queryFn: () => mocks.options(),
       }),
     memoryEvalRunsQuery: () =>
       infiniteQueryOptions({
-        queryKey: ["@gram/admin-client", "admin", "listMemoryEvalRuns"],
+        queryKey: actual.memoryEvalRunsQuery().queryKey,
         queryFn: () => mocks.runs(),
         initialPageParam: undefined as undefined | { cursor: string },
         getNextPageParam: () => undefined,
@@ -210,6 +211,9 @@ describe("MemoryEvalsPage", () => {
 
     await waitFor(() => expect(mocks.start).toHaveBeenCalled());
     expect(mocks.start.mock.calls[0]?.[0]).toEqual(defaults);
+    // The start re-reads the runs and the remaining budget.
+    await waitFor(() => expect(mocks.runs).toHaveBeenCalledTimes(2));
+    expect(mocks.options).toHaveBeenCalledTimes(2);
   });
 
   it("compares a succeeded run from its report", async () => {
