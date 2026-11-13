@@ -70,7 +70,8 @@ export function useMcpServerAuthenticationReadiness(
     enabled: remoteMcpServerId !== "",
   });
   const remoteHeaders = remoteHeadersResult?.headers ?? [];
-  const canReadBinding = !rbacLoading && hasScope("mcp:read", mcpServer?.id);
+  const canReadBinding =
+    !rbacLoading && hasScope("mcp:read", mcpServer?.id, mcpServer?.projectId);
   const associationsQuery = useServerClientAssociations(
     { mcpServerId: mcpServer?.id ?? "" },
     undefined,
@@ -162,7 +163,7 @@ export function useMcpServerAuthenticationReadiness(
     description = "The identity status is not available yet.";
   } else if (
     githubBinding?.githubAppRequired &&
-    !githubBinding.githubAppBound
+    (!githubBinding.githubAppBound || !githubBinding.githubAppEnabled)
   ) {
     description =
       "Callers' requests are blocked until you save a new identity.";

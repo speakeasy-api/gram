@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -38,11 +39,20 @@ func TestRecordUpstreamClientSelectionsForCredentialsMatchesIssuance(t *testing.
 	unassociated := f.server(issuer)
 	ambiguous := f.server(issuer, registration, f.client(issuer))
 	typed := f.authClient(authclientbackfill.TypeRemoteSession, registration, server)
+	githubServer, disabledServer := f.server(issuer), f.server(issuer)
+	unlinkedServer, ambiguousGitHubServer := f.server(issuer), f.server(issuer)
+	githubClient := f.githubAppClient(githubServer)
+	disabledClient := f.githubAppClient(disabledServer)
+	require.NoError(t, authclientbackfill.New(f.pool).SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{ID: disabledClient, Enabled: false}))
+	f.githubAppClient(unlinkedServer)
+	f.detachAuthClients(unlinkedServer)
+	f.githubAppClient(ambiguousGitHubServer)
+	f.githubAppClient(ambiguousGitHubServer)
 	q := usersessionsrepo.New(f.pool)
 	issued := f.session(issuer)
 	empty := f.session(issuer)
 	first, second := f.session(issuer), f.session(issuer)
-	require.Equal(t, int64(2), f.record(issuer, issued))
+	require.Equal(t, int64(6), f.record(issuer, issued))
 	n, err := q.RecordUpstreamClientSelectionsForCredentials(t.Context(), batchSelectionParams(issuer, []uuid.UUID{}))
 	require.NoError(t, err)
 	require.Zero(t, n)
@@ -55,9 +65,9 @@ func TestRecordUpstreamClientSelectionsForCredentialsMatchesIssuance(t *testing.
 	params.ScopeMcpServerIds = nil
 	n, err = q.RecordUpstreamClientSelectionsForCredentials(t.Context(), params)
 	require.NoError(t, err)
-	require.Equal(t, int64(4), n, "duplicate IDs must not conflict twice in one statement")
+	require.Equal(t, int64(12), n, "duplicate IDs must not conflict twice in one statement")
 	want := f.selections(issued)
-	require.Len(t, want, 2)
+	require.Len(t, want, 6)
 	require.Equal(t, registration, want[server])
 	require.Contains(t, want, unassociated, "a server with no client records no-auth")
 	require.NotContains(t, want, ambiguous, "two eligible clients record nothing")
@@ -67,6 +77,16 @@ func TestRecordUpstreamClientSelectionsForCredentialsMatchesIssuance(t *testing.
 		require.Equal(t, uuid.NullUUID{UUID: typed, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
 	}
 	require.Equal(t, uuid.NullUUID{UUID: typed, Valid: true}, f.namedAuthClient(issued, server).AuthClientID)
+	for _, credential := range []uuid.UUID{issued, first, second} {
+		named := f.namedAuthClient(credential, githubServer)
+		require.Equal(t, uuid.NullUUID{UUID: githubClient, Valid: true}, named.AuthClientID)
+		require.False(t, named.NoAuth, "a selected GitHub App is not a no-auth choice")
+		for _, unmappedServer := range []uuid.UUID{disabledServer, unlinkedServer, ambiguousGitHubServer} {
+			named := f.namedAuthClient(credential, unmappedServer)
+			require.False(t, named.AuthClientID.Valid, "disabled, detached, or ambiguous GitHub Apps must not be inferred")
+			require.True(t, named.NoAuth)
+		}
+	}
 }
 
 func TestRecordUpstreamClientSelectionsBatchPreservesImmutableChoices(t *testing.T) {
@@ -160,4 +180,45 @@ func TestReconcileIssuerScopeBatchesEachLivePageByReach(t *testing.T) {
 			require.Len(t, choices, 1, "existing target lineages stay within maintenance scope")
 		}
 	}
+}
+
+func (f *fixture) githubAppClient(serverID uuid.UUID) uuid.UUID {
+	f.t.Helper()
+	q := authclientsrepo.New(f.pool)
+	client, err := q.CreateGitHubAppAuthClient(f.t.Context(), authclientsrepo.CreateGitHubAppAuthClientParams{
+		OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, Name: "Selection fixture",
+	})
+	require.NoError(f.t, err)
+	require.NoError(f.t, q.SetGitHubAppCredential(f.t.Context(), authclientsrepo.SetGitHubAppCredentialParams{
+		AuthClientID: client.ID, OrganizationID: f.orgID, InstanceUrl: "https://git.example.com", AppID: 123, InstallationID: 456,
+		PrivateKeyEncrypted: "TEST_ENCRYPTED_PRIVATE_KEY", UpstreamOrigin: "https://upstream.example.com",
+	}))
+	require.NoError(f.t, q.AttachGitHubAppAuthClient(f.t.Context(), authclientsrepo.AttachGitHubAppAuthClientParams{
+		ProjectID: f.projectID, McpServerID: serverID, AuthClientID: client.ID, OrganizationID: f.orgID,
+	}))
+	return client.ID
+}
+
+func TestRecordUpstreamClientSelectionsBatchPreservesGitHubAppChoices(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	server := f.server(issuer)
+	noAuth := f.session(issuer)
+	require.Equal(t, int64(1), f.record(issuer, noAuth))
+	beforeNoAuth := f.namedAuthClient(noAuth, server)
+	firstClient := f.githubAppClient(server)
+	selected := f.session(issuer)
+	require.Equal(t, int64(1), f.record(issuer, selected))
+	beforeSelected := f.namedAuthClient(selected, server)
+	require.Equal(t, uuid.NullUUID{UUID: firstClient, Valid: true}, beforeSelected.AuthClientID)
+	require.NoError(t, authclientbackfill.New(f.pool).SetAuthClientEnabledFixture(t.Context(), authclientbackfill.SetAuthClientEnabledFixtureParams{ID: firstClient, Enabled: false}))
+	replacement := f.githubAppClient(server)
+	fresh := f.session(issuer)
+	n, err := usersessionsrepo.New(f.pool).RecordUpstreamClientSelectionsForCredentials(t.Context(), batchSelectionParams(issuer, []uuid.UUID{noAuth, selected, fresh}))
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n, "only the new lineage is recorded; existing choices are not rewritten")
+	require.Equal(t, beforeNoAuth, f.namedAuthClient(noAuth, server), "bulk inference does not upgrade an existing no-auth choice to GitHub identity")
+	require.Equal(t, beforeSelected, f.namedAuthClient(selected, server), "a stale GitHub choice must not silently switch identity")
+	require.Equal(t, uuid.NullUUID{UUID: replacement, Valid: true}, f.namedAuthClient(fresh, server).AuthClientID)
 }

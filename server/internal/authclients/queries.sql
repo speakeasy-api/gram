@@ -581,8 +581,11 @@ WHERE mcp_auth_client_github_apps.organization_id = EXCLUDED.organization_id;
 
 -- name: AttachGitHubAppAuthClient :exec
 INSERT INTO mcp_server_auth_clients (organization_id, project_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
-SELECT ac.organization_id, @project_id::uuid, @mcp_server_id, ac.id, ac.attachment_scope, 'admin'
+SELECT ac.organization_id, ms.project_id, ms.id, ac.id, ac.attachment_scope, 'admin'
 FROM mcp_auth_clients ac
+JOIN mcp_servers ms ON ms.id = @mcp_server_id AND ms.project_id = @project_id::uuid
+  AND NOT ms.deleted AND (ac.project_id IS NULL OR ac.project_id = ms.project_id)
+JOIN projects p ON p.id = ms.project_id AND p.organization_id = ac.organization_id AND NOT p.deleted
 WHERE ac.id = @auth_client_id AND ac.organization_id = @organization_id AND NOT ac.deleted
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO UPDATE SET source = 'admin', updated_at = clock_timestamp();
 

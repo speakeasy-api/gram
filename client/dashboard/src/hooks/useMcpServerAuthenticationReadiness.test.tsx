@@ -1,3 +1,5 @@
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import { hasScopeInGrants } from "@/hooks/useRBAC";
 import { renderHook } from "@testing-library/react";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,7 +16,8 @@ const mocks = vi.hoisted(() => ({
     isError: false,
   },
 }));
-vi.mock("@/hooks/useRBAC", () => ({
+vi.mock("@/hooks/useRBAC", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useRBAC")>()),
   useRBAC: () => ({ hasScope: mocks.hasScope, isLoading: mocks.rbacLoading }),
 }));
 vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
@@ -47,6 +50,7 @@ import { useMcpServerAuthenticationReadiness } from "./useMcpServerAuthenticatio
 
 const server = {
   id: "server-fixture",
+  projectId: "project-fixture",
   remoteMcpServerId: "remote-fixture",
 } as McpServer;
 
@@ -133,6 +137,57 @@ describe("shared authentication readiness with GitHub App identity", () => {
     expect(result.current.ready).toBe(false);
     expect(mocks.probe).toHaveBeenCalledWith("remote-fixture", false);
   });
+
+  it.each(["project-fixture", "other-project"])(
+    "checks the server project against a read grant for %s",
+    (grantedProject) => {
+      const grants = [
+        {
+          scope: "mcp:read",
+          selectors: [{ resourceKind: "mcp", projectId: grantedProject }],
+        },
+      ];
+      mocks.hasScope.mockImplementation(
+        (scope: Scope, resourceId?: string, projectId?: string) =>
+          hasScopeInGrants(grants, scope, resourceId, projectId),
+      );
+      const { result } = renderHook(() =>
+        useMcpServerAuthenticationReadiness(server),
+      );
+      expect(mocks.hasScope).toHaveBeenCalledWith(
+        "mcp:read",
+        server.id,
+        server.projectId,
+      );
+      const allowed = grantedProject === server.projectId;
+      expect(mocks.associations.mock.calls[0]?.[2]).toMatchObject({
+        enabled: allowed,
+      });
+      expect(result.current.unavailable).toBe(!allowed);
+      expect(mocks.probe).toHaveBeenCalledWith("remote-fixture", allowed);
+    },
+  );
+
+  it.each([true, false])(
+    "explains blocked callers for a required App with bound=%s",
+    (bound) => {
+      mocks.associations.mockReturnValue({
+        data: {
+          githubAppBound: bound,
+          githubAppEnabled: false,
+          githubAppRequired: true,
+        },
+      });
+      const { result } = renderHook(() =>
+        useMcpServerAuthenticationReadiness(server),
+      );
+      expect(result.current.description).toBe(
+        "Callers' requests are blocked until you save a new identity.",
+      );
+      expect(result.current.ready).toBe(false);
+      expect(result.current.unavailable).toBe(true);
+    },
+  );
 
   it("keeps missing mcp:read metadata unknown rather than absent", () => {
     mocks.hasScope.mockReturnValue(false);

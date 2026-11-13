@@ -195,7 +195,8 @@ func (f *fixture) recordPickedFrom(userIssuerID, credentialID uuid.UUID, picks m
 	return n
 }
 
-// selections maps each chosen server to its client, uuid.Nil for no-auth.
+// selections maps each chosen server to its OAuth registration, uuid.Nil for
+// choices without one (no-auth or a registration-less typed identity).
 func (f *fixture) selections(credentialID uuid.UUID) map[uuid.UUID]uuid.UUID {
 	f.t.Helper()
 	rows, err := f.q.ListSelectionsFixture(f.t.Context(), ListSelectionsFixtureParams{
@@ -205,7 +206,11 @@ func (f *fixture) selections(credentialID uuid.UUID) map[uuid.UUID]uuid.UUID {
 	require.NoError(f.t, err)
 	chosen := make(map[uuid.UUID]uuid.UUID, len(rows))
 	for _, row := range rows {
-		require.Equal(f.t, row.NoAuth, !row.RemoteSessionClientID.Valid)
+		if row.RemoteSessionClientID.Valid {
+			require.False(f.t, row.NoAuth)
+		} else if !row.NoAuth {
+			require.True(f.t, f.namedAuthClient(credentialID, row.McpServerID).AuthClientID.Valid, "a registration-less identity must name an auth client")
+		}
 		chosen[row.McpServerID] = row.RemoteSessionClientID.UUID
 	}
 	return chosen

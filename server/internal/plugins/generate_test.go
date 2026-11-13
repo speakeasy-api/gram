@@ -3942,6 +3942,10 @@ func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T
 		"incomplete or absent OAuth discovery",
 		"Static credential (stored headers) through the dashboard setup URL",
 		"Service account credential (OAuth client credentials)",
+		"GitHub App service-account option",
+		"`api.githubcopilot.com`, `github.com`, or `api.github.com`",
+		"authenticated dashboard or API outside chat",
+		"Never request a GitHub App private key, pass it to a Platform MCP tool",
 		"do not attempt attachment",
 	} {
 		require.Contains(t, workflow, required)

@@ -684,8 +684,19 @@ func (s *Service) metaValidationTarget(
 		// The agent or workload actor rides on ctx; the gate has no field for it.
 	}
 	ctx = s.memberAttributionContext(ctx, logger, &gate)
-	// routeMetaMember, not dialMetaMember: a probe is not a dispatch to count.
-	dial, _, err := s.routeMetaMember(ctx, logger, gate, member, gate.callerIdentity(), false)
+	// The endpoint snapshot is also used before future typed choices are made,
+	// so only this legacy grant probe applies the serving-time provider guard.
+	probeMembers := []metaMember{member}
+	if err := s.rejectLegacyGitHubMembers(ctx, endpoint.OrganizationID, probeMembers); err != nil {
+		return ctx, none, fmt.Errorf("check consent probe GitHub App requirements: %w", err)
+	}
+	member = probeMembers[0]
+	var dial memberDial
+	err = member.upstreamUnavailable
+	if err == nil {
+		// routeMetaMember, not dialMetaMember: a probe is not a dispatch to count.
+		dial, _, err = s.routeMetaMember(ctx, logger, gate, member, gate.callerIdentity(), false)
+	}
 	if err != nil {
 		if errors.Is(err, errAmbiguousMemberCredential) {
 			return ctx, none, fmt.Errorf("%w: %w", errRemoteSessionUnroutable, err)
