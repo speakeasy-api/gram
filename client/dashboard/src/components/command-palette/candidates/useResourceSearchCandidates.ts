@@ -37,10 +37,13 @@ type PayloadByteBucket =
   | "over_250k";
 
 export const MIGRATED_RESOURCE_KINDS = [
+  "assistant",
   "environment",
   "gateway",
+  "mcp",
   "plugin",
   "rule",
+  "skill",
 ] as const;
 type MigratedResourceKind = (typeof MIGRATED_RESOURCE_KINDS)[number];
 
@@ -124,17 +127,20 @@ function estimatePayloadBytes(items: readonly ResourceSearchItem[]): number {
 }
 
 const KIND_PRESENTATION: Record<
-  string,
+  MigratedResourceKind,
   { detail: string; group: string; icon: LauncherCandidate["icon"] }
 > = {
+  assistant: { detail: "Assistant", group: "Assistants", icon: "bot" },
   environment: { detail: "Environment", group: "Environments", icon: "blocks" },
   gateway: { detail: "MCP gateway", group: "Gateways", icon: "network" },
+  mcp: { detail: "MCP server", group: "MCP Servers", icon: "network" },
   plugin: { detail: "Plugin", group: "Plugins", icon: "puzzle" },
   rule: {
     detail: "Detection rule",
     group: "Detection Rules",
     icon: "scan-search",
   },
+  skill: { detail: "Skill", group: "Skills", icon: "terminal" },
 };
 
 function validField(value: unknown): value is string {
@@ -150,9 +156,12 @@ export function mapResourceSearchItems(
   navigate: ReturnType<typeof useNavigate>,
 ): LauncherCandidate[] {
   return items.flatMap((item): LauncherCandidate[] => {
-    const presentation = KIND_PRESENTATION[item.kind];
+    if (!MIGRATED_RESOURCE_KINDS.includes(item.kind as MigratedResourceKind)) {
+      return [];
+    }
+    const kind = item.kind as MigratedResourceKind;
+    const presentation = KIND_PRESENTATION[kind];
     if (
-      !presentation ||
       !validField(item.id) ||
       !validField(item.name) ||
       !validField(item.routeSelector)
@@ -162,12 +171,18 @@ export function mapResourceSearchItems(
 
     const selector = item.routeSelector;
     let run: () => void;
-    switch (item.kind) {
+    switch (kind) {
+      case "assistant":
+        run = () => routes.assistants.detail.goTo(selector);
+        break;
       case "environment":
         run = () => routes.environments.environment.goTo(selector);
         break;
       case "gateway":
         run = () => routes.mcp.gateway.overview.goTo(selector);
+        break;
+      case "mcp":
+        run = () => routes.mcp.details.overview.goTo(selector);
         break;
       case "plugin":
         run = () => routes.plugins.detail.goTo(selector);
@@ -179,24 +194,26 @@ export function mapResourceSearchItems(
           );
         };
         break;
-      default:
-        return [];
+      case "skill":
+        run = () => routes.skills.detail.overview.goTo(selector);
+        break;
     }
 
     return [
       {
-        id: `${item.kind}:${item.id}`,
-        kind: item.kind,
+        id: `${kind}:${item.id}`,
+        kind: kind === "mcp" ? "mcp_server" : kind,
         title: item.name,
         detail: presentation.detail,
         keywords: [
           ...new Set([
-            item.kind.replaceAll("_", " "),
+            kind,
             selector,
             item.id,
             ...(item.keywords ?? []).filter(validField).slice(0, 32),
           ]),
         ],
+        resourceIdentity: { id: item.id, routeSelector: selector },
         verbs: ["open"],
         icon: presentation.icon,
         group: presentation.group,

@@ -2,6 +2,7 @@ package commandsearch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -9,12 +10,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/command_search"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/commandsearch/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -26,6 +29,9 @@ type fakeStore struct {
 	blockedStartOnce  sync.Once
 	blockedErr        error
 	environmentParams repo.ListCommandIndexEnvironmentsParams
+	assistants        []repo.ListCommandIndexAssistantsRow
+	mcpServers        []repo.ListCommandIndexMCPServersRow
+	skills            []repo.ListCommandIndexSkillsRow
 	environments      []repo.ListCommandIndexEnvironmentsRow
 	gateways          []repo.ListCommandIndexGatewaysRow
 	plugins           []repo.ListCommandIndexPluginsRow
@@ -50,6 +56,15 @@ func (f *fakeStore) call(ctx context.Context, kind string) error {
 	return nil
 }
 
+func (f *fakeStore) ListCommandIndexAssistants(ctx context.Context, _ repo.ListCommandIndexAssistantsParams) ([]repo.ListCommandIndexAssistantsRow, error) {
+	return f.assistants, f.call(ctx, "assistant")
+}
+func (f *fakeStore) ListCommandIndexMCPServers(ctx context.Context, _ repo.ListCommandIndexMCPServersParams) ([]repo.ListCommandIndexMCPServersRow, error) {
+	return f.mcpServers, f.call(ctx, "mcp")
+}
+func (f *fakeStore) ListCommandIndexSkills(ctx context.Context, _ repo.ListCommandIndexSkillsParams) ([]repo.ListCommandIndexSkillsRow, error) {
+	return f.skills, f.call(ctx, "skill")
+}
 func (f *fakeStore) ListCommandIndexEnvironments(ctx context.Context, params repo.ListCommandIndexEnvironmentsParams) ([]repo.ListCommandIndexEnvironmentsRow, error) {
 	f.mu.Lock()
 	f.environmentParams = params
@@ -86,18 +101,31 @@ func (fakeAuthz) RequirePluginWrite(context.Context, string, string) error { ret
 func ctxFor(projectID uuid.UUID) context.Context {
 	return contextvalues.SetAuthContext(context.Background(), &contextvalues.AuthContext{ProjectID: &projectID, ActiveOrganizationID: "org_test"})
 }
+
+type fakeFeatures struct {
+	enabled bool
+	err     error
+}
+
+func (f fakeFeatures) IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error) {
+	return f.enabled, f.err
+}
+
 func service(t *testing.T, store *fakeStore, authorizer fakeAuthz) *Service {
 	t.Helper()
-	return &Service{logger: testenv.NewLogger(t), repo: store, authz: authorizer, budget: time.Second}
+	return &Service{logger: testenv.NewLogger(t), repo: store, authz: authorizer, features: fakeFeatures{enabled: true}, budget: time.Second}
 }
 func storeWithAllKinds() *fakeStore {
-	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()}
 	return &fakeStore{
 		calls:        map[string]int{},
-		environments: []repo.ListCommandIndexEnvironmentsRow{{ID: ids[0], Name: "Environment", Slug: "environment"}},
-		gateways:     []repo.ListCommandIndexGatewaysRow{{ID: ids[1], Name: "Gateway"}},
-		plugins:      []repo.ListCommandIndexPluginsRow{{ID: ids[2], Name: "Plugin", Slug: "plugin"}},
-		rules:        []repo.ListCommandIndexCustomRulesRow{{ID: ids[3], Title: "Rule", RuleID: "custom.rule", Severity: "medium"}},
+		assistants:   []repo.ListCommandIndexAssistantsRow{{ID: ids[0], Name: "Assistant"}},
+		mcpServers:   []repo.ListCommandIndexMCPServersRow{{ID: ids[1], Name: pgtype.Text{String: "MCP Server", Valid: true}, Slug: pgtype.Text{String: "mcp-server", Valid: true}, RouteID: ids[1]}},
+		skills:       []repo.ListCommandIndexSkillsRow{{ID: ids[2], DisplayName: "Skill", Name: "skill"}},
+		environments: []repo.ListCommandIndexEnvironmentsRow{{ID: ids[3], Name: "Environment", Slug: "environment"}},
+		gateways:     []repo.ListCommandIndexGatewaysRow{{ID: ids[4], Name: "Gateway"}},
+		plugins:      []repo.ListCommandIndexPluginsRow{{ID: ids[5], Name: "Plugin", Slug: "plugin"}},
+		rules:        []repo.ListCommandIndexCustomRulesRow{{ID: ids[6], Title: "Rule", RuleID: "custom.rule", Severity: "medium"}},
 	}
 }
 
@@ -110,7 +138,7 @@ func TestSearchCompleteStableAndOneQueryPerKind(t *testing.T) {
 	require.NoError(t, err)
 	b, err := svc.Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "ru"})
 	require.NoError(t, err)
-	require.Len(t, a.Items, 4)
+	require.Len(t, a.Items, 7)
 	a.GeneratedAt, b.GeneratedAt = "", ""
 	require.Equal(t, a, b)
 	for _, kind := range allKinds {
@@ -155,7 +183,7 @@ func TestSearchDeadlineReturnsExactPartialMetadata(t *testing.T) {
 	require.False(t, got.result.Truncated)
 	require.Empty(t, got.result.TruncatedKinds)
 	require.Equal(t, []string{"gateway"}, got.result.FailedKinds)
-	require.Len(t, got.result.Items, 3)
+	require.Len(t, got.result.Items, 6)
 }
 
 func TestSearchPluginUsesIDSelectorAndSlugKeyword(t *testing.T) {
@@ -211,6 +239,30 @@ func TestMatchRankExactThenAliasPrefixThenNamePrefix(t *testing.T) {
 	require.Equal(t, 0, matchRank(&gen.Commandresourceindexitem{Name: "Other", Keywords: []string{"CAT"}}, query))
 	require.Equal(t, 1, matchRank(&gen.Commandresourceindexitem{Name: "Other", Keywords: []string{"catalog"}}, query))
 	require.Equal(t, 2, matchRank(&gen.Commandresourceindexitem{Name: "Catalog"}, query))
+}
+
+func TestSearchAssistantCollectionAuthorizationUsesProjectAwareWildcard(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	seen := false
+	authorizer := fakeAuthz{evaluate: func(check authz.Check) bool {
+		if check.Scope != authz.ScopeAssistantRead {
+			return true
+		}
+		seen = true
+		require.Equal(t, authz.WildcardResource, check.ResourceID)
+		require.Equal(t, map[string]string{authz.SelectorKeyProjectID: projectID.String()}, check.Dimensions)
+		return false // Models an exact-resource-only grant, which cannot match the collection check.
+	}}
+	store := storeWithAllKinds()
+	result, err := service(t, store, authorizer).Search(ctxFor(projectID), &gen.SearchPayload{Q: "as"})
+	require.NoError(t, err)
+	require.True(t, seen)
+	require.Zero(t, store.calls["assistant"])
+	for _, item := range result.Items {
+		require.NotEqual(t, "assistant", item.Kind)
+	}
 }
 
 func TestSearchGatewayCollectionAuthorizationUsesProjectAwareWildcard(t *testing.T) {
@@ -285,7 +337,7 @@ func TestSearchReportsPerKindTruncationWithoutFailure(t *testing.T) {
 	require.Equal(t, []string{"environment"}, result.TruncatedKinds)
 	require.False(t, result.Partial)
 	require.Empty(t, result.FailedKinds)
-	require.Len(t, result.Items, perKindLimit+3)
+	require.Len(t, result.Items, perKindLimit+6)
 }
 
 func TestSearchReportsGlobalTruncatedKinds(t *testing.T) {
@@ -306,10 +358,47 @@ func TestSearchReportsGlobalTruncatedKinds(t *testing.T) {
 	result, err := service(t, store, fakeAuthz{}).Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "ma"})
 	require.NoError(t, err)
 	require.True(t, result.Truncated)
-	require.Equal(t, []string{"plugin", "rule"}, result.TruncatedKinds)
+	require.Equal(t, []string{"assistant", "mcp", "plugin", "rule", "skill"}, result.TruncatedKinds)
 	require.False(t, result.Partial)
 	require.Empty(t, result.FailedKinds)
 	require.Len(t, result.Items, globalLimit)
+}
+
+func TestSearchSkillsFeatureGateAndFailure(t *testing.T) {
+	t.Parallel()
+
+	t.Run("disabled omits skills", func(t *testing.T) {
+		t.Parallel()
+		store := storeWithAllKinds()
+		svc := service(t, store, fakeAuthz{})
+		svc.features = fakeFeatures{enabled: false}
+		result, err := svc.Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "sk"})
+		require.NoError(t, err)
+		require.Zero(t, store.calls["skill"])
+		for _, item := range result.Items {
+			require.NotEqual(t, "skill", item.Kind)
+		}
+	})
+
+	t.Run("check error fails before authorization or queries", func(t *testing.T) {
+		t.Parallel()
+		store := storeWithAllKinds()
+		svc := service(t, store, fakeAuthz{evaluate: func(authz.Check) bool { t.Fatal("authorization must not run"); return false }})
+		svc.features = fakeFeatures{err: errors.New("feature store unavailable")}
+		_, err := svc.Search(ctxFor(uuid.New()), &gen.SearchPayload{Q: "sk"})
+		require.ErrorContains(t, err, "check skills feature")
+		for _, kind := range allKinds {
+			require.Zero(t, store.calls[kind])
+		}
+	})
+}
+
+func TestReservedMCPRoutesUseUUID(t *testing.T) {
+	t.Parallel()
+	for _, slug := range []string{"add", "catalog", "deployments", "sources", "organization-gateway", "gateway", "x"} {
+		require.True(t, isReservedMCPRoute(slug))
+	}
+	require.False(t, isReservedMCPRoute("custom-server"))
 }
 
 func TestSearchPreflightDeadlineIsRequestError(t *testing.T) {

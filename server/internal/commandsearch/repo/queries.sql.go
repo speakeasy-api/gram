@@ -9,7 +9,55 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const listCommandIndexAssistants = `-- name: ListCommandIndexAssistants :many
+SELECT id, name FROM assistants
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND lower(name) >= $2::text
+  AND lower(name) < $3::text
+ORDER BY CASE WHEN lower(name) = $2::text THEN 0 ELSE 2 END, name, id
+LIMIT $4
+`
+
+type ListCommandIndexAssistantsParams struct {
+	ProjectID    uuid.UUID
+	LowerBound   string
+	LowerCeiling string
+	ResultLimit  int32
+}
+
+type ListCommandIndexAssistantsRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+func (q *Queries) ListCommandIndexAssistants(ctx context.Context, arg ListCommandIndexAssistantsParams) ([]ListCommandIndexAssistantsRow, error) {
+	rows, err := q.db.Query(ctx, listCommandIndexAssistants,
+		arg.ProjectID,
+		arg.LowerBound,
+		arg.LowerCeiling,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCommandIndexAssistantsRow
+	for rows.Next() {
+		var i ListCommandIndexAssistantsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const listCommandIndexCustomRules = `-- name: ListCommandIndexCustomRules :many
 SELECT id, title, rule_id, severity FROM risk_custom_detection_rules
@@ -182,6 +230,92 @@ func (q *Queries) ListCommandIndexGateways(ctx context.Context, arg ListCommandI
 	return items, nil
 }
 
+const listCommandIndexMCPServers = `-- name: ListCommandIndexMCPServers :many
+WITH candidates AS (
+  SELECT ms.id, ms.name, ms.slug, ms.id AS route_id
+  FROM mcp_servers ms
+  WHERE ms.project_id = $4
+    AND ms.deleted IS FALSE
+    AND ms.toolset_id IS NULL
+    AND ms.builtin_backend IS NULL
+    AND num_nonnulls(ms.remote_mcp_server_id, ms.tunneled_mcp_server_id, ms.unproxied_mcp_server_id) > 0
+    AND ((lower(ms.name) >= $1::text AND lower(ms.name) < $2::text)
+      OR (ms.slug >= $1::text AND ms.slug < $2::text))
+  UNION ALL
+  SELECT t.id, t.name, t.slug, host.id AS route_id
+  FROM toolsets t
+  JOIN LATERAL (
+    SELECT ms.id
+    FROM mcp_servers ms
+    WHERE ms.project_id = t.project_id
+      AND ms.toolset_id = t.id
+      AND ms.deleted IS FALSE
+      AND ms.builtin_backend IS NULL
+      AND (ms.id = t.id OR EXISTS (
+        SELECT 1 FROM mcp_endpoints e
+        WHERE e.project_id = ms.project_id AND e.mcp_server_id = ms.id AND e.deleted IS FALSE
+      ))
+    ORDER BY (ms.id = t.id) DESC, ms.created_at, ms.id
+    LIMIT 1
+  ) host ON TRUE
+  WHERE t.project_id = $4
+    AND t.deleted IS FALSE
+    AND ((lower(t.name) >= $1::text AND lower(t.name) < $2::text)
+      OR (t.slug >= $1::text AND t.slug < $2::text))
+)
+SELECT id, name, slug, route_id FROM candidates
+ORDER BY CASE
+  WHEN slug = $1::text OR lower(name) = $1::text THEN 0
+  WHEN slug >= $1::text AND slug < $2::text THEN 1
+  ELSE 2
+END, name, id
+LIMIT $3
+`
+
+type ListCommandIndexMCPServersParams struct {
+	LowerBound   string
+	LowerCeiling string
+	ResultLimit  int32
+	ProjectID    uuid.UUID
+}
+
+type ListCommandIndexMCPServersRow struct {
+	ID      uuid.UUID
+	Name    pgtype.Text
+	Slug    pgtype.Text
+	RouteID uuid.UUID
+}
+
+func (q *Queries) ListCommandIndexMCPServers(ctx context.Context, arg ListCommandIndexMCPServersParams) ([]ListCommandIndexMCPServersRow, error) {
+	rows, err := q.db.Query(ctx, listCommandIndexMCPServers,
+		arg.LowerBound,
+		arg.LowerCeiling,
+		arg.ResultLimit,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCommandIndexMCPServersRow
+	for rows.Next() {
+		var i ListCommandIndexMCPServersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.RouteID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCommandIndexPlugins = `-- name: ListCommandIndexPlugins :many
 SELECT id, name, slug FROM plugins
 WHERE organization_id = $1
@@ -229,6 +363,58 @@ func (q *Queries) ListCommandIndexPlugins(ctx context.Context, arg ListCommandIn
 	for rows.Next() {
 		var i ListCommandIndexPluginsRow
 		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCommandIndexSkills = `-- name: ListCommandIndexSkills :many
+SELECT id, display_name, name FROM skills
+WHERE project_id = $1
+  AND archived_at IS NULL
+  AND ((lower(display_name) >= $2::text AND lower(display_name) < $3::text)
+    OR (name >= $2::text AND name < $3::text))
+ORDER BY CASE
+  WHEN name = $2::text OR lower(display_name) = $2::text THEN 0
+  WHEN name >= $2::text AND name < $3::text THEN 1
+  ELSE 2
+END, display_name, id
+LIMIT $4
+`
+
+type ListCommandIndexSkillsParams struct {
+	ProjectID    uuid.UUID
+	LowerBound   string
+	LowerCeiling string
+	ResultLimit  int32
+}
+
+type ListCommandIndexSkillsRow struct {
+	ID          uuid.UUID
+	DisplayName string
+	Name        string
+}
+
+func (q *Queries) ListCommandIndexSkills(ctx context.Context, arg ListCommandIndexSkillsParams) ([]ListCommandIndexSkillsRow, error) {
+	rows, err := q.db.Query(ctx, listCommandIndexSkills,
+		arg.ProjectID,
+		arg.LowerBound,
+		arg.LowerCeiling,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCommandIndexSkillsRow
+	for rows.Next() {
+		var i ListCommandIndexSkillsRow
+		if err := rows.Scan(&i.ID, &i.DisplayName, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -147,8 +147,10 @@ export function useLauncherCandidates({
     projectSlug,
   });
   const marketplace = useMarketplaceCandidate({ enabled, inProject });
-  // Assistants, skills, and MCP servers require exact per-row authorization,
-  // so they remain on their established local sources rather than remote search.
+  // Keep the MCP inventory live even after its open/detail rows migrate: the
+  // local candidates carry visibility state and per-server mutation verbs that
+  // the compact remote index intentionally does not model. Overlapping remote
+  // open rows are deduplicated below, while remote-only rows remain available.
   const mcpServers = useMcpServerCandidates({
     enabled: projectEnabled && canListMcp,
   });
@@ -162,10 +164,10 @@ export function useLauncherCandidates({
     enabled: fallback("plugin") && canListPlugins,
   });
   const assistants = useAssistantCandidates({
-    enabled: projectEnabled && canReadAssistants,
+    enabled: fallback("assistant") && canReadAssistants,
   });
   const skills = useSkillCandidates({
-    enabled: projectEnabled && canReadSkills,
+    enabled: fallback("skill") && canReadSkills,
   });
   const inferenceSetup = useInferenceSetupCandidate({ enabled, inProject });
   const platformSetups = usePlatformSetupCandidates({ enabled, inProject });
@@ -206,20 +208,32 @@ export function useLauncherCandidates({
     const projectOnly = (list: LauncherCandidate[]) => (inProject ? list : []);
     const adminOnly = (list: LauncherCandidate[]) =>
       inProject && isAdmin ? list : [];
+    const localMcpRouteIDs = new Set(
+      mcpServers.map((candidate) => candidate.id.replace(/^mcp:/, "")),
+    );
+    const indexedCandidates = resourceSearch.candidates.filter((candidate) => {
+      if (candidate.kind !== "mcp_server") return true;
+      const identity = candidate.resourceIdentity;
+      return (
+        !identity ||
+        (!localMcpRouteIDs.has(identity.id) &&
+          !localMcpRouteIDs.has(identity.routeSelector))
+      );
+    });
     return [
       ...actions,
       ...gatewayConnections,
       ...recents,
       ...marketplace,
       ...(inProject && canListMcp ? mcpServers : []),
-      ...(inProject ? resourceSearch.candidates : []),
+      ...(inProject ? indexedCandidates : []),
       ...(fallback("gateway") && canListGateways ? gateways : []),
       // Directly below the project's own servers: when a name matches both,
       // what you already run should read first and the catalog offer second.
       ...(inProject && canBrowseCatalog ? catalog : []),
       ...(fallback("plugin") && canListPlugins ? plugins : []),
-      ...(inProject && canReadAssistants ? assistants : []),
-      ...(inProject && canReadSkills ? skills : []),
+      ...(fallback("assistant") && canReadAssistants ? assistants : []),
+      ...(fallback("skill") && canReadSkills ? skills : []),
       ...agentIdentities,
       ...inferenceSetup,
       ...platformSetups,

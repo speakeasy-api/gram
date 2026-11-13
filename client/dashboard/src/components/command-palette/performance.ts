@@ -188,16 +188,16 @@ export class CommandPalettePerformanceTracker {
       ranking_invocation_count: session.rankingInvocationCount,
       ranking_duration_ms: session.rankingDuration,
       ranking_max_duration_ms: session.rankingMaxDuration,
-      // Four exact-authorized kinds are searched. Gateway registration still
-      // needs its shared inventory, so three list requests are net eliminated.
+      // Seven collection-authorized kinds are searched. Live MCP actions still
+      // need their shared inventory, so six list requests are net eliminated.
       // This is an explicit no-fallback model, not a measured total.
       inventory_call_baseline: 17,
-      searched_resource_kind_count: scope === "project" ? 4 : 0,
-      net_eliminated_inventory_call_baseline: scope === "project" ? 3 : 0,
-      remaining_inventory_call_baseline: scope === "project" ? 14 : 17,
+      searched_resource_kind_count: scope === "project" ? 7 : 0,
+      net_eliminated_inventory_call_baseline: scope === "project" ? 6 : 0,
+      remaining_inventory_call_baseline: scope === "project" ? 11 : 17,
       search_request_count: session.searchRequestCount,
       modeled_no_fallback_call_count:
-        (scope === "project" ? 14 : 17) + session.searchRequestCount,
+        (scope === "project" ? 11 : 17) + session.searchRequestCount,
       search_candidate_count: session.searchCandidateCount,
       search_complete: session.searchComplete,
       search_truncated: session.searchTruncated,

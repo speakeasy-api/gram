@@ -4,7 +4,7 @@ Command K uses `GET /rpc/commandSearch.search?q=...` to search authorization-saf
 
 ## Included resources
 
-Search covers environments, named MCP gateways, plugins, and custom detection rules. These kinds have project or organization collection-level authorization that can be checked before their SQL runs. Assistants, MCP servers/toolsets, and skills are intentionally excluded because they support resource-specific grants that the current search SQL cannot express exactly; post-fetch authorization filtering is not used.
+Search covers assistants, environments, named MCP gateways, MCP servers/toolsets, plugins, custom detection rules, and skills. Authorization is checked at collection scope before SQL runs; an exact-resource assistant or MCP grant never exposes the corpus, and post-fetch authorization filtering is not used. Skills are omitted when the skills product feature is disabled, and feature-check errors fail preflight.
 
 Every adapter uses one direct tenant/project-scoped SQL query with a normalized lowercase prefix interval and `LIMIT 21`, overfetching one row to detect truncation before returning at most 20 items per kind. Name/title predicates use `lower(column) >= lower_bound AND lower(column) < lower_ceiling`, backed by matching lifecycle-partial expression indexes. Canonical lowercase slugs and rule IDs use raw prefix intervals and their existing composite indexes. No adapter uses `LIKE`, `ILIKE`, a leading wildcard, HTTP, `COUNT`, pagination, or a whole-inventory transfer. Go ranks exact matches before slug/alias prefixes, then name prefixes, with stable kind/name/ID ties. Results are capped at 40 globally. Per-kind or global omissions set `truncated=true` and list the affected resource kinds in `truncated_kinds`; truncation is independent from timeout failure metadata.
 
@@ -21,9 +21,10 @@ Adapters run concurrently under one shared 250 millisecond deadline that starts 
 | Plugin      | `Bitmap Index Scan` on `plugins_organization_project_lower_name_idx` plus `plugins_organization_id_project_id_slug_key`       |          10 |  0.096 ms |
 | Rule        | `Bitmap Index Scan` on `risk_custom_rules_org_project_lower_title_idx` plus `risk_custom_detection_rules_project_rule_id_key` |          10 |  0.093 ms |
 
+The added corpora have matching lifecycle-partial expression indexes: `assistants_project_id_lower_name_idx`, `mcp_servers_project_id_lower_name_listable_idx`, `toolsets_project_id_lower_name_idx`, and `skills_project_id_lower_display_name_idx`. Existing slug/name indexes cover their raw aliases. MCP name/slug ranges are applied independently inside the direct-server and toolset branches before `UNION ALL`, so only matching rows enter the final deterministic 21-row sort. Toolsets enter that branch only through an inner lateral designated-host lookup: the canonical live wrapper first, otherwise the oldest live endpoint-backed wrapper.
+
 ## Deliberate exclusions
 
-- Assistants, MCP servers/toolsets, and skills require exact resource-specific authorization that is unsafe to reproduce with post-fetch filtering.
 - Deployments are history rather than durable named resources.
 - Sources depend on deployment assets and external-MCP redirect rules.
 - Guardrail policies require an additional product-feature contract.
@@ -35,4 +36,4 @@ Adapters run concurrently under one shared 250 millisecond deadline that starts 
 
 No Platform MCP tool is added. Command search is a UI optimization rather than an agent outcome, and existing management tools already expose resource discovery.
 
-No demo seed change is required: the existing fictional environments, gateways, plugins, and custom detection rules already cover every retained kind. The search endpoint persists no rows.
+No demo seed change is required: the existing fictional resources cover the retained kinds. The search endpoint persists no rows.

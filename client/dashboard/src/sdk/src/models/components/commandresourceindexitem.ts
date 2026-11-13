@@ -11,10 +11,13 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export const CommandresourceindexitemKind = {
+  Assistant: "assistant",
   Environment: "environment",
   Gateway: "gateway",
+  Mcp: "mcp",
   Plugin: "plugin",
   Rule: "rule",
+  Skill: "skill",
 } as const;
 export type CommandresourceindexitemKind = OpenEnum<
   typeof CommandresourceindexitemKind

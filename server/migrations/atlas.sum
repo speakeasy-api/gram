@@ -1,4 +1,4 @@
-h1:ViP9zRbnC7CwmeoDjCyVARsvqJD2uWo0PE1H/DCOxmc=
+h1:MxtH8nZg7j8POtY2hzuSZLXX3n+9K8fsTunLffLJCc0=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -536,4 +536,5 @@ h1:ViP9zRbnC7CwmeoDjCyVARsvqJD2uWo0PE1H/DCOxmc=
 20261113133636_github_app_auth_clients.sql h1:+wBZ0hfOk8dyxdc5Y+QyhQsla2AhA0FIeOgzeSE27zU=
 20261113145301_assistant_reasoning_effort.sql h1:146g+MfHhNhc0WZmwSYnIkqK8wwXqqFr9s5p6ALgzjE=
 20261113181604_command_search_prefix_indexes.sql h1:YHKW2fqYcxxr0kOfGhFg+c3ZL/ZN87eT9mN2oFoq7FY=
-20261113204803_organization-encryption-transitions.sql h1:pP9Q/FtEtLXz6qnIvuScRqUXhBXdSc2eRhjlkxWFY4I=
+20261113194530_command_search_name_indexes.sql h1:JJFNYdzWpefar5DLMpZW1Nrcyy0imfX9Vga6eUHPK7Y=
+20261113204803_organization-encryption-transitions.sql h1:P1/JwkkXKch3rV+ndrzaKWQVyaO2yppEurbUV8SQWlI=

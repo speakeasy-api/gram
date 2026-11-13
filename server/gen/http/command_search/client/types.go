@@ -662,8 +662,8 @@ func ValidateCommandresourceindexitemResponseBody(body *Commandresourceindexitem
 		err = goa.MergeErrors(err, goa.MissingFieldError("route_selector", "body"))
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "environment" || *body.Kind == "gateway" || *body.Kind == "plugin" || *body.Kind == "rule") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"environment", "gateway", "plugin", "rule"}))
+		if !(*body.Kind == "assistant" || *body.Kind == "environment" || *body.Kind == "gateway" || *body.Kind == "mcp" || *body.Kind == "plugin" || *body.Kind == "rule" || *body.Kind == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"assistant", "environment", "gateway", "mcp", "plugin", "rule", "skill"}))
 		}
 	}
 	if body.ID != nil {

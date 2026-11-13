@@ -74,7 +74,15 @@ vi.mock("./useResourceSearchCandidates", () => ({
       candidates: mocks.indexCandidates,
       fallbackKinds: new Set(
         mocks.indexFallback
-          ? ["environment", "gateway", "plugin", "rule"]
+          ? [
+              "assistant",
+              "environment",
+              "gateway",
+              "mcp",
+              "plugin",
+              "rule",
+              "skill",
+            ]
           : mocks.failedKinds,
       ),
       metrics: {
@@ -1746,23 +1754,20 @@ describe("useLauncherCandidates", () => {
     expect(mocks.indexOptions.at(-1)?.enabled).toBe(true);
   });
 
-  it("keeps assistants, skills, and MCP servers on legacy sources", () => {
+  it("suppresses successful legacy inventories except specialized MCP rows", () => {
     mocks.indexFallback = false;
     mocks.scopes = ["assistant:read", "skill:read", "mcp:read"];
     renderCandidates();
 
-    for (const name of [
-      "useAssistantsList",
-      "useSkillsInfinite",
-      "useMcpServers",
-    ]) {
-      expect(optionsOf(mocks.calls[name]?.at(-1)).enabled, name).toBe(true);
+    for (const name of ["useAssistantsList", "useSkillsInfinite"]) {
+      expect(optionsOf(mocks.calls[name]?.at(-1)).enabled, name).toBe(false);
     }
+    expect(optionsOf(mocks.calls.useMcpServers?.at(-1)).enabled).toBe(true);
   });
 
-  it("enables legacy inventory only for failed remote kinds", () => {
+  it("enables legacy inventory only for each failed remote kind", () => {
     mocks.indexFallback = false;
-    mocks.failedKinds = ["plugin"];
+    mocks.failedKinds = ["assistant", "plugin"];
     mocks.scopes = [
       "org:read",
       "org:admin",
@@ -1781,16 +1786,86 @@ describe("useLauncherCandidates", () => {
     ]) {
       expect(optionsOf(mocks.calls[name]?.at(-1)).enabled, name).toBe(false);
     }
-    for (const name of [
-      "useAssistantsList",
-      "useSkillsInfinite",
-      "useMcpServers",
-    ]) {
-      expect(optionsOf(mocks.calls[name]?.at(-1)).enabled, name).toBe(true);
-    }
+    expect(optionsOf(mocks.calls.useAssistantsList?.at(-1)).enabled).toBe(true);
+    expect(optionsOf(mocks.calls.useSkillsInfinite?.at(-1)).enabled).toBe(
+      false,
+    );
+    expect(optionsOf(mocks.calls.useMcpServers?.at(-1)).enabled).toBe(true);
   });
 
-  it("uses remote search only for the four exact-authorized kinds", () => {
+  it("deduplicates remote MCP open rows in favor of specialized local rows", () => {
+    mocks.indexFallback = false;
+    mocks.scopes = ["mcp:read", "mcp:write"];
+    mocks.mcpServers = [mcpServer("Local server", "local", "private")];
+    mocks.indexCandidates = [
+      {
+        id: "mcp:toolset-local",
+        kind: "mcp_server",
+        title: "Remote server",
+        detail: "MCP server",
+        keywords: ["mcp", "server-local"],
+        resourceIdentity: {
+          id: "toolset-local",
+          routeSelector: "server-local",
+        },
+        verbs: ["open"],
+        group: "MCP Servers",
+        run: vi.fn(),
+      },
+    ];
+
+    const { result } = renderCandidates();
+    const candidates = result.current.filter(
+      (candidate) => candidate.id === "mcp:server-local",
+    );
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({
+      title: "Local server",
+      detail: "MCP server · enabled",
+      verbs: ["open", "disable"],
+    });
+  });
+
+  it("does not deduplicate a UUID-shaped MCP alias that collides with a local ID", () => {
+    mocks.indexFallback = false;
+    mocks.scopes = ["mcp:read"];
+    mocks.mcpServers = [
+      {
+        ...mcpServer("Local server", "local", "private"),
+        id: "11111111-1111-4111-8111-111111111111",
+      },
+    ];
+    mocks.indexCandidates = [
+      {
+        id: "mcp:different-server",
+        kind: "mcp_server",
+        title: "Distinct remote server",
+        detail: "MCP server",
+        keywords: ["mcp", "11111111-1111-4111-8111-111111111111"],
+        resourceIdentity: {
+          id: "different-server",
+          routeSelector: "different-route",
+        },
+        verbs: ["open"],
+        group: "MCP Servers",
+        run: vi.fn(),
+      },
+    ];
+
+    const { result } = renderCandidates();
+
+    expect(
+      result.current
+        .filter((candidate) => candidate.kind === "mcp_server")
+        .map((candidate) => candidate.id),
+    ).toEqual([
+      "mcp:11111111-1111-4111-8111-111111111111",
+      "mcp:different-server",
+    ]);
+  });
+
+  it("uses remote search for all seven migrated kinds", () => {
     mocks.indexFallback = false;
     mocks.indexCandidates = [
       {
@@ -1831,14 +1906,14 @@ describe("useLauncherCandidates", () => {
       for (const args of calls)
         expect(optionsOf(args).enabled, name).toBe(false);
     }
-    for (const name of [
-      "useMcpServers",
-      "useAssistantsList",
-      "useSkillsInfinite",
-      "useListDeployments",
-    ]) {
+    for (const name of ["useMcpServers", "useListDeployments"]) {
       for (const args of mocks.calls[name] ?? []) {
         expect(optionsOf(args).enabled, name).toBe(true);
+      }
+    }
+    for (const name of ["useAssistantsList", "useSkillsInfinite"]) {
+      for (const args of mocks.calls[name] ?? []) {
+        expect(optionsOf(args).enabled, name).toBe(false);
       }
     }
   });

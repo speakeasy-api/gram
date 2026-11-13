@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 const (
@@ -35,13 +36,20 @@ const (
 	globalLimit       = 40
 )
 
-var allKinds = []string{"environment", "gateway", "plugin", "rule"}
+var allKinds = []string{"assistant", "environment", "gateway", "mcp", "plugin", "rule", "skill"}
 
 type queryStore interface {
+	ListCommandIndexAssistants(context.Context, repo.ListCommandIndexAssistantsParams) ([]repo.ListCommandIndexAssistantsRow, error)
+	ListCommandIndexMCPServers(context.Context, repo.ListCommandIndexMCPServersParams) ([]repo.ListCommandIndexMCPServersRow, error)
+	ListCommandIndexSkills(context.Context, repo.ListCommandIndexSkillsParams) ([]repo.ListCommandIndexSkillsRow, error)
 	ListCommandIndexCustomRules(context.Context, repo.ListCommandIndexCustomRulesParams) ([]repo.ListCommandIndexCustomRulesRow, error)
 	ListCommandIndexEnvironments(context.Context, repo.ListCommandIndexEnvironmentsParams) ([]repo.ListCommandIndexEnvironmentsRow, error)
 	ListCommandIndexGateways(context.Context, repo.ListCommandIndexGatewaysParams) ([]repo.ListCommandIndexGatewaysRow, error)
 	ListCommandIndexPlugins(context.Context, repo.ListCommandIndexPluginsParams) ([]repo.ListCommandIndexPluginsRow, error)
+}
+
+type featureChecker interface {
+	IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error)
 }
 
 type authorizer interface {
@@ -50,16 +58,17 @@ type authorizer interface {
 }
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	auth   *auth.Auth
-	repo   queryStore
-	authz  authorizer
-	budget time.Duration
+	tracer   trace.Tracer
+	logger   *slog.Logger
+	auth     *auth.Auth
+	repo     queryStore
+	authz    authorizer
+	features featureChecker
+	budget   time.Duration
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine) *Service {
-	return &Service{tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/commandsearch"), logger: logger, auth: auth.New(logger, db, sessionManager, authzEngine), repo: repo.New(db), authz: authzEngine, budget: indexBudget}
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, features featureChecker) *Service {
+	return &Service{tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/commandsearch"), logger: logger, auth: auth.New(logger, db, sessionManager, authzEngine), repo: repo.New(db), authz: authzEngine, features: features, budget: indexBudget}
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -103,11 +112,16 @@ func (s *Service) Search(ctx context.Context, payload *gen.SearchPayload) (*gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	projectID, organizationID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	skillsEnabled, err := s.features.IsFeatureEnabled(indexCtx, organizationID, productfeatures.FeatureSkills)
+	if err != nil {
+		return nil, fmt.Errorf("check skills feature for command search: %w", err)
+	}
 	authorized, err := s.authorizedKinds(indexCtx, organizationID, projectID)
 	if err != nil {
 		return nil, err
 	}
 
+	authorized["skill"] = authorized["skill"] && skillsEnabled
 	adapters := s.adapters(organizationID, projectID, query, authorized)
 	results := make(chan adapterResult, len(adapters))
 	for _, a := range adapters {
@@ -234,6 +248,17 @@ func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, al
 			out = append(out, adapter{kind: kind, run: fn})
 		}
 	}
+	add("assistant", func(ctx context.Context) ([]*gen.Commandresourceindexitem, error) {
+		rows, e := s.repo.ListCommandIndexAssistants(ctx, repo.ListCommandIndexAssistantsParams{LowerBound: bounds.lower, LowerCeiling: bounds.lowerCeiling, ProjectID: project, ResultLimit: limit})
+		if e != nil {
+			return nil, fmt.Errorf("list command search assistants: %w", e)
+		}
+		x := make([]*gen.Commandresourceindexitem, 0, len(rows))
+		for _, r := range rows {
+			x = append(x, &gen.Commandresourceindexitem{Kind: "assistant", ID: r.ID.String(), Name: r.Name, RouteSelector: r.ID.String(), Keywords: nil})
+		}
+		return x, nil
+	})
 	add("environment", func(ctx context.Context) ([]*gen.Commandresourceindexitem, error) {
 		rows, e := s.repo.ListCommandIndexEnvironments(ctx, repo.ListCommandIndexEnvironmentsParams{LowerBound: bounds.lower, LowerCeiling: bounds.lowerCeiling, ProjectID: project, ResultLimit: limit})
 		if e != nil {
@@ -253,6 +278,25 @@ func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, al
 		x := make([]*gen.Commandresourceindexitem, 0, len(rows))
 		for _, r := range rows {
 			x = append(x, &gen.Commandresourceindexitem{Kind: "gateway", ID: r.ID.String(), Name: r.Name, RouteSelector: r.ID.String(), Keywords: nil})
+		}
+		return x, nil
+	})
+	add("mcp", func(ctx context.Context) ([]*gen.Commandresourceindexitem, error) {
+		rows, e := s.repo.ListCommandIndexMCPServers(ctx, repo.ListCommandIndexMCPServersParams{LowerBound: bounds.lower, LowerCeiling: bounds.lowerCeiling, ProjectID: project, ResultLimit: limit})
+		if e != nil {
+			return nil, fmt.Errorf("list command search MCP servers: %w", e)
+		}
+		x := make([]*gen.Commandresourceindexitem, 0, len(rows))
+		for _, r := range rows {
+			name, slug := r.Name.String, r.Slug.String
+			if name == "" {
+				name = slug
+			}
+			selector := slug
+			if isReservedMCPRoute(selector) || selector == "" {
+				selector = r.RouteID.String()
+			}
+			x = append(x, &gen.Commandresourceindexitem{Kind: "mcp", ID: r.ID.String(), Name: name, RouteSelector: selector, Keywords: compactKeywords(name, slug)})
 		}
 		return x, nil
 	})
@@ -278,8 +322,28 @@ func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, al
 		}
 		return x, nil
 	})
+	add("skill", func(ctx context.Context) ([]*gen.Commandresourceindexitem, error) {
+		rows, e := s.repo.ListCommandIndexSkills(ctx, repo.ListCommandIndexSkillsParams{LowerBound: bounds.lower, LowerCeiling: bounds.lowerCeiling, ProjectID: project, ResultLimit: limit})
+		if e != nil {
+			return nil, fmt.Errorf("list command search skills: %w", e)
+		}
+		x := make([]*gen.Commandresourceindexitem, 0, len(rows))
+		for _, r := range rows {
+			x = append(x, &gen.Commandresourceindexitem{Kind: "skill", ID: r.ID.String(), Name: r.DisplayName, RouteSelector: r.ID.String(), Keywords: compactKeywords(r.DisplayName, r.Name)})
+		}
+		return x, nil
+	})
 
 	return out
+}
+
+func isReservedMCPRoute(slug string) bool {
+	switch slug {
+	case "add", "catalog", "deployments", "sources", "organization-gateway", "gateway", "x":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) authorizedKinds(ctx context.Context, organizationID string, projectID uuid.UUID) (map[string]bool, error) {
@@ -287,10 +351,13 @@ func (s *Service) authorizedKinds(ctx context.Context, organizationID string, pr
 		kind  string
 		check authz.Check
 	}{
+		{"assistant", authz.AssistantCheck(authz.ScopeAssistantRead, authz.WildcardResource, projectID.String())},
 		{"environment", authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
 		{"gateway", authz.MCPCheck(authz.ScopeMCPRead, authz.WildcardResource, projectID.String())},
+		{"mcp", authz.MCPCheck(authz.ScopeMCPRead, authz.WildcardResource, projectID.String())},
 		{"plugin", authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil}},
 		{"rule", authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}},
+		{"skill", authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
 	}
 	result := make(map[string]bool, len(checks))
 	for _, candidate := range checks {

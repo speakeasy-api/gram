@@ -258,15 +258,15 @@ describe("resource command search", () => {
     expect(result.candidates).toEqual([]);
   });
 
-  it("maps only exact-authorized kinds and exact plugin UUID routes", () => {
+  it("maps assistant, MCP, skill, and plugin selectors to canonical routes", () => {
     const candidates = mapResourceSearchItems(
       [
         {
           id: "skill-1",
           kind: "skill",
           name: "Skill",
-          routeSelector: "skill-slug",
-          keywords: ["excluded-skill-alias"],
+          routeSelector: "skill-1",
+          keywords: ["skill-alias"],
         },
         {
           id: "assistant-1",
@@ -276,7 +276,7 @@ describe("resource command search", () => {
         },
         {
           id: "mcp-1",
-          kind: "mcp_server",
+          kind: "mcp",
           name: "MCP server",
           routeSelector: "mcp-1",
         },
@@ -301,12 +301,24 @@ describe("resource command search", () => {
       } as never,
       mocks.navigate,
     );
-    expect(candidates).toHaveLength(1);
-    expect(candidates[0]?.keywords).toContain("plugin-alias");
-    void candidates[0]?.run("open");
-    expect(mocks.goTo).toHaveBeenCalledWith(
-      "11111111-1111-4111-8111-111111111111",
-    );
+    expect(candidates.map((candidate) => candidate.id)).toEqual([
+      "skill:skill-1",
+      "assistant:assistant-1",
+      "mcp:mcp-1",
+      "plugin:11111111-1111-4111-8111-111111111111",
+    ]);
+    expect(candidates[0]?.keywords).toContain("skill-alias");
+    expect(candidates[2]).toMatchObject({
+      kind: "mcp_server",
+      resourceIdentity: { id: "mcp-1", routeSelector: "mcp-1" },
+    });
+    for (const candidate of candidates) void candidate.run("open");
+    expect(mocks.goTo.mock.calls).toEqual([
+      ["skill-1"],
+      ["assistant-1"],
+      ["mcp-1"],
+      ["11111111-1111-4111-8111-111111111111"],
+    ]);
   });
 
   it("maps gateways and encoded detection-rule selectors to exact routes", () => {

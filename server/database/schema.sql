@@ -863,6 +863,7 @@ COMMENT ON COLUMN skills.created_at IS '@access: confidential';
 COMMENT ON COLUMN skills.updated_at IS '@access: confidential';
 
 CREATE INDEX IF NOT EXISTS skills_project_id_idx ON skills (project_id);
+CREATE INDEX IF NOT EXISTS skills_project_id_lower_display_name_idx ON skills (project_id, lower(display_name)) WHERE archived_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_id_key ON skills (project_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS skills_project_id_name_key ON skills (project_id, name) WHERE archived_at IS NULL;
 CREATE INDEX IF NOT EXISTS skills_suggestion_sweep_idx ON skills (project_id, last_seen_at DESC, id DESC) WHERE archived_at IS NULL;
@@ -4700,6 +4701,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_name_key
 ON assistants (project_id, name)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS assistants_project_id_lower_name_idx
+ON assistants (project_id, lower(name))
+WHERE deleted IS FALSE;
+
 CREATE UNIQUE INDEX IF NOT EXISTS assistants_project_id_id_key ON assistants (project_id, id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistants_organization_project_id_key
@@ -6275,6 +6280,10 @@ COMMENT ON COLUMN toolsets.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key
 ON toolsets (project_id, slug)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS toolsets_project_id_lower_name_idx
+ON toolsets (project_id, lower(name))
 WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_custom_domain_id_key
@@ -10393,6 +10402,13 @@ COMMENT ON COLUMN mcp_servers.requires_upstream_auth IS 'Whether the upstream ne
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
 ON mcp_servers (project_id)
 WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_servers_project_id_lower_name_listable_idx
+ON mcp_servers (project_id, lower(name))
+WHERE deleted IS FALSE
+  AND toolset_id IS NULL
+  AND builtin_backend IS NULL
+  AND num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, unproxied_mcp_server_id) > 0;
 
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_slug_key
 ON mcp_servers (project_id, slug)

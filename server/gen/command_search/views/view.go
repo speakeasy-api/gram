@@ -152,8 +152,8 @@ func ValidateCommandresourceindexitemView(result *CommandresourceindexitemView) 
 		err = goa.MergeErrors(err, goa.MissingFieldError("route_selector", "result"))
 	}
 	if result.Kind != nil {
-		if !(*result.Kind == "environment" || *result.Kind == "gateway" || *result.Kind == "plugin" || *result.Kind == "rule") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("result.kind", *result.Kind, []any{"environment", "gateway", "plugin", "rule"}))
+		if !(*result.Kind == "assistant" || *result.Kind == "environment" || *result.Kind == "gateway" || *result.Kind == "mcp" || *result.Kind == "plugin" || *result.Kind == "rule" || *result.Kind == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("result.kind", *result.Kind, []any{"assistant", "environment", "gateway", "mcp", "plugin", "rule", "skill"}))
 		}
 	}
 	if result.ID != nil {

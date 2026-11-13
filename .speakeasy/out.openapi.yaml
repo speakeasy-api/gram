@@ -93466,10 +93466,13 @@ components:
         kind:
           type: string
           enum:
+            - assistant
             - environment
             - gateway
+            - mcp
             - plugin
             - rule
+            - skill
         name:
           type: string
         route_selector:
