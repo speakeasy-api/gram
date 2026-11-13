@@ -202,7 +202,14 @@ export function describeServerImpact(
   const after = providersLabel(impact.clientsAfter);
   const reasons = new Set<string>(impact.reasons);
   if (reasons.has("provider_not_in_metadata")) {
-    return `Would use an OAuth client for ${after}, which its upstream doesn't accept.`;
+    // The offending clients are the ones it gains; it already used the rest.
+    const before = new Set(
+      impact.clientsBefore.map((client) => client.remoteSessionClientId),
+    );
+    const gained = impact.clientsAfter.filter(
+      (client) => !before.has(client.remoteSessionClientId),
+    );
+    return `Would use an OAuth client for ${providersLabel(gained.length > 0 ? gained : impact.clientsAfter)}, which its upstream doesn't accept.`;
   }
   if (reasons.has("multiple_clients_for_provider")) {
     // Name only the providers that would have several clients.
@@ -211,9 +218,9 @@ export function describeServerImpact(
       const label = providerLabel(client);
       counts.set(label, (counts.get(label) ?? 0) + 1);
     }
-    const duplicated = [...counts]
-      .filter(([, count]) => count > 1)
-      .map(([label]) => ({ providerIssuer: label }));
+    const duplicated = impact.clientsAfter.filter(
+      (client) => (counts.get(providerLabel(client)) ?? 0) > 1,
+    );
     const named = duplicated.length > 0 ? providersLabel(duplicated) : after;
     return `Would use more than one OAuth client for ${named}.`;
   }
@@ -230,4 +237,15 @@ export function describeServerImpact(
     return `Would use a different OAuth client for ${after}.`;
   }
   return "Keeps its current OAuth client.";
+}
+
+/** What an admin does to clear a server's blocker before consolidating. */
+export function serverImpactRemedy(
+  impact: Pick<UserSessionIssuerMigrationServerImpact, "hosted">,
+): string {
+  // A hosted server uses every OAuth client its authorization server lists,
+  // so only removing one from that list changes what it uses.
+  return impact.hosted
+    ? "Remove the extra OAuth client from one of these authorization servers, then try again."
+    : "Set its OAuth client in its authentication settings, then try again.";
 }

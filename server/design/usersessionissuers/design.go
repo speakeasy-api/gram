@@ -409,18 +409,19 @@ var _ = Service("organizationUserSessionIssuers", func() {
 			Attribute("target_id", String, "The user_session_issuer to migrate onto.", func() { Format(FormatUUID) })
 			Required("source_id", "target_id")
 			security.SessionPayload()
+			Meta("openapi:typename", "GetUserSessionIssuerMigratePreflightRequestBody")
 		})
 		Result(OrganizationUserSessionIssuerMigratePreflight)
+		// POST although it changes nothing: it takes the consolidation's
+		// locks, so a cross-site navigation must not be able to start one.
 		HTTP(func() {
-			GET("/rpc/organizationUserSessionIssuers.getMigratePreflight")
-			Param("source_id")
-			Param("target_id")
+			POST("/rpc/organizationUserSessionIssuers.getMigratePreflight")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "getOrganizationUserSessionIssuerMigratePreflight")
 		Meta("openapi:extension:x-speakeasy-name-override", "getMigratePreflight")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerMigratePreflight"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerMigratePreflight", "type": "query"}`)
 	})
 
 	Method("migrateIssuer", func() {
@@ -768,7 +769,8 @@ var UserSessionIssuerMigrationServerImpact = Type("UserSessionIssuerMigrationSer
 	Attribute("clients_before", ArrayOf(UserSessionIssuerMigrationClient), "The clients the server uses today.")
 	Attribute("clients_after", ArrayOf(UserSessionIssuerMigrationClient), "The clients the server would use after consolidation.")
 	Attribute("pinned_client_ids", ArrayOf(String), "Remote session clients consolidation associates with the server before the move.")
-	Required("mcp_server_id", "mcp_server_name", "mcp_server_slug", "project_id", "project_name", "impact_severity", "reasons", "clients_before", "clients_after", "pinned_client_ids")
+	Attribute("hosted", Boolean, "True for a hosted server, which uses every OAuth client its user session issuer binds rather than the ones associated with it, so changing its clients means changing that issuer's bindings.")
+	Required("mcp_server_id", "mcp_server_name", "mcp_server_slug", "project_id", "project_name", "impact_severity", "reasons", "clients_before", "clients_after", "pinned_client_ids", "hosted")
 })
 
 var MigrateOrganizationUserSessionIssuerResult = Type("MigrateOrganizationUserSessionIssuerResult", func() {

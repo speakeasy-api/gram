@@ -267,3 +267,77 @@ func TestOrganizationUserSessionIssuerMigrateBlocksSecondClientForHostedServer(t
 	require.Equal(t, hostedClient.String(), hosted.ClientsBefore[0].RemoteSessionClientID)
 	require.Len(t, hosted.ClientsAfter, 2)
 }
+
+// A client bound to both the source and the organization's only
+// organization-level issuer is shared with the servers there. Consolidation
+// does not pin it, since a pin claims it on that issuer too, but the moved
+// server still becomes the target's only consumer, and reconcile then
+// associates the client with it. The organization issuer's server stops
+// requiring the client, so the preview reports that server even though it is
+// on neither issuer.
+func TestOrganizationUserSessionIssuerMigrateReportsServerOnOrganizationIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	organizationID := seedOrganizationTierIssuer(t, ctx, ti.conn, "claim-organization")
+	targetID := seedIssuer(t, ctx, ti, "claim-target")
+	sourceID := seedIssuer(t, ctx, ti, "claim-source")
+	impactSeedServer(t, ctx, ti, sourceID)
+	organizationServer := impactSeedServer(t, ctx, ti, organizationID)
+	shared := leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
+	require.NoError(t, selectionbackfill.New(ti.conn).SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: shared, UserSessionIssuerID: organizationID}))
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	require.NoError(t, err)
+	require.Len(t, preflight.ServerImpacts, 1)
+	impact := preflight.ServerImpacts[0]
+	require.Equal(t, organizationServer.String(), impact.McpServerID)
+	require.Equal(t, orggen.UserSessionIssuerMigrationImpactSeverity("warning"), impact.ImpactSeverity)
+	require.Equal(t, []orggen.UserSessionIssuerMigrationImpactReason{"loses_client"}, impact.Reasons)
+	require.Empty(t, impact.PinnedClientIds)
+	require.NotEmpty(t, preflight.WarningsFingerprint)
+}
+
+// A gateway resolves every client its issuer binds, associated or not, so a
+// gateway on the source keeps every source binding it signs in through.
+func TestOrganizationUserSessionIssuerMigrateCarriesBindingsForSourceGateway(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	targetID := seedIssuer(t, ctx, ti, "gateway-target")
+	sourceID := seedIssuer(t, ctx, ti, "gateway-source")
+	require.NoError(t, selectionbackfill.New(ti.conn).SeedMetaMCPServerFixture(ctx, selectionbackfill.SeedMetaMCPServerFixtureParams{ID: uuid.New(), OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, Name: "Source gateway", UserSessionIssuerID: conv.ToNullUUID(sourceID)}))
+	gatewayClient := leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	require.NoError(t, err)
+	require.Empty(t, preflight.DroppedClientLinks)
+
+	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String(), ConfirmedWarningsFingerprint: new(preflight.WarningsFingerprint)})
+	require.NoError(t, err)
+	bound, err := remotesessionsrepo.New(ti.conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: gatewayClient, UserSessionIssuerID: targetID})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), bound)
+}
+
+// A fingerprint confirms one preview. When what the consolidation would do
+// changes afterwards, the consolidation refuses the stale confirmation.
+func TestOrganizationUserSessionIssuerMigrateRefusesStaleFingerprint(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	targetID := seedIssuer(t, ctx, ti, "stale-target")
+	sourceID := seedIssuer(t, ctx, ti, "stale-source")
+	leftoverSeedServer(t, ctx, ti, sourceID)
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	require.NoError(t, err)
+	require.Empty(t, preflight.WarningsFingerprint)
+
+	leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
+
+	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String(), ConfirmedWarningsFingerprint: new(preflight.WarningsFingerprint)})
+	requireOopsCode(t, err, oops.CodeConflict)
+}

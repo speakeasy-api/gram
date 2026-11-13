@@ -1257,6 +1257,42 @@ WHERE server.user_session_issuer_id IN (@source_issuer_id, @target_issuer_id)
   AND project.deleted IS FALSE
 ORDER BY server.project_id;
 
+-- name: ListMCPServersOnClaimingOrganizationIssuerForMigration :many
+-- Live servers on the organization's only organization-level issuer once the
+-- source is retired, when that issuer is neither the source nor the target
+-- and binds a client either of them binds. Serving counts an association with
+-- such a client, from a server anywhere in the organization, as a claim on
+-- that issuer, so a consolidation that associates it changes what these
+-- servers require.
+WITH organization_issuer AS (
+    SELECT (array_agg(issuer.id))[1] AS id
+    FROM user_session_issuers AS issuer
+    WHERE issuer.organization_id = @organization_id::text
+      AND issuer.project_id IS NULL
+      AND issuer.deleted IS FALSE
+      AND issuer.id <> @source_issuer_id::uuid
+    HAVING count(*) = 1
+)
+SELECT server.id, server.project_id
+FROM organization_issuer
+JOIN mcp_servers AS server
+  ON server.user_session_issuer_id = organization_issuer.id
+ AND server.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = server.project_id
+ AND project.deleted IS FALSE
+ AND project.organization_id = @organization_id::text
+WHERE organization_issuer.id <> @target_issuer_id::uuid
+  AND EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS shared
+    JOIN remote_session_client_user_session_issuers AS ours
+      ON ours.remote_session_client_id = shared.remote_session_client_id
+    WHERE shared.user_session_issuer_id = organization_issuer.id
+      AND ours.user_session_issuer_id IN (@source_issuer_id::uuid, @target_issuer_id::uuid)
+  )
+ORDER BY server.id;
+
 -- name: ListSourceClientLinksForUserSessionIssuerMigration :many
 -- Every client the source issuer binds, with whether consolidation carries the
 -- binding to the target. A binding is needed when something still signs in
@@ -1267,11 +1303,15 @@ ORDER BY server.project_id;
 --     bindings without an association;
 --   - a live association of a server on the source or target issuer, of a
 --     member of a gateway on either, or of any server in the organization
---     when the target is organization-level, since the organization gateway
---     fronts every server through it;
+--     when the target is the organization's only organization-level issuer
+--     once the source is retired, since the organization gateway then fronts
+--     every server through it;
 --   - an agent attachment, EMA binding or Okta connection naming the client
 --     through the source issuer;
---   - either issuer's trusted client.
+--   - either issuer's trusted client;
+--   - any binding at all while a live gateway signs in through the source,
+--     since a gateway resolves every client its issuer binds and routes each
+--     member by its recorded resource, associated or not.
 --
 -- A deleted client's binding is never needed.
 SELECT link.remote_session_client_id,
@@ -1298,7 +1338,14 @@ SELECT link.remote_session_client_id,
              AND association.deleted IS FALSE
              AND (
                server.user_session_issuer_id IN (@source_issuer_id::uuid, @target_issuer_id::uuid)
-               OR target.project_id IS NULL
+               OR (target.project_id IS NULL AND (
+                 SELECT count(*)
+                 FROM user_session_issuers AS organization_issuer
+                 WHERE organization_issuer.organization_id = @organization_id::text
+                   AND organization_issuer.project_id IS NULL
+                   AND organization_issuer.deleted IS FALSE
+                   AND organization_issuer.id <> @source_issuer_id::uuid
+               ) = 1)
                OR EXISTS (
                  SELECT 1
                  FROM meta_mcp_server_members AS member
@@ -1340,6 +1387,16 @@ SELECT link.remote_session_client_id,
            WHERE trusting.id IN (@source_issuer_id::uuid, @target_issuer_id::uuid)
              AND trusting.trusted_remote_session_client_id = link.remote_session_client_id
          )
+         OR EXISTS (
+           SELECT 1
+           FROM meta_mcp_servers AS gateway
+           JOIN projects AS gateway_project
+             ON gateway_project.id = gateway.project_id
+            AND gateway_project.deleted IS FALSE
+           WHERE gateway.user_session_issuer_id = @source_issuer_id::uuid
+             AND gateway.organization_id = @organization_id::text
+             AND gateway.deleted IS FALSE
+         )
        ), FALSE)::boolean AS needed
 FROM remote_session_client_user_session_issuers AS link
 JOIN user_session_issuers AS target
@@ -1357,21 +1414,19 @@ ORDER BY link.remote_session_client_id;
 
 -- name: ListUserSessionIssuerMigrationImpactServers :many
 -- What a consolidation preview reports about each affected server: where it
--- lives, whether it is hosted, whether it is recorded as needing no upstream
--- authentication, and the authorization servers its upstream advertises.
+-- lives, whether it is hosted, and the authorization servers its upstream
+-- advertises.
 -- authorization_servers comes from the newest valid protected resource record
 -- for the remote server's URL, matched the way ListEMABindingServers matches
 -- it; it is NULL when there is no such record, which means unknown rather than
 -- an empty list.
 SELECT s.id,
        s.project_id,
-       p.slug AS project_slug,
        p.name AS project_name,
        s.name,
        s.slug,
        s.user_session_issuer_id,
        (s.toolset_id IS NOT NULL)::boolean AS hosted,
-       (s.requires_upstream_auth IS FALSE)::boolean AS upstream_auth_not_required,
        rp.authorization_servers
 FROM mcp_servers AS s
 JOIN projects AS p

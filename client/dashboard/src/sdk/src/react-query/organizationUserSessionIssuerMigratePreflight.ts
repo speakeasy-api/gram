@@ -119,13 +119,7 @@ export function useOrganizationUserSessionIssuerMigratePreflightSuspense(
 
 export function setOrganizationUserSessionIssuerMigratePreflightData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      sourceId: string;
-      targetId: string;
-      gramSession?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { gramSession?: string | undefined }],
   data: OrganizationUserSessionIssuerMigratePreflightQueryData,
 ): OrganizationUserSessionIssuerMigratePreflightQueryData | undefined {
   const key = queryKeyOrganizationUserSessionIssuerMigratePreflight(
@@ -140,11 +134,7 @@ export function setOrganizationUserSessionIssuerMigratePreflightData(
 export function invalidateOrganizationUserSessionIssuerMigratePreflight(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      sourceId: string;
-      targetId: string;
-      gramSession?: string | undefined;
-    }]
+    [parameters: { gramSession?: string | undefined }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

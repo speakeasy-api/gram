@@ -57,6 +57,7 @@ func detached(row *ListUpstreamClientBackfillCandidatesRow)      { row.PairRecor
 func associated(row *ListUpstreamClientBackfillCandidatesRow)    { row.LiveAssociations = 1 }
 func noAuth(row *ListUpstreamClientBackfillCandidatesRow)        { row.UpstreamAuthNotRequired = true }
 func ownClient(row *ListUpstreamClientBackfillCandidatesRow)     { row.OffersOwnOauthClient = true }
+func gatewayed(row *ListUpstreamClientBackfillCandidatesRow)     { row.IssuerHasGateway = true }
 
 func TestDecidePin(t *testing.T) {
 	t.Parallel()
@@ -90,6 +91,17 @@ func TestDecidePin(t *testing.T) {
 			name:      "a sole consumer takes its bound clients",
 			rows:      []ListUpstreamClientBackfillCandidatesRow{pinRow(pinClientA, pinProviderX)},
 			outcome:   PinOutcomeSoleConsumer,
+			associate: []uuid.UUID{pinClientA},
+		},
+		{
+			name:    "a gateway on the issuer makes its binding shared",
+			rows:    []ListUpstreamClientBackfillCandidatesRow{pinRow(pinClientA, pinProviderX, gatewayed)},
+			outcome: PinOutcomeNoEvidence,
+		},
+		{
+			name:      "a gateway issuer still pins from metadata",
+			rows:      []ListUpstreamClientBackfillCandidatesRow{pinRow(pinClientA, pinProviderX, gatewayed, metadataMatch)},
+			outcome:   PinOutcomeMetadataMatch,
 			associate: []uuid.UUID{pinClientA},
 		},
 		{

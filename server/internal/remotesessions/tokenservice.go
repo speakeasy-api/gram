@@ -630,14 +630,9 @@ func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, 
 // It reads through dbtx, so a caller holding a transaction sees its own
 // uncommitted writes.
 func BoundUserSessionIssuerClients(ctx context.Context, dbtx remotesessions_repo.DBTX, organizationID string, projectID, userSessionIssuerID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := remotesessions_repo.New(dbtx).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerParams{
-		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           conv.ToNullUUID(projectID),
-		OrganizationID:      conv.ToPGText(organizationID),
-		OrganizationWide:    false,
-	})
+	rows, err := listRemoteSessionClientRows(ctx, dbtx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
-		return nil, fmt.Errorf("list bound remote session clients: %w", err)
+		return nil, err
 	}
 	ids := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {

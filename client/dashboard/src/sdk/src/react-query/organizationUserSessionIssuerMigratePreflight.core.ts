@@ -54,8 +54,6 @@ export function buildOrganizationUserSessionIssuerMigratePreflightQuery(
 } {
   return {
     queryKey: queryKeyOrganizationUserSessionIssuerMigratePreflight({
-      sourceId: request.sourceId,
-      targetId: request.targetId,
       gramSession: request.gramSession,
     }),
     queryFn:
@@ -84,11 +82,7 @@ export function buildOrganizationUserSessionIssuerMigratePreflightQuery(
 }
 
 export function queryKeyOrganizationUserSessionIssuerMigratePreflight(
-  parameters: {
-    sourceId: string;
-    targetId: string;
-    gramSession?: string | undefined;
-  },
+  parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return [
     "@gram/client",

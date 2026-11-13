@@ -3380,6 +3380,74 @@ func (q *Queries) ListMCPServersForUserSessionIssuerMigration(ctx context.Contex
 	return items, nil
 }
 
+const listMCPServersOnClaimingOrganizationIssuerForMigration = `-- name: ListMCPServersOnClaimingOrganizationIssuerForMigration :many
+WITH organization_issuer AS (
+    SELECT (array_agg(issuer.id))[1] AS id
+    FROM user_session_issuers AS issuer
+    WHERE issuer.organization_id = $1::text
+      AND issuer.project_id IS NULL
+      AND issuer.deleted IS FALSE
+      AND issuer.id <> $3::uuid
+    HAVING count(*) = 1
+)
+SELECT server.id, server.project_id
+FROM organization_issuer
+JOIN mcp_servers AS server
+  ON server.user_session_issuer_id = organization_issuer.id
+ AND server.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = server.project_id
+ AND project.deleted IS FALSE
+ AND project.organization_id = $1::text
+WHERE organization_issuer.id <> $2::uuid
+  AND EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS shared
+    JOIN remote_session_client_user_session_issuers AS ours
+      ON ours.remote_session_client_id = shared.remote_session_client_id
+    WHERE shared.user_session_issuer_id = organization_issuer.id
+      AND ours.user_session_issuer_id IN ($3::uuid, $2::uuid)
+  )
+ORDER BY server.id
+`
+
+type ListMCPServersOnClaimingOrganizationIssuerForMigrationParams struct {
+	OrganizationID string
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+}
+
+type ListMCPServersOnClaimingOrganizationIssuerForMigrationRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Live servers on the organization's only organization-level issuer once the
+// source is retired, when that issuer is neither the source nor the target
+// and binds a client either of them binds. Serving counts an association with
+// such a client, from a server anywhere in the organization, as a claim on
+// that issuer, so a consolidation that associates it changes what these
+// servers require.
+func (q *Queries) ListMCPServersOnClaimingOrganizationIssuerForMigration(ctx context.Context, arg ListMCPServersOnClaimingOrganizationIssuerForMigrationParams) ([]ListMCPServersOnClaimingOrganizationIssuerForMigrationRow, error) {
+	rows, err := q.db.Query(ctx, listMCPServersOnClaimingOrganizationIssuerForMigration, arg.OrganizationID, arg.TargetIssuerID, arg.SourceIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMCPServersOnClaimingOrganizationIssuerForMigrationRow
+	for rows.Next() {
+		var i ListMCPServersOnClaimingOrganizationIssuerForMigrationRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMergeableCimdClientPairs = `-- name: ListMergeableCimdClientPairs :many
 
 SELECT source.id AS source_client_id, target.id AS target_client_id
@@ -4077,7 +4145,14 @@ SELECT link.remote_session_client_id,
              AND association.deleted IS FALSE
              AND (
                server.user_session_issuer_id IN ($4::uuid, $1::uuid)
-               OR target.project_id IS NULL
+               OR (target.project_id IS NULL AND (
+                 SELECT count(*)
+                 FROM user_session_issuers AS organization_issuer
+                 WHERE organization_issuer.organization_id = $3::text
+                   AND organization_issuer.project_id IS NULL
+                   AND organization_issuer.deleted IS FALSE
+                   AND organization_issuer.id <> $4::uuid
+               ) = 1)
                OR EXISTS (
                  SELECT 1
                  FROM meta_mcp_server_members AS member
@@ -4118,6 +4193,16 @@ SELECT link.remote_session_client_id,
            FROM user_session_issuers AS trusting
            WHERE trusting.id IN ($4::uuid, $1::uuid)
              AND trusting.trusted_remote_session_client_id = link.remote_session_client_id
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM meta_mcp_servers AS gateway
+           JOIN projects AS gateway_project
+             ON gateway_project.id = gateway.project_id
+            AND gateway_project.deleted IS FALSE
+           WHERE gateway.user_session_issuer_id = $4::uuid
+             AND gateway.organization_id = $3::text
+             AND gateway.deleted IS FALSE
          )
        ), FALSE)::boolean AS needed
 FROM remote_session_client_user_session_issuers AS link
@@ -4161,11 +4246,15 @@ type ListSourceClientLinksForUserSessionIssuerMigrationRow struct {
 //     bindings without an association;
 //   - a live association of a server on the source or target issuer, of a
 //     member of a gateway on either, or of any server in the organization
-//     when the target is organization-level, since the organization gateway
-//     fronts every server through it;
+//     when the target is the organization's only organization-level issuer
+//     once the source is retired, since the organization gateway then fronts
+//     every server through it;
 //   - an agent attachment, EMA binding or Okta connection naming the client
 //     through the source issuer;
-//   - either issuer's trusted client.
+//   - either issuer's trusted client;
+//   - any binding at all while a live gateway signs in through the source,
+//     since a gateway resolves every client its issuer binds and routes each
+//     member by its recorded resource, associated or not.
 //
 // A deleted client's binding is never needed.
 func (q *Queries) ListSourceClientLinksForUserSessionIssuerMigration(ctx context.Context, arg ListSourceClientLinksForUserSessionIssuerMigrationParams) ([]ListSourceClientLinksForUserSessionIssuerMigrationRow, error) {
@@ -4739,13 +4828,11 @@ func (q *Queries) ListUserSessionIssuerMigrationImpactClients(ctx context.Contex
 const listUserSessionIssuerMigrationImpactServers = `-- name: ListUserSessionIssuerMigrationImpactServers :many
 SELECT s.id,
        s.project_id,
-       p.slug AS project_slug,
        p.name AS project_name,
        s.name,
        s.slug,
        s.user_session_issuer_id,
        (s.toolset_id IS NOT NULL)::boolean AS hosted,
-       (s.requires_upstream_auth IS FALSE)::boolean AS upstream_auth_not_required,
        rp.authorization_servers
 FROM mcp_servers AS s
 JOIN projects AS p
@@ -4782,21 +4869,19 @@ type ListUserSessionIssuerMigrationImpactServersParams struct {
 }
 
 type ListUserSessionIssuerMigrationImpactServersRow struct {
-	ID                      uuid.UUID
-	ProjectID               uuid.UUID
-	ProjectSlug             string
-	ProjectName             string
-	Name                    pgtype.Text
-	Slug                    pgtype.Text
-	UserSessionIssuerID     uuid.NullUUID
-	Hosted                  bool
-	UpstreamAuthNotRequired bool
-	AuthorizationServers    []string
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	ProjectName          string
+	Name                 pgtype.Text
+	Slug                 pgtype.Text
+	UserSessionIssuerID  uuid.NullUUID
+	Hosted               bool
+	AuthorizationServers []string
 }
 
 // What a consolidation preview reports about each affected server: where it
-// lives, whether it is hosted, whether it is recorded as needing no upstream
-// authentication, and the authorization servers its upstream advertises.
+// lives, whether it is hosted, and the authorization servers its upstream
+// advertises.
 // authorization_servers comes from the newest valid protected resource record
 // for the remote server's URL, matched the way ListEMABindingServers matches
 // it; it is NULL when there is no such record, which means unknown rather than
@@ -4813,13 +4898,11 @@ func (q *Queries) ListUserSessionIssuerMigrationImpactServers(ctx context.Contex
 		if err := rows.Scan(
 			&i.ID,
 			&i.ProjectID,
-			&i.ProjectSlug,
 			&i.ProjectName,
 			&i.Name,
 			&i.Slug,
 			&i.UserSessionIssuerID,
 			&i.Hosted,
-			&i.UpstreamAuthNotRequired,
 			&i.AuthorizationServers,
 		); err != nil {
 			return nil, err

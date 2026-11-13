@@ -518,6 +518,7 @@ func serverImpactViews(impacts []serverImpact) []*orggen.UserSessionIssuerMigrat
 			ClientsBefore:   migrationClientViews(impact.before),
 			ClientsAfter:    migrationClientViews(impact.after),
 			PinnedClientIds: pinned,
+			Hosted:          impact.server.Hosted,
 		})
 	}
 	return views

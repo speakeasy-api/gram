@@ -5200,8 +5200,7 @@ func ParseEndpoint(
 		organizationUserSessionIssuersMoveIssuerSessionTokenFlag = organizationUserSessionIssuersMoveIssuerFlags.String("session-token", "", "")
 
 		organizationUserSessionIssuersGetIssuerMigratePreflightFlags            = flag.NewFlagSet("get-issuer-migrate-preflight", flag.ExitOnError)
-		organizationUserSessionIssuersGetIssuerMigratePreflightSourceIDFlag     = organizationUserSessionIssuersGetIssuerMigratePreflightFlags.String("source-id", "REQUIRED", "")
-		organizationUserSessionIssuersGetIssuerMigratePreflightTargetIDFlag     = organizationUserSessionIssuersGetIssuerMigratePreflightFlags.String("target-id", "REQUIRED", "")
+		organizationUserSessionIssuersGetIssuerMigratePreflightBodyFlag         = organizationUserSessionIssuersGetIssuerMigratePreflightFlags.String("body", "REQUIRED", "")
 		organizationUserSessionIssuersGetIssuerMigratePreflightSessionTokenFlag = organizationUserSessionIssuersGetIssuerMigratePreflightFlags.String("session-token", "", "")
 
 		organizationUserSessionIssuersMigrateIssuerFlags            = flag.NewFlagSet("migrate-issuer", flag.ExitOnError)
@@ -13581,7 +13580,7 @@ func ParseEndpoint(
 				data, err = organizationusersessionissuersc.BuildMoveIssuerPayload(*organizationUserSessionIssuersMoveIssuerBodyFlag, *organizationUserSessionIssuersMoveIssuerSessionTokenFlag)
 			case "get-issuer-migrate-preflight":
 				endpoint = c.GetIssuerMigratePreflight()
-				data, err = organizationusersessionissuersc.BuildGetIssuerMigratePreflightPayload(*organizationUserSessionIssuersGetIssuerMigratePreflightSourceIDFlag, *organizationUserSessionIssuersGetIssuerMigratePreflightTargetIDFlag, *organizationUserSessionIssuersGetIssuerMigratePreflightSessionTokenFlag)
+				data, err = organizationusersessionissuersc.BuildGetIssuerMigratePreflightPayload(*organizationUserSessionIssuersGetIssuerMigratePreflightBodyFlag, *organizationUserSessionIssuersGetIssuerMigratePreflightSessionTokenFlag)
 			case "migrate-issuer":
 				endpoint = c.MigrateIssuer()
 				data, err = organizationusersessionissuersc.BuildMigrateIssuerPayload(*organizationUserSessionIssuersMigrateIssuerBodyFlag, *organizationUserSessionIssuersMigrateIssuerSessionTokenFlag)
@@ -36248,8 +36247,7 @@ func organizationUserSessionIssuersMoveIssuerUsage() {
 func organizationUserSessionIssuersGetIssuerMigratePreflightUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] organization-user-session-issuers get-issuer-migrate-preflight", os.Args[0])
-	fmt.Fprint(os.Stderr, " -source-id STRING")
-	fmt.Fprint(os.Stderr, " -target-id STRING")
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -36258,13 +36256,12 @@ func organizationUserSessionIssuersGetIssuerMigratePreflightUsage() {
 	fmt.Fprintln(os.Stderr, `Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. When no hard blocker is present, it runs the consolidation in a transaction it rolls back and reports how each affected MCP server's upstream OAuth clients would change. That run takes the same locks a consolidation does, and returns 409 when another writer holds them for too long. Requires org:admin.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -source-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers get-issuer-migrate-preflight --source-id \"550e8400-e29b-41d4-a716-446655440000\" --target-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers get-issuer-migrate-preflight --body '{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func organizationUserSessionIssuersMigrateIssuerUsage() {

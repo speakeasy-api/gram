@@ -76,6 +76,16 @@ type MoveIssuerRequestBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 }
 
+// GetIssuerMigratePreflightRequestBody is the type of the
+// "organizationUserSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP request body.
+type GetIssuerMigratePreflightRequestBody struct {
+	// The user_session_issuer to migrate away from.
+	SourceID string `form:"source_id" json:"source_id" xml:"source_id"`
+	// The user_session_issuer to migrate onto.
+	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
+}
+
 // MigrateIssuerRequestBody is the type of the "organizationUserSessionIssuers"
 // service "migrateIssuer" endpoint HTTP request body.
 type MigrateIssuerRequestBody struct {
@@ -3844,6 +3854,10 @@ type UserSessionIssuerMigrationServerImpactResponseBody struct {
 	// Remote session clients consolidation associates with the server before the
 	// move.
 	PinnedClientIds []string `form:"pinned_client_ids,omitempty" json:"pinned_client_ids,omitempty" xml:"pinned_client_ids,omitempty"`
+	// True for a hosted server, which uses every OAuth client its user session
+	// issuer binds rather than the ones associated with it, so changing its
+	// clients means changing that issuer's bindings.
+	Hosted *bool `form:"hosted,omitempty" json:"hosted,omitempty" xml:"hosted,omitempty"`
 }
 
 // UserSessionIssuerMigrationClientResponseBody is used to define fields on
@@ -3919,6 +3933,17 @@ func NewMoveIssuerRequestBody(p *organizationusersessionissuers.MoveIssuerPayloa
 	body := &MoveIssuerRequestBody{
 		ID:        p.ID,
 		ProjectID: p.ProjectID,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightRequestBody builds the HTTP request body from
+// the payload of the "getIssuerMigratePreflight" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetIssuerMigratePreflightRequestBody(p *organizationusersessionissuers.GetIssuerMigratePreflightPayload) *GetIssuerMigratePreflightRequestBody {
+	body := &GetIssuerMigratePreflightRequestBody{
+		SourceID: p.SourceID,
+		TargetID: p.TargetID,
 	}
 	return body
 }
@@ -11408,6 +11433,9 @@ func ValidateUserSessionIssuerMigrationServerImpactResponseBody(body *UserSessio
 	}
 	if body.PinnedClientIds == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pinned_client_ids", "body"))
+	}
+	if body.Hosted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hosted", "body"))
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))

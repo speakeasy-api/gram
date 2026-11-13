@@ -187,6 +187,7 @@ describe("describeServerImpact", () => {
       clientsBefore: [],
       clientsAfter: [],
       pinnedClientIds: [],
+      hosted: false,
       ...overrides,
     };
   }
@@ -214,6 +215,48 @@ describe("describeServerImpact", () => {
         }),
       ),
     ).toBe("Would switch from slack.com to slack.com and accounts.google.com.");
+  });
+
+  it("names only the provider with several clients", () => {
+    const portSlack = {
+      remoteSessionClientId: "slack-2",
+      clientId: "slack-app-2",
+      providerIssuer: "https://idp.corp.com:8443",
+    };
+    expect(
+      describeServerImpact(
+        impact({
+          reasons: ["multiple_clients_for_provider", "changes_clients"],
+          clientsAfter: [
+            google,
+            { ...portSlack, remoteSessionClientId: "slack-1" },
+            portSlack,
+          ],
+        }),
+      ),
+    ).toBe("Would use more than one OAuth client for idp.corp.com:8443.");
+  });
+
+  it("describes each kind of change", () => {
+    expect(
+      describeServerImpact(
+        impact({ reasons: ["gains_client"], clientsAfter: [google] }),
+      ),
+    ).toBe("Would start asking people to connect accounts.google.com.");
+    expect(
+      describeServerImpact(
+        impact({ reasons: ["loses_client"], clientsBefore: [slack] }),
+      ),
+    ).toBe("Would stop asking people to connect slack.com.");
+    expect(
+      describeServerImpact(
+        impact({
+          reasons: ["changes_clients"],
+          clientsBefore: [slack],
+          clientsAfter: [{ ...slack, remoteSessionClientId: "slack-2" }],
+        }),
+      ),
+    ).toBe("Would use a different OAuth client for slack.com.");
   });
 
   it("says a pinned server keeps its client", () => {

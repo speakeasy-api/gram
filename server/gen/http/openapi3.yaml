@@ -56087,28 +56087,10 @@ paths:
             x-speakeasy-react-hook:
                 name: OrganizationUserSessionIssuerDeletePreflight
     /rpc/organizationUserSessionIssuers.getMigratePreflight:
-        get:
+        post:
             description: Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. When no hard blocker is present, it runs the consolidation in a transaction it rolls back and reports how each affected MCP server's upstream OAuth clients would change. That run takes the same locks a consolidation does, and returns 409 when another writer holds them for too long. Requires org:admin.
             operationId: getOrganizationUserSessionIssuerMigratePreflight
             parameters:
-                - allowEmptyValue: true
-                  description: The user_session_issuer to migrate away from.
-                  in: query
-                  name: source_id
-                  required: true
-                  schema:
-                    description: The user_session_issuer to migrate away from.
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: The user_session_issuer to migrate onto.
-                  in: query
-                  name: target_id
-                  required: true
-                  schema:
-                    description: The user_session_issuer to migrate onto.
-                    format: uuid
-                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -56116,6 +56098,12 @@ paths:
                   schema:
                     description: Session header
                     type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetUserSessionIssuerMigratePreflightRequestBody'
+                required: true
             responses:
                 "200":
                     content:
@@ -56185,6 +56173,7 @@ paths:
             x-speakeasy-name-override: getMigratePreflight
             x-speakeasy-react-hook:
                 name: OrganizationUserSessionIssuerMigratePreflight
+                type: query
     /rpc/organizationUserSessionIssuers.list:
         get:
             description: 'List the user_session_issuers in the caller''s organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.'
@@ -114486,6 +114475,20 @@ components:
             description: Result of user metrics summary query
             required:
                 - metrics
+        GetUserSessionIssuerMigratePreflightRequestBody:
+            type: object
+            properties:
+                source_id:
+                    type: string
+                    description: The user_session_issuer to migrate away from.
+                    format: uuid
+                target_id:
+                    type: string
+                    description: The user_session_issuer to migrate onto.
+                    format: uuid
+            required:
+                - source_id
+                - target_id
         GlobalRemoteSessionIssuer:
             type: object
             properties:
@@ -140384,6 +140387,9 @@ components:
                     items:
                         $ref: '#/components/schemas/UserSessionIssuerMigrationClient'
                     description: The clients the server uses today.
+                hosted:
+                    type: boolean
+                    description: True for a hosted server, which uses every OAuth client its user session issuer binds rather than the ones associated with it, so changing its clients means changing that issuer's bindings.
                 impact_severity:
                     type: string
                     description: How a consolidation's change to one MCP server ranks.
@@ -140439,6 +140445,7 @@ components:
                 - clients_before
                 - clients_after
                 - pinned_client_ids
+                - hosted
         UserSessionUpstream:
             type: object
             properties:

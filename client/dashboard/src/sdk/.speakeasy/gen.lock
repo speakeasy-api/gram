@@ -1371,6 +1371,7 @@ trackedFiles:
   src/models/components/getunproxiedmcpserveruserusageresult.ts: {}
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
+  src/models/components/getusersessionissuermigratepreflightrequestbody.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
   src/models/components/hiddenmcpserver.ts: {}
   src/models/components/hideagentmcpserverrequestbody.ts: {}
@@ -8363,9 +8364,11 @@ examples:
         query:
           source_id: "8bd44363-c387-4f86-ab14-6621930e2721"
           target_id: "6dcbb5e1-5161-4baf-ac8d-f4611f29834a"
+      requestBody:
+        application/json: {"source_id": "8bd44363-c387-4f86-ab14-6621930e2721", "target_id": "6dcbb5e1-5161-4baf-ac8d-f4611f29834a"}
       responses:
         "200":
-          application/json: {"can_migrate": true, "cimd_client_count": 501939, "client_count": 28777, "conflicting_client_ids": [], "consent_count": 553825, "dropped_client_links": [{"client_id": "<id>", "provider_issuer": "<value>", "remote_session_client_id": "bd44363c-387f-486b-9146-621930e2721a"}], "ema_binding_conflict_count": 650417, "impact_previewed": false, "newly_reachable_server_count": 797368, "platform_owned": false, "principal_binding_conflict_count": 90292, "remote_session_count": 748407, "server_impacts": [{"clients_after": [{"client_id": "<id>", "provider_issuer": "<value>", "remote_session_client_id": "5e15161b-afc8-4df4-a611-f29834a92803"}], "clients_before": [{"client_id": "<id>", "provider_issuer": "<value>", "remote_session_client_id": "a1b27d67-0e10-43c2-8fef-2beea2330485"}], "impact_severity": "warning", "mcp_server_id": "44113244-67b7-479c-bc49-ac1642d7dd9d", "mcp_server_name": "<value>", "mcp_server_slug": "<value>", "pinned_client_ids": ["<value 1>"], "project_id": "ef256ab6-d880-4357-9fdf-2eeffadc0cf6", "project_name": "<value>", "reasons": ["loses_client"]}], "session_count": 154481, "unscoped_session_count": 189931, "warnings": [], "warnings_fingerprint": "<value>"}
+          application/json: {"can_migrate": true, "cimd_client_count": 501939, "client_count": 28777, "conflicting_client_ids": [], "consent_count": 553825, "dropped_client_links": [{"client_id": "<id>", "provider_issuer": "<value>", "remote_session_client_id": "bd44363c-387f-486b-9146-621930e2721a"}], "ema_binding_conflict_count": 650417, "impact_previewed": false, "newly_reachable_server_count": 797368, "platform_owned": false, "principal_binding_conflict_count": 90292, "remote_session_count": 748407, "server_impacts": [{"clients_after": [{"client_id": "<id>", "provider_issuer": "<value>", "remote_session_client_id": "5e15161b-afc8-4df4-a611-f29834a92803"}], "clients_before": [{"client_id": "<id>", "provider_issuer": "<value>", "remote_session_client_id": "a1b27d67-0e10-43c2-8fef-2beea2330485"}], "hosted": false, "impact_severity": "warning", "mcp_server_id": "44113244-67b7-479c-bc49-ac1642d7dd9d", "mcp_server_name": "<value>", "mcp_server_slug": "<value>", "pinned_client_ids": ["<value 1>"], "project_id": "ef256ab6-d880-4357-9fdf-2eeffadc0cf6", "project_name": "<value>", "reasons": ["loses_client"]}], "session_count": 154481, "unscoped_session_count": 189931, "warnings": [], "warnings_fingerprint": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

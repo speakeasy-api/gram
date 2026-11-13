@@ -2170,30 +2170,33 @@ func DecodeGetIssuerMigratePreflightRequest(mux goahttp.Muxer, decoder func(*htt
 	return func(r *http.Request) (*organizationusersessionissuers.GetIssuerMigratePreflightPayload, error) {
 		var payload *organizationusersessionissuers.GetIssuerMigratePreflightPayload
 		var (
-			sourceID     string
-			targetID     string
-			sessionToken *string
-			err          error
+			body GetIssuerMigratePreflightRequestBody
+			err  error
 		)
-		qp := r.URL.Query()
-		sourceID = qp.Get("source_id")
-		if sourceID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("source_id", "query string"))
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("source_id", sourceID, goa.FormatUUID))
-		targetID = qp.Get("target_id")
-		if targetID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("target_id", "query string"))
+		err = ValidateGetIssuerMigratePreflightRequestBody(&body)
+		if err != nil {
+			return payload, err
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("target_id", targetID, goa.FormatUUID))
+
+		var (
+			sessionToken *string
+		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewGetIssuerMigratePreflightPayload(sourceID, targetID, sessionToken)
+		payload = NewGetIssuerMigratePreflightPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3500,6 +3503,7 @@ func marshalOrganizationusersessionissuersUserSessionIssuerMigrationServerImpact
 		ProjectID:      v.ProjectID,
 		ProjectName:    v.ProjectName,
 		ImpactSeverity: string(v.ImpactSeverity),
+		Hosted:         v.Hosted,
 	}
 	if v.Reasons != nil {
 		res.Reasons = make([]string, len(v.Reasons))

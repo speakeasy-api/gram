@@ -2375,7 +2375,7 @@ func DecodeMoveIssuerResponse(decoder func(*http.Response) goahttp.Decoder, rest
 // service "getIssuerMigratePreflight" endpoint
 func (c *Client) BuildGetIssuerMigratePreflightRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetIssuerMigratePreflightOrganizationUserSessionIssuersPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
+	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("organizationUserSessionIssuers", "getIssuerMigratePreflight", u.String(), err)
 	}
@@ -2398,10 +2398,10 @@ func EncodeGetIssuerMigratePreflightRequest(encoder func(*http.Request) goahttp.
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		values := req.URL.Query()
-		values.Add("source_id", p.SourceID)
-		values.Add("target_id", p.TargetID)
-		req.URL.RawQuery = values.Encode()
+		body := NewGetIssuerMigratePreflightRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationUserSessionIssuers", "getIssuerMigratePreflight", err)
+		}
 		return nil
 	}
 }
@@ -3858,6 +3858,7 @@ func unmarshalUserSessionIssuerMigrationServerImpactResponseBodyToOrganizationus
 		ProjectID:      *v.ProjectID,
 		ProjectName:    *v.ProjectName,
 		ImpactSeverity: organizationusersessionissuers.UserSessionIssuerMigrationImpactSeverity(*v.ImpactSeverity),
+		Hosted:         *v.Hosted,
 	}
 	res.Reasons = make([]organizationusersessionissuers.UserSessionIssuerMigrationImpactReason, len(v.Reasons))
 	for i, val := range v.Reasons {

@@ -77,7 +77,10 @@ type Pin struct {
 // DecidePin classifies one server from its candidate rows, which all belong
 // to that server, and lists the clients to associate. It is stricter than
 // Decide because it runs where the server's issuer is about to change, so it
-// records only what the server uses today and what nothing contradicts:
+// records only clients the server uses today and that nothing contradicts. A
+// metadata or grant pin on a shared issuer can narrow a server that required
+// every unclaimed client down to the one its evidence names; the caller
+// reports that as a change rather than a preserved client.
 //
 //   - it never touches a server that already has an association or an
 //     administrator-configured OAuth client;
@@ -174,6 +177,14 @@ func unrecorded(rows []ListUpstreamClientBackfillCandidatesRow) []uuid.UUID {
 // servers' projects; the caller records the auth clients of the pinned
 // servers.
 //
+// scopeIssuerIDs are the user session issuers whose servers the caller
+// accounts for. A client also bound to another issuer where serving would
+// count the new association as a claim, the organization's only
+// organization-level issuer once retiringIssuerIDs are gone or the issuer of
+// a gateway fronting one of the servers, is not pinned: the association would
+// change what unassociated servers on that issuer require, out of the
+// caller's sight.
+//
 // Under upstream auth enforcement it writes nothing: an enforced server
 // offers only the auth clients configured for it, never an association
 // inferred from its issuer.
@@ -183,7 +194,7 @@ func unrecorded(rows []ListUpstreamClientBackfillCandidatesRow) []uuid.UUID {
 // server, so a grant pin is skipped, never inverted, when the derived value
 // names another client; the server then reports whatever the move does to it
 // instead of being pinned.
-func PinServers(ctx context.Context, db DBTX, organizationID string, serverIDs []uuid.UUID) ([]Pin, error) {
+func PinServers(ctx context.Context, db DBTX, organizationID string, serverIDs, scopeIssuerIDs, retiringIssuerIDs []uuid.UUID) ([]Pin, error) {
 	if len(serverIDs) == 0 {
 		return nil, nil
 	}
@@ -204,10 +215,38 @@ func PinServers(ctx context.Context, db DBTX, organizationID string, serverIDs [
 	if err != nil {
 		return nil, fmt.Errorf("list pin candidates: %w", err)
 	}
-	var pins []Pin
-	for _, server := range groupByServer(rows) {
+	servers := groupByServer(rows)
+	decisions := make([]PinDecision, 0, len(servers))
+	var decided []uuid.UUID
+	for _, server := range servers {
 		decision := DecidePin(server)
+		decisions = append(decisions, decision)
+		decided = append(decided, decision.Associate...)
+	}
+	claimed := make(map[uuid.UUID]bool)
+	if len(decided) > 0 {
+		ids, err := q.ListClientsClaimedThroughOtherIssuers(ctx, ListClientsClaimedThroughOtherIssuersParams{
+			RemoteSessionClientIds: decided,
+			ScopeIssuerIds:         append([]uuid.UUID{}, scopeIssuerIDs...),
+			OrganizationID:         organizationID,
+			RetiringIssuerIds:      append([]uuid.UUID{}, retiringIssuerIDs...),
+			McpServerIds:           serverIDs,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list clients claimed through other issuers: %w", err)
+		}
+		for _, id := range ids {
+			claimed[id] = true
+		}
+	}
+
+	var pins []Pin
+	for i, server := range servers {
+		decision := decisions[i]
 		for _, clientID := range decision.Associate {
+			if claimed[clientID] {
+				continue
+			}
 			n, err := q.BackfillUpstreamClientAssociation(ctx, BackfillUpstreamClientAssociationParams{
 				RemoteSessionClientID: clientID,
 				McpServerID:           decision.MCPServerID,

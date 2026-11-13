@@ -426,7 +426,7 @@ func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orggen
 	run, err := s.runIssuerMigration(ctx, dbtx, authCtx, logger, sourceID, targetID)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.LockNotAvailable {
+		if errors.As(err, &pgErr) && (pgErr.Code == pgerrcode.LockNotAvailable || pgErr.Code == pgerrcode.DeadlockDetected) {
 			return nil, oops.E(oops.CodeConflict, err, "another change to these issuers or their servers is in progress; retry the preview").LogWarn(ctx, logger)
 		}
 		return nil, err
@@ -502,7 +502,9 @@ type issuerMigrationScope struct {
 	// serverIDs are every server whose credential reach the consolidation can
 	// change: servers on either issuer, members of gateways on either, every
 	// proxied server of the organization when either issuer is
-	// organization-level, and servers reached through the moved bindings.
+	// organization-level, servers reached through the moved bindings, and
+	// servers on the organization's only organization-level issuer that share
+	// a client binding with either issuer.
 	serverIDs []uuid.UUID
 
 	// syncServers are the servers whose typed auth clients and credential
@@ -535,6 +537,21 @@ func lockIssuerMigrationAuth(ctx context.Context, dbtx pgx.Tx, organizationID st
 		scope.serverIDs = append(scope.serverIDs, server.ID)
 		if server.NeedsSync {
 			scope.syncServers = append(scope.syncServers, server.ID)
+		}
+	}
+	// Servers on the organization's only organization-level issuer can lose a
+	// client they share with either issuer once a consolidated server is
+	// associated with it, so they are previewed and reconciled too.
+	claiming, err := q.ListMCPServersOnClaimingOrganizationIssuerForMigration(ctx, repo.ListMCPServersOnClaimingOrganizationIssuerForMigrationParams{
+		OrganizationID: organizationID, SourceIssuerID: source.ID, TargetIssuerID: target.ID,
+	})
+	if err != nil {
+		return issuerMigrationScope{}, fmt.Errorf("discover servers on the organization issuer: %w", err)
+	}
+	for _, server := range claiming {
+		if !slices.Contains(scope.serverIDs, server.ID) {
+			scope.serverIDs = append(scope.serverIDs, server.ID)
+			scope.projects = append(scope.projects, server.ProjectID)
 		}
 	}
 	for _, issuer := range []repo.UserSessionIssuer{source, target} {
@@ -735,7 +752,7 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	// Record the clients each server on either issuer provably uses while
 	// its own issuer still says so; after the move the merged bindings no
 	// longer prove which server a client was meant for.
-	run.pins, err = associationbackfill.PinServers(ctx, dbtx, organizationID, before.serversOn(source.ID, target.ID))
+	run.pins, err = associationbackfill.PinServers(ctx, dbtx, organizationID, before.serversOn(source.ID, target.ID), []uuid.UUID{source.ID, target.ID}, []uuid.UUID{source.ID})
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "pin MCP server upstream clients").LogError(ctx, logger)
 	}

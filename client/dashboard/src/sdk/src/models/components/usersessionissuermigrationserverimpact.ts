@@ -57,6 +57,10 @@ export type UserSessionIssuerMigrationServerImpact = {
    */
   clientsBefore: Array<UserSessionIssuerMigrationClient>;
   /**
+   * True for a hosted server, which uses every OAuth client its user session issuer binds rather than the ones associated with it, so changing its clients means changing that issuer's bindings.
+   */
+  hosted: boolean;
+  /**
    * How a consolidation's change to one MCP server ranks.
    */
   impactSeverity: ImpactSeverity;
@@ -106,6 +110,7 @@ export const UserSessionIssuerMigrationServerImpact$inboundSchema:
     z.object({
       clients_after: z.array(UserSessionIssuerMigrationClient$inboundSchema),
       clients_before: z.array(UserSessionIssuerMigrationClient$inboundSchema),
+      hosted: z.boolean(),
       impact_severity: ImpactSeverity$inboundSchema,
       mcp_server_id: z.string(),
       mcp_server_name: z.string(),

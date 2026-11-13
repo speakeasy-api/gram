@@ -142,6 +142,7 @@ function serverImpact(
       },
     ],
     pinnedClientIds: [],
+    hosted: false,
     ...overrides,
   };
 }
@@ -227,6 +228,29 @@ describe("ConsolidateIssuerDialog", () => {
     });
   });
 
+  it("lists the OAuth client IDs under technical details", () => {
+    testState.preflight = preflight({
+      serverImpacts: [serverImpact({})],
+      droppedClientLinks: [
+        {
+          remoteSessionClientId: "client-3",
+          clientId: "unused-app",
+          providerIssuer: "https://mcp.notion.com",
+        },
+      ],
+      warningsFingerprint: "fingerprint-details",
+    });
+    renderDialog();
+
+    expect(screen.queryByText(/slack-app \(slack.com\)/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Technical details" }));
+    expect(screen.getByText(/Now: slack-app \(slack.com\)/)).toBeDefined();
+    expect(
+      screen.getByText(/After: google-app \(accounts.google.com\)/),
+    ).toBeDefined();
+    expect(screen.getByText(/unused-app \(mcp.notion.com\)/)).toBeDefined();
+  });
+
   it("refuses while an MCP server would get a client its upstream rejects", () => {
     testState.preflight = preflight({
       canMigrate: false,
@@ -250,6 +274,38 @@ describe("ConsolidateIssuerDialog", () => {
         .getByRole("button", { name: "Consolidate" })
         .hasAttribute("disabled"),
     ).toBe(true);
+  });
+
+  it("tells an admin to remove a binding for a blocked hosted server", () => {
+    testState.preflight = preflight({
+      canMigrate: false,
+      serverImpacts: [
+        serverImpact({
+          hosted: true,
+          impactSeverity: "blocker",
+          reasons: ["multiple_clients_for_provider", "changes_clients"],
+          clientsAfter: [
+            {
+              remoteSessionClientId: "client-1",
+              clientId: "slack-app",
+              providerIssuer: "https://slack.com",
+            },
+            {
+              remoteSessionClientId: "client-2",
+              clientId: "slack-app-2",
+              providerIssuer: "https://slack.com",
+            },
+          ],
+        }),
+      ],
+    });
+    renderDialog();
+
+    expect(
+      screen.getByText(
+        /more than one OAuth client for slack.com\. Remove the extra OAuth client/,
+      ),
+    ).toBeDefined();
   });
 
   it("names the OAuth clients that won't move and the servers that keep theirs", () => {
@@ -280,7 +336,7 @@ describe("ConsolidateIssuerDialog", () => {
       screen.getByText(/1 OAuth client for mcp.notion.com won't move/),
     ).toBeDefined();
     expect(
-      screen.getByText(/Linear keeps its current OAuth client/),
+      screen.getByText(/Linear \(Sales\) keeps its current OAuth client/),
     ).toBeDefined();
     expect(
       screen.getByText(

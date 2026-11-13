@@ -560,6 +560,10 @@ type UserSessionIssuerMigrationServerImpact struct {
 	// Remote session clients consolidation associates with the server before the
 	// move.
 	PinnedClientIds []string
+	// True for a hosted server, which uses every OAuth client its user session
+	// issuer binds rather than the ones associated with it, so changing its
+	// clients means changing that issuer's bindings.
+	Hosted bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

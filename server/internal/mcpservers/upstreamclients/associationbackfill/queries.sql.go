@@ -396,6 +396,82 @@ func (q *Queries) DeleteClientBindingsFixture(ctx context.Context, remoteSession
 	return err
 }
 
+const listClientsClaimedThroughOtherIssuers = `-- name: ListClientsClaimedThroughOtherIssuers :many
+SELECT DISTINCT link.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS other
+  ON other.id = link.user_session_issuer_id
+ AND other.deleted IS FALSE
+LEFT JOIN projects AS other_project
+  ON other_project.id = other.project_id
+WHERE link.remote_session_client_id = ANY($1::uuid[])
+  AND other.id <> ALL($2::uuid[])
+  AND COALESCE(other.organization_id, other_project.organization_id) = $3::text
+  AND (
+    (other.project_id IS NULL
+     AND (
+       SELECT count(*)
+       FROM user_session_issuers AS organization_issuer
+       WHERE organization_issuer.organization_id = $3::text
+         AND organization_issuer.project_id IS NULL
+         AND organization_issuer.deleted IS FALSE
+         AND organization_issuer.id <> ALL($4::uuid[])
+     ) = 1)
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      JOIN meta_mcp_server_members AS member
+        ON member.meta_mcp_server_id = gateway.id
+       AND member.deleted IS FALSE
+      WHERE gateway.user_session_issuer_id = other.id
+        AND gateway.deleted IS FALSE
+        AND member.mcp_server_id = ANY($5::uuid[])
+    )
+  )
+ORDER BY link.remote_session_client_id
+`
+
+type ListClientsClaimedThroughOtherIssuersParams struct {
+	RemoteSessionClientIds []uuid.UUID
+	ScopeIssuerIds         []uuid.UUID
+	OrganizationID         string
+	RetiringIssuerIds      []uuid.UUID
+	McpServerIds           []uuid.UUID
+}
+
+// The named clients that an association with one of the named servers would
+// also claim on a user session issuer outside scope_issuer_ids. Serving counts
+// another server's association as claiming a client on an issuer that server
+// reaches as a gateway member, or on the organization's only
+// organization-level issuer. Associating such a client therefore changes what
+// unassociated servers on that issuer require. retiring_issuer_ids are about
+// to be retired, so they do not count toward the organization-level issuers.
+func (q *Queries) ListClientsClaimedThroughOtherIssuers(ctx context.Context, arg ListClientsClaimedThroughOtherIssuersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listClientsClaimedThroughOtherIssuers,
+		arg.RemoteSessionClientIds,
+		arg.ScopeIssuerIds,
+		arg.OrganizationID,
+		arg.RetiringIssuerIds,
+		arg.McpServerIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var remote_session_client_id uuid.UUID
+		if err := rows.Scan(&remote_session_client_id); err != nil {
+			return nil, err
+		}
+		items = append(items, remote_session_client_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGatewayAssociationCandidates = `-- name: ListGatewayAssociationCandidates :many
 WITH fronted AS (
     SELECT g.user_session_issuer_id AS issuer_id, s.id AS server_id
