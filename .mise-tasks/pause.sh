@@ -86,6 +86,15 @@ if pitchfork supervisor status &> /dev/null; then
     pitchfork stop tailscale-cert
 fi
 
+# `mise run playwright` sessions run as detached daemons, each holding a live
+# Chrome, and nothing stops them when the agent that opened them exits. They
+# outlive the stack they were pointed at and pile up at about 1 GB each, so
+# close this worktree's sessions along with the rest of the stack. Best effort:
+# a browser that will not close must not keep the stack running.
+if command -v playwright-cli &> /dev/null; then
+    playwright-cli close-all &> /dev/null || echo "⚠️  Could not close this worktree's Playwright browsers." >&2
+fi
+
 # Pause before stopping Temporal to avoid catchup after deliberate sleep.
 # Preserve bookkeeping so wake does not undo a developer's manual pause.
 if ! mise run temporal:schedules --state pause --lock-owner "$$"; then
