@@ -364,7 +364,7 @@ function SetupBody({
     // Inside the server's detail frame: a heading for the current task, then
     // the task beside its step rail.
     <div className="flex flex-col gap-6 [&_button:focus-visible]:outline-2 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-[var(--border-focus)] [&_button:focus-visible]:outline-solid">
-      <div className="grid grid-cols-1 items-end gap-6 lg:grid-cols-[minmax(0,768px)_minmax(170px,1fr)] lg:gap-8 xl:gap-14">
+      <div className="grid grid-cols-1 items-end gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(200px,3fr)] lg:gap-8 xl:gap-14">
         <div className="min-w-0">
           <PageEyebrow area={`${name} Setup`} className="mb-2" />
           <Heading
@@ -380,10 +380,10 @@ function SetupBody({
           className="bg-card mb-1 justify-self-start"
         />
       </div>
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,768px)_minmax(170px,1fr)] lg:gap-8 xl:gap-14">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(200px,3fr)] lg:gap-8 xl:gap-14">
         <section
           aria-label={`Current ${name} setup task`}
-          className="@container/task relative isolate min-w-0 max-w-[768px] text-sm leading-[1.65] [&_summary]:cursor-pointer [&_strong]:font-semibold"
+          className="@container/task relative isolate min-w-0 text-sm leading-[1.65] [&_summary]:cursor-pointer [&_strong]:font-semibold"
         >
           <canvas
             ref={canvasRef}

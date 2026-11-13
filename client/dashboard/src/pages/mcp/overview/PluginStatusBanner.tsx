@@ -97,17 +97,17 @@ function describeSaveResult(addedCount: number, removedCount: number): string {
     : "Added to plugin and published to GitHub";
 }
 
-type PluginStatusVariant = "banner" | "header" | "settings";
+type PluginStatusVariant = "banner" | "settings";
+
+const PLUGINS_STORY =
+  "Plugins are the preferred way to distribute MCP servers to your organization's users. They install from marketplaces: GitHub repositories that Speakeasy hosts on your behalf.";
 
 export function PluginStatusBanner({
   server,
   variant = "banner",
 }: {
   server: HostedServerRef;
-  /**
-   * "header" is the compact card in the MCP detail page header; "settings"
-   * is the Plugins section on the Settings tab.
-   */
+  /** "settings" is the Plugins section on the Settings tab. */
   variant?: PluginStatusVariant;
 }): React.JSX.Element | null {
   const canWritePlugins = usePluginWriteAccess();
@@ -358,9 +358,7 @@ function WritablePluginStatusBanner({
   const publishButton = (
     <Button
       size={variant === "settings" ? "md" : "sm"}
-      // In the page header it is secondary: the tab below owns the view's
-      // one primary action.
-      variant={variant === "header" ? "secondary" : "primary"}
+      variant="primary"
       disabled={!hasChanges || isSaving}
       onClick={() => void handleSave()}
     >
@@ -449,26 +447,6 @@ function WritablePluginStatusBanner({
     );
   }
 
-  if (variant === "header") {
-    // The page header's compact version: one row, what it's in and the
-    // picker, wrapping the picker under the status when the header is narrow.
-    return (
-      <div className="border-border bg-card flex max-w-full flex-col gap-1 border py-1.5 pr-1.5 pl-3">
-        <span className="text-eyebrow pt-0.5">Publish status</span>
-        <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span
-            className="flex shrink-0 items-center gap-2 text-sm whitespace-nowrap"
-            title={statusHint}
-          >
-            <StatusDot tone={statusTone} />
-            {statusLabel}
-          </span>
-          {pickerControls}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <StatusBanner tone={isTrulyPublished ? "success" : "warning"}>
       {/* State, why plugins, and the picker on the left; the clients it
@@ -510,14 +488,16 @@ function WritablePluginStatusBanner({
                         : plugin.name;
                     })
                     .join(", ")
-                : "Add it to a plugin so your team can install it from your marketplace."}
+                : PLUGINS_STORY}
             </Text>
           </div>
-          <Text variant="small" className="text-muted-foreground/90 max-w-xl">
-            Plugins are the preferred way to distribute MCP servers to your
-            organization&apos;s users. They install from marketplaces: GitHub
-            repositories that Speakeasy hosts on your behalf.
-          </Text>
+          {/* Unpublished, the story is the subtitle; once published the
+              subtitle lists the plugins, and the story follows it. */}
+          {memberPlugins.length > 0 ? (
+            <Text variant="small" className="text-muted-foreground/90 max-w-xl">
+              {PLUGINS_STORY}
+            </Text>
+          ) : null}
           {pickerControls}
         </div>
         <ClientIconFan />

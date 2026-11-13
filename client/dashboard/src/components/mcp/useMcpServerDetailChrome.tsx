@@ -456,16 +456,15 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
         check.key === "authentication" ? [check, setupGuideCheck] : [check],
       )
     : checks;
-  // Overview offers the guide once Speakeasy can sign in, so it never asks
-  // for the provider's steps before the step they depend on.
-  const authenticationReady =
-    checks.find((check) => check.key === "authentication")?.ready === true;
+  // Overview leads with a banner while the guide is open, so a step easy to
+  // miss in the readiness list is the first thing on the page.
   const overviewSetupGuide =
-    setupGuideCheck && !setupGuideDoneAt && authenticationReady ? (
+    setupGuideCheck && !setupGuideDoneAt ? (
       <SetupPrompt
         name={guideName}
         href={setupHref}
         description={`A few steps happen in ${guideName}, not in Speakeasy. The setup guide walks you through them.`}
+        action="Open setup guide"
       />
     ) : undefined;
 
@@ -557,9 +556,6 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     // The upstream endpoint is what the guide catalog indexes; a server
     // with no upstream has no guide to point at.
     installLinks: effectiveInstallPageLinks,
-    aside: pluginRef ? (
-      <PluginStatusBanner variant="header" server={pluginRef} />
-    ) : undefined,
     overviewSetup: needsSetup ? (
       <SetupPrompt name={setupName} href={setupHref} />
     ) : (

@@ -79,14 +79,6 @@ export function McpDetailFrame({
             {chrome ? <TitleBlock chrome={chrome} /> : <TitleSkeleton />}
             <div className="flex w-full flex-col items-end gap-4 sm:w-auto sm:pt-1">
               {chrome ? <HeaderControls chrome={chrome} /> : null}
-              {/* Settings has its own Plugins area, Overview leads with the
-                  full banner, and Setup keeps to its task; one plugin box per
-                  view at most. */}
-              {activeTab === "settings" ||
-              activeTab === "setup" ||
-              (activeTab === "overview" && chrome?.overviewBanner)
-                ? null
-                : chrome?.aside}
             </div>
           </div>
         </HeaderBand>

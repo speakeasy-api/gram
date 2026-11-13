@@ -294,7 +294,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 const scope = { gramProject: "project-slug", gramSession: "session-a" };
-function banner(variant?: "banner" | "header" | "settings") {
+function banner(variant?: "banner" | "settings") {
   const client = new QueryClient();
   const content = () => (
     <QueryClientProvider client={client}>
@@ -384,15 +384,6 @@ describe("MCP plugin permission boundaries", () => {
       .map((box) => box.closest("label")?.textContent);
     expect(names).toEqual(["AlphaFor the support team", "Mid", "zeta"]);
     if (original) state.plugins.mockImplementation(original);
-  });
-
-  it("labels the header card and keeps its Publish action secondary", () => {
-    state.grants = [{ scope: "plugin:write" }];
-    banner("header");
-    expect(screen.getByText("Publish status")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Update" }).getAttribute("class"),
-    ).not.toMatch(/(^|\s)bg-btn-primary(\s|$)/);
   });
 
   it.each(["org:read", "plugin:write", "org:admin"])(

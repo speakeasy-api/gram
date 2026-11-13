@@ -40,7 +40,7 @@ export function GuideSetupPage({
     // Inside the server's detail frame: a heading, then the guide beside a
     // status column that stays in view while the guide scrolls.
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 items-end gap-6 lg:grid-cols-[minmax(0,768px)_minmax(170px,1fr)] lg:gap-8 xl:gap-14">
+      <div className="grid grid-cols-1 items-end gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(200px,3fr)] lg:gap-8 xl:gap-14">
         <div className="min-w-0">
           <PageEyebrow area={`${name} Setup`} className="mb-2" />
           <Heading
@@ -66,11 +66,8 @@ export function GuideSetupPage({
           </Button>
         ) : null}
       </div>
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,768px)_minmax(170px,1fr)] lg:gap-8 xl:gap-14">
-        <section
-          aria-label={`${name} setup guide`}
-          className="min-w-0 max-w-[768px]"
-        >
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(200px,3fr)] lg:gap-8 xl:gap-14">
+        <section aria-label={`${name} setup guide`} className="min-w-0">
           <SetupGuidePanel serverUrl={serverUrl} className="pb-4" />
         </section>
         {/* Where the steps stand, beside them, so finishing the last one

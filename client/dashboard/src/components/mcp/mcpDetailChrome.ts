@@ -28,8 +28,6 @@ export interface McpDetailChrome {
   /** Install pages to hand to teammates. */
   installLinks: { url: string; label: string }[];
   items: DetailSidebarNavItem[];
-  /** The header's top-right card, e.g. which plugins distribute the server. */
-  aside?: ReactNode;
   /** Overview's first card while a guided provider setup is unfinished. */
   overviewSetup?: ReactNode;
   /** Overview's lead card: how the server reaches the team, with Install. */
