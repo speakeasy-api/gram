@@ -41,3 +41,15 @@ Authoritative references:
 - [Speakeasy native setup guide](https://www.speakeasy.com/docs/ai-control-plane/guides/snowflake)
 - [Snowflake Cortex Agents MCP](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-mcp)
 - [Snowflake custom OAuth clients](https://docs.snowflake.com/en/user-guide/oauth-custom)
+
+## Okta
+
+Sources: [Managed MCP browser setup](https://help.okta.com/mcp/en-us/content/topics/mcpserver/oidc-pkce-browser-based.htm), [client configuration](https://help.okta.com/mcp/en-us/content/topics/mcpserver/mcp-client-configuration-overview.htm), and [client authentication](https://developer.okta.com/docs/api/openapi/okta-oauth/guides/client-auth).
+
+Target native `com.okta/managed-mcp`, not the older hosted integration or self-hosted STDIO server. The organization configures the `/mcp` upstream and org authorization server; Okta API scopes use that server rather than `/oauth2/default`. Accept only supported public `okta.com`, `oktapreview.com`, and `okta-emea.com` org hosts; custom domains and government orgs are excluded. Consult the [MCP overview](https://help.okta.com/mcp/en-us/content/topics/mcpserver/mcpserver.htm) for licensing and Early Access prerequisites; setup neither provisions nor polls them.
+
+Web apps use `client_secret_basic`; Native apps use `none`. Both use S256 PKCE and the API-provided callback. Administrators grant scopes in Okta; setup neither collects nor persists a duplicate list. Credential saves omit the manual scope override so the existing sign-in flow resolves scopes from the resource challenge/metadata. Preserve the approved grant sequence: select Okta API Scopes, grant scopes for the desired tools, then check PKCE on General. App assignments are separate from scope grants and the user’s existing privileges. The plan explains the permission needed to configure the app and grant scopes. No API-token, device-flow, service-app or private-key branch is offered.
+
+`OktaTask.tsx` owns choice-specific Web/Native and new/existing app instructions. Enable Okta MCP uses the standard Continue action; it does not claim verified enablement. A disabled Open Okta action explains the missing valid organization at the point of use.
+
+Okta shares the server-first marker lifecycle with Snowflake. `account-provider.ts` selects its temporary URL, and `provider_setup.go` guards both providers. Replace the marker with the validated org-specific upstream before OAuth configuration; preserve gateway and policy continuation. No instance header or provisioning capability is introduced.

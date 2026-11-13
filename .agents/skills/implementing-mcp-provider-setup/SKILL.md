@@ -23,7 +23,7 @@ Approved appearance establishes presentation, not provisioning, support, authent
 
 ## Locate implementation
 
-Use the [code map](../../../client/dashboard/src/pages/catalog/provider-setup/README.md) to locate owning files and tests on the active branch. Before provider-specific changes, read the relevant [provider contract](references/provider-contracts.md): Slack permissions, GitHub registration, Salesforce app/domain/source handling, or Snowflake endpoints, SQL and OAuth. Follow `frontend` for shared components and styling.
+Use the [code map](../../../client/dashboard/src/pages/catalog/provider-setup/README.md) to locate owning files and tests on the active branch. Before provider-specific changes, read the relevant [provider contract](references/provider-contracts.md): Slack permissions, GitHub registration, Salesforce app/domain/source handling, Snowflake endpoints, SQL and OAuth, or Okta organization/app/PKCE configuration. Follow `frontend` for shared components and styling.
 
 ## Preserve first-time progression
 
