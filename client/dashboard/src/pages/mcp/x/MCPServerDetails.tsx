@@ -140,19 +140,14 @@ export default function MCPServerDetails(): JSX.Element | null {
   }
   // Which tabs exist depends on the server's kind, so route only once it loads.
   if (!mcpServer) return <SplashScreen />;
-  if (activeTab === "setup") {
-    if (providerSetupRollout === "loading") return <SplashScreen />;
-    if (providerSetupRollout !== "enabled")
-      return (
-        <Navigate
-          to={routes.mcp.details.overview.href(mcpServerRouteParam(mcpServer))}
-          replace
-        />
-      );
+  // Setup renders inside the frame like every other tab, but only once the
+  // rollout is known: a disabled one sends the viewer to Overview.
+  if (activeTab === "setup" && providerSetupRollout === "disabled") {
     return (
-      <RequireScope scope="mcp:write" resourceId={mcpServer.id} level="page">
-        <ProviderSetupPage key={mcpServer.id} mcpServer={mcpServer} />
-      </RequireScope>
+      <Navigate
+        to={routes.mcp.details.overview.href(mcpServerRouteParam(mcpServer))}
+        replace
+      />
     );
   }
   // Retired tab segments (`authentication`, the toolset page's `performance`).
@@ -203,7 +198,8 @@ export default function MCPServerDetails(): JSX.Element | null {
         ? !mcpServer.toolset
         : activeTab !== "sessions" &&
           activeTab !== "guardrails" &&
-          activeTab !== "skills";
+          activeTab !== "skills" &&
+          activeTab !== "setup";
     if (hosted && needsToolset && !hostedToolset) {
       if (isLoadingToolset) return <SplashScreen />;
       return (
@@ -226,6 +222,17 @@ export default function MCPServerDetails(): JSX.Element | null {
       );
     }
     switch (activeTab) {
+      case "setup":
+        if (providerSetupRollout === "loading") return <SplashScreen />;
+        return (
+          <RequireScope
+            scope="mcp:write"
+            resourceId={mcpServer.id}
+            level="page"
+          >
+            <ProviderSetupPage key={mcpServer.id} mcpServer={mcpServer} />
+          </RequireScope>
+        );
       case "tools":
         return (
           hostedToolset && (
