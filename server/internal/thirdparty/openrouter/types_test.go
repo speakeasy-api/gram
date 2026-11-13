@@ -29,3 +29,17 @@ func TestOpenAIChatRequestTemperatureNonZeroIsSent(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(data), `"temperature":0.7`)
 }
+
+// TestOpenAIChatRequestProviderRouting confirms provider routing is sent only
+// when set, with fallbacks off stated explicitly.
+func TestOpenAIChatRequestProviderRouting(t *testing.T) {
+	t.Parallel()
+
+	data, err := json.Marshal(OpenAIChatRequest{Model: "anthropic/claude-sonnet-5.5", Provider: &ProviderRouting{Order: []string{"anthropic"}, AllowFallbacks: false}})
+	require.NoError(t, err)
+	require.Contains(t, string(data), `"provider":{"order":["anthropic"],"allow_fallbacks":false}`)
+
+	data, err = json.Marshal(OpenAIChatRequest{Model: "anthropic/claude-sonnet-5.5"})
+	require.NoError(t, err)
+	require.NotContains(t, string(data), `"provider"`)
+}

@@ -286,8 +286,14 @@ func attempt(parent context.Context, client openrouter.CompletionClient, model s
 turns:
 	for turn := range maxAgentTurns {
 		outcome.Turns = turn + 1
-		response, err := client.GetCompletion(ctx, completionRequest(model, messages, listed))
+		response, err := completeWithRetry(ctx, client, completionRequest(model, messages, listed))
 		if err != nil {
+			// A provider that kept rate limiting is an error, not a miss,
+			// even when the waiting ran the case out of time.
+			if errors.Is(err, openrouter.ErrRateLimited) {
+				outcome.Err = fmt.Errorf("case %s turn %d: %w", c.ID, turn, err)
+				break
+			}
 			// An agent that runs out of time has not reached a tool, like one
 			// that runs out of turns: a miss, not an error that drops out of
 			// the rates. A cancelled run is still an error.
@@ -400,6 +406,34 @@ func systemMessage(model, prompt string) or.ChatMessages {
 		}}),
 		Name: nil,
 	})
+}
+
+// rateLimitRetries is how many times one completion is retried after a rate
+// limit, waiting rateLimitWait and then twice as long each time, up to
+// rateLimitMaxWait. A pinned provider rate limits a run with many cases in
+// flight.
+const (
+	rateLimitRetries = 6
+	rateLimitWait    = 2 * time.Second
+	rateLimitMaxWait = 30 * time.Second
+)
+
+func completeWithRetry(ctx context.Context, client openrouter.CompletionClient, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+	wait := rateLimitWait
+	for try := 0; ; try++ {
+		response, err := client.GetCompletion(ctx, request)
+		if err == nil || !errors.Is(err, openrouter.ErrRateLimited) || try == rateLimitRetries {
+			return response, err
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, err
+		case <-timer.C:
+		}
+		wait = min(2*wait, rateLimitMaxWait)
+	}
 }
 
 func completionRequest(model string, messages []or.ChatMessages, tools []openrouter.Tool) openrouter.CompletionRequest {

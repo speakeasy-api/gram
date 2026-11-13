@@ -56,6 +56,9 @@ type ChatClient struct {
 	usageTrackingStrategy  UsageTrackingStrategy
 	chatTitleGenerator     ChatTitleGenerator
 	telemetryLogger        TelemetryLogger
+	// providerRouting, when set, limits which OpenRouter providers serve
+	// every request this client sends.
+	providerRouting *ProviderRouting
 }
 
 // NewUnifiedClient creates a new UnifiedClient with the given strategies.
@@ -78,7 +81,16 @@ func NewUnifiedClient(
 		usageTrackingStrategy:  trackingStrategy,
 		chatTitleGenerator:     chatTitleGenerator,
 		telemetryLogger:        telemetryLogger,
+		providerRouting:        nil,
 	}
+}
+
+// WithProviderRouting makes every request this client sends use only the
+// given OpenRouter providers. Evals use it so results do not shift with
+// whichever provider OpenRouter picks.
+func (c *ChatClient) WithProviderRouting(routing *ProviderRouting) *ChatClient {
+	c.providerRouting = routing
+	return c
 }
 
 // ResolveKey exposes key resolution so callers can scope rate-limit buckets to
@@ -178,6 +190,7 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		Metadata:       nil,
 		Trace:          nil,
 		Plugins:        nil,
+		Provider:       c.providerRouting,
 	}
 
 	if req.WebSearch != nil {

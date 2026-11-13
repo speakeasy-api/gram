@@ -287,8 +287,7 @@ func (r *Runtime) instructionBudget(logger *slog.Logger) func(context.Context) i
 // discoveryInstructions replace the full server instructions, which Codex cuts
 // to 1 KB. Tool-specific rules travel with describe_platform_tool instead.
 func discoveryInstructions(mode discoveryMode) string {
-	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization. This connection lists the tools most people use first; call them directly. " +
-		"For any other Platform tool, find it with search_platform_tools (plain words, such as \"add an MCP server to a plugin\"), call describe_platform_tool for its input schema and rules, then run it with call_platform_tool. Answer how-to and setup questions with search_speakeasy_docs and cite the pages it returns. " +
+	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization, and manage access, logs, risk, exports, dashboards and Organizational Memory (what the team decided). This connection lists the tools most people use first; call them directly. Before saying something can't be done, find the tool with search_platform_tools in plain words, then describe_platform_tool and call_platform_tool. Answer how-to questions with search_speakeasy_docs and cite its pages. " +
 		"Write tools preview first: show the user what will change and wait for explicit confirmation before calling again with confirmed set. Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
 	if mode == discoveryCode {
 		instructions += " For multi-step work, execute runs Python that can search, describe and call every tool as platform--<tool name>."

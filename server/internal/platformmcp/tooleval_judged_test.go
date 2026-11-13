@@ -146,6 +146,14 @@ func TestToolEvalJudged(t *testing.T) { //nolint:paralleltest // one long run th
 		nil,
 	)
 
+	if !slices.ContainsFunc(cfg.Models, func(m string) bool { return !strings.HasPrefix(m, "anthropic/") }) {
+		// OpenRouter otherwise picks among Bedrock, Vertex, Azure and others
+		// per request, and their results drift apart; the baseline is only
+		// comparable when every run is served the same way. Bedrock is the
+		// provider OpenRouter picks for this account by default; Anthropic's
+		// own endpoint is filtered out by the account's routing settings.
+		client.WithProviderRouting(&openrouter.ProviderRouting{Order: []string{"amazon-bedrock"}, AllowFallbacks: false})
+	}
 	report, err := tooleval.Run(t.Context(), client, cases, toolEvalCatalogue(t, registrar), surfaces, cfg)
 	require.NoError(t, err)
 

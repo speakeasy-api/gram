@@ -197,6 +197,7 @@ type OpenAIChatRequest struct {
 	ResponseFormat *or.ResponseFormat                 `json:"response_format,omitempty"`
 	Reasoning      *Reasoning                         `json:"reasoning,omitempty"`
 	CacheControl   *or.AnthropicCacheControlDirective `json:"cache_control,omitempty"`
+	Provider       *ProviderRouting                   `json:"provider,omitempty"`
 	// OpenRouter caps SessionID at 256 chars and Metadata at 16 entries with
 	// 64-char keys and 512-char values; callers must respect both.
 	SessionID string            `json:"session_id,omitempty"`
@@ -265,6 +266,13 @@ type ToolCall struct {
 	ID       string           `json:"id,omitempty"`
 	Type     string           `json:"type,omitempty"` // always "function"
 	Function ToolCallFunction `json:"function"`
+}
+
+// ProviderRouting is OpenRouter's provider preference for a request: try the
+// providers in Order, and with AllowFallbacks false, no others.
+type ProviderRouting struct {
+	Order          []string `json:"order,omitempty"`
+	AllowFallbacks bool     `json:"allow_fallbacks"`
 }
 
 // Tool defines a function tool available to the model
