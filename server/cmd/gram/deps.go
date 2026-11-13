@@ -542,6 +542,8 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	// The dashboard shows every flag on in local dev, so the server lets local
 	// orgs create tool approval policies too. A CSV row can still turn it off.
 	inmem.SetFlag(feature.FlagToolApprovals, feature.AnyDistinctID, true)
+	// Local development runs the tailnet gateway, not the operator.
+	inmem.SetFlag(feature.FlagPrivateNetworkGateway, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -1882,46 +1884,83 @@ func newKMSEncryptionClients(ctx context.Context, logger *slog.Logger, c *cli.Co
 		}, nil
 }
 
-// newOrgEncryption builds the organization encryption service and
-// provisioner, or nils when no platform credential is configured: the feature
-// is then off and every consumer fails closed.
-func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, auditLogger *audit.Logger) (*orgencryption.Service, *orgencryption.Provisioner, error) {
+// orgEncryptionSetup is Speakeasy's side of organization encryption: where
+// managed keys live and how processes reach KMS.
+type orgEncryptionSetup struct {
+	keys         orgencryption.KeyConfig
+	clients      gcpkms.EncryptionClientFactory
+	provisioning gcpkms.EncryptionProvisioningClientFactory
+}
+
+// orgEncryptionSetupFromCLI reads the organization encryption settings, or
+// returns nil when no platform credential is configured.
+func orgEncryptionSetupFromCLI(ctx context.Context, logger *slog.Logger, c *cli.Context) (*orgEncryptionSetup, error) {
 	rawCredentialID := strings.TrimSpace(c.String(orgEncryptionCredentialIDFlag))
 	if rawCredentialID == "" {
 		logger.WarnContext(ctx, "organization encryption is unavailable: no platform credential configured")
-		return nil, nil, nil
+		return nil, nil
 	}
 	credentialID, err := uuid.Parse(rawCredentialID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse organization encryption credential id: %w", err)
+		return nil, fmt.Errorf("parse organization encryption credential id: %w", err)
 	}
 
 	keyRing := strings.TrimSpace(c.String(orgEncryptionKMSKeyRingFlag))
 	if keyRing == "" {
 		if c.String("environment") != "local" {
-			return nil, nil, errors.New("organization encryption kms key ring is required when a credential is configured")
+			return nil, errors.New("organization encryption kms key ring is required when a credential is configured")
 		}
 		keyRing = orgEncryptionKMSKeyRingLocalDefault
 	}
 
-	keys := orgencryption.KeyConfig{
-		KeyRing:                keyRing,
-		PlatformCredentialID:   credentialID,
-		PlatformServiceAccount: strings.TrimSpace(c.String(orgEncryptionServiceAccountFlag)),
-	}
-
 	clients, provisioning, err := newKMSEncryptionClients(ctx, logger, c)
 	if err != nil {
+		return nil, err
+	}
+
+	return &orgEncryptionSetup{
+		keys: orgencryption.KeyConfig{
+			KeyRing:                keyRing,
+			PlatformCredentialID:   credentialID,
+			PlatformServiceAccount: strings.TrimSpace(c.String(orgEncryptionServiceAccountFlag)),
+		},
+		clients:      clients,
+		provisioning: provisioning,
+	}, nil
+}
+
+// newOrgEncryptionService builds only the encrypt and decrypt path, for
+// processes that never mint keys. It returns nil when no platform credential
+// is configured.
+func newOrgEncryptionService(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity) (*orgencryption.Service, error) {
+	setup, err := orgEncryptionSetupFromCLI(ctx, logger, c)
+	if err != nil || setup == nil {
+		return nil, err
+	}
+
+	service, err := orgencryption.NewService(logger, db, gcpIdentity, setup.clients, setup.keys)
+	if err != nil {
+		return nil, fmt.Errorf("build organization encryption service: %w", err)
+	}
+	return service, nil
+}
+
+// newOrgEncryption builds the organization encryption service and
+// provisioner, or nils when no platform credential is configured: the feature
+// is then off and every consumer fails closed.
+func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, auditLogger *audit.Logger) (*orgencryption.Service, *orgencryption.Provisioner, error) {
+	setup, err := orgEncryptionSetupFromCLI(ctx, logger, c)
+	if err != nil || setup == nil {
 		return nil, nil, err
 	}
 
-	service, err := orgencryption.NewService(logger, db, gcpIdentity, clients, keys)
+	service, err := orgencryption.NewService(logger, db, gcpIdentity, setup.clients, setup.keys)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build organization encryption service: %w", err)
 	}
 
-	provisioner, err := orgencryption.NewProvisioner(logger, db, gcpIdentity, clients, provisioning, auditLogger, service, orgencryption.ProvisionerConfig{
-		Keys:                keys,
+	provisioner, err := orgencryption.NewProvisioner(logger, db, gcpIdentity, setup.clients, setup.provisioning, auditLogger, service, orgencryption.ProvisionerConfig{
+		Keys:                setup.keys,
 		SwitchGracePeriod:   c.Duration(orgEncryptionSwitchGracePeriodFlag),
 		ManagedKeyRetention: c.Duration(orgEncryptionManagedKeyRetention),
 	})

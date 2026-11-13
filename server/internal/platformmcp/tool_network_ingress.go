@@ -34,8 +34,24 @@ const (
 	networkIngressNextEnable              = "enable_ingress_in_dashboard"
 	networkIngressNextWait                = "wait_for_ingress"
 	networkIngressNextRepair              = "repair_ingress_in_dashboard"
+	networkIngressNextApproveGateway      = "approve_gateway_in_tailscale"
+	networkIngressNextWaitForCertificate  = "wait_for_tailscale_certificate"
+	networkIngressNextRestoreKey          = "restore_organization_encryption_key"
 	networkIngressNextUnsupportedProvider = "contact_support_for_unsupported_provider"
 )
+
+// networkIngressServiceNotApproved mirrors
+// k8s.NetworkIngressErrorProviderServiceNotApproved without pulling the
+// Kubernetes client into this package.
+const networkIngressServiceNotApproved = "provider_service_not_approved"
+
+// networkIngressCertificateUnavailable mirrors
+// k8s.NetworkIngressErrorProviderCertificateUnavailable for the same reason.
+const networkIngressCertificateUnavailable = "provider_certificate_unavailable"
+
+// networkIngressEncryptionKeyUnavailable mirrors
+// k8s.NetworkIngressErrorEncryptionKeyUnavailable for the same reason.
+const networkIngressEncryptionKeyUnavailable = "encryption_key_unavailable"
 
 // networkIngressErrorCodePattern admits only the short reconcile codes the
 // ingress lifecycle stores (for example provider_error). Anything else is
@@ -156,6 +172,18 @@ func networkIngressNextAction(output GetNetworkIngressOutput) string {
 		return networkIngressNextAddCredentials
 	case !ingress.Enabled:
 		return networkIngressNextEnable
+	// The tailnet has not approved Speakeasy's gateway to host the service.
+	// Only a tailnet admin can fix that, in Tailscale, not in the dashboard.
+	case ingress.LastError == networkIngressServiceNotApproved:
+		return networkIngressNextApproveGateway
+	// Let's Encrypt has not issued the service's TLS certificate yet. The
+	// gateway retries on its own; neither the dashboard nor Tailscale has a fix.
+	case ingress.LastError == networkIngressCertificateUnavailable:
+		return networkIngressNextWaitForCertificate
+	// The organization's encryption key is suspended or unusable, so the
+	// gateway cannot store its secrets. The fix is the key, not the ingress.
+	case ingress.LastError == networkIngressEncryptionKeyUnavailable:
+		return networkIngressNextRestoreKey
 	case ingress.Status == "error" || ingress.Status == "degraded":
 		return networkIngressNextRepair
 	case ingress.Status != "online" || ingress.DNSName == "":
@@ -167,7 +195,10 @@ func networkIngressNextAction(output GetNetworkIngressOutput) string {
 
 const getNetworkIngressDescription = "Read the organization's private network (Tailscale) ingress: whether private networking is switched on for the organization, whether an ingress is configured and enabled, its latest observed status and private DNS name, and the single next_action that stands between the organization and private MCP access. " +
 	"ready_for_private_access is required before any MCP can use dual or private_only network access; it is not proof that a tailnet client can connect. " +
-	"For wait_for_ingress, wait and call this tool again. Present setup_url only for configure_ingress_in_dashboard, add_credentials_in_dashboard, enable_ingress_in_dashboard, or repair_ingress_in_dashboard; request_private_networking and contact_support_for_unsupported_provider require Speakeasy support instead. " +
+	"For wait_for_ingress, wait and call this tool again. Present setup_url only for configure_ingress_in_dashboard, add_credentials_in_dashboard, enable_ingress_in_dashboard, repair_ingress_in_dashboard, or approve_gateway_in_tailscale; request_private_networking and contact_support_for_unsupported_provider require Speakeasy support instead. " +
+	"approve_gateway_in_tailscale means the organization's tailnet has not approved Speakeasy's gateway to host the private service: a tailnet admin must approve the speakeasy-gw hosts on the service in the Tailscale admin console, or add the service to autoApprovers in the tailnet policy. setup_url shows the exact steps; the ingress becomes ready on its own once approved. " +
+	"wait_for_tailscale_certificate means Speakeasy's gateway is approved but Tailscale has not yet obtained the private service's HTTPS certificate from Let's Encrypt, most often because the tailnet used its weekly allowance of new certificates, which every machine and service on the tailnet shares. The gateway retries on its own and the ingress becomes ready once the certificate is issued, so usually no dashboard or Tailscale change is needed: wait and call this tool again later. If it is still waiting a day later, contact Speakeasy support. " +
+	"restore_organization_encryption_key means the organization's encryption key is suspended or cannot be used, so Speakeasy cannot store the gateway's secrets: for a customer-managed key, an administrator restores Speakeasy's access to the key in their cloud key management service; otherwise contact Speakeasy support. Do not present setup_url for it. " +
 	"An unsupported provider is never ready: contact_support_for_unsupported_provider means contact Speakeasy support, not attempt dashboard setup or repair. " +
 	"Creating, enabling, repairing, or supplying credentials for the ingress happens only in the dashboard at setup_url, because it requires Tailscale OAuth client credentials. Never returns credentials or provider resources."
 

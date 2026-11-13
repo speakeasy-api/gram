@@ -38,7 +38,7 @@ func (r *publicationRequester) Organization(_ context.Context, _ pgx.Tx, organiz
 func TestNetworkIngressCreateRollsBackWhenEnqueueFails(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestServiceWithRequester(t, true, failingReconcileRequester{}, nil)
-	_, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: "private", OauthClientID: "client", OauthClientSecret: "secret"})
+	_, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: new("private"), OauthClientID: "client", OauthClientSecret: "secret"})
 	require.Error(t, err)
 	_, err = repo.New(ti.conn).GetNetworkIngressByOrganization(ctx, ti.orgID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -55,7 +55,7 @@ func TestNetworkIngressPublicationRequesterRollsBackMutation(t *testing.T) {
 	t.Parallel()
 	publication := &publicationRequester{err: fmt.Errorf("publication unavailable")}
 	ctx, ti := newTestServiceWithRequester(t, true, networkingress.NewOutboxRequester("test-network-ingress"), publication)
-	_, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: "private", OauthClientID: "client", OauthClientSecret: "secret"})
+	_, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: new("private"), OauthClientID: "client", OauthClientSecret: "secret"})
 	require.Error(t, err)
 	_, err = repo.New(ti.conn).GetNetworkIngressByOrganization(ctx, ti.orgID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)

@@ -3549,7 +3549,8 @@ INSERT INTO network_ingresses (
     'platform',
     true,
     'test-ns',
-    'test-sa',
+    -- Unique per row, so a test can seed several active ingresses.
+    'test-sa-' || CAST(CAST($1 AS uuid) AS text),
     $3
 )
 `
@@ -3877,6 +3878,20 @@ func (q *Queries) IsQueryBlockedByFixture(ctx context.Context, arg IsQueryBlocke
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const lapseNetworkIngressCertificateLease = `-- name: LapseNetworkIngressCertificateLease :exec
+UPDATE network_ingress_certificate_states
+SET updated_at = updated_at - interval '1 hour'
+WHERE network_ingress_id = $1
+  AND state_key = 'issuance-lease'
+`
+
+// Ages a connection's certificate issuance lease past any lease duration, as
+// if its holder died or stalled.
+func (q *Queries) LapseNetworkIngressCertificateLease(ctx context.Context, networkIngressID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lapseNetworkIngressCertificateLease, networkIngressID)
+	return err
 }
 
 const latchAttachmentOwnerFixture = `-- name: LatchAttachmentOwnerFixture :execrows

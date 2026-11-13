@@ -17,7 +17,8 @@ INSERT INTO network_ingresses (
     'platform',
     true,
     'test-ns',
-    'test-sa',
+    -- Unique per row, so a test can seed several active ingresses.
+    'test-sa-' || CAST(CAST(@id AS uuid) AS text),
     @dns_name
 );
 
@@ -2689,3 +2690,11 @@ WHERE id = @id;
 -- Test-only fixture: backdates every message in a chat so the team memory
 -- sweep reads the chat's last activity as created_at.
 UPDATE chat_messages SET created_at = @created_at WHERE chat_id = @chat_id;
+
+-- name: LapseNetworkIngressCertificateLease :exec
+-- Ages a connection's certificate issuance lease past any lease duration, as
+-- if its holder died or stalled.
+UPDATE network_ingress_certificate_states
+SET updated_at = updated_at - interval '1 hour'
+WHERE network_ingress_id = @network_ingress_id
+  AND state_key = 'issuance-lease';

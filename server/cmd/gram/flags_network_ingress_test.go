@@ -233,3 +233,14 @@ func TestValidatePrivateServerConfig(t *testing.T) {
 	require.Error(t, validatePrivateServerConfig(true, ":8443", "cert", "key", true))
 	require.NoError(t, validatePrivateServerConfig(true, ":8443", "cert", "key", false))
 }
+
+func TestTailnetGatewayRegistersOnlyTheEncryptionSettingsItReads(t *testing.T) {
+	t.Parallel()
+	names := map[string]bool{}
+	for _, flag := range newTailnetGatewayCommand().Flags {
+		names[flag.Names()[0]] = true
+	}
+	require.True(t, names[orgEncryptionCredentialIDFlag], "the gateway decrypts with the organization's key")
+	require.False(t, names[orgEncryptionSwitchGracePeriodFlag], "key switching is the provisioner's, not the gateway's")
+	require.False(t, names[orgEncryptionManagedKeyRetention])
+}

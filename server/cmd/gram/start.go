@@ -1186,7 +1186,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			_, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+			orgEncryptionService, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
 			if err != nil {
 				return err
 			}
@@ -1817,7 +1817,8 @@ func newStartCommand() *cli.Command {
 				networkIngressClient.Client = temporalEnv.Client()
 			}
 			ingressPublicationRequester := plugins.PublicationRequests{Enabled: publicationEmit}
-			networkIngressService := networkingress.NewServiceWithPublication(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), ingressPublicationRequester, networkIngressClient)
+			networkIngressService := networkingress.NewServiceWithPublication(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), ingressPublicationRequester, networkIngressClient).
+				WithFeatures(featureFlags)
 			networkingress.Attach(mux, networkIngressService, networkIngressEnabled)
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission).
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithHostedServerWriter(toolsetsSvc).WithServerURL(serverURL)
@@ -2302,7 +2303,7 @@ func newStartCommand() *cli.Command {
 						DisableRiskRetroReconcile:      c.Bool("disable-clickhouse-risk-retro-reconcile"),
 						LLMAnalyzerEnabled:             llmAnalyzerConfigFromCLI(c).Enabled(),
 					})
-					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, networkIngressConfig, ingressPublicationRequester)
+					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, orgEncryptionService, orgEncryptionProvisioner, k8sClient, networkIngressConfig, ingressPublicationRequester)
 					if err != nil {
 						logger.ErrorContext(ctx, "configure network ingress worker", attr.SlogError(err))
 						return

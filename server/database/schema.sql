@@ -2893,7 +2893,7 @@ CREATE TABLE IF NOT EXISTS network_ingress_nodes (
   -- encrypted by the application. Cleared once the node has persisted state.
   auth_key_encrypted TEXT,
   auth_key_expires_at timestamptz,
-  -- pending | starting | online | draining | error | stopped (app-validated)
+  -- pending | starting | online | draining | error | stopped | needs_login | awaiting_approval (app-validated)
   status TEXT NOT NULL DEFAULT 'pending',
   -- Stable Tailscale node id used to delete the device on teardown.
   node_id TEXT,
