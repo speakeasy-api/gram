@@ -490,3 +490,16 @@ func TestPreconditionsAndAuthorization(t *testing.T) {
 	_, err = si.svc.Dismiss(support, &gen.DismissPayload{SessionToken: nil, RegistryEntryID: linear.String()})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestListExcludesHiddenAndUnlinkedRegistryEntries(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	raw := entryRecord("example.test/hidden", []string{"https://example.test/mcp"}, `{"oinNames":["linear"]}`)
+	id := createEntry(t, ctx, si, raw, true)
+	createApp(t, ctx, si, "0oa1", "Linear", "linear", "SAML_2_0", true)
+	require.Len(t, list(t, ctx, si, false).Suggestions, 1)
+	require.NoError(t, registryrepo.New(si.conn).HideRegistryServerFixture(ctx, id))
+	require.Empty(t, list(t, ctx, si, false).Suggestions)
+	require.NoError(t, registryrepo.New(si.conn).InsertRegistryUnlinkedEntryFixture(ctx, registryrepo.InsertRegistryUnlinkedEntryFixtureParams{ID: uuid.New(), Data: []byte(strings.Replace(raw, "example.test/hidden", "example.test/unlinked", 1)), Published: true}))
+	require.Empty(t, list(t, ctx, si, false).Suggestions)
+}

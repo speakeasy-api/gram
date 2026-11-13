@@ -169,3 +169,20 @@ func TestRegistryOktaCandidatesAndUnmapped(t *testing.T) {
 	require.False(t, unmapped.Names[2].Integrator)
 	require.Nil(t, unmapped.Names[3].SuggestedEntryID)
 }
+
+func TestRegistryOktaHiddenOwnersRetainedUnlinkedExcluded(t *testing.T) {
+	t.Parallel()
+	ctx, _, db := newTestAdminService(t)
+	hidden := uuid.New()
+	raw := json.RawMessage(`{"server":{"name":"example.test/hidden","version":"1"},"_meta":{"com.speakeasy.ai/okta":{"oinNames":["hidden-app"]}}}`)
+	require.NoError(t, registryrepo.New(db).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: hidden, Data: raw, Published: true}))
+	require.NoError(t, registryrepo.New(db).HideRegistryServerFixture(ctx, hidden))
+	raw = json.RawMessage(`{"server":{"name":"example.test/unlinked","version":"1"},"_meta":{"com.speakeasy.ai/okta":{"oinNames":["unlinked-app"]}}}`)
+	require.NoError(t, registryrepo.New(db).InsertRegistryUnlinkedEntryFixture(ctx, registryrepo.InsertRegistryUnlinkedEntryFixtureParams{ID: uuid.New(), Data: raw, Published: true}))
+	mappings, err := repo.New(db).AdminListRegistryOktaMappings(ctx)
+	require.NoError(t, err)
+	require.Len(t, mappings, 1)
+	facts, err := repo.New(db).AdminListRegistryEntryFacts(ctx)
+	require.NoError(t, err)
+	require.Len(t, facts, 1)
+}

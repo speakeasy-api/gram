@@ -24,18 +24,21 @@ or temporary `AdoptPublishedDefault` behavior.
    registry-producing jobs/integrations. Merely hiding new-version controls is insufficient. Verify
    no queued/retrying or old-process writer can resume. If this cannot be proven,
    stop for an approved rollout adjustment, not an application workaround.
-3. **Directly before A**, execute `server/internal/mcpregistry/backfill.sql` with
+3. Pass the **expand completion gate** below before any backfill. **Directly before A**, execute `server/internal/mcpregistry/backfill.sql` with
    stop-on-error using the approved, explicitly verified target. Validate below.
    This idempotent operator operation is never an application startup hook.
 4. Deploy **A**, the version-aware compatible readers and first-server writers,
    built/generated against the actual **nullable expanded schema**. Keep all
    registry writes frozen, including A's otherwise compatible creates/toggles.
-   Re-run backfill (no changes expected) and validation. A must preserve final
+   Re-run backfill and validation. Its returned `inserted` count **must be zero**;
+   a nonzero count is a stop condition requiring investigation and reconciliation. A must preserve final
    immutable-version and no-auto-default semantics, not introduce transitional
    republish behavior. Nullable SQLc outputs must be generated, not transplanted.
 5. Still frozen, apply the existing generated contract migration
-   `20261113193415_registry_server_versions.sql` as its separately approved schema
-   artifact. Revalidate linkage, default ownership/publication, NOT NULL, removal
+   `*_registry_server_versions.sql` as its separately approved schema artifact.
+   Discover it with `find server/migrations -maxdepth 1 -name '*_registry_server_versions.sql'`;
+   require **exactly one** result before proceeding. The unshipped contract timestamp
+   may change on regeneration; the shipped expand filename above remains fixed. Revalidate linkage, default ownership/publication, NOT NULL, removal
    of name-only uniqueness, and validity of exact-version uniqueness. Stop on any
    failure. Do not regenerate a duplicate contract migration.
 6. Deploy **B** (final backend/API/Admin MCP version/default/visibility operations)
@@ -51,6 +54,45 @@ reopened A unpublish/republish can leave no default and no restoration control.
 These are stop conditions: drain again, explicitly reconcile operator decisions,
 repeat validation, and retain the freeze. Backfill does not repair existing
 parent decisions. Do not treat a passing count alone as proof writers are drained.
+
+## Expand completion gate (before backfill)
+
+Verify the approved connection targets the intended database and that both
+unqualified registry tables resolve to `public`. In that same operator session,
+use `SET search_path TO public;` for the backfill and validation. Use a direct
+connection or a session-scoped pooler connection throughout: a transaction pooler
+does not preserve session-level `SET search_path` between transactions. Do not proceed
+with missing/invalid indexes or missing/unvalidated/mismatched foreign keys:
+
+```sql
+SHOW search_path;
+SELECT to_regclass('mcp_registry_entries') = to_regclass('public.mcp_registry_entries')
+         AS entries_resolve_public,
+       to_regclass('mcp_registry_servers') = to_regclass('public.mcp_registry_servers')
+         AS servers_resolve_public;
+SELECT c.relname, i.indisvalid, i.indisready, i.indisunique, pg_get_indexdef(i.indexrelid)
+FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+WHERE i.indexrelid IN (to_regclass('public.mcp_registry_entries_server_id_id_key'),
+                       to_regclass('public.mcp_registry_servers_name_key'));
+SELECT conname, convalidated, condeferrable, condeferred,
+       confupdtype, confdeltype, pg_get_constraintdef(oid)
+FROM pg_constraint
+WHERE (conrelid = 'public.mcp_registry_entries'::regclass
+       AND conname = 'mcp_registry_entries_server_id_fkey')
+   OR (conrelid = 'public.mcp_registry_servers'::regclass
+       AND conname = 'mcp_registry_servers_default_entry_fkey');
+```
+
+Require both resolution results true, exactly two index rows (valid, ready and
+unique), and the expected `(server_id, id)` and `(name)` definitions on the named
+public tables. Require exactly two FK rows with the expected referenced public
+tables/columns: entries `server_id → servers(id)` is validated, nondeferrable,
+not deferred, update NO ACTION (`a`) and delete SET NULL (`n`); servers
+`(id, default_entry_id) → entries(server_id, id)` is validated, deferrable,
+initially deferred, and update/delete NO ACTION (`a`/`a`). An interrupted expand
+migration can leave counts looking correct but omit the ownership FK; counts are
+not evidence that this gate passed. Inspect the complete migration revision state
+and retain the freeze until the actual expand has finished.
 
 ## Backfill and schema gates
 
@@ -72,9 +114,22 @@ SELECT count(*) AS wrong_default
 FROM mcp_registry_servers s LEFT JOIN mcp_registry_entries e ON e.id = s.default_entry_id
 WHERE s.default_entry_id IS NOT NULL
   AND (e.id IS NULL OR e.server_id <> s.id OR NOT e.published);
+-- Freeze-only anomaly gate; not a permanent product invariant.
+SELECT count(*) AS published_without_default
+FROM mcp_registry_servers s
+WHERE s.default_entry_id IS NULL
+  AND EXISTS (SELECT 1 FROM mcp_registry_entries e
+              WHERE e.server_id = s.id AND e.published);
 ```
 
-All counts must be zero. On a backfill error, stop and roll back/disconnect the
+During the freeze all counts must be zero. Nonzero `published_without_default`
+means a writer ran or a parent was pre-created; stop for explicit operator
+reconciliation. Rerunning backfill deliberately preserves such a parent's decision
+and does not repair it. After writes reopen this is a legitimate withdrawn-default
+state and is **no longer a gate**. A post-A backfill rerun must additionally report
+zero inserted parents; otherwise stop even if the invariant counts pass.
+
+On a backfill error, stop and roll back/disconnect the
 failed transaction before retrying; never alter historical JSON or replace IDs
 to force success. An unpublished legacy default needs explicit operator
 reconciliation, not repeated backfill or fallback selection.
@@ -92,8 +147,12 @@ WHERE i.indexrelid = to_regclass('public.mcp_registry_entries_server_version_key
 
 Require true NOT NULL and old-index removal, exactly one valid/ready/unique index
 row, and the expected `(server_id, (data #>> '{server,version}'))` definition.
-Disposable tests prove duplicate identifiers fail and distinct versions succeed;
-do not insert synthetic acceptance records into a deployed registry.
+Disposable tests prove duplicate non-null identifiers fail and distinct versions
+succeed. Historical JSON-null and missing versions extract to SQL NULL and remain
+unconstrained by ordinary unique-index semantics (NULLs are distinct); new writes
+must pass strict application metadata/SemVer validation. This rollout does not add
+`NULLS NOT DISTINCT` or normalize historical values. Do not insert synthetic
+acceptance records into a deployed registry.
 
 ## Partial migration failure and lock risk
 
@@ -102,11 +161,14 @@ are intentionally outside a transaction. The contract drops name-only uniqueness
 **before** adding NOT NULL and building exact-version uniqueness. Failure may
 leave a partially applied migration, including an INVALID concurrent index.
 Keep every writer frozen and inspect the actual schema and Atlas revision state;
-never assume rollback or blindly replay the whole file (the drop may already
-have succeeded). Only an approved operator may reconcile/resume the failed
+never assume rollback or blindly replay either whole file (the expand column or
+indexes may already exist, and the contract drop may already have succeeded). Only an approved operator may reconcile/resume the failed
 migration using the normal migration procedure.
 
-Before any index cleanup, verify the exact schema-qualified index name, its table,
+The potentially failed concurrent indexes are exactly
+`public.mcp_registry_entries_server_id_id_key` (expand) and
+`public.mcp_registry_entries_server_version_key` (contract). Before any index
+cleanup, verify the exact schema-qualified index name, its table,
 definition, ownership, validity, and whether a build is still active. Only if the
 operator establishes that this is the **INVALID index owned by this failed
 migration**, with no active build, may they approve dropping that specific index
