@@ -126,6 +126,11 @@ type fixedCostClient struct {
 	calls int
 }
 
+func (c *fixedCostClient) CreateEmbeddings(context.Context, string, string, []string, ...openrouter.EmbeddingOption) ([][]float32, error) {
+	c.calls++
+	return [][]float32{{1}}, nil
+}
+
 func (c *fixedCostClient) GetCompletion(context.Context, openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 	c.calls++
 	var response openrouter.CompletionResponse
@@ -142,6 +147,8 @@ func TestSpendCapStopsTheRun(t *testing.T) {
 	ctx, client, stop := WithSpendCap(t.Context(), inner, 10)
 	defer stop()
 
+	_, err := client.CreateEmbeddings(ctx, "org", "model", []string{"x"})
+	require.NoError(t, err, "embeddings pass through below the cap")
 	for range 3 {
 		_, err := client.GetCompletion(ctx, openrouter.CompletionRequest{})
 		require.NoError(t, err)
@@ -151,9 +158,11 @@ func TestSpendCapStopsTheRun(t *testing.T) {
 	require.True(t, ok)
 	require.InDelta(t, 12.0, capErr.SpentUSD, 1e-9)
 
-	_, err := client.GetCompletion(ctx, openrouter.CompletionRequest{})
+	_, err = client.GetCompletion(ctx, openrouter.CompletionRequest{})
 	require.ErrorIs(t, err, capErr)
-	require.Equal(t, 3, inner.calls, "a call after the cap never reaches the model")
+	_, err = client.CreateEmbeddings(ctx, "org", "model", []string{"x"})
+	require.ErrorIs(t, err, capErr)
+	require.Equal(t, 4, inner.calls, "a call after the cap never reaches the model")
 
 	uncappedCtx, uncapped, stopUncapped := WithSpendCap(t.Context(), inner, 0)
 	defer stopUncapped()
