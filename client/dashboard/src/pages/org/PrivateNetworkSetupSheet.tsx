@@ -24,6 +24,8 @@ import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { handleAPIError } from "@/lib/errors";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { invalidateAllNetworkIngress } from "@gram/client/react-query/networkIngress.js";
 import { toast } from "sonner";
 import { useCreateNetworkIngressMutation } from "@gram/client/react-query/createNetworkIngress.js";
@@ -37,6 +39,19 @@ const HOSTNAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 // ACCESS_GROUP is the example group the restricted snippet introduces.
 const ACCESS_GROUP = "group:speakeasy-users";
+
+// The policy an operator-hosted connection needs: the Kubernetes operator owns
+// the proxy and service tags and auto-approves the service advertisements.
+const OPERATOR_POLICY_SNIPPET = `"tagOwners": {
+  "tag:k8s-operator": ["autogroup:admin"],
+  "tag:gram-proxy": ["tag:k8s-operator"],
+  "tag:gram-service": ["tag:k8s-operator"]
+},
+"autoApprovers": {
+  "services": {
+    "tag:gram-service": ["tag:gram-proxy"]
+  }
+}`;
 
 function tailscalePolicySnippet(
   hostname: string,
@@ -79,6 +94,12 @@ export function PrivateNetworkSetupSheet({
   const [clientSecret, setClientSecret] = useState("");
   const [identityRequired, setIdentityRequired] = useState(false);
   const [groupSnippetOpen, setGroupSnippetOpen] = useState(false);
+  // The server makes the same check when the connection is created: the
+  // tailnet gateway when the flag is on, the Tailscale operator otherwise,
+  // including when the flag cannot be read.
+  const gatewayFlag = useFeatureFlag(FEATURE_FLAGS.privateNetworkGateway);
+  const flagLoading = gatewayFlag.status === "loading";
+  const usesGateway = gatewayFlag.status === "enabled";
 
   const resetCredentials = () => {
     setClientId("");
@@ -119,6 +140,7 @@ export function PrivateNetworkSetupSheet({
     hostnameValid &&
     clientId.trim() !== "" &&
     clientSecret !== "" &&
+    !flagLoading &&
     !create.isPending;
 
   return (
@@ -161,68 +183,118 @@ export function PrivateNetworkSetupSheet({
             </Text>
           </div>
 
-          <div className="space-y-2">
-            <Text variant="subheading">2. Check the tailnet prerequisites</Text>
-            <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
-              <li>MagicDNS is enabled.</li>
-              <li>HTTPS certificates are enabled.</li>
-              <li>
-                Devices that will connect run Tailscale 1.86 or later, which
-                Tailscale Services require.
-              </li>
-              <li>
-                The policy owns a <code>tag:speakeasy</code> tag, auto-approves
-                the <code>svc:{serviceLabel}</code> service for it, and grants
-                your users access to that service.
-              </li>
-            </ul>
-            <pre className="overflow-x-auto border bg-muted/30 p-3 text-xs">
-              <code>{tailscalePolicySnippet(serviceLabel)}</code>
-            </pre>
+          {flagLoading ? (
             <Text small muted>
-              Keep the tag dedicated to Speakeasy. This grant lets every member
-              of your tailnet reach your private MCP servers.
+              Loading the setup steps for your organization...
             </Text>
-            <Collapsible
-              open={groupSnippetOpen}
-              onOpenChange={setGroupSnippetOpen}
-            >
-              <CollapsibleTrigger className="text-muted-foreground hover:text-default flex items-center gap-1 text-sm">
-                <Icon
-                  name="chevron-right"
-                  className={cn(
-                    "h-4 w-4 transition-transform",
-                    groupSnippetOpen && "rotate-90",
-                  )}
-                />
-                Limit access to a group
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-2 pt-2">
-                <Text small muted>
-                  Use this policy instead to let only the people in{" "}
-                  <code>{ACCESS_GROUP}</code> reach the service. Replace the
-                  example address with their logins.
+          ) : usesGateway ? (
+            <>
+              <div className="space-y-2">
+                <Text variant="subheading">
+                  2. Check the tailnet prerequisites
                 </Text>
+                <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
+                  <li>MagicDNS is enabled.</li>
+                  <li>HTTPS certificates are enabled.</li>
+                  <li>
+                    Devices that will connect run Tailscale 1.86 or later, which
+                    Tailscale Services require.
+                  </li>
+                  <li>
+                    The policy owns a <code>tag:speakeasy</code> tag,
+                    auto-approves the <code>svc:{serviceLabel}</code> service
+                    for it, and grants your users access to that service.
+                  </li>
+                </ul>
                 <pre className="overflow-x-auto border bg-muted/30 p-3 text-xs">
-                  <code>
-                    {tailscalePolicySnippet(serviceLabel, ACCESS_GROUP)}
-                  </code>
+                  <code>{tailscalePolicySnippet(serviceLabel)}</code>
                 </pre>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
+                <Text small muted>
+                  Keep the tag dedicated to Speakeasy. This grant lets every
+                  member of your tailnet reach your private MCP servers.
+                </Text>
+                <Collapsible
+                  open={groupSnippetOpen}
+                  onOpenChange={setGroupSnippetOpen}
+                >
+                  <CollapsibleTrigger className="text-muted-foreground hover:text-default flex items-center gap-1 text-sm">
+                    <Icon
+                      name="chevron-right"
+                      className={cn(
+                        "h-4 w-4 transition-transform",
+                        groupSnippetOpen && "rotate-90",
+                      )}
+                    />
+                    Limit access to a group
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-2 pt-2">
+                    <Text small muted>
+                      Use this policy instead to let only the people in{" "}
+                      <code>{ACCESS_GROUP}</code> reach the service. Replace the
+                      example address with their logins.
+                    </Text>
+                    <pre className="overflow-x-auto border bg-muted/30 p-3 text-xs">
+                      <code>
+                        {tailscalePolicySnippet(serviceLabel, ACCESS_GROUP)}
+                      </code>
+                    </pre>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
 
-          <div className="space-y-2">
-            <Text variant="subheading">3. Create a Tailscale OAuth client</Text>
-            <Text small muted>
-              In the Tailscale admin console, open{" "}
-              <TailscaleTrustCredentialsLink /> and create an OAuth client.
-              Grant Auth Keys, Devices Core, and Services write scopes, then
-              apply the <code>tag:speakeasy</code> tag. Speakeasy uses the OAuth
-              client only to register its gateway nodes and define the service.
-              The client never leaves Speakeasy&apos;s control plane.
-            </Text>
-          </div>
+              <div className="space-y-2">
+                <Text variant="subheading">
+                  3. Create a Tailscale OAuth client
+                </Text>
+                <Text small muted>
+                  In the Tailscale admin console, open{" "}
+                  <TailscaleTrustCredentialsLink /> and create an OAuth client.
+                  Grant Auth Keys, Devices Core, and Services write scopes, then
+                  apply the <code>tag:speakeasy</code> tag. Speakeasy uses the
+                  OAuth client only to register its gateway nodes and define the
+                  service. The client never leaves Speakeasy&apos;s control
+                  plane.
+                </Text>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Text variant="subheading">
+                  2. Check the tailnet prerequisites
+                </Text>
+                <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
+                  <li>MagicDNS is enabled.</li>
+                  <li>HTTPS certificates are enabled.</li>
+                  <li>
+                    The policy has isolated operator, proxy, and service tags
+                    plus service-advertisement auto-approval.
+                  </li>
+                </ul>
+                <pre className="overflow-x-auto border bg-muted/30 p-3 text-xs">
+                  <code>{OPERATOR_POLICY_SNIPPET}</code>
+                </pre>
+                <Text small muted>
+                  Keep these tags dedicated to Speakeasy. Your tailnet policy
+                  must also allow the intended users to reach the generated
+                  service tag.
+                </Text>
+              </div>
+
+              <div className="space-y-2">
+                <Text variant="subheading">
+                  3. Create a Tailscale OAuth client
+                </Text>
+                <Text small muted>
+                  In the Tailscale admin console, open{" "}
+                  <TailscaleTrustCredentialsLink /> and create an OAuth client.
+                  Grant Devices Core, Auth Keys, and Services write scopes, then
+                  apply the <code>tag:k8s-operator</code> tag. Do not reuse a
+                  broadly privileged client.
+                </Text>
+              </div>
+            </>
+          )}
 
           <NetworkIngressCredentialsFields
             idPrefix="tailscale"

@@ -6,6 +6,12 @@ import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { PrivateNetworkSection } from "./PrivateNetworkSection";
 
 const state = vi.hoisted(() => ({
+  gatewayFlag: "enabled" as
+    | "enabled"
+    | "disabled"
+    | "missing"
+    | "error"
+    | "loading",
   isAdmin: true,
   entitled: true,
   productTier: "enterprise" as "enterprise" | "payg" | "base",
@@ -43,6 +49,13 @@ const state = vi.hoisted(() => ({
         updatedAt: Date;
       }
     | undefined,
+}));
+
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) =>
+    flag === "private-network-gateway"
+      ? { status: state.gatewayFlag }
+      : { status: "disabled" },
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -135,6 +148,7 @@ vi.mock("sonner", () => ({
 }));
 
 beforeEach(() => {
+  state.gatewayFlag = "enabled";
   state.isAdmin = true;
   state.entitled = true;
   state.productTier = "enterprise";
@@ -276,6 +290,41 @@ describe("PrivateNetworkSection", () => {
     ).toBeTruthy();
     expect(screen.getByText(/"dst": \["svc:speakeasy"\]/)).toBeTruthy();
     expect(screen.getByText(/run Tailscale 1\.86 or later/)).toBeTruthy();
+  });
+
+  it.each(["disabled", "missing", "error"] as const)(
+    "shows the operator setup steps when the gateway flag is %s",
+    (flag) => {
+      state.gatewayFlag = flag;
+      render(<PrivateNetworkSection />);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Connect Tailscale" }),
+      );
+
+      expect(
+        screen.getByText(/"tag:gram-proxy": \["tag:k8s-operator"\]/),
+      ).toBeTruthy();
+      expect(screen.getByText("tag:k8s-operator")).toBeTruthy();
+      expect(screen.queryByText(/"tag:speakeasy"/)).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Limit access to a group" }),
+      ).toBeNull();
+    },
+  );
+
+  it("waits for the gateway flag before showing setup steps", () => {
+    state.gatewayFlag = "loading";
+    render(<PrivateNetworkSection />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
+
+    expect(
+      screen.getByText("Loading the setup steps for your organization..."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/"tagOwners"/)).toBeNull();
+    const submit = screen
+      .getAllByRole("button", { name: "Connect Tailscale" })
+      .at(-1)!;
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("offers a group-restricted policy behind a collapsed section", () => {
