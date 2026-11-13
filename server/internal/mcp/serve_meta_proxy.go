@@ -182,8 +182,11 @@ func serverHeadersHaveCredential(headers []remotemcp_repo.RemoteMcpServerHeader)
 	})
 }
 
-// upstreamHost names the member's upstream only for a code that says the upstream itself failed.
-func (d memberDial) upstreamHost(code mcpconnectionattempts.Code) mcpconnectionattempts.Option {
+// upstreamHost names the member's upstream only when err's code says the upstream itself failed.
+func (d memberDial) upstreamHost(err error, code mcpconnectionattempts.Code) mcpconnectionattempts.Option {
+	if _, refused := errors.AsType[memberEgressRefusedError](err); refused {
+		return mcpconnectionattempts.Provider("")
+	}
 	switch code {
 	case mcpconnectionattempts.CodeProviderRejected, mcpconnectionattempts.CodeSharedCredentialRejected, mcpconnectionattempts.CodeStaticKeyRejected,
 		mcpconnectionattempts.CodeProviderRateLimited, mcpconnectionattempts.CodeProviderServerError, mcpconnectionattempts.CodeProviderUnreachable:
@@ -692,7 +695,7 @@ func (s *Service) executeProxiedMemberTool(
 	}
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code, dial.upstreamHost(failure.code))
+			s.recordMemberFailure(ctx, gate, member, failure.code, dial.upstreamHost(err, failure.code))
 		}
 		// The gateway logs this failure only when the call never reached
 		// the upstream interceptor.

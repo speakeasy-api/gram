@@ -676,3 +676,29 @@ func TestInboundRefresh_UsedTokenFromAnotherClientNamesNobody(t *testing.T) {
 	require.Empty(t, row.SubjectURN, "a token another client presented is not attributed to its owner")
 	require.Equal(t, other.ID.String(), row.UserSessionClientID)
 }
+
+// A refusal cached for the owner's app names nobody when another app replays the token.
+func TestInboundRefresh_CachedUsedTokenRefusalNamesNobodyForAnotherClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+	first := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, first.err)
+	require.Equal(t, http.StatusOK, first.code, first.body)
+	expireRefreshReplay(t, ctx, ti, issuer.ID, refreshToken)
+
+	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, refused.err)
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, refused.body)
+	other := seedOtherRefreshClient(t, ctx, ti, issuer.ID)
+
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	replayed := performRefreshRequest(ctx, ti, toolset.McpSlug.String, other.ClientID, refreshToken)
+	require.NoError(t, replayed.err)
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, replayed.body)
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed)
+	require.Empty(t, row.SubjectURN, "a cached refusal names its owner only to the app that drew it")
+	require.Equal(t, other.ID.String(), row.UserSessionClientID)
+}

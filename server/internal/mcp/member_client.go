@@ -425,6 +425,11 @@ type memberDiscoveryError struct {
 
 func (e memberDiscoveryError) Unwrap() error { return e.metaMemberError }
 
+// memberEgressRefusedError is a member call our egress policy refused before any connection.
+type memberEgressRefusedError struct{ error }
+
+func (e memberEgressRefusedError) Unwrap() error { return e.error }
+
 // sdkTransportRejected is the text the SDK gives a call it did not get answered, for
 // transient HTTP statuses included. The member never said it.
 const sdkTransportRejected = "rejected by transport"
@@ -519,7 +524,11 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		_, untrusted := errors.AsType[*tls.CertificateVerificationError](exchangeErr)
 		refused := untrusted || errors.Is(exchangeErr, guardian.ErrBlockedIP) || errors.Is(exchangeErr, guardian.ErrBadHost)
 		code, _ := remotemcp.UpstreamFailureHappened(0, false, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
-		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), !spent && !refused), code}
+		failure := upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), !spent && !refused)
+		if errors.Is(exchangeErr, guardian.ErrBlockedIP) {
+			failure = memberEgressRefusedError{failure}
+		}
+		return memberConnectionError{failure, code}
 	}
 	rpcErr, isRPC := errors.AsType[*jsonrpc.Error](err)
 	message := fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status)

@@ -352,6 +352,36 @@ func TestMemberClientFailure_TunneledTransportTimeoutIsNotTheProvider(t *testing
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
 }
 
+// Egress policy refusing the member's address never reached the upstream, so the row names no host.
+func TestMemberClientFailure_EgressRefusalNamesNoHost(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	service := &Service{connections: rec.Recorder}
+	gate := &metaGateContext{organizationID: "org", projectID: uuid.New(), metaServerID: uuid.New()}
+	member := metaMember{serverID: uuid.New(), slug: "fixture"}
+	dial := memberDial{provider: "https://mcp.example.com/mcp"}
+
+	for _, tc := range []struct {
+		name     string
+		exchange error
+		host     string
+	}{
+		{name: "blocked", exchange: fmt.Errorf("dial: %w", guardian.ErrBlockedIP), host: ""},
+		{name: "unreachable", exchange: errors.New("connection refused"), host: "mcp.example.com"},
+	} {
+		err := memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{err: tc.exchange}, dial, member, errors.New("call failed"))
+		failure, ok := errors.AsType[memberConnectionError](err)
+		require.True(t, ok, tc.name)
+		require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, failure.code, tc.name)
+		require.Equal(t, `server "fixture" did not answer: upstream unreachable or timed out`, err.Error(), tc.name)
+
+		service.recordMemberFailure(t.Context(), gate, member, failure.code, dial.upstreamHost(err, failure.code))
+		rows := rec.Rows()
+		require.Equal(t, tc.host, rows[len(rows)-1].ProviderHost, tc.name)
+	}
+}
+
 func TestRecordMemberFailure(t *testing.T) {
 	t.Parallel()
 
