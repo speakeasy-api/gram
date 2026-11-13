@@ -31,6 +31,17 @@ describe("getAgentPlatforms", () => {
     );
   });
 
+  it("offers the OpenCode observability ZIP first and keeps the CLI as an alternative", () => {
+    const opencode = AGENT_PLATFORMS.find(({ id }) => id === "opencode");
+    expect(opencode?.setupSteps[0]?.download?.platform).toBe("opencode");
+    expect(opencode?.setupSteps[1]?.code).toBe(
+      "unzip observability-opencode.zip -d ~/.config/opencode",
+    );
+    expect(opencode?.setupSteps[2]?.code).toContain(
+      "speakeasy-hooks install --provider=opencode --dir=.",
+    );
+  });
+
   it("follows the shared setup provider order", () => {
     expect(
       AGENT_PLATFORMS.slice(0, ACTIVE_AGENT_PROVIDER_IDS.setup.length).map(
