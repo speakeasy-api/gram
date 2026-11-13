@@ -79,7 +79,7 @@ func (c Config) Validate() error {
 }
 
 func (c Config) benchConfig() bench.Config {
-	return bench.Config{AnswerModels: c.AnswerModels, JudgeModel: c.JudgeModel, Runs: c.Runs, Concurrency: concurrency}
+	return bench.Config{AnswerModels: c.AnswerModels, JudgeModel: c.JudgeModel, Runs: c.Runs, Concurrency: concurrency, Billing: bench.Billing{OrganizationID: "", ProjectID: ""}}
 }
 
 // Runner executes stored runs.
@@ -203,7 +203,12 @@ func (r *Runner) score(ctx context.Context, client openrouter.CompletionClient, 
 	if err != nil {
 		return nil, fmt.Errorf("build search_team_memory arm: %w", err)
 	}
-	report, err := bench.Run(ctx, client, target.Corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm}, cfg.benchConfig())
+	benchCfg := cfg.benchConfig()
+	// The deployed key resolver provisions a platform key per stored
+	// organization, so answers and grading bill the seeded org that holds the
+	// corpus, as memory writing already does.
+	benchCfg.Billing = bench.Billing{OrganizationID: target.OrganizationID, ProjectID: target.Projects[memoryeval.ProjectMain].ID.String()}
+	report, err := bench.Run(ctx, client, target.Corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm}, benchCfg)
 	if err != nil {
 		return nil, fmt.Errorf("score arms: %w", err)
 	}

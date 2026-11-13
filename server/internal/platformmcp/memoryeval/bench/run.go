@@ -31,11 +31,14 @@ const (
 	// judgeTimeout bounds one grading call.
 	judgeTimeout = time.Minute
 
-	// evalOrgID labels completion requests; the configured key pays for them.
+	// evalOrgID labels completion requests when the config names no
+	// organization. Only a development key (OPENROUTER_DEV_KEY) can pay for
+	// them: platform keys are provisioned per stored organization.
 	evalOrgID = "memoryeval"
 
-	// evalProjectID labels completion requests. The completion client rejects
-	// a request whose project ID is not a UUID before it calls the model.
+	// evalProjectID labels completion requests when the config names no
+	// project. The completion client rejects a request whose project ID is
+	// not a UUID before it calls the model.
 	evalProjectID = "6d656d6f-7279-4576-a16c-000000000001"
 )
 
@@ -58,6 +61,27 @@ type Config struct {
 
 	// Concurrency bounds in-flight questions across models, arms and runs.
 	Concurrency int
+
+	// Billing is who answer and judge completions are billed to. Leave it
+	// empty only with a development key; a deployed server provisions its
+	// OpenRouter key per stored organization, so it must name a real one.
+	Billing Billing
+}
+
+// Billing is the organization and project completions are made for.
+type Billing struct {
+	OrganizationID string
+	ProjectID      string
+}
+
+func (b Billing) orDefault() Billing {
+	if b.OrganizationID == "" {
+		b.OrganizationID = evalOrgID
+	}
+	if b.ProjectID == "" {
+		b.ProjectID = evalProjectID
+	}
+	return b
 }
 
 // CostCapPerPassUSD is the spend cap for one answer model answering every
@@ -212,7 +236,7 @@ func runEval(ctx context.Context, client openrouter.CompletionClient, corpus *me
 			for run := range cfg.Runs {
 				for _, q := range corpus.Questions {
 					group.Go(func() error {
-						result := ask(groupCtx, client, model, corpus, a, q)
+						result := ask(groupCtx, client, cfg.Billing.orDefault(), model, corpus, a, q)
 						result.run = run
 						mu.Lock()
 						answers = append(answers, result)
@@ -229,7 +253,7 @@ func runEval(ctx context.Context, client openrouter.CompletionClient, corpus *me
 		return nil, nil, fmt.Errorf("answer questions: %w", context.Cause(ctx))
 	}
 	retryErrored(ctx, cfg.Concurrency, answers, func(ctx context.Context, first answer) answer {
-		return ask(ctx, client, first.model, corpus, armNamed(arms, first.arm), first.question)
+		return ask(ctx, client, cfg.Billing.orDefault(), first.model, corpus, armNamed(arms, first.arm), first.question)
 	})
 	if ctx.Err() != nil {
 		return nil, nil, fmt.Errorf("retry errored answers: %w", context.Cause(ctx))
@@ -243,10 +267,10 @@ func runEval(ctx context.Context, client openrouter.CompletionClient, corpus *me
 	group.SetLimit(cfg.Concurrency)
 	for i, ans := range answers {
 		group.Go(func() error {
-			verdicts[i] = judge(groupCtx, client, cfg.JudgeModel, ans)
+			verdicts[i] = judge(groupCtx, client, cfg.Billing.orDefault(), cfg.JudgeModel, ans)
 			if verdicts[i].Miss == missUngraded && groupCtx.Err() == nil {
 				first := verdicts[i].usage
-				verdicts[i] = judge(groupCtx, client, cfg.JudgeModel, ans)
+				verdicts[i] = judge(groupCtx, client, cfg.Billing.orDefault(), cfg.JudgeModel, ans)
 				verdicts[i].usage.addUsage(first)
 			}
 			return nil
@@ -347,7 +371,7 @@ func systemPrompt(corpus *memoryeval.Corpus, a Arm) string {
 }
 
 // ask runs the answering agent for one question in one arm.
-func ask(ctx context.Context, client openrouter.CompletionClient, model string, corpus *memoryeval.Corpus, a Arm, q memoryeval.Question) answer {
+func ask(ctx context.Context, client openrouter.CompletionClient, billing Billing, model string, corpus *memoryeval.Corpus, a Arm, q memoryeval.Question) answer {
 	ctx, cancel := context.WithTimeout(ctx, questionTimeout)
 	defer cancel()
 	started := time.Now()
@@ -361,7 +385,7 @@ func ask(ctx context.Context, client openrouter.CompletionClient, model string, 
 	var toolOutput strings.Builder
 
 	for turn := range maxAgentTurns {
-		response, err := client.GetCompletion(ctx, completionRequest(model, messages, tools, nil))
+		response, err := client.GetCompletion(ctx, completionRequest(billing, model, messages, tools, nil))
 		if err != nil {
 			result.err = fmt.Errorf("answer %s turn %d: %w", q.ID, turn, err)
 			break
@@ -414,11 +438,11 @@ func ask(ctx context.Context, client openrouter.CompletionClient, model string, 
 	return result
 }
 
-func completionRequest(model string, messages []or.ChatMessages, tools []openrouter.Tool, temperature *float64) openrouter.CompletionRequest {
+func completionRequest(billing Billing, model string, messages []or.ChatMessages, tools []openrouter.Tool, temperature *float64) openrouter.CompletionRequest {
 	return openrouter.CompletionRequest{
-		OrgID:                     evalOrgID,
+		OrgID:                     billing.OrganizationID,
 		Messages:                  messages,
-		ProjectID:                 evalProjectID,
+		ProjectID:                 billing.ProjectID,
 		Tools:                     tools,
 		Temperature:               temperature,
 		Model:                     model,
@@ -488,7 +512,7 @@ Use "retrieval" when the answer lacks facts it should have found, "reasoning" wh
 
 // judge grades one answer. An answer that errored is graded wrong without a
 // call; a judge call that fails leaves the answer ungraded.
-func judge(ctx context.Context, client openrouter.CompletionClient, model string, ans answer) verdict {
+func judge(ctx context.Context, client openrouter.CompletionClient, billing Billing, model string, ans answer) verdict {
 	if ans.err != nil {
 		return verdict{Correct: false, Miss: missError, Reason: ans.err.Error(), usage: noUsage}
 	}
@@ -497,7 +521,7 @@ func judge(ctx context.Context, client openrouter.CompletionClient, model string
 	started := time.Now()
 	temperature := 0.0
 	prompt := fmt.Sprintf(judgePrompt, ans.question.Text, ans.question.Answer, ans.text)
-	response, err := client.GetCompletion(ctx, completionRequest(model, []or.ChatMessages{openrouter.CreateMessageUser(prompt)}, nil, &temperature))
+	response, err := client.GetCompletion(ctx, completionRequest(billing, model, []or.ChatMessages{openrouter.CreateMessageUser(prompt)}, nil, &temperature))
 	if err != nil {
 		return verdict{Correct: false, Miss: missUngraded, Reason: "judge: " + err.Error(), usage: noUsage}
 	}

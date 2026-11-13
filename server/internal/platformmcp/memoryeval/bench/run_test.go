@@ -40,7 +40,7 @@ func TestSummarizeCountsErrorsAsWrong(t *testing.T) {
 	verdicts := []verdict{
 		{Correct: true, Miss: "", Reason: "ok", usage: usage{costUSD: 0.5}},
 		// An errored answer is never sent to the judge, so no client is needed.
-		judge(t.Context(), nil, cfg.JudgeModel, answers[1]),
+		judge(t.Context(), nil, Billing{}, cfg.JudgeModel, answers[1]),
 		{Correct: false, Miss: missUngraded, Reason: "judge: timeout"},
 		{Correct: false, Miss: "reasoning", Reason: "wrong", usage: usage{costUSD: 0.5}},
 		{Correct: true, Miss: "", Reason: "ok", usage: usage{costUSD: 0.5}},
@@ -179,7 +179,7 @@ func TestCompletionRequestPassesClientValidation(t *testing.T) {
 		keyResolverSentinel{},
 		nil, nil, nil, nil,
 	)
-	_, err := client.GetCompletion(t.Context(), completionRequest("anthropic/claude-sonnet-5.5", []or.ChatMessages{openrouter.CreateMessageUser("hi")}, nil, nil))
+	_, err := client.GetCompletion(t.Context(), completionRequest(Billing{}.orDefault(), "anthropic/claude-sonnet-5.5", []or.ChatMessages{openrouter.CreateMessageUser("hi")}, nil, nil))
 	require.ErrorIs(t, err, errReachedKeyResolver)
 }
 
@@ -242,4 +242,40 @@ func TestMemoAndDigestCitationsCountThroughTheirChats(t *testing.T) {
 	require.Equal(t, 4, s.CitedAnswers)
 	require.Equal(t, 2, s.ValidCited, "the source digest, and the source chat beside an unchecked memo")
 	require.Equal(t, 4, s.MemoOrDigestCited)
+}
+
+// billingRecorder answers every question "Not found", grades every answer
+// correct and records which organization and project each call bills.
+type billingRecorder struct {
+	openrouter.CompletionClient
+
+	mu    sync.Mutex
+	bills map[Billing]int
+}
+
+func (b *billingRecorder) GetCompletion(_ context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+	b.mu.Lock()
+	b.bills[Billing{OrganizationID: request.OrgID, ProjectID: request.ProjectID}]++
+	b.mu.Unlock()
+	var response openrouter.CompletionResponse
+	response.Content = "Not found"
+	if request.Temperature != nil {
+		response.Content = `{"correct": true, "miss": "", "reason": "ok"}`
+	}
+	return &response, nil
+}
+
+// TestRunBillsTheConfiguredOrganization checks that answers and grading are
+// billed to the configured organization: a deployed server provisions its
+// OpenRouter key per stored organization, so the placeholder label fails.
+func TestRunBillsTheConfiguredOrganization(t *testing.T) {
+	t.Parallel()
+	corpus := memoryeval.Build(testNow)
+	billing := Billing{OrganizationID: "org-with-corpus", ProjectID: uuid.NewString()}
+	client := &billingRecorder{bills: map[Billing]int{}}
+	cfg := Config{AnswerModels: []string{"anthropic/claude-sonnet-5.5"}, JudgeModel: "openai/gpt-5.5", Runs: 1, Concurrency: 4, Billing: billing}
+
+	_, err := Run(t.Context(), client, corpus, []Arm{NoMemoryArm()}, cfg)
+	require.NoError(t, err)
+	require.Equal(t, map[Billing]int{billing: 2 * len(corpus.Questions)}, client.bills)
 }
