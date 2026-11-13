@@ -34,6 +34,7 @@ jobs:
       verify: ${{ github.event_name != 'push' }}
       server: ${{ steps.gates.outputs.server }}
       client: ${{ steps.gates.outputs.client }}
+      tooling: ${{ steps.gates.outputs.tooling }}
       cli: ${{ steps.gates.outputs.cli }}
       hooks: ${{ steps.gates.outputs.hooks }}
       functions: ${{ steps.gates.outputs.functions }}
@@ -120,6 +121,7 @@ jobs:
           STACKED_PYSTREAMS: ${{ steps.stacked.outputs.pystreams }}
           STEPS_FILTER_OUTPUTS_SERVER: ${{ steps.filter.outputs.server }}
           STEPS_FILTER_OUTPUTS_CLIENT: ${{ steps.filter.outputs.client }}
+          STEPS_FILTER_OUTPUTS_TOOLING: ${{ steps.filter.outputs.tooling }}
           STEPS_FILTER_OUTPUTS_CLI: ${{ steps.filter.outputs.cli }}
           STEPS_FILTER_OUTPUTS_HOOKS: ${{ steps.filter.outputs.hooks }}
           STEPS_FILTER_OUTPUTS_FUNCTIONS: ${{ steps.filter.outputs.functions }}
@@ -152,6 +154,13 @@ jobs:
             echo "Client jobs will run."
           else
             echo "Client jobs will be skipped."
+          fi
+
+          if [[ "${STEPS_FILTER_OUTPUTS_TOOLING}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "tooling=true" >> $GITHUB_OUTPUT
+            echo "Tooling checks will run."
+          else
+            echo "Tooling checks will be skipped."
           fi
 
           if [[ "${STEPS_FILTER_OUTPUTS_CLI}" == "true" || "${GITHUB_REF}" ==  "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
@@ -2477,6 +2486,46 @@ jobs:
           headers: |-
             cache-control: public, max-age=31536000, immutable
 
+  tooling-lint:
+    name: tooling-lint
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [changes]
+    if: |
+      !cancelled() &&
+      needs.changes.outputs.verify == 'true' &&
+      needs.changes.outputs.tooling == 'true'
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache aube store
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
+          path: |
+            ${{ env.AUBE_STORE_PATH }}
+
+      - name: Install dependencies
+        run: aube install --frozen-lockfile
+
+      - name: Type-check tooling
+        run: mise run lint:tooling
+
   client-build-lint:
     name: client-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -2519,13 +2568,8 @@ jobs:
           NODE_ENV: production
         run: mise exec --env viteprod -- aube run build
 
-      - name: Lint
-        run: aube run lint
-        working-directory: client/dashboard
-
-      - name: Lint admin
-        run: aube run lint
-        working-directory: client/admin
+      - name: Lint workspace packages
+        run: mise run lint:client
 
       - name: Knip (dead code / unused deps)
         run: aube run knip
@@ -3294,6 +3338,7 @@ jobs:
       - upload-dashboard-assets
       - docker-build-pystreams
       - client-build-lint
+      - tooling-lint
       - client-test
       - sdk-gen-check
       - cli-build-lint
