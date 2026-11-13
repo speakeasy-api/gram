@@ -4,7 +4,13 @@ import { useReducer } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { initialState, reduce, type Action } from "./state";
+import {
+  initialState,
+  reduce,
+  validate,
+  type State,
+  type Action,
+} from "./state";
 import { SetupContext } from "./setup-context";
 import { ProviderTask } from "./ProviderTasks";
 
@@ -480,4 +486,185 @@ it("renders the published installation link and support handoff details", async 
     screen.getByText(/Your next step is with Speakeasy support/),
   ).toBeDefined();
   expect(screen.queryByLabelText("Consumer Key")).toBeNull();
+});
+
+describe("Snowflake instructions", () => {
+  it("keeps SQL workspace instructions on their own step without input fields", () => {
+    const account = task("account");
+    expect(screen.queryByText(/Projects → Workspaces/)).toBeNull();
+    account.unmount();
+    task("workspace");
+    expect(screen.getByText("Projects → Workspaces")).toBeDefined();
+    expect(screen.getByText("SQL File")).toBeDefined();
+    expect(screen.getByText(/Choose an available warehouse/)).toBeDefined();
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+  it("normalizes a pasted account URL to its hostname when leaving the field", async () => {
+    function Account() {
+      const [s, dispatch] = useReducer(reduce, {
+        ...initialState("snowflake"),
+        step: "account",
+      });
+      return (
+        <SetupContext
+          value={{ s, dispatch, live: connectionFixture(dispatch) }}
+        >
+          <ProviderTask serverName="Snowflake" />
+        </SetupContext>
+      );
+    }
+    const user = userEvent.setup();
+    render(<Account />);
+    const input = screen.getByLabelText("Public Account/Server URL");
+    await user.click(input);
+    await user.paste("https://EXAMPLE-ACCOUNT.snowflakecomputing.com/");
+    await user.tab();
+    expect(input).toHaveProperty(
+      "value",
+      "example-account.snowflakecomputing.com",
+    );
+  });
+  function task(
+    step: string,
+    values = {},
+    saved = false,
+    errors: State["errors"] = {},
+  ) {
+    const initial = initialState("snowflake"),
+      dispatch = vi.fn<() => void>();
+    return render(
+      <SetupContext
+        value={{
+          s: {
+            ...initial,
+            step,
+            saved,
+            errors,
+            values: { ...initial.values, ...values },
+          },
+          dispatch,
+          live: connectionFixture(dispatch, {
+            loading: false,
+            callbackUrl: "https://retained.example/callback",
+          }),
+        }}
+      >
+        <ProviderTask serverName="Snowflake" />
+      </SetupContext>,
+    );
+  }
+
+  it("uses the approved shared plan card before collecting account details", () => {
+    task("begin");
+    expect(
+      screen.getByRole("heading", {
+        name: "Let’s connect Snowflake to Speakeasy.",
+      }),
+    ).toBeDefined();
+    expect(
+      screen.getByText("Check permissions and region availability"),
+    ).toBeDefined();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByText("Identity")).toBeNull();
+  });
+
+  it("routes credentials to the Snowflake SQL and required fields", () => {
+    const { container } = task("credentials", {
+      oauthIntegration: "EXAMPLE_OAUTH",
+    });
+    expect(
+      container.querySelector('[data-sql="credentials"]')?.textContent,
+    ).toContain("SYSTEM$SHOW_OAUTH_CLIENT_SECRETS('EXAMPLE_OAUTH')");
+    expect(screen.getByLabelText("Client ID")).toBeDefined();
+    expect(screen.getByLabelText("Client Secret")).toBeDefined();
+  });
+  it("shows invalid connection recovery on the credentials step", () => {
+    const state = { ...initialState("snowflake"), step: "credentials" };
+    task("credentials", {}, false, validate(state));
+    expect(
+      screen.getByText(/Review the Snowflake account and server details/),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Review account" }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Review server details" }),
+    ).toBeDefined();
+  });
+  it("keeps creation instructions visible while incomplete SQL cannot be copied", () => {
+    const { container } = task("create", {
+      creatorRole: "EXAMPLE_CREATOR",
+      database: "",
+      schema: "",
+      serverName: "",
+    });
+    expect(container.querySelector("[data-sql]")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Copy SQL" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(
+      screen.getByText(/Copy the SQL below into your SQL file/),
+    ).toBeDefined();
+  });
+
+  it.each([
+    ["creator", "Grant access"],
+    ["access", "4. Assign the role and user defaults"],
+    ["oauth", "Create the integration in Snowflake"],
+  ])(
+    "keeps %s instructions visible before inputs are filled",
+    (step, heading) => {
+      task(step, {
+        creatorRole: "",
+        accessRole: "",
+        warehouse: "",
+        users: "",
+        oauthIntegration: "",
+      });
+      expect(screen.getByRole("heading", { name: heading })).toBeDefined();
+      for (const button of screen.getAllByRole("button", { name: "Copy SQL" }))
+        expect(button).toHaveProperty("disabled", true);
+      for (const summary of screen.getAllByText("View SQL"))
+        expect(summary.closest("details")).toHaveProperty("open", false);
+    },
+  );
+
+  it.each([false, true])(
+    "keeps OAuth instructions visible during callback recovery (failed=%s)",
+    (failed) => {
+      callback.data.callbackUrl = "";
+      callback.isError = failed;
+      const { container } = task("oauth", {
+        oauthIntegration: "EXAMPLE_OAUTH",
+      });
+      expect(container.querySelector('[data-sql="oauth"]')).not.toBeNull();
+      expect(
+        screen.queryByText("Create the integration in Snowflake"),
+      ).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Copy SQL" })).toHaveProperty(
+        "disabled",
+        true,
+      );
+      expect(
+        screen.getByText(
+          failed ? /Couldn’t load the callback URL/ : /Loading callback URL/,
+        ),
+      ).toBeDefined();
+    },
+  );
+  it.each([false, true])("uses the actual callback (saved=%s)", (saved) => {
+    const { container } = task(
+      "oauth",
+      { oauthIntegration: "SPEAKEASY_OAUTH" },
+      saved,
+    );
+    const text = container.querySelector('[data-sql="oauth"]')?.textContent;
+    expect(text).toContain(
+      saved
+        ? "https://retained.example/callback"
+        : "https://current.example/callback",
+    );
+    expect(text).toContain("OAUTH_CLIENT_TYPE = 'CONFIDENTIAL'");
+  });
 });

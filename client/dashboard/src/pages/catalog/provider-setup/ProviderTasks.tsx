@@ -1,4 +1,8 @@
 import { SalesforceTask } from "./SalesforceTask";
+import {
+  SnowflakeTask,
+  SnowflakeCredentialInstructions,
+} from "./SnowflakeTask";
 import { useSetup } from "./setup-context";
 import { names, orgValid } from "./state";
 import type { ReactNode } from "react";
@@ -40,6 +44,20 @@ function Plan() {
           </div>
         </Card.Content>
       </Card>
+      {s.provider === "snowflake" && (
+        <details className="mt-6">
+          <summary>Check permissions and region availability</summary>
+          <p className="mt-3">
+            You’ll need a security owner to grant access, a role that can create
+            the MCP server if needed, and ACCOUNTADMIN or a delegated role with
+            CREATE INTEGRATION for OAuth. These can be different people.
+          </p>
+          <p className="mt-3">
+            This setup isn’t available in China or government regions. Each
+            person will sign in using their own Snowflake account.
+          </p>
+        </details>
+      )}
       {s.provider === "github" && (
         <details className="mt-6">
           <summary>Organization approval and SSO</summary>
@@ -127,12 +145,23 @@ function Credentials() {
           </Correction>
         </Alert>
       )}
-      <InProvider
-        actions={credentialInstructions(
-          s.provider,
-          s.values.appChoice === "existing",
-        )}
-      />
+      {s.provider === "snowflake" ? (
+        <SnowflakeCredentialInstructions />
+      ) : (
+        <InProvider
+          actions={credentialInstructions(
+            s.provider,
+            s.values.appChoice === "existing",
+          )}
+        />
+      )}
+      {s.provider === "snowflake" && s.errors.host && (
+        <Alert variant="error">
+          {s.errors.host} <Correction step="account">Review account</Correction>
+          {" · "}
+          <Correction step="server">Review server details</Correction>
+        </Alert>
+      )}
       <SetupField
         field="clientId"
         label={s.provider === "salesforce" ? "Consumer Key" : "Client ID"}
@@ -439,6 +468,7 @@ export function ProviderTask({
   const { s } = useSetup();
   if (s.step === "begin") return <Plan />;
   if (s.step === "credentials") return <Credentials />;
+  if (s.provider === "snowflake") return <SnowflakeTask />;
   if (s.provider === "salesforce") return <SalesforceTask />;
   if (s.provider === "github") return <GitHubTask />;
   return <SlackTask serverName={serverName} />;

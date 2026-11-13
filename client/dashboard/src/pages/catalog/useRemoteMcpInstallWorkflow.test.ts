@@ -1,3 +1,7 @@
+import {
+  snowflakeRemoteTemplate,
+  snowflakeSetupUrl,
+} from "./snowflake-install";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -249,6 +253,95 @@ describe("useRemoteMcpInstallWorkflow", () => {
       await pending;
     });
     expect(mockCreateServer).not.toHaveBeenCalled();
+  });
+
+  it("creates native Snowflake disabled before account configuration without probing or OAuth", async () => {
+    const servers = [
+      makeServer({
+        registrySpecifier: "com.snowflake/cortex-mcp",
+        remotes: [remote(snowflakeRemoteTemplate)],
+      }),
+    ];
+    const initialConfiguration = { identityMode: "user" as const };
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        snowflakeSetupEnabled: true,
+        initialConfiguration,
+      }),
+    );
+    await act(async () => {
+      if (result.current.phase !== "configure")
+        throw new Error("Expected configure");
+      await result.current.startInstall();
+    });
+    expect(mockCreateServer).toHaveBeenCalledWith(
+      {
+        createServerForm: {
+          name: "com.snowflake/cortex-mcp",
+          url: snowflakeSetupUrl,
+          transportType: "streamable-http",
+        },
+      },
+      undefined,
+      undefined,
+    );
+    expect(mockMcpServersCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        createMcpServerForm: expect.objectContaining({
+          remoteMcpServerId: "rms-1",
+          visibility: "disabled",
+        }),
+      }),
+      undefined,
+      undefined,
+    );
+    expect(mockProbeURL).not.toHaveBeenCalled();
+    expect(mockDiscoverProtectedResourceMetadata).not.toHaveBeenCalled();
+    expect(mockCommitIdentity).not.toHaveBeenCalled();
+    expect(mockMcpServersUpdate).not.toHaveBeenCalled();
+    expect(result.current.phase).toBe("complete");
+    if (result.current.phase !== "complete")
+      throw new Error("Expected complete");
+    expect(result.current.statuses[0]).toMatchObject({
+      mcpServerId: "mcp-server-1",
+      remoteUrl: snowflakeSetupUrl,
+      identityMode: "user",
+      setupRequired: expect.any(String),
+    });
+  });
+
+  it("retains Snowflake customize intent for server Setup instead of opening a competing editor", async () => {
+    const servers = [
+      makeServer({
+        registrySpecifier: "com.snowflake/cortex-mcp",
+        remotes: [remote(snowflakeRemoteTemplate)],
+      }),
+    ];
+    const initialConfiguration = { identityMode: "user" as const };
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        initialConfiguration,
+        snowflakeSetupEnabled: true,
+        offerGuardrails: true,
+      }),
+    );
+    act(() => {
+      if (result.current.phase === "configure")
+        result.current.continueToGuardrails?.();
+    });
+    await act(async () => {
+      if (result.current.phase !== "guardrails")
+        throw new Error("Expected guardrails");
+      expect(await result.current.installForCustomizing()).toEqual([]);
+    });
+    if (result.current.phase !== "complete")
+      throw new Error("Expected complete");
+    expect(result.current.statuses[0]?.setupPolicy?.categories).toEqual(
+      new Set(["secrets", "pii"]),
+    );
+    expect(mockCreatePolicy).not.toHaveBeenCalled();
   });
 
   it("retains accepted servers when policy creation fails", async () => {

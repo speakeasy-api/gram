@@ -1,4 +1,8 @@
 import {
+  snowflakeConnection,
+  snowflakeSelectionForUrl,
+} from "@/pages/catalog/provider-setup/snowflake";
+import {
   salesforceConnection,
   salesforceInstance,
   salesforceInstanceConfiguration,
@@ -8,7 +12,7 @@ import {
   SalesforceInstanceConfigurationError,
   salesforceSelectionForUrl,
 } from "@/pages/catalog/provider-setup/salesforce";
-import { salesforceSourceFingerprint } from "./provider-setup";
+import { providerSourceFingerprint } from "./provider-setup";
 import { invalidateRemoteMcpSourceViews } from "../tabs/settings/sections/sourceInvalidation";
 import { invalidateAllRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders";
 import { useServerClientConfiguration } from "@/lib/remote-identity/queries/useServerClientConfiguration";
@@ -133,6 +137,7 @@ export function useProviderConnection(
   dispatch: Dispatch<Action>,
   server: McpServer,
   source?: { url: string; instanceUrl?: string },
+  onConfigured?: () => Promise<void>,
 ): ProviderConnection {
   const providerKey = s.provider;
   if (providerKey === "salesforce" && source?.instanceUrl)
@@ -145,10 +150,21 @@ export function useProviderConnection(
       providerKey === "salesforce" ? salesforceConnection(s.values) : null,
     [providerKey, s.values],
   );
+  const configurableSource =
+    providerKey === "salesforce" || providerKey === "snowflake";
+  const selectedConnection =
+    providerKey === "snowflake" ? snowflakeConnection(s.values) : salesforce;
   const config =
     providerKey === "salesforce"
       ? (salesforce ?? salesforceLogin())
-      : providers[providerKey];
+      : providerKey === "snowflake"
+        ? (selectedConnection ?? {
+            name: "Snowflake",
+            issuer: "https://snowflake.invalid",
+            authorizationEndpoint: "https://snowflake.invalid/oauth/authorize",
+            tokenEndpoint: "https://snowflake.invalid/oauth/token-request",
+          })
+        : providers[providerKey];
   const name = config.name;
   const access = s.values.access;
   const requestedScopes = useMemo(
@@ -157,7 +173,9 @@ export function useProviderConnection(
         ? scopesFor({ values: { access } })
         : providerKey === "salesforce"
           ? salesforceScopes()
-          : [],
+          : providerKey === "snowflake"
+            ? ["session:role:all"]
+            : [],
     [access, providerKey],
   );
   const sdk = useSdkClient();
@@ -199,7 +217,7 @@ export function useProviderConnection(
   const appliedSource = useRef(source ? { ...source } : undefined);
   const observedSource = useRef({ ...source, id: server.remoteMcpServerId });
   useEffect(() => {
-    if (providerKey !== "salesforce" || !source) return;
+    if (!configurableSource || !source) return;
     const previous = observedSource.current;
     const id = server.remoteMcpServerId;
     const changed =
@@ -226,12 +244,15 @@ export function useProviderConnection(
         appliedSource.current = { ...source };
         dispatch({
           type: "source",
-          values: {
-            salesforceDomain: "",
-            ...salesforceSelectionForUrl(source.url),
-            instanceUrl: source.instanceUrl ?? "",
-          },
-          sourceFingerprint: salesforceSourceFingerprint(id, source),
+          values:
+            providerKey === "snowflake"
+              ? (snowflakeSelectionForUrl(source.url) ?? {})
+              : {
+                  salesforceDomain: "",
+                  ...salesforceSelectionForUrl(source.url),
+                  instanceUrl: source.instanceUrl ?? "",
+                },
+          sourceFingerprint: providerSourceFingerprint(id, source),
         });
         return;
       }
@@ -239,13 +260,11 @@ export function useProviderConnection(
     if (!s.sourceFingerprint && appliedSource.current)
       dispatch({
         type: "connection",
-        sourceFingerprint: salesforceSourceFingerprint(
-          id,
-          appliedSource.current,
-        ),
+        sourceFingerprint: providerSourceFingerprint(id, appliedSource.current),
       });
   }, [
     providerKey,
+    configurableSource,
     server.remoteMcpServerId,
     source,
     s.sourceFingerprint,
@@ -266,7 +285,11 @@ export function useProviderConnection(
     server.remoteMcpServerId,
     server.environmentId,
     server.updatedAt,
-    ...(providerKey === "salesforce" ? [config.issuer] : []),
+    ...(providerKey === "salesforce"
+      ? [config.issuer]
+      : configurableSource
+        ? [config.issuer, source?.url, source?.instanceUrl]
+        : []),
   ]);
   const currentTarget = useRef(targetKey);
   const observedClient = useRef<string | null>(null);
@@ -316,6 +339,11 @@ export function useProviderConnection(
         authorized: false,
         tested: false,
         ...(!status.data ? { saved: false } : {}),
+        ...(providerKey === "snowflake" &&
+        status.data &&
+        !sameScopes(status.data.client.scope, requestedScopes)
+          ? { saved: false, configChanged: true }
+          : {}),
       });
       if (!preparing) {
         generation.current++;
@@ -324,18 +352,27 @@ export function useProviderConnection(
       }
     }
     observedClient.current = fingerprint;
-  }, [status.isSuccess, status.data, preparing, dispatch, cancelPopup]);
+  }, [
+    status.isSuccess,
+    status.data,
+    preparing,
+    dispatch,
+    cancelPopup,
+    providerKey,
+    requestedScopes,
+  ]);
   useEffect(() => {
     if (!status.isSuccess || hydrated.current) return;
     hydrated.current = true;
     if (
       status.data &&
-      (providerKey !== "salesforce" ||
+      (!configurableSource ||
         (!s.configChanged &&
-          salesforce &&
-          salesforce.url === appliedSource.current?.url &&
-          (salesforce.instanceUrl ?? "") ===
-            (appliedSource.current?.instanceUrl ?? "")))
+          selectedConnection &&
+          selectedConnection.url === appliedSource.current?.url &&
+          ("instanceUrl" in selectedConnection
+            ? (selectedConnection.instanceUrl ?? "")
+            : "") === (appliedSource.current?.instanceUrl ?? "")))
     ) {
       if (providerKey === "slack" && !s.accessChosen)
         dispatch({
@@ -346,14 +383,15 @@ export function useProviderConnection(
             ? "all"
             : "read",
         });
+      const scopeMismatch =
+        (providerKey === "snowflake" || s.accessChosen) &&
+        !sameScopes(status.data.client.scope, requestedScopes);
       dispatch({
         type: "connection",
-        saved: true,
+        saved: providerKey !== "snowflake" || !scopeMismatch,
         authorized: false,
         tested: false,
-        configChanged:
-          s.accessChosen &&
-          !sameScopes(status.data.client.scope, requestedScopes),
+        configChanged: scopeMismatch,
       });
     }
   }, [
@@ -363,7 +401,8 @@ export function useProviderConnection(
     providerKey,
     s.accessChosen,
     requestedScopes,
-    salesforce,
+    selectedConnection,
+    configurableSource,
     s.configChanged,
   ]);
 
@@ -386,16 +425,27 @@ export function useProviderConnection(
     [sdk, queryClient],
   );
 
-  const prepareSalesforceSource = useCallback(
+  const prepareProviderSource = useCallback(
     async (
       run: number,
       write: boolean,
       registerRollback?: (rollback: () => Promise<void>) => void,
     ) => {
-      if (providerKey !== "salesforce") return;
-      const selected = salesforceConnection(s.values);
+      if (!configurableSource) return;
+      const selected =
+        providerKey === "snowflake"
+          ? snowflakeConnection(s.values)
+          : salesforceConnection(s.values);
+      const selectedInstance =
+        selected && "instanceUrl" in selected
+          ? selected.instanceUrl
+          : undefined;
       const id = server.remoteMcpServerId;
-      if (!selected || !id || s.values.path !== "own")
+      if (
+        !selected ||
+        !id ||
+        (providerKey === "salesforce" && s.values.path !== "own")
+      )
         throw new ConfigurationChanged();
       const target = await sdk.mcpServers.get({ id: server.id });
       if (
@@ -416,7 +466,9 @@ export function useProviderConnection(
       )
         throw new ConfigurationChanged();
       const { header: instance, instanceUrl: currentInstance } =
-        salesforceInstanceConfiguration(headers);
+        providerKey === "salesforce"
+          ? salesforceInstanceConfiguration(headers)
+          : { header: undefined, instanceUrl: "" };
       const expected = appliedSource.current;
       if (
         !expected ||
@@ -425,7 +477,7 @@ export function useProviderConnection(
       )
         throw new ConfigurationChanged();
       const changeUrl = upstream.url !== selected.url;
-      const changeInstance = currentInstance !== (selected.instanceUrl ?? "");
+      const changeInstance = currentInstance !== (selectedInstance ?? "");
       if (!changeUrl && !changeInstance) return;
       if (!write) throw new ConfigurationChanged();
       const { mcpServers } = await sdk.mcpServers.list();
@@ -440,76 +492,77 @@ export function useProviderConnection(
         url: upstream.url,
         instanceUrl: currentInstance,
       };
-      registerRollback?.(async () => {
-        if (generation.current !== run) throw new ConfigurationChanged();
-        const latestTarget = await sdk.mcpServers.get({ id: server.id });
-        const latestRemote = await sdk.remoteMcp.getServer({ id });
-        const latestHeaders = await sdk.remoteMcp.listServerHeaders({
-          remoteMcpServerId: id,
-        });
-        const latestInstance = salesforceInstanceConfiguration(
-          latestHeaders.headers,
-        );
-        const latestLinks = await sdk.mcpServers.list();
-        const applied = appliedSource.current;
-        if (
-          generation.current !== run ||
-          latestLinks.mcpServers.some(
-            (item) => item.id !== server.id && item.remoteMcpServerId === id,
-          ) ||
-          latestTarget.remoteMcpServerId !== id ||
-          latestTarget.environmentId !== server.environmentId ||
-          !applied ||
-          latestRemote.url !== applied.url ||
-          latestInstance.instanceUrl !== (applied.instanceUrl ?? "")
-        )
-          throw new ConfigurationChanged();
-        if (latestRemote.url !== originalSource.url) {
-          await sdk.remoteMcp.updateServer({
-            updateServerForm: { id, url: originalSource.url },
+      if (providerKey === "salesforce")
+        registerRollback?.(async () => {
+          if (generation.current !== run) throw new ConfigurationChanged();
+          const latestTarget = await sdk.mcpServers.get({ id: server.id });
+          const latestRemote = await sdk.remoteMcp.getServer({ id });
+          const latestHeaders = await sdk.remoteMcp.listServerHeaders({
+            remoteMcpServerId: id,
           });
-          appliedSource.current = {
-            ...appliedSource.current!,
-            url: originalSource.url,
-          };
-        }
-        if (latestInstance.instanceUrl !== originalSource.instanceUrl) {
-          if (instance) {
-            const form = {
-              name: instance.name,
-              description: instance.description,
-              value: instance.value,
-              isRequired: instance.isRequired,
-              isSecret: false,
-            };
-            if (latestInstance.header)
-              await sdk.remoteMcp.updateServerHeader({
-                updateServerHeaderForm: {
-                  ...form,
-                  id: latestInstance.header.id,
-                },
-              });
-            else
-              await sdk.remoteMcp.createServerHeader({
-                createServerHeaderForm: { ...form, remoteMcpServerId: id },
-              });
-          } else if (latestInstance.header)
-            await sdk.remoteMcp.deleteServerHeader({
-              id: latestInstance.header.id,
+          const latestInstance = salesforceInstanceConfiguration(
+            latestHeaders.headers,
+          );
+          const latestLinks = await sdk.mcpServers.list();
+          const applied = appliedSource.current;
+          if (
+            generation.current !== run ||
+            latestLinks.mcpServers.some(
+              (item) => item.id !== server.id && item.remoteMcpServerId === id,
+            ) ||
+            latestTarget.remoteMcpServerId !== id ||
+            latestTarget.environmentId !== server.environmentId ||
+            !applied ||
+            latestRemote.url !== applied.url ||
+            latestInstance.instanceUrl !== (applied.instanceUrl ?? "")
+          )
+            throw new ConfigurationChanged();
+          if (latestRemote.url !== originalSource.url) {
+            await sdk.remoteMcp.updateServer({
+              updateServerForm: { id, url: originalSource.url },
             });
-        }
-        appliedSource.current = originalSource;
-        dispatch({
-          type: "connection",
-          sourceFingerprint: salesforceSourceFingerprint(id, originalSource),
+            appliedSource.current = {
+              ...appliedSource.current!,
+              url: originalSource.url,
+            };
+          }
+          if (latestInstance.instanceUrl !== originalSource.instanceUrl) {
+            if (instance) {
+              const form = {
+                name: instance.name,
+                description: instance.description,
+                value: instance.value,
+                isRequired: instance.isRequired,
+                isSecret: false,
+              };
+              if (latestInstance.header)
+                await sdk.remoteMcp.updateServerHeader({
+                  updateServerHeaderForm: {
+                    ...form,
+                    id: latestInstance.header.id,
+                  },
+                });
+              else
+                await sdk.remoteMcp.createServerHeader({
+                  createServerHeaderForm: { ...form, remoteMcpServerId: id },
+                });
+            } else if (latestInstance.header)
+              await sdk.remoteMcp.deleteServerHeader({
+                id: latestInstance.header.id,
+              });
+          }
+          appliedSource.current = originalSource;
+          dispatch({
+            type: "connection",
+            sourceFingerprint: providerSourceFingerprint(id, originalSource),
+          });
         });
-      });
       if (changeInstance) {
-        if (selected.instanceUrl) {
+        if (selectedInstance) {
           const form = {
             name: instance?.name ?? salesforceInstanceHeader,
             description: instance?.description,
-            value: selected.instanceUrl,
+            value: selectedInstance,
             isRequired: true,
             isSecret: false,
           };
@@ -527,11 +580,11 @@ export function useProviderConnection(
         // Retain completed writes so a failed later operation can be retried.
         appliedSource.current = {
           ...expected,
-          instanceUrl: selected.instanceUrl ?? "",
+          instanceUrl: selectedInstance ?? "",
         };
         dispatch({
           type: "connection",
-          sourceFingerprint: salesforceSourceFingerprint(
+          sourceFingerprint: providerSourceFingerprint(
             id,
             appliedSource.current,
           ),
@@ -545,11 +598,11 @@ export function useProviderConnection(
         if (generation.current !== run) throw new ConfigurationChanged();
         appliedSource.current = {
           url: selected.url,
-          instanceUrl: selected.instanceUrl ?? "",
+          instanceUrl: selectedInstance ?? "",
         };
         dispatch({
           type: "connection",
-          sourceFingerprint: salesforceSourceFingerprint(
+          sourceFingerprint: providerSourceFingerprint(
             id,
             appliedSource.current,
           ),
@@ -559,6 +612,7 @@ export function useProviderConnection(
     },
     [
       providerKey,
+      configurableSource,
       s.values,
       server.id,
       server.remoteMcpServerId,
@@ -571,7 +625,7 @@ export function useProviderConnection(
 
   const checkConnection = useCallback(async () => {
     const run = generation.current;
-    await prepareSalesforceSource(run, false);
+    await prepareProviderSource(run, false);
     const result = await unwrapAsync(
       remoteSessionsTestServerConnection(
         sdk,
@@ -621,7 +675,7 @@ export function useProviderConnection(
     providerKey,
     status.data?.client.id,
     revokeSessions,
-    prepareSalesforceSource,
+    prepareProviderSource,
   ]);
 
   useEffect(() => {
@@ -768,7 +822,23 @@ export function useProviderConnection(
     if (activeSave.current !== null) return;
     const run = generation.current;
     if (s.saved && !s.values.clientId && !s.values.clientSecret) {
-      dispatch({ type: "goto", step: "test" });
+      if (onConfigured) {
+        setPhase("saving");
+        setFailure(null);
+        try {
+          await onConfigured();
+        } catch {
+          if (generation.current === run)
+            fail(
+              "save",
+              `Couldn’t finish the ${name} connection. Try saving again.`,
+            );
+          return;
+        } finally {
+          setPhase("idle");
+        }
+      }
+      if (generation.current === run) dispatch({ type: "goto", step: "test" });
       return;
     }
     if (Object.keys(validate(s)).length) {
@@ -778,12 +848,12 @@ export function useProviderConnection(
     activeSave.current = run;
     setPhase("saving");
     setFailure(null);
-    if (providerKey === "salesforce")
+    if (configurableSource)
       dispatch({ type: "connection", configChanged: true });
     let rollbackSource: (() => Promise<void>) | undefined;
     let identityCommitted = false;
     try {
-      await prepareSalesforceSource(run, true, (rollback) => {
+      await prepareProviderSource(run, true, (rollback) => {
         rollbackSource = rollback;
       });
       if (generation.current !== run) return;
@@ -840,7 +910,7 @@ export function useProviderConnection(
         throw new ConfigurationChanged();
       }
       const issuerDigest =
-        providerKey === "salesforce" && !provider
+        configurableSource && !provider
           ? Array.from(
               new Uint8Array(
                 await crypto.subtle.digest(
@@ -904,6 +974,19 @@ export function useProviderConnection(
           },
         });
       if (generation.current !== run) return;
+      // Native account-specific sources can finish their existing catalog
+      // handoff only after provider configuration is committed.
+      try {
+        await onConfigured?.();
+      } catch {
+        if (generation.current === run)
+          fail(
+            "save",
+            `${name} credentials were saved, but the connection handoff couldn’t be finished. Try again.`,
+          );
+        return;
+      }
+      if (generation.current !== run) return;
       dispatch({ type: "field", field: "clientId", value: "" });
       dispatch({ type: "field", field: "clientSecret", value: "" });
       dispatch({
@@ -911,7 +994,7 @@ export function useProviderConnection(
         saved: true,
         authorized: false,
         tested: false,
-        ...(providerKey === "salesforce" ? { configChanged: false } : {}),
+        ...(configurableSource ? { configChanged: false } : {}),
       });
       dispatch({ type: "goto", step: "test" });
       await Promise.all([
@@ -955,7 +1038,7 @@ export function useProviderConnection(
         activeSave.current = null;
         setPhase("idle");
       }
-      if (providerKey === "salesforce") {
+      if (configurableSource) {
         await Promise.all([
           invalidateRemoteMcpSourceViews(queryClient),
           invalidateAllRemoteMcpServerHeaders(queryClient),
@@ -966,7 +1049,7 @@ export function useProviderConnection(
 
   const signIn = async () => {
     const run = generation.current;
-    if (pending || (providerKey === "salesforce" && !ready(s))) return;
+    if (pending || (configurableSource && !ready(s))) return;
     setFailure(null);
     const slug = server.platformEndpointSlug;
     if (!slug) {
@@ -1006,7 +1089,7 @@ export function useProviderConnection(
             );
             throw new Error("Missing credentials");
           }
-          await prepareSalesforceSource(run, false);
+          await prepareProviderSource(run, false);
           if (providerKey === "slack") await syncPermissions(requestedScopes);
           if (generation.current !== run)
             throw new Error("Setup target changed");
@@ -1040,7 +1123,7 @@ export function useProviderConnection(
 
   const test = async () => {
     const run = generation.current;
-    if (pending || (providerKey === "salesforce" && !ready(s))) return;
+    if (pending || (configurableSource && !ready(s))) return;
     setPhase("testing");
     setFailure(null);
     setToolCount(null);
