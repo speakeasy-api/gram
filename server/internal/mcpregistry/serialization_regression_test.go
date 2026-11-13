@@ -35,7 +35,7 @@ func TestAcceptedInputSurvivesJSONBSerialization(t *testing.T) {
 	require.NoError(t, err)
 	discovered, err := s.Discover(ctx, DiscoveryOptions{Limit: 10})
 	require.NoError(t, err)
-	require.Len(t, discovered.Records, 2, "accepted published record must survive discovery validation")
+	require.Len(t, discovered.Records, 1, "only the selected published default is discoverable after withdrawal")
 	for _, record := range discovered.Records {
 		require.Contains(t, string(record), "9007199254740993")
 		require.Contains(t, string(record), "1.234567890123456789")

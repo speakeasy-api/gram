@@ -83,6 +83,7 @@ func (s *Service) Discover(ctx context.Context, opts DiscoveryOptions) (Discover
 		return DiscoveryPage{}, fmt.Errorf("query discovery records: %w", err)
 	}
 	page := DiscoveryPage{Records: make([]json.RawMessage, 0, len(rows)), NextCursor: ""}
+	responseBytes := 0
 	for i, row := range rows {
 		if row.DataBytes > 16<<20 && i == 0 {
 			return DiscoveryPage{}, fmt.Errorf("discovery record exceeds page byte budget")
@@ -95,27 +96,45 @@ func (s *Service) Discover(ctx context.Context, opts DiscoveryOptions) (Discover
 			page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 			break
 		}
-		c.Name = row.DiscoveryName
 		if len(s.validator.ValidateStored(row.Data)) == 0 {
-			page.Records = append(page.Records, json.RawMessage(row.Data))
+			data, err := discoveryMetadata(row.Data, row.IsLatest)
+			if err != nil {
+				return DiscoveryPage{}, err
+			}
+			if len(data) > 16<<20 {
+				return DiscoveryPage{}, fmt.Errorf("discovery record exceeds page byte budget")
+			}
+			if responseBytes+len(data) > 16<<20 {
+				raw, err := json.Marshal(c)
+				if err != nil {
+					return DiscoveryPage{}, fmt.Errorf("encode discovery cursor: %w", err)
+				}
+				page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
+				break
+			}
+			responseBytes += len(data)
+			page.Records = append(page.Records, data)
 		}
+		c.Name = row.DiscoveryName
 	}
 	return page, nil
 }
 
-// DiscoverVersion only resolves the currently retained version, never history.
+// LookupDiscoveryVersion resolves the visible default or an exact published version.
 func (s *Service) LookupDiscoveryVersion(ctx context.Context, name, version string, includeDeleted bool) (Entry, error) {
 	if name == "" || version == "" || len(name) > 1024 || len(version) > 1024 || strings.ContainsRune(name+version, 0) {
 		return Entry{}, ErrInvalidListOptions
 	}
-	row, err := entry(repo.New(s.db).DiscoverVersion(ctx, repo.DiscoverVersionParams{Name: name, Version: version, IncludeDeleted: includeDeleted}))
+	result, err := repo.New(s.db).DiscoverVersion(ctx, repo.DiscoverVersionParams{Name: name, Version: version, IncludeDeleted: includeDeleted})
+	row, err := entry(result.McpRegistryEntry, err)
 	if err != nil {
 		return Entry{}, err
 	}
 	if len(s.validator.ValidateStored(row.Data)) != 0 {
 		return Entry{}, ErrNotFound
 	}
-	return row, nil
+	row.Data, err = discoveryMetadata(row.Data, result.IsLatest)
+	return row, err
 }
 
 // Name is at most 200 ASCII bytes (enforced by SQL). Hex digests bind both
@@ -123,4 +142,50 @@ func (s *Service) LookupDiscoveryVersion(ctx context.Context, name, version stri
 // 600 bytes even when accepted filters use their full 1024-byte allowance.
 func discoveryFilterBinding(value string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
+}
+
+// Only backend-owned latest metadata changes; exact keys and numeric lexemes survive.
+func discoveryMetadata(data json.RawMessage, latest bool) (json.RawMessage, error) {
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("project discovery metadata: %w", err)
+	}
+	meta := map[string]json.RawMessage{}
+	if raw := doc["_meta"]; raw != nil {
+		if err := json.Unmarshal(raw, &meta); err != nil {
+			return nil, fmt.Errorf("project discovery metadata: %w", err)
+		}
+	}
+	official := map[string]json.RawMessage{}
+	const namespace = "io.modelcontextprotocol.registry/official"
+	if raw := meta[namespace]; raw != nil {
+		if err := json.Unmarshal(raw, &official); err != nil {
+			return nil, fmt.Errorf("project discovery metadata: %w", err)
+		}
+	}
+	official["isLatest"] = json.RawMessage("false")
+	if latest {
+		official["isLatest"] = json.RawMessage("true")
+	}
+	raw, err := encodeDiscoveryObject(official)
+	if err != nil {
+		return nil, fmt.Errorf("project discovery metadata: %w", err)
+	}
+	meta[namespace] = raw
+	raw, err = encodeDiscoveryObject(meta)
+	if err != nil {
+		return nil, fmt.Errorf("project discovery metadata: %w", err)
+	}
+	doc["_meta"] = raw
+	return encodeDiscoveryObject(doc)
+}
+
+func encodeDiscoveryObject(doc map[string]json.RawMessage) (json.RawMessage, error) {
+	var out bytes.Buffer
+	encoder := json.NewEncoder(&out)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(doc); err != nil {
+		return nil, fmt.Errorf("encode discovery metadata: %w", err)
+	}
+	return bytes.TrimSpace(out.Bytes()), nil
 }

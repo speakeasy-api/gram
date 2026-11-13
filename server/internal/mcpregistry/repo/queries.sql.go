@@ -12,6 +12,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearWithdrawnDefault = `-- name: ClearWithdrawnDefault :exec
+UPDATE mcp_registry_servers SET default_entry_id = NULL,
+ updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE id = $1 AND default_entry_id = $2
+`
+
+type ClearWithdrawnDefaultParams struct {
+	ServerID uuid.UUID
+	EntryID  uuid.NullUUID
+}
+
+func (q *Queries) ClearWithdrawnDefault(ctx context.Context, arg ClearWithdrawnDefaultParams) error {
+	_, err := q.db.Exec(ctx, clearWithdrawnDefault, arg.ServerID, arg.EntryID)
+	return err
+}
+
 const countRegistryEntries = `-- name: CountRegistryEntries :one
 SELECT count(*) FROM mcp_registry_entries
 `
@@ -23,24 +39,43 @@ func (q *Queries) CountRegistryEntries(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countRegistryServers = `-- name: CountRegistryServers :one
+SELECT count(*) FROM mcp_registry_servers
+`
+
+// Test fixture: count parents to verify atomic creation and backfill idempotence.
+func (q *Queries) CountRegistryServers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countRegistryServers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createEntry = `-- name: CreateEntry :one
-INSERT INTO mcp_registry_entries(data, published, published_at)
+INSERT INTO mcp_registry_entries(server_id, data, published, published_at)
 SELECT
-    $1::jsonb,
+    $1,
+    $2::jsonb,
     true,
-    $2::timestamptz
-WHERE octet_length($1::jsonb::text) <= $3::bigint
+    $3::timestamptz
+WHERE octet_length($2::jsonb::text) <= $4::bigint
 RETURNING id, server_id, data, published, published_at, created_at, updated_at
 `
 
 type CreateEntryParams struct {
+	ServerID          uuid.NullUUID
 	Data              []byte
 	PublishedAt       pgtype.Timestamptz
 	StoredRecordLimit int64
 }
 
 func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (McpRegistryEntry, error) {
-	row := q.db.QueryRow(ctx, createEntry, arg.Data, arg.PublishedAt, arg.StoredRecordLimit)
+	row := q.db.QueryRow(ctx, createEntry,
+		arg.ServerID,
+		arg.Data,
+		arg.PublishedAt,
+		arg.StoredRecordLimit,
+	)
 	var i McpRegistryEntry
 	err := row.Scan(
 		&i.ID,
@@ -54,39 +89,60 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (McpRe
 	return i, err
 }
 
+const createServer = `-- name: CreateServer :one
+INSERT INTO mcp_registry_servers(name) VALUES ($1) RETURNING id, name, visible, default_entry_id, created_at, updated_at
+`
+
+func (q *Queries) CreateServer(ctx context.Context, name string) (McpRegistryServer, error) {
+	row := q.db.QueryRow(ctx, createServer, name)
+	var i McpRegistryServer
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Visible,
+		&i.DefaultEntryID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const discoverEntries = `-- name: DiscoverEntries :many
 WITH candidates AS MATERIALIZED (
     SELECT
-        id,
+        e.id,
+        COALESCE(s.default_entry_id = e.id, false)::boolean AS is_latest,
         COALESCE(data #>> '{server,name}', '')::text AS discovery_name
-    FROM mcp_registry_entries
-    WHERE published
+    FROM mcp_registry_entries e
+    JOIN mcp_registry_servers s ON s.id = e.server_id
+    WHERE e.published AND s.visible
     -- Permanently schema-invalid names cannot be cursor keys.
     AND jsonb_typeof(data #> '{server,name}') = 'string'
     AND octet_length(data #>> '{server,name}') BETWEEN 3 AND 200
     AND (data #>> '{server,name}') COLLATE "C" ~ '^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$'
     AND ($2::boolean OR COALESCE(data #>> '{_meta,io.modelcontextprotocol.registry/official,status}', '') <> 'deleted')
     AND strpos(lower(data #>> '{server,name}'), lower($3::text)) > 0
-    AND ($4::text IN ('', 'latest') OR data #>> '{server,version}' = $4::text)
+    AND (($4::text IN ('', 'latest') AND s.default_entry_id = e.id) OR ($4::text NOT IN ('', 'latest') AND data #>> '{server,version}' = $4::text))
     AND (data #>> '{server,name}') COLLATE "C" > $5::text COLLATE "C"
     ORDER BY (data #>> '{server,name}') COLLATE "C"
     LIMIT $6
 ), sized AS MATERIALIZED (
-    -- Measure only the bounded candidate set.
+    -- Reserve space for pointer-derived latest metadata in the bounded candidate set.
     SELECT
-        c.id, c.discovery_name,
-        octet_length(e.data::text)::bigint AS data_bytes
+        c.id, c.is_latest, c.discovery_name,
+        (octet_length(e.data::text) + 128)::bigint AS data_bytes
     FROM candidates c
     JOIN mcp_registry_entries e ON e.id = c.id
 ), budgeted AS (
     -- Accumulate bytes in cursor order before fetching page bodies.
     SELECT
-        id, discovery_name, data_bytes,
+        id, is_latest, discovery_name, data_bytes,
         (sum(data_bytes) OVER (ORDER BY discovery_name COLLATE "C"))::bigint AS page_bytes
     FROM sized
 )
 SELECT
     b.discovery_name,
+    b.is_latest,
     b.data_bytes,
     b.page_bytes,
     CASE
@@ -109,6 +165,7 @@ type DiscoverEntriesParams struct {
 
 type DiscoverEntriesRow struct {
 	DiscoveryName string
+	IsLatest      bool
 	DataBytes     int64
 	PageBytes     int64
 	Data          []byte
@@ -134,6 +191,7 @@ func (q *Queries) DiscoverEntries(ctx context.Context, arg DiscoverEntriesParams
 		var i DiscoverEntriesRow
 		if err := rows.Scan(
 			&i.DiscoveryName,
+			&i.IsLatest,
 			&i.DataBytes,
 			&i.PageBytes,
 			&i.Data,
@@ -149,11 +207,14 @@ func (q *Queries) DiscoverEntries(ctx context.Context, arg DiscoverEntriesParams
 }
 
 const discoverVersion = `-- name: DiscoverVersion :one
-SELECT id, server_id, data, published, published_at, created_at, updated_at FROM mcp_registry_entries
-WHERE published
-AND data #>> '{server,name}' = $1::text
+SELECT e.id, e.server_id, e.data, e.published, e.published_at, e.created_at, e.updated_at, COALESCE(s.default_entry_id = e.id, false)::boolean AS is_latest
+FROM mcp_registry_entries e
+JOIN mcp_registry_servers s ON s.id = e.server_id
+WHERE e.published
+AND s.name = $1::text
 AND ($2::boolean OR COALESCE(data #>> '{_meta,io.modelcontextprotocol.registry/official,status}', '') <> 'deleted')
-AND ($3::text = 'latest' OR data #>> '{server,version}' = $3::text)
+AND (($3::text = 'latest' AND s.visible AND s.default_entry_id = e.id)
+ OR ($3::text <> 'latest' AND data #>> '{server,version}' = $3::text))
 `
 
 type DiscoverVersionParams struct {
@@ -162,17 +223,23 @@ type DiscoverVersionParams struct {
 	Version        string
 }
 
-func (q *Queries) DiscoverVersion(ctx context.Context, arg DiscoverVersionParams) (McpRegistryEntry, error) {
+type DiscoverVersionRow struct {
+	McpRegistryEntry McpRegistryEntry
+	IsLatest         bool
+}
+
+func (q *Queries) DiscoverVersion(ctx context.Context, arg DiscoverVersionParams) (DiscoverVersionRow, error) {
 	row := q.db.QueryRow(ctx, discoverVersion, arg.Name, arg.IncludeDeleted, arg.Version)
-	var i McpRegistryEntry
+	var i DiscoverVersionRow
 	err := row.Scan(
-		&i.ID,
-		&i.ServerID,
-		&i.Data,
-		&i.Published,
-		&i.PublishedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.McpRegistryEntry.ID,
+		&i.McpRegistryEntry.ServerID,
+		&i.McpRegistryEntry.Data,
+		&i.McpRegistryEntry.Published,
+		&i.McpRegistryEntry.PublishedAt,
+		&i.McpRegistryEntry.CreatedAt,
+		&i.McpRegistryEntry.UpdatedAt,
+		&i.IsLatest,
 	)
 	return i, err
 }
@@ -199,9 +266,12 @@ func (q *Queries) GetEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry,
 }
 
 const getEntryByName = `-- name: GetEntryByName :one
-SELECT id, server_id, data, published, published_at, created_at, updated_at
-FROM mcp_registry_entries
-WHERE data #>> '{server,name}' = $1::text
+SELECT e.id, e.server_id, e.data, e.published, e.published_at, e.created_at, e.updated_at
+FROM mcp_registry_entries e
+JOIN mcp_registry_servers s ON s.id = e.server_id
+WHERE s.name = $1::text
+ORDER BY (s.default_entry_id = e.id) IS TRUE DESC, e.published DESC, e.created_at DESC, e.id DESC
+LIMIT 1
 `
 
 func (q *Queries) GetEntryByName(ctx context.Context, name string) (McpRegistryEntry, error) {
@@ -219,9 +289,43 @@ func (q *Queries) GetEntryByName(ctx context.Context, name string) (McpRegistryE
 	return i, err
 }
 
+const getServer = `-- name: GetServer :one
+SELECT id, name, visible, default_entry_id, created_at, updated_at FROM mcp_registry_servers WHERE id = $1
+`
+
+func (q *Queries) GetServer(ctx context.Context, id uuid.UUID) (McpRegistryServer, error) {
+	row := q.db.QueryRow(ctx, getServer, id)
+	var i McpRegistryServer
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Visible,
+		&i.DefaultEntryID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const hideRegistryServerFixture = `-- name: HideRegistryServerFixture :exec
+UPDATE mcp_registry_servers SET visible = false, default_entry_id = NULL WHERE id = $1
+`
+
+// Test fixture: preserve an operator's later visibility/default decisions on backfill reruns.
+func (q *Queries) HideRegistryServerFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, hideRegistryServerFixture, id)
+	return err
+}
+
 const insertRegistryEntryFixture = `-- name: InsertRegistryEntryFixture :exec
-INSERT INTO mcp_registry_entries(id, data, published)
-VALUES($1, $2, $3)
+WITH parent AS (
+ INSERT INTO mcp_registry_servers(id, name, default_entry_id)
+ VALUES ($1, COALESCE($2::jsonb #>> '{server,name}', ''), CASE WHEN $3::boolean THEN $1::uuid END)
+ ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+ RETURNING id
+)
+INSERT INTO mcp_registry_entries(id, server_id, data, published)
+SELECT $1, id, $2, $3 FROM parent
 `
 
 type InsertRegistryEntryFixtureParams struct {
@@ -230,15 +334,18 @@ type InsertRegistryEntryFixtureParams struct {
 	Published bool
 }
 
-// Test fixture: preserve arbitrary stored records, including invalid records.
+// Test fixture: link arbitrary stored records to a parent, including invalid records.
 func (q *Queries) InsertRegistryEntryFixture(ctx context.Context, arg InsertRegistryEntryFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertRegistryEntryFixture, arg.ID, arg.Data, arg.Published)
 	return err
 }
 
 const insertRegistryNamedEntryFixture = `-- name: InsertRegistryNamedEntryFixture :exec
-INSERT INTO mcp_registry_entries(data)
-VALUES(jsonb_build_object('server',jsonb_build_object('name',$1::text)))
+WITH identity AS (SELECT gen_random_uuid() AS id), parent AS (
+ INSERT INTO mcp_registry_servers(id, name, default_entry_id) SELECT id, $1, id FROM identity RETURNING id, name
+)
+ INSERT INTO mcp_registry_entries(id, server_id, data)
+ SELECT id, id, jsonb_build_object('server',jsonb_build_object('name',name)) FROM parent
 `
 
 func (q *Queries) InsertRegistryNamedEntryFixture(ctx context.Context, name string) error {
@@ -247,15 +354,34 @@ func (q *Queries) InsertRegistryNamedEntryFixture(ctx context.Context, name stri
 }
 
 const insertRegistryPublicationFixture = `-- name: InsertRegistryPublicationFixture :exec
-INSERT INTO mcp_registry_entries(data, published)
-SELECT
-    jsonb_build_object('server',jsonb_build_object('name','io.example/'||n)),
-    n%2=0
-FROM generate_series(1,60) n
+WITH identities AS (SELECT gen_random_uuid() AS id, n FROM generate_series(1,60) n), parent AS (
+ INSERT INTO mcp_registry_servers(id, name, default_entry_id)
+ SELECT id, 'io.example/'||n, CASE WHEN n%2=0 THEN id END FROM identities RETURNING id, name
+)
+INSERT INTO mcp_registry_entries(id, server_id, data, published)
+SELECT id, id, jsonb_build_object('server',jsonb_build_object('name',name)),
+ split_part(name,'/',2)::integer%2=0 FROM parent
 `
 
 func (q *Queries) InsertRegistryPublicationFixture(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, insertRegistryPublicationFixture)
+	return err
+}
+
+const insertRegistryUnlinkedEntryFixture = `-- name: InsertRegistryUnlinkedEntryFixture :exec
+INSERT INTO mcp_registry_entries(id, data, published)
+VALUES($1, $2, $3)
+`
+
+type InsertRegistryUnlinkedEntryFixtureParams struct {
+	ID        uuid.UUID
+	Data      []byte
+	Published bool
+}
+
+// Test fixture: preserve arbitrary stored records, including invalid records.
+func (q *Queries) InsertRegistryUnlinkedEntryFixture(ctx context.Context, arg InsertRegistryUnlinkedEntryFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertRegistryUnlinkedEntryFixture, arg.ID, arg.Data, arg.Published)
 	return err
 }
 
@@ -401,14 +527,14 @@ CROSS JOIN LATERAL jsonb_array_elements(
         ELSE '[]'::jsonb
     END
 ) AS n(value)
-WHERE e.id <> $1::uuid
+WHERE e.server_id <> $1::uuid
 AND jsonb_typeof(n.value) = 'string'
 AND (n.value #>> '{}') = ANY($2::text[])
 `
 
 type ListOktaMappingConflictsParams struct {
-	ID    uuid.UUID
-	Names []string
+	ServerID uuid.UUID
+	Names    []string
 }
 
 type ListOktaMappingConflictsRow struct {
@@ -419,7 +545,7 @@ type ListOktaMappingConflictsRow struct {
 // Invalid historical rows may hold a non-array, non-string elements or no
 // name; none of those can claim or be blamed for a key.
 func (q *Queries) ListOktaMappingConflicts(ctx context.Context, arg ListOktaMappingConflictsParams) ([]ListOktaMappingConflictsRow, error) {
-	rows, err := q.db.Query(ctx, listOktaMappingConflicts, arg.ID, arg.Names)
+	rows, err := q.db.Query(ctx, listOktaMappingConflicts, arg.ServerID, arg.Names)
 	if err != nil {
 		return nil, err
 	}
@@ -460,6 +586,26 @@ func (q *Queries) LockEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry
 	return i, err
 }
 
+const lockEntryServer = `-- name: LockEntryServer :one
+SELECT s.id, s.name, s.visible, s.default_entry_id, s.created_at, s.updated_at FROM mcp_registry_servers s
+JOIN mcp_registry_entries e ON e.server_id = s.id
+WHERE e.id = $1 FOR UPDATE OF s
+`
+
+func (q *Queries) LockEntryServer(ctx context.Context, id uuid.UUID) (McpRegistryServer, error) {
+	row := q.db.QueryRow(ctx, lockEntryServer, id)
+	var i McpRegistryServer
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Visible,
+		&i.DefaultEntryID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const lockOktaMappings = `-- name: LockOktaMappings :exec
 SELECT pg_advisory_xact_lock(hashtextextended('mcp_registry_entries:com.speakeasy.ai/okta', 0))
 `
@@ -470,6 +616,35 @@ SELECT pg_advisory_xact_lock(hashtextextended('mcp_registry_entries:com.speakeas
 func (q *Queries) LockOktaMappings(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, lockOktaMappings)
 	return err
+}
+
+const lockServer = `-- name: LockServer :one
+SELECT id, name, visible, default_entry_id, created_at, updated_at FROM mcp_registry_servers WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockServer(ctx context.Context, id uuid.UUID) (McpRegistryServer, error) {
+	row := q.db.QueryRow(ctx, lockServer, id)
+	var i McpRegistryServer
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Visible,
+		&i.DefaultEntryID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const registryNameExists = `-- name: RegistryNameExists :one
+SELECT EXISTS (SELECT 1 FROM mcp_registry_servers WHERE name = $1::text)
+`
+
+func (q *Queries) RegistryNameExists(ctx context.Context, name string) (bool, error) {
+	row := q.db.QueryRow(ctx, registryNameExists, name)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const registryReady = `-- name: RegistryReady :one
@@ -586,6 +761,22 @@ type SetRegistryEntryPublishedFixtureParams struct {
 
 func (q *Queries) SetRegistryEntryPublishedFixture(ctx context.Context, arg SetRegistryEntryPublishedFixtureParams) error {
 	_, err := q.db.Exec(ctx, setRegistryEntryPublishedFixture, arg.Published, arg.ID)
+	return err
+}
+
+const setServerDefault = `-- name: SetServerDefault :exec
+UPDATE mcp_registry_servers SET default_entry_id = $1,
+ updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE id = $2
+`
+
+type SetServerDefaultParams struct {
+	DefaultEntryID uuid.NullUUID
+	ID             uuid.UUID
+}
+
+func (q *Queries) SetServerDefault(ctx context.Context, arg SetServerDefaultParams) error {
+	_, err := q.db.Exec(ctx, setServerDefault, arg.DefaultEntryID, arg.ID)
 	return err
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
+	registryrepo "github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -81,8 +82,11 @@ func TestPromotionExistingCatalogueEndpointIsNotCandidate(t *testing.T) {
 	f := newPromotionFixture(t)
 	record, err := buildRecord(f.request.Public, "streamable-http")
 	require.NoError(t, err)
-	_, err = f.service.registry.Create(t.Context(), record)
+	first, err := f.service.registry.Create(t.Context(), record)
 	require.NoError(t, err)
+	require.NoError(t, registryrepo.New(f.service.db).HideRegistryServerFixture(t.Context(), first.ServerID))
+	_, err = f.service.registry.Create(t.Context(), record)
+	require.ErrorIs(t, err, mcpregistry.ErrConflict)
 	candidate, err := f.service.GetCandidate(t.Context(), f.target)
 	require.NoError(t, err)
 	require.False(t, candidate.Eligible)

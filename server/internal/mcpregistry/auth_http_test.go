@@ -180,7 +180,7 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 			require.Contains(t, []int{401, 403, 404}, w.Code, w.Body.String())
 		}
 	})
-	t.Run("current version replacement", func(t *testing.T) {
+	t.Run("immutable version and withdrawn default", func(t *testing.T) {
 		old, err := s.Get(ctx, id)
 		require.NoError(t, err)
 		published, err := s.SetPublished(ctx, id, mcpregistry.Token(old), true)
@@ -192,20 +192,22 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, firstPublication, mcpregistry.PublicationDate(t, published.Data))
 		}
-		replacement, err := s.Save(ctx, id, mcpregistry.Token(published), []byte(`{"server":{"name":"io.example/test","version":"2","description":"synthetic record"}}`))
+		_, err = s.Save(ctx, id, mcpregistry.Token(published), []byte(`{"server":{"name":"io.example/test","version":"2","description":"synthetic record"}}`))
+		var invalid *mcpregistry.InvalidError
+		require.ErrorAs(t, err, &invalid)
+		// Clear upstream deletion metadata without changing the version or default.
+		published, err = s.Save(ctx, id, mcpregistry.Token(published), []byte(`{"server":{"name":"io.example/test","version":"1","description":"synthetic record"}}`))
 		require.NoError(t, err)
-		require.Equal(t, 404, send(path+"1", key, "").Code)
+		require.Equal(t, 200, send(path+"1", key, "").Code)
 		w := send(path+"latest", key, "")
-		require.Equal(t, 200, w.Code)
-		require.JSONEq(t, string(replacement.Data), w.Body.String())
-		require.Equal(t, firstPublication, mcpregistry.PublicationDate(t, w.Body.Bytes()))
+		require.Equal(t, 404, w.Code)
 		w = send(strings.TrimSuffix(path, "/"), key, "")
-		require.Equal(t, 200, w.Code)
+		require.Equal(t, 404, w.Code)
 		var page struct {
 			Servers []json.RawMessage `json:"servers"`
 		}
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
-		require.Len(t, page.Servers, 1)
+		require.Empty(t, page.Servers)
 	})
 	t.Run("live pagination", func(t *testing.T) {
 		insert := func(name string) uuid.UUID {
@@ -317,6 +319,9 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 				e, err = s.SetPublished(ctx, e.ID, mcpregistry.Token(e), status)
 				require.NoError(t, err)
 			}
+			// Restore the wire fixture's default explicitly; republishing never selects it.
+			require.NoError(t, repo.New(db).SetServerDefault(ctx, repo.SetServerDefaultParams{ID: e.ServerID, DefaultEntryID: uuid.NullUUID{UUID: e.ID, Valid: true}}))
+
 		}
 		other, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "wire-other", Slug: "wire-other", OrganizationID: ac.ActiveOrganizationID})
 		require.NoError(t, err)

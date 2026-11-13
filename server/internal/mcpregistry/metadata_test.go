@@ -92,7 +92,9 @@ func TestReservedPublicationMetadataAndPrecision(t *testing.T) {
 	page, err := s.Discover(ctx, DiscoveryOptions{Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, page.Records, 1)
-	require.JSONEq(t, string(e.Data), string(page.Records[0]))
+	projected, err := discoveryMetadata(e.Data, true)
+	require.NoError(t, err)
+	require.JSONEq(t, string(projected), string(page.Records[0]))
 }
 
 func TestCatalogDocumentationMetadata(t *testing.T) {

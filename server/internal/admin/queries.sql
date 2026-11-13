@@ -901,11 +901,12 @@ ORDER BY organizations DESC, l.name;
 -- name: AdminListRegistryOktaMappings :many
 -- Every OIN name a catalog entry claims, published or not, so a candidate
 -- already taken can say by whom.
-SELECT
-    e.id AS registry_entry_id,
-    (e.data #>> '{server,name}')::text AS entry_name,
+SELECT DISTINCT
+    s.id AS registry_server_id,
+    s.name AS entry_name,
     (n.value #>> '{}')::text AS oin_name
 FROM mcp_registry_entries AS e
+JOIN mcp_registry_servers s ON s.id = e.server_id
 CROSS JOIN LATERAL jsonb_array_elements(
     CASE WHEN jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
         THEN e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}'
@@ -915,12 +916,11 @@ CROSS JOIN LATERAL jsonb_array_elements(
 WHERE jsonb_typeof(n.value) = 'string';
 
 -- name: AdminListRegistryEntryFacts :many
--- The fields the Okta matcher reads, for every entry.
-SELECT
-    id AS registry_entry_id,
-    data
-FROM mcp_registry_entries
-ORDER BY (data #>> '{server,name}') COLLATE "C";
+-- Every historical entry remains eligible; prefer the parent default for tied matches.
+SELECT e.id AS registry_entry_id, e.data
+FROM mcp_registry_entries e
+JOIN mcp_registry_servers s ON s.id = e.server_id
+ORDER BY s.name COLLATE "C", (s.default_entry_id = e.id) IS TRUE DESC, e.created_at DESC, e.id DESC;
 
 -- Test fixture: an issuer row as the Okta connection references it.
 -- name: AdminGetIssuerFixture :one

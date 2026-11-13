@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -78,4 +79,42 @@ func TestDiscoveryPageByteBudgetPreservesContinuation(t *testing.T) {
 	require.Len(t, next.Records, 1)
 	require.Contains(t, string(next.Records[0]), "budget-c")
 	require.Empty(t, next.NextCursor)
+}
+
+func TestDiscoveryMetadataPreservesUnescapedPayloadBudget(t *testing.T) {
+	t.Parallel()
+	ctx, s, db := newTestService(t)
+	for _, name := range []string{"example.test/budget-a", "example.test/budget-b", "example.test/budget-c"} {
+		raw := `{"server":{"name":"` + name + `","description":"Budget","version":"1"},"_meta":{"example.test/raw":{"integer":9007199254740993,"decimal":1.234567890123456789,"payload":"` + strings.Repeat("<", 6<<20) + `"}}}`
+		require.NoError(t, repo.New(db).InsertRegistryEntryFixture(ctx, repo.InsertRegistryEntryFixtureParams{ID: uuid.New(), Data: []byte(raw), Published: true}))
+	}
+	page, err := s.Discover(ctx, DiscoveryOptions{Limit: 100})
+	require.NoError(t, err)
+	require.Len(t, page.Records, 2)
+	for _, record := range page.Records {
+		require.Contains(t, string(record), "9007199254740993")
+		require.Contains(t, string(record), "1.234567890123456789")
+		require.NotContains(t, string(record), `\u003c`)
+	}
+	require.LessOrEqual(t, len(page.Records[0])+len(page.Records[1]), 16<<20)
+	require.NotEmpty(t, page.NextCursor)
+	next, err := s.Discover(ctx, DiscoveryOptions{Limit: 100, Cursor: page.NextCursor})
+	require.NoError(t, err)
+	require.Len(t, next.Records, 1)
+	require.Equal(t, "example.test/budget-c", recordName(next.Records[0]))
+	require.Empty(t, next.NextCursor)
+}
+
+func TestRegistryNameExistsWithoutDefaultOrEntries(t *testing.T) {
+	t.Parallel()
+	ctx, _, db := newTestService(t)
+	tx := testenv.BeginTx(t, ctx, db)
+	_, err := repo.New(tx).CreateServer(ctx, "example.test/demo")
+	require.NoError(t, err)
+	taken, err := NameTakenTx(ctx, tx, json.RawMessage(basicRecord))
+	require.NoError(t, err)
+	require.True(t, taken)
+	taken, err = NameTakenTx(ctx, tx, json.RawMessage(strings.Replace(basicRecord, "example.test/demo", "example.test/other", 1)))
+	require.NoError(t, err)
+	require.False(t, taken)
 }

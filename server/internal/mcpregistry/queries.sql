@@ -4,9 +4,15 @@ FROM mcp_registry_entries
 WHERE id = @id;
 
 -- name: GetEntryByName :one
-SELECT *
-FROM mcp_registry_entries
-WHERE data #>> '{server,name}' = sqlc.arg(name)::text;
+SELECT e.*
+FROM mcp_registry_entries e
+JOIN mcp_registry_servers s ON s.id = e.server_id
+WHERE s.name = sqlc.arg(name)::text
+ORDER BY (s.default_entry_id = e.id) IS TRUE DESC, e.published DESC, e.created_at DESC, e.id DESC
+LIMIT 1;
+
+-- name: RegistryNameExists :one
+SELECT EXISTS (SELECT 1 FROM mcp_registry_servers WHERE name = sqlc.arg(name)::text);
 
 -- name: RegistryReady :one
 SELECT EXISTS (SELECT 1 FROM mcp_registry_entries LIMIT 1);
@@ -70,25 +76,42 @@ SELECT
 FROM budgeted b
 ORDER BY b.name COLLATE "C", b.id;
 
--- name: InsertRegistryEntryFixture :exec
+-- name: InsertRegistryUnlinkedEntryFixture :exec
 -- Test fixture: preserve arbitrary stored records, including invalid records.
 INSERT INTO mcp_registry_entries(id, data, published)
 VALUES(@id, @data, @published);
 
+-- name: InsertRegistryEntryFixture :exec
+-- Test fixture: link arbitrary stored records to a parent, including invalid records.
+WITH parent AS (
+ INSERT INTO mcp_registry_servers(id, name, default_entry_id)
+ VALUES (@id, COALESCE(@data::jsonb #>> '{server,name}', ''), CASE WHEN @published::boolean THEN @id::uuid END)
+ ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+ RETURNING id
+)
+INSERT INTO mcp_registry_entries(id, server_id, data, published)
+SELECT @id, id, @data, @published FROM parent;
+
 -- name: InsertRegistryNamedEntryFixture :exec
-INSERT INTO mcp_registry_entries(data)
-VALUES(jsonb_build_object('server',jsonb_build_object('name',@name::text)));
+WITH identity AS (SELECT gen_random_uuid() AS id), parent AS (
+ INSERT INTO mcp_registry_servers(id, name, default_entry_id) SELECT id, @name, id FROM identity RETURNING id, name
+)
+ INSERT INTO mcp_registry_entries(id, server_id, data)
+ SELECT id, id, jsonb_build_object('server',jsonb_build_object('name',name)) FROM parent;
 
 -- name: InsertRegistryPublicationFixture :exec
-INSERT INTO mcp_registry_entries(data, published)
-SELECT
-    jsonb_build_object('server',jsonb_build_object('name','io.example/'||n)),
-    n%2=0
-FROM generate_series(1,60) n;
+WITH identities AS (SELECT gen_random_uuid() AS id, n FROM generate_series(1,60) n), parent AS (
+ INSERT INTO mcp_registry_servers(id, name, default_entry_id)
+ SELECT id, 'io.example/'||n, CASE WHEN n%2=0 THEN id END FROM identities RETURNING id, name
+)
+INSERT INTO mcp_registry_entries(id, server_id, data, published)
+SELECT id, id, jsonb_build_object('server',jsonb_build_object('name',name)),
+ split_part(name,'/',2)::integer%2=0 FROM parent;
 
 -- name: CreateEntry :one
-INSERT INTO mcp_registry_entries(data, published, published_at)
+INSERT INTO mcp_registry_entries(server_id, data, published, published_at)
 SELECT
+    @server_id,
     sqlc.arg(data)::jsonb,
     true,
     sqlc.arg(published_at)::timestamptz
@@ -146,7 +169,7 @@ CROSS JOIN LATERAL jsonb_array_elements(
         ELSE '[]'::jsonb
     END
 ) AS n(value)
-WHERE e.id <> sqlc.arg(id)::uuid
+WHERE e.server_id <> sqlc.arg(server_id)::uuid
 AND jsonb_typeof(n.value) = 'string'
 AND (n.value #>> '{}') = ANY(sqlc.arg(names)::text[]);
 
@@ -154,25 +177,27 @@ AND (n.value #>> '{}') = ANY(sqlc.arg(names)::text[]);
 -- Limit candidate metadata before measuring stored bodies.
 WITH candidates AS MATERIALIZED (
     SELECT
-        id,
+        e.id,
+        COALESCE(s.default_entry_id = e.id, false)::boolean AS is_latest,
         COALESCE(data #>> '{server,name}', '')::text AS discovery_name
-    FROM mcp_registry_entries
-    WHERE published
+    FROM mcp_registry_entries e
+    JOIN mcp_registry_servers s ON s.id = e.server_id
+    WHERE e.published AND s.visible
     -- Permanently schema-invalid names cannot be cursor keys.
     AND jsonb_typeof(data #> '{server,name}') = 'string'
     AND octet_length(data #>> '{server,name}') BETWEEN 3 AND 200
     AND (data #>> '{server,name}') COLLATE "C" ~ '^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$'
     AND (sqlc.arg(include_deleted)::boolean OR COALESCE(data #>> '{_meta,io.modelcontextprotocol.registry/official,status}', '') <> 'deleted')
     AND strpos(lower(data #>> '{server,name}'), lower(sqlc.arg(search)::text)) > 0
-    AND (sqlc.arg(version)::text IN ('', 'latest') OR data #>> '{server,version}' = sqlc.arg(version)::text)
+    AND ((sqlc.arg(version)::text IN ('', 'latest') AND s.default_entry_id = e.id) OR (sqlc.arg(version)::text NOT IN ('', 'latest') AND data #>> '{server,version}' = sqlc.arg(version)::text))
     AND (data #>> '{server,name}') COLLATE "C" > sqlc.arg(after_name)::text COLLATE "C"
     ORDER BY (data #>> '{server,name}') COLLATE "C"
     LIMIT sqlc.arg(page_limit)
 ), sized AS MATERIALIZED (
-    -- Measure only the bounded candidate set.
+    -- Reserve space for pointer-derived latest metadata in the bounded candidate set.
     SELECT
         c.*,
-        octet_length(e.data::text)::bigint AS data_bytes
+        (octet_length(e.data::text) + 128)::bigint AS data_bytes
     FROM candidates c
     JOIN mcp_registry_entries e ON e.id = c.id
 ), budgeted AS (
@@ -185,6 +210,7 @@ WITH candidates AS MATERIALIZED (
 -- Fetch full bodies only when admitted by the byte budget.
 SELECT
     b.discovery_name,
+    b.is_latest,
     b.data_bytes,
     b.page_bytes,
     CASE
@@ -196,11 +222,14 @@ FROM budgeted b
 ORDER BY b.discovery_name COLLATE "C";
 
 -- name: DiscoverVersion :one
-SELECT * FROM mcp_registry_entries
-WHERE published
-AND data #>> '{server,name}' = sqlc.arg(name)::text
+SELECT sqlc.embed(e), COALESCE(s.default_entry_id = e.id, false)::boolean AS is_latest
+FROM mcp_registry_entries e
+JOIN mcp_registry_servers s ON s.id = e.server_id
+WHERE e.published
+AND s.name = sqlc.arg(name)::text
 AND (sqlc.arg(include_deleted)::boolean OR COALESCE(data #>> '{_meta,io.modelcontextprotocol.registry/official,status}', '') <> 'deleted')
-AND (sqlc.arg(version)::text = 'latest' OR data #>> '{server,version}' = sqlc.arg(version)::text);
+AND ((sqlc.arg(version)::text = 'latest' AND s.visible AND s.default_entry_id = e.id)
+ OR (sqlc.arg(version)::text <> 'latest' AND data #>> '{server,version}' = sqlc.arg(version)::text));
 
 -- name: SetRegistryEntryPublishedFixture :exec
 UPDATE mcp_registry_entries SET published = @published WHERE id = @id;
@@ -227,3 +256,35 @@ UPDATE assets SET deleted_at = clock_timestamp() WHERE id = @id;
 -- name: RestorePlatformIconAssetFixture :exec
 -- Test fixture: restores a catalog icon asset after an invalid association.
 UPDATE assets SET content_type = 'image/svg+xml', project_id = NULL, deleted_at = NULL WHERE id = @id;
+
+-- name: GetServer :one
+SELECT * FROM mcp_registry_servers WHERE id = @id;
+
+-- name: LockServer :one
+SELECT * FROM mcp_registry_servers WHERE id = @id FOR UPDATE;
+
+-- name: LockEntryServer :one
+SELECT s.* FROM mcp_registry_servers s
+JOIN mcp_registry_entries e ON e.server_id = s.id
+WHERE e.id = @id FOR UPDATE OF s;
+
+-- name: CreateServer :one
+INSERT INTO mcp_registry_servers(name) VALUES (@name) RETURNING *;
+
+-- name: SetServerDefault :exec
+UPDATE mcp_registry_servers SET default_entry_id = @default_entry_id,
+ updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE id = @id;
+
+-- name: CountRegistryServers :one
+-- Test fixture: count parents to verify atomic creation and backfill idempotence.
+SELECT count(*) FROM mcp_registry_servers;
+
+-- name: HideRegistryServerFixture :exec
+-- Test fixture: preserve an operator's later visibility/default decisions on backfill reruns.
+UPDATE mcp_registry_servers SET visible = false, default_entry_id = NULL WHERE id = @id;
+
+-- name: ClearWithdrawnDefault :exec
+UPDATE mcp_registry_servers SET default_entry_id = NULL,
+ updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE id = @server_id AND default_entry_id = @entry_id;

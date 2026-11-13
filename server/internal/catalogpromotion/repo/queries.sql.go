@@ -348,9 +348,15 @@ func (q *Queries) DeletePromotionProjectFixture(ctx context.Context, projectID u
 }
 
 const deletePromotionRegistryEntryFixture = `-- name: DeletePromotionRegistryEntryFixture :exec
-DELETE FROM mcp_registry_entries WHERE id = $1
+WITH cleared AS (
+ UPDATE mcp_registry_servers SET default_entry_id = NULL WHERE default_entry_id = $1
+ RETURNING mcp_registry_servers.id
+)
+DELETE FROM mcp_registry_entries e WHERE e.id = $1
 `
 
+// Test fixture: clear default ownership and delete atomically; the deferred FK
+// checks the final statement state, not sibling CTE snapshot visibility.
 func (q *Queries) DeletePromotionRegistryEntryFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deletePromotionRegistryEntryFixture, id)
 	return err

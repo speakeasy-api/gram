@@ -80,8 +80,25 @@ func (s *Service) CreateTx(ctx context.Context, tx pgx.Tx, data json.RawMessage)
 	if err := checkOktaMappingConflicts(ctx, q, uuid.Nil, data); err != nil {
 		return Entry{}, err
 	}
+	// Preserve stored-size rejection before reporting an existing parent name.
+	size, err := q.SerializedRegistryRecordBytes(ctx, data)
+	if err != nil {
+		return Entry{}, fmt.Errorf("measure registry create: %w", err)
+	}
+	if size > StoredRecordByteLimit {
+		return Entry{}, storedSizeError()
+	}
+	parent, err := q.CreateServer(ctx, recordName(data))
+	if err != nil {
+		var pgerr *pgconn.PgError
+		if errors.As(err, &pgerr) && pgerr.Code == pgerrcode.UniqueViolation && pgerr.ConstraintName == "mcp_registry_servers_name_key" {
+			return Entry{}, ErrConflict
+		}
+		return Entry{}, fmt.Errorf("create registry server: %w", err)
+	}
 	params := repo.CreateEntryParams{
-		Data: data,
+		ServerID: uuid.NullUUID{UUID: parent.ID, Valid: true},
+		Data:     data,
 		PublishedAt: pgtype.Timestamptz{
 			Time:             publishedAt,
 			InfinityModifier: pgtype.Finite,
@@ -97,7 +114,13 @@ func (s *Service) CreateTx(ctx context.Context, tx pgx.Tx, data json.RawMessage)
 	if errors.As(err, &pgerr) && pgerr.Code == pgerrcode.UniqueViolation && pgerr.ConstraintName == "mcp_registry_entries_name_key" {
 		return Entry{}, ErrConflict
 	}
-	return entry(row, err)
+	if err != nil {
+		return Entry{}, fmt.Errorf("create registry entry: %w", err)
+	}
+	if err := q.SetServerDefault(ctx, repo.SetServerDefaultParams{ID: parent.ID, DefaultEntryID: uuid.NullUUID{UUID: row.ID, Valid: true}}); err != nil {
+		return Entry{}, fmt.Errorf("set registry server default: %w", err)
+	}
+	return entry(row, nil)
 }
 
 // NameTakenTx reports whether an entry already uses the record's server name.
@@ -106,15 +129,11 @@ func NameTakenTx(ctx context.Context, tx pgx.Tx, data json.RawMessage) (bool, er
 	if name == "" {
 		return false, nil
 	}
-	_, err := entry(repo.New(tx).GetEntryByName(ctx, name))
-	switch {
-	case errors.Is(err, ErrNotFound):
-		return false, nil
-	case err != nil:
-		return false, fmt.Errorf("look up registry entry name: %w", err)
-	default:
-		return true, nil
+	taken, err := repo.New(tx).RegistryNameExists(ctx, name)
+	if err != nil {
+		return false, fmt.Errorf("look up registry server name: %w", err)
 	}
+	return taken, nil
 }
 
 func (s *Service) Save(ctx context.Context, id uuid.UUID, token string, data json.RawMessage) (Entry, error) {
@@ -143,7 +162,7 @@ func (s *Service) mutate(ctx context.Context, id uuid.UUID, token string, data j
 
 func (s *Service) mutateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token string, data json.RawMessage, published *bool) (Entry, error) {
 	q := repo.New(tx)
-	old, err := entry(q.LockEntry(ctx, id))
+	old, err := lockEntry(ctx, q, id)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -167,10 +186,13 @@ func (s *Service) mutateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token s
 		if recordName(old.Data) != recordName(data) {
 			return Entry{}, &InvalidError{Issues: []Issue{{Path: "/server/name", Message: "name is immutable"}}}
 		}
+		if recordVersion(old.Data) != recordVersion(data) {
+			return Entry{}, &InvalidError{Issues: []Issue{{Path: "/server/version", Message: "version is immutable"}}}
+		}
 		if err := checkStructure(old.Data, data); err != nil {
 			return Entry{}, err
 		}
-		if err := checkOktaMappingConflicts(ctx, q, id, data); err != nil {
+		if err := checkOktaMappingConflicts(ctx, q, old.ServerID, data); err != nil {
 			return Entry{}, err
 		}
 	}
@@ -184,7 +206,7 @@ func (s *Service) mutateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token s
 		if _, err := s.canonicalIcons(ctx, q, old.Data); err != nil {
 			return Entry{}, err
 		}
-		if err := checkOktaMappingConflicts(ctx, q, id, old.Data); err != nil {
+		if err := checkOktaMappingConflicts(ctx, q, old.ServerID, old.Data); err != nil {
 			return Entry{}, err
 		}
 	}
@@ -233,6 +255,11 @@ func (s *Service) mutateTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token s
 	}
 	if err != nil {
 		return Entry{}, err
+	}
+	if published != nil && !*published {
+		if err := q.ClearWithdrawnDefault(ctx, repo.ClearWithdrawnDefaultParams{ServerID: old.ServerID, EntryID: uuid.NullUUID{UUID: id, Valid: true}}); err != nil {
+			return Entry{}, fmt.Errorf("registry version mutation: %w", err)
+		}
 	}
 	return result, nil
 }
@@ -370,7 +397,7 @@ func storedSizeError() error {
 
 // CheckCatalogIconsTx locks the exact revision and validates a full icon replacement without writing.
 func (s *Service) CheckCatalogIconsTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token string, icons CatalogIcons) (Entry, error) {
-	old, err := entry(repo.New(tx).LockEntry(ctx, id))
+	old, err := lockEntry(ctx, repo.New(tx), id)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -407,7 +434,7 @@ func (s *Service) CheckCatalogIconsTx(ctx context.Context, tx pgx.Tx, id uuid.UU
 
 // SetCatalogIconsTx participates in the caller's transaction, including its receipt.
 func (s *Service) SetCatalogIconsTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, token string, icons CatalogIcons) (Entry, error) {
-	old, err := entry(repo.New(tx).LockEntry(ctx, id))
+	old, err := lockEntry(ctx, repo.New(tx), id)
 	if err != nil {
 		return Entry{}, err
 	}

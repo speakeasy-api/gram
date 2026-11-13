@@ -25,3 +25,18 @@ type McpRegistryEntry struct {
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
 }
+
+type McpRegistryServer struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Visible bool
+	// @access: confidential
+	DefaultEntryID uuid.NullUUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}

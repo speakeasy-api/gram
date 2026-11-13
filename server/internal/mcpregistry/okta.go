@@ -98,7 +98,7 @@ func validateOktaMapping(meta map[string]any) []Issue {
 // published or not. The caller holds a transaction; the advisory lock
 // serializes writers because no index can enforce element-wise uniqueness on
 // a jsonb array. Never take the lock before LockEntry, or Save could deadlock.
-func checkOktaMappingConflicts(ctx context.Context, q *repo.Queries, id uuid.UUID, data json.RawMessage) error {
+func checkOktaMappingConflicts(ctx context.Context, q *repo.Queries, serverID uuid.UUID, data json.RawMessage) error {
 	mapping, err := ParseOktaMapping(data)
 	if errors.Is(err, ErrNoOktaMapping) || (err == nil && len(mapping.OINNames) == 0) {
 		return nil
@@ -109,7 +109,7 @@ func checkOktaMappingConflicts(ctx context.Context, q *repo.Queries, id uuid.UUI
 	if err := q.LockOktaMappings(ctx); err != nil {
 		return fmt.Errorf("lock registry okta mappings: %w", err)
 	}
-	taken, err := q.ListOktaMappingConflicts(ctx, repo.ListOktaMappingConflictsParams{ID: id, Names: mapping.OINNames})
+	taken, err := q.ListOktaMappingConflicts(ctx, repo.ListOktaMappingConflictsParams{ServerID: serverID, Names: mapping.OINNames})
 	if err != nil {
 		return fmt.Errorf("list registry okta mapping conflicts: %w", err)
 	}

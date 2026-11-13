@@ -337,8 +337,9 @@ const listMappedApplications = `-- name: ListMappedApplications :many
 WITH mapped AS MATERIALIZED (
     SELECT e.id AS registry_entry_id, (n.value #>> '{}')::text AS name
     FROM mcp_registry_entries AS e
+    JOIN mcp_registry_servers AS s ON s.id = e.server_id AND s.default_entry_id = e.id
     CROSS JOIN LATERAL jsonb_array_elements(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') AS n(value)
-    WHERE e.published
+    WHERE e.published AND s.visible
       AND jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
       AND jsonb_typeof(n.value) = 'string'
 )
@@ -428,10 +429,11 @@ func (q *Queries) ListMappedApplications(ctx context.Context, arg ListMappedAppl
 }
 
 const listMappedEntries = `-- name: ListMappedEntries :many
-SELECT id, data
-FROM mcp_registry_entries
-WHERE id = ANY($1::uuid[])
-  AND published
+SELECT e.id, e.data
+FROM mcp_registry_entries e
+JOIN mcp_registry_servers s ON s.id = e.server_id AND s.default_entry_id = e.id
+WHERE e.id = ANY($1::uuid[])
+  AND e.published AND s.visible
 `
 
 type ListMappedEntriesRow struct {

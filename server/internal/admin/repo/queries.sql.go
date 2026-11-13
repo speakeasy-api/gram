@@ -2078,11 +2078,10 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 }
 
 const adminListRegistryEntryFacts = `-- name: AdminListRegistryEntryFacts :many
-SELECT
-    id AS registry_entry_id,
-    data
-FROM mcp_registry_entries
-ORDER BY (data #>> '{server,name}') COLLATE "C"
+SELECT e.id AS registry_entry_id, e.data
+FROM mcp_registry_entries e
+JOIN mcp_registry_servers s ON s.id = e.server_id
+ORDER BY s.name COLLATE "C", (s.default_entry_id = e.id) IS TRUE DESC, e.created_at DESC, e.id DESC
 `
 
 type AdminListRegistryEntryFactsRow struct {
@@ -2090,7 +2089,7 @@ type AdminListRegistryEntryFactsRow struct {
 	Data            []byte
 }
 
-// The fields the Okta matcher reads, for every entry.
+// Every historical entry remains eligible; prefer the parent default for tied matches.
 func (q *Queries) AdminListRegistryEntryFacts(ctx context.Context) ([]AdminListRegistryEntryFactsRow, error) {
 	rows, err := q.db.Query(ctx, adminListRegistryEntryFacts)
 	if err != nil {
@@ -2112,11 +2111,12 @@ func (q *Queries) AdminListRegistryEntryFacts(ctx context.Context) ([]AdminListR
 }
 
 const adminListRegistryOktaMappings = `-- name: AdminListRegistryOktaMappings :many
-SELECT
-    e.id AS registry_entry_id,
-    (e.data #>> '{server,name}')::text AS entry_name,
+SELECT DISTINCT
+    s.id AS registry_server_id,
+    s.name AS entry_name,
     (n.value #>> '{}')::text AS oin_name
 FROM mcp_registry_entries AS e
+JOIN mcp_registry_servers s ON s.id = e.server_id
 CROSS JOIN LATERAL jsonb_array_elements(
     CASE WHEN jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
         THEN e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}'
@@ -2127,9 +2127,9 @@ WHERE jsonb_typeof(n.value) = 'string'
 `
 
 type AdminListRegistryOktaMappingsRow struct {
-	RegistryEntryID uuid.UUID
-	EntryName       string
-	OinName         string
+	RegistryServerID uuid.UUID
+	EntryName        string
+	OinName          string
 }
 
 // Every OIN name a catalog entry claims, published or not, so a candidate
@@ -2143,7 +2143,7 @@ func (q *Queries) AdminListRegistryOktaMappings(ctx context.Context) ([]AdminLis
 	var items []AdminListRegistryOktaMappingsRow
 	for rows.Next() {
 		var i AdminListRegistryOktaMappingsRow
-		if err := rows.Scan(&i.RegistryEntryID, &i.EntryName, &i.OinName); err != nil {
+		if err := rows.Scan(&i.RegistryServerID, &i.EntryName, &i.OinName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
