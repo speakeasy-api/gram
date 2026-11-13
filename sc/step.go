@@ -1323,7 +1323,10 @@ func (r *run[S, C]) startServices() {
 	// Each resource acquired in this call lets the next one declared on
 	// its state start, if the state is still active.
 	for _, got := range r.acquired {
-		if !r.config[got.state] {
+		// The state may have been left and entered again since, in which
+		// case its resources are being acquired from the first again.
+		held := slices.ContainsFunc(r.services, func(s service[S, C]) bool { return s.inv == got && s.acquired })
+		if !r.config[got.state] || !held {
 			continue
 		}
 

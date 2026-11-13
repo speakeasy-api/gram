@@ -275,7 +275,7 @@ func TestAssignRandIsRepeatableForAnInstanceAndDiffersBetweenSeeds(t *testing.T)
 	require.NotEqual(t, first, draws(2))
 
 	// Each step draws afresh, within the range asked for.
-	require.Len(t, slices.Compact(slices.Clone(first)), 3)
+	require.Len(t, slices.Compact(slices.Sorted(slices.Values(first))), 3)
 	for _, d := range first {
 		require.InDelta(t, float64(time.Hour), float64(d), float64(6*time.Minute))
 	}

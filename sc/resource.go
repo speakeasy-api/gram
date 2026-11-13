@@ -216,8 +216,9 @@ func (t *resourceTable[S, C]) wait(ctx context.Context, ids []string) error {
 			return fmt.Errorf("wait for resource: %w", context.Cause(ctx))
 		}
 
+		// A value released since it settled is no longer in held.
 		t.mu.Lock()
-		held := slot.ok
+		held := slices.Contains(t.held, slot)
 		t.mu.Unlock()
 		if !held {
 			return ErrResourceUnavailable

@@ -153,7 +153,8 @@ func (m *Machine[S, C]) Bind(def func(b *Binder[S, C])) (*Machine[S, C], error) 
 	return &bound, nil
 }
 
-// Unbound lists the services and chart actions that have no implementation,
+// Unbound lists the services, resources and chart actions that have no
+// implementation,
 // sorted by name. A driver built from a machine with unbound entries fails
 // them when they run; checking Unbound at start-up finds that sooner.
 func (m *Machine[S, C]) Unbound() []string {

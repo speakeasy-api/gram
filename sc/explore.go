@@ -812,11 +812,8 @@ func (m *Machine[S, C]) stateKey(snap Snapshot[S, C], now time.Time, key func(C,
 	slices.Sort(id.Timers)
 
 	for _, inv := range snap.invocations {
-		held := ""
-		if inv.acquired {
-			held = " held"
-		}
-		id.Services = append(id.Services, m.nodes[inv.state].name+"."+inv.name+held)
+		// Quoting keeps a name that ends like the marker apart from it.
+		id.Services = append(id.Services, fmt.Sprintf("%q %q held=%t", m.nodes[inv.state].name, inv.name, inv.acquired))
 	}
 	slices.Sort(id.Services)
 

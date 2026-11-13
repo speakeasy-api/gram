@@ -485,6 +485,10 @@ func (r *run[S, C]) checkConfig() error {
 // adopting work that is already under way, such as an existing row whose
 // status names its state. It returns an error wrapping [ErrInvalidSnapshot]
 // when the states are not a legal configuration of the chart.
+//
+// The instance's random seed is derived from now, so instances placed at
+// the same instant make the same [Transition.AssignRand] draws. Use
+// [Machine.Start] with [Seed] or [RandomSeed] when they must differ.
 func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C], []Effect[C], error) {
 	var zero Snapshot[S, C]
 
@@ -633,7 +637,9 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 // state, and one
 // [EffectStartInvocation] per unfinished service run. Drivers that keep
 // timers and services in memory call it after loading a snapshot in a new
-// process. Drivers that store them durably do not need it.
+// process. Drivers that store them durably do not need it for timers and
+// services, but resource values never outlive their process: any driver
+// that holds resources must acquire them again through Resume.
 func (m *Machine[S, C]) Resume(snap Snapshot[S, C]) []Effect[C] {
 	r := m.load(snap, time.Time{})
 

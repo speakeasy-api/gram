@@ -229,9 +229,10 @@ type Effect[C any] struct {
 
 	// At is when an EffectStartTimer timer is due, measured on the clock
 	// the driver passed to the core. Drivers schedule the timer for At; a
-	// time already past fires at once. For an EffectStartInvocation it is
-	// the deadline of the budgets declared with [StateBuilder.Within] around
-	// the service, on the same clock; zero for none. [Hooks.Exec] applies
+	// time already past fires at once. For an EffectStartInvocation or an
+	// EffectAcquire it is the deadline of the budgets declared with
+	// [StateBuilder.Within] around the service or the acquisition, on the
+	// same clock; zero for none. [Hooks.Exec] applies
 	// it, and [Effect.Budget] turns it into a duration for other drivers.
 	At time.Time
 
@@ -260,8 +261,8 @@ type Effect[C any] struct {
 	Needs []string
 }
 
-// Budget returns how long an EffectStartInvocation service may run, from
-// now on the driver's clock, and false when no [StateBuilder.Within] budget
+// Budget returns how long an EffectStartInvocation service or an
+// EffectAcquire acquisition may run, from now on the driver's clock, and false when no [StateBuilder.Within] budget
 // applies. A budget already spent is zero. Drivers turn it into a context
 // timeout rather than a deadline, because the driver's clock need not be the
 // wall clock.
@@ -312,11 +313,11 @@ func guardedSend(send func(ev any), ev any) {
 // change.
 var ErrUnknownEffect = errors.New("effect does not match the chart")
 
-// Exec carries out an [EffectAction] or [EffectStartInvocation] effect. For a
-// service it blocks until the service finishes or ctx is cancelled, calling
-// send with each event the service produces; the driver passes those events
-// to [Machine.Transition]. Timer and stop effects are the driver's to handle
-// and are rejected.
+// Exec carries out an [EffectAction], [EffectStartInvocation] or
+// [EffectAcquire] effect. For a service or an acquisition it blocks until
+// that finishes or ctx is cancelled, calling send with each event it
+// produces; the driver passes those events to [Machine.Transition]. Timer,
+// stop and release effects are the driver's to handle and are rejected.
 //
 // A panic in the action or service comes back as [ErrPanicked]. A panic in
 // send is the driver's own and is not caught.
@@ -512,7 +513,7 @@ func (m *Machine[S, C]) EncodeEffect(e Effect[C]) ([]byte, error) {
 		To:         e.To,
 	}
 
-	if e.Kind == EffectAction || e.Kind == EffectStartInvocation {
+	if e.Kind == EffectAction || e.Kind == EffectStartInvocation || e.Kind == EffectAcquire {
 		ctx, err := json.Marshal(e.Context)
 		if err != nil {
 			return nil, fmt.Errorf("marshal effect context: %w", err)

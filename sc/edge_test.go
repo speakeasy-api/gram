@@ -229,3 +229,21 @@ func TestSendAndSettleSettlesBeforeReturningAnActionsError(t *testing.T) {
 		require.True(t, inst.Snapshot().Done())
 	})
 }
+
+func TestANameCannotBeBothAServiceAndAResource(t *testing.T) {
+	t.Parallel()
+
+	_, err := sc.New("clash", func(b *sc.Builder[string, counter]) {
+		b.Initial("a")
+		a := b.State("a")
+		work := a.Requires[int]("thing")
+		work.OnDone().To("b")
+		work.OnError().To("b")
+
+		held := b.State("b").HoldsRequired[int]("thing")
+		held.OnAcquired().To("c")
+		held.OnError().To("c")
+		b.Final("c")
+	})
+	require.ErrorContains(t, err, "names both a service and a resource")
+}

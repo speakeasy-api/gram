@@ -108,7 +108,7 @@ func New[S comparable, C any](m *sc.Machine[S, C], tp trace.TracerProvider, mp m
 	}
 
 	durations, err := meter.Float64Histogram("sc.effect.duration",
-		metric.WithDescription("How long statechart actions and service runs took."),
+		metric.WithDescription("How long statechart actions, service runs, and resource acquisitions and releases took."),
 		metric.WithUnit("s"),
 	)
 	if err != nil {

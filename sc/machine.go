@@ -101,6 +101,7 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 		ordered: nil,
 		errs:    nil,
 		actions: map[string]chartAction[S, C]{},
+		kinds:   map[string]bool{},
 	}
 	def(&Builder[S, C]{b: b, parent: root})
 
@@ -239,6 +240,13 @@ func (m *Machine[S, C]) resolveBehaviour(b *build[S, C], n *node[S, C]) {
 			b.errorf("state %q: service name %q is empty or declared twice", n.name, inv.name)
 		}
 		services[inv.name] = true
+
+		// Implementations are bound by name, so one name cannot stand
+		// for a service in one state and a resource in another.
+		if resource, ok := b.kinds[inv.name]; ok && resource != (inv.resource != nil) {
+			b.errorf("state %q: %q names both a service and a resource in the chart", n.name, inv.name)
+		}
+		b.kinds[inv.name] = inv.resource != nil
 
 		routed := false
 		for _, t := range n.transitions {

@@ -183,5 +183,11 @@ func TestErrorRoutingWorksOnTypesBeforeStorageAndOnCodesAfter(t *testing.T) {
 	snap, err := d.Load(t.Context(), "o1")
 	require.NoError(t, err)
 	require.Equal(t, []string{"throttled"}, snap.Active())
-	require.Equal(t, "quota_exceeded: charge: quota exceeded", <-seen)
+	// drain has run the action, so a missing report fails at once.
+	select {
+	case got := <-seen:
+		require.Equal(t, "quota_exceeded: charge: quota exceeded", got)
+	default:
+		require.Fail(t, "the report action did not run")
+	}
 }

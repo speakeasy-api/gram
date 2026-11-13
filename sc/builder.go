@@ -25,6 +25,10 @@ type build[S comparable, C any] struct {
 
 	// actions are the chart actions declared with Action.
 	actions map[string]chartAction[S, C]
+
+	// kinds records, for each service or resource name checked so far,
+	// whether it names a resource.
+	kinds map[string]bool
 }
 
 func (b *build[S, C]) errorf(format string, args ...any) {
@@ -407,9 +411,12 @@ func (s *StateBuilder[S, C]) RequiresStream(name string) *Invocation[S, C, struc
 // A state's resources are acquired one after another, in the order they
 // were declared: each starts once the one before it is held, and its acquire
 // function can read the earlier ones with [Resource.From]. If one fails, the
-// later ones are not acquired. Services of the same state start with the
-// first acquisition, so put work that needs the resource in a child state
-// entered from OnAcquired.
+// later ones are not acquired.
+//
+// Acquiring does not hold anything else up: the services of the state, and
+// of the child states entered with it, start alongside the first
+// acquisition and may find [Resource.From] reporting false. Put work that
+// needs the resource in a child state entered from OnAcquired.
 //
 // The value never enters the context or the snapshot. The driver keeps it,
 // and services and actions of the state and the states inside it read it
