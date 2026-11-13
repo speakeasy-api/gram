@@ -13,8 +13,8 @@ func TestRequireAnyUnblocked(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	checks := []Check{
-		{Scope: ScopeSkillRead, ResourceID: "project-one", Dimensions: map[string]string{SelectorKeyProjectID: "project-one"}},
-		{Scope: ScopeSkillRead, ResourceID: "skill-one", Dimensions: map[string]string{SelectorKeyProjectID: "project-one"}},
+		{Scope: ScopeSkillRead, ResourceID: "project-one", Dimensions: nil},
+		{Scope: ScopeSkillRead, ResourceID: "skill-one", Dimensions: nil},
 	}
 	for _, tc := range []struct {
 		name    string
@@ -29,7 +29,6 @@ func TestRequireAnyUnblocked(t *testing.T) {
 		{"root explicit deny", []Grant{NewGrant(ScopeRoot, "*"), NewGrant(ScopeSkillBlockedRead, "skill-one")}, false},
 		{"other skill exclusion", []Grant{NewGrant(ScopeSkillWrite, "project-one"), NewGrant(ScopeSkillBlockedRead, "skill-two")}, true},
 		{"write exclusion does not deny reads", []Grant{NewGrant(ScopeSkillWrite, "project-one"), NewGrant(ScopeSkillBlockedWrite, "skill-one")}, true},
-		{"wrong project exclusion", []Grant{NewGrant(ScopeSkillWrite, "project-one"), NewGrantWithSelector(ScopeSkillBlockedRead, Selector{SelectorKeyResourceKind: ResourceKindSkill, SelectorKeyResourceID: "skill-one", SelectorKeyProjectID: "project-two"})}, true},
 		{"no grants", nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

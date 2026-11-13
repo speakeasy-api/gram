@@ -229,6 +229,7 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return err
 	}
 	if !enforce {
+		e.logInvalidUnenforced(ctx, checks)
 		if !all(checks, unenforcedAllows) {
 			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
 		}
@@ -359,6 +360,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, err)
 	}
 	if !enforce {
+		e.logInvalidUnenforced(ctx, checks)
 		if len(checks) > 0 && !slices.ContainsFunc(checks, unenforcedAllows) {
 			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
 		}
@@ -534,6 +536,7 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 		return false, err
 	}
 	if !enforce {
+		e.logInvalidUnenforced(ctx, checks)
 		return all(checks, unenforcedAllows), nil
 	}
 	if len(checks) == 0 {
@@ -583,6 +586,7 @@ func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, erro
 		return false, err
 	}
 	if !enforce {
+		e.logInvalidUnenforced(ctx, alternatives)
 		return slices.ContainsFunc(alternatives, unenforcedAllows), nil
 	}
 	authorization, ok := grantAuthorizationFromContext(ctx)
@@ -658,6 +662,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	}
 
 	if !enforce {
+		e.logInvalidUnenforced(ctx, checks)
 		ids := make([]string, 0, len(checks))
 		for _, c := range checks {
 			if unenforcedAllows(c) {
@@ -768,6 +773,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 	}
 
 	if !enforce {
+		e.logInvalidUnenforced(ctx, checks)
 		out := make([]bool, len(checks))
 		for i, c := range checks {
 			out[i] = unenforcedAllows(c)
@@ -929,6 +935,9 @@ func validateInput(c Check) error {
 	case WildcardResource:
 		return InvalidCheck(c.Scope, c.ResourceID)
 	default:
+		if err := validateCheckIdentity(c); err != nil {
+			return err
+		}
 		if err := validateCheckDimensions(c); err != nil {
 			return err
 		}
@@ -937,6 +946,48 @@ func validateInput(c Check) error {
 		}
 		return validateAuthClientCheck(c)
 	}
+}
+
+// logInvalidUnenforced reports checks that would be refused as invalid if the
+// caller were enforced. Enforcement is skipped for this caller, so the request
+// still goes through: this is the logging window before such checks are
+// refused for every caller.
+func (e *Engine) logInvalidUnenforced(ctx context.Context, checks []Check) {
+	for _, check := range checks {
+		err := validateInput(check)
+		if err == nil {
+			continue
+		}
+		e.logger.ErrorContext(
+			ctx,
+			"invalid authz check on a path that skips enforcement",
+			attr.SlogResourceID(check.ResourceID),
+			attr.SlogError(err),
+		)
+	}
+}
+
+// validateCheckIdentity rejects a check whose scope the registry does not
+// know, whose resource kind is not its scope's kind, or whose dimensions use
+// a key the scope does not declare. resource_kind and resource_id are never
+// dimensions: they would replace the resource the check names.
+func validateCheckIdentity(c Check) error {
+	kind, known := scopeResourceKinds[c.Scope]
+	if !known {
+		return invalidCheckReason(c.Scope, c.ResourceID, "unknown scope")
+	}
+	if c.ResourceKind != "" && c.ResourceKind != kind {
+		return invalidCheckReason(c.Scope, c.ResourceID, "resource kind "+c.ResourceKind+" is not the scope's kind")
+	}
+	for key := range c.Dimensions {
+		if key == SelectorKeyResourceKind || key == SelectorKeyResourceID {
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" is reserved")
+		}
+		if !allowedSelectorKeys[kind][key] && !scopeAllowsSelectorKey(c.Scope, key) {
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" is not declared for the scope")
+		}
+	}
+	return nil
 }
 
 // validateRequireInput is validateInput for the Require family, which also
