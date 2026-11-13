@@ -88,8 +88,9 @@ type serverClientSnapshot struct {
 // one reached only as a gateway member, its associated clients.
 func snapshotServerClients(ctx context.Context, tx pgx.Tx, organizationID string, serverIDs []uuid.UUID) (serverClientSnapshot, error) {
 	snapshot := serverClientSnapshot{
-		servers: make(map[uuid.UUID]repo.ListUserSessionIssuerMigrationImpactServersRow, len(serverIDs)),
-		clients: make(map[uuid.UUID][]uuid.UUID, len(serverIDs)),
+		servers:  make(map[uuid.UUID]repo.ListUserSessionIssuerMigrationImpactServersRow, len(serverIDs)),
+		clients:  make(map[uuid.UUID][]uuid.UUID, len(serverIDs)),
+		enforced: false,
 	}
 	if len(serverIDs) == 0 {
 		return snapshot, nil
