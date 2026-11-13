@@ -137,10 +137,10 @@ func TestNewOrgEncryptionBuildsServiceAndProvisioner(t *testing.T) {
 	require.NotNil(t, deps.Provisioner)
 }
 
-// TestOrgEncryptionFlagsOnOAuthCredentialProcesses guards the wiring: each
-// process that reads or writes OAuth credentials calls newOrgEncryption, which
-// reads these flags, so dropping them from a command would turn its startup
-// check off.
+// TestOrgEncryptionFlagsOnOAuthCredentialProcesses checks that each process
+// that reads or writes OAuth credentials registers the flags newOrgEncryption
+// reads. A command without them ignores the GRAM_ORG_ENCRYPTION_* variables it
+// is deployed with. It does not check that the command calls newOrgEncryption.
 func TestOrgEncryptionFlagsOnOAuthCredentialProcesses(t *testing.T) {
 	t.Parallel()
 
