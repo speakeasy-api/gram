@@ -2006,6 +2006,7 @@ trackedFiles:
   src/models/components/shadowmcpinventoryurlstate.ts: {}
   src/models/components/shadowmcpinventoryuser.ts: {}
   src/models/components/shadowmcpinventoryusersource.ts: {}
+  src/models/components/shadowmcpofficialserver.ts: {}
   src/models/components/sharedskill2.ts: {}
   src/models/components/shareskillrequestbody.ts: {}
   src/models/components/sigintsensor.ts: {}

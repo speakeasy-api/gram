@@ -1334,6 +1334,18 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			evidence.ServerIdentity = matched.Command
 		}
 	}
+	// Onboarding takes effect at once: a server the project serves an
+	// official version of is blocked for direct use whatever the policy's
+	// default, and no bypass grant on the direct URL lifts it. A
+	// Speakeasy-hosted URL is never the direct connection.
+	hasOfficialServer := false
+	if matched != nil && matched.URL != "" {
+		if official, ok := s.shadowMCPOfficialServer(ctx, metadata.GramOrgID, metadata.ProjectID, matched.URL); ok &&
+			!s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID) {
+			hasOfficialServer = true
+			detail = shadowMCPOfficialServerDetail(official, matched.URL)
+		}
+	}
 	// A non-empty detail means this call is blocked. Return immediately for
 	// clean allows; otherwise give a URL-scoped bypass grant a chance to allow
 	// the call before recording and returning the block below.
@@ -1346,7 +1358,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 
 	// Bypass grants are a block_all concept: under allow-all the blocked-list
 	// membership above is the whole check.
-	if !policy.IsAllowAll() {
+	if !policy.IsAllowAll() && !hasOfficialServer {
 		if _, allowed := s.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
 			matchedURL, matchedCommand := "", ""
 			if matched != nil {

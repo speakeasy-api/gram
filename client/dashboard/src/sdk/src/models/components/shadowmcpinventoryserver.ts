@@ -21,6 +21,10 @@ import {
   ShadowMCPInventoryRequestSummary,
   ShadowMCPInventoryRequestSummary$inboundSchema,
 } from "./shadowmcpinventoryrequestsummary.js";
+import {
+  ShadowMCPOfficialServer,
+  ShadowMCPOfficialServer$inboundSchema,
+} from "./shadowmcpofficialserver.js";
 
 /**
  * Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.
@@ -72,6 +76,10 @@ export type ShadowMCPInventoryServer = {
   lastSeen: Date;
   latestRequest?: ShadowMCPInventoryRequestSummary | undefined;
   observedUseCount: number;
+  /**
+   * The official, Speakeasy-served version of a Shadow MCP server.
+   */
+  officialServer?: ShadowMCPOfficialServer | undefined;
   requestCount: number;
   serverName?: string | undefined;
   serverSlug: string;
@@ -125,6 +133,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
     ),
     latest_request: z.optional(ShadowMCPInventoryRequestSummary$inboundSchema),
     observed_use_count: z.int(),
+    official_server: z.optional(ShadowMCPOfficialServer$inboundSchema),
     request_count: z.int(),
     server_name: z.optional(z.string()),
     server_slug: z.string(),
@@ -145,6 +154,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
       "last_seen": "lastSeen",
       "latest_request": "latestRequest",
       "observed_use_count": "observedUseCount",
+      "official_server": "officialServer",
       "request_count": "requestCount",
       "server_name": "serverName",
       "server_slug": "serverSlug",

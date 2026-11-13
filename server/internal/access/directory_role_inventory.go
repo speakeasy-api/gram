@@ -334,7 +334,7 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 	}
 	writer := &Service{
 		tracer: nil, logger: logger, db: db, chConn: nil, auth: nil,
-		authz: engine, roleMgr: nil, audit: auditLogger, email: nil, orgHosts: nil, foldGate: nil,
+		authz: engine, roleMgr: nil, audit: auditLogger, email: nil, orgHosts: nil, foldGate: nil, serverURL: nil,
 	}
 	for _, group := range groups {
 		// No expected set: each desired set was read under the source lock this
