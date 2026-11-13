@@ -25,7 +25,7 @@ type serversUserSession struct {
 	createdAgo       string
 }
 
-// serversValidatedSession is one upstream session on Linear's CIMD client.
+// serversValidatedSession is one upstream session on the Per-User OAuth Server's CIMD client.
 // status "" is the never-validated session (NULL validation_status).
 type serversValidatedSession struct {
 	n               int32
@@ -69,6 +69,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		LinearID:      s.det("issuer-linear"),
 		ProjectID:     proj,
 		SlackID:       s.det("issuer-slack"),
+		PassThroughID: s.det("issuer-github"),
 		GatewayID:     s.det("issuer-gateway"),
 		CodeGatewayID: s.det("issuer-code-gateway"),
 	}); err != nil {
@@ -76,34 +77,30 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}
 
 	if err := s.q.ServersInsertMCPServers(ctx, repo.ServersInsertMCPServersParams{
-		SupportID:         s.det("mcpserver-support"),
-		ProjectID:         proj,
-		Toolset1:          s.toolset1(),
-		OpsID:             s.det("mcpserver-ops"),
-		Toolset2:          s.toolset2(),
-		LinearID:          s.det("mcpserver-linear"),
-		RemoteLinearID:    s.det("remotemcp-linear"),
-		IssuerLinearID:    s.det("issuer-linear"),
-		SlackID:           s.det("mcpserver-slack"),
-		RemoteSlackID:     s.det("remotemcp-slack"),
-		IssuerSlackID:     s.det("issuer-slack"),
-		GithubID:          s.det("mcpserver-github"),
-		RemoteGithubID:    s.det("remotemcp-github"),
-		IssuerWorkforceID: s.det("issuer-workforce"),
+		ProjectID:      proj,
+		LinearID:       s.det("mcpserver-linear"),
+		RemoteLinearID: s.det("remotemcp-linear"),
+		IssuerLinearID: s.det("issuer-linear"),
+		SlackID:        s.det("mcpserver-slack"),
+		RemoteSlackID:  s.det("remotemcp-slack"),
+		IssuerSlackID:  s.det("issuer-slack"),
+		GithubID:       s.det("mcpserver-github"),
+		RemoteGithubID: s.det("remotemcp-github"),
+		IssuerGithubID: s.det("issuer-github"),
 	}); err != nil {
 		return fmt.Errorf("insert demo mcp servers: %w", err)
 	}
 
 	if err := s.q.ServersInsertHostedToolsetMCPServers(ctx, repo.ServersInsertHostedToolsetMCPServersParams{
 		Toolset1:         s.toolset1(),
-		SupportMcpSlug:   s.spec.OrgSlug + "-support",
+		SupportMcpSlug:   s.spec.OrgSlug + "-openapi-api-key",
 		Toolset2:         s.toolset2(),
-		OpsMcpSlug:       s.spec.OrgSlug + "-ops",
+		OpsMcpSlug:       s.spec.OrgSlug + "-read-only-subset",
 		Toolset3:         s.toolset3(),
-		PartnerMcpSlug:   s.spec.OrgSlug + "-partner",
+		PartnerMcpSlug:   s.spec.OrgSlug + "-server-specific-sign-in",
 		PartnerIssuerID:  s.usIssuer(),
 		Toolset4:         s.toolset4(),
-		DiscoveryMcpSlug: s.spec.OrgSlug + "-oauth-discovery",
+		DiscoveryMcpSlug: s.spec.OrgSlug + "-external-oauth",
 		ProjectID:        proj,
 	}); err != nil {
 		return fmt.Errorf("insert demo hosted toolset mcp servers: %w", err)
@@ -158,8 +155,10 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}
 
 	n, err := s.q.ServersInsertRoleServerMemberships(ctx, repo.ServersInsertRoleServerMembershipsParams{
-		OrgID:     org,
-		ProjectID: proj,
+		OrgID:           org,
+		ProjectID:       proj,
+		SupportServerID: s.supportServer(),
+		OpsServerID:     s.opsServer(),
 	})
 	if err != nil {
 		return fmt.Errorf("insert demo role server memberships: %w", err)
@@ -214,8 +213,8 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("bind demo linear remote session client: %w", err)
 	}
-	// The gateway serves Linear as a member, so its issuer binds Linear's
-	// client too, or no gateway sign-in could choose a client for Linear.
+	// The gateway serves the Per-User OAuth Server as a member, so its issuer binds the Per-User OAuth Server's
+	// client too, or no gateway sign-in could choose a client for the Per-User OAuth Server.
 	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
 		RemoteSessionClientID: s.det("remote-identity-client-linear"),
 		UserSessionIssuerID:   s.det("issuer-gateway"),
@@ -267,9 +266,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		SupportMemberID: s.det("metamember-support"),
 		ProjectID:       proj,
 		MetaID:          s.det("metamcp-1"),
-		SupportServerID: s.det("mcpserver-support"),
+		SupportServerID: s.supportServer(),
 		OpsMemberID:     s.det("metamember-ops"),
-		OpsServerID:     s.det("mcpserver-ops"),
+		OpsServerID:     s.opsServer(),
 		LinearMemberID:  s.det("metamember-linear"),
 		LinearServerID:  s.det("mcpserver-linear"),
 		SlackMemberID:   s.det("metamember-slack"),
@@ -289,9 +288,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		SupportMemberID: s.det("metamember-code-support"),
 		ProjectID:       proj,
 		MetaID:          s.det("metamcp-code"),
-		SupportServerID: s.det("mcpserver-support"),
+		SupportServerID: s.supportServer(),
 		OpsMemberID:     s.det("metamember-code-ops"),
-		OpsServerID:     s.det("mcpserver-ops"),
+		OpsServerID:     s.opsServer(),
 	}); err != nil {
 		return fmt.Errorf("insert demo code gateway members: %w", err)
 	}
@@ -312,16 +311,19 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo removed github meta member: %w", err)
 	}
 	if err := s.q.ServersInsertGatewayEndpoints(ctx, repo.ServersInsertGatewayEndpointsParams{
-		GatewayEndpointID: s.det("endpoint-gateway"),
-		ProjectID:         proj,
-		MetaID:            s.det("metamcp-1"),
-		GatewaySlug:       s.spec.OrgSlug + "-gateway",
-		LinearEndpointID:  s.det("endpoint-linear"),
-		LinearServerID:    s.det("mcpserver-linear"),
-		LinearSlug:        s.spec.OrgSlug + "-linear",
-		SlackEndpointID:   s.det("endpoint-slack"),
-		SlackServerID:     s.det("mcpserver-slack"),
-		SlackSlug:         s.spec.OrgSlug + "-slack",
+		GatewayEndpointID:     s.det("endpoint-gateway"),
+		ProjectID:             proj,
+		MetaID:                s.det("metamcp-1"),
+		GatewaySlug:           s.spec.OrgSlug + "-gateway",
+		LinearEndpointID:      s.det("endpoint-linear"),
+		LinearServerID:        s.det("mcpserver-linear"),
+		LinearSlug:            s.spec.OrgSlug + "-per-user-oauth",
+		SlackEndpointID:       s.det("endpoint-slack"),
+		SlackServerID:         s.det("mcpserver-slack"),
+		SlackSlug:             s.spec.OrgSlug + "-service-account",
+		PassThroughEndpointID: s.det("endpoint-github"),
+		PassThroughServerID:   s.det("mcpserver-github"),
+		PassThroughSlug:       s.spec.OrgSlug + "-pass-through-token",
 	}); err != nil {
 		return fmt.Errorf("insert demo gateway endpoints: %w", err)
 	}
@@ -411,26 +413,14 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo attachment client: %w", err)
 	}
-	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-		RemoteSessionClientID: s.det("attachment-client"),
-		UserSessionIssuerID:   s.det("issuer-linear"),
-	}); err != nil {
-		return fmt.Errorf("bind demo attachment client: %w", err)
-	}
-	// The Linear server is its issuer's only consumer, so every client bound
-	// to the issuer is associated with it, as the app's reconcile would do.
-	if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
-		ID:                    s.det("server-client-association-attachment"),
-		ProjectID:             proj,
-		OrgID:                 org,
-		McpServerID:           s.det("mcpserver-linear"),
-		RemoteSessionClientID: s.det("attachment-client"),
-	}); err != nil {
-		return fmt.Errorf("associate demo linear server with the attachment client: %w", err)
-	}
+	// The legacy callback client above stays unbound: Speakeasy allows one
+	// client per (user session issuer, remote issuer) pair, and the Per-User OAuth Server's main
+	// client already holds that pair. Exact-session attachments use the main
+	// client, so the Per-User OAuth Server offers one OAuth client.
 	// Each seeded sign-in carries the choice its consent page would have
-	// recorded for every server it reaches: Linear through its main client,
-	// Slack with no upstream authentication.
+	// recorded for every server it reaches: the Per-User OAuth Server through
+	// its main client, the Service Account Server with no upstream
+	// authentication.
 	choices := []struct {
 		session int
 		server  string
@@ -464,19 +454,20 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			return fmt.Errorf("insert demo upstream client choice for session %d on %s: %w", c.session, c.server, err)
 		}
 	}
-	// Organization authorizations include Linear and Slack plus GitHub, private
-	// inventory, both EMA servers, Notion and DeepWiki, including on the
-	// expired history row.
+	// Organization authorizations include the Per-User OAuth Server, the
+	// Service Account Server, the Pass-Through Token Server, the Tunnelled
+	// Private Server, the Enterprise Sign-In (ID-JAG) Server, the
+	// Auto-Configured OAuth Server and Linear,
+	// including on the expired history row. An organization sign-in reaches
+	// every server in the organization, including one with a sign-in of its own.
 	for i := 1; i <= 3; i++ {
-		for _, server := range []string{"linear", "slack", "github", "private-inventory", "ema-tracker", "ema-wiki", "notion", "deepwiki"} {
+		for _, server := range []string{"linear", "slack", "github", "private-inventory", "enterprise-sign-in", "notion", "linear-app"} {
 			client := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 			switch server {
 			case "linear":
 				client = uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}
-			case "ema-tracker":
-				client = uuid.NullUUID{UUID: s.det("ema-client-tracker"), Valid: true}
-			case "ema-wiki":
-				client = uuid.NullUUID{UUID: s.det("ema-client-wiki"), Valid: true}
+			case "enterprise-sign-in":
+				client = uuid.NullUUID{UUID: s.det("ema-client-enterprise-sign-in"), Valid: true}
 			}
 			if err := s.q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
 				ID: s.det("org-gateway-choice-" + strconv.Itoa(i) + "-" + server), ProjectID: proj, OrgID: org,
@@ -505,19 +496,20 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		if err := s.q.ServersInsertAttachmentSession(ctx, repo.ServersInsertAttachmentSessionParams{
 			AccessTokenEncrypted: dummyAccess,
 			ID:                   s.det(account.key), UserID: user(account.person), UserSessionIssuerID: s.det("issuer-linear"),
-			RemoteSessionClientID: s.det("attachment-client"), ExpiresIn: pgtype.Interval{Microseconds: account.expires.Microseconds(), Days: 0, Months: 0, Valid: true},
+			RemoteSessionClientID: s.det("remote-identity-client-linear"), ExpiresIn: pgtype.Interval{Microseconds: account.expires.Microseconds(), Days: 0, Months: 0, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("insert demo attachment session: %w", err)
 		}
 	}
 
+	// Members 1 and 2 hold the attached sessions above, never validated; a
+	// person holds one session per client, so the validation spread goes to
+	// members 3 to 6.
 	validated := []serversValidatedSession{
-		{n: 1, status: "valid", grantGeneration: 1},
-		{n: 2, status: "valid", grantGeneration: 3},
-		{n: 3, status: "rejected_by_member", grantGeneration: 2},
-		{n: 4, status: "inactive", grantGeneration: 1},
-		{n: 5, status: "unknown", grantGeneration: 1},
-		{n: 6, status: "", grantGeneration: 1},
+		{n: 3, status: "valid", grantGeneration: 3},
+		{n: 4, status: "rejected_by_member", grantGeneration: 2},
+		{n: 5, status: "inactive", grantGeneration: 1},
+		{n: 6, status: "unknown", grantGeneration: 1},
 	}
 	for _, v := range validated {
 		if err := s.q.ServersInsertValidatedSession(ctx, repo.ServersInsertValidatedSessionParams{
@@ -548,7 +540,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			OrgID:                 org,
 			PrincipalID:           s.det("managed-agent-" + num),
 			UserSessionIssuerID:   s.det("issuer-linear"),
-			RemoteSessionClientID: s.det("attachment-client"),
+			RemoteSessionClientID: s.det("remote-identity-client-linear"),
 			AttachedByUserID:      user(person),
 			RemoteSessionID:       s.det(session),
 		}); err != nil {
@@ -598,9 +590,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	if err := s.q.ServersInsertKillswitchVersionResources(ctx, repo.ServersInsertKillswitchVersionResourcesParams{
 		OrgID:            org,
 		ActiveSelectedID: s.det("killswitch-active-selected"),
-		SupportServerID:  s.det("mcpserver-support"),
+		SupportServerID:  s.supportServer(),
 		ChangedID:        s.det("killswitch-changed"),
-		OpsServerID:      s.det("mcpserver-ops"),
+		OpsServerID:      s.opsServer(),
 		LinearServerID:   s.det("mcpserver-linear"),
 		LiftedID:         s.det("killswitch-lifted"),
 		SlackServerID:    s.det("mcpserver-slack"),
@@ -645,19 +637,20 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	return s.seedAuthClients(ctx)
 }
 
-// seedAuthClients records Linear's personal client as the upstream OAuth
-// migration derives it, and two clients an administrator created: a token
-// shared by two servers and a pass-through of the caller's own GitHub token,
-// with who may use the shared token, and the token chosen for an app that
-// signs in to Linear without a browser.
+// seedAuthClients records the Per-User OAuth Server's OAuth client as the
+// upstream OAuth migration derives it, under the MCP Fixture OAuth provider.
+// It also records two clients an administrator created: a token shared by two
+// servers and a pass-through of the caller's own token, with who may use the
+// shared token, and the token chosen for an app that signs in to the
+// Per-User OAuth Server without a browser.
 func (s *seeder) seedAuthClients(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
 
 	clients := []repo.ServersInsertAuthClientParams{
-		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Linear", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
-		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Engineering automation token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
-		{ID: s.det("auth-client-github-forwarded"), OrgID: org, ProjectID: proj, ClientType: "pass_through", Source: "admin", Name: "Your own GitHub token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
+		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Fixture OAuth sign-in", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
+		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Shared service token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
+		{ID: s.det("auth-client-github-forwarded"), OrgID: org, ProjectID: proj, ClientType: "pass_through", Source: "admin", Name: "Your own token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 	}
 	for _, client := range clients {
 		if err := s.q.ServersInsertAuthClient(ctx, client); err != nil {
@@ -672,7 +665,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 	}
 	if err := s.q.ServersInsertAuthClientForwardedHeader(ctx, repo.ServersInsertAuthClientForwardedHeaderParams{
 		ID: s.det("auth-client-github-forwarded-header"), AuthClientID: s.det("auth-client-github-forwarded"), OrgID: org,
-		Name: "Authorization", ValueFromRequestHeader: "X-GitHub-Token",
+		Name: "Authorization", ValueFromRequestHeader: "X-Upstream-Token",
 	}); err != nil {
 		return fmt.Errorf("insert demo forwarded auth client header: %w", err)
 	}
@@ -696,10 +689,10 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		McpServerID:   s.det("mcpserver-github"),
 	})
 	if err != nil {
-		return fmt.Errorf("pick demo gateway GitHub credential: %w", err)
+		return fmt.Errorf("pick the demo gateway's Pass-Through Token Server credential: %w", err)
 	}
 	if picked != 3 {
-		return fmt.Errorf("pick demo gateway GitHub credential: expected 3 choices, updated %d", picked)
+		return fmt.Errorf("pick the demo gateway's Pass-Through Token Server credential: expected 3 choices, updated %d", picked)
 	}
 	if err := s.q.ServersInsertAuthClientRoleGrants(ctx, repo.ServersInsertAuthClientRoleGrantsParams{
 		OrgID: org, AuthClientID: s.det("auth-client-github-token"),
@@ -708,7 +701,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		return fmt.Errorf("insert demo auth client role grants: %w", err)
 	}
 
-	// Linear offers two credentials, so the app that signs in without a
+	// The Per-User OAuth Server offers two credentials, so the app that signs in without a
 	// browser has its choice made by an administrator.
 	if err := s.q.ServersInsertHeadlessClient(ctx, repo.ServersInsertHeadlessClientParams{
 		ID: s.det("usc-nightly-report"), ProjectID: proj, OrgID: org, IssuerID: s.det("issuer-linear"),
@@ -728,7 +721,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		return fmt.Errorf("insert demo issuance profile choice: %w", err)
 	}
 
-	// The identity-bound assistant reaches Linear, which offers a person's own
+	// The identity-bound assistant reaches the Per-User OAuth Server, which offers a person's own
 	// account and the shared token, so its turns need a choice in each context
 	// they run in: person-backed dashboard turns, and userless ones, which can
 	// only use a shared credential.
@@ -766,7 +759,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 // tunnel, so the tunnel Overview has a source to chart without a live agent.
 func (s *seeder) seedServersTunnel(ctx context.Context) error {
 	proj := s.projectID()
-	slug := s.spec.OrgSlug + "-private-inventory"
+	slug := s.spec.OrgSlug + "-tunnelled-private"
 	if err := s.q.ServersInsertPrivateInventoryTunnel(ctx, repo.ServersInsertPrivateInventoryTunnelParams{
 		ID:        s.tunnelSourceID(),
 		ProjectID: proj,
@@ -799,15 +792,17 @@ func (s *seeder) tunnelSourceID() uuid.UUID { return s.det("tunneledmcp-private-
 func (s *seeder) tunnelServerID() uuid.UUID { return s.det("mcpserver-private-inventory") }
 
 // seedServersEMA: Enterprise Managed Authorization. Acme Identity is a
-// fictional identity provider for two fictional services behind workforce
-// servers. The workforce issuer trusts it for inbound EMA (ID-JAGs) only;
-// interactive sign-in is not federated through it, so demo sign-in is
-// unaffected. Neither service has accepted a provider yet. Runs after role
-// distribution, so plugins skip these servers.
+// fictional company identity provider. The Enterprise Sign-In (ID-JAG)
+// Server signs callers in through it on an organization sign-in of its own,
+// and reaches its upstream with the token Speakeasy obtains by exchanging
+// that identity for an ID-JAG. The workforce issuer trusts the provider for
+// inbound EMA (ID-JAGs) only, so the other servers' sign-in is unaffected.
+// Runs after role distribution, so plugins skip the server.
 func (s *seeder) seedServersEMA(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
 	workforce := s.det("issuer-workforce")
+	issuer := s.det("issuer-enterprise-sign-in")
 
 	if err := s.q.ServersInsertEMAIdentityProvider(ctx, repo.ServersInsertEMAIdentityProviderParams{
 		ID:    s.det("ema-idp"),
@@ -833,114 +828,110 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 	if linked != 1 {
 		return fmt.Errorf("trust demo ema identity provider for inbound ema: updated %d workforce issuers", linked)
 	}
-	if err := s.q.ServersInsertEMARemoteMCPServers(ctx, repo.ServersInsertEMARemoteMCPServersParams{
-		TrackerID: s.det("remotemcp-ema-tracker"),
-		ProjectID: proj,
-		WikiID:    s.det("remotemcp-ema-wiki"),
-	}); err != nil {
-		return fmt.Errorf("insert demo ema remote mcp servers: %w", err)
-	}
-	if err := s.q.ServersInsertEMAMCPServers(ctx, repo.ServersInsertEMAMCPServersParams{
-		TrackerID:         s.det("mcpserver-ema-tracker"),
-		ProjectID:         proj,
-		RemoteTrackerID:   s.det("remotemcp-ema-tracker"),
-		IssuerWorkforceID: workforce,
-		WikiID:            s.det("mcpserver-ema-wiki"),
-		RemoteWikiID:      s.det("remotemcp-ema-wiki"),
-	}); err != nil {
-		return fmt.Errorf("insert demo ema mcp servers: %w", err)
-	}
-	if err := s.q.ServersInsertEMAVendorIssuers(ctx, repo.ServersInsertEMAVendorIssuersParams{
-		TrackerID: s.det("ema-vendor-tracker"),
-		ProjectID: proj,
-		OrgID:     org,
-		WikiID:    s.det("ema-vendor-wiki"),
-	}); err != nil {
-		return fmt.Errorf("insert demo ema vendor issuers: %w", err)
-	}
-	if err := s.q.ServersInsertEMAVendorClients(ctx, repo.ServersInsertEMAVendorClientsParams{
-		TrackerID:       s.det("ema-client-tracker"),
-		ProjectID:       proj,
+	if err := s.q.ServersInsertEMAUserSessionIssuer(ctx, repo.ServersInsertEMAUserSessionIssuerParams{
+		ID:              issuer,
 		OrgID:           org,
-		TrackerIssuerID: s.det("ema-vendor-tracker"),
-		WikiID:          s.det("ema-client-wiki"),
-		WikiIssuerID:    s.det("ema-vendor-wiki"),
+		TrustedIssuerID: s.det("ema-idp"),
+		TrustedClientID: s.det("ema-idp-client"),
 	}); err != nil {
-		return fmt.Errorf("insert demo ema vendor clients: %w", err)
+		return fmt.Errorf("insert demo enterprise sign-in issuer: %w", err)
 	}
-	for _, client := range []string{"ema-client-tracker", "ema-client-wiki"} {
-		if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-			RemoteSessionClientID: s.det(client),
-			UserSessionIssuerID:   workforce,
-		}); err != nil {
-			return fmt.Errorf("bind demo %s: %w", client, err)
-		}
+	if err := s.q.ServersInsertEMARemoteMCPServer(ctx, repo.ServersInsertEMARemoteMCPServerParams{
+		ID:        s.det("remotemcp-enterprise-sign-in"),
+		ProjectID: proj,
+	}); err != nil {
+		return fmt.Errorf("insert demo ema remote mcp server: %w", err)
 	}
-	// The workforce issuer is shared, so each service's server is associated
-	// with the one client of the authorization server its protected resource
-	// names. GitHub, on the same issuer, uses neither client.
-	for _, service := range []string{"tracker", "wiki"} {
-		if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
-			ID:                    s.det("server-client-association-ema-" + service),
-			ProjectID:             proj,
-			OrgID:                 org,
-			McpServerID:           s.det("mcpserver-ema-" + service),
-			RemoteSessionClientID: s.det("ema-client-" + service),
-		}); err != nil {
-			return fmt.Errorf("associate demo ema %s server with its client: %w", service, err)
-		}
-		if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
-			RemoteSessionIssuerID: s.det("ema-vendor-" + service),
-			McpServerID:           s.det("mcpserver-ema-" + service),
-			ProjectID:             proj,
-		}); err != nil {
-			return fmt.Errorf("stamp demo ema %s remote session issuer: %w", service, err)
-		}
+	if err := s.q.ServersInsertEMAMCPServer(ctx, repo.ServersInsertEMAMCPServerParams{
+		ID:        s.det("mcpserver-enterprise-sign-in"),
+		ProjectID: proj,
+		RemoteID:  s.det("remotemcp-enterprise-sign-in"),
+		IssuerID:  issuer,
+	}); err != nil {
+		return fmt.Errorf("insert demo ema mcp server: %w", err)
 	}
-	if err := s.q.ServersInsertEMAProtectedResources(ctx, repo.ServersInsertEMAProtectedResourcesParams{
-		TrackerID: s.det("protected-resource-ema-tracker"),
+	if err := s.q.ServersInsertEMAEndpoint(ctx, repo.ServersInsertEMAEndpointParams{
+		ID:          s.det("endpoint-enterprise-sign-in"),
+		ProjectID:   proj,
+		McpServerID: s.det("mcpserver-enterprise-sign-in"),
+		Slug:        s.spec.OrgSlug + "-enterprise-sign-in",
+	}); err != nil {
+		return fmt.Errorf("insert demo ema endpoint: %w", err)
+	}
+	if err := s.q.ServersInsertEMAVendorIssuer(ctx, repo.ServersInsertEMAVendorIssuerParams{
+		ID:        s.det("ema-vendor-enterprise-sign-in"),
 		ProjectID: proj,
 		OrgID:     org,
-		WikiID:    s.det("protected-resource-ema-wiki"),
 	}); err != nil {
-		return fmt.Errorf("insert demo ema protected resources: %w", err)
+		return fmt.Errorf("insert demo ema vendor issuer: %w", err)
 	}
-	if err := s.q.ServersInsertEMABindings(ctx, repo.ServersInsertEMABindingsParams{
-		TrackerID:         s.det("ema-binding-tracker"),
-		ProjectID:         proj,
-		OrgID:             org,
-		IssuerWorkforceID: workforce,
-		TrackerIssuerID:   s.det("ema-vendor-tracker"),
-		TrackerClientID:   s.det("ema-client-tracker"),
-		WikiID:            s.det("ema-binding-wiki"),
-		WikiIssuerID:      s.det("ema-vendor-wiki"),
-		WikiClientID:      s.det("ema-client-wiki"),
+	if err := s.q.ServersInsertEMAVendorClient(ctx, repo.ServersInsertEMAVendorClientParams{
+		ID:        s.det("ema-client-enterprise-sign-in"),
+		ProjectID: proj,
+		OrgID:     org,
+		IssuerID:  s.det("ema-vendor-enterprise-sign-in"),
 	}); err != nil {
-		return fmt.Errorf("insert demo ema bindings: %w", err)
+		return fmt.Errorf("insert demo ema vendor client: %w", err)
 	}
-	if err := s.q.ServersInsertEMAProviderOrder(ctx, repo.ServersInsertEMAProviderOrderParams{
-		ID:                    s.det("ema-order-wiki"),
+	// Both organization sign-ins reach the server, so its client is bound to
+	// each: its own federated sign-in, and the workforce sign-in.
+	for _, usi := range []uuid.UUID{issuer, workforce} {
+		if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
+			RemoteSessionClientID: s.det("ema-client-enterprise-sign-in"),
+			UserSessionIssuerID:   usi,
+		}); err != nil {
+			return fmt.Errorf("bind demo ema vendor client: %w", err)
+		}
+	}
+	// The server is associated with the one client of the authorization
+	// server its protected resource names.
+	if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
+		ID:                    s.det("server-client-association-enterprise-sign-in"),
+		ProjectID:             proj,
 		OrgID:                 org,
-		RemoteSessionIssuerID: s.det("ema-idp"),
+		McpServerID:           s.det("mcpserver-enterprise-sign-in"),
+		RemoteSessionClientID: s.det("ema-client-enterprise-sign-in"),
 	}); err != nil {
-		return fmt.Errorf("insert demo ema provider order: %w", err)
+		return fmt.Errorf("associate demo ema server with its client: %w", err)
+	}
+	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
+		RemoteSessionIssuerID: s.det("ema-vendor-enterprise-sign-in"),
+		McpServerID:           s.det("mcpserver-enterprise-sign-in"),
+		ProjectID:             proj,
+	}); err != nil {
+		return fmt.Errorf("stamp demo ema remote session issuer: %w", err)
+	}
+	if err := s.q.ServersInsertEMAProtectedResource(ctx, repo.ServersInsertEMAProtectedResourceParams{
+		ID:        s.det("protected-resource-enterprise-sign-in"),
+		ProjectID: proj,
+		OrgID:     org,
+	}); err != nil {
+		return fmt.Errorf("insert demo ema protected resource: %w", err)
+	}
+	if err := s.q.ServersInsertEMABinding(ctx, repo.ServersInsertEMABindingParams{
+		ID:                  s.det("ema-binding-enterprise-sign-in"),
+		ProjectID:           proj,
+		OrgID:               org,
+		UserSessionIssuerID: issuer,
+		IssuerID:            s.det("ema-vendor-enterprise-sign-in"),
+		ClientID:            s.det("ema-client-enterprise-sign-in"),
+	}); err != nil {
+		return fmt.Errorf("insert demo ema binding: %w", err)
 	}
 	return nil
 }
 
-// seedSignInExampleServers adds Notion, whose callers each sign in to their
-// own account once an admin sets up its sign-in, and DeepWiki, a public
-// server that needs no sign-in. Unlike the example-host servers, both
-// connect for real.
+// seedSignInExampleServers adds the Auto-Configured OAuth Server and Linear, whose
+// callers each sign in to their own account once an admin sets up its
+// sign-in.
 func (s *seeder) seedSignInExampleServers(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
 	if err := s.q.ServersInsertSignInExampleRemoteMCPServers(ctx, repo.ServersInsertSignInExampleRemoteMCPServersParams{
-		NotionID:   s.det("remotemcp-notion"),
-		ProjectID:  proj,
-		DeepwikiID: s.det("remotemcp-deepwiki"),
+		NotionID:  s.det("remotemcp-notion"),
+		ProjectID: proj,
 	}); err != nil {
-		return fmt.Errorf("insert demo notion and deepwiki remote servers: %w", err)
+		return fmt.Errorf("insert demo auto-configured oauth remote server: %w", err)
 	}
 	if err := s.q.ServersInsertNotionUserSessionIssuer(ctx, repo.ServersInsertNotionUserSessionIssuerParams{
 		ID:        s.det("issuer-notion"),
@@ -950,26 +941,31 @@ func (s *seeder) seedSignInExampleServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo notion user session issuer: %w", err)
 	}
 	if err := s.q.ServersInsertSignInExampleMCPServers(ctx, repo.ServersInsertSignInExampleMCPServersParams{
-		NotionID:          s.det("mcpserver-notion"),
-		ProjectID:         proj,
-		RemoteNotionID:    s.det("remotemcp-notion"),
-		IssuerNotionID:    s.det("issuer-notion"),
-		DeepwikiID:        s.det("mcpserver-deepwiki"),
-		RemoteDeepwikiID:  s.det("remotemcp-deepwiki"),
-		IssuerWorkforceID: s.det("issuer-workforce"),
+		NotionID:       s.det("mcpserver-notion"),
+		ProjectID:      proj,
+		RemoteNotionID: s.det("remotemcp-notion"),
+		IssuerNotionID: s.det("issuer-notion"),
 	}); err != nil {
-		return fmt.Errorf("insert demo notion and deepwiki servers: %w", err)
+		return fmt.Errorf("insert demo auto-configured oauth server: %w", err)
 	}
 	if err := s.q.ServersInsertSignInExampleEndpoints(ctx, repo.ServersInsertSignInExampleEndpointsParams{
-		NotionEndpointID:   s.det("endpoint-notion"),
-		ProjectID:          proj,
-		NotionServerID:     s.det("mcpserver-notion"),
-		NotionSlug:         s.spec.OrgSlug + "-notion",
-		DeepwikiEndpointID: s.det("endpoint-deepwiki"),
-		DeepwikiServerID:   s.det("mcpserver-deepwiki"),
-		DeepwikiSlug:       s.spec.OrgSlug + "-deepwiki",
+		NotionEndpointID: s.det("endpoint-notion"),
+		ProjectID:        proj,
+		NotionServerID:   s.det("mcpserver-notion"),
+		NotionSlug:       s.spec.OrgSlug + "-auto-configured-oauth",
 	}); err != nil {
-		return fmt.Errorf("insert demo notion and deepwiki endpoints: %w", err)
+		return fmt.Errorf("insert demo auto-configured oauth endpoint: %w", err)
+	}
+	if err := s.q.ServersInsertLinearAppServer(ctx, repo.ServersInsertLinearAppServerParams{
+		RemoteID:   s.det("remotemcp-linear-app"),
+		IssuerID:   s.det("issuer-linear-app"),
+		ServerID:   s.det("mcpserver-linear-app"),
+		EndpointID: s.det("endpoint-linear-app"),
+		Slug:       s.spec.OrgSlug + "-linear",
+		ProjectID:  proj,
+		OrgID:      org,
+	}); err != nil {
+		return fmt.Errorf("insert demo linear server: %w", err)
 	}
 	return nil
 }

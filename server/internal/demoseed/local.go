@@ -69,6 +69,9 @@ type LocalFixturesOptions struct {
 	ObservedEnv map[string]string
 	// Slack connects the org to the developer's Slack test app, when set.
 	Slack LocalSlackOptions
+	// MCPFixture points seeded servers at the local MCP fixture server, when
+	// its URL is set.
+	MCPFixture LocalMCPFixtureOptions
 }
 
 // RunLocalFixtures adds everything the local development organization needs on
@@ -85,7 +88,9 @@ type LocalFixturesOptions struct {
 //     hardcode them;
 //   - the global MCP registry row, which is not tenant-scoped and so cannot
 //     live in the seed proper;
-//   - a global catalog logo entry and public platform asset when SiteURL is set.
+//   - a global catalog logo entry and public platform asset when SiteURL is set;
+//   - the local MCP fixture wiring (local_mcp_fixture.go), so the seeded
+//     OAuth, shared-token and generated servers work end to end.
 //
 // Writes are idempotent. Tenant writes are scoped to LocalSpec's org; the
 // registry entries, platform assets, and system roles are global.
@@ -165,6 +170,9 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"adopt developer", func() error {
 			return q.LocalAdoptDeveloper(ctx, repo.LocalAdoptDeveloperParams{OrganizationID: spec.OrgID, UserID: dev.ID, WorkosUserID: workosID})
 		}},
+		{"provision developer in the directory", func() error {
+			return q.LocalProvisionDeveloperDirectoryUser(ctx, repo.LocalProvisionDeveloperDirectoryUserParams{OrganizationID: spec.OrgID, UserID: dev.ID, Email: dev.Email, DisplayName: dev.Name})
+		}},
 		{"grant session visibility", func() error {
 			return q.LocalGrantSessionVisibility(ctx, repo.LocalGrantSessionVisibilityParams{OrganizationID: spec.OrgID, UserID: dev.ID})
 		}},
@@ -234,6 +242,9 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		}},
 		{"mcp app toolset entry", func() error {
 			return q.LocalAttachMCPAppToToolset(ctx, repo.LocalAttachMCPAppToToolsetParams{OrganizationID: spec.OrgID, ToolUrn: mcpAppToolURN(), ResourceUrn: mcpAppResourceURN(), ToolsetSlug: MCPAppToolsetSlug})
+		}},
+		{"mcp fixture servers", func() error {
+			return wireLocalMCPFixture(ctx, logger, tx, opts.MCPFixture)
 		}},
 	} {
 		if err := step.run(); err != nil {

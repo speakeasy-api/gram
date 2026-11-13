@@ -33,6 +33,10 @@ case "$usage_name" in
   mock-oidc)
     mise run check:http --url "http://$(probe_address "${MOCK_OIDC_ADDRESS:-localhost:$GRAM_ADMIN_OIDC_EMULATOR_PORT}")/healthz"
     ;;
+  mcp-fixture)
+    # Serves TLS with the local certificate so Speakeasy can discover its OAuth server.
+    mise run check:http --url "$GRAM_HTTP_SCHEME://${GRAM_HOST:-localhost}:$GRAM_MCP_FIXTURE_PORT/healthz"
+    ;;
   server)
     mise run check:http --url "http://$(probe_address "${GRAM_CONTROL_ADDRESS:-localhost:$GRAM_CONTROL_PORT}")/healthz"
     ;;

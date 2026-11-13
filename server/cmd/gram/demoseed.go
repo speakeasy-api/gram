@@ -76,6 +76,37 @@ func newDemoSeedCommand() *cli.Command {
 				EnvVars: []string{"GRAM_DEV_SLACK_EMAIL"},
 			},
 			&cli.StringFlag{
+				Name:    "local-mcp-fixture-url",
+				Usage:   "URL of the local MCP fixture server; seeded servers point at it so they work end to end",
+				EnvVars: []string{"GRAM_MCP_FIXTURE_URL"},
+			},
+			&cli.DurationFlag{
+				Name:    "local-mcp-fixture-access-token-ttl",
+				Usage:   "Lifetime of the fixture access tokens the local seed mints",
+				EnvVars: []string{"GRAM_MCP_FIXTURE_ACCESS_TOKEN_TTL"},
+				Value:   time.Hour,
+			},
+			&cli.StringFlag{
+				Name:    "local-devidp-url",
+				Usage:   "External URL of the local dev-idp; the Enterprise Sign-In (ID-JAG) Server signs in and exchanges identities through it",
+				EnvVars: []string{"GRAM_DEVIDP_EXTERNAL_URL"},
+			},
+			&cli.StringFlag{
+				Name:    "local-devidp-client-id",
+				Usage:   "The dev-idp's static login client id, which Speakeasy's dev-idp registration for the Enterprise Sign-In (ID-JAG) Server reuses",
+				EnvVars: []string{"GRAM_IDP_CLIENT_ID"},
+			},
+			&cli.StringFlag{
+				Name:    "local-cache-dir",
+				Usage:   "Directory that keeps the Linear client the local seed registers, so reseeding reuses it",
+				EnvVars: []string{"GRAM_DEMOSEED_CACHE_DIR"},
+			},
+			&cli.StringFlag{
+				Name:    "server-url",
+				Usage:   "Speakeasy's own URL, which the local MCP fixture redirects sign-ins back to",
+				EnvVars: []string{"GRAM_SERVER_URL"},
+			},
+			&cli.StringFlag{
 				Name:     "authz-issuer-url",
 				Usage:    "Speakeasy platform signing issuer origin, under which the seeded assistant triggers are registered",
 				EnvVars:  []string{"GRAM_AUTHZ_ISSUER_URL"},
@@ -90,11 +121,18 @@ func newDemoSeedCommand() *cli.Command {
 		}, append(clickHouseFlags(), redisFlags()...)...),
 		Action: func(c *cli.Context) error {
 			var siteURL *url.URL
+			var fixture demoseed.LocalMCPFixtureOptions
 			if c.Bool("local") {
 				var err error
 				siteURL, err = parseSiteURL(c.String("site-url"))
 				if err != nil {
 					return fmt.Errorf("local seed site-url: %w", err)
+				}
+				// Validate before the seed writes anything, so a bad setting
+				// cannot leave the org reseeded without its local fixtures.
+				fixture, err = localMCPFixtureOptions(c)
+				if err != nil {
+					return err
 				}
 			}
 			// HTTP is only for an environment explicitly declared local: the
@@ -192,6 +230,7 @@ func newDemoSeedCommand() *cli.Command {
 				Environment:    c.String("environment"),
 				ObservedEnv:    observed,
 				Slack:          slack,
+				MCPFixture:     fixture,
 			}); err != nil {
 				return fmt.Errorf("apply local fixtures: %w", err)
 			}
@@ -222,4 +261,57 @@ func newDemoSeedCommand() *cli.Command {
 			return nil
 		},
 	}
+}
+
+// localMCPFixtureOptions reads the local MCP fixture settings. Without a
+// fixture URL the seeded servers stay display-only.
+func localMCPFixtureOptions(c *cli.Context) (demoseed.LocalMCPFixtureOptions, error) {
+	opts := demoseed.LocalMCPFixtureOptions{BaseURL: "", ServerURL: nil, AccessTokenTTL: c.Duration("local-mcp-fixture-access-token-ttl"), Encryption: nil, DevIDPURL: "", DevIDPClientID: "", HTTPClient: nil, Policy: nil, CacheDir: ""}
+	base := c.String("local-mcp-fixture-url")
+	if base == "" || base == "unset" {
+		return opts, nil
+	}
+	if _, err := parseOrigin(base); err != nil {
+		return opts, fmt.Errorf("GRAM_MCP_FIXTURE_URL: %w", err)
+	}
+	serverURL, err := parseOrigin(c.String("server-url"))
+	if err != nil {
+		return opts, fmt.Errorf("the local MCP fixture needs GRAM_SERVER_URL: %w", err)
+	}
+	encryptionClient, err := encryption.New(c.String("encryption-key"))
+	if err != nil {
+		return opts, fmt.Errorf("create encryption client for the local MCP fixture tokens: %w", err)
+	}
+	opts.BaseURL = base
+	opts.ServerURL = serverURL
+	opts.Encryption = encryptionClient
+	opts.DevIDPURL = c.String("local-devidp-url")
+	opts.DevIDPClientID = c.String("local-devidp-client-id")
+	// The dev-idp listens on localhost, which the default egress policy
+	// refuses; the local seed only ever calls the developer's own dev-idp.
+	policy, err := guardian.NewUnsafePolicy(otel.GetTracerProvider(), []string{})
+	if err != nil {
+		return opts, fmt.Errorf("create the dev-idp egress policy: %w", err)
+	}
+	opts.HTTPClient = policy.Client()
+	opts.HTTPClient.Timeout = 10 * time.Second
+	opts.Policy = policy
+	opts.CacheDir = c.String("local-cache-dir")
+	return opts, nil
+}
+
+// parseOrigin accepts an absolute http(s) origin: a scheme and host, with no
+// path, query or fragment.
+func parseOrigin(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse %q: %w", raw, err)
+	}
+	if (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return nil, fmt.Errorf("%q is not an absolute http(s) URL", raw)
+	}
+	if u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return nil, fmt.Errorf("%q must be an origin, without a path, query or fragment", raw)
+	}
+	return u, nil
 }

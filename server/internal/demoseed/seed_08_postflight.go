@@ -269,7 +269,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 				return s.q.PostflightCountKillswitchOverlappingActive(ctx, repo.PostflightCountKillswitchOverlappingActiveParams{
 					OrgID:        org,
 					PrincipalKey: s.userID(demoUsers[0].handle),
-					ResourceKey:  s.det("mcpserver-support").String(),
+					ResourceKey:  s.supportServer().String(),
 				})
 			},
 			fail: postflightMustEqual(2, "expected 2 overlapping active killswitches, found %d"),

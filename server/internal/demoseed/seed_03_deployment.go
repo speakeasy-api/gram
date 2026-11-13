@@ -94,7 +94,7 @@ func (s *seeder) seedDeploymentStack(ctx context.Context) error {
 			Summary:             "Acme " + strings.ReplaceAll(name, "_", " "),
 			Description:         "Calls the Acme internal API operation " + name + ".",
 			HttpMethod:          method,
-			Path:                "/" + strings.ReplaceAll(name, "_", "/"),
+			Path:                toolPaths[name],
 			ReadOnlyHint:        name != "process_refund",
 			DestructiveHint:     name == "process_refund",
 		}); err != nil {

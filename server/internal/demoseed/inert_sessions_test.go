@@ -28,8 +28,10 @@ func TestInertDemoSessionsReadAsConnected(t *testing.T) {
 	seedLocalPostgres(ctx, t, db, spec)
 
 	s := &seeder{spec: spec}
+	// Validated sessions 3 to 6: they share the Per-User OAuth Server's one
+	// client, and each demo user can hold one session per client.
 	keys := []string{"attachment-session"}
-	for n := 1; n <= 6; n++ {
+	for n := 3; n <= 6; n++ {
 		keys = append(keys, "validated-session-"+strconv.Itoa(n))
 	}
 	enc := testenv.NewEncryptionClient(t)

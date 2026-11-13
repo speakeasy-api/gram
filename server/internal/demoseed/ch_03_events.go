@@ -843,8 +843,8 @@ func (s *seeder) chInsertMCPNetworkRequests(ctx context.Context, ch driver.Conn)
 	targets := []struct {
 		kind, surface, serverID string
 	}{
-		{"mcp", "public", s.det("mcpserver-support").String()},
-		{"mcp", "private", s.det("mcpserver-ops").String()},
+		{"mcp", "public", s.supportServer().String()},
+		{"mcp", "private", s.opsServer().String()},
 		{"meta", "public", s.det("metamcp-1").String()},
 		{"meta", "private", s.det("metamcp-1").String()},
 	}

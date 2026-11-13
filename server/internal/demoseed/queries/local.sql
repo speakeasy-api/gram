@@ -214,3 +214,274 @@ WHERE id = (
   LIMIT 1
 )
 AND NOT (@tool_urn::text = ANY(tool_urns));
+
+-- Local MCP fixture (local_mcp_fixture.go). These point a few seeded servers
+-- at the throwaway fixture server (mcp-fixture/) so they work right after
+-- seeding. Local org only: the public demo org cannot reach localhost.
+
+-- name: LocalFixtureUpsertEnvironment :exec
+INSERT INTO environments (id, organization_id, project_id, name, slug, description)
+VALUES (@id::uuid, @organization_id::text, @project_id::uuid, 'MCP fixture', 'mcp-fixture',
+        'Points the demo API servers at the local MCP fixture''s API stub.')
+ON CONFLICT (project_id, slug) WHERE deleted IS FALSE
+DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, updated_at = clock_timestamp();
+
+-- name: LocalFixtureUpsertEnvironmentEntry :execrows
+INSERT INTO environment_entries (environment_id, name, value, is_secret)
+SELECT e.id, @name::text, @value::text, FALSE
+FROM environments e
+WHERE e.id = @environment_id::uuid AND e.project_id = @project_id::uuid AND e.deleted IS FALSE
+ON CONFLICT (environment_id, name)
+DO UPDATE SET value = EXCLUDED.value, is_secret = FALSE, updated_at = clock_timestamp();
+
+-- A toolset's environment is system-provided: it wins over any caller's own.
+-- name: LocalFixtureLinkToolsetEnvironments :execrows
+INSERT INTO toolset_environments (toolset_id, project_id, environment_id)
+SELECT t.id, t.project_id, @environment_id::uuid
+FROM toolsets t
+WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE
+  AND t.id = ANY(@toolset_ids::uuid[])
+ON CONFLICT (toolset_id)
+DO UPDATE SET environment_id = EXCLUDED.environment_id, updated_at = clock_timestamp();
+
+-- name: LocalFixturePointRemoteServer :execrows
+UPDATE remote_mcp_servers SET url = @url::text, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: LocalFixtureSetRemoteHeaderValue :execrows
+UPDATE remote_mcp_server_headers h SET value = @value::text, is_secret = FALSE, updated_at = clock_timestamp()
+FROM remote_mcp_servers r
+WHERE h.id = @id::uuid AND h.remote_mcp_server_id = r.id
+  AND r.project_id = @project_id::uuid AND h.deleted IS FALSE AND h.value IS NOT NULL;
+
+-- Upserted by a fixed id, so a reseed rewrites it in place.
+-- name: LocalFixtureUpsertForwardedHeader :execrows
+INSERT INTO remote_mcp_server_headers (id, remote_mcp_server_id, name, description, is_required, is_secret, value_from_request_header)
+SELECT @id::uuid, r.id, @name::text, 'Your own upstream token, forwarded from this request header', TRUE, TRUE, @from_request_header::text
+FROM remote_mcp_servers r
+WHERE r.id = @remote_mcp_server_id::uuid AND r.project_id = @project_id::uuid AND r.deleted IS FALSE
+ON CONFLICT (id) DO UPDATE
+SET name = EXCLUDED.name, value_from_request_header = EXCLUDED.value_from_request_header,
+    value = NULL, deleted_at = NULL, updated_at = clock_timestamp();
+
+-- name: LocalFixturePointIssuer :execrows
+UPDATE remote_session_issuers
+SET issuer = @issuer::text,
+    authorization_endpoint = @issuer::text || '/oauth/authorize',
+    token_endpoint = @issuer::text || '/oauth/token',
+    registration_endpoint = @issuer::text || '/oauth/register',
+    revocation_endpoint = @issuer::text || '/oauth/revoke',
+    jwks_uri = NULL,
+    scopes_supported = @scopes::text[],
+    scope_override = NULL,
+    grant_types_supported = ARRAY['authorization_code', 'refresh_token'],
+    response_types_supported = ARRAY['code'],
+    token_endpoint_auth_methods_supported = ARRAY['none'],
+    code_challenge_methods_supported = ARRAY['S256'],
+    client_id_metadata_document_supported = TRUE,
+    name = @name::text,
+    metadata_fetched_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: LocalFixturePointProtectedResource :execrows
+UPDATE remote_protected_resources
+SET resource_identifier = @resource::text,
+    metadata_url = @metadata_url::text,
+    authorization_servers = ARRAY[@issuer::text],
+    scopes_supported = @scopes::text[],
+    scope_override = @scopes::text[],
+    resource_name = 'Speakeasy MCP fixture (per-user OAuth)',
+    metadata_fetched_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id::uuid AND organization_id = @organization_id::text
+  AND resource_identifier = @old_resource::text AND deleted IS FALSE;
+
+-- A client ID metadata document client: Speakeasy serves the document at
+-- client_id, and the fixture fetches it to learn the redirect URI.
+-- name: LocalFixturePointMetadataDocumentClient :execrows
+UPDATE remote_session_clients
+SET client_id = @client_id::text, client_id_metadata_uri = @client_id::text,
+    callback_base_url = @callback_base_url::text, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: LocalFixtureSetHeaderValue :execrows
+UPDATE mcp_auth_client_headers SET value = @value::text, is_secret = FALSE, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND organization_id = @organization_id::text;
+
+-- The live seeded sign-ins on the given clients, with the email each signed in as.
+-- name: LocalFixtureListLiveSessions :many
+SELECT rs.id, COALESCE(u.email, rs.upstream_email, '')::text AS email
+FROM remote_sessions rs
+JOIN remote_session_clients c
+  ON c.id = rs.remote_session_client_id AND c.project_id = @project_id::uuid
+LEFT JOIN users u ON rs.subject_urn = 'user:' || u.id
+WHERE rs.remote_session_client_id = ANY(@client_ids::uuid[])
+  AND rs.deleted IS FALSE
+  AND rs.access_expires_at > clock_timestamp()
+ORDER BY rs.id;
+
+-- name: LocalFixtureSetSessionTokens :execrows
+UPDATE remote_sessions
+SET access_token_encrypted = @access_token_encrypted::text,
+    access_expires_at = @access_expires_at::timestamptz,
+    refresh_token_encrypted = @refresh_token_encrypted::text,
+    refresh_expires_at = @refresh_expires_at::timestamptz,
+    scopes = @scopes::text[],
+    auto_refresh = TRUE,
+    upstream_email = @email::text,
+    resource = @resource::text,
+    -- The shared seed holds a long re-check lease so the demo org never
+    -- presents its dummy token; these hold real fixture tokens that must
+    -- refresh, so the lease is released.
+    last_refresh_attempt_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND remote_session_client_id = ANY(@client_ids::uuid[]) AND deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients c
+    WHERE c.id = remote_sessions.remote_session_client_id AND c.project_id = @project_id::uuid
+  );
+
+-- The External OAuth Server's authorization server: the running fixture's.
+-- name: LocalFixturePointExternalOAuth :execrows
+UPDATE external_oauth_server_metadata SET metadata = @metadata::jsonb, authorization_server_issuer = NULL, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- The Tunnelled Private Server's tunnel takes the fixture daemon's checked-in
+-- agent key, so the tunnel is live locally. The shared seed keeps it inert.
+-- name: LocalFixtureSetTunnelKey :execrows
+UPDATE tunneled_mcp_servers SET key_hash = @key_hash::text, key_prefix = @key_prefix::text, status = 'active', updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- The Enterprise Sign-In (ID-JAG) Server (local_ema.go). Locally the company
+-- identity provider is the dev-idp's OAuth 2.1 server.
+-- name: LocalEMAPointIdentityProvider :execrows
+UPDATE remote_session_issuers
+SET issuer = @issuer::text,
+    authorization_endpoint = @issuer::text || '/authorize',
+    token_endpoint = @issuer::text || '/token',
+    userinfo_endpoint = @issuer::text || '/userinfo',
+    revocation_endpoint = @issuer::text || '/revoke',
+    registration_endpoint = NULL,
+    jwks_uri = @issuer::text || '/.well-known/jwks.json',
+    jwks = NULL, jwks_fetched_at = NULL, jwks_cache_expires_at = NULL, jwks_etag = NULL,
+    scopes_supported = ARRAY['openid', 'email', 'profile'],
+    grant_types_supported = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    response_types_supported = ARRAY['code'],
+    token_endpoint_auth_methods_supported = ARRAY['client_secret_post'],
+    code_challenge_methods_supported = ARRAY['S256'],
+    id_token_signing_alg_values_supported = ARRAY['RS256'],
+    authorization_response_iss_parameter_supported = TRUE,
+    oidc = TRUE,
+    name = @name::text,
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND organization_id = @organization_id::text AND project_id IS NULL AND deleted IS FALSE;
+
+-- Speakeasy's registration at the dev-idp: its static login client, with the
+-- checked-in local secret the dev-idp EMA app also holds.
+-- name: LocalEMAPointIdentityProviderClient :execrows
+UPDATE remote_session_clients
+SET client_id = @client_id::text,
+    client_secret_encrypted = @client_secret_encrypted::text,
+    token_endpoint_auth_method = 'client_secret_post',
+    grant_types = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    scope = ARRAY['openid', 'email', 'profile'],
+    callback_base_url = @callback_base_url::text,
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND organization_id = @organization_id::text AND project_id IS NULL AND deleted IS FALSE;
+
+-- The server's authorization server: the dev-idp resource authorization
+-- server for the fixture's /mcp/ema endpoint.
+-- name: LocalEMAPointVendorIssuer :execrows
+UPDATE remote_session_issuers
+SET issuer = @issuer::text,
+    token_endpoint = @issuer::text || '/token',
+    introspection_endpoint = @issuer::text || '/introspect',
+    jwks_uri = @issuer::text || '/.well-known/jwks.json',
+    jwks = NULL, jwks_fetched_at = NULL, jwks_cache_expires_at = NULL, jwks_etag = NULL,
+    scopes_supported = @scopes::text[],
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: LocalEMAPointVendorClient :execrows
+UPDATE remote_session_clients
+SET client_id = @client_id::text,
+    client_secret_encrypted = @client_secret_encrypted::text,
+    scope = @scopes::text[],
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- The protected resource, its binding and the typed auth client move from the
+-- shared seed's placeholder to the running fixture's /mcp/ema endpoint.
+-- name: LocalEMAPointProtectedResource :execrows
+UPDATE remote_protected_resources
+SET resource_identifier = @resource::text,
+    metadata_url = @metadata_url::text,
+    authorization_servers = ARRAY[@issuer::text],
+    scopes_supported = @scopes::text[],
+    metadata_fetched_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: LocalEMAPointBinding :execrows
+UPDATE remote_session_ema_bindings
+SET resource = @resource::text, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid;
+
+-- name: LocalEMAPointAuthClient :execrows
+UPDATE mcp_auth_client_emas
+SET resource = @resource::text, updated_at = clock_timestamp()
+WHERE remote_session_client_id = @remote_session_client_id::uuid
+  AND organization_id = @organization_id::text AND deleted IS FALSE;
+
+-- Linear's authorization server, as its metadata document describes it
+-- (https://mcp.linear.app/.well-known/oauth-authorization-server).
+-- name: LocalLinearInsertIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
+   token_endpoint, registration_endpoint, revocation_endpoint,
+   scopes_supported, grant_types_supported, response_types_supported,
+   token_endpoint_auth_methods_supported, code_challenge_methods_supported,
+   client_id_metadata_document_supported, name, metadata_fetched_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @organization_id::text, 'linear',
+   @issuer::text, @issuer::text || '/authorize', @issuer::text || '/token',
+   @issuer::text || '/register', @issuer::text || '/token',
+   ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['code'], ARRAY['client_secret_basic', 'client_secret_post', 'none'],
+   ARRAY['S256'], TRUE, 'Linear', clock_timestamp());
+
+-- A public client registered with Linear by dynamic client registration. Its
+-- callback origin is the one the registration listed.
+-- name: LocalLinearInsertClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_id_issued_at, token_endpoint_auth_method, callback_base_url)
+VALUES
+  (@id::uuid, @project_id::uuid, @organization_id::text,
+   @remote_session_issuer_id::uuid, @client_id::text, clock_timestamp(),
+   'none', @callback_base_url::text);
+
+-- name: LocalLinearInsertProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @organization_id::text, @resource::text,
+   @metadata_url::text, ARRAY[@issuer::text], ARRAY['read', 'write'],
+   clock_timestamp());
+
+-- Provisions the developer in the local org's directory, linked to their
+-- user, the way directory sync would. Federated sign-in (the Enterprise
+-- Sign-In server) admits only directory-provisioned people.
+-- name: LocalProvisionDeveloperDirectoryUser :exec
+INSERT INTO directory_users
+  (organization_id, user_id, workos_directory_user_id, email, first_name,
+   workos_created_at, workos_updated_at)
+VALUES (@organization_id::text, @user_id::text, 'devidp_dir_' || @user_id::text,
+        @email::text, @display_name::text, clock_timestamp(), clock_timestamp())
+ON CONFLICT (workos_directory_user_id) DO UPDATE
+SET organization_id = EXCLUDED.organization_id, user_id = EXCLUDED.user_id,
+    email = EXCLUDED.email, first_name = EXCLUDED.first_name,
+    deleted_at = NULL, workos_deleted_at = NULL,
+    workos_updated_at = clock_timestamp(), updated_at = clock_timestamp();

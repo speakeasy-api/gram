@@ -2263,6 +2263,23 @@ func (q *Queries) GetAttachmentSourceIDFixture(ctx context.Context, arg GetAttac
 	return id, err
 }
 
+const getAuthClientHeaderFixture = `-- name: GetAuthClientHeaderFixture :one
+SELECT value, is_secret FROM mcp_auth_client_headers WHERE id = $1 AND deleted IS FALSE
+`
+
+type GetAuthClientHeaderFixtureRow struct {
+	Value    pgtype.Text
+	IsSecret bool
+}
+
+// Reads an auth client header's stored value and secrecy.
+func (q *Queries) GetAuthClientHeaderFixture(ctx context.Context, id uuid.UUID) (GetAuthClientHeaderFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getAuthClientHeaderFixture, id)
+	var i GetAuthClientHeaderFixtureRow
+	err := row.Scan(&i.Value, &i.IsSecret)
+	return i, err
+}
+
 const getChatSessionLinkByParentFixture = `-- name: GetChatSessionLinkByParentFixture :one
 SELECT kind, child_chat_id, parent_session_id, target_harness, organization_id, project_id
 FROM chat_session_links
@@ -2504,6 +2521,28 @@ func (q *Queries) GetDirectoryReviewItemStateFixture(ctx context.Context, id uui
 	return state, err
 }
 
+const getEnvironmentEntryFixture = `-- name: GetEnvironmentEntryFixture :one
+SELECT value, is_secret FROM environment_entries WHERE environment_id = $1 AND name = $2
+`
+
+type GetEnvironmentEntryFixtureParams struct {
+	EnvironmentID uuid.UUID
+	Name          string
+}
+
+type GetEnvironmentEntryFixtureRow struct {
+	Value    string
+	IsSecret bool
+}
+
+// Reads one environment entry by environment and name.
+func (q *Queries) GetEnvironmentEntryFixture(ctx context.Context, arg GetEnvironmentEntryFixtureParams) (GetEnvironmentEntryFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getEnvironmentEntryFixture, arg.EnvironmentID, arg.Name)
+	var i GetEnvironmentEntryFixtureRow
+	err := row.Scan(&i.Value, &i.IsSecret)
+	return i, err
+}
+
 const getLatestTrialArmAuditIDFixture = `-- name: GetLatestTrialArmAuditIDFixture :one
 SELECT id::text
 FROM audit_logs
@@ -2519,6 +2558,51 @@ func (q *Queries) GetLatestTrialArmAuditIDFixture(ctx context.Context, organizat
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getLocalEMAWiringFixture = `-- name: GetLocalEMAWiringFixture :one
+SELECT b.resource,
+       idp.issuer AS identity_provider,
+       idp_client.client_id AS identity_provider_client_id,
+       idp_client.client_secret_encrypted AS identity_provider_client_secret,
+       vendor.issuer AS authorization_server,
+       vendor.token_endpoint AS authorization_server_token_endpoint,
+       vendor_client.client_id AS authorization_server_client_id
+FROM remote_session_ema_bindings b
+JOIN user_session_issuers usi ON usi.id = b.user_session_issuer_id
+JOIN remote_session_issuers idp ON idp.id = usi.trusted_remote_session_issuer_id
+JOIN remote_session_clients idp_client ON idp_client.id = usi.trusted_remote_session_client_id
+JOIN remote_session_issuers vendor ON vendor.id = b.remote_session_issuer_id
+JOIN remote_session_clients vendor_client ON vendor_client.id = b.remote_session_client_id
+WHERE b.id = $1
+`
+
+type GetLocalEMAWiringFixtureRow struct {
+	Resource                         string
+	IdentityProvider                 string
+	IdentityProviderClientID         string
+	IdentityProviderClientSecret     pgtype.Text
+	AuthorizationServer              string
+	AuthorizationServerTokenEndpoint pgtype.Text
+	AuthorizationServerClientID      string
+}
+
+// Reads what the local seed points the Enterprise Sign-In (ID-JAG) Server's
+// binding at: its resource, the user session issuer's trusted identity
+// provider and client, and the authorization server and its client.
+func (q *Queries) GetLocalEMAWiringFixture(ctx context.Context, id uuid.UUID) (GetLocalEMAWiringFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getLocalEMAWiringFixture, id)
+	var i GetLocalEMAWiringFixtureRow
+	err := row.Scan(
+		&i.Resource,
+		&i.IdentityProvider,
+		&i.IdentityProviderClientID,
+		&i.IdentityProviderClientSecret,
+		&i.AuthorizationServer,
+		&i.AuthorizationServerTokenEndpoint,
+		&i.AuthorizationServerClientID,
+	)
+	return i, err
 }
 
 const getMCPServerRequiresUpstreamAuthFixture = `-- name: GetMCPServerRequiresUpstreamAuthFixture :one
@@ -2849,6 +2933,47 @@ func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublish
 		&i.LeaseToken,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const getRemoteMCPServerHeaderFixture = `-- name: GetRemoteMCPServerHeaderFixture :one
+SELECT name, value, value_from_request_header, is_secret FROM remote_mcp_server_headers WHERE id = $1 AND deleted IS FALSE
+`
+
+type GetRemoteMCPServerHeaderFixtureRow struct {
+	Name                   string
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+	IsSecret               bool
+}
+
+// Reads a remote MCP server header's static value or forwarding source.
+func (q *Queries) GetRemoteMCPServerHeaderFixture(ctx context.Context, id uuid.UUID) (GetRemoteMCPServerHeaderFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteMCPServerHeaderFixture, id)
+	var i GetRemoteMCPServerHeaderFixtureRow
+	err := row.Scan(
+		&i.Name,
+		&i.Value,
+		&i.ValueFromRequestHeader,
+		&i.IsSecret,
+	)
+	return i, err
+}
+
+const getRemoteMCPServerURLFixture = `-- name: GetRemoteMCPServerURLFixture :one
+SELECT name, url FROM remote_mcp_servers WHERE id = $1 AND deleted IS FALSE
+`
+
+type GetRemoteMCPServerURLFixtureRow struct {
+	Name pgtype.Text
+	Url  string
+}
+
+// Reads a remote MCP server's name and upstream URL.
+func (q *Queries) GetRemoteMCPServerURLFixture(ctx context.Context, id uuid.UUID) (GetRemoteMCPServerURLFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteMCPServerURLFixture, id)
+	var i GetRemoteMCPServerURLFixtureRow
+	err := row.Scan(&i.Name, &i.Url)
 	return i, err
 }
 
@@ -4561,6 +4686,48 @@ func (q *Queries) ListPublishOutboxRows(ctx context.Context) ([]ListPublishOutbo
 			&i.LockedUntil,
 			&i.LeaseToken,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSessionTokensFixture = `-- name: ListRemoteSessionTokensFixture :many
+SELECT id, access_token_encrypted, refresh_token_encrypted::text AS refresh_token_encrypted, auto_refresh
+FROM remote_sessions
+WHERE remote_session_client_id = $1
+  AND deleted IS FALSE
+  AND (access_expires_at IS NULL OR access_expires_at > clock_timestamp())
+ORDER BY id
+`
+
+type ListRemoteSessionTokensFixtureRow struct {
+	ID                    uuid.UUID
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted string
+	AutoRefresh           bool
+}
+
+// Reads the stored, encrypted tokens of a client's live remote sessions.
+func (q *Queries) ListRemoteSessionTokensFixture(ctx context.Context, remoteSessionClientID uuid.UUID) ([]ListRemoteSessionTokensFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionTokensFixture, remoteSessionClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionTokensFixtureRow
+	for rows.Next() {
+		var i ListRemoteSessionTokensFixtureRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccessTokenEncrypted,
+			&i.RefreshTokenEncrypted,
+			&i.AutoRefresh,
 		); err != nil {
 			return nil, err
 		}

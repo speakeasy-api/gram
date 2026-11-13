@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in to the MCP fixture</title>
+<style>
+  :root { --bg: #f6f7f9; --card: #fff; --fg: #1b1f27; --muted: #5d6573; --line: #dde1e8; --accent: #3a5bd9; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #12151b; --card: #1a1e26; --fg: #e6e9ef; --muted: #9aa3b2; --line: #2c323d; --accent: #4968d8; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; display: grid; place-items: center; min-height: 100vh; padding: 16px; box-sizing: border-box; }
+  main { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 24px; width: 100%; max-width: 420px; display: grid; gap: 14px; }
+  h1 { font-size: 1.2rem; margin: 0; }
+  p { margin: 0; color: var(--muted); }
+  .scopes { display: flex; gap: 6px; flex-wrap: wrap; }
+  .scopes code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-size: 0.85rem; }
+  .pick { display: grid; gap: 8px; }
+  button, input { font: inherit; }
+  .pick button { text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); cursor: pointer; }
+  .pick button:hover, .pick button:focus-visible { border-color: var(--accent); outline: none; }
+  label { font-size: 0.85rem; color: var(--muted); }
+  .row { display: flex; gap: 8px; }
+  input[type=email] { flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+  .primary { padding: 9px 14px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+  .deny { justify-self: start; background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; padding: 0; }
+  .note { font-size: 0.8rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sign in to the MCP fixture</h1>
+  <p><strong>{{.ClientName}}</strong> wants to access the fixture as you, with:</p>
+  <div class="scopes">{{range .Scopes}}<code>{{.}}</code>{{end}}</div>
+  {{with .Request}}
+  <form method="post" action="/oauth/authorize">
+    <input type="hidden" name="client_id" value="{{.ClientID}}">
+    <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
+    <input type="hidden" name="state" value="{{.State}}">
+    <input type="hidden" name="scope" value="{{.Scope}}">
+    <input type="hidden" name="resource" value="{{.Resource}}">
+    <input type="hidden" name="code_challenge" value="{{.CodeChallenge}}">
+    <input type="hidden" name="code_challenge_method" value="{{.CodeChallengeMethod}}">
+    {{end}}
+    {{if .Suggested}}
+    <div class="pick">
+      {{range .Suggested}}<button type="submit" name="email" value="{{.}}" formnovalidate>Continue as {{.}}</button>{{end}}
+    </div>
+    {{end}}
+    <div style="display:grid;gap:6px;margin-top:12px">
+      <label for="email">Or sign in as any email</label>
+      <div class="row">
+        <input id="email" type="email" name="email" placeholder="you@example.com" autocomplete="off">
+        <button class="primary" type="submit">Sign in</button>
+      </div>
+    </div>
+    <div style="margin-top:12px"><button class="deny" type="submit" name="action" value="deny" formnovalidate>Deny access</button></div>
+  </form>
+  <p class="note">This is a throwaway local server. There is no password: you are whoever you pick.</p>
+</main>
+</body>
+</html>

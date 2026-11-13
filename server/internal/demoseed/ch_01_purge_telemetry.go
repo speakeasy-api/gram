@@ -478,7 +478,7 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
 				}
 				// How the gateway signed the call in upstream: the person's
-				// own Linear connection, the shared engineering token, or
+				// own Per-User OAuth connection, the shared service token, or
 				// nothing for calls recorded before the gateway named it, so
 				// the Tool Logs row shows all three renderings. The ids are
 				// seeded auth clients, so the id a row names resolves to one.
@@ -489,10 +489,10 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 					attrs += `,"gram.auth_client.type":"static_credential","gram.auth_client.id":"` + s.det("auth-client-github-token").String() + `"`
 				}
 			}
-			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"`
+			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "read-only-subset", "openapi-api-key") + `"`
 			// The serving wrapper's id; every seventh chat models calls recorded before stamping.
 			if i%7 != 0 {
-				attrs += `,"gram.mcp_server.id":"` + chIf(i%5 == 0, s.det("mcpserver-ops").String(), s.toolset1().String()) + `"`
+				attrs += `,"gram.mcp_server.id":"` + chIf(i%5 == 0, s.opsServer().String(), s.toolset1().String()) + `"`
 			}
 			attrs += `,"http.response.status_code":` + chIf(failed, "500", "200") +
 				`,"gram.outcome":"` + chIf(failed || toolError, "error", "ok") + `"` +
@@ -616,7 +616,7 @@ func (s *seeder) chUnattributedToolRows() []chTelemetryRow {
 			traceID:      s.chTrace("unattributed-" + strconv.Itoa(i)),
 			attributes: `{"gram.tool.urn":"` + toolURN(toolName) + `"` +
 				`,"gram.tool.name":"` + toolName + `"` +
-				`,"gram.toolset.slug":"acme-support-tools"` +
+				`,"gram.toolset.slug":"openapi-api-key"` +
 				`,"http.response.status_code":200` +
 				`,"http.server.request.duration":0.42` +
 				`,"gram.project.id":"` + s.projectID().String() + `"` +
@@ -886,7 +886,7 @@ func (s *seeder) chMCPSkillLoadRows() []chTelemetryRow {
 				`,"gram.mcp.skill.id":"` + s.skillID(pos).String() + `"` +
 				`,"gram.mcp.skill.version_id":"` + versionID.String() + `"` +
 				`,"gram.mcp.skill.digest":"sha256:` + hex.EncodeToString(digest[:]) + `"` +
-				`,"gram.toolset.slug":"acme-support-tools"` +
+				`,"gram.toolset.slug":"openapi-api-key"` +
 				`,"gram.mcp_server.id":"` + s.toolset1().String() + `"` +
 				`,"gram.mcp_endpoint.id":"` + s.det("endpoint-hosted-acme-support-tools").String() + `"` +
 				`,"http.response.status_code":200` +

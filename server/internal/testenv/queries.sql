@@ -2669,6 +2669,50 @@ SELECT count(*)
 FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = @remote_session_client_id;
 
+-- name: GetRemoteMCPServerURLFixture :one
+-- Reads a remote MCP server's name and upstream URL.
+SELECT name, url FROM remote_mcp_servers WHERE id = @id AND deleted IS FALSE;
+
+-- name: ListRemoteSessionTokensFixture :many
+-- Reads the stored, encrypted tokens of a client's live remote sessions.
+SELECT id, access_token_encrypted, refresh_token_encrypted::text AS refresh_token_encrypted, auto_refresh
+FROM remote_sessions
+WHERE remote_session_client_id = @remote_session_client_id
+  AND deleted IS FALSE
+  AND (access_expires_at IS NULL OR access_expires_at > clock_timestamp())
+ORDER BY id;
+
+-- name: GetAuthClientHeaderFixture :one
+-- Reads an auth client header's stored value and secrecy.
+SELECT value, is_secret FROM mcp_auth_client_headers WHERE id = @id AND deleted IS FALSE;
+
+-- name: GetRemoteMCPServerHeaderFixture :one
+-- Reads a remote MCP server header's static value or forwarding source.
+SELECT name, value, value_from_request_header, is_secret FROM remote_mcp_server_headers WHERE id = @id AND deleted IS FALSE;
+
+-- name: GetEnvironmentEntryFixture :one
+-- Reads one environment entry by environment and name.
+SELECT value, is_secret FROM environment_entries WHERE environment_id = @environment_id AND name = @name;
+
+-- name: GetLocalEMAWiringFixture :one
+-- Reads what the local seed points the Enterprise Sign-In (ID-JAG) Server's
+-- binding at: its resource, the user session issuer's trusted identity
+-- provider and client, and the authorization server and its client.
+SELECT b.resource,
+       idp.issuer AS identity_provider,
+       idp_client.client_id AS identity_provider_client_id,
+       idp_client.client_secret_encrypted AS identity_provider_client_secret,
+       vendor.issuer AS authorization_server,
+       vendor.token_endpoint AS authorization_server_token_endpoint,
+       vendor_client.client_id AS authorization_server_client_id
+FROM remote_session_ema_bindings b
+JOIN user_session_issuers usi ON usi.id = b.user_session_issuer_id
+JOIN remote_session_issuers idp ON idp.id = usi.trusted_remote_session_issuer_id
+JOIN remote_session_clients idp_client ON idp_client.id = usi.trusted_remote_session_client_id
+JOIN remote_session_issuers vendor ON vendor.id = b.remote_session_issuer_id
+JOIN remote_session_clients vendor_client ON vendor_client.id = b.remote_session_client_id
+WHERE b.id = @id;
+
 -- name: SetCustomDomainHealthWithoutDNSObservation :exec
 -- Models a worker that does not write the independent DNS observation columns.
 UPDATE custom_domains

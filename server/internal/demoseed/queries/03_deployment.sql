@@ -36,8 +36,8 @@ VALUES (@tool_urn::text, @project_id::uuid, @deployment_id, @openapiv3_document_
 INSERT INTO external_oauth_server_metadata
   (id, project_id, slug, metadata, authorization_server_issuer)
 VALUES
-  (@id, @project_id::uuid, 'acme-oauth-discovery',
-   '{"issuer":"https://auth.example.com","authorization_endpoint":"https://auth.example.com/oauth/authorize","token_endpoint":"https://auth.example.com/oauth/token","registration_endpoint":"https://auth.example.com/oauth/register"}'::jsonb,
+  (@id, @project_id::uuid, 'external-oauth',
+   '{"issuer":"https://mcp-fixture.example.com","authorization_endpoint":"https://mcp-fixture.example.com/oauth/authorize","token_endpoint":"https://mcp-fixture.example.com/oauth/token","registration_endpoint":"https://mcp-fixture.example.com/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["none"]}'::jsonb,
    NULL);
 
 -- Hosting state (address, visibility, issuer) lives on each hosted
@@ -47,17 +47,17 @@ VALUES
 INSERT INTO toolsets (id, organization_id, project_id, name, slug, description,
                       external_oauth_server_id)
 VALUES
-  (@toolset_1, @organization_id::text, @project_id::uuid, 'Acme Support Tools', 'acme-support-tools',
+  (@toolset_1, @organization_id::text, @project_id::uuid, 'OpenAPI Server (API Key)', 'openapi-api-key',
    'Support workflows: logs, refunds, customer lookups.', NULL),
-  (@toolset_2, @organization_id::text, @project_id::uuid, 'Acme Ops', 'acme-ops',
+  (@toolset_2, @organization_id::text, @project_id::uuid, 'Read-Only Tool Subset', 'read-only-subset',
    'Operational checks and deploy tooling.', NULL),
   -- The OAuth-protected server, kept separate from the two above: attaching
   -- a session issuer changes what a server's authentication tab and install
   -- instructions say, and the support server is the one a visitor meets
   -- first.
-  (@toolset_3, @organization_id::text, @project_id::uuid, 'Acme Partner Gateway', 'acme-partner-gateway',
+  (@toolset_3, @organization_id::text, @project_id::uuid, 'Server-Specific Sign-In', 'server-specific-sign-in',
    'Tools Acme exposes to partner agents, behind OAuth.', NULL),
-  (@toolset_4, @organization_id::text, @project_id::uuid, 'Acme OAuth Discovery', 'acme-oauth-discovery',
+  (@toolset_4, @organization_id::text, @project_id::uuid, 'External OAuth Server', 'external-oauth',
    'Demonstrates external OAuth metadata source choices.',
    @external_oauth_server_id::uuid);
 
@@ -74,7 +74,7 @@ INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VAL
 
 -- name: DeployInsertUserSessionIssuer :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
-VALUES (@id, @project_id::uuid, @organization_id::text, 'acme-partner-gateway', 'interactive', make_interval(secs => 30 * 24 * 60 * 60));
+VALUES (@id, @project_id::uuid, @organization_id::text, 'server-specific-sign-in', 'interactive', make_interval(secs => 30 * 24 * 60 * 60));
 
 -- name: DeployInsertChainingIssuer :exec
 INSERT INTO remote_session_issuers

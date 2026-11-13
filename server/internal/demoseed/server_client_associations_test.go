@@ -24,9 +24,12 @@ func TestLocalServerClientAssociations(t *testing.T) {
 
 // Every seeded proxied server whose issuer binds an upstream client carries
 // the association it is meant to use, so the backfill has nothing to decide.
-// GitHub and DeepWiki share the workforce issuer with the EMA services and
-// Notion but have no evidence for any of their clients, so they use none.
-// DeepWiki is public and needs no sign-in at all.
+// The Pass-Through Token Server has its own issuer with no bound client, so
+// it uses none. The Enterprise Sign-In
+// (ID-JAG) Server has its own issuer and uses its authorization server's
+// client. The Auto-Configured OAuth Server and the Linear vendor server
+// (mcpserver-linear-app; mcpserver-linear is the Per-User OAuth Server) have
+// their own issuers and no client in the shared seed.
 func testServerClientAssociations(t *testing.T, spec Spec) {
 	t.Helper()
 	ctx := t.Context()
@@ -34,11 +37,9 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 	require.NoError(t, err)
 	det := func(name string) uuid.UUID { return detUUID(spec.NameSeed + name) }
 	github := det("mcpserver-github")
-	deepwiki := det("mcpserver-deepwiki")
 	want := map[uuid.UUID][]uuid.UUID{
-		det("mcpserver-linear"):      {det("remote-identity-client-linear"), det("attachment-client")},
-		det("mcpserver-ema-tracker"): {det("ema-client-tracker")},
-		det("mcpserver-ema-wiki"):    {det("ema-client-wiki")},
+		det("mcpserver-linear"):             {det("remote-identity-client-linear")},
+		det("mcpserver-enterprise-sign-in"): {det("ema-client-enterprise-sign-in")},
 	}
 
 	for range 2 {
@@ -64,15 +65,15 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 		for serverID, clients := range want {
 			require.ElementsMatch(t, clients, got[serverID], "server %s", serverID)
 		}
-		require.ElementsMatch(t, []uuid.UUID{github, deepwiki}, uncovered, "every proxied server with an issuer-bound client must be associated")
+		require.Empty(t, uncovered, "every proxied server with an issuer-bound client must be associated")
 
 		report, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0})
 		require.NoError(t, err)
 		require.Zero(t, report.Decided, "the seed must write every association the backfill would decide")
 		require.Zero(t, report.Gaps)
 		for _, result := range report.Results {
-			if result.MCPServerID == github || result.MCPServerID == deepwiki {
-				require.Equal(t, associationbackfill.OutcomeNoClient, result.Outcome)
+			if result.MCPServerID == github {
+				require.Equal(t, associationbackfill.OutcomeUnbound, result.Outcome)
 			}
 		}
 		for _, result := range report.GatewayResults {

@@ -241,6 +241,22 @@ GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 ## name, renewed by `mise run tls:tailscale`). zero:tailscale sets it locally
 ## when the tailnet has HTTPS certificates enabled.
 GRAM_TLS_PROVIDER = { default = "mkcert" }
+## Throwaway MCP server (mcp-fixture/) for local development: its own OAuth
+## server (sign in by picking an email), a shared-token endpoint and a stub of
+## the demo API. The local seed points its MCP servers at it.
+## GRAM_MCP_FIXTURE_PORT is auto-remapped by `mise work:init` for parallel worktrees.
+GRAM_MCP_FIXTURE_PORT = "47321"
+GRAM_MCP_FIXTURE_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_MCP_FIXTURE_PORT}}"
+GRAM_MCP_FIXTURE_URL = "{{env.GRAM_HTTP_SCHEME}}://{{env.GRAM_HOST}}:{{env.GRAM_MCP_FIXTURE_PORT}}"
+## Short access tokens make expiry and refresh visible; refresh tokens last 30 days.
+GRAM_MCP_FIXTURE_ACCESS_TOKEN_TTL = "1h"
+## The local seed keeps the client it registers with Linear here (gitignored),
+## so reseeding reuses it.
+GRAM_DEMOSEED_CACHE_DIR = "{{ config_root }}/local/cache"
+## The fixture reads TUNNEL_GATEWAY_PUBLIC_PORT (its tunnel agent serves the
+## open endpoint as the seeded Tunnelled Private Server) and
+## GRAM_DEVIDP_EXTERNAL_URL (its /mcp/ema endpoint takes the dev-idp's tokens)
+## directly, so they follow this worktree's ports without a git:worksync.
 ## GitHub App for plugin publishing (leave unset to disable)
 # GRAM_PLUGINS_GITHUB_APP_ID = ""
 # GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""

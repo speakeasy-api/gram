@@ -107,6 +107,230 @@ func (q *Queries) LocalAttachMCPAppToToolset(ctx context.Context, arg LocalAttac
 	return err
 }
 
+const localEMAPointAuthClient = `-- name: LocalEMAPointAuthClient :execrows
+UPDATE mcp_auth_client_emas
+SET resource = $1::text, updated_at = clock_timestamp()
+WHERE remote_session_client_id = $2::uuid
+  AND organization_id = $3::text AND deleted IS FALSE
+`
+
+type LocalEMAPointAuthClientParams struct {
+	Resource              string
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+}
+
+func (q *Queries) LocalEMAPointAuthClient(ctx context.Context, arg LocalEMAPointAuthClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointAuthClient, arg.Resource, arg.RemoteSessionClientID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointBinding = `-- name: LocalEMAPointBinding :execrows
+UPDATE remote_session_ema_bindings
+SET resource = $1::text, updated_at = clock_timestamp()
+WHERE id = $2::uuid AND project_id = $3::uuid
+`
+
+type LocalEMAPointBindingParams struct {
+	Resource  string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LocalEMAPointBinding(ctx context.Context, arg LocalEMAPointBindingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointBinding, arg.Resource, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointIdentityProvider = `-- name: LocalEMAPointIdentityProvider :execrows
+UPDATE remote_session_issuers
+SET issuer = $1::text,
+    authorization_endpoint = $1::text || '/authorize',
+    token_endpoint = $1::text || '/token',
+    userinfo_endpoint = $1::text || '/userinfo',
+    revocation_endpoint = $1::text || '/revoke',
+    registration_endpoint = NULL,
+    jwks_uri = $1::text || '/.well-known/jwks.json',
+    jwks = NULL, jwks_fetched_at = NULL, jwks_cache_expires_at = NULL, jwks_etag = NULL,
+    scopes_supported = ARRAY['openid', 'email', 'profile'],
+    grant_types_supported = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    response_types_supported = ARRAY['code'],
+    token_endpoint_auth_methods_supported = ARRAY['client_secret_post'],
+    code_challenge_methods_supported = ARRAY['S256'],
+    id_token_signing_alg_values_supported = ARRAY['RS256'],
+    authorization_response_iss_parameter_supported = TRUE,
+    oidc = TRUE,
+    name = $2::text,
+    updated_at = clock_timestamp()
+WHERE id = $3::uuid AND organization_id = $4::text AND project_id IS NULL AND deleted IS FALSE
+`
+
+type LocalEMAPointIdentityProviderParams struct {
+	Issuer         string
+	Name           string
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// The Enterprise Sign-In (ID-JAG) Server (local_ema.go). Locally the company
+// identity provider is the dev-idp's OAuth 2.1 server.
+func (q *Queries) LocalEMAPointIdentityProvider(ctx context.Context, arg LocalEMAPointIdentityProviderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointIdentityProvider,
+		arg.Issuer,
+		arg.Name,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointIdentityProviderClient = `-- name: LocalEMAPointIdentityProviderClient :execrows
+UPDATE remote_session_clients
+SET client_id = $1::text,
+    client_secret_encrypted = $2::text,
+    token_endpoint_auth_method = 'client_secret_post',
+    grant_types = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    scope = ARRAY['openid', 'email', 'profile'],
+    callback_base_url = $3::text,
+    updated_at = clock_timestamp()
+WHERE id = $4::uuid AND organization_id = $5::text AND project_id IS NULL AND deleted IS FALSE
+`
+
+type LocalEMAPointIdentityProviderClientParams struct {
+	ClientID              string
+	ClientSecretEncrypted string
+	CallbackBaseUrl       string
+	ID                    uuid.UUID
+	OrganizationID        string
+}
+
+// Speakeasy's registration at the dev-idp: its static login client, with the
+// checked-in local secret the dev-idp EMA app also holds.
+func (q *Queries) LocalEMAPointIdentityProviderClient(ctx context.Context, arg LocalEMAPointIdentityProviderClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointIdentityProviderClient,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.CallbackBaseUrl,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointProtectedResource = `-- name: LocalEMAPointProtectedResource :execrows
+UPDATE remote_protected_resources
+SET resource_identifier = $1::text,
+    metadata_url = $2::text,
+    authorization_servers = ARRAY[$3::text],
+    scopes_supported = $4::text[],
+    metadata_fetched_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $5::uuid AND project_id = $6::uuid AND deleted IS FALSE
+`
+
+type LocalEMAPointProtectedResourceParams struct {
+	Resource    string
+	MetadataUrl string
+	Issuer      string
+	Scopes      []string
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// The protected resource, its binding and the typed auth client move from the
+// shared seed's placeholder to the running fixture's /mcp/ema endpoint.
+func (q *Queries) LocalEMAPointProtectedResource(ctx context.Context, arg LocalEMAPointProtectedResourceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointProtectedResource,
+		arg.Resource,
+		arg.MetadataUrl,
+		arg.Issuer,
+		arg.Scopes,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointVendorClient = `-- name: LocalEMAPointVendorClient :execrows
+UPDATE remote_session_clients
+SET client_id = $1::text,
+    client_secret_encrypted = $2::text,
+    scope = $3::text[],
+    updated_at = clock_timestamp()
+WHERE id = $4::uuid AND project_id = $5::uuid AND deleted IS FALSE
+`
+
+type LocalEMAPointVendorClientParams struct {
+	ClientID              string
+	ClientSecretEncrypted string
+	Scopes                []string
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+func (q *Queries) LocalEMAPointVendorClient(ctx context.Context, arg LocalEMAPointVendorClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointVendorClient,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.Scopes,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointVendorIssuer = `-- name: LocalEMAPointVendorIssuer :execrows
+UPDATE remote_session_issuers
+SET issuer = $1::text,
+    token_endpoint = $1::text || '/token',
+    introspection_endpoint = $1::text || '/introspect',
+    jwks_uri = $1::text || '/.well-known/jwks.json',
+    jwks = NULL, jwks_fetched_at = NULL, jwks_cache_expires_at = NULL, jwks_etag = NULL,
+    scopes_supported = $2::text[],
+    updated_at = clock_timestamp()
+WHERE id = $3::uuid AND project_id = $4::uuid AND deleted IS FALSE
+`
+
+type LocalEMAPointVendorIssuerParams struct {
+	Issuer    string
+	Scopes    []string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The server's authorization server: the dev-idp resource authorization
+// server for the fixture's /mcp/ema endpoint.
+func (q *Queries) LocalEMAPointVendorIssuer(ctx context.Context, arg LocalEMAPointVendorIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointVendorIssuer,
+		arg.Issuer,
+		arg.Scopes,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const localEnableCodeModeFeature = `-- name: LocalEnableCodeModeFeature :exec
 INSERT INTO organization_features (organization_id, feature_name)
 VALUES ($1::text, 'code_mode')
@@ -146,6 +370,431 @@ ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 func (q *Queries) LocalEnablePlatformMCPFeature(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, localEnablePlatformMCPFeature, organizationID)
 	return err
+}
+
+const localFixtureLinkToolsetEnvironments = `-- name: LocalFixtureLinkToolsetEnvironments :execrows
+INSERT INTO toolset_environments (toolset_id, project_id, environment_id)
+SELECT t.id, t.project_id, $1::uuid
+FROM toolsets t
+WHERE t.project_id = $2::uuid AND t.deleted IS FALSE
+  AND t.id = ANY($3::uuid[])
+ON CONFLICT (toolset_id)
+DO UPDATE SET environment_id = EXCLUDED.environment_id, updated_at = clock_timestamp()
+`
+
+type LocalFixtureLinkToolsetEnvironmentsParams struct {
+	EnvironmentID uuid.UUID
+	ProjectID     uuid.UUID
+	ToolsetIds    []uuid.UUID
+}
+
+// A toolset's environment is system-provided: it wins over any caller's own.
+func (q *Queries) LocalFixtureLinkToolsetEnvironments(ctx context.Context, arg LocalFixtureLinkToolsetEnvironmentsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixtureLinkToolsetEnvironments, arg.EnvironmentID, arg.ProjectID, arg.ToolsetIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixtureListLiveSessions = `-- name: LocalFixtureListLiveSessions :many
+SELECT rs.id, COALESCE(u.email, rs.upstream_email, '')::text AS email
+FROM remote_sessions rs
+JOIN remote_session_clients c
+  ON c.id = rs.remote_session_client_id AND c.project_id = $1::uuid
+LEFT JOIN users u ON rs.subject_urn = 'user:' || u.id
+WHERE rs.remote_session_client_id = ANY($2::uuid[])
+  AND rs.deleted IS FALSE
+  AND rs.access_expires_at > clock_timestamp()
+ORDER BY rs.id
+`
+
+type LocalFixtureListLiveSessionsParams struct {
+	ProjectID uuid.UUID
+	ClientIds []uuid.UUID
+}
+
+type LocalFixtureListLiveSessionsRow struct {
+	ID    uuid.UUID
+	Email string
+}
+
+// The live seeded sign-ins on the given clients, with the email each signed in as.
+func (q *Queries) LocalFixtureListLiveSessions(ctx context.Context, arg LocalFixtureListLiveSessionsParams) ([]LocalFixtureListLiveSessionsRow, error) {
+	rows, err := q.db.Query(ctx, localFixtureListLiveSessions, arg.ProjectID, arg.ClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LocalFixtureListLiveSessionsRow
+	for rows.Next() {
+		var i LocalFixtureListLiveSessionsRow
+		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const localFixturePointExternalOAuth = `-- name: LocalFixturePointExternalOAuth :execrows
+UPDATE external_oauth_server_metadata SET metadata = $1::jsonb, authorization_server_issuer = NULL, updated_at = clock_timestamp()
+WHERE id = $2::uuid AND project_id = $3::uuid AND deleted IS FALSE
+`
+
+type LocalFixturePointExternalOAuthParams struct {
+	Metadata  []byte
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The External OAuth Server's authorization server: the running fixture's.
+func (q *Queries) LocalFixturePointExternalOAuth(ctx context.Context, arg LocalFixturePointExternalOAuthParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixturePointExternalOAuth, arg.Metadata, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixturePointIssuer = `-- name: LocalFixturePointIssuer :execrows
+UPDATE remote_session_issuers
+SET issuer = $1::text,
+    authorization_endpoint = $1::text || '/oauth/authorize',
+    token_endpoint = $1::text || '/oauth/token',
+    registration_endpoint = $1::text || '/oauth/register',
+    revocation_endpoint = $1::text || '/oauth/revoke',
+    jwks_uri = NULL,
+    scopes_supported = $2::text[],
+    scope_override = NULL,
+    grant_types_supported = ARRAY['authorization_code', 'refresh_token'],
+    response_types_supported = ARRAY['code'],
+    token_endpoint_auth_methods_supported = ARRAY['none'],
+    code_challenge_methods_supported = ARRAY['S256'],
+    client_id_metadata_document_supported = TRUE,
+    name = $3::text,
+    metadata_fetched_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $4::uuid AND project_id = $5::uuid AND deleted IS FALSE
+`
+
+type LocalFixturePointIssuerParams struct {
+	Issuer    string
+	Scopes    []string
+	Name      string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LocalFixturePointIssuer(ctx context.Context, arg LocalFixturePointIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixturePointIssuer,
+		arg.Issuer,
+		arg.Scopes,
+		arg.Name,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixturePointMetadataDocumentClient = `-- name: LocalFixturePointMetadataDocumentClient :execrows
+UPDATE remote_session_clients
+SET client_id = $1::text, client_id_metadata_uri = $1::text,
+    callback_base_url = $2::text, updated_at = clock_timestamp()
+WHERE id = $3::uuid AND project_id = $4::uuid AND deleted IS FALSE
+`
+
+type LocalFixturePointMetadataDocumentClientParams struct {
+	ClientID        string
+	CallbackBaseUrl string
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+// A client ID metadata document client: Speakeasy serves the document at
+// client_id, and the fixture fetches it to learn the redirect URI.
+func (q *Queries) LocalFixturePointMetadataDocumentClient(ctx context.Context, arg LocalFixturePointMetadataDocumentClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixturePointMetadataDocumentClient,
+		arg.ClientID,
+		arg.CallbackBaseUrl,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixturePointProtectedResource = `-- name: LocalFixturePointProtectedResource :execrows
+UPDATE remote_protected_resources
+SET resource_identifier = $1::text,
+    metadata_url = $2::text,
+    authorization_servers = ARRAY[$3::text],
+    scopes_supported = $4::text[],
+    scope_override = $4::text[],
+    resource_name = 'Speakeasy MCP fixture (per-user OAuth)',
+    metadata_fetched_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = $5::uuid AND organization_id = $6::text
+  AND resource_identifier = $7::text AND deleted IS FALSE
+`
+
+type LocalFixturePointProtectedResourceParams struct {
+	Resource       string
+	MetadataUrl    string
+	Issuer         string
+	Scopes         []string
+	ProjectID      uuid.UUID
+	OrganizationID string
+	OldResource    string
+}
+
+func (q *Queries) LocalFixturePointProtectedResource(ctx context.Context, arg LocalFixturePointProtectedResourceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixturePointProtectedResource,
+		arg.Resource,
+		arg.MetadataUrl,
+		arg.Issuer,
+		arg.Scopes,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.OldResource,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixturePointRemoteServer = `-- name: LocalFixturePointRemoteServer :execrows
+UPDATE remote_mcp_servers SET url = $1::text, updated_at = clock_timestamp()
+WHERE id = $2::uuid AND project_id = $3::uuid AND deleted IS FALSE
+`
+
+type LocalFixturePointRemoteServerParams struct {
+	Url       string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LocalFixturePointRemoteServer(ctx context.Context, arg LocalFixturePointRemoteServerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixturePointRemoteServer, arg.Url, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixtureSetHeaderValue = `-- name: LocalFixtureSetHeaderValue :execrows
+UPDATE mcp_auth_client_headers SET value = $1::text, is_secret = FALSE, updated_at = clock_timestamp()
+WHERE id = $2::uuid AND organization_id = $3::text
+`
+
+type LocalFixtureSetHeaderValueParams struct {
+	Value          string
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LocalFixtureSetHeaderValue(ctx context.Context, arg LocalFixtureSetHeaderValueParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixtureSetHeaderValue, arg.Value, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixtureSetRemoteHeaderValue = `-- name: LocalFixtureSetRemoteHeaderValue :execrows
+UPDATE remote_mcp_server_headers h SET value = $1::text, is_secret = FALSE, updated_at = clock_timestamp()
+FROM remote_mcp_servers r
+WHERE h.id = $2::uuid AND h.remote_mcp_server_id = r.id
+  AND r.project_id = $3::uuid AND h.deleted IS FALSE AND h.value IS NOT NULL
+`
+
+type LocalFixtureSetRemoteHeaderValueParams struct {
+	Value     string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LocalFixtureSetRemoteHeaderValue(ctx context.Context, arg LocalFixtureSetRemoteHeaderValueParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixtureSetRemoteHeaderValue, arg.Value, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixtureSetSessionTokens = `-- name: LocalFixtureSetSessionTokens :execrows
+UPDATE remote_sessions
+SET access_token_encrypted = $1::text,
+    access_expires_at = $2::timestamptz,
+    refresh_token_encrypted = $3::text,
+    refresh_expires_at = $4::timestamptz,
+    scopes = $5::text[],
+    auto_refresh = TRUE,
+    upstream_email = $6::text,
+    resource = $7::text,
+    -- The shared seed holds a long re-check lease so the demo org never
+    -- presents its dummy token; these hold real fixture tokens that must
+    -- refresh, so the lease is released.
+    last_refresh_attempt_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $8::uuid AND remote_session_client_id = ANY($9::uuid[]) AND deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM remote_session_clients c
+    WHERE c.id = remote_sessions.remote_session_client_id AND c.project_id = $10::uuid
+  )
+`
+
+type LocalFixtureSetSessionTokensParams struct {
+	AccessTokenEncrypted  string
+	AccessExpiresAt       pgtype.Timestamptz
+	RefreshTokenEncrypted string
+	RefreshExpiresAt      pgtype.Timestamptz
+	Scopes                []string
+	Email                 string
+	Resource              string
+	ID                    uuid.UUID
+	ClientIds             []uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+func (q *Queries) LocalFixtureSetSessionTokens(ctx context.Context, arg LocalFixtureSetSessionTokensParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixtureSetSessionTokens,
+		arg.AccessTokenEncrypted,
+		arg.AccessExpiresAt,
+		arg.RefreshTokenEncrypted,
+		arg.RefreshExpiresAt,
+		arg.Scopes,
+		arg.Email,
+		arg.Resource,
+		arg.ID,
+		arg.ClientIds,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixtureSetTunnelKey = `-- name: LocalFixtureSetTunnelKey :execrows
+UPDATE tunneled_mcp_servers SET key_hash = $1::text, key_prefix = $2::text, status = 'active', updated_at = clock_timestamp()
+WHERE id = $3::uuid AND project_id = $4::uuid AND deleted IS FALSE
+`
+
+type LocalFixtureSetTunnelKeyParams struct {
+	KeyHash   string
+	KeyPrefix string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The Tunnelled Private Server's tunnel takes the fixture daemon's checked-in
+// agent key, so the tunnel is live locally. The shared seed keeps it inert.
+func (q *Queries) LocalFixtureSetTunnelKey(ctx context.Context, arg LocalFixtureSetTunnelKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixtureSetTunnelKey,
+		arg.KeyHash,
+		arg.KeyPrefix,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixtureUpsertEnvironment = `-- name: LocalFixtureUpsertEnvironment :exec
+
+INSERT INTO environments (id, organization_id, project_id, name, slug, description)
+VALUES ($1::uuid, $2::text, $3::uuid, 'MCP fixture', 'mcp-fixture',
+        'Points the demo API servers at the local MCP fixture''s API stub.')
+ON CONFLICT (project_id, slug) WHERE deleted IS FALSE
+DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, updated_at = clock_timestamp()
+`
+
+type LocalFixtureUpsertEnvironmentParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Local MCP fixture (local_mcp_fixture.go). These point a few seeded servers
+// at the throwaway fixture server (mcp-fixture/) so they work right after
+// seeding. Local org only: the public demo org cannot reach localhost.
+func (q *Queries) LocalFixtureUpsertEnvironment(ctx context.Context, arg LocalFixtureUpsertEnvironmentParams) error {
+	_, err := q.db.Exec(ctx, localFixtureUpsertEnvironment, arg.ID, arg.OrganizationID, arg.ProjectID)
+	return err
+}
+
+const localFixtureUpsertEnvironmentEntry = `-- name: LocalFixtureUpsertEnvironmentEntry :execrows
+INSERT INTO environment_entries (environment_id, name, value, is_secret)
+SELECT e.id, $1::text, $2::text, FALSE
+FROM environments e
+WHERE e.id = $3::uuid AND e.project_id = $4::uuid AND e.deleted IS FALSE
+ON CONFLICT (environment_id, name)
+DO UPDATE SET value = EXCLUDED.value, is_secret = FALSE, updated_at = clock_timestamp()
+`
+
+type LocalFixtureUpsertEnvironmentEntryParams struct {
+	Name          string
+	Value         string
+	EnvironmentID uuid.UUID
+	ProjectID     uuid.UUID
+}
+
+func (q *Queries) LocalFixtureUpsertEnvironmentEntry(ctx context.Context, arg LocalFixtureUpsertEnvironmentEntryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixtureUpsertEnvironmentEntry,
+		arg.Name,
+		arg.Value,
+		arg.EnvironmentID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixtureUpsertForwardedHeader = `-- name: LocalFixtureUpsertForwardedHeader :execrows
+INSERT INTO remote_mcp_server_headers (id, remote_mcp_server_id, name, description, is_required, is_secret, value_from_request_header)
+SELECT $1::uuid, r.id, $2::text, 'Your own upstream token, forwarded from this request header', TRUE, TRUE, $3::text
+FROM remote_mcp_servers r
+WHERE r.id = $4::uuid AND r.project_id = $5::uuid AND r.deleted IS FALSE
+ON CONFLICT (id) DO UPDATE
+SET name = EXCLUDED.name, value_from_request_header = EXCLUDED.value_from_request_header,
+    value = NULL, deleted_at = NULL, updated_at = clock_timestamp()
+`
+
+type LocalFixtureUpsertForwardedHeaderParams struct {
+	ID                uuid.UUID
+	Name              string
+	FromRequestHeader string
+	RemoteMcpServerID uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+// Upserted by a fixed id, so a reseed rewrites it in place.
+func (q *Queries) LocalFixtureUpsertForwardedHeader(ctx context.Context, arg LocalFixtureUpsertForwardedHeaderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixtureUpsertForwardedHeader,
+		arg.ID,
+		arg.Name,
+		arg.FromRequestHeader,
+		arg.RemoteMcpServerID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const localGrantAPIKeyPolicy = `-- name: LocalGrantAPIKeyPolicy :exec
@@ -207,6 +856,105 @@ func (q *Queries) LocalGrantToolLogVisibility(ctx context.Context, arg LocalGran
 	return err
 }
 
+const localLinearInsertClient = `-- name: LocalLinearInsertClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_id_issued_at, token_endpoint_auth_method, callback_base_url)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   $4::uuid, $5::text, clock_timestamp(),
+   'none', $6::text)
+`
+
+type LocalLinearInsertClientParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	RemoteSessionIssuerID uuid.UUID
+	ClientID              string
+	CallbackBaseUrl       string
+}
+
+// A public client registered with Linear by dynamic client registration. Its
+// callback origin is the one the registration listed.
+func (q *Queries) LocalLinearInsertClient(ctx context.Context, arg LocalLinearInsertClientParams) error {
+	_, err := q.db.Exec(ctx, localLinearInsertClient,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RemoteSessionIssuerID,
+		arg.ClientID,
+		arg.CallbackBaseUrl,
+	)
+	return err
+}
+
+const localLinearInsertIssuer = `-- name: LocalLinearInsertIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
+   token_endpoint, registration_endpoint, revocation_endpoint,
+   scopes_supported, grant_types_supported, response_types_supported,
+   token_endpoint_auth_methods_supported, code_challenge_methods_supported,
+   client_id_metadata_document_supported, name, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, 'linear',
+   $4::text, $4::text || '/authorize', $4::text || '/token',
+   $4::text || '/register', $4::text || '/token',
+   ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['code'], ARRAY['client_secret_basic', 'client_secret_post', 'none'],
+   ARRAY['S256'], TRUE, 'Linear', clock_timestamp())
+`
+
+type LocalLinearInsertIssuerParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Issuer         string
+}
+
+// Linear's authorization server, as its metadata document describes it
+// (https://mcp.linear.app/.well-known/oauth-authorization-server).
+func (q *Queries) LocalLinearInsertIssuer(ctx context.Context, arg LocalLinearInsertIssuerParams) error {
+	_, err := q.db.Exec(ctx, localLinearInsertIssuer,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Issuer,
+	)
+	return err
+}
+
+const localLinearInsertProtectedResource = `-- name: LocalLinearInsertProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::text,
+   $5::text, ARRAY[$6::text], ARRAY['read', 'write'],
+   clock_timestamp())
+`
+
+type LocalLinearInsertProtectedResourceParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Resource       string
+	MetadataUrl    string
+	Issuer         string
+}
+
+func (q *Queries) LocalLinearInsertProtectedResource(ctx context.Context, arg LocalLinearInsertProtectedResourceParams) error {
+	_, err := q.db.Exec(ctx, localLinearInsertProtectedResource,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Resource,
+		arg.MetadataUrl,
+		arg.Issuer,
+	)
+	return err
+}
+
 const localLinkWorkOSOrg = `-- name: LocalLinkWorkOSOrg :exec
 
 UPDATE organization_metadata
@@ -228,6 +976,39 @@ type LocalLinkWorkOSOrgParams struct {
 // counterpart at all.
 func (q *Queries) LocalLinkWorkOSOrg(ctx context.Context, arg LocalLinkWorkOSOrgParams) error {
 	_, err := q.db.Exec(ctx, localLinkWorkOSOrg, arg.WorkosOrgID, arg.OrganizationID)
+	return err
+}
+
+const localProvisionDeveloperDirectoryUser = `-- name: LocalProvisionDeveloperDirectoryUser :exec
+INSERT INTO directory_users
+  (organization_id, user_id, workos_directory_user_id, email, first_name,
+   workos_created_at, workos_updated_at)
+VALUES ($1::text, $2::text, 'devidp_dir_' || $2::text,
+        $3::text, $4::text, clock_timestamp(), clock_timestamp())
+ON CONFLICT (workos_directory_user_id) DO UPDATE
+SET organization_id = EXCLUDED.organization_id, user_id = EXCLUDED.user_id,
+    email = EXCLUDED.email, first_name = EXCLUDED.first_name,
+    deleted_at = NULL, workos_deleted_at = NULL,
+    workos_updated_at = clock_timestamp(), updated_at = clock_timestamp()
+`
+
+type LocalProvisionDeveloperDirectoryUserParams struct {
+	OrganizationID string
+	UserID         string
+	Email          string
+	DisplayName    string
+}
+
+// Provisions the developer in the local org's directory, linked to their
+// user, the way directory sync would. Federated sign-in (the Enterprise
+// Sign-In server) admits only directory-provisioned people.
+func (q *Queries) LocalProvisionDeveloperDirectoryUser(ctx context.Context, arg LocalProvisionDeveloperDirectoryUserParams) error {
+	_, err := q.db.Exec(ctx, localProvisionDeveloperDirectoryUser,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.Email,
+		arg.DisplayName,
+	)
 	return err
 }
 
