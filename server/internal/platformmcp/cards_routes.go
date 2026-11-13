@@ -217,6 +217,8 @@ var textOnlyTools = map[string]string{
 	"search_chats":                         textOnlyLog,
 	"read_chat":                            textOnlyLog,
 	"search_team_memory":                   textOnlyLog,
+	"recall_team_history":                  textOnlyForModel,
+	"zoom":                                 textOnlyForModel,
 	"find_signal_sessions":                 textOnlyLog,
 	"list_skill_feedback":                  textOnlyLog,
 	"list_skill_suggestion_feedback":       textOnlyLog,
