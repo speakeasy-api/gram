@@ -1,27 +1,8 @@
 package authz
 
-import (
-	"reflect"
-
-	"github.com/google/uuid"
-)
-
 // This file holds the hand-written half of the typed requests generated in
 // refs_gen.go: the helper every ref method builds its check with, and the
 // requests that need more than a resource and an action.
-
-// ID is the id a typed ref takes: a resource's uuid, or its id as a string.
-// Ref constructors are generic over it so callers pass ids as they hold them.
-type ID interface {
-	~string | uuid.UUID
-}
-
-func idString[T ID](id T) string {
-	if u, ok := any(id).(uuid.UUID); ok {
-		return u.String()
-	}
-	return reflect.ValueOf(id).String()
-}
 
 // MatchMode is how an allow grant's selector is compared with a check.
 type MatchMode int
@@ -47,7 +28,7 @@ func newRefCheck(scope Scope, resourceID string, dimensions map[string]string, m
 // on the project id, as it always has been, so existing grants keep working.
 
 // MCPServerCollection names the MCP servers of one project.
-type MCPServerCollection struct{ project string }
+type MCPServerCollection struct{ project ProjectID }
 
 // MCPServers names the MCP servers of the project.
 func (r ProjectRef) MCPServers() MCPServerCollection { return MCPServerCollection{project: r.id} }
@@ -55,11 +36,11 @@ func (r ProjectRef) MCPServers() MCPServerCollection { return MCPServerCollectio
 // Create requests creating an MCP server in the project (mcp:write on the
 // project).
 func (c MCPServerCollection) Create() Check {
-	return MCPServer(c.project, c.project).Write()
+	return MCPServer(MCPServerID{id: c.project.id}, c.project).Write()
 }
 
 // EnvironmentCollection names the environments of one project.
-type EnvironmentCollection struct{ project string }
+type EnvironmentCollection struct{ project ProjectID }
 
 // Environments names the environments of the project.
 func (r ProjectRef) Environments() EnvironmentCollection {
@@ -69,24 +50,24 @@ func (r ProjectRef) Environments() EnvironmentCollection {
 // Create requests creating an environment in the project
 // (environment:write on the project).
 func (c EnvironmentCollection) Create() Check {
-	return Environment(c.project, c.project).Write()
+	return Environment(EnvironmentID{id: c.project.id}, c.project).Write()
 }
 
 // Read requests environment:read on the project: every environment in it.
 // Use it where no environment resolved, so the answer to a missing slug does
 // not reveal whether the environment exists.
 func (c EnvironmentCollection) Read() Check {
-	return Environment(c.project, c.project).Read()
+	return Environment(EnvironmentID{id: c.project.id}, c.project).Read()
 }
 
 // Write requests environment:write on the project: every environment in it.
 // It is the same check as Create.
 func (c EnvironmentCollection) Write() Check {
-	return Environment(c.project, c.project).Write()
+	return Environment(EnvironmentID{id: c.project.id}, c.project).Write()
 }
 
 // AssistantCollection names the assistants of one project.
-type AssistantCollection struct{ project string }
+type AssistantCollection struct{ project ProjectID }
 
 // Assistants names the assistants of the project.
 func (r ProjectRef) Assistants() AssistantCollection { return AssistantCollection{project: r.id} }
@@ -94,5 +75,5 @@ func (r ProjectRef) Assistants() AssistantCollection { return AssistantCollectio
 // Create requests creating an assistant in the project (assistant:write on
 // the project).
 func (c AssistantCollection) Create() Check {
-	return Assistant(c.project, c.project).Write()
+	return Assistant(AssistantID{id: c.project.id}, c.project).Write()
 }

@@ -30,6 +30,11 @@ func RefName(kind registry.Kind) string {
 	return camel(string(kind))
 }
 
+// IDTypeName is the Go name of a kind's id type: mcp becomes MCPServerID.
+func IDTypeName(kind registry.Kind) string {
+	return RefName(kind) + "ID"
+}
+
 // ActionMethodName is the Go name of the ref method for action:
 // plugin_write becomes PluginWrite.
 func ActionMethodName(action registry.Action) string {
@@ -66,7 +71,7 @@ func paramName(key string) string {
 // naming a kind (project_id is a ProjectID), otherwise a string.
 func paramType(r registry.Registry, key string) string {
 	if kind, ok := strings.CutSuffix(key, "_id"); ok && slices.ContainsFunc(r.Types, func(t registry.ResourceType) bool { return string(t.Kind) == kind }) {
-		return RefName(registry.Kind(kind)) + "ID"
+		return IDTypeName(registry.Kind(kind))
 	}
 	return "string"
 }
@@ -84,7 +89,7 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 	b.WriteString(header)
 	b.WriteString("package authz\n\n")
 	b.WriteString("// Typed requests, one ref per resource kind and one method per permission.\n")
-	b.WriteString("// A handler writes e.Require(ctx, authz.MCPServer(id, project).Write()).\n")
+	b.WriteString("// A handler writes e.Require(ctx, authz.MCPServer(id, project).Write()), with\n// id and project built by the id types in ids_gen.go.\n")
 	b.WriteString("// Kinds whose requests need hand-built dimensions are listed at the end.\n\n")
 
 	for _, t := range r.Types {
@@ -104,30 +109,24 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 			}
 		}
 
-		fmt.Fprintf(&b, "// %sRef names one %s resource for a request.\ntype %sRef struct {\n\tid string\n", name, t.Kind, name)
+		fmt.Fprintf(&b, "// %sRef names one %s resource for a request.\ntype %sRef struct {\n\tid %s\n", name, t.Kind, name, IDTypeName(t.Kind))
 		for _, d := range dims {
-			fmt.Fprintf(&b, "\t%s string\n", paramName(d.Key))
+			fmt.Fprintf(&b, "\t%s %s\n", paramName(d.Key), paramType(r, d.Key))
 		}
 		b.WriteString("}\n\n")
 
-		typeParams := []string{"I"}
-		params := []string{"id I"}
-		fields := []string{"id: idString(id)"}
-		for i, d := range dims {
-			tp := fmt.Sprintf("P%d", i+1)
-			if len(dims) == 1 {
-				tp = "P"
-			}
-			typeParams = append(typeParams, tp)
-			params = append(params, paramName(d.Key)+" "+tp)
-			fields = append(fields, paramName(d.Key)+": idString("+paramName(d.Key)+")")
+		params := []string{"id " + IDTypeName(t.Kind)}
+		fields := []string{"id: id"}
+		for _, d := range dims {
+			params = append(params, paramName(d.Key)+" "+paramType(r, d.Key))
+			fields = append(fields, paramName(d.Key)+": "+paramName(d.Key))
 		}
 		fmt.Fprintf(&b, "// %s names the %s resource id", name, t.Kind)
 		for _, d := range dims {
 			fmt.Fprintf(&b, ", in %s %s", strings.TrimSuffix(d.Key, "_id"), paramName(d.Key))
 		}
 		b.WriteString(".\n")
-		fmt.Fprintf(&b, "func %s[%s ID](%s) %sRef {\n\treturn %sRef{%s}\n}\n\n", name, strings.Join(typeParams, ", "), strings.Join(params, ", "), name, name, strings.Join(fields, ", "))
+		fmt.Fprintf(&b, "func %s(%s) %sRef {\n\treturn %sRef{%s}\n}\n\n", name, strings.Join(params, ", "), name, name, strings.Join(fields, ", "))
 
 		fmt.Fprintf(&b, "func (r %sRef) dimensions() map[string]string {\n", name)
 		if len(dims) == 0 {
@@ -135,7 +134,7 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 		} else {
 			b.WriteString("\treturn map[string]string{\n")
 			for _, d := range dims {
-				fmt.Fprintf(&b, "\t\t%q: r.%s,\n", d.Key, paramName(d.Key))
+				fmt.Fprintf(&b, "\t\t%q: r.%s.String(),\n", d.Key, paramName(d.Key))
 			}
 			b.WriteString("\t}\n}\n\n")
 		}
@@ -155,18 +154,18 @@ func renderRefs(r registry.Registry) ([]byte, error) {
 			fmt.Fprintf(&b, "// %s requests %s: %s\n", method, ScopeConstantName(t.ScopeFor(p)), p.Description)
 			var mparams []string
 			for _, d := range extra {
-				mparams = append(mparams, paramName(d.Key)+" string")
+				mparams = append(mparams, paramName(d.Key)+" "+paramType(r, d.Key))
 			}
 			fmt.Fprintf(&b, "func (r %sRef) %s(%s) Check {\n", name, method, strings.Join(mparams, ", "))
 			if len(extra) == 0 {
-				fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id, r.dimensions(), %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
+				fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), r.dimensions(), %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
 				continue
 			}
 			b.WriteString("\tdimensions := r.dimensions()\n\tif dimensions == nil {\n\t\tdimensions = map[string]string{}\n\t}\n")
 			for _, d := range extra {
-				fmt.Fprintf(&b, "\tdimensions[%q] = %s\n", d.Key, paramName(d.Key))
+				fmt.Fprintf(&b, "\tdimensions[%q] = %s.String()\n", d.Key, paramName(d.Key))
 			}
-			fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id, dimensions, %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
+			fmt.Fprintf(&b, "\treturn newRefCheck(%s, r.id.String(), dimensions, %s)\n}\n\n", ScopeConstantName(t.ScopeFor(p)), match)
 		}
 		for _, p := range t.Permissions {
 			for _, set := range p.DimensionSets {
@@ -212,5 +211,33 @@ func renderDimensionSet(b *strings.Builder, ref, scope, match string, set regist
 	for i, key := range set.Keys {
 		fmt.Fprintf(b, "\tdimensions[%q] = valueOrUnknown(%s)\n", key, params[i])
 	}
-	fmt.Fprintf(b, "\treturn newRefCheck(%s, r.id, dimensions, %s)\n}\n\n", scope, match)
+	fmt.Fprintf(b, "\treturn newRefCheck(%s, r.id.String(), dimensions, %s)\n}\n\n", scope, match)
+}
+
+// renderIDs writes one id type per kind that has a generated ref. Each can
+// only be built through its constructors, which keep an id that cannot name a
+// resource as absent.
+func renderIDs(r registry.Registry) ([]byte, error) {
+	var b strings.Builder
+	b.WriteString(header)
+	b.WriteString("package authz\n\nimport \"github.com/google/uuid\"\n\n")
+	b.WriteString("// Id types, one per resource kind. A typed ref takes these, never a raw\n")
+	b.WriteString("// string, so ids of different kinds cannot be swapped. An id built from an\n")
+	b.WriteString("// empty or reserved value is absent, and every check built from it is refused.\n\n")
+	for _, t := range r.Types {
+		if _, ok := handWrittenRefs[t.Kind]; ok {
+			continue
+		}
+		name := IDTypeName(t.Kind)
+		fmt.Fprintf(&b, "// %s is the id of one %s resource in a check.\ntype %s struct{ id Option[string] }\n\n", name, t.Kind, name)
+		fmt.Fprintf(&b, "// %sOf is the %s for a uuid. The nil uuid is absent.\nfunc %sOf(id uuid.UUID) %s { return %s{id: idFromUUID(id)} }\n\n", name, name, name, name, name)
+		fmt.Fprintf(&b, "// %sFrom is the %s for an id held as a string. An empty, wildcard or\n// reserved value is absent.\nfunc %sFrom(id string) %s { return %s{id: idFromString(id)} }\n\n", name, name, name, name, name)
+		fmt.Fprintf(&b, "// String is the id as checks and grants carry it, empty when absent.\nfunc (i %s) String() string { return idValue(i.id) }\n\n", name)
+		fmt.Fprintf(&b, "// Equals reports whether both ids name the same %s. It fails with\n// ErrEmptyValue when either is absent.\nfunc (i %s) Equals(other %s) (bool, error) { return i.id.Equals(other.id) }\n\n", t.Kind, name, name)
+	}
+	formatted, err := format.Source([]byte(b.String()))
+	if err != nil {
+		return nil, fmt.Errorf("format ids_gen.go: %w\n%s", err, b.String())
+	}
+	return formatted, nil
 }

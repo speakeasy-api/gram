@@ -42,9 +42,13 @@ func InferenceExecuteCheck(projectID string) Check {
 	return Check{Scope: "inference:execute", ResourceID: projectID}
 }
 
-type EnvironmentID string
+type EnvironmentID struct{ id string }
 
-type ProjectID string
+func EnvironmentIDFrom(id string) EnvironmentID { return EnvironmentID{id: id} }
+
+type ProjectID struct{ id string }
+
+func ProjectIDFrom(id string) ProjectID { return ProjectID{id: id} }
 
 type EnvironmentRef struct {
 	id      EnvironmentID
@@ -56,10 +60,10 @@ func Environment(id EnvironmentID, project ProjectID) EnvironmentRef {
 }
 
 func (r EnvironmentRef) Read() Check {
-	return EnvironmentCheck("environment:read", string(r.id), string(r.project))
+	return EnvironmentCheck("environment:read", r.id.id, r.project.id)
 }
 
 // MCPCheck as a method is not the constructor the rule bans.
 func (r EnvironmentRef) MCPCheck() Check {
-	return Check{Scope: "mcp:read", ResourceID: string(r.id)}
+	return Check{Scope: "mcp:read", ResourceID: r.id.id}
 }
