@@ -71,7 +71,8 @@ CREATE TABLE "organization_encryption_unreadable_values" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "organization_encryption_unreadable_values_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+  CONSTRAINT "organization_encryption_unreadable_values_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "organization_encryption_unreadable_values_use_case_check" CHECK (use_case <> ''::text)
 );
 -- Create index "organization_encryption_unreadable_values_source_row_key" to table: "organization_encryption_unreadable_values"
 CREATE UNIQUE INDEX "organization_encryption_unreadable_values_source_row_key" ON "organization_encryption_unreadable_values" ("organization_id", "use_case", "source_column", "row_id");

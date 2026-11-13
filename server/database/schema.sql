@@ -3672,7 +3672,7 @@ CREATE TABLE IF NOT EXISTS organization_encryption_unreadable_values (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   -- Registered orgencryption use case (app-validated).
-  use_case TEXT NOT NULL,
+  use_case TEXT NOT NULL CHECK (use_case <> ''),
   -- Logical table.column name the feature registers (app-validated).
   source_column TEXT NOT NULL,
   -- Single-column primary key of the source row, as produced by <pk>::text,
