@@ -28,11 +28,6 @@ import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
-import { setupGuideProviderName } from "@/components/setup-guide/guideDocs";
-import {
-  SetupGuideOverviewCard,
-  SetupGuideStepActions,
-} from "@/components/setup-guide/SetupGuideStep";
 import { useSetupGuide } from "@/components/setup-guide/useSetupGuide";
 import { formatRelativeTime } from "@/lib/dates";
 import { getMcpServerArgs } from "@/lib/sources";
@@ -333,13 +328,16 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   const showSetup =
     providerSetupRollout === "enabled" &&
     !!mcpServer?.remoteMcpServerId &&
-    !!setupProvider &&
+    (!!setupProvider || !!setupGuide) &&
     hasScope("mcp:write", mcpServer.id);
   // A provider with a guided setup is set up there, not in Settings: until
   // Speakeasy can sign in to it, the Authentication step and Overview send
   // the admin to the Setup tab.
   const needsSetup =
-    showSetup && !authReadiness.loading && !authReadiness.ready;
+    showSetup &&
+    !!setupProvider &&
+    !authReadiness.loading &&
+    !authReadiness.ready;
   const setupHref = mcpServerTabHref(routes, idOrSlug, "setup");
   const setupName = setupProvider ? SETUP_PROVIDER_NAME[setupProvider] : "";
   const checks: McpReadinessCheck[] = mcpServer
@@ -440,29 +438,22 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       ]
     : [];
 
-  // The provider's own steps follow Authentication: most guides need the
-  // redirect URL or credentials it sets up. A provider with a guided setup
-  // covers them there instead.
+  // A provider with only a written guide is set up on the Setup tab too,
+  // after Authentication: most guides need the redirect URL or credentials
+  // it sets up. The step stays open until someone marks the guide done.
   const setupGuideDoneAt = mcpServer?.setupGuideCompletedAt;
-  const canWriteServer = !!mcpServer && hasScope("mcp:write", mcpServer.id);
+  const guideName = setupGuide?.only?.title ?? "the provider";
   const setupGuideCheck: McpReadinessCheck | undefined =
-    mcpServer && setupGuide && !showSetup
+    mcpServer && showSetup && !setupProvider
       ? {
           key: "setup-guide",
-          label: `Set up ${setupGuideProviderName(setupGuide)}`,
+          label: `Set up ${guideName}`,
           description: setupGuideDoneAt
             ? `Marked done ${formatRelativeTime(setupGuideDoneAt)}.`
-            : `A few steps happen in ${setupGuideProviderName(setupGuide)}, not in Speakeasy. Follow the guide, then mark it done.`,
+            : `A few steps happen in ${guideName}, not in Speakeasy. Follow the setup guide, then mark it done.`,
           ready: !!setupGuideDoneAt,
-          chipLabel: `Set up ${setupGuideProviderName(setupGuide)}`,
-          actions: (
-            <SetupGuideStepActions
-              guide={setupGuide}
-              serverId={mcpServer.id}
-              done={!!setupGuideDoneAt}
-              canWrite={canWriteServer}
-            />
-          ),
+          chipLabel: `Set up ${guideName}`,
+          href: setupHref,
         }
       : undefined;
   const withGuide = setupGuideCheck
@@ -470,20 +461,16 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
         check.key === "authentication" ? [check, setupGuideCheck] : [check],
       )
     : checks;
-  // Overview offers the provider's steps once Speakeasy can sign in, so it
-  // never asks for them before the step they depend on.
+  // Overview offers the guide once Speakeasy can sign in, so it never asks
+  // for the provider's steps before the step they depend on.
   const authenticationReady =
     checks.find((check) => check.key === "authentication")?.ready === true;
   const overviewSetupGuide =
-    mcpServer &&
-    setupGuide &&
-    setupGuideCheck &&
-    !setupGuideDoneAt &&
-    authenticationReady ? (
-      <SetupGuideOverviewCard
-        guide={setupGuide}
-        serverId={mcpServer.id}
-        canWrite={canWriteServer}
+    setupGuideCheck && !setupGuideDoneAt && authenticationReady ? (
+      <SetupPrompt
+        name={guideName}
+        href={setupHref}
+        description={`A few steps happen in ${guideName}, not in Speakeasy. The setup guide walks you through them.`}
       />
     ) : undefined;
 

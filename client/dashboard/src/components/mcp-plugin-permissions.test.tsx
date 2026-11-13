@@ -219,6 +219,13 @@ const identityGate = vi.hoisted(() => ({
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => identityGate.features,
 }));
+vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
+  useServerClientAssociations: () => ({
+    data: { requiredClientIds: [] },
+    isError: false,
+    isLoading: false,
+  }),
+}));
 vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
   useMcpServerAuthentication: () => identityGate.authentication,
 }));

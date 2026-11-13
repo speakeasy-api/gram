@@ -11,6 +11,7 @@ import { useGetMCPSetupDocs } from "@gram/client/react-query/getMCPSetupDocs.js"
 import { Badge } from "@/components/ui/Badge";
 import { ExternalLink } from "lucide-react";
 import { useMemo } from "react";
+import { cn } from "@/lib/utils";
 
 // Guide headings are sized for a full documentation page; scale them to a
 // panel that is a few hundred pixels wide.
@@ -86,9 +87,12 @@ function guideLinkResolver(guideSlug: string): LinkResolver {
 export function SetupGuidePanel({
   registrySpecifier,
   serverUrl,
+  className = "px-6 pt-5 pb-8",
 }: {
   registrySpecifier?: string;
   serverUrl?: string;
+  /** Padding: the side panel pads its content; a full page brings its own. */
+  className?: string;
 }): React.JSX.Element | null {
   const { data } = useGetMCPSetupDocs(
     { registrySpecifier, serverUrl },
@@ -105,7 +109,7 @@ export function SetupGuidePanel({
   const only = soleGuide(guides);
 
   return (
-    <div className="flex flex-col gap-6 px-6 pt-5 pb-8">
+    <div className={cn("flex flex-col gap-6", className)}>
       {only?.summary && (
         <Text variant="small" className="text-muted-foreground">
           {only.summary}

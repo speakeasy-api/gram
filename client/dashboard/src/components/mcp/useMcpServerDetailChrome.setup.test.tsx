@@ -32,10 +32,6 @@ vi.mock("@/hooks/useProviderSetupRollout", () => ({
 vi.mock("@/components/setup-guide/useSetupGuide", () => ({
   useSetupGuide: () => state.guide,
 }));
-vi.mock("@/components/setup-guide/SetupGuideStep", () => ({
-  SetupGuideStepActions: () => null,
-  SetupGuideOverviewCard: () => null,
-}));
 vi.mock("./useMcpServerReachability", () => ({
   useMcpServerReachability: () => ({ kind: "off" }),
 }));
@@ -135,6 +131,13 @@ vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
 }));
 vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
   PluginStatusBanner: () => null,
+}));
+vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
+  useServerClientAssociations: () => ({
+    data: { requiredClientIds: [] },
+    isError: false,
+    isLoading: false,
+  }),
 }));
 vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
   useMcpServerAuthentication: () => ({}),
@@ -328,8 +331,7 @@ it("reports a turned-off server as broken, not as a setup step", () => {
   expect(readiness("Availability")).toBe("true");
 });
 
-it("lists a provider's setup guide as the step after Authentication until marked done", () => {
-  state.rollout = "disabled";
+it("sends a guide-only provider to the Setup tab, as the step after Authentication, until marked done", () => {
   state.url = "https://mcp.linear.app/mcp";
   state.server = REMOTE_SERVER;
   state.guide = { only: { title: "Linear" }, openGuide: null };
@@ -349,7 +351,24 @@ it("lists a provider's setup guide as the step after Authentication until marked
   expect(screen.getByText(/Marked done/)).toBeTruthy();
 });
 
-it("leaves the guide to the Setup tab when the provider has a guided setup", () => {
+it("offers Setup for a guide-only provider only with the rollout and write access", () => {
+  state.url = "https://mcp.linear.app/mcp";
+  state.guide = { only: { title: "Linear" }, openGuide: null };
+  const view = render(<Sidebar />);
+  expect(screen.getByRole("link", { name: "Setup" })).toBeDefined();
+  state.rollout = "disabled";
+  view.rerender(<Sidebar />);
+  expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
+  cleanup();
+  state.rollout = "enabled";
+  renderReadiness();
+  cleanup();
+  state.canWrite = false;
+  render(<Sidebar />);
+  expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
+});
+
+it("leaves a guided provider's steps to its guided flow", () => {
   state.server = REMOTE_SERVER;
   state.guide = { only: { title: "Slack" }, openGuide: null };
   renderReadiness();
@@ -357,6 +376,7 @@ it("leaves the guide to the Setup tab when the provider has a guided setup", () 
 });
 
 it("lists no setup step for a provider without a guide", () => {
+  state.url = "https://other.example/mcp";
   state.server = REMOTE_SERVER;
   renderReadiness();
   expect(screen.queryByText(/^Set up /)).toBeNull();

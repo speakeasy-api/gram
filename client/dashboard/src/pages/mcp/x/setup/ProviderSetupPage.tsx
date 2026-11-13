@@ -4,7 +4,7 @@ import {
   salesforceInstanceConfiguration,
 } from "@/pages/catalog/provider-setup/salesforce";
 import type { State } from "@/pages/catalog/provider-setup/state";
-import { useEffect, useReducer, useRef, type ReactNode } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import { useProviderConnection } from "./useProviderConnection";
 import { Link, Navigate, useNavigate } from "react-router";
 import { Check } from "lucide-react";
@@ -12,9 +12,7 @@ import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { SetupGuideLink } from "@/components/setup-guide/SetupGuideLink";
 import { Page } from "@/components/page-layout";
 import { PageEyebrow } from "@/components/page-eyebrow";
-import { useIconDither } from "@/components/icon-dither";
 import { useConfettiBurst } from "@/components/icon-confetti";
-import { BrandMeshLayers } from "@/components/brand-mesh";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -34,6 +32,8 @@ import {
   steps,
 } from "@/pages/catalog/provider-setup/state";
 import { ProviderTask } from "@/pages/catalog/provider-setup/ProviderTasks";
+import { GuideSetupPage } from "./GuideSetupPage";
+import { SetupHeader } from "./SetupHeader";
 import { taskTitle } from "@/pages/catalog/provider-setup/provider-data";
 import { ConnectionTask } from "@/pages/catalog/provider-setup/ConnectionTask";
 import {
@@ -84,7 +84,15 @@ export function ProviderSetupPage({
       </Page>
     );
   const provider = setupProviderForUrl(remote.data?.url);
-  if (!provider) return <Navigate to={overview} replace />;
+  // Providers without a guided flow get their written guide, full page.
+  if (!provider)
+    return (
+      <GuideSetupPage
+        serverUrl={remote.data?.url}
+        mcpServer={mcpServer}
+        overviewHref={overview}
+      />
+    );
   if (provider === "salesforce")
     return (
       <SalesforceSetupEntry
@@ -340,34 +348,6 @@ function StepRail(): JSX.Element {
         })}
       </ol>
     </nav>
-  );
-}
-function SetupHeader({
-  dither,
-  children,
-}: {
-  dither: boolean;
-  children: ReactNode;
-}): JSX.Element {
-  const { canvasRef, start, stop } = useIconDither();
-  useEffect(() => {
-    if (dither) start();
-    return stop;
-  }, [dither, start, stop]);
-  return (
-    <header className="relative isolate overflow-hidden bg-card">
-      <div className="pointer-events-none absolute inset-0 -z-1 opacity-[0.367] saturate-[0.615]">
-        <BrandMeshLayers />
-      </div>
-      {dither && (
-        <canvas
-          ref={canvasRef}
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-1 size-full opacity-20"
-        />
-      )}
-      {children}
-    </header>
   );
 }
 function SetupBody({

@@ -48,9 +48,4 @@ export type McpReadinessCheck = ReadinessCheck & {
   chipLabel?: string;
   /** The server's own words, shown on hover only, never as the message. */
   detail?: string;
-  /**
-   * Buttons that finish the step where it is listed, for a step done outside
-   * Speakeasy. A step with actions shows them instead of linking away.
-   */
-  actions?: ReactNode;
 };

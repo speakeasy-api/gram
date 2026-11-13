@@ -523,16 +523,6 @@ function ReadinessRow({
       ) : null}
     </span>
   );
-  // A step done outside Speakeasy is finished right here, so its buttons
-  // sit under it instead of a link away.
-  if (check.actions && !check.pending) {
-    return (
-      <div className="flex flex-col pb-2">
-        {body}
-        <div className="pl-8">{check.actions}</div>
-      </div>
-    );
-  }
   // Every settled open check links, including one that couldn't be
   // determined: its target is where to try again.
   return check.href && check.ready !== true && !check.pending ? (
@@ -588,31 +578,26 @@ function useHighlightLinkedSection(): void {
       align();
       timers.push(window.setTimeout(align, 400));
       timers.push(window.setTimeout(align, 1000));
-      // Once the scroll has landed, a thin ring and a faint tint settle on
-      // the section, hold, then fade. Both live only in the animation, so
+      // Once the scroll has landed, a hairline border settles around the
+      // section, holds, then fades. It lives only in the animation, so
       // nothing is left behind.
-      const ring = "color-mix(in oklab, var(--color-primary) 45%, transparent)";
-      const wash = "color-mix(in oklab, var(--color-primary) 4%, transparent)";
+      const line = "color-mix(in oklab, var(--color-primary) 30%, transparent)";
       const clear = "color-mix(in oklab, var(--color-primary) 0%, transparent)";
-      const lit = {
-        outline: `1px solid ${ring}`,
-        outlineOffset: "8px",
-        backgroundColor: wash,
-        boxShadow: `0 0 0 8px ${wash}`,
-        borderRadius: "10px",
-      };
-      const dark = {
-        outline: `1px solid ${clear}`,
-        outlineOffset: "8px",
-        backgroundColor: clear,
-        boxShadow: `0 0 0 8px ${clear}`,
-        borderRadius: "10px",
-      };
+      const ringAt = (color: string) => ({
+        outline: `1px solid ${color}`,
+        outlineOffset: "12px",
+        borderRadius: "6px",
+      });
       timers.push(
         window.setTimeout(() => {
           target.animate?.(
-            [dark, { ...lit, offset: 0.12 }, { ...lit, offset: 0.7 }, dark],
-            { duration: 2200, easing: reduced ? "steps(1, end)" : "ease-out" },
+            [
+              ringAt(clear),
+              { ...ringAt(line), offset: 0.12 },
+              { ...ringAt(line), offset: 0.75 },
+              ringAt(clear),
+            ],
+            { duration: 2400, easing: reduced ? "steps(1, end)" : "ease-out" },
           );
         }, 400),
       );

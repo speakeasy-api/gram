@@ -33,13 +33,3 @@ export function setupGuideHeading(guides: MCPSetupGuide[]): {
     ? { title: only.title, subtitle: "MCP setup guide" }
     : { title: "MCP setup guides" };
 }
-
-/**
- * The provider a guide covers, in the words the step uses. Two matched guides
- * leave no single provider to name.
- */
-export function setupGuideProviderName(guide: {
-  only: MCPSetupGuide | undefined;
-}): string {
-  return guide.only?.title ?? "the provider";
-}
