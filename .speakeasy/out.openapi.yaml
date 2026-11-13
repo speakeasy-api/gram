@@ -38389,6 +38389,117 @@ paths:
       x-speakeasy-name-override: listToolMetadata
       x-speakeasy-react-hook:
         name: ListMcpServerToolMetadata
+  /rpc/mcpServers.setSetupGuideCompleted:
+    post:
+      description: Mark the upstream provider's manual setup guide for an MCP server as done, or clear that mark. Marking it done again keeps the original completion time. Requires the same access as updateMcpServer.
+      operationId: setMcpServerSetupGuideCompleted
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSetupGuideCompletedRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: setSetupGuideCompleted mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: setSetupGuideCompleted
+      x-speakeasy-react-hook:
+        name: SetMcpServerSetupGuideCompleted
   /rpc/mcpServers.setToolMetadata:
     put:
       description: 'Set the annotation hints of a single tool metadata entry (manual override). This is a full-record replace: omitted hints become unset on the stored record.'
@@ -106270,6 +106381,10 @@ components:
           type: string
           description: The ID of the remote MCP server used as the backend
           format: uuid
+        setup_guide_completed_at:
+          type: string
+          description: When an admin marked the upstream provider's manual setup guide as done. Absent while it is not done.
+          format: date-time
         slug:
           type: string
           description: A URL-safe, project-unique slug derived server-side from the name and ID
@@ -116424,6 +116539,19 @@ components:
       required:
         - mcp_server_id
         - scopes
+    SetSetupGuideCompletedRequestBody:
+      type: object
+      properties:
+        completed:
+          type: boolean
+          description: true marks the setup guide as done; false clears the mark
+        id:
+          type: string
+          description: The ID of the MCP server
+          format: uuid
+      required:
+        - id
+        - completed
     SetSlackDirectoryDefaultProjectRequestBody:
       type: object
       properties:

@@ -28,7 +28,13 @@ import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
-import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
+import { setupGuideProviderName } from "@/components/setup-guide/guideDocs";
+import {
+  SetupGuideOverviewCard,
+  SetupGuideStepActions,
+} from "@/components/setup-guide/SetupGuideStep";
+import { useSetupGuide } from "@/components/setup-guide/useSetupGuide";
+import { formatRelativeTime } from "@/lib/dates";
 import { getMcpServerArgs } from "@/lib/sources";
 import {
   mcpServerInstallPageLinks,
@@ -263,6 +269,8 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     canonicalToolset?.defaultEnvironmentSlug || "default",
     canonicalMetadata?.metadata,
   );
+  // Manual steps some providers need on their side, e.g. registering an app.
+  const setupGuide = useSetupGuide({ serverUrl: upstreamUrl });
 
   if (!idOrSlug) return null;
 
@@ -432,8 +440,55 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       ]
     : [];
 
+  // The provider's own steps follow Authentication: most guides need the
+  // redirect URL or credentials it sets up. A provider with a guided setup
+  // covers them there instead.
+  const setupGuideDoneAt = mcpServer?.setupGuideCompletedAt;
+  const canWriteServer = !!mcpServer && hasScope("mcp:write", mcpServer.id);
+  const setupGuideCheck: McpReadinessCheck | undefined =
+    mcpServer && setupGuide && !showSetup
+      ? {
+          key: "setup-guide",
+          label: `Set up ${setupGuideProviderName(setupGuide)}`,
+          description: setupGuideDoneAt
+            ? `Marked done ${formatRelativeTime(setupGuideDoneAt)}.`
+            : `A few steps happen in ${setupGuideProviderName(setupGuide)}, not in Speakeasy. Follow the guide, then mark it done.`,
+          ready: !!setupGuideDoneAt,
+          chipLabel: `Set up ${setupGuideProviderName(setupGuide)}`,
+          actions: (
+            <SetupGuideStepActions
+              guide={setupGuide}
+              serverId={mcpServer.id}
+              done={!!setupGuideDoneAt}
+              canWrite={canWriteServer}
+            />
+          ),
+        }
+      : undefined;
+  const withGuide = setupGuideCheck
+    ? checks.flatMap((check) =>
+        check.key === "authentication" ? [check, setupGuideCheck] : [check],
+      )
+    : checks;
+  // Overview offers the provider's steps once Speakeasy can sign in, so it
+  // never asks for them before the step they depend on.
+  const authenticationReady =
+    checks.find((check) => check.key === "authentication")?.ready === true;
+  const overviewSetupGuide =
+    mcpServer &&
+    setupGuide &&
+    setupGuideCheck &&
+    !setupGuideDoneAt &&
+    authenticationReady ? (
+      <SetupGuideOverviewCard
+        guide={setupGuide}
+        serverId={mcpServer.id}
+        canWrite={canWriteServer}
+      />
+    ) : undefined;
+
   const readinessChecks = needsSetup
-    ? checks.map((check) =>
+    ? withGuide.map((check) =>
         check.key === "authentication" && check.ready === false
           ? {
               ...check,
@@ -443,7 +498,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
             }
           : check,
       )
-    : checks;
+    : withGuide;
   const items = buildMcpDetailNavItems<TabValue>({
     tabs: [
       showSetup && SETUP_TAB,
@@ -519,16 +574,15 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     readinessChecks,
     // The upstream endpoint is what the guide catalog indexes; a server
     // with no upstream has no guide to point at.
-    setupGuide: upstreamUrl ? (
-      <SetupGuideCard serverUrl={upstreamUrl} />
-    ) : undefined,
     installLinks: effectiveInstallPageLinks,
     aside: pluginRef ? (
       <PluginStatusBanner variant="header" server={pluginRef} />
     ) : undefined,
     overviewSetup: needsSetup ? (
       <SetupPrompt name={setupName} href={setupHref} />
-    ) : undefined,
+    ) : (
+      overviewSetupGuide
+    ),
     overviewBanner: pluginRef ? (
       <PluginStatusBanner variant="banner" server={pluginRef} />
     ) : undefined,

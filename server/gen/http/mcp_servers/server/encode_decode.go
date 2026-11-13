@@ -1255,6 +1255,257 @@ func EncodeUpdateMcpServerError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
+// EncodeSetSetupGuideCompletedResponse returns an encoder for responses
+// returned by the mcpServers setSetupGuideCompleted endpoint.
+func EncodeSetSetupGuideCompletedResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*types.McpServer)
+		enc := encoder(ctx, w)
+		body := NewSetSetupGuideCompletedResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSetSetupGuideCompletedRequest returns a decoder for requests sent to
+// the mcpServers setSetupGuideCompleted endpoint.
+func DecodeSetSetupGuideCompletedRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*mcpservers.SetSetupGuideCompletedPayload, error) {
+	return func(r *http.Request) (*mcpservers.SetSetupGuideCompletedPayload, error) {
+		var payload *mcpservers.SetSetupGuideCompletedPayload
+		var (
+			body SetSetupGuideCompletedRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSetSetupGuideCompletedRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewSetSetupGuideCompletedPayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSetSetupGuideCompletedError returns an encoder for errors returned by
+// the setSetupGuideCompleted mcpServers endpoint.
+func EncodeSetSetupGuideCompletedError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetSetupGuideCompletedUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetSetupGuideCompletedForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetSetupGuideCompletedBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetSetupGuideCompletedNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetSetupGuideCompletedConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetSetupGuideCompletedUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetSetupGuideCompletedInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetSetupGuideCompletedInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetSetupGuideCompletedUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetSetupGuideCompletedGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetSetupGuideCompletedUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListToolFiltersResponse returns an encoder for responses returned by
 // the mcpServers listToolFilters endpoint.
 func EncodeListToolFiltersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -3286,6 +3537,7 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		PrimaryEndpointID:     v.PrimaryEndpointID,
 		PrimaryEndpointURL:    v.PrimaryEndpointURL,
 		HasEndpoint:           v.HasEndpoint,
+		SetupGuideCompletedAt: v.SetupGuideCompletedAt,
 		CreatedAt:             v.CreatedAt,
 		UpdatedAt:             v.UpdatedAt,
 	}

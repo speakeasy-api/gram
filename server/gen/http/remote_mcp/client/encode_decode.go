@@ -3907,6 +3907,7 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 		PrimaryEndpointID:     v.PrimaryEndpointID,
 		PrimaryEndpointURL:    v.PrimaryEndpointURL,
 		HasEndpoint:           v.HasEndpoint,
+		SetupGuideCompletedAt: v.SetupGuideCompletedAt,
 		CreatedAt:             *v.CreatedAt,
 		UpdatedAt:             *v.UpdatedAt,
 	}

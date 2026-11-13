@@ -225,8 +225,8 @@ vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
 vi.mock("@/components/sources/SourceCard", () => ({
   SourceMcpIcon: () => null,
 }));
-vi.mock("@/components/setup-guide/SetupGuideCard", () => ({
-  SetupGuideCard: () => null,
+vi.mock("@/components/setup-guide/useSetupGuide", () => ({
+  useSetupGuide: () => null,
 }));
 vi.mock("@/components/mcp-server-readiness-bar", () => ({
   McpServerReadinessBar: ({

@@ -16,6 +16,10 @@ const state = vi.hoisted(() => ({
   plugins: [] as unknown[],
   publishStatus: {} as Record<string, unknown>,
   missingEnvVars: 0,
+  guide: null as {
+    only: { title: string } | undefined;
+    openGuide: null;
+  } | null,
 }));
 const REMOTE_SERVER = {
   id: "server",
@@ -24,6 +28,13 @@ const REMOTE_SERVER = {
 };
 vi.mock("@/hooks/useProviderSetupRollout", () => ({
   useProviderSetupRollout: () => state.rollout,
+}));
+vi.mock("@/components/setup-guide/useSetupGuide", () => ({
+  useSetupGuide: () => state.guide,
+}));
+vi.mock("@/components/setup-guide/SetupGuideStep", () => ({
+  SetupGuideStepActions: () => null,
+  SetupGuideOverviewCard: () => null,
 }));
 vi.mock("./useMcpServerReachability", () => ({
   useMcpServerReachability: () => ({ kind: "off" }),
@@ -170,6 +181,7 @@ beforeEach(() => {
   state.plugins = [];
   state.publishStatus = {};
   state.missingEnvVars = 0;
+  state.guide = null;
 });
 it.each(["disabled", "loading"] as const)(
   "hides Setup while the rollout is %s",
@@ -314,4 +326,38 @@ it("reports a turned-off server as broken, not as a setup step", () => {
   state.server = { ...HOSTED_SERVER, visibility: "private" };
   renderReadiness();
   expect(readiness("Availability")).toBe("true");
+});
+
+it("lists a provider's setup guide as the step after Authentication until marked done", () => {
+  state.rollout = "disabled";
+  state.url = "https://mcp.linear.app/mcp";
+  state.server = REMOTE_SERVER;
+  state.guide = { only: { title: "Linear" }, openGuide: null };
+  renderReadiness();
+  const labels = screen
+    .getAllByRole("listitem")
+    .map((item) => item.textContent?.split(":")[0]);
+  expect(labels.indexOf("Set up Linear")).toBe(
+    labels.indexOf("Authentication") + 1,
+  );
+  expect(readiness("Set up Linear")).toBe("false");
+  cleanup();
+
+  state.server = { ...REMOTE_SERVER, setupGuideCompletedAt: new Date() };
+  renderReadiness();
+  expect(readiness("Set up Linear")).toBe("true");
+  expect(screen.getByText(/Marked done/)).toBeTruthy();
+});
+
+it("leaves the guide to the Setup tab when the provider has a guided setup", () => {
+  state.server = REMOTE_SERVER;
+  state.guide = { only: { title: "Slack" }, openGuide: null };
+  renderReadiness();
+  expect(screen.queryByText(/^Set up Slack:/)).toBeNull();
+});
+
+it("lists no setup step for a provider without a guide", () => {
+  state.server = REMOTE_SERVER;
+  renderReadiness();
+  expect(screen.queryByText(/^Set up /)).toBeNull();
 });

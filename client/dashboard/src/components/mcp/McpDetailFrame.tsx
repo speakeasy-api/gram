@@ -395,11 +395,6 @@ function ReadinessChip({
             </li>
           ))}
         </ul>
-        {/* The guide card hides itself when the provider has no guide, so it
-            gets no rule of its own: an empty one would double the line. */}
-        {chrome.setupGuide ? (
-          <div className="px-2 empty:hidden">{chrome.setupGuide}</div>
-        ) : null}
       </PopoverContent>
     </Popover>
   );
@@ -528,6 +523,16 @@ function ReadinessRow({
       ) : null}
     </span>
   );
+  // A step done outside Speakeasy is finished right here, so its buttons
+  // sit under it instead of a link away.
+  if (check.actions && !check.pending) {
+    return (
+      <div className="flex flex-col pb-2">
+        {body}
+        <div className="pl-8">{check.actions}</div>
+      </div>
+    );
+  }
   // Every settled open check links, including one that couldn't be
   // determined: its target is where to try again.
   return check.href && check.ready !== true && !check.pending ? (
