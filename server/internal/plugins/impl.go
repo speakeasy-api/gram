@@ -3204,11 +3204,13 @@ func (s *Service) resolveOrganizationName(ctx context.Context, orgID, orgSlug st
 }
 
 // pluginMCPKeyPolicy is the policy a plugin's consumer key is minted with, so
-// the key reaches what its plugins distribute without waiting for a default
-// auth permission run: mcp:connect on each server, gateway and gateway member
-// of the plugins named by slugs, and mcp:auth on the project's shared auth
-// clients. A key represents no user, so it never holds personal or identity
-// chaining clients.
+// the key reaches what it is published for without waiting for a default auth
+// permission run: mcp:connect on each server the plugins named by slugs
+// present the key to, and mcp:auth on the project's shared auth clients. The
+// servers are the ones a publish distributes, read as it reads them, less
+// those the generated config never sends the key to: public, OAuth and
+// unproxied servers, and gateways, which sign in through OAuth. A key
+// represents no user, so it never holds personal or identity chaining clients.
 func pluginMCPKeyPolicy(ctx context.Context, dbtx repo.DBTX, projectID uuid.UUID, slugs []string) ([]*authz.RoleGrant, error) {
 	project := projectID.String()
 	shared := &authz.RoleGrant{Scope: string(authz.ScopeMCPAuth), Selectors: []authz.Selector{
@@ -3218,14 +3220,28 @@ func pluginMCPKeyPolicy(ctx context.Context, dbtx repo.DBTX, projectID uuid.UUID
 	}}
 	policy := []*authz.RoleGrant{shared}
 
-	resources, err := repo.New(dbtx).ListPluginConnectResources(ctx, repo.ListPluginConnectResourcesParams{ProjectID: projectID, Slugs: slugs})
+	rows, err := repo.New(dbtx).ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: nil})
 	if err != nil {
-		return nil, fmt.Errorf("list plugin connect resources: %w", err)
+		return nil, fmt.Errorf("list plugin servers: %w", err)
 	}
+	// mcp:connect is checked on a server's id, or on its toolset's for a
+	// toolset-backed server.
+	var resources []string
+	for _, row := range rows {
+		if !slices.Contains(slugs, row.PluginSlug) || row.McpServerIsPublic || row.McpServerIsOauth || row.UnproxiedUrl.Valid || !row.McpServerID.Valid {
+			continue
+		}
+		resources = append(resources, row.McpServerID.UUID.String())
+		if row.McpServerToolsetID.Valid {
+			resources = append(resources, row.McpServerToolsetID.UUID.String())
+		}
+	}
+	slices.Sort(resources)
+	resources = slices.Compact(resources)
 	if len(resources) > 0 {
 		connect := &authz.RoleGrant{Scope: string(authz.ScopeMCPConnect), Selectors: make([]authz.Selector, 0, len(resources))}
 		for _, id := range resources {
-			selector := authz.NewSelector(authz.ScopeMCPConnect, id.String())
+			selector := authz.NewSelector(authz.ScopeMCPConnect, id)
 			selector[authz.SelectorKeyProjectID] = project
 			connect.Selectors = append(connect.Selectors, selector)
 		}

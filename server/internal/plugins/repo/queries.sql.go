@@ -1953,82 +1953,6 @@ func (q *Queries) ListPluginAudienceForRoleDeletionAudit(ctx context.Context, ar
 	return items, nil
 }
 
-const listPluginConnectResources = `-- name: ListPluginConnectResources :many
-WITH distributed AS (
-    SELECT ps.mcp_server_id, ps.meta_mcp_server_id
-    FROM plugin_servers AS ps
-    JOIN plugins AS p
-      ON p.id = ps.plugin_id
-     AND p.deleted IS FALSE
-    WHERE p.project_id = $1
-      AND p.slug = ANY ($2::text[])
-      AND ps.deleted IS FALSE
-),
-gateways AS (
-    SELECT g.id
-    FROM meta_mcp_servers AS g
-    WHERE g.project_id = $1
-      AND g.deleted IS FALSE
-      AND g.visibility <> 'disabled'
-      AND g.id IN (SELECT d.meta_mcp_server_id FROM distributed AS d)
-),
-servers AS (
-    SELECT s.id, s.toolset_id
-    FROM mcp_servers AS s
-    WHERE s.project_id = $1
-      AND s.deleted IS FALSE
-      AND s.visibility <> 'disabled'
-      AND (
-        s.id IN (SELECT d.mcp_server_id FROM distributed AS d)
-        OR s.id IN (
-          SELECT m.mcp_server_id
-          FROM meta_mcp_server_members AS m
-          WHERE m.project_id = $1
-            AND m.deleted IS FALSE
-            AND m.meta_mcp_server_id IN (SELECT g.id FROM gateways AS g)
-        )
-      )
-)
-SELECT r.resource_id::uuid AS resource_id
-FROM (
-    SELECT s.id AS resource_id FROM servers AS s
-    UNION
-    SELECT s.toolset_id FROM servers AS s WHERE s.toolset_id IS NOT NULL
-    UNION
-    SELECT g.id FROM gateways AS g
-) AS r
-ORDER BY r.resource_id
-`
-
-type ListPluginConnectResourcesParams struct {
-	ProjectID uuid.UUID
-	Slugs     []string
-}
-
-// The ids mcp:connect is checked on for everything the named plugins of a
-// project distribute: each server and its toolset when it has one, each
-// gateway, and each gateway's live members. A disabled server or gateway is
-// left out, as a publish leaves it out of the plugin.
-func (q *Queries) ListPluginConnectResources(ctx context.Context, arg ListPluginConnectResourcesParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listPluginConnectResources, arg.ProjectID, arg.Slugs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var resource_id uuid.UUID
-		if err := rows.Scan(&resource_id); err != nil {
-			return nil, err
-		}
-		items = append(items, resource_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listPluginEnvironmentConfigsForProject = `-- name: ListPluginEnvironmentConfigsForProject :many
 SELECT DISTINCT
   t.id AS toolset_id,
@@ -2688,6 +2612,7 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.mcp_server_id,
+  s.toolset_id AS mcp_server_toolset_id,
   s.slug AS mcp_server_slug,
   (s.visibility = 'public')::bool AS mcp_server_is_public,
   (s.user_session_issuer_id IS NOT NULL)::bool AS mcp_server_is_oauth,
@@ -2764,6 +2689,7 @@ type ListPluginsWithMcpServersForProjectRow struct {
 	ServerPolicy         string
 	ServerSortOrder      int32
 	McpServerID          uuid.NullUUID
+	McpServerToolsetID   uuid.NullUUID
 	McpServerSlug        pgtype.Text
 	McpServerIsPublic    bool
 	McpServerIsOauth     bool
@@ -2813,6 +2739,7 @@ func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, arg L
 			&i.ServerPolicy,
 			&i.ServerSortOrder,
 			&i.McpServerID,
+			&i.McpServerToolsetID,
 			&i.McpServerSlug,
 			&i.McpServerIsPublic,
 			&i.McpServerIsOauth,

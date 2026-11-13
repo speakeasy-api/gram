@@ -580,6 +580,7 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.mcp_server_id,
+  s.toolset_id AS mcp_server_toolset_id,
   s.slug AS mcp_server_slug,
   (s.visibility = 'public')::bool AS mcp_server_is_public,
   (s.user_session_issuer_id IS NOT NULL)::bool AS mcp_server_is_oauth,
@@ -1508,53 +1509,3 @@ WHERE assignment.plugin_id = @plugin_id
   AND assignment.organization_id = @organization_id
   AND plugin.project_id = @project_id
 ORDER BY assignment.principal_urn;
-
--- name: ListPluginConnectResources :many
--- The ids mcp:connect is checked on for everything the named plugins of a
--- project distribute: each server and its toolset when it has one, each
--- gateway, and each gateway's live members. A disabled server or gateway is
--- left out, as a publish leaves it out of the plugin.
-WITH distributed AS (
-    SELECT ps.mcp_server_id, ps.meta_mcp_server_id
-    FROM plugin_servers AS ps
-    JOIN plugins AS p
-      ON p.id = ps.plugin_id
-     AND p.deleted IS FALSE
-    WHERE p.project_id = @project_id
-      AND p.slug = ANY (@slugs::text[])
-      AND ps.deleted IS FALSE
-),
-gateways AS (
-    SELECT g.id
-    FROM meta_mcp_servers AS g
-    WHERE g.project_id = @project_id
-      AND g.deleted IS FALSE
-      AND g.visibility <> 'disabled'
-      AND g.id IN (SELECT d.meta_mcp_server_id FROM distributed AS d)
-),
-servers AS (
-    SELECT s.id, s.toolset_id
-    FROM mcp_servers AS s
-    WHERE s.project_id = @project_id
-      AND s.deleted IS FALSE
-      AND s.visibility <> 'disabled'
-      AND (
-        s.id IN (SELECT d.mcp_server_id FROM distributed AS d)
-        OR s.id IN (
-          SELECT m.mcp_server_id
-          FROM meta_mcp_server_members AS m
-          WHERE m.project_id = @project_id
-            AND m.deleted IS FALSE
-            AND m.meta_mcp_server_id IN (SELECT g.id FROM gateways AS g)
-        )
-      )
-)
-SELECT r.resource_id::uuid AS resource_id
-FROM (
-    SELECT s.id AS resource_id FROM servers AS s
-    UNION
-    SELECT s.toolset_id FROM servers AS s WHERE s.toolset_id IS NOT NULL
-    UNION
-    SELECT g.id FROM gateways AS g
-) AS r
-ORDER BY r.resource_id;
