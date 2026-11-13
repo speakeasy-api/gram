@@ -49,8 +49,8 @@ const configFileName = "speakeasy.json"
 // cursor, codex, opencode, copilot, openclaw, antigravity) or "pi". For
 // claude-code, cursor and copilot, dir is a plugin directory; for codex, which
 // has no plugin layout for hooks, dir is the Codex home the config installs
-// into; for antigravity, dir is the Antigravity config home
-// (~/.gemini/config) whose hooks.json is merged; for
+// into; for antigravity, dir is the Antigravity config home whose hooks.json
+// is merged (~/.gemini/config per public docs; unverified against agy); for
 // opencode, dir receives an .opencode/plugin shim usable either as a project
 // directory or referenced from an OpenCode config's plugin list; for openclaw,
 // dir is a native OpenClaw plugin package installed with `openclaw plugins

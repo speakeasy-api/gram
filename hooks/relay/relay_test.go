@@ -251,8 +251,8 @@ func TestEnvelopeClaudePreToolUse(t *testing.T) {
 }
 
 // TestEnvelopeCopilotPreToolUse proves attribution is correct by construction:
-// with a native ProviderCopilot, adapterSlug falls through to the provider
-// slug, so Copilot sessions land under adapter=copilot with no override.
+// adapterSlug maps ProviderCopilotCLI back to the pre-split slug, so Copilot
+// sessions still land under adapter=copilot.
 func TestEnvelopeCopilotPreToolUse(t *testing.T) {
 	payload := agenthookstest.Fixture(t, "copilot/pre_tool_use.json")
 	runner := agenthooks.New()
@@ -2120,7 +2120,9 @@ func TestAntigravitySessionStartRelaysMCPInventory(t *testing.T) {
 		`{"mcpServers":{"linear":{"serverUrl":"https://mcp.linear.app/mcp?token=secret"}}}`)
 	writeTestFile(t, filepath.Join(cwd, ".agents", "mcp_config.json"),
 		`{"mcpServers":{"local":{"command":"node","args":["server.js"]}}}`)
-	payload := []byte(fmt.Sprintf(`{"conversationId":"agy-conv-1","workspacePaths":[%q],"modelName":"gemini-3-pro"}`, cwd))
+	roots, err := json.Marshal([]string{cwd})
+	require.NoError(t, err)
+	payload := []byte(fmt.Sprintf(`{"conversationId":"agy-conv-1","workspacePaths":%s,"modelName":"gemini-3-pro"}`, roots))
 
 	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderAntigravity, payload, "--event=SessionStart")
 
