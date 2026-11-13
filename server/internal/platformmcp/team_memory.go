@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -60,16 +61,39 @@ type TeamMemoryService struct {
 	audit    *audit.Logger
 	budget   OperationBudget
 	redactor TextRedactor
+
+	// now is the clock recall measures its lookback from. Nil reads the
+	// wall clock; WithClock pins it for evals over a fixed corpus.
+	now func() time.Time
 }
 
 // NewTeamMemoryService composes the team memory tools. Missing dependencies
 // leave stable unavailable tools registered on the server.
 func NewTeamMemoryService(db *pgxpool.Pool, engine *authz.Engine, auditLogger *audit.Logger, budget OperationBudget, redactor TextRedactor) *TeamMemoryService {
-	service := &TeamMemoryService{db: db, engine: engine, audit: auditLogger, budget: budget, redactor: redactor}
+	service := &TeamMemoryService{db: db, engine: engine, audit: auditLogger, budget: budget, redactor: redactor, now: nil}
 	if !service.valid() {
 		return nil
 	}
 	return service
+}
+
+// WithClock returns a copy of the service whose recall lookback is measured
+// from now() instead of the wall clock. The memory eval uses it to recall a
+// corpus anchored at a fixed date; production never sets it.
+func (s *TeamMemoryService) WithClock(now func() time.Time) *TeamMemoryService {
+	if s == nil {
+		return nil
+	}
+	clocked := *s
+	clocked.now = now
+	return &clocked
+}
+
+func (s *TeamMemoryService) clock() time.Time {
+	if s.now != nil {
+		return s.now().UTC()
+	}
+	return time.Now().UTC()
 }
 
 func (s *TeamMemoryService) valid() bool {

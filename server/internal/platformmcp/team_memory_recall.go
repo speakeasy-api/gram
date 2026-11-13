@@ -80,7 +80,7 @@ func (s *TeamMemoryService) Recall(ctx context.Context, principal Principal, inp
 	}
 	ctx, cancel := context.WithTimeout(ctx, teamMemorySearchTimeout)
 	defer cancel()
-	output, err := s.recall(ctx, principal, project, budget, time.Now().UTC())
+	output, err := s.recall(ctx, principal, project, budget, s.clock())
 	if errors.Is(err, context.DeadlineExceeded) {
 		return zero, errTeamMemoryTimeout
 	}
