@@ -2156,8 +2156,8 @@ jobs:
   # It starts when catalogue.json, a case, the baseline or the eval harness
   # changes; every tool or instruction change forces a catalogue.json change.
   # The report goes to the job summary, and the report and an updated
-  # baseline.json to the platform-tool-eval artifact. It spends LLM calls, so it is report-only, runs only on pull
-  # requests, and skips when the eval key secret is not available (forks, or
+  # baseline.json to the platform-tool-eval artifact. It spends LLM calls, so it
+  # runs only on pull requests, and skips when the eval key secret is not available (forks, or
   # before the secret is configured).
   platform-tool-eval:
     name: platform-tool-eval
