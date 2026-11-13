@@ -379,7 +379,10 @@ func (q *Queries) LocalUpsertEnvironment(ctx context.Context, arg LocalUpsertEnv
 const localUpsertInspectEndpoint = `-- name: LocalUpsertInspectEndpoint :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)
 VALUES ($1::uuid, $2::uuid, $3::uuid, $4::text)
-ON CONFLICT (id) DO NOTHING
+ON CONFLICT (id) DO UPDATE
+  SET mcp_server_id = EXCLUDED.mcp_server_id, meta_mcp_server_id = NULL, slug = EXCLUDED.slug,
+      deleted_at = NULL, updated_at = clock_timestamp()
+  WHERE mcp_endpoints.project_id = EXCLUDED.project_id
 `
 
 type LocalUpsertInspectEndpointParams struct {
@@ -389,6 +392,8 @@ type LocalUpsertInspectEndpointParams struct {
 	Slug        string
 }
 
+// Restores the fixture endpoint if it was soft-deleted, but only within the
+// local fixture's project.
 func (q *Queries) LocalUpsertInspectEndpoint(ctx context.Context, arg LocalUpsertInspectEndpointParams) error {
 	_, err := q.db.Exec(ctx, localUpsertInspectEndpoint,
 		arg.ID,
