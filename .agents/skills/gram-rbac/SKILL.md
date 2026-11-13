@@ -108,6 +108,8 @@ go test ./internal/agents/runtimepolicy -run TestStoredPolicyFixtures -args -wri
 
 The flag refuses to overwrite a fixture. Never regenerate an existing one, because those fixtures are what old stored policies are decoded against.
 
+A credential that acts for a user also carries that user's live policy. Today it decides auth-client checks only. For every other check, the engine logs one warning per engine call (`authz check passes the credential's policies but not the live policy of the user it acts for`) when the call is allowed a check that policy would refuse. `RequireAny` and `Can(AnyOf(...))` log only when it refuses every allowed alternative. After the logging window those checks will be refused. A workload session acts for nobody and is bounded by its owner only.
+
 ## Never
 
 - **A tool or disposition goes on a tool call and nowhere else.** `ToolCall` (and `MCPToolCallCheck`) mark the check as a tool call. A check that carries `tool` or `disposition` without being built that way is an invalid check, and so is a tool call you build on any scope but `mcp:connect` (the engine derives the matching `mcp:blocked_connect` check itself). The engine reads that mark, not which dimensions happen to be present, so a tool call can never be evaluated as a connection.
