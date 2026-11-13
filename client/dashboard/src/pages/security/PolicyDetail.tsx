@@ -4029,7 +4029,7 @@ export function StandardPolicyEditor({
 // Shown while the Shadow AI detector is on and the project already has its
 // one enabled blocking Shadow MCP policy: this policy can still flag, but
 // Block would fail on create, so say so before the author configures it.
-export function ShadowMCPBlockingPolicyConflictNotice({
+function ShadowMCPBlockingPolicyConflictNotice({
   name,
   href,
   blockSelected,
