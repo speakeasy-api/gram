@@ -336,9 +336,29 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 				dimensions[key] = "platform-mcp-catalogue-probe"
 			}
 		}
-		allowed, err := authz.GrantsAuthorize(grants, authz.Check{
-			Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions,
-		})
+		// A wildcard tool or disposition is no limit, and a check may not
+		// carry a wildcard, so the grant is probed without it.
+		for _, key := range []string{authz.SelectorKeyTool, authz.SelectorKeyDisposition} {
+			if dimensions[key] == authz.WildcardResource {
+				delete(dimensions, key)
+			}
+		}
+		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions}
+		_, hasTool := dimensions[authz.SelectorKeyTool]
+		_, hasDisposition := dimensions[authz.SelectorKeyDisposition]
+		if hasTool || hasDisposition {
+			// A grant limited to some tools or dispositions reaches tool
+			// calls, so probe with one. Only a tool call may name either.
+			if scope != authz.ScopeMCPConnect {
+				continue
+			}
+			check = authz.MCPToolCallCheck(resourceID, authz.MCPToolCallDimensions{
+				Tool:        dimensions[authz.SelectorKeyTool],
+				Disposition: dimensions[authz.SelectorKeyDisposition],
+				ProjectID:   dimensions[authz.SelectorKeyProjectID],
+			})
+		}
+		allowed, err := authz.GrantsAuthorize(grants, check)
 		if err == nil && allowed {
 			return true
 		}

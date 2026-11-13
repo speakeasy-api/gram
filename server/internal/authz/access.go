@@ -26,6 +26,31 @@ type Check struct {
 	// anyOf holds the alternatives of a check built by AnyOf. Only Require and
 	// Can accept such a check, and only on its own.
 	anyOf []Check
+	// operation says what the check asks to do. Constructors set it; the
+	// matcher reads it instead of guessing from which dimensions are present.
+	operation operation
+}
+
+// operation is what a check asks to do. The zero value is an ordinary action
+// on one resource, or a connection when the scope is the connect permission.
+type operation int
+
+const (
+	operationDefault operation = iota
+	// operationToolCall is calling one tool on an MCP server. It always
+	// carries the tool and its disposition.
+	operationToolCall
+)
+
+// asToolCall marks c as a tool call. Only the tool-call constructors use it.
+func (c Check) asToolCall() Check {
+	c.operation = operationToolCall
+	return c
+}
+
+// isToolCall reports whether the check was built as a tool call.
+func (c Check) isToolCall() bool {
+	return c.operation == operationToolCall
 }
 
 type selectorMatchMode int
@@ -77,6 +102,7 @@ func AnyOf(alternatives ...Check) Check {
 		representedUser: "",
 		probe:           false,
 		anyOf:           append([]Check{}, alternatives...),
+		operation:       operationDefault,
 	}
 }
 
@@ -99,7 +125,7 @@ func (c Check) exclusionCheck(exclusion Scope) Check {
 	if IsBlocklistScope(exclusion) {
 		mode = selectorMatchBlock
 	}
-	return Check{Scope: exclusion, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: mode, representedUser: c.representedUser, probe: false, anyOf: nil}
+	return Check{Scope: exclusion, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: mode, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation}
 }
 
 // isAuthClientCheck reports whether c targets an auth client. Those checks
@@ -144,7 +170,7 @@ func GrantsContainSelectorFor(representedUser string, grants []Grant, scope Scop
 	dimensions := maps.Clone(selector)
 	delete(dimensions, SelectorKeyResourceKind)
 	delete(dimensions, SelectorKeyResourceID)
-	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: representedUser, probe: false, anyOf: nil}
+	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: representedUser, probe: false, anyOf: nil, operation: operationDefault}
 	grant, _ := matchingGrant(grants, check.expand())
 	return grant != nil
 }
@@ -155,12 +181,12 @@ func GrantsContainSelectorFor(representedUser string, grants []Grant, scope Scop
 // matches any check), so we only need one entry per scope level.
 func (c Check) expand() []Check {
 	checks := []Check{
-		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil},
-		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil},
+		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation},
+		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation},
 	}
 	// Additional scopes that also satisfy this check.
 	for _, s := range scopeExpansions[c.Scope] {
-		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil})
+		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, selectorMatch: c.selectorMatch, representedUser: c.representedUser, probe: false, anyOf: nil, operation: c.operation})
 	}
 	// Root administers everything but uses no auth client.
 	if c.isAuthClientCheck() {

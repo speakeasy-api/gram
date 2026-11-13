@@ -20,7 +20,7 @@ func newRefCheck(scope Scope, resourceID string, dimensions map[string]string, m
 	if match == MatchStrict {
 		mode = selectorMatchStrict
 	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: mode, representedUser: "", probe: false, anyOf: nil}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: mode, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }
 
 // Collections name the resources of one kind inside a project, for requests

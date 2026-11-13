@@ -197,11 +197,26 @@ func TestModelInvariant_UnknownValuesFailClosed(t *testing.T) {
 					}
 				}
 				check := invariantCheck(typ, scope, "resource-1", "project-1")
-				dimensions := map[string]string{key: authz.SelectorValueUnknown}
-				for k, v := range check.Dimensions {
-					dimensions[k] = v
+				if key == authz.SelectorKeyTool || key == authz.SelectorKeyDisposition {
+					// Only a tool call carries a tool or disposition, and only
+					// the connect permission has tool calls.
+					if scope != authz.ScopeMCPConnect {
+						continue
+					}
+					call := authz.MCPToolCallDimensions{Tool: "tool-1", Disposition: authz.DispositionReadOnly, ProjectID: "project-1"}
+					if key == authz.SelectorKeyTool {
+						call.Tool = ""
+					} else {
+						call.Disposition = ""
+					}
+					check = authz.MCPToolCallCheck("resource-1", call)
+				} else {
+					dimensions := map[string]string{key: authz.SelectorValueUnknown}
+					for k, v := range check.Dimensions {
+						dimensions[k] = v
+					}
+					check.Dimensions = dimensions
 				}
-				check.Dimensions = dimensions
 
 				constrained := authz.NewSelector(scope, authz.WildcardResource)
 				constrained[key] = value
