@@ -2,6 +2,7 @@ package authz
 
 import (
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
 )
@@ -24,14 +25,10 @@ func idFromUUID(id uuid.UUID) Option[string] {
 // string, the wildcard, which only grants may carry, a reserved marker such
 // as $represented_user, and anything containing whitespace.
 func idFromString(id string) Option[string] {
-	if id == "" || id == WildcardResource || strings.HasPrefix(id, "$") || strings.ContainsFunc(id, isSpace) {
+	if id == "" || id == WildcardResource || strings.HasPrefix(id, "$") || strings.ContainsFunc(id, unicode.IsSpace) {
 		return None[string]()
 	}
 	return Some(id)
-}
-
-func isSpace(r rune) bool {
-	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
 }
 
 // idValue is the string a check carries for an id: its value, or the empty
