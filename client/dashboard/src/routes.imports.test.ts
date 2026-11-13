@@ -60,10 +60,14 @@ function importChain(importers: Map<string, string>, file: string): string {
 }
 
 const ROUTE_PAGES = path.join(SRC, "route-pages.tsx");
+const LAZY_PATTERN =
+  /const (\w+) = React\.lazy\(\s*\(\) => import\(["']([^"']+)["']\)/g;
 
 // The modules whose components `route-pages.tsx` mounts as a page, including
 // the few that live outside `src/pages`. Only imports used as a `component` or
 // `indexComponent` count, so a helper imported there is not mistaken for a page.
+// A loader module (route-pages.lazy.tsx) is not itself a page: follow its
+// import() targets.
 function pageComponents(): Set<string> {
   const source = readFileSync(ROUTE_PAGES, "utf8");
   const mounted = new Set(
@@ -72,20 +76,26 @@ function pageComponents(): Set<string> {
     ),
   );
   const pages = new Set<string>();
-  const addIfMounted = (names: string[], specifier: string) => {
-    if (!names.some((name) => mounted.has(name))) return;
-    const resolved = resolveLocal(specifier, ROUTE_PAGES);
-    if (resolved) pages.add(resolved);
+  const addLazyTargets = (file: string) => {
+    const lazySource = readFileSync(file, "utf8");
+    let found = false;
+    for (const match of lazySource.matchAll(LAZY_PATTERN)) {
+      if (!mounted.has(match[1]!)) continue;
+      found = true;
+      const target = resolveLocal(match[2]!, file);
+      if (target) pages.add(target);
+    }
+    return found;
   };
+  addLazyTargets(ROUTE_PAGES);
   for (const match of source.matchAll(
     /import\s+(?!type\s)([^'"]*?)\s+from\s+["']([^"']+)["']/g,
   )) {
-    addIfMounted(match[1]!.match(/\w+/g) ?? [], match[2]!);
-  }
-  for (const match of source.matchAll(
-    /const (\w+) = React\.lazy\(\s*\(\) => import\(["']([^"']+)["']\)/g,
-  )) {
-    addIfMounted([match[1]!], match[2]!);
+    const names = match[1]!.match(/\w+/g) ?? [];
+    if (!names.some((name) => mounted.has(name))) continue;
+    const resolved = resolveLocal(match[2]!, ROUTE_PAGES);
+    if (!resolved) continue;
+    if (!addLazyTargets(resolved)) pages.add(resolved);
   }
   return pages;
 }
