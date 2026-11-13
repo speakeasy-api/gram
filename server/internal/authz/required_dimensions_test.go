@@ -25,7 +25,7 @@ func TestValidateInput_MCPChecksRequireProject(t *testing.T) {
 				"tool, no project":  {SelectorKeyTool: "search", SelectorKeyDisposition: DispositionReadOnly},
 				"explicit mcp kind": nil,
 			} {
-				check := Check{Scope: scope, ResourceKind: "", ResourceID: "server-1", Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
+				check := Check{Scope: scope, ResourceKind: "", ResourceID: "server-1", Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 				if name == "explicit mcp kind" {
 					check.ResourceKind = ResourceKindMCP
 				}
@@ -38,7 +38,7 @@ func TestValidateInput_MCPChecksRequireProject(t *testing.T) {
 	require.ErrorIs(t, validateInput(MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""})), ErrInvalidCheck)
 	require.NoError(t, validateInput(MCPToolCallCheck("server-1", MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: "project-1"})))
 	// Kinds with no required dimension are unaffected.
-	require.NoError(t, validateInput(Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "project-1", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}))
+	require.NoError(t, validateInput(Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "project-1", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}))
 }
 
 func TestRequiredCheckDimensions(t *testing.T) {
@@ -79,10 +79,10 @@ func TestGrantsAuthorize_ProjectBoundedMCPGrantOtherProject(t *testing.T) {
 	}
 
 	// Omitting the project used to skip the grant's bound; it now fails closed.
-	allowed, err := GrantsAuthorize(grants, Check{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "project-q", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil})
+	allowed, err := GrantsAuthorize(grants, Check{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "project-q", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault})
 	require.ErrorIs(t, err, ErrInvalidCheck)
 	require.False(t, allowed)
-	require.False(t, GrantsSatisfy(grants, Check{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "project-q", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}))
+	require.False(t, GrantsSatisfy(grants, Check{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "project-q", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}))
 }
 
 func TestEngineRequire_ProjectBoundedMCPGrantOtherProject(t *testing.T) {
@@ -101,7 +101,7 @@ func TestEngineRequire_ProjectBoundedMCPGrantOtherProject(t *testing.T) {
 	require.ErrorAs(t, engine.Require(bounded, MCPCheck(ScopeMCPWrite, "project-q", "project-q")), &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 
-	require.ErrorAs(t, engine.Require(bounded, Check{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "project-q", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}), &oopsErr)
+	require.ErrorAs(t, engine.Require(bounded, Check{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "project-q", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}), &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code, "a check without a project is invalid")
 
 	allowed, err := engine.Filter(bounded, []Check{

@@ -211,7 +211,7 @@ func renderDimensionSet(b *strings.Builder, ref, scope, match string, set regist
 	for i, key := range set.Keys {
 		fmt.Fprintf(b, "\tdimensions[%q] = valueOrUnknown(%s)\n", key, params[i])
 	}
-	fmt.Fprintf(b, "\treturn newRefCheck(%s, r.id.String(), dimensions, %s)\n}\n\n", scope, match)
+	fmt.Fprintf(b, "\treturn newRefCheck(%s, r.id.String(), dimensions, %s).asToolCall()\n}\n\n", scope, match)
 }
 
 // renderIDs writes one id type per kind that has a generated ref. Each can

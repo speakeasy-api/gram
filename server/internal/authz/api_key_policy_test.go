@@ -221,7 +221,7 @@ func checkForTest(scope Scope, resourceID string) Check {
 		}
 		dimensions[key] = testProjectID
 	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }
 
 func TestAuthorizeMandatoryKeepsAgentKeyAdmission(t *testing.T) {

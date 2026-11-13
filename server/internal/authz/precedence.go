@@ -136,7 +136,7 @@ func directOverride(grants []Grant, check Check) (*Grant, *Check, error) {
 // carries. Loose matching would let a disposition-scoped grant reach a tool
 // with no derivable disposition, past a block that otherwise covers it.
 func directOverrideCheck(check Check) Check {
-	if _, toolCall := check.Dimensions[SelectorKeyTool]; toolCall {
+	if check.isToolCall() {
 		return check.WithStrictSelectorMatch()
 	}
 	return check
