@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/memorydigest"
 	memorydigestrepo "github.com/speakeasy-api/gram/server/internal/memorydigest/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -135,6 +136,47 @@ func TestRecallTeamHistoryHidesStaleDigestsAndIneligibleItems(t *testing.T) {
 	require.ErrorIs(t, err, errTeamMemoryItemNotFound)
 }
 
+func TestRecallTeamHistoryKeepsTheChatAMemoCameFrom(t *testing.T) {
+	t.Parallel()
+	f := newTeamMemoryFixture(t)
+	ctx := f.context(t.Context(), authz.NewGrant(authz.ScopeMemoryWrite, authz.WildcardResource))
+	chat := f.summarizedChat(t, ctx, f.project.ID, "Source", "canary-source-chat", time.Now().Add(-time.Hour), uuid.NullUUID{})
+	memo, err := f.service.Remember(ctx, f.principal, RememberInput{ProjectSlug: f.project.Slug, Content: "canary-linked-memo", ChatID: chat.String()})
+	require.NoError(t, err)
+
+	output, err := f.service.Recall(ctx, f.principal, RecallTeamHistoryInput{ProjectSlug: f.project.Slug})
+	require.NoError(t, err)
+	var found bool
+	for _, source := range output.Sources {
+		if source.Kind == TeamMemorySourceMemo && source.ID == memo.Memo.Source.ID {
+			found = true
+			require.Equal(t, chat.String(), source.ChatID)
+		}
+	}
+	require.True(t, found)
+}
+
+func TestRecallTeamHistorySaysWhenUnfoldedItemsAreCapped(t *testing.T) {
+	t.Parallel()
+	f := newTeamMemoryFixture(t)
+	ctx := f.reader(t.Context())
+	now := time.Now().UTC()
+	for i := range teamMemoryRecallRowLimit {
+		f.summarizedChat(t, ctx, f.project.ID, "Chat", "canary-capped-chat", now.Add(-time.Duration(i+1)*time.Minute), uuid.NullUUID{})
+	}
+
+	output, err := f.service.Recall(ctx, f.principal, RecallTeamHistoryInput{ProjectSlug: f.project.Slug})
+	require.NoError(t, err)
+	require.False(t, output.Capped)
+	require.NotContains(t, output.History, teamMemoryRecallCappedNote)
+
+	f.summarizedChat(t, ctx, f.project.ID, "Chat", "canary-capped-chat", now.Add(-48*time.Hour), uuid.NullUUID{})
+	output, err = f.service.Recall(ctx, f.principal, RecallTeamHistoryInput{ProjectSlug: f.project.Slug})
+	require.NoError(t, err)
+	require.True(t, output.Capped)
+	require.True(t, strings.HasSuffix(output.History, teamMemoryRecallCappedNote))
+}
+
 func TestRecallTeamHistoryRedactsBeforeCutting(t *testing.T) {
 	t.Parallel()
 	f := newTeamMemoryFixture(t)
@@ -213,6 +255,25 @@ func TestZoomOpensEachLevelDownToSummariesAndMemos(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
 	require.Equal(t, []string{"memo:" + h.memo.String()}, metadata.Sources)
+}
+
+func TestZoomLeavesARegeneratedSummaryOutOfItsOldDay(t *testing.T) {
+	t.Parallel()
+	f := newTeamMemoryFixture(t)
+	ctx := f.reader(t.Context())
+	h := f.history(t, ctx)
+	// Regenerating the folded chat's summary today moves it out of the old
+	// day digest: recall shows it on its own and the old day no longer
+	// lists it.
+	require.NoError(t, testrepo.New(f.db).SetChatMemorySummaryFixture(ctx, testrepo.SetChatMemorySummaryFixtureParams{ID: h.foldedChat, Summary: conv.ToPGText("canary-regenerated-chat"), SummaryGeneratedAt: conv.ToPGTimestamptz(time.Now().Add(-time.Minute))}))
+
+	day, err := f.service.Zoom(ctx, f.principal, ZoomTeamMemoryInput{ProjectSlug: f.project.Slug, Source: "digest:" + h.day.String()})
+	require.NoError(t, err)
+	require.Empty(t, day.Children)
+
+	output, err := f.service.Recall(ctx, f.principal, RecallTeamHistoryInput{ProjectSlug: f.project.Slug})
+	require.NoError(t, err)
+	require.Contains(t, sourceRefs(output.Sources), "chat:"+h.foldedChat.String())
 }
 
 func TestZoomRefusesInvalidAndForeignSources(t *testing.T) {

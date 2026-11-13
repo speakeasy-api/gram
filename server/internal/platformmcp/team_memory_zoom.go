@@ -156,6 +156,11 @@ func (s *TeamMemoryService) zoomDigest(ctx context.Context, principal Principal,
 		if err != nil {
 			return zero, err
 		}
+		// A day digest covers a chat only for the day of its current
+		// summary, as in recall: a summary regenerated on a later day belongs
+		// to that day, not to this snapshot.
+		day := row.PeriodStart.Time.UTC().Format(time.DateOnly)
+		chats = slices.DeleteFunc(chats, func(chat TeamMemoryItem) bool { return chat.At.Format(time.DateOnly) != day })
 		memos, err := s.zoomMemos(ctx, principal, project, row.MemoIds, teamMemoryZoomChildRunes)
 		if err != nil {
 			return zero, err
