@@ -202,10 +202,10 @@ function TrustRow({
   provider: ProviderView;
   isDefault: boolean;
   service: string;
-  /** The Okta connection's issuer, when its Cross App Access view is available. */
+  /** The Okta connection's issuer; undefined without an Okta connection. */
   oktaIssuerId: string | undefined;
 }): JSX.Element {
-  // The Okta fix needs the Okta view, which the rollout can hide.
+  // Without an Okta connection the fix opens the identity providers overview.
   const fixTarget =
     provider.fix === "okta" && !oktaIssuerId
       ? "identity-providers"

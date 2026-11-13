@@ -44,9 +44,8 @@ func TestGetUserMetricsSummary_FoldsEmailOnlyUsageIntoEmployee(t *testing.T) {
 
 	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
 	// A personal AI account signs in with its own email, so its usage rows only
-	// reach the employee through the user_accounts directory.
+	// reach the employee through the identity map.
 	personalEmail := "personal-" + uuid.New().String() + "@example.com"
-	linkUserAccount(t, ctx, ti, employeeID, personalEmail, "personal")
 	seedEmployeeIdentityMap(t, ctx, ti, employeeID, employeeEmail, personalEmail)
 
 	strangerEmail := "stranger-" + uuid.New().String() + "@example.com"
@@ -163,7 +162,6 @@ func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
 	projectID := authCtx.ProjectID.String()
 	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "employee")
 	personalEmail := "personal-" + uuid.New().String() + "@example.com"
-	linkUserAccount(t, ctx, ti, employeeID, personalEmail, "personal")
 	seedEmployeeIdentityMap(t, ctx, ti, employeeID, employeeEmail, personalEmail)
 
 	now := time.Now().UTC()
@@ -213,37 +211,6 @@ func TestCostAnalytics_FoldsLinkedAccountEmailFilters(t *testing.T) {
 		require.Equal(t, personalChatID, wideSessions.Sessions[0].GramChatID)
 		require.Equal(t, workChatID, wideSessions.Sessions[1].GramChatID)
 	}
-}
-
-func TestCostAnalytics_DoesNotExpandAmbiguousAccountEmail(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestLogsService(t)
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
-
-	firstID, firstEmail := seedConnectedOrgUser(t, ctx, ti, "first")
-	secondID, secondEmail := seedConnectedOrgUser(t, ctx, ti, "second")
-	sharedEmail := "shared-" + uuid.NewString() + "@example.com"
-	linkUserAccount(t, ctx, ti, firstID, sharedEmail, "personal")
-	linkUserAccount(t, ctx, ti, secondID, sharedEmail, "personal")
-
-	now := time.Now().UTC()
-	projectID := authCtx.ProjectID.String()
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-10*time.Minute), uuid.NewString(), 1, 100, 0, 0, 0, "opus", sharedEmail, "", nil, "main", "", "", "", "")
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-9*time.Minute), uuid.NewString(), 2, 200, 0, 0, 0, "opus", firstEmail, "", nil, "main", "", "", "", "")
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, now.Add(-8*time.Minute), uuid.NewString(), 4, 400, 0, 0, 0, "opus", secondEmail, "", nil, "main", "", "", "", "")
-
-	result, err := ti.service.Query(ctx, &gen.QueryPayload{
-		From:    now.Add(-time.Hour).Format(time.RFC3339),
-		To:      now.Add(time.Hour).Format(time.RFC3339),
-		Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{sharedEmail}}},
-		TopN:    10,
-		SortBy:  "total_cost",
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Table, 1)
-	require.InDelta(t, 1, result.Table[0].Measures.TotalCost, 0.001)
 }
 
 // userMetrics fetches one employee's metrics summary over a window wide enough

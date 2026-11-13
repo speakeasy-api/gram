@@ -46,8 +46,7 @@ function ProviderContent({
   const provider = !ambiguous
     ? PROVIDERS.find((provider) => provider.id === providerId)
     : undefined;
-  // Only offer an identity provider that is shown; the overview is all a
-  // hidden one would open.
+  // Speakeasy is offered only when shown; unknown providers open the overview.
   const providerShown =
     providerId === "speakeasy"
       ? showSpeakeasy
