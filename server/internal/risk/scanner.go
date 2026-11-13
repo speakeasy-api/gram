@@ -551,23 +551,12 @@ func (s *Scanner) scanForEnforcement(
 		return nil, nil
 	}
 
-	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
-	if err != nil {
-		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
-		return nil, err
-	}
-
+	applies := s.riskPolicyApplicability(ctx, organizationID, userID)
 	applicablePolicies := make([]repo.RiskPolicy, 0, len(policies))
 	for _, p := range policies {
-		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
-		if err != nil {
-			s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
-			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
+		if applies(p.ID.String()) {
+			applicablePolicies = append(applicablePolicies, p)
 		}
-		if !policyApplication.Satisfied {
-			continue
-		}
-		applicablePolicies = append(applicablePolicies, p)
 	}
 
 	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
@@ -792,21 +781,16 @@ func (s *Scanner) scanForEnforcement(
 // for the project whose action is "block". Flag-action policies surface as
 // findings via the batch scanner instead of denying at the hook layer.
 func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizationID string, projectID uuid.UUID, userID string) (*ShadowMCPPolicy, error) {
-	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
-	if err != nil {
-		return nil, err
-	}
-
 	policies, err := s.repo.ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list shadow_mcp policies: %w", err)
 	}
+	if len(policies) == 0 {
+		return nil, nil
+	}
+	applies := s.riskPolicyApplicability(ctx, organizationID, userID)
 	for _, p := range policies {
-		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
-		if err != nil {
-			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
-		}
-		if !policyApplication.Satisfied {
+		if !applies(p.ID.String()) {
 			continue
 		}
 		if p.Action == "block" {
@@ -829,6 +813,26 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 		}
 	}
 	return nil, nil
+}
+
+// riskPolicyApplicability answers, for one caller, whether a policy governs
+// their requests. A policy is left out only when the caller is known to be
+// outside its audience or to hold an exemption. When the caller's grants cannot
+// be read, or a policy cannot be evaluated, the policy applies and the failure
+// is logged.
+func (s *Scanner) riskPolicyApplicability(ctx context.Context, organizationID string, userID string) func(policyID string) bool {
+	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "risk policy audience could not be read, so every policy applies", attr.SlogOrganizationID(organizationID), attr.SlogError(err))
+		return func(string) bool { return true }
+	}
+	return func(policyID string) bool {
+		application, err := authz.EvaluateRiskPolicy(grants, policyID, authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""})
+		if err != nil {
+			s.logger.ErrorContext(ctx, "risk policy could not be evaluated, so it applies", attr.SlogOrganizationID(organizationID), attr.SlogRiskPolicyID(policyID), attr.SlogError(err))
+		}
+		return application.Applies()
+	}
 }
 
 func (s *Scanner) riskPolicyGrants(ctx context.Context, organizationID string, userID string) ([]authz.Grant, error) {
