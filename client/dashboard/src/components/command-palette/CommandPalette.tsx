@@ -47,6 +47,8 @@ interface DisplayRow {
   candidate: LauncherCandidate;
 }
 
+const EMPTY_ROWS: DisplayRow[] = [];
+
 // Idle order for page actions: contextual Tool Actions first, then project
 // Pages before Organization pages, then anything else alphabetically.
 function groupPriority(name: string): number {
@@ -294,11 +296,13 @@ export function CommandPalette(): JSX.Element {
   const hasQuery = trimmedQuery.length > 0;
 
   const ranked = useMemo(() => {
+    if (!isOpen || !hasQuery) return null;
+
     const startedAt = performance.now();
     const rows = rank(prefilter(trimmedQuery, candidates));
     return { rows, duration: performance.now() - startedAt };
-  }, [trimmedQuery, candidates]);
-  const rows = ranked.rows;
+  }, [candidates, hasQuery, isOpen, trimmedQuery]);
+  const rows = ranked?.rows ?? EMPTY_ROWS;
   const idle = useMemo(() => idleRows(candidates), [candidates]);
 
   useEffect(() => {
@@ -330,7 +334,8 @@ export function CommandPalette(): JSX.Element {
   }, [candidates, inProject, isOpen, telemetry, tracker]);
 
   useEffect(() => {
-    if (!isOpen || recordedRanking.current === ranked) return;
+    if (!isOpen || ranked === null || recordedRanking.current === ranked)
+      return;
     recordedRanking.current = ranked;
     tracker.ranking(ranked.duration);
   }, [isOpen, ranked, tracker]);
