@@ -209,8 +209,9 @@ function jsonTypeMismatch(schema: unknown, value: unknown): string | undefined {
         return isRecord(value);
       case "string":
         return typeof value === "string";
+      // JSON.parse turns 1e400 into Infinity, which serializes as null.
       case "number":
-        return typeof value === "number";
+        return typeof value === "number" && Number.isFinite(value);
       case "integer":
         return typeof value === "number" && Number.isInteger(value);
       case "boolean":

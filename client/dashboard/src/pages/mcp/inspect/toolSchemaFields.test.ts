@@ -481,6 +481,19 @@ describe("toArguments JSON checks", () => {
     });
   });
 
+  it("rejects a number too large to send", () => {
+    const fields = extractFields({
+      type: "object",
+      properties: { limit: { type: ["number", "array"] } },
+    });
+    expect(fields[0]!.kind).toBe("json");
+    expect(toArguments(fields, { limit: "1e400" }).ok).toBe(false);
+    expect(toArguments(fields, { limit: "12" })).toEqual({
+      ok: true,
+      args: { limit: 12 },
+    });
+  });
+
   it("reads only own form values, so __proto__ is just a field name", () => {
     // Parsed, not a literal: `{ __proto__: ... }` in source sets the prototype.
     const fields = extractFields(
