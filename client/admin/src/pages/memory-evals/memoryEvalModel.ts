@@ -1,48 +1,27 @@
 // Types and pure helpers for the Organizational Memory eval runs page. The report shape
 // mirrors server/internal/platformmcp/memoryeval/bench/report.go (Report and
 // ArmScore), prepare.go (Preparation) and metered.go (ModelSpend), which the
-// API returns as report_json.
+// API returns as reportJson.
 
+import type { AdminMemoryEvalOptions } from "@gram/admin-client/models/components/adminmemoryevaloptions";
+import type {
+  AdminMemoryEvalRun,
+  Status,
+} from "@gram/admin-client/models/components/adminmemoryevalrun";
+import type { AdminMemoryEvalRunConfig } from "@gram/admin-client/models/components/adminmemoryevalrunconfig";
 import { z } from "zod";
 
-export type MemoryEvalStatus = "queued" | "running" | "succeeded" | "failed";
-
-export type MemoryEvalConfig = {
-  answer_models: string[];
-  judge_model: string;
-  summary_model: string;
-  digest_model: string;
-  runs: number;
-};
-
-export type MemoryEvalRun = {
-  id: string;
-  status: MemoryEvalStatus;
-  config: MemoryEvalConfig;
-  cost_usd?: number;
-  error?: string;
-  requested_by: string;
-  report_json?: string;
-  started_at?: string;
-  finished_at?: string;
-  created_at: string;
-};
-
-export type MemoryEvalOptions = {
-  defaults: MemoryEvalConfig;
-  allowed_models: string[];
-  daily_run_limit: number;
-  runs_last_24h: number;
-  /** Server cap on answer models per run. */
-  max_answer_models: number;
-  /** Server cap on repeats per answer model and arm. */
-  max_runs: number;
-};
+// Runs, configs and options come from the generated admin SDK; only the
+// report, which the API returns as a JSON string, is typed here.
+export type MemoryEvalStatus = Status;
+export type MemoryEvalConfig = AdminMemoryEvalRunConfig;
+export type MemoryEvalRun = AdminMemoryEvalRun;
+export type MemoryEvalOptions = AdminMemoryEvalOptions;
 
 /** The parts of the options a config is checked against. */
 export type ConfigLimits = Pick<
   MemoryEvalOptions,
-  "allowed_models" | "max_answer_models" | "max_runs"
+  "allowedModels" | "maxAnswerModels" | "maxRuns"
 >;
 
 export type KindScore = { correct: number; total: number };
@@ -148,10 +127,10 @@ const reportSchema = z.object({
 
 /** parseReport returns null for a run without a readable report. */
 export function parseReport(run: MemoryEvalRun): MemoryEvalReport | null {
-  if (!run.report_json) return null;
+  if (!run.reportJson) return null;
   let raw: unknown;
   try {
-    raw = JSON.parse(run.report_json);
+    raw = JSON.parse(run.reportJson);
   } catch {
     return null;
   }
@@ -211,10 +190,10 @@ export function comparisonRows(
         runId: run.id,
         runLabel: shortRunLabel(run),
         summaryModel:
-          report.preparation?.models.summary_model ?? run.config.summary_model,
+          report.preparation?.models.summary_model ?? run.config.summaryModel,
         digestModel:
-          report.preparation?.models.digest_model ?? run.config.digest_model,
-        judgeModel: report.judge_model || run.config.judge_model,
+          report.preparation?.models.digest_model ?? run.config.digestModel,
+        judgeModel: report.judge_model || run.config.judgeModel,
         score: s,
         best:
           !isUnsafe(s) &&
@@ -234,9 +213,8 @@ export function comparisonRows(
 }
 
 /** utcMinute formats a timestamp as "YYYY-MM-DD HH:MM" in UTC. */
-function utcMinute(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+function utcMinute(date: Date): string {
+  if (Number.isNaN(date.getTime())) return "—";
   return date.toISOString().slice(0, 16).replace("T", " ");
 }
 
@@ -245,15 +223,13 @@ function utcMinute(value: string): string {
  * UUIDv7, so the leading characters are timestamp bits shared by runs created
  * the same minute, while the tail is random.
  */
-export function runLabel(
-  run: Pick<MemoryEvalRun, "id" | "created_at">,
-): string {
-  return `${utcMinute(run.created_at)} · ${run.id.slice(-8)}`;
+export function runLabel(run: Pick<MemoryEvalRun, "id" | "createdAt">): string {
+  return `${utcMinute(run.createdAt)} · ${run.id.slice(-8)}`;
 }
 
 /** shortRunLabel fits a comparison cell: month, day and time in UTC. */
-export function shortRunLabel(run: Pick<MemoryEvalRun, "created_at">): string {
-  return utcMinute(run.created_at).slice(5);
+export function shortRunLabel(run: Pick<MemoryEvalRun, "createdAt">): string {
+  return utcMinute(run.createdAt).slice(5);
 }
 
 /** duration renders a span in milliseconds as "2h 05m", "12m" or "<1m". */
@@ -271,16 +247,13 @@ export function duration(ms: number): string {
  * finished one took. A queued run counts from when it was queued.
  */
 export function runTiming(
-  run: Pick<
-    MemoryEvalRun,
-    "status" | "created_at" | "started_at" | "finished_at"
-  >,
+  run: Pick<MemoryEvalRun, "status" | "createdAt" | "startedAt" | "finishedAt">,
   now: number,
 ): string {
-  const since = Date.parse(run.started_at ?? run.created_at);
+  const since = (run.startedAt ?? run.createdAt).getTime();
   if (isActive(run)) return `for ${duration(now - since)}`;
-  if (run.started_at && run.finished_at)
-    return `took ${duration(Date.parse(run.finished_at) - Date.parse(run.started_at))}`;
+  if (run.startedAt && run.finishedAt)
+    return `took ${duration(run.finishedAt.getTime() - run.startedAt.getTime())}`;
   return "";
 }
 
@@ -303,21 +276,21 @@ export function validateConfig(
   cfg: MemoryEvalConfig,
   limits: ConfigLimits,
 ): string | null {
-  if (cfg.answer_models.length === 0) return "Pick at least one answer model.";
-  if (cfg.answer_models.length > limits.max_answer_models)
-    return `Pick at most ${limits.max_answer_models} answer models.`;
-  if (new Set(cfg.answer_models).size !== cfg.answer_models.length)
+  if (cfg.answerModels.length === 0) return "Pick at least one answer model.";
+  if (cfg.answerModels.length > limits.maxAnswerModels)
+    return `Pick at most ${limits.maxAnswerModels} answer models.`;
+  if (new Set(cfg.answerModels).size !== cfg.answerModels.length)
     return "Each answer model can appear once.";
-  if (cfg.runs < 1 || cfg.runs > limits.max_runs)
-    return `Runs must be between 1 and ${limits.max_runs}.`;
-  if (cfg.answer_models.includes(cfg.judge_model))
+  if (cfg.runs < 1 || cfg.runs > limits.maxRuns)
+    return `Runs must be between 1 and ${limits.maxRuns}.`;
+  if (cfg.answerModels.includes(cfg.judgeModel))
     return "The judge must not also be an answer model; it would grade itself.";
-  const allowedSet = new Set(limits.allowed_models);
+  const allowedSet = new Set(limits.allowedModels);
   for (const model of [
-    ...cfg.answer_models,
-    cfg.judge_model,
-    cfg.summary_model,
-    cfg.digest_model,
+    ...cfg.answerModels,
+    cfg.judgeModel,
+    cfg.summaryModel,
+    cfg.digestModel,
   ]) {
     if (!allowedSet.has(model)) return `${model} is not an allowed model.`;
   }

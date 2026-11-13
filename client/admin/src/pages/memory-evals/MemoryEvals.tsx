@@ -20,11 +20,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { errorMessage } from "@/lib/gramAdminApi";
+
 import {
-  errorMessage,
-  gramAdminFetch,
-  gramAdminMutation,
-} from "@/lib/gramAdminApi";
+  invalidateMemoryEvals,
+  memoryEvalOptionsQuery,
+  memoryEvalRunQuery,
+  memoryEvalRunsQuery,
+  startMemoryEvalRun,
+} from "./memoryEvalClient";
 
 import {
   accuracyLabel,
@@ -44,26 +48,12 @@ import {
   type MemoryEvalStatus,
 } from "./memoryEvalModel";
 
-const optionsKey = ["admin", "memory-evals", "options"];
-const runsKey = ["admin", "memory-evals", "runs"];
-const runKey = (id: string) => ["admin", "memory-evals", "run", id];
 const maxCompared = 4;
-const runsPageSize = 50;
-
-type RunsPage = { runs: MemoryEvalRun[]; next_cursor?: string };
 
 // Native selects on purpose: the allowed model list is long and plain text,
 // and the browser's own picker searches it by typing.
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs";
-
-function startRun(config: MemoryEvalConfig) {
-  return gramAdminMutation<MemoryEvalRun>("/admin/memoryEval.start", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ config }),
-  });
-}
 
 const statusVariant: Record<
   MemoryEvalStatus,
@@ -77,44 +67,25 @@ const statusVariant: Record<
 
 export function MemoryEvalsPage(): JSX.Element {
   const client = useQueryClient();
-  const options = useQuery({
-    queryKey: optionsKey,
-    queryFn: () =>
-      gramAdminFetch<MemoryEvalOptions>("/admin/memoryEval.options"),
-  });
+  const options = useQuery(memoryEvalOptionsQuery());
   const runs = useInfiniteQuery({
-    queryKey: runsKey,
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      gramAdminFetch<RunsPage>(
-        `/admin/memoryEval.runs?limit=${runsPageSize}${
-          pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""
-        }`,
-      ),
-    getNextPageParam: (page) => page.next_cursor,
+    ...memoryEvalRunsQuery(),
     // A run can take hours; poll while one is in flight. Active runs
     // are always the newest, so they are on the first page.
     refetchInterval: (query) =>
-      query.state.data?.pages[0]?.runs.some(isActive) ? 15_000 : false,
+      query.state.data?.pages[0]?.result.runs.some(isActive) ? 15_000 : false,
   });
-  const allRuns = runs.data?.pages.flatMap((page) => page.runs);
+  const allRuns = runs.data?.pages.flatMap((page) => page.result.runs);
   const [compared, setCompared] = useState<string[]>([]);
   const mutation = useMutation({
-    mutationFn: startRun,
-    // Re-read after any attempt: a refused start means another run appeared,
-    // and a failed one may still have used a slot of the daily limit.
-    onSettled: async () => {
-      await Promise.all([
-        client.invalidateQueries({ queryKey: runsKey }),
-        client.invalidateQueries({ queryKey: optionsKey }),
-      ]);
-    },
+    mutationFn: startMemoryEvalRun,
+    onSettled: () => invalidateMemoryEvals(client),
   });
 
   const active = allRuns?.some(isActive) ?? false;
   const limitReached =
     options.data !== undefined &&
-    options.data.runs_last_24h >= options.data.daily_run_limit;
+    options.data.runsLast24h >= options.data.dailyRunLimit;
 
   return (
     <div className="space-y-6 p-6">
@@ -135,7 +106,7 @@ export function MemoryEvalsPage(): JSX.Element {
             active
               ? "A run is in progress. Runs share the corpus's memory, so they go one at a time."
               : limitReached
-                ? `${options.data.daily_run_limit} runs started in the last 24 hours.`
+                ? `${options.data.dailyRunLimit} runs started in the last 24 hours.`
                 : null
           }
           pending={mutation.isPending}
@@ -205,7 +176,7 @@ function StartRunForm(props: {
   const confirmStart = async () => {
     const confirmed = await confirm({
       title: "Start a memory eval run?",
-      description: `${config.answer_models.join(", ")} × ${config.runs}, judged by ${config.judge_model}, with ${config.summary_model} summaries and ${config.digest_model} digests. It spends model credit, uses 1 of ${options.daily_run_limit} runs for the next 24 hours, and no other run can start until it finishes.`,
+      description: `${config.answerModels.join(", ")} × ${config.runs}, judged by ${config.judgeModel}, with ${config.summaryModel} summaries and ${config.digestModel} digests. It spends model credit, uses 1 of ${options.dailyRunLimit} runs for the next 24 hours, and no other run can start until it finishes.`,
       confirmLabel: "Start run",
     });
     if (confirmed) props.onStart(config);
@@ -213,7 +184,7 @@ function StartRunForm(props: {
 
   const modelSelect = (
     label: string,
-    key: "judge_model" | "summary_model" | "digest_model",
+    key: "judgeModel" | "summaryModel" | "digestModel",
   ) => (
     <label className="block space-y-1 text-sm">
       {label}
@@ -224,7 +195,7 @@ function StartRunForm(props: {
           setConfig({ ...config, [key]: event.target.value })
         }
       >
-        {options.allowed_models.map((m) => (
+        {options.allowedModels.map((m) => (
           <option key={m} value={m}>
             {m}
           </option>
@@ -246,17 +217,17 @@ function StartRunForm(props: {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Start a run</h2>
         <span className="text-sm text-muted-foreground">
-          {options.runs_last_24h} of {options.daily_run_limit} runs used in the
-          last 24 hours
+          {options.runsLast24h} of {options.dailyRunLimit} runs used in the last
+          24 hours
         </span>
       </div>
 
       <div className="space-y-2">
         <span className="text-sm">
-          Answer models (up to {options.max_answer_models})
+          Answer models (up to {options.maxAnswerModels})
         </span>
         <div className="flex flex-wrap gap-2">
-          {config.answer_models.map((m) => (
+          {config.answerModels.map((m) => (
             <Badge key={m} variant="secondary" className="gap-1">
               {m}
               <button
@@ -265,7 +236,7 @@ function StartRunForm(props: {
                 onClick={() =>
                   setConfig({
                     ...config,
-                    answer_models: config.answer_models.filter((x) => x !== m),
+                    answerModels: config.answerModels.filter((x) => x !== m),
                   })
                 }
               >
@@ -282,8 +253,8 @@ function StartRunForm(props: {
             onChange={(event) => setAdding(event.target.value)}
           >
             <option value="">Choose a model…</option>
-            {options.allowed_models
-              .filter((m) => !config.answer_models.includes(m))
+            {options.allowedModels
+              .filter((m) => !config.answerModels.includes(m))
               .map((m) => (
                 <option key={m} value={m}>
                   {m}
@@ -295,13 +266,13 @@ function StartRunForm(props: {
             variant="outline"
             disabled={
               !adding ||
-              config.answer_models.includes(adding) ||
-              config.answer_models.length >= options.max_answer_models
+              config.answerModels.includes(adding) ||
+              config.answerModels.length >= options.maxAnswerModels
             }
             onClick={() => {
               setConfig({
                 ...config,
-                answer_models: [...config.answer_models, adding],
+                answerModels: [...config.answerModels, adding],
               });
               setAdding("");
             }}
@@ -312,15 +283,15 @@ function StartRunForm(props: {
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        {modelSelect("Judge model", "judge_model")}
-        {modelSelect("Summary model", "summary_model")}
-        {modelSelect("Digest model", "digest_model")}
+        {modelSelect("Judge model", "judgeModel")}
+        {modelSelect("Summary model", "summaryModel")}
+        {modelSelect("Digest model", "digestModel")}
         <label className="block space-y-1 text-sm">
           Repeats per model and arm
           <Input
             type="number"
             min={1}
-            max={options.max_runs}
+            max={options.maxRuns}
             value={config.runs}
             onChange={(event) =>
               setConfig({ ...config, runs: Number(event.target.value) })
@@ -423,20 +394,20 @@ function RunsTable(props: {
               )}
             </TableCell>
             <TableCell className="max-w-64 text-xs whitespace-normal">
-              {run.config.answer_models.join(", ")}
+              {run.config.answerModels.join(", ")}
               <br />
               <span className="text-muted-foreground">
-                ×{run.config.runs}, judged by {run.config.judge_model}
+                ×{run.config.runs}, judged by {run.config.judgeModel}
               </span>
             </TableCell>
             <TableCell className="max-w-64 text-xs whitespace-normal">
-              {run.config.summary_model}
+              {run.config.summaryModel}
               <br />
-              {run.config.digest_model}
+              {run.config.digestModel}
             </TableCell>
-            <TableCell>{usd(run.cost_usd)}</TableCell>
+            <TableCell>{usd(run.costUsd)}</TableCell>
             <TableCell className="max-w-64 text-xs whitespace-normal">
-              {run.requested_by}
+              {run.requestedBy}
             </TableCell>
           </TableRow>
         ))}
@@ -447,14 +418,7 @@ function RunsTable(props: {
 
 function Comparison(props: { runIds: string[] }): JSX.Element {
   const results = useQueries({
-    queries: props.runIds.map((id) => ({
-      queryKey: runKey(id),
-      queryFn: () =>
-        gramAdminFetch<MemoryEvalRun>(
-          `/admin/memoryEval.run?id=${encodeURIComponent(id)}`,
-        ),
-      staleTime: Infinity,
-    })),
+    queries: props.runIds.map((id) => memoryEvalRunQuery(id)),
   });
   const failed = results.find((r) => r.isError);
   const loaded: { run: MemoryEvalRun; report: MemoryEvalReport }[] = [];
