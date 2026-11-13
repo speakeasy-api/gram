@@ -247,7 +247,7 @@ func validateMockMCPURL(raw string) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("%q must be an absolute http or https URL", raw)
 	}
-	if u.Host == "" {
+	if u.Hostname() == "" {
 		return fmt.Errorf("%q has no host", raw)
 	}
 	return nil
