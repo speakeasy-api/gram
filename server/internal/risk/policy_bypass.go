@@ -212,7 +212,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	// single review — deduplicated by canonical URL, evidence gathered —
 	// instead of minting a per-user bypass row. The legacy bypass request
 	// remains only for what the workflow cannot key: identity-only servers
-	// with no observed URL.
+	// with no observed URL, and URLs that are not http(s).
 	if s.approvalIntake != nil && target.Kind == PolicyBypassTargetKindShadowMCPServer {
 		// Only http(s) URLs are admittable: the approval intake rejects every
 		// other scheme, and the block evaluator will happily mint a ws:// (or
