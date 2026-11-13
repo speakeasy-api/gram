@@ -610,12 +610,12 @@ func TestWorkloadScopeIsAdminAndMemberDefault(t *testing.T) {
 
 	// Administrators configure workload identity, beside agent:authorize: both
 	// hand a machine an agent's authority.
-	require.True(t, slices.Contains(adminScopes, ScopeWorkloadRead))
-	require.True(t, slices.Contains(adminScopes, ScopeWorkloadWrite))
+	require.True(t, slices.Contains(Model.SystemRoles[SystemRoleAdmin], ScopeWorkloadRead))
+	require.True(t, slices.Contains(Model.SystemRoles[SystemRoleAdmin], ScopeWorkloadWrite))
 
 	// workload:read is a member default so that team members can view the Access
 	// Hub in preview deployments. workload:write remains admin-only since it
 	// allows granting machine access.
-	require.True(t, slices.Contains(memberScopes, ScopeWorkloadRead))
-	require.False(t, slices.Contains(memberScopes, ScopeWorkloadWrite))
+	require.True(t, slices.Contains(Model.SystemRoles[SystemRoleMember], ScopeWorkloadRead))
+	require.False(t, slices.Contains(Model.SystemRoles[SystemRoleMember], ScopeWorkloadWrite))
 }

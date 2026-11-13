@@ -139,6 +139,11 @@ var Model = Registry{
 			},
 		},
 		{
+			// mcp:connect is implied by neither read nor write: viewing or
+			// managing a server is not permission to call its tools, so who
+			// may connect is decided per server. Its blocks are derived as
+			// independent of one another for now (independentBlockKinds in
+			// registry_derive.go).
 			Kind:     "mcp",
 			Parent:   "project",
 			Category: ScopeCategoryMCP,
@@ -226,7 +231,10 @@ var Model = Registry{
 		},
 		{
 			// Independent of project:*: a project viewer must not gain
-			// environment values, which include secrets.
+			// environment values, which include secrets. Environment checks
+			// carry their own resource kind with project_id as a dimension,
+			// so project grants could not match them anyway; roles that need
+			// environments hold environment:read or environment:write.
 			Kind:       "environment",
 			Parent:     "project",
 			Category:   ScopeCategoryEnvironment,

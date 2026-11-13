@@ -14,56 +14,9 @@ const (
 	GrantSourceRiskPolicy GrantSource = "risk_policy"
 )
 
-var scopeGrantSource = map[Scope]GrantSource{
-	ScopeRoot:                    GrantSourceRoles,
-	ScopeOrgRead:                 GrantSourceRoles,
-	ScopeOrgBlockedRead:          GrantSourceRoles,
-	ScopeOrgAdmin:                GrantSourceRoles,
-	ScopeOrgBlockedAdmin:         GrantSourceRoles,
-	ScopeProjectRead:             GrantSourceRoles,
-	ScopeProjectBlockedRead:      GrantSourceRoles,
-	ScopeProjectWrite:            GrantSourceRoles,
-	ScopeProjectBlockedWrite:     GrantSourceRoles,
-	ScopeMCPRead:                 GrantSourceRoles,
-	ScopeMCPBlockedRead:          GrantSourceRoles,
-	ScopeMCPWrite:                GrantSourceRoles,
-	ScopeMCPBlockedWrite:         GrantSourceRoles,
-	ScopeMCPConnect:              GrantSourceRoles,
-	ScopeMCPBlockedConnect:       GrantSourceRoles,
-	ScopeMCPAuth:                 GrantSourceRoles,
-	ScopeMCPBlockedAuth:          GrantSourceRoles,
-	ScopeEnvironmentRead:         GrantSourceRoles,
-	ScopeEnvironmentBlockedRead:  GrantSourceRoles,
-	ScopeEnvironmentWrite:        GrantSourceRoles,
-	ScopeEnvironmentBlockedWrite: GrantSourceRoles,
-	ScopeSkillRead:               GrantSourceRoles,
-	ScopeSkillBlockedRead:        GrantSourceRoles,
-	ScopeSkillWrite:              GrantSourceRoles,
-	ScopeSkillBlockedWrite:       GrantSourceRoles,
-	ScopePluginWrite:             GrantSourceRoles,
-	ScopePluginBlockedWrite:      GrantSourceRoles,
-	ScopeAssistantRead:           GrantSourceRoles,
-	ScopeAssistantBlockedRead:    GrantSourceRoles,
-	ScopeAssistantWrite:          GrantSourceRoles,
-	ScopeAssistantBlockedWrite:   GrantSourceRoles,
-	ScopeRiskPolicyEvaluate:      GrantSourceRiskPolicy,
-	ScopeRiskPolicyBypass:        GrantSourceRiskPolicy,
-	ScopeRiskPolicyBlock:         GrantSourceRiskPolicy,
-	ScopeChatRead:                GrantSourceRoles,
-	ScopeChatWrite:               GrantSourceRoles,
-	ScopeInferenceExecute:        GrantSourceRoles,
-	ScopeLogRead:                 GrantSourceRoles,
-	ScopeAgentRead:               GrantSourceRoles,
-	ScopeAgentWrite:              GrantSourceRoles,
-	ScopeAgentAuthorize:          GrantSourceRoles,
-	ScopeAgentTransfer:           GrantSourceRoles,
-	ScopeWorkloadRead:            GrantSourceRoles,
-	ScopeWorkloadBlockedRead:     GrantSourceRoles,
-	ScopeWorkloadWrite:           GrantSourceRoles,
-	ScopeWorkloadBlockedWrite:    GrantSourceRoles,
-	ScopeOrgDeviceAgentSync:      GrantSourceRoles,
-	ScopeOrgHooksIngest:          GrantSourceRoles,
-}
+// scopeGrantSource maps every scope to where its grants are set.
+// Derived from Model: a block is written where its permission is.
+var scopeGrantSource = Model.deriveGrantSource()
 
 // ScopeGrantSource returns where the grants of scope are set.
 func ScopeGrantSource(scope Scope) (GrantSource, bool) {
