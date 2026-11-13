@@ -438,6 +438,41 @@ func (q *Queries) GetDeviceAgentConfigurationForUpdate(ctx context.Context, orga
 	return i, err
 }
 
+const getMemberClaudeWebHooksAPIKey = `-- name: GetMemberClaudeWebHooksAPIKey :one
+SELECT created_at, last_accessed_at
+FROM api_keys
+WHERE organization_id = $1
+  AND created_by_user_id = $2
+  AND deleted IS FALSE
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name ~ '^plugins-claude-web-hooks-[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+  AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetMemberClaudeWebHooksAPIKeyParams struct {
+	OrganizationID  string
+	CreatedByUserID string
+}
+
+type GetMemberClaudeWebHooksAPIKeyRow struct {
+	CreatedAt      pgtype.Timestamptz
+	LastAccessedAt pgtype.Timestamptz
+}
+
+// The member's live key from the Claude web plugin download, the one
+// getClaudeObservabilityPlugin mints and RevokeMemberClaudeWebHooksAPIKeys
+// keeps to one. last_accessed_at moves when the uploaded plugin's hooks
+// authenticate, so it says whether the plugin is sending events. The name and
+// key_prefix checks mirror the revoke query, so a user-chosen key never counts.
+func (q *Queries) GetMemberClaudeWebHooksAPIKey(ctx context.Context, arg GetMemberClaudeWebHooksAPIKeyParams) (GetMemberClaudeWebHooksAPIKeyRow, error) {
+	row := q.db.QueryRow(ctx, getMemberClaudeWebHooksAPIKey, arg.OrganizationID, arg.CreatedByUserID)
+	var i GetMemberClaudeWebHooksAPIKeyRow
+	err := row.Scan(&i.CreatedAt, &i.LastAccessedAt)
+	return i, err
+}
+
 const insertChatSessionLink = `-- name: InsertChatSessionLink :exec
 INSERT INTO chat_session_links (
   project_id, organization_id, parent_chat_id, child_chat_id,

@@ -106,6 +106,7 @@ trackedFiles:
   src/funcs/agentCreateSessionHandoff.ts: {}
   src/funcs/agentDeleteAiScanTarget.ts: {}
   src/funcs/agentGetClaudeObservabilityPlugin.ts: {}
+  src/funcs/agentGetClaudeObservabilityPluginStatus.ts: {}
   src/funcs/agentGetConfiguration.ts: {}
   src/funcs/agentGetMyConnections.ts: {}
   src/funcs/agentGetPlugins.ts: {}
@@ -1090,6 +1091,7 @@ trackedFiles:
   src/models/components/claudeagentusage.ts: {}
   src/models/components/claudehookpayload.ts: {}
   src/models/components/claudehookresult.ts: {}
+  src/models/components/claudeobservabilitypluginstatus.ts: {}
   src/models/components/claudetoolusage.ts: {}
   src/models/components/claudeturnusage.ts: {}
   src/models/components/cloneenvironmentrequestbody.ts: {}
@@ -2524,6 +2526,7 @@ trackedFiles:
   src/models/operations/getadminopenrouterkeyusage.ts: {}
   src/models/operations/getagent.ts: {}
   src/models/operations/getagentclaudeobservabilityplugin.ts: {}
+  src/models/operations/getagentclaudeobservabilitypluginstatus.ts: {}
   src/models/operations/getagentmyconnections.ts: {}
   src/models/operations/getagentplugins.ts: {}
   src/models/operations/getagentsessionmeta.ts: {}
@@ -3181,6 +3184,8 @@ trackedFiles:
   src/react-query/admitWorkloadSubject.ts: {}
   src/react-query/agent.core.ts: {}
   src/react-query/agent.ts: {}
+  src/react-query/agentClaudeObservabilityPluginStatus.core.ts: {}
+  src/react-query/agentClaudeObservabilityPluginStatus.ts: {}
   src/react-query/agentConnectionBlocks.core.ts: {}
   src/react-query/agentConnectionBlocks.ts: {}
   src/react-query/agentGetClaudeObservabilityPlugin.core.ts: {}
@@ -7418,6 +7423,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getAgentClaudeObservabilityPluginStatus:
+    speakeasy-default-get-agent-claude-observability-plugin-status:
+      responses:
+        "200":
+          application/json: {"available": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getAgentMyConnections:
     speakeasy-default-get-agent-my-connections:
       parameters:
