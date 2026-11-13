@@ -50,7 +50,7 @@ type StatusPresentation = {
 };
 
 const NO_AUTH_STATUS: StatusPresentation = {
-  label: "No authentication required",
+  label: "No authentication",
   hint: "Speakeasy sends no credentials upstream. Callers still need access to the server itself.",
   tone: "neutral",
 };
