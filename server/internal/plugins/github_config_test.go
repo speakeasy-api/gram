@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 )
 
@@ -25,7 +26,7 @@ func newTestGitHubClient(t *testing.T) *ghclient.Client {
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(key),
 	})
-	c, err := ghclient.NewClient(1, keyPEM, &guardian.HTTPClient{})
+	c, err := ghclient.NewClient(1, keyPEM, &guardian.HTTPClient{}, testenv.NewTracerProvider(t))
 	require.NoError(t, err)
 	return c
 }
