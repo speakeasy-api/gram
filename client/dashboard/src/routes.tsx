@@ -723,8 +723,9 @@ const ROUTE_STRUCTURE = {
   },
   // Shadow AI lives in Guardrails (the Shadow AI policy and its targets tab)
   // and is not in the nav. Its section URLs stay because tickets, bookmarks
-  // and block messages link to them: every index page redirects to
-  // Guardrails, and the tool and server detail pages beneath keep rendering.
+  // and block messages link to them: the MCPs index redirects to the Shadow
+  // MCP page, the other indexes to the Shadow AI targets tab of Guardrails,
+  // and the tool and server detail pages beneath keep rendering.
   //
   // Project-level placement with organization-scoped reads behind it, the
   // same shape as identities above and for the same reason.

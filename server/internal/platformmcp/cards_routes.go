@@ -110,9 +110,9 @@ var cardTools = map[string]cardSpec{
 	"unmark_risk_findings_false_positive": {kind: cardKindReceipt, route: "P/risk-events", label: "Open risk events"},
 
 	// Shadow MCP, shadow AI and devices.
-	"list_shadow_mcp_inventory": {kind: cardKindList, route: "P/shadow-ai", label: "Open shadow AI"},
-	"get_shadow_mcp_review":     {kind: cardKindDetail, route: "P/shadow-ai", label: "Open shadow AI"},
-	"decide_shadow_mcp_access":  {kind: cardKindReceipt, route: "P/shadow-ai", label: "Open shadow AI"},
+	"list_shadow_mcp_inventory": {kind: cardKindList, route: "P/shadow-mcp", label: "Open Shadow MCP"},
+	"get_shadow_mcp_review":     {kind: cardKindDetail, route: "P/shadow-mcp", label: "Open Shadow MCP"},
+	"decide_shadow_mcp_access":  {kind: cardKindReceipt, route: "P/shadow-mcp", label: "Open Shadow MCP"},
 	"list_shadow_ai_inventory":  {kind: cardKindList, route: "P/shadow-ai", label: "Open shadow AI"},
 	"get_device_coverage":       {kind: cardKindDetail, route: "O/device-agent/devices", label: "Open devices"},
 	"list_managed_devices":      {kind: cardKindList, route: "O/device-agent/devices", label: "Open devices"},

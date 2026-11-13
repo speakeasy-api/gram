@@ -118,7 +118,13 @@ export function AppSidebar({
 
   // Find the specific active route title for the sliding highlight. Shared with
   // the command palette via useProjectNavRoutes so the two stay in sync.
-  const activeRoute = allNavRoutes.find((entry) => entry.route.active)?.route;
+  // A server's page sits under the Shadow AI section's URL but is opened
+  // from Shadow MCP, so Shadow MCP stays lit while drilling in.
+  const shadowMCPActive =
+    routes.shadowMCP.active || routes.shadowAI.mcps.active;
+  const activeRoute = shadowMCPActive
+    ? routes.shadowMCP
+    : allNavRoutes.find((entry) => entry.route.active)?.route;
   const accessFor = (
     route: AppRoute,
   ): { scope?: Scope[]; resourceId?: string; projectId?: string } => {
@@ -193,12 +199,7 @@ export function AppSidebar({
         { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
         { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
         {
-          // A server's page sits under the Shadow AI section's URL but is
-          // opened from Shadow MCP, so the item stays lit while drilling in.
-          item: {
-            ...routes.shadowMCP,
-            active: routes.shadowMCP.active || routes.shadowAI.mcps.active,
-          },
+          item: { ...routes.shadowMCP, active: shadowMCPActive },
           ...accessFor(routes.shadowMCP),
         },
       ],
