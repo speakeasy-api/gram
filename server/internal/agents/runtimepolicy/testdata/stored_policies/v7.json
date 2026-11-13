@@ -1,0 +1,69 @@
+{
+  "org:blocked_admin": {
+    "requested": [
+      {
+        "scope": "org:blocked_admin",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "org:blocked_admin",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ]
+  },
+  "org:blocked_read": {
+    "requested": [
+      {
+        "scope": "org:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "org:blocked_admin",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      },
+      {
+        "scope": "org:blocked_read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ]
+  },
+  "org:read": {
+    "requested": [
+      {
+        "scope": "org:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "org:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "org"
+        }
+      }
+    ]
+  }
+}

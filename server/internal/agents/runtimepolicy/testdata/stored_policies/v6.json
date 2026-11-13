@@ -1,0 +1,22 @@
+{
+  "inference:execute": {
+    "requested": [
+      {
+        "scope": "inference:execute",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "inference"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "inference:execute",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "inference"
+        }
+      }
+    ]
+  }
+}
