@@ -89,6 +89,20 @@ export function useGatewayConnectionCandidates({
     if (!enabled) return [];
     const result: LauncherCandidate[] = [];
     if (canReadOrg) {
+      // The MCP list leads with this gateway by name, so it is findable by name.
+      result.push({
+        id: `gateway:organization:${organization.id}`,
+        kind: "page",
+        title: "Organization Gateway",
+        detail: "Every server your team can reach",
+        keywords: ["gateway", "organization", "mcp", "overview"],
+        verbs: ["open"],
+        icon: "network",
+        group: "Pages",
+        run: () => {
+          void navigate(routes.mcp.organizationGateway.href());
+        },
+      });
       result.push({
         id: `gateway-connections:organization:${organization.id}`,
         kind: "page",
