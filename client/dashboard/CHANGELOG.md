@@ -1,5 +1,21 @@
 # dashboard
 
+## 0.148.0
+
+### Minor Changes
+
+- b1631cf: Add guided setup for Okta Managed MCP Server with organization configuration, Web and Native app credentials, instructions for granting access in Okta, sign-in, and connection testing.
+
+### Patch Changes
+
+- 9f04e25: Administrators can attach an upstream OAuth client to one MCP server with `remoteSessions.attachServerClientAssociation`, including a server on a shared user session issuer, and detach now has an undo. The client must already be bound to the server's own issuer. Attach also binds it to the issuers of gateways fronting the server, so their consent can offer it, and detach removes that binding when the client stays on the server's own issuer and nothing else on the gateway's issuer signs in through it. The audit log names the new `remote-session-client:attach-mcp-server` action.
+- e62fc27: Clearly mark required fields in credential setup and explain why incomplete credentials cannot be added.
+- 8e10356: Add a one-click Gateways quick filter to the MCP servers list, and give each source badge (Gateway, Hosted, Remote, Tunneled, Unproxied) its own color on MCP cards and table rows.
+- 997f8d0: OpenCode plugin install instructions now install the plugin's MCP servers and skills, and offer observability as a separate optional step. The OpenCode observability setup now leads with the ZIP download and keeps the CLI as an alternative.
+- 8aa24a1: Consolidating one authorization server into another now shows how each affected MCP server's OAuth clients would change before you confirm, and keeps each server's working OAuth client explicit through the move. The preview runs the consolidation and rolls it back, so it reports exactly what confirming would do: servers that would start or stop asking people to connect an account, switch providers, or keep their current client. It blocks the consolidation when a server would end up with two OAuth clients for one provider, or with a client its upstream does not accept. Consolidation now carries over only the OAuth clients something still signs in through, never a deleted one, and lists the rest. Previewing a consolidation now requires organization admin access, because it takes the same locks a consolidation does.
+- 305e284: Okta identity providers, identity chaining through Okta and MCP research no longer wait on a rollout flag.
+- 5853fc9: Shorten the no-authentication identity label to fit the server overview sidebar.
+
 ## 0.147.0
 
 ### Minor Changes
