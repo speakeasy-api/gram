@@ -305,7 +305,7 @@ func TestRiskMutationReceiptResultAllowlistCoversEveryOperation(t *testing.T) {
 	project := RiskMutationReceiptProject{ID: "11111111-1111-4111-8111-111111111111", Slug: "default"}
 	policy := RiskPolicyReceiptSummary{ID: "22222222-2222-4222-8222-222222222222", PolicyType: "standard", Enabled: true, Action: "flag"}
 	exclusion := RiskExclusionReceiptSummary{ID: "33333333-3333-4333-8333-333333333333", MatchType: "source", Enabled: true}
-	for _, action := range []string{"flag", "warn", "block", "quarantine"} {
+	for _, action := range []string{"flag", "confirm", "warn", "block", "quarantine"} {
 		t.Run("policy action "+action, func(t *testing.T) {
 			t.Parallel()
 			candidate := policy

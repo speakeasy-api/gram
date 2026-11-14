@@ -21,9 +21,9 @@ var SourceDescriptions = map[string]string{
 
 // ActionDescriptions explains what each enforcement action does at runtime.
 var ActionDescriptions = map[string]string{
-	"flag":  "Log the finding for review without interrupting the session.",
-	"warn":  "Warn the user and require acknowledgement before the action proceeds; falls back to blocking where confirmation is not possible.",
-	"block": "Deny the prompt or tool call that matched.",
+	"flag":    "Log the finding for review without interrupting the session.",
+	"confirm": "Block the prompt or tool call until the user confirms they want to go ahead; they can bypass the block themselves, and every confirmation is audited. Blocks outright where the client cannot ask the user.",
+	"block":   "Deny the prompt or tool call that matched.",
 }
 
 // PolicyTypeDescriptions explains when to pick each policy type.

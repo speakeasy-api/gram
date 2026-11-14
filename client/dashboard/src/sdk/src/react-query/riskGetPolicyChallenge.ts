@@ -55,7 +55,7 @@ export type RiskGetPolicyChallengeMutationError =
  * getRiskPolicyChallenge risk
  *
  * @remarks
- * Fetch the details of a risk policy warn/challenge from a warning-link token, WITHOUT acknowledging it. Powers the approval page (shows what was flagged and Approve/Deny actions).
+ * Fetch the details of a confirm policy challenge from a confirmation-link token, WITHOUT confirming it. Powers the confirmation page (shows what was flagged and the Confirm and Keep blocked actions).
  */
 export function useRiskGetPolicyChallengeMutation(
   options?: MutationHookOptions<

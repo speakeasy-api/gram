@@ -213,10 +213,10 @@ func ValidateMCPScope(scope *MCPScope, sources []string, action string) error {
 
 func ValidateAction(action string) error {
 	switch action {
-	case "flag", "block", "warn", "quarantine", ActionRequireApproval:
+	case "flag", "block", ActionConfirm, ActionWarnLegacy, "quarantine", ActionRequireApproval:
 		return nil
 	default:
-		return fmt.Errorf("action must be one of: flag, warn, block, quarantine, %s", ActionRequireApproval)
+		return fmt.Errorf("action must be one of: flag, %s, block, quarantine, %s", ActionConfirm, ActionRequireApproval)
 	}
 }
 

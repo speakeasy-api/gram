@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
@@ -429,7 +430,7 @@ func TestScanner_LLMLaneFailsClosed(t *testing.T) {
 			result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "alice@example.com", message.User, ""))
 			require.NoError(t, err, "%s/%s", action, lane.name)
 			require.NotNil(t, result, "%s/%s must deny", action, lane.name)
-			require.Equal(t, action, result.Action, "%s/%s keeps the policy action", action, lane.name)
+			require.Equal(t, policycore.CanonicalAction(action), result.Action, "%s/%s keeps the policy action", action, lane.name)
 			require.Equal(t, action+" pii", result.PolicyName, "%s/%s", action, lane.name)
 			require.Equal(t, llmanalyzer.Source, result.Source, "%s/%s", action, lane.name)
 			require.Equal(t, llmanalyzer.RuleDeadLetter, result.RuleID, "%s/%s", action, lane.name)
@@ -484,8 +485,8 @@ func TestScanner_LLMLaneDeadLetterKeepsWarnSentinelOverChallenge(t *testing.T) {
 
 	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "some text", message.User, ""))
 	require.NoError(t, err)
-	require.NotNil(t, result, "a warn policy denies on a degraded lane instead of passing the event through")
-	require.Equal(t, "warn", result.Action)
+	require.NotNil(t, result, "a confirm policy denies on a degraded lane instead of passing the event through")
+	require.Equal(t, "confirm", result.Action)
 	require.Equal(t, "unavailable", result.DeadLetterReason)
 	require.Empty(t, result.CallFingerprint)
 }

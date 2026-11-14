@@ -83,21 +83,29 @@ describe("shadowMCPPolicyState", () => {
     expect(
       shadowMCPPolicyState([
         policy({ action: "flag", id: "flag" }),
-        policy({ action: "warn", id: "warn" }),
+        policy({ action: "confirm", id: "confirm" }),
         policy({ action: "block", id: "block" }),
       ]),
     ).toBe("blocking");
   });
 
-  it("returns warning for enabled warn policy without blocking policy", () => {
-    expect(shadowMCPPolicyState([policy({ action: "warn" })])).toBe("warning");
+  it("returns warning for enabled confirm policy without blocking policy", () => {
+    expect(shadowMCPPolicyState([policy({ action: "confirm" })])).toBe(
+      "warning",
+    );
+  });
+
+  it("reads the legacy warn action as confirm", () => {
+    expect(
+      shadowMCPPolicyState([policy({ action: unrecognized("warn") })]),
+    ).toBe("warning");
   });
 
   it("prioritizes warning policies over flagging policies", () => {
     expect(
       shadowMCPPolicyState([
         policy({ action: "flag", id: "flag" }),
-        policy({ action: "warn", id: "warn" }),
+        policy({ action: "confirm", id: "confirm" }),
       ]),
     ).toBe("warning");
   });

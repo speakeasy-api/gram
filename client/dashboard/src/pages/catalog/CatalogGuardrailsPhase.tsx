@@ -28,8 +28,8 @@ import type {
 
 const ACTION_LABELS = {
   flag: { chip: "Log", label: "Log for review" },
-  warn: { chip: "Warn", label: "Warn & confirm" },
-  block: { chip: "Deny", label: "Deny the request" },
+  confirm: { chip: "Confirm", label: "Block until confirmed" },
+  block: { chip: "Block", label: "Block" },
   quarantine: { chip: "Quarantine", label: "Quarantine session" },
   require_approval: { chip: "Approval", label: "Require approval" },
 } as const;

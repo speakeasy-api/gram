@@ -1,6 +1,7 @@
 import { enumPresentation } from "@/lib/enum";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import {
+  canonicalPolicyAction,
   DETECTION_RULES,
   ruleCategoryMeta,
   type DetectorMode,
@@ -97,12 +98,16 @@ export function getPolicyRuleGroupNamesForDeleteDialog(
 export function getPolicyDeleteRuleActionLabel(policy: RiskPolicy): string {
   const labels: Record<RiskPolicy["action"], string> = {
     flag: "flag",
-    warn: "warn",
+    confirm: "confirm",
     block: "block",
     quarantine: "quarantine",
     require_approval: "require approval",
   };
-  return enumPresentation(labels, policy.action, "unknown");
+  return enumPresentation(
+    labels,
+    canonicalPolicyAction(policy.action),
+    "unknown",
+  );
 }
 
 export function getPolicyDeleteImpactText(

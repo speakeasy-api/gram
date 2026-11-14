@@ -121,7 +121,7 @@ func TestAHPInboundAttachmentWarnAcknowledgement(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	ti.service.auth = &ahpTestAuthorizer{authCtx: hookAuthContext(t, ctx)}
 	scanner := &ahpEvidenceScanner{stubResultScanner: stubResultScanner{result: &risk.ScanResult{
-		Action: "warn", PolicyID: uuid.NewString(), PolicyName: "attachment review",
+		Action: "confirm", PolicyID: uuid.NewString(), PolicyName: "attachment review",
 		Description: "requires review", RuleID: "attachment-review", Entity: "content",
 		MatchedValue: "attachment evidence", CallFingerprint: "attachment-warn-fingerprint",
 	}}}

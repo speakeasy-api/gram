@@ -24,17 +24,17 @@ import {
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
+ * Policy action: flag (log only), confirm (block until the user confirms they want to go ahead; they bypass it themselves and the confirmation is audited; formerly named warn), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export const RiskPolicyAction = {
   Flag: "flag",
-  Warn: "warn",
+  Confirm: "confirm",
   Block: "block",
   Quarantine: "quarantine",
   RequireApproval: "require_approval",
 } as const;
 /**
- * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
+ * Policy action: flag (log only), confirm (block until the user confirms they want to go ahead; they bypass it themselves and the confirmation is audited; formerly named warn), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export type RiskPolicyAction = OpenEnum<typeof RiskPolicyAction>;
 
@@ -78,7 +78,7 @@ export type RiskPolicyShadowMcpDisposition = OpenEnum<
 
 export type RiskPolicy = {
   /**
-   * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
+   * Policy action: flag (log only), confirm (block until the user confirms they want to go ahead; they bypass it themselves and the confirmation is audited; formerly named warn), block (deny in real-time), quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
    */
   action: RiskPolicyAction;
   approvalConfig?: RiskPolicyApprovalConfig | undefined;

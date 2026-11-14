@@ -60,7 +60,7 @@ func Build() (Catalog, error) {
 	catalog := Catalog{
 		Schema:      SchemaV1,
 		PolicyTypes: []string{"prompt_based", "standard"},
-		Actions:     []string{"block", "flag", "warn"},
+		Actions:     []string{"block", "confirm", "flag"},
 		Sources: []string{
 			accountidentity.Source,
 			clidestructive.Source,

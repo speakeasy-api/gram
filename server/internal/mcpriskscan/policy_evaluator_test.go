@@ -525,7 +525,7 @@ func TestPolicyEvaluator_DrainPublishesFlagFindingsReturnedWithError(t *testing.
 
 func TestPolicyEvaluator_NonBlockActionsUseFlagLane(t *testing.T) {
 	t.Parallel()
-	for _, action := range []string{"flag", "warn", "quarantine"} {
+	for _, action := range []string{"flag", "confirm", "warn", "quarantine"} {
 		t.Run(action, func(t *testing.T) {
 			t.Parallel()
 			projectID := uuid.New()

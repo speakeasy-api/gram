@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 )
 
 const maxRiskMutationReceiptPayloadBytes = 16 << 10
@@ -283,7 +285,7 @@ func validRiskReceiptSlug(slug string) bool {
 }
 
 func validRiskPolicyReceiptSummary(policy RiskPolicyReceiptSummary) bool {
-	return uuid.Validate(policy.ID) == nil && (policy.PolicyType == "standard" || policy.PolicyType == "prompt_based") && (policy.Action == "" || policy.Action == "flag" || policy.Action == "warn" || policy.Action == "block" || policy.Action == "quarantine")
+	return uuid.Validate(policy.ID) == nil && (policy.PolicyType == "standard" || policy.PolicyType == "prompt_based") && (policy.Action == "" || policy.Action == "flag" || policy.Action == policycore.ActionConfirm || policy.Action == policycore.ActionWarnLegacy || policy.Action == "block" || policy.Action == "quarantine")
 }
 
 func validRiskExclusionReceiptSummary(exclusion RiskExclusionReceiptSummary) bool {

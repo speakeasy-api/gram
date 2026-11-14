@@ -142,6 +142,36 @@ type ModelConfig struct {
 // approves it.
 const ActionRequireApproval = "require_approval"
 
+// ActionConfirm blocks the matching prompt or tool call until the user
+// confirms they want to go ahead: they bypass the block themselves, and the
+// confirmation is audited. It was called "warn" before.
+const ActionConfirm = "confirm"
+
+// ActionWarnLegacy is the old name of ActionConfirm. The API still accepts
+// it, and risk_policies rows still store it, so a rollback or a server not
+// yet on this version keeps enforcing those policies. A later migration
+// moves the rows to ActionConfirm; until then CanonicalAction and
+// StoredAction translate at the database boundary.
+const ActionWarnLegacy = "warn"
+
+// CanonicalAction returns the current name of an action read from the
+// database or an API request: "warn" becomes "confirm".
+func CanonicalAction(action string) string {
+	if action == ActionWarnLegacy {
+		return ActionConfirm
+	}
+	return action
+}
+
+// StoredAction returns the value written to risk_policies.action. Confirm
+// policies are stored as "warn" until the backfill migration runs.
+func StoredAction(action string) string {
+	if action == ActionConfirm {
+		return ActionWarnLegacy
+	}
+	return action
+}
+
 // ApprovalConfig is the persisted approval configuration of a
 // require_approval policy.
 type ApprovalConfig struct {
@@ -179,7 +209,7 @@ func Project(row repo.RiskPolicy, audiencePrincipalURNs []string) Policy {
 		DisabledRules:          row.DisabledRules,
 		CustomRuleIDs:          row.CustomRuleIds,
 		Enabled:                row.Enabled,
-		Action:                 row.Action,
+		Action:                 CanonicalAction(row.Action),
 		AudienceType:           row.AudienceType,
 		AudiencePrincipalURNs:  audience,
 		ShadowMCPDisposition:   shadowMCPDisposition(row),

@@ -2,6 +2,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { RiskCategoryDefinition } from "@gram/client/models/components/riskcategorydefinition.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
@@ -534,10 +535,10 @@ describe("StandardPolicyEditor scope rows", () => {
       ).toBe("true");
     });
   });
-  it("coerces warn to block when switching to MCP scope", () => {
+  it("coerces a legacy warn policy to block when switching to MCP scope", () => {
     renderEditor(
       policy({
-        action: "warn",
+        action: unrecognized("warn"),
         sources: ["gitleaks"],
         mcpScope: undefined,
       }),

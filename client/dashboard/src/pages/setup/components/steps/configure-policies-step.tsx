@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/Button";
 import { useSlugs } from "@/contexts/Sdk";
 import { StepContainer } from "../step-container";
 import {
+  canonicalPolicyAction,
   ruleCategoryMeta,
   POLICY_MESSAGE_TYPE_META,
   type DetectorMode,
@@ -187,7 +188,7 @@ function isPolicyAction(value: unknown): value is PolicyAction {
   return (
     value === "flag" ||
     value === "block" ||
-    value === "warn" ||
+    value === "confirm" ||
     value === "quarantine"
   );
 }
@@ -393,8 +394,9 @@ export function ConfigurePoliciesStep({
           }
           continue;
         }
-        const serverAction = isPolicyAction(existing.action)
-          ? existing.action
+        const existingAction = canonicalPolicyAction(existing.action);
+        const serverAction = isPolicyAction(existingAction)
+          ? existingAction
           : next[cat].action;
         // Scope hydration needs the category recommendations; until they
         // load, leave the local selection alone rather than showing a scope
@@ -748,16 +750,16 @@ export function ConfigurePoliciesStep({
                       selected={activeConfig.action === "flag"}
                     />
                     <ActionRadio
-                      value="warn"
-                      label="Warn & confirm"
-                      description="Warn the user; they must acknowledge before it proceeds"
+                      value="confirm"
+                      label="Block until confirmed"
+                      description="Block the call; the user can confirm and go ahead"
                       disabled={!activeConfig.enabled || isShadowMcp}
-                      selected={activeConfig.action === "warn"}
+                      selected={activeConfig.action === "confirm"}
                     />
                     <ActionRadio
                       value="block"
                       label="Block"
-                      description="Reject the call, return an error"
+                      description="Block the call; the user cannot get past it"
                       disabled={!activeConfig.enabled || isShadowMcp}
                       selected={activeConfig.action === "block"}
                     />
@@ -970,7 +972,7 @@ const ACTION_PILL_VARIANT: Record<
 > = {
   block: "destructive",
   quarantine: "destructive",
-  warn: "warning",
+  confirm: "warning",
   flag: "neutral",
   require_approval: "warning",
   off: "neutral",
@@ -979,7 +981,7 @@ const ACTION_PILL_VARIANT: Record<
 const ACTION_PILL_LABEL: Record<ActionPillKind, string> = {
   block: "Block",
   quarantine: "Quarantine",
-  warn: "Warn",
+  confirm: "Confirm",
   flag: "Flag",
   require_approval: "Require approval",
   off: "Off",

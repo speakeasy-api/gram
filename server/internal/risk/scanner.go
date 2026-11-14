@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -135,7 +136,7 @@ func (p *ShadowMCPPolicy) IsAllowAll() bool {
 // transcript content (e.g. a future session-replay path) MUST scrub %{match}
 // before persisting, or the invariant breaks silently.
 type ScanResult struct {
-	Action      string // "flag" | "block" | "warn"
+	Action      string // "flag" | "block" | "confirm" | "quarantine"
 	PolicyID    string
 	PolicyName  string
 	Source      string
@@ -173,12 +174,20 @@ func (r *ScanResult) AnalysisUnavailable() bool {
 	return r != nil && r.DeadLetterReason != "" && r.Source == llmanalyzer.Source
 }
 
-// IsWarnChallenge reports whether the result should be delivered as a warn
-// challenge (deny plus an acknowledgement link). A fail-closed sentinel on a
-// warn policy is never challengeable: an analyzer outage is not something
-// the user can acknowledge, so it degrades to a plain deny.
+// IsWarnChallenge reports whether the result should be delivered as a confirm
+// challenge (deny until the user confirms). A fail-closed sentinel on a
+// confirm policy is never challengeable: an analyzer outage is not something
+// the user can confirm, so it degrades to a plain deny.
 func (r *ScanResult) IsWarnChallenge() bool {
-	return r != nil && r.Action == "warn" && !r.AnalysisUnavailable()
+	return r != nil && r.Action == policycore.ActionConfirm && !r.AnalysisUnavailable()
+}
+
+// canonicalizePolicyActions gives every loaded policy its current action
+// name, so the stored legacy "warn" reads as "confirm" from here on.
+func canonicalizePolicyActions(policies []repo.RiskPolicy) {
+	for i := range policies {
+		policies[i].Action = policycore.CanonicalAction(policies[i].Action)
+	}
 }
 
 // callFingerprint is the stable per-call key for a warn acknowledgement: a hex
@@ -558,6 +567,7 @@ func (s *Scanner) scanForEnforcement(
 		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
 		return nil, fmt.Errorf("list enforcing policies: %w", err)
 	}
+	canonicalizePolicyActions(policies)
 	span.SetAttributes(attr.RiskPolicyCount(len(policies)))
 	if len(policies) == 0 {
 		// No enforcing policies, fast path. Record as "skipped" to track volume.
@@ -815,6 +825,7 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 	if err != nil {
 		return nil, fmt.Errorf("list shadow_mcp policies: %w", err)
 	}
+	canonicalizePolicyActions(policies)
 	for _, p := range policies {
 		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
 		if err != nil {
@@ -868,6 +879,7 @@ func (s *Scanner) HasEnabledShadowMCPPolicy(ctx context.Context, projectID uuid.
 	if err != nil {
 		return false, fmt.Errorf("list shadow_mcp policies: %w", err)
 	}
+	canonicalizePolicyActions(policies)
 	return len(policies) > 0, nil
 }
 

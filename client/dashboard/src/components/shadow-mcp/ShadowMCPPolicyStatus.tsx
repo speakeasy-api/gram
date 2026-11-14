@@ -32,10 +32,10 @@ function policyStatusText(
       };
     case "warning":
       return {
-        label: "Warning",
+        label: "Confirming",
         icon: "shield-alert",
         description:
-          "Warn policy is enabled. Users must acknowledge warnings before continuing.",
+          "Confirm policy is enabled. Users in the policy's audience must confirm before they can use a server without allow rules.",
       };
     case "flagging":
       return {

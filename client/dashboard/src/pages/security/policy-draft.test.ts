@@ -60,7 +60,7 @@ describe("policy drafts", () => {
       presetId: "",
       policyType: "prompt_based",
       name: "Refund Promises",
-      action: "warn",
+      action: "confirm",
       score: 6,
       sources: [],
       presidioEntities: [],

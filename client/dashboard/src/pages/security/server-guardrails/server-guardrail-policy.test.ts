@@ -59,9 +59,9 @@ describe("effectiveAction", () => {
     expect(effectiveAction(state)).toBe("flag");
   });
 
-  it("maps warn and quarantine to block for MCP-scoped guardrails", () => {
+  it("maps confirm and quarantine to block for MCP-scoped guardrails", () => {
     const state = defaultServerGuardrailState();
-    state.action = "warn";
+    state.action = "confirm";
     expect(effectiveAction(state)).toBe("block");
     state.action = "quarantine";
     expect(effectiveAction(state)).toBe("block");
