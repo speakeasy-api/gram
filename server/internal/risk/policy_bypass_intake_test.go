@@ -356,7 +356,6 @@ func TestCreatePolicyBypassRequest_RealIntakeOpensApprovalRequest(t *testing.T) 
 	})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	flags.SetFlag(feature.FlagMCPApproval, authCtx.ActiveOrganizationID, true)
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
 		Scope:    authz.ScopeOrgAdmin,

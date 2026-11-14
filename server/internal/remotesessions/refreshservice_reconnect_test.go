@@ -58,7 +58,7 @@ func TestRefreshNow_ReconnectNeverAdoptsReplacement(t *testing.T) {
 				require.NoError(t, err)
 				replacement, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 					SubjectUrn: env.subject, UserSessionIssuerID: env.session.UserSessionIssuerID,
-					RemoteSessionClientID: env.clientID, AccessTokenEncrypted: env.session.AccessTokenEncrypted,
+					RemoteSessionClientID: env.clientID, AccessTokenEncrypted: env.session.AccessTokenEncrypted.String,
 					AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
 					RefreshTokenEncrypted: env.session.RefreshTokenEncrypted, Scopes: []string{},
 				})

@@ -76,6 +76,16 @@ type MoveIssuerRequestBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 }
 
+// GetIssuerMigratePreflightRequestBody is the type of the
+// "organizationUserSessionIssuers" service "getIssuerMigratePreflight"
+// endpoint HTTP request body.
+type GetIssuerMigratePreflightRequestBody struct {
+	// The user_session_issuer to migrate away from.
+	SourceID string `form:"source_id" json:"source_id" xml:"source_id"`
+	// The user_session_issuer to migrate onto.
+	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
+}
+
 // MigrateIssuerRequestBody is the type of the "organizationUserSessionIssuers"
 // service "migrateIssuer" endpoint HTTP request body.
 type MigrateIssuerRequestBody struct {
@@ -84,7 +94,8 @@ type MigrateIssuerRequestBody struct {
 	// The surviving user_session_issuer.
 	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
 	// The exact warnings_fingerprint returned by the latest preflight. Required
-	// when that preflight reports warnings.
+	// when that preflight reports warnings, server impacts, or dropped client
+	// links.
 	ConfirmedWarningsFingerprint *string `form:"confirmed_warnings_fingerprint,omitempty" json:"confirmed_warnings_fingerprint,omitempty" xml:"confirmed_warnings_fingerprint,omitempty"`
 }
 
@@ -567,11 +578,34 @@ type GetIssuerMigratePreflightResponseBody struct {
 	// values, such as an identity provider or a federated platform, must be
 	// updated.
 	Warnings []*UserSessionIssuerFieldMismatchResponseBody `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
-	// Stable fingerprint of the current warnings. Empty when there are no
-	// warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+	// Stable fingerprint of the current warnings, server impacts, and dropped
+	// client links. Empty when there are none; otherwise pass this exact value to
+	// migrateIssuer to confirm them. Counts that change on their own, such as
+	// unscoped_session_count, are not part of it.
 	WarningsFingerprint *string `form:"warnings_fingerprint,omitempty" json:"warnings_fingerprint,omitempty" xml:"warnings_fingerprint,omitempty"`
-	// True when no hard blocker is present.
+	// True when no hard blocker is present, including no server impact with
+	// blocker impact_severity.
 	CanMigrate *bool `form:"can_migrate,omitempty" json:"can_migrate,omitempty" xml:"can_migrate,omitempty"`
+	// True when the consolidation was run and rolled back to compute
+	// server_impacts and dropped_client_links. False when a hard blocker stopped
+	// it, in which case both are empty.
+	ImpactPreviewed *bool `form:"impact_previewed,omitempty" json:"impact_previewed,omitempty" xml:"impact_previewed,omitempty"`
+	// The MCP servers whose upstream OAuth clients consolidation would change, and
+	// those it would pin. A server whose clients do not change and that is not
+	// pinned is not listed.
+	ServerImpacts []*UserSessionIssuerMigrationServerImpactResponseBody `form:"server_impacts,omitempty" json:"server_impacts,omitempty" xml:"server_impacts,omitempty"`
+	// Clients the source binds that consolidation would not carry to the target
+	// because nothing signs in through them afterwards. A deleted client is never
+	// carried and not listed. Users' grants for them still move to the target, so
+	// attaching a client to the target later makes its grants usable again.
+	DroppedClientLinks []*UserSessionIssuerMigrationClientResponseBody `form:"dropped_client_links,omitempty" json:"dropped_client_links,omitempty" xml:"dropped_client_links,omitempty"`
+	// Live sign-ins on the source with no tool selection. Every MCP server on
+	// their issuer accepts them, so after consolidation they also reach the
+	// target's servers. Informational; not part of the fingerprint.
+	UnscopedSessionCount *int `form:"unscoped_session_count,omitempty" json:"unscoped_session_count,omitempty" xml:"unscoped_session_count,omitempty"`
+	// Live MCP servers already on the target that the source's unscoped sign-ins
+	// would reach for the first time. Informational; not part of the fingerprint.
+	NewlyReachableServerCount *int `form:"newly_reachable_server_count,omitempty" json:"newly_reachable_server_count,omitempty" xml:"newly_reachable_server_count,omitempty"`
 }
 
 // MigrateIssuerResponseBody is the type of the
@@ -592,6 +626,11 @@ type MigrateIssuerResponseBody struct {
 	RemoteSessionsMigrated *int `form:"remote_sessions_migrated,omitempty" json:"remote_sessions_migrated,omitempty" xml:"remote_sessions_migrated,omitempty"`
 	// True when the source issuer was soft-deleted.
 	SourceDeleted *bool `form:"source_deleted,omitempty" json:"source_deleted,omitempty" xml:"source_deleted,omitempty"`
+	// How consolidation changed each affected MCP server's upstream OAuth clients,
+	// read in its transaction just before it committed.
+	ServerImpacts []*UserSessionIssuerMigrationServerImpactResponseBody `form:"server_impacts,omitempty" json:"server_impacts,omitempty" xml:"server_impacts,omitempty"`
+	// Clients the source bound that consolidation did not carry to the target.
+	DroppedClientLinks []*UserSessionIssuerMigrationClientResponseBody `form:"dropped_client_links,omitempty" json:"dropped_client_links,omitempty" xml:"dropped_client_links,omitempty"`
 }
 
 // CreateCimdClientResponseBody is the type of the
@@ -3783,6 +3822,57 @@ type UserSessionIssuerFieldMismatchResponseBody struct {
 	TargetValue *string `form:"target_value,omitempty" json:"target_value,omitempty" xml:"target_value,omitempty"`
 }
 
+// UserSessionIssuerMigrationServerImpactResponseBody is used to define fields
+// on response body types.
+type UserSessionIssuerMigrationServerImpactResponseBody struct {
+	// The MCP server.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The MCP server's display name.
+	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
+	// The MCP server's slug.
+	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
+	// The MCP server's project.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The MCP server's project name.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// blocker stops the consolidation; warning needs confirming through the
+	// fingerprint; info only reports a pinned association.
+	ImpactSeverity *string `form:"impact_severity,omitempty" json:"impact_severity,omitempty" xml:"impact_severity,omitempty"`
+	// Why the server is listed. multiple_clients_for_provider (blocker): it would
+	// use two or more clients of one provider. provider_not_in_metadata (blocker):
+	// it would gain a client whose provider its upstream's protected resource
+	// metadata does not list. gains_client: it uses no client today and would use
+	// some. loses_client: it would use none. changes_provider: the providers it
+	// uses would change. changes_clients: the same providers, different clients.
+	// pinned: consolidation associates it with the clients its current
+	// configuration proves it uses, so they stay its own after the move.
+	Reasons []string `form:"reasons,omitempty" json:"reasons,omitempty" xml:"reasons,omitempty"`
+	// The clients the server uses today.
+	ClientsBefore []*UserSessionIssuerMigrationClientResponseBody `form:"clients_before,omitempty" json:"clients_before,omitempty" xml:"clients_before,omitempty"`
+	// The clients the server would use after consolidation.
+	ClientsAfter []*UserSessionIssuerMigrationClientResponseBody `form:"clients_after,omitempty" json:"clients_after,omitempty" xml:"clients_after,omitempty"`
+	// Remote session clients consolidation associates with the server before the
+	// move.
+	PinnedClientIds []string `form:"pinned_client_ids,omitempty" json:"pinned_client_ids,omitempty" xml:"pinned_client_ids,omitempty"`
+	// True for a hosted server on an organization not enforcing upstream auth,
+	// which uses every OAuth client its user session issuer binds rather than the
+	// ones associated with it. Changing its clients then means changing that
+	// issuer's bindings; when enforcement is on, its clients are its auth clients'
+	// offers instead and this is false.
+	Hosted *bool `form:"hosted,omitempty" json:"hosted,omitempty" xml:"hosted,omitempty"`
+}
+
+// UserSessionIssuerMigrationClientResponseBody is used to define fields on
+// response body types.
+type UserSessionIssuerMigrationClientResponseBody struct {
+	// The remote session client.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// The client's OAuth client_id at its provider.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// The issuer URL of the client's provider. Empty when the provider is unknown.
+	ProviderIssuer *string `form:"provider_issuer,omitempty" json:"provider_issuer,omitempty" xml:"provider_issuer,omitempty"`
+}
+
 // UserSessionIssuerCimdClientResponseBody is used to define fields on response
 // body types.
 type UserSessionIssuerCimdClientResponseBody struct {
@@ -3845,6 +3935,17 @@ func NewMoveIssuerRequestBody(p *organizationusersessionissuers.MoveIssuerPayloa
 	body := &MoveIssuerRequestBody{
 		ID:        p.ID,
 		ProjectID: p.ProjectID,
+	}
+	return body
+}
+
+// NewGetIssuerMigratePreflightRequestBody builds the HTTP request body from
+// the payload of the "getIssuerMigratePreflight" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewGetIssuerMigratePreflightRequestBody(p *organizationusersessionissuers.GetIssuerMigratePreflightPayload) *GetIssuerMigratePreflightRequestBody {
+	body := &GetIssuerMigratePreflightRequestBody{
+		SourceID: p.SourceID,
+		TargetID: p.TargetID,
 	}
 	return body
 }
@@ -5629,6 +5730,9 @@ func NewGetIssuerMigratePreflightOrganizationUserSessionIssuerMigratePreflightOK
 		PlatformOwned:                 *body.PlatformOwned,
 		WarningsFingerprint:           *body.WarningsFingerprint,
 		CanMigrate:                    *body.CanMigrate,
+		ImpactPreviewed:               *body.ImpactPreviewed,
+		UnscopedSessionCount:          *body.UnscopedSessionCount,
+		NewlyReachableServerCount:     *body.NewlyReachableServerCount,
 	}
 	v.ConflictingClientIds = make([]string, len(body.ConflictingClientIds))
 	for i, val := range body.ConflictingClientIds {
@@ -5641,6 +5745,22 @@ func NewGetIssuerMigratePreflightOrganizationUserSessionIssuerMigratePreflightOK
 			continue
 		}
 		v.Warnings[i] = unmarshalUserSessionIssuerFieldMismatchResponseBodyToOrganizationusersessionissuersUserSessionIssuerFieldMismatch(val)
+	}
+	v.ServerImpacts = make([]*organizationusersessionissuers.UserSessionIssuerMigrationServerImpact, len(body.ServerImpacts))
+	for i, val := range body.ServerImpacts {
+		if val == nil {
+			v.ServerImpacts[i] = nil
+			continue
+		}
+		v.ServerImpacts[i] = unmarshalUserSessionIssuerMigrationServerImpactResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationServerImpact(val)
+	}
+	v.DroppedClientLinks = make([]*organizationusersessionissuers.UserSessionIssuerMigrationClient, len(body.DroppedClientLinks))
+	for i, val := range body.DroppedClientLinks {
+		if val == nil {
+			v.DroppedClientLinks[i] = nil
+			continue
+		}
+		v.DroppedClientLinks[i] = unmarshalUserSessionIssuerMigrationClientResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationClient(val)
 	}
 
 	return v
@@ -5816,6 +5936,22 @@ func NewMigrateIssuerMigrateOrganizationUserSessionIssuerResultOK(body *MigrateI
 		SourceDeleted:          *body.SourceDeleted,
 	}
 	v.Issuer = unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(body.Issuer)
+	v.ServerImpacts = make([]*organizationusersessionissuers.UserSessionIssuerMigrationServerImpact, len(body.ServerImpacts))
+	for i, val := range body.ServerImpacts {
+		if val == nil {
+			v.ServerImpacts[i] = nil
+			continue
+		}
+		v.ServerImpacts[i] = unmarshalUserSessionIssuerMigrationServerImpactResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationServerImpact(val)
+	}
+	v.DroppedClientLinks = make([]*organizationusersessionissuers.UserSessionIssuerMigrationClient, len(body.DroppedClientLinks))
+	for i, val := range body.DroppedClientLinks {
+		if val == nil {
+			v.DroppedClientLinks[i] = nil
+			continue
+		}
+		v.DroppedClientLinks[i] = unmarshalUserSessionIssuerMigrationClientResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationClient(val)
+	}
 
 	return v
 }
@@ -7116,9 +7252,38 @@ func ValidateGetIssuerMigratePreflightResponseBody(body *GetIssuerMigratePreflig
 	if body.CanMigrate == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_migrate", "body"))
 	}
+	if body.ImpactPreviewed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("impact_previewed", "body"))
+	}
+	if body.ServerImpacts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_impacts", "body"))
+	}
+	if body.DroppedClientLinks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dropped_client_links", "body"))
+	}
+	if body.UnscopedSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unscoped_session_count", "body"))
+	}
+	if body.NewlyReachableServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("newly_reachable_server_count", "body"))
+	}
 	for _, e := range body.Warnings {
 		if e != nil {
 			if err2 := ValidateUserSessionIssuerFieldMismatchResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ServerImpacts {
+		if e != nil {
+			if err2 := ValidateUserSessionIssuerMigrationServerImpactResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.DroppedClientLinks {
+		if e != nil {
+			if err2 := ValidateUserSessionIssuerMigrationClientResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -7150,9 +7315,29 @@ func ValidateMigrateIssuerResponseBody(body *MigrateIssuerResponseBody) (err err
 	if body.SourceDeleted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("source_deleted", "body"))
 	}
+	if body.ServerImpacts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_impacts", "body"))
+	}
+	if body.DroppedClientLinks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dropped_client_links", "body"))
+	}
 	if body.Issuer != nil {
 		if err2 := ValidateUserSessionIssuerResponseBody(body.Issuer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.ServerImpacts {
+		if e != nil {
+			if err2 := ValidateUserSessionIssuerMigrationServerImpactResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.DroppedClientLinks {
+		if e != nil {
+			if err2 := ValidateUserSessionIssuerMigrationClientResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -11214,6 +11399,93 @@ func ValidateUserSessionIssuerFieldMismatchResponseBody(body *UserSessionIssuerF
 	}
 	if body.TargetValue == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("target_value", "body"))
+	}
+	return
+}
+
+// ValidateUserSessionIssuerMigrationServerImpactResponseBody runs the
+// validations defined on UserSessionIssuerMigrationServerImpactResponseBody
+func ValidateUserSessionIssuerMigrationServerImpactResponseBody(body *UserSessionIssuerMigrationServerImpactResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_name", "body"))
+	}
+	if body.McpServerSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_slug", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if body.ImpactSeverity == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("impact_severity", "body"))
+	}
+	if body.Reasons == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reasons", "body"))
+	}
+	if body.ClientsBefore == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("clients_before", "body"))
+	}
+	if body.ClientsAfter == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("clients_after", "body"))
+	}
+	if body.PinnedClientIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pinned_client_ids", "body"))
+	}
+	if body.Hosted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hosted", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.ImpactSeverity != nil {
+		if !(*body.ImpactSeverity == "blocker" || *body.ImpactSeverity == "warning" || *body.ImpactSeverity == "info") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.impact_severity", *body.ImpactSeverity, []any{"blocker", "warning", "info"}))
+		}
+	}
+	for _, e := range body.Reasons {
+		if !(e == "multiple_clients_for_provider" || e == "provider_not_in_metadata" || e == "gains_client" || e == "loses_client" || e == "changes_provider" || e == "changes_clients" || e == "pinned") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reasons[*]", e, []any{"multiple_clients_for_provider", "provider_not_in_metadata", "gains_client", "loses_client", "changes_provider", "changes_clients", "pinned"}))
+		}
+	}
+	for _, e := range body.ClientsBefore {
+		if e != nil {
+			if err2 := ValidateUserSessionIssuerMigrationClientResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ClientsAfter {
+		if e != nil {
+			if err2 := ValidateUserSessionIssuerMigrationClientResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateUserSessionIssuerMigrationClientResponseBody runs the validations
+// defined on UserSessionIssuerMigrationClientResponseBody
+func ValidateUserSessionIssuerMigrationClientResponseBody(body *UserSessionIssuerMigrationClientResponseBody) (err error) {
+	if body.RemoteSessionClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_client_id", "body"))
+	}
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ProviderIssuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider_issuer", "body"))
+	}
+	if body.RemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
 	}
 	return
 }

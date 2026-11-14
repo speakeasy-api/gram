@@ -137,8 +137,50 @@ type LogUserSessionIssuerMigrateEvent struct {
 	CimdClientsMigrated    int64
 	RemoteSessionsMigrated int64
 
+	// PinnedAssociations are the MCP server upstream client associations the
+	// consolidation wrote before moving the servers, because their current
+	// configuration proved them.
+	PinnedAssociations []UserSessionIssuerMigrationPin
+
+	// DroppedClientLinks are the remote session clients the source bound that
+	// the consolidation did not carry to the target.
+	DroppedClientLinks []uuid.UUID
+
+	// ServerImpacts summarize how the consolidation changed each affected MCP
+	// server's upstream clients.
+	ServerImpacts []UserSessionIssuerMigrationServerImpact
+
 	UserSessionIssuerSnapshotBefore *types.UserSessionIssuer
 	UserSessionIssuerSnapshotAfter  *types.UserSessionIssuer
+}
+
+// UserSessionIssuerMigrationPin is one association a consolidation wrote
+// before it moved the server.
+type UserSessionIssuerMigrationPin struct {
+	// MCPServerID is the server associated.
+	MCPServerID uuid.UUID `json:"mcp_server_id"`
+
+	// RemoteSessionClientID is the upstream client associated with it.
+	RemoteSessionClientID uuid.UUID `json:"remote_session_client_id"`
+}
+
+// UserSessionIssuerMigrationServerImpact is how a consolidation changed one
+// MCP server's upstream clients.
+type UserSessionIssuerMigrationServerImpact struct {
+	// MCPServerID is the server.
+	MCPServerID uuid.UUID `json:"mcp_server_id"`
+
+	// Severity is blocker, warning, or info.
+	Severity string `json:"severity"`
+
+	// Reasons say why the server was listed.
+	Reasons []string `json:"reasons"`
+
+	// ClientsBefore are the remote session clients it used before.
+	ClientsBefore []uuid.UUID `json:"clients_before"`
+
+	// ClientsAfter are the remote session clients it uses after.
+	ClientsAfter []uuid.UUID `json:"clients_after"`
 }
 
 func (l *Logger) LogUserSessionIssuerMigrate(ctx context.Context, dbtx repo.DBTX, event LogUserSessionIssuerMigrateEvent) error {
@@ -152,6 +194,9 @@ func (l *Logger) LogUserSessionIssuerMigrate(ctx context.Context, dbtx repo.DBTX
 		"consents_migrated":              event.ConsentsMigrated,
 		"cimd_clients_migrated":          event.CimdClientsMigrated,
 		"remote_sessions_migrated":       event.RemoteSessionsMigrated,
+		"pinned_associations":            event.PinnedAssociations,
+		"dropped_client_links":           event.DroppedClientLinks,
+		"server_impacts":                 event.ServerImpacts,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)

@@ -75,11 +75,11 @@ func (s *Service) UpdateKeyPolicy(ctx context.Context, payload *gen.UpdateKeyPol
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load api key policy").LogError(ctx, s.logger)
 	}
-	previousAudit, err := policyAuditPayload(grantsToRoleGrants(previous))
+	previousAudit, err := PolicyAuditPayload(grantsToRoleGrants(previous))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare api key audit").LogError(ctx, s.logger)
 	}
-	policyAudit, err := policyAuditPayload(policy)
+	policyAudit, err := PolicyAuditPayload(policy)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare api key audit").LogError(ctx, s.logger)
 	}

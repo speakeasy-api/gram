@@ -98,7 +98,7 @@ var _ = Service("oktaServerSuggestions", func() {
 	})
 
 	Method("list", func() {
-		Description("List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.")
+		Description("List the catalog servers suggested from the Okta applications snapshot. Requires org:admin and a verified identity provider connection.")
 
 		Security(security.Session)
 
@@ -124,7 +124,7 @@ var _ = Service("oktaServerSuggestions", func() {
 	})
 
 	Method("dismiss", func() {
-		Description("Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin and the okta-connections rollout.")
+		Description("Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin.")
 
 		Security(security.Session)
 
@@ -151,7 +151,7 @@ var _ = Service("oktaServerSuggestions", func() {
 	})
 
 	Method("restore", func() {
-		Description("Restore a dismissed suggestion currently made to the organization. Requires org:admin and the okta-connections rollout.")
+		Description("Restore a dismissed suggestion currently made to the organization. Requires org:admin.")
 
 		Security(security.Session)
 

@@ -192,10 +192,6 @@ func (s *ShadowDecisionService) admit(ctx context.Context, principal Principal, 
 		return shadowDecisionUnavailable(err)
 	}
 	groups := feature.OrgProjectGroups(organizationSlug, project.Slug)
-	base, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagMCPApproval, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, ""))
-	if err != nil || base != feature.EvaluationEnabled {
-		return shadowDecisionUnavailable(err)
-	}
 	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagPlatformMCPShadowAccessDecisions, principal.OrganizationID, groups)
 	if err != nil || evaluation != feature.EvaluationEnabled {
 		return shadowDecisionUnavailable(err)

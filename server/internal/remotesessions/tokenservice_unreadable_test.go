@@ -189,7 +189,7 @@ func TestResolveAccessTokens_UnreadableAccessTokenHealsByRefresh(t *testing.T) {
 
 	stored, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
-	plain, err := env.enc.Decrypt(stored.AccessTokenEncrypted)
+	plain, err := env.enc.Decrypt(stored.AccessTokenEncrypted.String)
 	require.NoError(t, err, "the new token is stored under the current key")
 	require.Equal(t, "healed-access", plain)
 

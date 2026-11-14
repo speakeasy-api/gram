@@ -252,7 +252,7 @@ func (s *Service) RevokeSession(ctx context.Context, payload *orgsessionsgen.Rev
 	// project-scoped RevokeRemoteSession; see upstreamrevoke.go.
 	s.revoker.RevokeDetached(ctx, RevokedCredentials{
 		RemoteSessionClientID: revoked.RemoteSessionClientID,
-		AccessTokenEncrypted:  revoked.AccessTokenEncrypted,
+		AccessTokenEncrypted:  revoked.AccessTokenEncrypted.String,
 		RefreshTokenEncrypted: revoked.RefreshTokenEncrypted,
 	})
 

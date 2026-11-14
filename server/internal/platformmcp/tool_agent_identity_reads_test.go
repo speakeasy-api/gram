@@ -102,7 +102,7 @@ func TestAssignedConnectionExpired(t *testing.T) {
 		require.NoError(t, err)
 		return ciphertext
 	}
-	access, refresh := sealed("access"), pgtype.Text{String: sealed("refresh"), Valid: true}
+	access, refresh := pgtype.Text{String: sealed("access"), Valid: true}, pgtype.Text{String: sealed("refresh"), Valid: true}
 	unreadable := pgtype.Text{String: "not-ciphertext", Valid: true}
 	for name, tc := range map[string]struct {
 		session remotesessionsrepo.RemoteSession
@@ -114,8 +114,8 @@ func TestAssignedConnectionExpired(t *testing.T) {
 		"refresh token expired":             {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: access, AccessExpiresAt: at(-time.Minute), RefreshTokenEncrypted: refresh, RefreshExpiresAt: at(-time.Second)}, want: true},
 		"refresh lapsed, access still good": {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: access, AccessExpiresAt: at(time.Minute), RefreshTokenEncrypted: refresh, RefreshExpiresAt: at(-time.Second)}, want: false},
 		"authorization deadline passed":     {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: access, AccessExpiresAt: at(time.Hour), RefreshTokenEncrypted: refresh, AuthorizationExpiresAt: at(-time.Second)}, want: true},
-		"nothing stored can be read":        {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: at(time.Hour), RefreshTokenEncrypted: unreadable}, want: true},
-		"unreadable access, refresh renews": {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: at(time.Hour), RefreshTokenEncrypted: refresh}, want: false},
+		"nothing stored can be read":        {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: unreadable, AccessExpiresAt: at(time.Hour), RefreshTokenEncrypted: unreadable}, want: true},
+		"unreadable access, refresh renews": {session: remotesessionsrepo.RemoteSession{AccessTokenEncrypted: unreadable, AccessExpiresAt: at(time.Hour), RefreshTokenEncrypted: refresh}, want: false},
 	} {
 		require.Equal(t, tc.want, !remotesessions.StoredSignInUsable(enc, tc.session, now), name)
 	}

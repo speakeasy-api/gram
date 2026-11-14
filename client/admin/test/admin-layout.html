@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Admin layout scroll fixture</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import React from "react";
+      import { createRoot } from "react-dom/client";
+      import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+      import {
+        createRootRoute,
+        createRoute,
+        createRouter,
+        createMemoryHistory,
+        RouterProvider,
+      } from "@tanstack/react-router";
+      import { AdminLayout } from "../src/layouts/AdminLayout.tsx";
+      import "../src/index.css";
+
+      // Exercise the real shell with the nested flex layout used by record pages.
+      // No backend or customer records are needed for a layout regression.
+      function LongPage() {
+        return React.createElement(
+          "div",
+          { className: "flex min-h-0 flex-1 flex-col gap-6" },
+          React.createElement(
+            "div",
+            { className: "flex flex-col gap-6" },
+            ...Array.from({ length: 30 }, (_, index) =>
+              React.createElement(
+                "section",
+                { key: index, className: "rounded-lg border p-6" },
+                `Section ${index + 1}`,
+              ),
+            ),
+          ),
+        );
+      }
+      const root = createRootRoute({ component: AdminLayout });
+      const route = createRoute({
+        getParentRoute: () => root,
+        path: "/",
+        component: LongPage,
+      });
+      const router = createRouter({
+        routeTree: root.addChildren([route]),
+        history: createMemoryHistory({ initialEntries: ["/"] }),
+      });
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { enabled: false, retry: false } },
+      });
+      createRoot(document.getElementById("root")).render(
+        React.createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          React.createElement(RouterProvider, { router }),
+        ),
+      );
+    </script>
+  </body>
+</html>

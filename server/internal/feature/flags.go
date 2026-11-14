@@ -94,20 +94,6 @@ const (
 	// entitlement if the analyzer becomes a sold capability.
 	FlagRiskLLMAnalyzer Flag = "gram-risk-llm-analyzer"
 
-	// FlagCanonicalIdentityFold serves cost analytics (telemetry.query /
-	// telemetry.listSessions) email filters and group-bys through the
-	// ClickHouse identity_map fold, so one employee's directory, personal,
-	// and case-variant emails read as one identity. Targeted by PostHog
-	// organization group (org slug), like FlagBudgets. Removed once the fold
-	// is GA (DNO-856).
-	FlagCanonicalIdentityFold Flag = "canonical-identity-fold"
-	// FlagCanonicalIdentityFoldShadow runs the folded variant of the
-	// telemetry.query table read alongside the literal one — serving the
-	// literal result — and logs divergence, validating the fold on real
-	// traffic before FlagCanonicalIdentityFold enables it anywhere. Ignored
-	// when the fold flag is on. Same targeting; removed with the fold flag.
-	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
-
 	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
 	// Targeted by PostHog organization group (org slug) and removed once PAYG
 	// billing is generally available.
@@ -125,29 +111,9 @@ const (
 	// (org slug). Removed once CIMD is GA.
 	FlagAssistantOAuthCIMD Flag = "assistant-oauth-cimd"
 
-	// FlagMCPApproval gates the MCP approval workflow end to end: the
-	// approval queue, evidence gathering, deciding, and the promotion of
-	// blocked-server redemptions into approval requests (orgs off the flag
-	// fall back to legacy bypass requests). Targeted by PostHog organization
-	// group (org slug), like FlagBudgets. A rollout gate while the workflow
-	// is dogfooded; if approval becomes a sold capability the durable
-	// entitlement returns through productfeatures alongside this flag.
-	FlagMCPApproval Flag = "gram-mcp-approval"
-
-	// FlagMCPResearch gates the MCP research agent within an approval-enabled
-	// organization: starting runs and executing queued ones. Targeted by
-	// PostHog organization group like FlagMCPApproval, and separate from it
-	// so research — the spend-heavy, web-facing piece — rolls out to a
-	// narrower set than the approval workflow. Fails closed: a flag-service
-	// error reads as off.
-	FlagMCPResearch Flag = "gram-mcp-research"
-
 	// FlagMCPResearchKill is the research kill switch: affirmatively on means
-	// no research runs anywhere, checked before the rollout flag. It exists
-	// apart from FlagMCPResearch so an emergency stop never touches the
-	// rollout flag's org targeting — un-killing restores exactly the release
-	// state from before. Fails closed: research must not run while the state
-	// of its stop control is unknown.
+	// no research runs anywhere. Fails closed: research must not run while
+	// the state of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
 
 	// FlagSkillsOverMCP gates serving managed skills over MCP (the
@@ -173,10 +139,6 @@ const (
 	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
-
-	// FlagOktaConnections gates the Okta integration while it is dogfooded:
-	// creating connections, resource connections and server suggestions.
-	FlagOktaConnections Flag = "okta-connections"
 
 	// FlagSignInEnforcement turns on, per organization (keyed by its id),
 	// linking MCP grants to sign-ins, sign-in evidence lookups, sign out

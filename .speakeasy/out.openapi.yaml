@@ -30332,7 +30332,7 @@ paths:
         name: Identity
   /rpc/identityProviderConnections.create:
     post:
-      description: Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.
+      description: Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin. One live connection per organization; creation is rate limited.
       operationId: createIdentityProviderConnection
       parameters:
         - allowEmptyValue: true
@@ -40668,7 +40668,7 @@ paths:
         name: UpdateNetworkIngress
   /rpc/oktaResourceConnections.confirm:
     post:
-      description: Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin and the okta-connections rollout.
+      description: Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin.
       operationId: confirmOktaResourceConnections
       parameters:
         - allowEmptyValue: true
@@ -40970,7 +40970,7 @@ paths:
         name: ResetOktaResourceConnection
   /rpc/oktaServerSuggestions.dismiss:
     post:
-      description: Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin and the okta-connections rollout.
+      description: Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin.
       operationId: dismissOktaServerSuggestion
       parameters:
         - allowEmptyValue: true
@@ -41070,7 +41070,7 @@ paths:
         name: DismissOktaServerSuggestion
   /rpc/oktaServerSuggestions.list:
     get:
-      description: List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.
+      description: List the catalog servers suggested from the Okta applications snapshot. Requires org:admin and a verified identity provider connection.
       operationId: listOktaServerSuggestions
       parameters:
         - allowEmptyValue: true
@@ -41172,7 +41172,7 @@ paths:
         name: OktaServerSuggestions
   /rpc/oktaServerSuggestions.restore:
     post:
-      description: Restore a dismissed suggestion currently made to the organization. Requires org:admin and the okta-connections rollout.
+      description: Restore a dismissed suggestion currently made to the organization. Requires org:admin.
       operationId: restoreOktaServerSuggestion
       parameters:
         - allowEmptyValue: true
@@ -46285,28 +46285,10 @@ paths:
       x-speakeasy-react-hook:
         name: OrganizationUserSessionIssuerDeletePreflight
   /rpc/organizationUserSessionIssuers.getMigratePreflight:
-    get:
-      description: Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. Requires org:read.
+    post:
+      description: Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. When no hard blocker is present, it runs the consolidation in a transaction it rolls back and reports how each affected MCP server's upstream OAuth clients would change. That run takes the same locks a consolidation does, and returns 409 when another writer holds them for too long. Requires org:admin.
       operationId: getOrganizationUserSessionIssuerMigratePreflight
       parameters:
-        - allowEmptyValue: true
-          description: The user_session_issuer to migrate away from.
-          in: query
-          name: source_id
-          required: true
-          schema:
-            description: The user_session_issuer to migrate away from.
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: The user_session_issuer to migrate onto.
-          in: query
-          name: target_id
-          required: true
-          schema:
-            description: The user_session_issuer to migrate onto.
-            format: uuid
-            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -46314,6 +46296,12 @@ paths:
           schema:
             description: Session header
             type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetUserSessionIssuerMigratePreflightRequestBody'
+        required: true
       responses:
         "200":
           content:
@@ -46384,6 +46372,7 @@ paths:
       x-speakeasy-name-override: getMigratePreflight
       x-speakeasy-react-hook:
         name: OrganizationUserSessionIssuerMigratePreflight
+        type: query
   /rpc/organizationUserSessionIssuers.list:
     get:
       description: 'List the user_session_issuers in the caller''s organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.'
@@ -58463,6 +58452,111 @@ paths:
       tags:
         - remoteSessions
       x-speakeasy-name-override: attachBinding
+  /rpc/remoteSessions.attachServerClientAssociation:
+    post:
+      description: Associate one MCP server with an upstream OAuth client, naming the client the server signs in through. The client must already be bound to the server's own user session issuer, or, for a server with none, to an issuer of a gateway fronting it. The client is also bound to the issuer of each gateway fronting the server, so its consent can offer the client. Refused when the server has another client, when another client of the provider holds a fronting gateway's issuer, or when the organization's organization-level issuer lacks the client. A per-user client is also refused when another proxied server uses it at a different upstream address, or would pick it up from a gateway's issuer. On a proxied server, a first association makes earlier no-auth choices unusable, so those people must reconnect, and other servers on the issuer stop falling back to the client. Attaching a client the server is already associated with refuses none of this and only completes the gateway bindings it can. Where upstream auth is enforced, attaching also restores the server's auth client link that detaching its own sign-in retired. Requires mcp:write on the server and on each gateway whose issuer gains the client.
+      operationId: attachServerClientAssociation
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServerClientAssociationForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachServerClientAssociationResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: attachServerClientAssociation remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: attachServerClientAssociation
+      x-speakeasy-react-hook:
+        name: AttachServerClientAssociation
   /rpc/remoteSessions.beginBindingRefresh:
     post:
       description: Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.
@@ -58956,7 +59050,7 @@ paths:
       x-speakeasy-name-override: detachBinding
   /rpc/remoteSessions.detachServerClientAssociation:
     post:
-      description: 'Remove one MCP server''s association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer''s client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server''s issuer) and synchronizes the backfill-derived typed links. Administrator-owned typed links are untouched. Requires mcp:write on the server.'
+      description: 'Remove one MCP server''s association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer''s client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server''s issuer) and synchronizes the backfill-derived typed links. Removing an association also releases the client from a project-level issuer of a fronting gateway when the client stays bound to the server''s own issuer and nothing else on that gateway issuer signs in through it. Administrator-owned typed links are untouched. Requires mcp:write on the server.'
       operationId: detachServerClientAssociation
       parameters:
         - allowEmptyValue: true
@@ -58984,7 +59078,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DetachServerClientAssociationRequestBody'
+              $ref: '#/components/schemas/ServerClientAssociationForm'
         required: true
       responses:
         "204":
@@ -91228,6 +91322,20 @@ components:
       required:
         - id
         - json_web_key_set_id
+    AttachServerClientAssociationResult:
+      type: object
+      properties:
+        association:
+          $ref: '#/components/schemas/ServerClientAssociation'
+        bound_user_session_issuer_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: The issuers of gateways fronting the server that this attach bound the client to. Empty when they already held it.
+      required:
+        - association
+        - bound_user_session_issuer_ids
     AttachUserSessionIssuerForm:
       type: object
       properties:
@@ -96407,20 +96515,6 @@ components:
         - principal_id
         - user_session_issuer_id
         - id
-    DetachServerClientAssociationRequestBody:
-      type: object
-      properties:
-        mcp_server_id:
-          type: string
-          description: The MCP server.
-          format: uuid
-        remote_session_client_id:
-          type: string
-          description: The associated remote session client.
-          format: uuid
-      required:
-        - mcp_server_id
-        - remote_session_client_id
     DeviceAgentConfiguration:
       type: object
       properties:
@@ -100755,6 +100849,20 @@ components:
       description: Result of user metrics summary query
       required:
         - metrics
+    GetUserSessionIssuerMigratePreflightRequestBody:
+      type: object
+      properties:
+        source_id:
+          type: string
+          description: The user_session_issuer to migrate away from.
+          format: uuid
+        target_id:
+          type: string
+          description: The user_session_issuer to migrate onto.
+          format: uuid
+      required:
+        - source_id
+        - target_id
     GlobalRemoteSessionIssuer:
       type: object
       properties:
@@ -106857,7 +106965,7 @@ components:
       properties:
         confirmed_warnings_fingerprint:
           type: string
-          description: The exact warnings_fingerprint returned by the latest preflight. Required when that preflight reports warnings.
+          description: The exact warnings_fingerprint returned by the latest preflight. Required when that preflight reports warnings, server impacts, or dropped client links.
         source_id:
           type: string
           description: The user_session_issuer to migrate away from; soft-deleted on success.
@@ -106901,12 +107009,22 @@ components:
           type: integer
           description: Consents normalized to the target scope.
           format: int64
+        dropped_client_links:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionIssuerMigrationClient'
+          description: Clients the source bound that consolidation did not carry to the target.
         issuer:
           $ref: '#/components/schemas/UserSessionIssuer'
         remote_sessions_migrated:
           type: integer
           description: Remote-session credentials whose provenance moved.
           format: int64
+        server_impacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionIssuerMigrationServerImpact'
+          description: How consolidation changed each affected MCP server's upstream OAuth clients, read in its transaction just before it committed.
         sessions_migrated:
           type: integer
           description: User sessions re-pointed to the target.
@@ -106923,6 +107041,8 @@ components:
         - cimd_clients_migrated
         - remote_sessions_migrated
         - source_deleted
+        - server_impacts
+        - dropped_client_links
     MigrateRemoteSessionIssuerRequestBody:
       type: object
       properties:
@@ -108639,7 +108759,7 @@ components:
       properties:
         can_migrate:
           type: boolean
-          description: True when no hard blocker is present.
+          description: True when no hard blocker is present, including no server impact with blocker impact_severity.
         cimd_client_count:
           type: integer
           description: Custom CIMD allowlist entries that would move or merge.
@@ -108657,9 +108777,21 @@ components:
           type: integer
           description: User-session consents that would move.
           format: int64
+        dropped_client_links:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionIssuerMigrationClient'
+          description: Clients the source binds that consolidation would not carry to the target because nothing signs in through them afterwards. A deleted client is never carried and not listed. Users' grants for them still move to the target, so attaching a client to the target later makes its grants usable again.
         ema_binding_conflict_count:
           type: integer
           description: Enterprise-managed authorization bindings already present on the target. Non-zero blocks migration.
+          format: int64
+        impact_previewed:
+          type: boolean
+          description: True when the consolidation was run and rolled back to compute server_impacts and dropped_client_links. False when a hard blocker stopped it, in which case both are empty.
+        newly_reachable_server_count:
+          type: integer
+          description: Live MCP servers already on the target that the source's unscoped sign-ins would reach for the first time. Informational; not part of the fingerprint.
           format: int64
         platform_owned:
           type: boolean
@@ -108672,9 +108804,18 @@ components:
           type: integer
           description: Remote-session credentials whose issuer provenance would move.
           format: int64
+        server_impacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionIssuerMigrationServerImpact'
+          description: The MCP servers whose upstream OAuth clients consolidation would change, and those it would pin. A server whose clients do not change and that is not pinned is not listed.
         session_count:
           type: integer
           description: User sessions that would move.
+          format: int64
+        unscoped_session_count:
+          type: integer
+          description: Live sign-ins on the source with no tool selection. Every MCP server on their issuer accepts them, so after consolidation they also reach the target's servers. Informational; not part of the fingerprint.
           format: int64
         warnings:
           type: array
@@ -108683,7 +108824,7 @@ components:
           description: 'Configuration differences that do not block the migration. The target''s values become authoritative for future authorization; existing sessions and refresh tokens are unaffected. Besides the issuer settings, this reports authorization_server_mode, use_authentication_host, and issuer_url (the shared authorization server''s issuer identifier, empty when not served) whenever they differ: repointed MCP servers then direct clients to a different authorization server, so anything configured with the source''s values, such as an identity provider or a federated platform, must be updated.'
         warnings_fingerprint:
           type: string
-          description: Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+          description: Stable fingerprint of the current warnings, server impacts, and dropped client links. Empty when there are none; otherwise pass this exact value to migrateIssuer to confirm them. Counts that change on their own, such as unscoped_session_count, are not part of it.
       description: Authoritative impact summary for consolidating one user_session_issuer onto another.
       required:
         - client_count
@@ -108698,6 +108839,11 @@ components:
         - warnings
         - warnings_fingerprint
         - can_migrate
+        - impact_previewed
+        - server_impacts
+        - dropped_client_links
+        - unscoped_session_count
+        - newly_reachable_server_count
     OrganizationUserSessionIssuerReference:
       type: object
       properties:
@@ -115516,6 +115662,21 @@ components:
         - scope
         - server_count
         - associated_at
+    ServerClientAssociationForm:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The MCP server.
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The remote session client.
+          format: uuid
+      description: One MCP server and one upstream OAuth client, the pair an association is between.
+      required:
+        - mcp_server_id
+        - remote_session_client_id
     ServerConnectionTestResult:
       type: object
       properties:
@@ -124797,6 +124958,96 @@ components:
         - name
         - project_id
         - project_name
+    UserSessionIssuerMigrationClient:
+      type: object
+      properties:
+        client_id:
+          type: string
+          description: The client's OAuth client_id at its provider.
+        provider_issuer:
+          type: string
+          description: The issuer URL of the client's provider. Empty when the provider is unknown.
+        remote_session_client_id:
+          type: string
+          description: The remote session client.
+          format: uuid
+      description: An upstream OAuth client (remote session client) in a consolidation preview.
+      required:
+        - remote_session_client_id
+        - client_id
+        - provider_issuer
+    UserSessionIssuerMigrationServerImpact:
+      type: object
+      properties:
+        clients_after:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionIssuerMigrationClient'
+          description: The clients the server would use after consolidation.
+        clients_before:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSessionIssuerMigrationClient'
+          description: The clients the server uses today.
+        hosted:
+          type: boolean
+          description: True for a hosted server on an organization not enforcing upstream auth, which uses every OAuth client its user session issuer binds rather than the ones associated with it. Changing its clients then means changing that issuer's bindings; when enforcement is on, its clients are its auth clients' offers instead and this is false.
+        impact_severity:
+          type: string
+          description: How a consolidation's change to one MCP server ranks.
+          enum:
+            - blocker
+            - warning
+            - info
+        mcp_server_id:
+          type: string
+          description: The MCP server.
+          format: uuid
+        mcp_server_name:
+          type: string
+          description: The MCP server's display name.
+        mcp_server_slug:
+          type: string
+          description: The MCP server's slug.
+        pinned_client_ids:
+          type: array
+          items:
+            type: string
+          description: Remote session clients consolidation associates with the server before the move.
+        project_id:
+          type: string
+          description: The MCP server's project.
+          format: uuid
+        project_name:
+          type: string
+          description: The MCP server's project name.
+        reasons:
+          type: array
+          items:
+            type: string
+            description: Why a consolidation preview lists an MCP server.
+            enum:
+              - multiple_clients_for_provider
+              - provider_not_in_metadata
+              - gains_client
+              - loses_client
+              - changes_provider
+              - changes_clients
+              - pinned
+          description: 'Why the server is listed. multiple_clients_for_provider (blocker): it would use two or more clients of one provider. provider_not_in_metadata (blocker): it would gain a client whose provider its upstream''s protected resource metadata does not list. gains_client: it uses no client today and would use some. loses_client: it would use none. changes_provider: the providers it uses would change. changes_clients: the same providers, different clients. pinned: consolidation associates it with the clients its current configuration proves it uses, so they stay its own after the move.'
+      description: 'How consolidation changes the upstream OAuth clients one MCP server uses. A server''s clients are the ones its callers must have connected: on an organization enforcing upstream auth, the clients its auth clients offer; otherwise, for a server on a user session issuer, the clients serving requires of it, and for any other server, its associated clients.'
+      required:
+        - mcp_server_id
+        - mcp_server_name
+        - mcp_server_slug
+        - project_id
+        - project_name
+        - impact_severity
+        - reasons
+        - clients_before
+        - clients_after
+        - pinned_client_ids
+        - hosted
     UserSessionUpstream:
       type: object
       properties:

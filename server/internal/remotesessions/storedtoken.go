@@ -84,8 +84,8 @@ func readStoredTokens(enc *encryption.Client, sess remotesessions_repo.RemoteSes
 		return read
 	}
 	// A lapsed access token is never sent, so it is never decrypted either.
-	if sess.AccessTokenEncrypted != "" && accessTokenLive(sess, now) {
-		read.access, read.accessErr = enc.Decrypt(sess.AccessTokenEncrypted)
+	if sess.AccessTokenEncrypted.String != "" && accessTokenLive(sess, now) {
+		read.access, read.accessErr = enc.Decrypt(sess.AccessTokenEncrypted.String)
 		if read.accessErr == nil && read.access != "" {
 			read.usable = true
 			return read

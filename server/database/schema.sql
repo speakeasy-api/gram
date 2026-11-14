@@ -3593,6 +3593,124 @@ ON data_encryption_key_wraps (organization_id, data_encryption_key_id);
 CREATE INDEX IF NOT EXISTS data_encryption_key_wraps_external_key_tenant_idx
 ON data_encryption_key_wraps (organization_id, external_key_id);
 
+-- Where an organization is in moving one use case's values from the platform
+-- key to its organization KMS keys. The state decides which ciphertext copies
+-- are written and read. An organization with no row for a use case is in
+-- platform_key; every other state exists only as a row.
+--
+-- Rows are never soft deleted or deleted by application code, only by the
+-- organization delete cascade. Losing an org_kms row would send the
+-- organization back to platform_key and leave its data unreadable, and
+-- recreating a row would restart generation. Rolling back is a state change.
+-- Who changed the state is recorded in audit events, not here.
+CREATE TABLE IF NOT EXISTS organization_encryption_transitions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- Registered orgencryption use case (app-validated).
+  use_case TEXT NOT NULL CHECK (use_case <> ''),
+  -- platform_key | dual_write | org_kms (app-validated).
+  state TEXT NOT NULL,
+  -- Starts at 1 and increases on every state change; never decreases. Detects
+  -- concurrent state changes, fences writers that decided under an older
+  -- state, and versions cached state.
+  generation bigint NOT NULL DEFAULT 1,
+  -- When the state last changed. Finalize requires a minimum time in
+  -- dual_write.
+  state_changed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  -- When finalize finished destroying the platform-key copies. Clearing runs
+  -- after the change to org_kms and resumes after a crash, so data is fully
+  -- covered by the organization's key only once this is set. Set only in
+  -- org_kms, which has no transition out of it.
+  platform_copies_cleared_at timestamptz,
+  -- Last backfill run, shown in the admin dashboard.
+  last_backfill_started_at timestamptz,
+  last_backfill_completed_at timestamptz,
+  last_backfill_converted_count bigint,
+  last_backfill_remaining_count bigint,
+  last_backfill_unreadable_count bigint,
+  last_backfill_error TEXT,
+  -- When a verification pass last proved every organization-key copy opens
+  -- and matches its platform-key copy.
+  last_verified_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT organization_encryption_transitions_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_encryption_transitions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN organization_encryption_transitions.id IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.use_case IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.state IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.generation IS 'Starts at 1 and increases on every state change; never decreases.
+@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.state_changed_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.platform_copies_cleared_at IS 'When finalize finished destroying the platform-key copies. Set only in org_kms.
+@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.last_backfill_started_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.last_backfill_completed_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.last_backfill_converted_count IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.last_backfill_remaining_count IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.last_backfill_unreadable_count IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.last_backfill_error IS 'Short error summary; never carries values, ciphertext or key material.
+@access: restricted';
+COMMENT ON COLUMN organization_encryption_transitions.last_verified_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_transitions.updated_at IS '@access: confidential';
+
+-- One row per (organization, use case). Non-partial because rows are never
+-- soft deleted. Also backs the organization FK cascade.
+CREATE UNIQUE INDEX IF NOT EXISTS organization_encryption_transitions_org_use_case_key
+ON organization_encryption_transitions (organization_id, use_case);
+
+-- Stored values whose platform-key copy does not decrypt with the current
+-- platform key, so the backfill cannot seal them. Recording them lets finalize
+-- count only values still waiting to be sealed. A record counts only while
+-- its hash matches the stored platform-key ciphertext, so rewriting the row
+-- retires it without a cleanup step. Derived state: deleting a record is fine.
+CREATE TABLE IF NOT EXISTS organization_encryption_unreadable_values (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- Registered orgencryption use case (app-validated).
+  use_case TEXT NOT NULL CHECK (use_case <> ''),
+  -- Logical table.column name the feature registers (app-validated).
+  source_column TEXT NOT NULL,
+  -- Single-column primary key of the source row, as produced by <pk>::text,
+  -- so any key type fits. Feature queries join on exactly that form.
+  row_id TEXT NOT NULL,
+  -- SHA-256 of the UTF-8 bytes of the platform-key ciphertext text as stored,
+  -- i.e. sha256(convert_to(<platform column>, 'UTF8')).
+  platform_ciphertext_sha256 bytea NOT NULL,
+  -- Decryption error code, e.g. ENC-4. Never the value or ciphertext.
+  error_code TEXT NOT NULL,
+  first_detected_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_detected_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT organization_encryption_unreadable_values_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_encryption_unreadable_values_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN organization_encryption_unreadable_values.id IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_unreadable_values.organization_id IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_unreadable_values.use_case IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_unreadable_values.source_column IS 'Logical table.column name registered by Speakeasy code.
+@access: confidential';
+COMMENT ON COLUMN organization_encryption_unreadable_values.row_id IS 'Single-column primary key of the source row, as produced by <pk>::text.
+@access: confidential';
+COMMENT ON COLUMN organization_encryption_unreadable_values.platform_ciphertext_sha256 IS 'SHA-256 of the UTF-8 bytes of the stored platform-key ciphertext text that failed to decrypt.
+@access: secret-restricted';
+COMMENT ON COLUMN organization_encryption_unreadable_values.error_code IS 'Speakeasy decryption error code; never the value or ciphertext.
+@access: confidential';
+COMMENT ON COLUMN organization_encryption_unreadable_values.first_detected_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_unreadable_values.last_detected_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_unreadable_values.created_at IS '@access: confidential';
+COMMENT ON COLUMN organization_encryption_unreadable_values.updated_at IS '@access: confidential';
+
+-- One record per stored value. Also backs the organization FK cascade.
+CREATE UNIQUE INDEX IF NOT EXISTS organization_encryption_unreadable_values_source_row_key
+ON organization_encryption_unreadable_values (organization_id, use_case, source_column, row_id);
+
 -- Customer-hosted MCP servers connected through outbound tunnels. Gram stores
 -- the durable management/source record; live connection routing is cached in
 -- Redis by the tunnel gateway.
@@ -3991,6 +4109,18 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
 
   client_id TEXT NOT NULL,
   client_secret_encrypted TEXT,
+  -- The same client secret sealed under the organization's own encryption
+  -- key. Written alongside client_secret_encrypted while the organization
+  -- moves to organization encryption, and the only copy written once it is
+  -- finalized. Both copies are cleared together when the secret is removed.
+  client_secret_org_encrypted TEXT,
+  -- Meant to be incremented by every statement that sets, replaces or clears
+  -- the client secret, and left alone when the same secret is sealed again
+  -- (dual write, backfill, finalize, key rotation). Nothing increments it
+  -- until organization-key sealing of client secrets ships (AIM-1003). Code
+  -- that needs to know the secret changed should read this rather than hash a
+  -- ciphertext, which changes on every seal.
+  client_secret_generation bigint NOT NULL DEFAULT 1,
   client_id_issued_at timestamptz,
   client_secret_expires_at timestamptz,
   token_endpoint_auth_method TEXT,
@@ -4129,15 +4259,16 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
     OR organization_id IS NOT NULL
   ),
   -- CIMD spec forbids symmetric secrets, so a row that publishes a CIMD
-  -- document must not have an encrypted secret on file. The spec also
-  -- requires the client_id value in the metadata document to equal the
-  -- document URL. We persist them as separate columns so the two roles are
+  -- document must not have an encrypted secret on file under either key. The
+  -- spec also requires the client_id value in the metadata document to equal
+  -- the document URL. We persist them as separate columns so the two roles are
   -- explicit, and this CHECK keeps them in sync (and rejects an empty URL).
   CONSTRAINT remote_session_clients_client_id_metadata_uri_check CHECK (
     client_id_metadata_uri IS NULL
     OR (
       client_id_metadata_uri <> ''
       AND client_secret_encrypted IS NULL
+      AND client_secret_org_encrypted IS NULL
       AND client_id = client_id_metadata_uri
     )
   ),
@@ -4167,6 +4298,8 @@ COMMENT ON COLUMN remote_session_clients.remote_session_issuer_id IS '@access: c
 COMMENT ON COLUMN remote_session_clients.client_id IS '@access: restricted';
 COMMENT ON COLUMN remote_session_clients.display_name IS '@access: opaque-confidential';
 COMMENT ON COLUMN remote_session_clients.client_secret_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_session_clients.client_secret_org_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_session_clients.client_secret_generation IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_id_issued_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.client_secret_expires_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.token_endpoint_auth_method IS '@access: confidential';
@@ -5834,9 +5967,15 @@ CREATE TABLE IF NOT EXISTS trusted_issuer_sessions (
   subject_urn TEXT NOT NULL,
   -- Validated OIDC ID token and verified expiry.
   identity_assertion_encrypted TEXT,
+  -- Each *_org_encrypted column is the organization-key copy of the column
+  -- before it: written alongside it while the organization moves to
+  -- organization encryption, and the only copy written once it is finalized.
+  -- Both copies are cleared together when the value is removed.
+  identity_assertion_org_encrypted TEXT,
   identity_assertion_expires_at timestamptz,
   -- Independent optional upstream refresh credential and best-effort expiry.
   refresh_token_encrypted TEXT,
+  refresh_token_org_encrypted TEXT,
   refresh_expires_at timestamptz,
   -- Actual refresh attempt, never an offline-consent/request marker.
   last_refresh_attempt_at timestamptz,
@@ -5852,8 +5991,10 @@ CREATE TABLE IF NOT EXISTS trusted_issuer_sessions (
   refresh_claim_id uuid,
   -- Verified upstream OIDC sub, distinct from the canonical Gram subject.
   upstream_subject_encrypted TEXT,
+  upstream_subject_org_encrypted TEXT,
   -- Original login nonce for the retained refresh family; refreshed ID token nonce, if present, must match (OIDC Core §12.2).
   nonce_encrypted TEXT,
+  nonce_org_encrypted TEXT,
   -- Credential binding fingerprint, including relevant registration/signing changes; distinct from the refusal hash.
   credential_config_hash TEXT,
   -- Last per-human delegation observation and its timestamp, not live provider health.
@@ -5883,8 +6024,10 @@ COMMENT ON COLUMN trusted_issuer_sessions.organization_id IS '@access: confident
 COMMENT ON COLUMN trusted_issuer_sessions.project_id IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.subject_urn IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.identity_assertion_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.identity_assertion_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN trusted_issuer_sessions.identity_assertion_expires_at IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.refresh_token_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.refresh_token_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN trusted_issuer_sessions.refresh_expires_at IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.last_refresh_attempt_at IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.offline_access_refused_at IS '@access: confidential';
@@ -5892,7 +6035,9 @@ COMMENT ON COLUMN trusted_issuer_sessions.offline_access_request_config_hash IS 
 COMMENT ON COLUMN trusted_issuer_sessions.credential_generation IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.refresh_claim_id IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.upstream_subject_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.upstream_subject_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN trusted_issuer_sessions.nonce_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN trusted_issuer_sessions.nonce_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN trusted_issuer_sessions.credential_config_hash IS '@access: secret-restricted';
 COMMENT ON COLUMN trusted_issuer_sessions.observation_status IS '@access: confidential';
 COMMENT ON COLUMN trusted_issuer_sessions.observed_at IS '@access: confidential';
@@ -5924,6 +6069,27 @@ ON trusted_issuer_sessions (id)
 WHERE identity_assertion_encrypted IS NULL AND refresh_token_encrypted IS NULL
   AND (upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL);
 
+-- The same cleanup scans over both the platform-key and organization-key
+-- copies, for while either copy can be set. A query uses one only when its
+-- WHERE implies the index predicate, so write the same conditions. Dropping a
+-- column drops every index whose predicate names it, so these go away with the
+-- platform-key columns; organization-key-only replacements must be created
+-- before that drop.
+CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_assertion_cleanup_v2_idx
+ON trusted_issuer_sessions (identity_assertion_expires_at NULLS FIRST, id)
+WHERE (identity_assertion_encrypted IS NOT NULL OR identity_assertion_org_encrypted IS NOT NULL);
+CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_refresh_cleanup_v2_idx
+ON trusted_issuer_sessions (refresh_expires_at, id)
+WHERE (refresh_token_encrypted IS NOT NULL OR refresh_token_org_encrypted IS NOT NULL);
+CREATE INDEX IF NOT EXISTS trusted_issuer_sessions_metadata_cleanup_v2_idx
+ON trusted_issuer_sessions (id)
+WHERE identity_assertion_encrypted IS NULL AND identity_assertion_org_encrypted IS NULL
+  AND refresh_token_encrypted IS NULL AND refresh_token_org_encrypted IS NULL
+  AND (
+    upstream_subject_encrypted IS NOT NULL OR upstream_subject_org_encrypted IS NOT NULL
+    OR nonce_encrypted IS NOT NULL OR nonce_org_encrypted IS NOT NULL
+  );
+
 -- One live credential per client and human, independent of downstream resources.
 CREATE UNIQUE INDEX IF NOT EXISTS trusted_issuer_sessions_client_subject_key
 ON trusted_issuer_sessions (remote_session_client_id, subject_urn)
@@ -5938,12 +6104,24 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   subject_urn TEXT NOT NULL,
   user_session_issuer_id uuid NOT NULL,
   remote_session_client_id uuid NOT NULL,
+  -- Organization whose encryption key seals the token columns: the client's
+  -- organization, directly or through its project. NULL for sessions under a
+  -- global client, and for older rows until they are backfilled.
+  organization_id TEXT,
 
-  access_token_encrypted TEXT NOT NULL,
+  -- Nullable so a session in an organization that has finished moving to
+  -- organization encryption can hold only access_token_org_encrypted.
+  access_token_encrypted TEXT,
+  -- Each *_org_encrypted column is the organization-key copy of the column
+  -- before it: written alongside it while the organization moves to
+  -- organization encryption, and the only copy written once it is finalized.
+  -- Both copies are cleared together when the value is removed.
+  access_token_org_encrypted TEXT,
   -- NULL when the upstream omitted expires_in: the token has no known expiry
   -- (e.g. Slack non-rotating tokens). Readers treat NULL as non-expiring.
   access_expires_at timestamptz,
   refresh_token_encrypted TEXT,
+  refresh_token_org_encrypted TEXT,
   -- Absolute upstream authorization deadline reported via
   -- authorization_expires_in. Separate from the sliding refresh-token idle
   -- deadline because exchanging a token resets only the latter.
@@ -6004,7 +6182,8 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
 
   CONSTRAINT remote_sessions_pkey PRIMARY KEY (id),
   CONSTRAINT remote_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
-  CONSTRAINT remote_sessions_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE
+  CONSTRAINT remote_sessions_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE,
+  CONSTRAINT remote_sessions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL
 );
 
 COMMENT ON COLUMN remote_sessions.id IS '@access: confidential';
@@ -6012,9 +6191,12 @@ COMMENT ON COLUMN remote_sessions.grant_generation IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.subject_urn IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.user_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.remote_session_client_id IS '@access: confidential';
+COMMENT ON COLUMN remote_sessions.organization_id IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.access_token_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_sessions.access_token_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN remote_sessions.access_expires_at IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.refresh_token_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_sessions.refresh_token_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN remote_sessions.authorization_expires_at IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.refresh_expires_at IS '@access: confidential';
 COMMENT ON COLUMN remote_sessions.scopes IS '@access: opaque-restricted';
@@ -6060,6 +6242,28 @@ ON remote_sessions ((COALESCE(last_validated_at, created_at)), id)
 WHERE deleted IS FALSE
   AND refresh_token_encrypted IS NULL
   AND refresh_expires_at IS NULL;
+
+-- The keepalive and re-check claims over both the platform-key and
+-- organization-key refresh token copies, for while either copy can be set. A
+-- query uses one only when its WHERE implies the index predicate, so write the
+-- same conditions. Dropping a column drops every index whose predicate names
+-- it, so these go away with the platform-key columns; organization-key-only
+-- replacements must be created before that drop.
+CREATE INDEX IF NOT EXISTS remote_sessions_refresh_keepalive_due_v2_idx
+ON remote_sessions (updated_at, id)
+WHERE deleted IS FALSE
+  AND (refresh_token_encrypted IS NOT NULL OR refresh_token_org_encrypted IS NOT NULL)
+  AND auto_refresh IS TRUE;
+CREATE INDEX IF NOT EXISTS remote_sessions_recheck_due_v2_idx
+ON remote_sessions ((COALESCE(last_validated_at, created_at)), id)
+WHERE deleted IS FALSE
+  AND refresh_token_encrypted IS NULL
+  AND refresh_token_org_encrypted IS NULL
+  AND refresh_expires_at IS NULL;
+
+-- Non-partial so it also supports the foreign key action on soft-deleted rows.
+CREATE INDEX IF NOT EXISTS remote_sessions_organization_id_idx
+ON remote_sessions (organization_id);
 
 CREATE TABLE IF NOT EXISTS tool_variations_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -15694,6 +15898,10 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   requested_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   access_token_encrypted TEXT,
+  -- Organization-key copy of access_token_encrypted: written alongside it
+  -- while the organization moves to organization encryption, and the only
+  -- copy written once it is finalized. Both copies are cleared together.
+  access_token_org_encrypted TEXT,
   -- Consumers cap or skip unknown provider expiry; never store indefinite access.
   access_expires_at timestamptz NOT NULL,
   -- Capability observation only; downstream refresh tokens and ID-JAGs are discarded.
@@ -15759,6 +15967,7 @@ COMMENT ON COLUMN remote_session_ema_credentials.auth_client_attachment_scope IS
 COMMENT ON COLUMN remote_session_ema_credentials.requested_scopes IS '@access: opaque-restricted';
 COMMENT ON COLUMN remote_session_ema_credentials.granted_scopes IS '@access: opaque-restricted';
 COMMENT ON COLUMN remote_session_ema_credentials.access_token_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN remote_session_ema_credentials.access_token_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN remote_session_ema_credentials.access_expires_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.downstream_refresh_token_observed IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.last_used_at IS '@access: confidential';

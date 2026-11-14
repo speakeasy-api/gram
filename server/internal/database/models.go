@@ -4628,6 +4628,73 @@ type OrganizationEncryptionConfig struct {
 	Deleted bool
 }
 
+type OrganizationEncryptionTransition struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UseCase string
+	// @access: confidential
+	State string
+	// Starts at 1 and increases on every state change; never decreases.
+	// @access: confidential
+	Generation int64
+	// @access: confidential
+	StateChangedAt pgtype.Timestamptz
+	// When finalize finished destroying the platform-key copies. Set only in org_kms.
+	// @access: confidential
+	PlatformCopiesClearedAt pgtype.Timestamptz
+	// @access: confidential
+	LastBackfillStartedAt pgtype.Timestamptz
+	// @access: confidential
+	LastBackfillCompletedAt pgtype.Timestamptz
+	// @access: confidential
+	LastBackfillConvertedCount pgtype.Int8
+	// @access: confidential
+	LastBackfillRemainingCount pgtype.Int8
+	// @access: confidential
+	LastBackfillUnreadableCount pgtype.Int8
+	// Short error summary; never carries values, ciphertext or key material.
+	// @access: restricted
+	LastBackfillError pgtype.Text
+	// @access: confidential
+	LastVerifiedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type OrganizationEncryptionUnreadableValue struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UseCase string
+	// Logical table.column name registered by Speakeasy code.
+	// @access: confidential
+	SourceColumn string
+	// Single-column primary key of the source row, as produced by <pk>::text.
+	// @access: confidential
+	RowID string
+	// SHA-256 of the UTF-8 bytes of the stored platform-key ciphertext text that failed to decrypt.
+	// @access: secret-restricted
+	PlatformCiphertextSha256 []byte
+	// Speakeasy decryption error code; never the value or ciphertext.
+	// @access: confidential
+	ErrorCode string
+	// @access: confidential
+	FirstDetectedAt pgtype.Timestamptz
+	// @access: confidential
+	LastDetectedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type OrganizationFeature struct {
 	// @access: confidential
 	ID int64
@@ -6026,12 +6093,18 @@ type RemoteSession struct {
 	UserSessionIssuerID uuid.UUID
 	// @access: confidential
 	RemoteSessionClientID uuid.UUID
+	// @access: confidential
+	OrganizationID pgtype.Text
 	// @access: secret-restricted
-	AccessTokenEncrypted string
+	AccessTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	AccessTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	AccessExpiresAt pgtype.Timestamptz
 	// @access: secret-restricted
 	RefreshTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	RefreshTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	AuthorizationExpiresAt pgtype.Timestamptz
 	// @access: confidential
@@ -6087,6 +6160,10 @@ type RemoteSessionClient struct {
 	ClientID string
 	// @access: secret-restricted
 	ClientSecretEncrypted pgtype.Text
+	// @access: secret-restricted
+	ClientSecretOrgEncrypted pgtype.Text
+	// @access: confidential
+	ClientSecretGeneration int64
 	// @access: confidential
 	ClientIDIssuedAt pgtype.Timestamptz
 	// @access: confidential
@@ -6228,6 +6305,8 @@ type RemoteSessionEmaCredential struct {
 	GrantedScopes []string
 	// @access: secret-restricted
 	AccessTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	AccessTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	AccessExpiresAt pgtype.Timestamptz
 	// @access: confidential
@@ -8348,10 +8427,14 @@ type TrustedIssuerSession struct {
 	SubjectUrn string
 	// @access: secret-restricted
 	IdentityAssertionEncrypted pgtype.Text
+	// @access: secret-restricted
+	IdentityAssertionOrgEncrypted pgtype.Text
 	// @access: confidential
 	IdentityAssertionExpiresAt pgtype.Timestamptz
 	// @access: secret-restricted
 	RefreshTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	RefreshTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	RefreshExpiresAt pgtype.Timestamptz
 	// @access: confidential
@@ -8367,7 +8450,11 @@ type TrustedIssuerSession struct {
 	// @access: secret-restricted
 	UpstreamSubjectEncrypted pgtype.Text
 	// @access: secret-restricted
+	UpstreamSubjectOrgEncrypted pgtype.Text
+	// @access: secret-restricted
 	NonceEncrypted pgtype.Text
+	// @access: secret-restricted
+	NonceOrgEncrypted pgtype.Text
 	// @access: secret-restricted
 	CredentialConfigHash pgtype.Text
 	// @access: confidential

@@ -137,7 +137,7 @@ func TestRefreshSession(t *testing.T) {
 		RemoteSessionClientID: uuid.MustParse(result.RemoteSessionClientID),
 	})
 	require.NoError(t, err)
-	plain, err := enc.Decrypt(stored.AccessTokenEncrypted)
+	plain, err := enc.Decrypt(stored.AccessTokenEncrypted.String)
 	require.NoError(t, err)
 	require.Equal(t, "refreshed-access", plain)
 	require.Equal(t, []string{"read:only"}, stored.Scopes)

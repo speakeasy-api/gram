@@ -86,7 +86,21 @@ func (m *ChallengeManager) listRemoteSessionClientRowsForUserSessionIssuer(
 	userSessionIssuerID uuid.UUID,
 	organizationWide bool,
 ) ([]repo.ListRemoteSessionClientsForUserSessionIssuerRow, error) {
-	rows, err := repo.New(m.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsForUserSessionIssuerParams{
+	return listRemoteSessionClientRows(ctx, m.db, projectID, organizationID, userSessionIssuerID, organizationWide)
+}
+
+// listRemoteSessionClientRows runs the listing listRemoteSessionClientRowsForUserSessionIssuer
+// describes through dbtx, so every caller admits exactly the same clients
+// whether it reads from the pool or from its own transaction.
+func listRemoteSessionClientRows(
+	ctx context.Context,
+	dbtx repo.DBTX,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	organizationWide bool,
+) ([]repo.ListRemoteSessionClientsForUserSessionIssuerRow, error) {
+	rows, err := repo.New(dbtx).ListRemoteSessionClientsForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           conv.ToNullUUID(projectID),
 		OrganizationID:      conv.ToPGText(organizationID),

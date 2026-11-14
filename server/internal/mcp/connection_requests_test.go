@@ -1410,7 +1410,7 @@ func TestUnreadableUpstreamTokenGatewayMemberHeals(t *testing.T) {
 
 	stored, err := remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: f.subject, RemoteSessionClientID: f.clientID})
 	require.NoError(t, err)
-	access, err := ti.enc.Decrypt(stored.AccessTokenEncrypted)
+	access, err := ti.enc.Decrypt(stored.AccessTokenEncrypted.String)
 	require.NoError(t, err, "the renewed access token is stored under the current key")
 	require.Equal(t, "refreshed-token", access)
 	refresh, err := ti.enc.Decrypt(stored.RefreshTokenEncrypted.String)

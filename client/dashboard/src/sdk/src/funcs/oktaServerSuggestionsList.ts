@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * list oktaServerSuggestions
  *
  * @remarks
- * List the catalog servers suggested from the Okta applications snapshot. Requires org:admin, the okta-connections rollout and a verified identity provider connection.
+ * List the catalog servers suggested from the Okta applications snapshot. Requires org:admin and a verified identity provider connection.
  */
 export function oktaServerSuggestionsList(
   client: GramCore,

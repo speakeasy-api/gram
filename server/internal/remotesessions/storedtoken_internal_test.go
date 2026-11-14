@@ -37,8 +37,8 @@ func TestRefresh_UnreadableSnapshotRereadStoreFailure(t *testing.T) {
 	s := &RefreshService{enc: testenv.NewEncryptionClient(t)}
 	sess := remotesessions_repo.RemoteSession{
 		ID: uuid.New(), SubjectUrn: urn.NewUserSubject("store-down"), RemoteSessionClientID: uuid.New(),
-		AccessTokenEncrypted: "not-ciphertext",
 	}
+	sess.AccessTokenEncrypted.String, sess.AccessTokenEncrypted.Valid = "not-ciphertext", true
 	sess.RefreshTokenEncrypted.String, sess.RefreshTokenEncrypted.Valid = "not-ciphertext", true
 	sess.UpdatedAt.Time, sess.UpdatedAt.Valid = time.Now(), true
 	attempted := sess

@@ -140,11 +140,8 @@ func TestStartResearch_RequiresOrgAdmin(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-// Research has its own rollout on top of the approval flag, and a kill
-// switch above both: the switch stops research without touching the rollout
-// flag's org targeting, so un-killing restores exactly the release state
-// from before.
-func TestStartResearch_GatedByResearchFlagAndKillSwitch(t *testing.T) {
+// The kill switch stops research; un-killing lets it run again.
+func TestStartResearch_GatedByKillSwitch(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -152,13 +149,8 @@ func TestStartResearch_GatedByResearchFlagAndKillSwitch(t *testing.T) {
 		targetKey: "https://mcp.example.com/research-gates", status: "requested", evidence: "", version: 0,
 	})
 
-	ti.flags.SetFlag(feature.FlagMCPResearch, ti.organizationID, false)
-	_, err := ti.service.StartResearch(ctx, startResearchPayload(requestID.String()))
-	requireOopsCode(t, err, oops.CodeForbidden)
-
-	ti.flags.SetFlag(feature.FlagMCPResearch, ti.organizationID, true)
 	ti.flags.SetFlag(feature.FlagMCPResearchKill, ti.organizationID, true)
-	_, err = ti.service.StartResearch(ctx, startResearchPayload(requestID.String()))
+	_, err := ti.service.StartResearch(ctx, startResearchPayload(requestID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	ti.flags.SetFlag(feature.FlagMCPResearchKill, ti.organizationID, false)

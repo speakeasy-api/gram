@@ -63,8 +63,8 @@ type DiagnosticsTelemetryReader interface {
 	GetSkillBreakdown(ctx context.Context, arg telemetryrepo.GetSkillBreakdownParams) ([]telemetryrepo.SkillBreakdownRow, error)
 }
 
-// CanonicalIdentityGate keeps Platform MCP user grouping under the same rollout
-// switch as the dashboard telemetry APIs.
+// CanonicalIdentityGate keeps Platform MCP user grouping folded the same way as
+// the dashboard telemetry APIs.
 type CanonicalIdentityGate interface {
 	CanonicalOrgFor(ctx context.Context, orgID string) string
 }
@@ -146,9 +146,8 @@ func (s *DiagnosticsService) WithAuthorization(engine *authz.Engine) *Diagnostic
 	return s
 }
 
-// WithCanonicalIdentityGate applies the telemetry service's rollout-aware
-// identity folding to user attribution without making the ClickHouse repository
-// responsible for feature flags.
+// WithCanonicalIdentityGate applies the telemetry service's identity folding
+// to user attribution.
 func (s *DiagnosticsService) WithCanonicalIdentityGate(gate CanonicalIdentityGate) *DiagnosticsService {
 	if s != nil {
 		s.identityGate = gate
