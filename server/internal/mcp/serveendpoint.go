@@ -804,6 +804,7 @@ func (s *Service) serveRemoteBackend(
 	}
 	renewal := s.renewClientCredentialOnRejection(p, logger, upstream)
 	rejectSurvivingClientCredentialRejection(w, p, logger, upstream, renewal)
+	rejectWorkloadUpstreamCredentialRejection(ctx, p, logger, upstream, mcpServer.ID.String(), mcpServerDisplayName(mcpServer))
 
 	return serveProxyBackend(w, r.WithContext(ctx), p)
 }
@@ -1038,6 +1039,7 @@ func (s *Service) serveTunneledBackend(
 	}
 	renewal := s.renewClientCredentialOnRejection(p, logger, upstream)
 	rejectSurvivingClientCredentialRejection(w, p, logger, upstream, renewal)
+	rejectWorkloadUpstreamCredentialRejection(ctx, p, logger, upstream, mcpServer.ID.String(), mcpServerDisplayName(mcpServer))
 
 	return serveProxyBackend(w, r.WithContext(ctx), p)
 }

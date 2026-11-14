@@ -16,6 +16,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
+// ErrUpstreamCredentialRejected marks a refusal answered in place of an
+// upstream that rejected the credential Speakeasy attached for a subject, so
+// the refusal is recorded as that rejection.
+var ErrUpstreamCredentialRejected = errors.New("upstream rejected the subject's credential")
+
 // ConnectionAttribution files a proxy's refused and failed tool calls.
 type ConnectionAttribution struct {
 	// Scope is what the rows are filed under.
@@ -174,11 +179,33 @@ func CredentialRejected(status int, wwwAuthenticate []string) bool {
 		return true
 	case http.StatusForbidden:
 		return slices.ContainsFunc(authParams(wwwAuthenticate), func(p authParam) bool {
-			return (strings.EqualFold(p.scheme, "Bearer") || strings.EqualFold(p.scheme, "DPoP")) &&
-				strings.EqualFold(p.name, "error") && strings.EqualFold(p.value, "invalid_token")
+			return isBearerOrDPoP(p.scheme) && strings.EqualFold(p.name, "error") && strings.EqualFold(p.value, "invalid_token")
 		})
 	}
 	return false
+}
+
+// ChallengeError returns the RFC 6750 §3 error code of the first Bearer or
+// DPoP challenge in wwwAuthenticate that names one, with that scheme's
+// error_description, or empty strings when no challenge names an error.
+func ChallengeError(wwwAuthenticate []string) (code, description string) {
+	params := authParams(wwwAuthenticate)
+	for _, p := range params {
+		if !isBearerOrDPoP(p.scheme) || !strings.EqualFold(p.name, "error") {
+			continue
+		}
+		for _, q := range params {
+			if q.scheme == p.scheme && strings.EqualFold(q.name, "error_description") {
+				return p.value, q.value
+			}
+		}
+		return p.value, ""
+	}
+	return "", ""
+}
+
+func isBearerOrDPoP(scheme string) bool {
+	return strings.EqualFold(scheme, "Bearer") || strings.EqualFold(scheme, "DPoP")
 }
 
 // requestMethodDetail bounds a client-supplied method to a known label.
@@ -295,6 +322,9 @@ func refusalHappened(err error) (mcpconnectionattempts.Code, bool) {
 	}
 	if mcpaccess.IsToolPermissionDenied(err) {
 		return mcpconnectionattempts.CodeToolPermissionDenied, true
+	}
+	if errors.Is(err, ErrUpstreamCredentialRejected) {
+		return mcpconnectionattempts.CodeProviderRejected, true
 	}
 	if reject, ok := errors.AsType[*proxy.RejectError](err); ok {
 		if _, paused := reject.Data.(proxy.KillswitchRejectionData); paused {
