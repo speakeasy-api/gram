@@ -46,15 +46,19 @@ func newEmailCLIContext(t *testing.T, apiKey, templateIDs string) *cli.Context {
 }
 
 func TestNewEmailService_ResendConfiguration(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct{ name, provider, environment, key, from, replyTo, wantError string }{
 		{name: "unknown provider", provider: "other", wantError: "unsupported email provider"},
 		{name: "local disabled", provider: "resend", environment: "local"},
 		{name: "local placeholder disabled", provider: "resend", environment: "local", key: "unset"},
 		{name: "deployed requires selected key", provider: "resend", environment: "production", wantError: "RESEND_API_KEY"},
-		{name: "sender required", provider: "resend", environment: "local", key: "test-key", wantError: "email-from and email-reply-to"},
+		{name: "sender required", provider: "resend", environment: "local", key: "test-key", replyTo: "platform@speakeasy.com", wantError: "email-from and email-reply-to"},
 		{name: "reply-to required", provider: "resend", environment: "local", key: "test-key", from: "platform@notifications.dev.speakeasy.com", wantError: "email-from and email-reply-to"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			c := newEmailCLIContext(t, "loops-key-is-not-a-resend-key", "")
 			for name, value := range map[string]string{"email-provider": tc.provider, "environment": tc.environment, "resend-api-key": tc.key, "email-from": tc.from, "email-reply-to": tc.replyTo} {
 				require.NoError(t, c.Set(name, value))
@@ -71,6 +75,8 @@ func TestNewEmailService_ResendConfiguration(t *testing.T) {
 }
 
 func TestNewEmailService_ResendIgnoresLegacyIDs(t *testing.T) {
+	t.Parallel()
+
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 	c := newEmailCLIContext(t, "", "not legacy JSON")

@@ -8,7 +8,6 @@ To enable Resend locally, merge these nonsecret settings into the existing
 `[env]` section of your ignored `mise.local.toml` (do not replace the file):
 
 ```toml
-[env]
 GRAM_ENVIRONMENT = "local"
 GRAM_EMAIL_PROVIDER = "resend"
 GRAM_EMAIL_FROM = "platform@notifications.dev.speakeasy.com"

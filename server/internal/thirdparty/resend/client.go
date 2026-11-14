@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 // Client is the transactional delivery boundary.
@@ -49,6 +50,11 @@ type noopClient struct{}
 func (noopClient) Send(context.Context, SendInput) error { return nil }
 
 func (c *httpClient) Send(ctx context.Context, input SendInput) error {
+	// Bound provider calls even when the caller has no deadline. Earlier caller
+	// deadlines still win, and this covers reading the response body as well.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	payload, err := json.Marshal(input)
 	if err != nil {
 		return fmt.Errorf("marshal resend email: %w", err)

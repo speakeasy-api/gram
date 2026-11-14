@@ -23,14 +23,14 @@ func NewResendService(logger *slog.Logger, sender resend.Client, contacts loops.
 			return err
 		}
 		if err := sender.Send(ctx, resend.SendInput{From: from, To: []string{recipient}, ReplyTo: replyTo, Template: selected, IdempotencyKey: idempotencyKey}); err != nil {
-			return err
+			return fmt.Errorf("send Resend template %q: %w", selected.ID, err)
 		}
 		if template.AddToAudience() && contacts != nil {
 			// The shared HTTP client has no overall request timeout. Bound this
 			// best-effort follow-up after delivery has already succeeded.
 			contactCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			defer cancel()
-			if err := contacts.UpdateContact(contactCtx, loops.UpdateContactInput{Email: recipient}); err != nil {
+			if err := contacts.UpdateContact(contactCtx, loops.UpdateContactInput{Email: recipient, FirstName: nil, UserID: "", CustomProperties: nil}); err != nil {
 				// Provider errors can contain recipient data; log the operation, not the body.
 				logger.WarnContext(ctx, "email delivered but Loops contact upsert failed")
 			}
@@ -54,6 +54,8 @@ func resendTemplate(template Template) (resend.Template, error) {
 	alias := "gram.v2." + string(key)
 	variables := maps.Clone(template.Variables())
 	switch key {
+	case TemplateKeyTeamInvite, TemplateKeyEnterpriseAdminOnboarding, TemplateKeyAccessRequest, TemplateKeyTrialEndingSoon, TemplateKeyAccessPaused, TemplateKeyPaygActivated, TemplateKeySetupTaskAssignment:
+		// These templates use their registered alias and variables unchanged.
 	case TemplateKeyCustomDomainUnhealthy:
 		variables["recipient_email"] = variables["email"]
 		delete(variables, "email")

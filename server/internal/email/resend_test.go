@@ -13,8 +13,12 @@ import (
 )
 
 func TestResendTemplates(t *testing.T) {
+	t.Parallel()
+
 	for _, template := range RegisteredTemplates {
 		t.Run(string(template.Key()), func(t *testing.T) {
+			t.Parallel()
+
 			selected, err := resendTemplate(template)
 			require.NoError(t, err)
 			require.Equal(t, "gram.v2."+string(template.Key()), selected.ID)
@@ -60,18 +64,25 @@ func (f resendSenderFunc) Send(ctx context.Context, in resend.SendInput) error {
 
 type contactRecorder struct {
 	loops.WorkflowClient
-	calls int
-	ctx   context.Context
-	err   error
+	calls       int
+	deadline    time.Time
+	hasDeadline bool
+	contextErr  func() error
+	email       string
+	err         error
 }
 
 func (c *contactRecorder) UpdateContact(ctx context.Context, input loops.UpdateContactInput) error {
-	c.ctx = ctx
+	c.deadline, c.hasDeadline = ctx.Deadline()
+	c.contextErr = ctx.Err
+	c.email = input.Email
 	c.calls++
 	return c.err
 }
 
 func TestResendDeliveryAndAudience(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name       string
 		template   Template
@@ -80,11 +91,14 @@ func TestResendDeliveryAndAudience(t *testing.T) {
 		wantCalls  int
 	}{
 		{"invite audience", TeamInvite{}, nil, nil, 1},
+		{"onboarding audience", EnterpriseAdminOnboarding{}, nil, nil, 1},
 		{"failed send", TeamInvite{}, errors.New("send failed"), nil, 0},
 		{"contact failure stays successful", TeamInvite{}, nil, errors.New("contact failed"), 1},
 		{"no audience", WeeklyUsageSummary{}, nil, nil, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			contacts := &contactRecorder{err: tc.contactErr}
 			sender := resendSenderFunc(func(_ context.Context, in resend.SendInput) error {
 				require.Zero(t, contacts.calls)
@@ -103,16 +117,18 @@ func TestResendDeliveryAndAudience(t *testing.T) {
 			}
 			require.Equal(t, tc.wantCalls, contacts.calls)
 			if contacts.calls > 0 {
-				deadline, ok := contacts.ctx.Deadline()
-				require.True(t, ok, "best-effort contact upsert must have a deadline")
-				require.WithinDuration(t, time.Now(), deadline, 3*time.Second)
-				require.ErrorIs(t, contacts.ctx.Err(), context.Canceled)
+				require.Equal(t, "person@example.com", contacts.email)
+				require.True(t, contacts.hasDeadline, "best-effort contact upsert must have a deadline")
+				require.WithinDuration(t, time.Now(), contacts.deadline, 3*time.Second)
+				require.ErrorIs(t, contacts.contextErr(), context.Canceled)
 			}
 		})
 	}
 }
 
 func TestResendDisabled(t *testing.T) {
+	t.Parallel()
+
 	service := NewResendService(testenv.NewLogger(t), resend.NewNoop(), nil, "", "", false)
 	require.NoError(t, service.Send(t.Context(), "person@example.com", TeamInvite{}))
 	require.ErrorIs(t, service.Send(t.Context(), "", TeamInvite{}), ErrEmptyRecipient)
