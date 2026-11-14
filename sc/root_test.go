@@ -326,3 +326,109 @@ func TestAStateRaisesAnEventAWhileAfterItIsEntered(t *testing.T) {
 	cancelled, _ = m.Advance(cancelled, epoch.Add(time.Hour))
 	require.Equal(t, []string{"busy"}, cancelled.Active())
 }
+
+func TestAStateCancelsADelayedEventItRaisedOnEntry(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("choosing", func(b *sc.Builder[string, counter]) {
+		b.Initial("first")
+		first := b.State("first").
+			RaiseAfterOnEntry("foo", time.Second, func(counter) any { return tick{} }).
+			RaiseAfterOnEntry("bar", 2*time.Second, func(counter) any { return ping{} }).
+			CancelRaiseOnEntry("foo")
+		first.On[tick]().To("wrong")
+		first.On[ping]().To("right")
+		b.Final("wrong")
+		b.Final("right")
+	})
+	require.NoError(t, err)
+
+	// The cancelled raise never reaches the driver.
+	snap, effects := m.Start(counter{N: 0}, epoch)
+	require.Equal(t, []sc.EffectKind{sc.EffectStartTimer}, kinds(effects))
+	require.Len(t, snap.Timers(), 1)
+
+	snap, _ = m.Advance(snap, epoch.Add(time.Second))
+	require.Equal(t, []string{"first"}, snap.Active())
+
+	snap, _ = m.Advance(snap, epoch.Add(2*time.Second))
+	require.Equal(t, []string{"right"}, snap.Active())
+
+	_, err = sc.New("dangling", func(b *sc.Builder[string, counter]) {
+		b.Chart().CancelRaiseOnEntry("nothing")
+	})
+	require.ErrorContains(t, err, "no RaiseAfter declares")
+}
+
+func TestATransitionCancelsADelayedTransitionWithoutLeaving(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("patient", func(b *sc.Builder[string, counter]) {
+		b.Initial("waiting")
+		waiting := b.State("waiting")
+		waiting.After(time.Minute).To("timedOut")
+		waiting.On[tick]().CancelAfter("waiting")
+		waiting.On[leave]().To("away")
+		b.State("away").On[back]().To("waiting")
+		b.State("timedOut")
+	})
+	require.NoError(t, err)
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	snap, effects := m.Transition(snap, tick{}, epoch)
+	require.Equal(t, []sc.EffectKind{sc.EffectCancelTimer}, kinds(effects))
+	require.Empty(t, snap.Timers())
+
+	snap, _ = m.Advance(snap, epoch.Add(time.Hour))
+	require.Equal(t, []string{"waiting"}, snap.Active())
+
+	// The timer starts again the next time the state is entered.
+	snap, _ = m.Transition(snap, leave{}, epoch.Add(time.Hour))
+	snap, _ = m.Transition(snap, back{}, epoch.Add(time.Hour))
+	require.Len(t, snap.Timers(), 1)
+
+	_, err = sc.New("nothing", func(b *sc.Builder[string, counter]) {
+		b.Initial("a")
+		b.State("a").On[tick]().CancelAfter("a")
+	})
+	require.ErrorContains(t, err, "not a state with delayed transitions")
+}
+
+func TestAChartOfFinalStatesStartsInNone(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("job", func(b *sc.Builder[string, counter]) {
+		work := b.Chart().Invoke("work", func(context.Context, counter) (int, error) { return 0, errFlaky })
+		work.OnDone().To("succeeded")
+		work.OnError().To("failed")
+		b.Final("succeeded")
+		b.Final("failed").Output(func(counter) string { return "gave up" })
+	})
+	require.NoError(t, err)
+
+	snap, effects := m.Start(counter{N: 0}, epoch)
+	require.Empty(t, snap.Active())
+	require.False(t, snap.Done())
+	run := effect(t, effects, sc.EffectStartInvocation)
+
+	// It survives being stored while in no state.
+	data, err := json.Marshal(snap)
+	require.NoError(t, err)
+	snap, _, err = m.Restore(data, epoch)
+	require.NoError(t, err)
+
+	snap, _ = m.Transition(snap, sc.Failed{ID: run.ID, Err: errFlaky}, epoch)
+	require.True(t, snap.Done())
+	require.Equal(t, []string{"failed"}, snap.Active())
+
+	output, ok := m.Output(snap)
+	require.True(t, ok)
+	require.Equal(t, "gave up", output)
+
+	// A chart with any other kind of state still needs an initial one.
+	_, err = sc.New("mixed", func(b *sc.Builder[string, counter]) {
+		b.State("a")
+		b.Final("b")
+	})
+	require.ErrorContains(t, err, "has child states but no initial state")
+}

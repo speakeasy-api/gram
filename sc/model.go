@@ -173,11 +173,13 @@ type stateAssign[C any] struct {
 	fn   func(C) C
 }
 
-// delayedRaise is an event a state raises a while after it is entered.
+// delayedRaise is an event a state raises a while after it is entered, or,
+// with cancel set, the cancellation of the waiting events of that name.
 type delayedRaise[C any] struct {
-	name  string
-	delay time.Duration
-	fn    func(C) any
+	name   string
+	delay  time.Duration
+	fn     func(C) any
+	cancel bool
 }
 
 // stateRaise is an event a state raises on entry or exit.
@@ -292,6 +294,10 @@ const (
 	// one.
 	stepSpawn stepKind = "spawn"
 	stepStop  stepKind = "stop"
+
+	// stepCancelAfter cancels the pending delayed transitions of the state
+	// the step names, which stays active.
+	stepCancelAfter stepKind = "cancelAfter"
 
 	// stepSend sends an event to a running service of the chart.
 	stepSend stepKind = "send"

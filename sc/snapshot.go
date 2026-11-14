@@ -660,6 +660,8 @@ func (r *run[S, C]) checkConfig() error {
 		switch {
 		case n.kind == kindParallel && activeChildren != len(n.states()):
 			return fmt.Errorf("%w: parallel state %q does not have every region active", ErrInvalidSnapshot, n.name)
+		case n.root && n.initial == nil && activeChildren == 0:
+			// A chart of final states starts in none of them.
 		case n.kind == kindState && !n.atomic() && activeChildren != 1:
 			return fmt.Errorf("%w: state %q has %d active child states, want 1", ErrInvalidSnapshot, n.name, activeChildren)
 		}

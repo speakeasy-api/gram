@@ -48,7 +48,9 @@
 // sees an expiry nothing has processed. [StateBuilder.Within] gives the
 // services inside a state one shared deadline. [Transition.RaiseAfter] and
 // [StateBuilder.RaiseAfterOnEntry] send the chart an event after a wait,
-// wherever it is by then.
+// wherever it is by then, and [Transition.CancelRaise] and
+// [StateBuilder.CancelRaiseOnEntry] drop it again. [Transition.CancelAfter]
+// cancels a state's delayed transitions while it stays active.
 //
 // # Actions and services
 //

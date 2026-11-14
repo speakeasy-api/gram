@@ -16,10 +16,6 @@ package sc_test
 // Cases that are not ported, with the reason:
 //
 // after.test.ts
-//   - "schedules after entry cancellation and honors later cancellation
-//     (cancel after entry: true)": sc cannot cancel the timer of a delayed
-//     transition without leaving its state; CancelRaise only reaches
-//     RaiseAfter. The "false" case is ported without the entry cancellation.
 //   - "does not rely on inferred function names for built-in timer effects":
 //     about the names of JavaScript functions inside XState.
 //   - "should transition after an ISO8601 duration without a delay source",
@@ -46,6 +42,7 @@ import (
 
 type (
 	xaftGo           struct{}
+	xaftCancel       struct{}
 	xaftNext         struct{}
 	xaftActivate     struct{ Delay time.Duration }
 	xaftAny          struct{}
@@ -225,20 +222,34 @@ func TestXAftAfterResolvesAllInitialStateDelaysAfterEntryContextPatch(t *testing
 	require.Empty(t, snap.Timers())
 }
 
-// XState: delayed transitions > schedules after entry cancellation and honors
-// later cancellation (cancel after entry: false)
+// xaftCancellable is XState's chart for the two cases that follow: a state
+// with a delayed transition and an event that cancels its timer without
+// leaving it.
 //
-// Only the "false" case is ported, and without the cancellation the entry
-// action attempts: sc has no step that cancels a delayed transition's timer.
-func TestXAftAfterSchedulesAfterEntryCancellationFalse(t *testing.T) {
-	t.Parallel()
+// XState's entry action also tries to cancel the timer, which does nothing
+// because the timer is scheduled after the entry actions run; the port
+// leaves that attempt out, since sc starts the timer at the same point.
+func xaftCancellable(t *testing.T) *sc.Machine[string, counter] {
+	t.Helper()
 
 	m, err := sc.New("cancel", func(b *xaftBuilder) {
 		b.Initial("waiting")
-		b.State("waiting").After(xaftMillis(100)).To("done")
+		waiting := b.State("waiting")
+		waiting.After(xaftMillis(100)).To("done")
+		waiting.On[xaftCancel]().CancelAfter("waiting")
 		b.State("done")
 	})
 	require.NoError(t, err)
+
+	return m
+}
+
+// XState: delayed transitions > schedules after entry cancellation and honors
+// later cancellation (cancel after entry: false)
+func TestXAftAfterSchedulesAfterEntryCancellationFalse(t *testing.T) {
+	t.Parallel()
+
+	m := xaftCancellable(t)
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
 
@@ -256,6 +267,27 @@ func TestXAftAfterSchedulesAfterEntryCancellationFalse(t *testing.T) {
 
 	snap, _ = m.Advance(snap, xaftAt(150))
 	require.Equal(t, []string{"done"}, snap.Active())
+}
+
+// XState: delayed transitions > schedules after entry cancellation and honors
+// later cancellation (cancel after entry: true)
+func TestXAftAfterSchedulesAfterEntryCancellationTrue(t *testing.T) {
+	t.Parallel()
+
+	m := xaftCancellable(t)
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	require.Len(t, snap.Timers(), 1)
+
+	snap, _ = m.Advance(snap, xaftAt(50))
+	require.Equal(t, []string{"waiting"}, snap.Active())
+
+	// The cancel event clears the timer and the state stays.
+	snap, _ = m.Transition(snap, xaftCancel{}, xaftAt(50))
+	require.Empty(t, snap.Timers())
+
+	snap, _ = m.Advance(snap, xaftAt(150))
+	require.Equal(t, []string{"waiting"}, snap.Active())
 }
 
 // XState: delayed transitions > uses a canonical after event with delay and

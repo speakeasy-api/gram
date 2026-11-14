@@ -187,6 +187,10 @@ func (b *Builder[S, C]) Parallel(s S, regions func(*Builder[S, C])) *StateBuilde
 // which fires that state's [StateBuilder.OnDone] transitions. Entering a
 // top-level final state completes the machine. Declared directly inside a
 // parallel state it is a region that is complete from the start.
+//
+// A chart whose top-level states are all final needs no initial state: it
+// starts in none of them, its own transitions, services and timers doing
+// the work, and ends when one of them takes it to a final state.
 func (b *Builder[S, C]) Final(s S) *FinalBuilder[S, C] {
 	return &FinalBuilder[S, C]{b: b.b, n: b.declare(s, kindFinal)}
 }
@@ -544,7 +548,19 @@ func (s *StateBuilder[S, C]) RaiseAfterOnEntry(name string, d time.Duration, f f
 	}
 
 	s.b.raises[name] = true
-	s.n.entryDelayed = append(s.n.entryDelayed, delayedRaise[C]{name: name, delay: d, fn: f})
+	s.n.entryDelayed = append(s.n.entryDelayed, delayedRaise[C]{name: name, delay: d, fn: f, cancel: false})
+
+	return s
+}
+
+// CancelRaiseOnEntry drops, whenever the state is entered, the events that
+// a raise named name is still waiting to deliver, as [Transition.CancelRaise]
+// does from a transition. It runs in order with the state's
+// [StateBuilder.RaiseAfterOnEntry] calls, so a state can raise several
+// delayed events and cancel one of them as it is entered.
+func (s *StateBuilder[S, C]) CancelRaiseOnEntry(name string) *StateBuilder[S, C] {
+	s.b.cancels = append(s.b.cancels, name)
+	s.n.entryDelayed = append(s.n.entryDelayed, delayedRaise[C]{name: name, delay: 0, fn: nil, cancel: true})
 
 	return s
 }
@@ -1368,6 +1384,17 @@ func (t *Transition[S, C, Ev]) To(target S, also ...S) *Transition[S, C, Ev] {
 
 	t.t.targetID = &target
 	t.t.alsoIDs = also
+
+	return t
+}
+
+// CancelAfter cancels the pending timers of the delayed transitions that
+// state declares with [StateBuilder.After], [StateBuilder.Delay] and
+// [StateBuilder.Deadline], without leaving it: they will not be taken this
+// time the state is active, and start again the next time it is entered.
+// It does nothing when state is not active.
+func (t *Transition[S, C, Ev]) CancelAfter(state S) *Transition[S, C, Ev] {
+	t.t.steps = append(t.t.steps, step[C]{kind: stepCancelAfter, name: fmt.Sprint(state), assign: nil, do: nil, raise: nil, random: false})
 
 	return t
 }

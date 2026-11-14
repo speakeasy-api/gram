@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 )
 
 // Machine is an immutable statechart over state identifiers S and context C.
@@ -310,7 +311,7 @@ func (m *Machine[S, C]) resolveStructure(b *build[S, C], n *node[S, C]) {
 	switch {
 	case n.kind == kindParallel && len(states) == 0:
 		b.errorf("parallel state %q: has no regions", n.name)
-	case n.kind == kindState && len(states) > 0 && n.initialID == nil:
+	case n.kind == kindState && len(states) > 0 && n.initialID == nil && (!n.root || !allFinal(states)):
 		b.errorf("state %q: has child states but no initial state", n.name)
 	case n.initialID != nil:
 		init, ok := m.nodes[*n.initialID]
@@ -438,6 +439,10 @@ func (m *Machine[S, C]) resolveBehaviour(b *build[S, C], n *node[S, C]) {
 				claim(s.name)
 			case s.kind == stepRun:
 				known(s.name)
+			case s.kind == stepCancelAfter:
+				if target, ok := m.names[s.name]; !ok || target.afterCount == 0 {
+					b.errorf("state %q: CancelAfter names %q, which is not a state with delayed transitions", n.name, s.name)
+				}
 			case s.name == "":
 				b.errorf("state %q: a transition %s has no name", n.name, s.kind)
 			}
@@ -715,7 +720,7 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 		write("entry raise %q\n", raise.name)
 	}
 	for _, raise := range n.entryDelayed {
-		write("entry raise %q after=%d\n", raise.name, raise.delay)
+		write("entry raise %q after=%d cancel=%t\n", raise.name, raise.delay, raise.cancel)
 	}
 	for _, raise := range n.exitRaises {
 		write("exit raise %q\n", raise.name)
@@ -804,4 +809,9 @@ func apart[S comparable, C any](a, b *node[S, C]) bool {
 	}
 
 	return false
+}
+
+// allFinal reports whether every one of states is a final state.
+func allFinal[S comparable, C any](states []*node[S, C]) bool {
+	return !slices.ContainsFunc(states, func(n *node[S, C]) bool { return n.kind != kindFinal })
 }

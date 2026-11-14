@@ -702,21 +702,17 @@ func TestXIntInterpreterCanCancelDelayedEvent(t *testing.T) {
 // resolve send id
 //
 // A raise's name is fixed when the chart is declared, so there is no
-// expression to resolve. XState's entry action raises FOO and BAR and then
-// cancels FOO. An sc state can raise after a delay on entry but cannot
-// cancel there, so an eventless transition out of "boot" does all three on
-// the way into first.
+// expression to resolve. As in XState, the state raises FOO and BAR as it is
+// entered and then cancels FOO.
 func TestXIntInterpreterCanCancelDelayedEventByID(t *testing.T) {
 	t.Parallel()
 
 	m := xintNew(t, "m", func(b *xintBuilder) {
-		b.Initial("boot")
-		b.State("boot").Always().
-			RaiseAfter("foo", xintMs(100), func(counter, struct{}) any { return xintFoo{} }).
-			RaiseAfter("bar", xintMs(200), func(counter, struct{}) any { return xintBar{} }).
-			CancelRaise("foo").
-			To("first")
-		first := b.State("first")
+		b.Initial("first")
+		first := b.State("first").
+			RaiseAfterOnEntry("foo", xintMs(100), func(counter) any { return xintFoo{} }).
+			RaiseAfterOnEntry("bar", xintMs(200), func(counter) any { return xintBar{} }).
+			CancelRaiseOnEntry("foo")
 		first.On[xintFoo]().To("fail")
 		first.On[xintBar]().To("pass")
 		b.Final("fail")

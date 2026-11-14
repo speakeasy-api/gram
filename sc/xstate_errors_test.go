@@ -519,10 +519,8 @@ func TestXErrErrorsUnhandledInvokedActorErrorsStopsSiblingInvokedActorsAtTheRoot
 		m, err := sc.New("root", func(b *xerrBuilder) {
 			b.Chart().Stream("callback", xerrCallback[counter](&cleanup)).OnError().Stay()
 			b.Chart().Invoke("failing", xerrRejectsWhen(gate, errXerrOops)).OnError().Do("record", xerrRecord[counter](box)).To("failed")
-			// XState's machine has no states; this chart needs one to start in
-			// before it routes the failure to "failed".
-			b.Initial("idle")
-			b.State("idle")
+			// As XState's machine has no states, the chart starts in none: its
+			// only state is the final one the failure leads to.
 			b.Final("failed")
 		})
 		require.NoError(t, err)
@@ -606,10 +604,8 @@ func TestXErrErrorsUnhandledInvokedActorErrorsStopsSpawnedActors(t *testing.T) {
 			b.Chart().Stream("spawned", xerrCallback[counter](&cleanup)).Spawned().OnError().Stay()
 			b.On[xerrSpawn]().Spawn("spawn", "spawned", func(counter, xerrSpawn) string { return "spawned" })
 			b.Chart().Invoke("failing", xerrRejectsWhen(gate, errXerrOops)).OnError().To("failed")
-			// XState's machine has no states; this chart needs one to start in
-			// before it routes the failure to "failed".
-			b.Initial("idle")
-			b.State("idle")
+			// As XState's machine has no states, the chart starts in none: its
+			// only state is the final one the failure leads to.
 			b.Final("failed")
 		})
 		require.NoError(t, err)
@@ -660,10 +656,8 @@ func TestXErrErrorsUnhandledInvokedActorErrorsStopsGrandchildrenAndTheirTimers(t
 				func(sc.Snapshot[string, counter]) (int, error) { return 0, nil },
 			).OnError().Stay()
 			b.Chart().Invoke("failing", xerrRejectsWhen(gate, errXerrOops)).OnError().To("failed")
-			// XState's machine has no states; this chart needs one to start in
-			// before it routes the failure to "failed".
-			b.Initial("idle")
-			b.State("idle")
+			// As XState's machine has no states, the chart starts in none: its
+			// only state is the final one the failure leads to.
 			b.Final("failed")
 		})
 		require.NoError(t, err)

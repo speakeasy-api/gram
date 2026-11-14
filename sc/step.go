@@ -942,13 +942,15 @@ func (r *run[S, C]) selectTransitions(stim stimulus[S, C]) []*transition[S, C] {
 	var enabled []*transition[S, C]
 
 	// A chart without states is its own only leaf.
+	// With no state active, the chart is the only leaf there is.
 	leaves := r.active()
-	if len(leaves) == 0 {
+	alone := len(leaves) == 0
+	if alone {
 		leaves = r.m.root.self
 	}
 
 	for _, leaf := range leaves {
-		if !leaf.atomic() {
+		if !leaf.atomic() && !alone {
 			continue
 		}
 
@@ -1356,6 +1358,19 @@ func (r *run[S, C]) exit(n *node[S, C], event any) {
 	r.deactivate(n)
 }
 
+// cancelRaise drops the events a raise of the given name is still waiting to
+// deliver.
+func (r *run[S, C]) cancelRaise(name string) {
+	r.timers = slices.DeleteFunc(r.timers, func(tm timer[S, C]) bool {
+		if tm.kind != timerRaise || tm.label != name {
+			return false
+		}
+		r.effects = append(r.effects, r.bare(EffectCancelTimer, tm.id, tm.source, tm.label))
+
+		return true
+	})
+}
+
 // raise queues the events a state raises on entry or exit.
 func (r *run[S, C]) raise(raises []stateRaise[C]) {
 	for _, raise := range raises {
@@ -1465,11 +1480,14 @@ func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
 			e.Event = s.raise(r.ctx, stim.event)
 			r.effects = append(r.effects, e)
 		case stepCancel:
+			r.cancelRaise(s.name)
+		case stepCancelAfter:
+			target := r.m.names[s.name]
 			r.timers = slices.DeleteFunc(r.timers, func(tm timer[S, C]) bool {
-				if tm.kind != timerRaise || tm.label != s.name {
+				if tm.kind != timerAfter || tm.t.source != target {
 					return false
 				}
-				r.effects = append(r.effects, r.bare(EffectCancelTimer, tm.id, tm.source, tm.label))
+				r.effects = append(r.effects, r.bare(EffectCancelTimer, tm.id, target, tm.t.delayName))
 
 				return true
 			})
@@ -1499,6 +1517,11 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 	}
 	r.raise(n.entryRaises)
 	for _, raise := range n.entryDelayed {
+		if raise.cancel {
+			r.cancelRaise(raise.name)
+			continue
+		}
+
 		r.startRaise(n, raise.name, raise.fn(r.ctx), raise.delay)
 	}
 	r.message(n, n.entrySends, n.entryEmits)
