@@ -11,9 +11,9 @@ import (
 	testidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestService_ServeOpenAPIv3_Success(t *testing.T) {
@@ -343,7 +343,7 @@ func TestService_ServeOpenAPIv3_CrossProjectAccess(t *testing.T) {
 	project1ID := *authCtx1.ProjectID
 
 	// Create second auth context with different project using the same database connection
-	ctx2 := testenv.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
+	ctx2 := authztest.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
 
 	authCtx2, ok := contextvalues.GetAuthContext(ctx2)
 	require.True(t, ok)
