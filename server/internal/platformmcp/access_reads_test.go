@@ -122,7 +122,7 @@ func TestRoleAuthzGrantsUseEffectiveExclusions(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, serverAllowed, "a tool-specific exclusion does not block the server-level check")
 
-	toolAllowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(server, authz.MCPToolCallDimensions{Tool: tool}))
+	toolAllowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(server, authz.MCPToolCallDimensions{Tool: tool, ProjectID: uuid.NewString()}))
 	require.NoError(t, err)
 	require.False(t, toolAllowed)
 }

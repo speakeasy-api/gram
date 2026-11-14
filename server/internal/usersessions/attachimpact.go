@@ -151,7 +151,7 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err != nil {
 			return none, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id").LogWarn(ctx, logger)
 		}
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, projectID.String(), projectID.String())); err != nil {
 			return none, err
 		}
 		server, err := metamcprepo.New(s.db).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{ID: id, OrganizationID: organizationID, ProjectID: projectID})

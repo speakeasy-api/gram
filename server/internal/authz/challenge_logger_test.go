@@ -210,7 +210,7 @@ func TestChallengeLogger_publishesAssistantPrincipal(t *testing.T) {
 	conn := newTestDB(t)
 	seedOrganization(t, ctx, conn, orgID)
 
-	check := Check{Scope: ScopeMCPConnect, ResourceID: "tool_assistant"}
+	check := MCPCheck(ScopeMCPConnect, "tool_assistant", testProjectID)
 	challengeLogger{
 		Operation: authzrepo.OperationRequire,
 		Outcome:   authzrepo.OutcomeAllow,
@@ -271,7 +271,7 @@ func TestChallengeLogger_publishesNestedAndExpandedFields(t *testing.T) {
 	focus := Check{Scope: ScopeProjectRead, ResourceID: "proj_focus"}
 	checks := []Check{
 		focus,
-		{Scope: ScopeMCPConnect, ResourceID: "tool_other"},
+		MCPCheck(ScopeMCPConnect, "tool_other", testProjectID),
 	}
 	matches := []grantMatch{
 		{

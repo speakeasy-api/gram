@@ -33,7 +33,7 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	ctx = GrantsToContext(ctx, grants)
 	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj:123"}))
-	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
+	require.NoError(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, "toolA", testProjectID)))
 }
 
 func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {

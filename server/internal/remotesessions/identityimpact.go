@@ -279,7 +279,7 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 			ProjectName: row.ProjectName,
 			Impact:      impact,
 		})
-		checks = append(checks, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: row.ProjectID.String(), Dimensions: nil})
+		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, row.ProjectID.String(), row.ProjectID.String()))
 	}
 
 	readable, err := s.authz.FindMatched(ctx, checks)

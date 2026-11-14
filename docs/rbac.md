@@ -366,7 +366,8 @@ Example:
   "resource_kind": "mcp",
   "resource_id": "toolset_123",
   "tool": "search_docs",
-  "disposition": "read_only"
+  "disposition": "read_only",
+  "project_id": "project_456"
 }
 ```
 
@@ -907,6 +908,7 @@ Today, dimensions are used for MCP tool calls:
 if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
 	Tool:        params.Name,
 	Disposition: disposition,
+	ProjectID:   toolset.ProjectID,
 })); err != nil {
 	return nil, err
 }
@@ -919,7 +921,8 @@ That check becomes a selector like:
   "resource_kind": "mcp",
   "resource_id": "toolset_123",
   "tool": "search_docs",
-  "disposition": "read_only"
+  "disposition": "read_only",
+  "project_id": "project_456"
 }
 ```
 
@@ -983,6 +986,8 @@ Check:
 Result: denied.
 
 One nuance: if a grant has a key that the check does not include, matching skips that key. This allows a more specific grant to satisfy a broader connection-level check that does not yet constrain that dimension. Be aware of this when deciding whether a handler should use a plain resource check or a dimensional check.
+
+Because of that, some resource kinds require a dimension on every check. `requiredCheckDimensions` in `server/internal/authz/checks.go` lists them, and the engine rejects a check of that kind that omits one, or sets it to `*`, as an invalid check (it fails closed). Today only `mcp` is listed, with `project_id`: an MCP grant can be bounded to one project (`{"resource_kind":"mcp","resource_id":"*","project_id":"<PROJECT_ID>"}`), and a check without the project would otherwise pass it in any project. Build MCP checks with `authz.MCPCheck(scope, resourceID, projectID)` or `authz.MCPToolCallCheck` with `ProjectID` set. Project-level operations name the project as both the resource and the `project_id`.
 
 #### Auth client checks
 

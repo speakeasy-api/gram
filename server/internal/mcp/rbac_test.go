@@ -27,7 +27,7 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithNoGrants(t *testing.T) {
 	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
+	err := authzEngine.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String()))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -42,7 +42,7 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithUnrelatedGrant(t *testing.T) {
 	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPConnect, Selector: authz.NewSelector(authz.ScopeMCPConnect, uuid.NewString())})
 
-	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
+	err := authzEngine.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String()))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -57,7 +57,7 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithWriteGrant(t *testing.T) {
 	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPWrite, Selector: authz.NewSelector(authz.ScopeMCPWrite, toolset.ID.String())})
 
-	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
+	err := authzEngine.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String()))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr, "mcp:write does not imply mcp:connect")
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -72,7 +72,7 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithConnectGrant(t *testing.T) {
 	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPConnect, Selector: authz.NewSelector(authz.ScopeMCPConnect, toolset.ID.String())})
 
-	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
+	err := authzEngine.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String()))
 	require.NoError(t, err)
 }
 
@@ -110,11 +110,7 @@ func TestServePublic_RBAC_ToolLevelGrant_AllowsMatchingTool(t *testing.T) {
 	})
 
 	// Tool-level check with matching tool name should pass.
-	err := authzEngine.Require(ctx, authz.Check{
-		Scope:      authz.ScopeMCPConnect,
-		ResourceID: toolset.ID.String(),
-		Dimensions: map[string]string{"tool": "allowed_tool"},
-	})
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "allowed_tool", Disposition: "", ProjectID: toolset.ProjectID.String()}))
 	require.NoError(t, err)
 }
 
@@ -135,11 +131,7 @@ func TestServePublic_RBAC_ToolLevelGrant_DeniesWrongTool(t *testing.T) {
 	})
 
 	// Tool-level check with different tool name should be denied.
-	err := authzEngine.Require(ctx, authz.Check{
-		Scope:      authz.ScopeMCPConnect,
-		ResourceID: toolset.ID.String(),
-		Dimensions: map[string]string{"tool": "forbidden_tool"},
-	})
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "forbidden_tool", Disposition: "", ProjectID: toolset.ProjectID.String()}))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -158,11 +150,7 @@ func TestServePublic_RBAC_ServerLevelGrant_AllowsAnyTool(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeMCPConnect, toolset.ID.String()),
 	})
 
-	err := authzEngine.Require(ctx, authz.Check{
-		Scope:      authz.ScopeMCPConnect,
-		ResourceID: toolset.ID.String(),
-		Dimensions: map[string]string{"tool": "any_tool_name"},
-	})
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "any_tool_name", Disposition: "", ProjectID: toolset.ProjectID.String()}))
 	require.NoError(t, err)
 }
 
@@ -183,11 +171,7 @@ func TestServePublic_RBAC_ToolLevelGrant_DeniesWrongServer(t *testing.T) {
 	})
 
 	// Same tool name but different server should be denied.
-	err := authzEngine.Require(ctx, authz.Check{
-		Scope:      authz.ScopeMCPConnect,
-		ResourceID: uuid.NewString(),
-		Dimensions: map[string]string{"tool": "allowed_tool"},
-	})
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(uuid.NewString(), authz.MCPToolCallDimensions{Tool: "allowed_tool", Disposition: "", ProjectID: toolset.ProjectID.String()}))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)

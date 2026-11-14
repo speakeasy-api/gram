@@ -292,9 +292,9 @@ func TestEngineFilterPrincipalPrecedence(t *testing.T) {
 	})
 
 	allowed, err := engine.Filter(ctx, []Check{
-		MCPCheck(ScopeMCPConnect, "server-1", ""),
-		MCPCheck(ScopeMCPConnect, "server-2", ""),
-		MCPCheck(ScopeMCPConnect, "server-3", ""),
+		MCPCheck(ScopeMCPConnect, "server-1", testProjectID),
+		MCPCheck(ScopeMCPConnect, "server-2", testProjectID),
+		MCPCheck(ScopeMCPConnect, "server-3", testProjectID),
 	})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"server-1", "server-3"}, allowed)

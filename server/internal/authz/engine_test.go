@@ -91,8 +91,8 @@ func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPConnect, "tool_a")})
 
 	err := engine.RequireAny(ctx,
-		Check{Scope: ScopeMCPConnect, ResourceID: "tool_b"},
-		Check{Scope: ScopeMCPConnect, ResourceID: "tool_c"},
+		MCPCheck(ScopeMCPConnect, "tool_b", testProjectID),
+		MCPCheck(ScopeMCPConnect, "tool_c", testProjectID),
 	)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -223,10 +223,17 @@ func TestEngineFilter_mcpWriteBlocklistExcludesProjectScopedResources(t *testing
 	resourceIDs, err := engine.Filter(ctx, []Check{
 		MCPCheck(ScopeMCPWrite, "server_in_project", projectID),
 		MCPCheck(ScopeMCPWrite, "server_other_project", "project_other"),
-		{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "dimensionless_probe", Dimensions: nil},
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"server_other_project", "dimensionless_probe"}, resourceIDs)
+	require.Equal(t, []string{"server_other_project"}, resourceIDs)
+
+	// A check that omits the project fails the batch rather than passing it.
+	_, err = engine.Filter(ctx, []Check{
+		{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "dimensionless_probe", Dimensions: nil},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 }
 
 func TestEngineFilter_withDimensions(t *testing.T) {
@@ -245,8 +252,8 @@ func TestEngineFilter_withDimensions(t *testing.T) {
 
 	// Only tool_1 matches the grant — one resource ID returned.
 	results, err := engine.Filter(ctx, []Check{
-		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "tool_1", Disposition: ""}),
-		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "tool_2", Disposition: ""}),
+		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "tool_1", Disposition: "", ProjectID: testProjectID}),
+		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "tool_2", Disposition: "", ProjectID: testProjectID}),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"toolsetA"}, results)
@@ -268,8 +275,8 @@ func TestEngineFilter_withDisposition(t *testing.T) {
 
 	// read_only disposition matches, destructive does not.
 	results, err := engine.Filter(ctx, []Check{
-		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "safe_tool", Disposition: "read_only"}),
-		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "risky_tool", Disposition: "destructive"}),
+		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "safe_tool", Disposition: "read_only", ProjectID: testProjectID}),
+		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "risky_tool", Disposition: "destructive", ProjectID: testProjectID}),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"toolsetA"}, results)
@@ -284,8 +291,8 @@ func TestEngineFilter_serverLevelGrantAllowsAllDimensions(t *testing.T) {
 
 	// Server-level grant (no tool/disposition keys) allows everything.
 	results, err := engine.Filter(ctx, []Check{
-		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "any_tool", Disposition: "destructive"}),
-		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "other_tool", Disposition: "read_only"}),
+		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "any_tool", Disposition: "destructive", ProjectID: testProjectID}),
+		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "other_tool", Disposition: "read_only", ProjectID: testProjectID}),
 	})
 	require.NoError(t, err)
 	require.Len(t, results, 2)
@@ -843,7 +850,7 @@ func TestPrepareContext_adminImpersonationGrantsAllScopes(t *testing.T) {
 		ScopeSkillRead, ScopeSkillWrite,
 		ScopeAssistantRead, ScopeAssistantWrite,
 	} {
-		err := engine.Require(ctx, Check{Scope: scope, ResourceID: "org_customer"})
+		err := engine.Require(ctx, checkForTest(scope, "org_customer"))
 		require.NoError(t, err, "admin impersonation should satisfy scope %s", scope)
 	}
 }
