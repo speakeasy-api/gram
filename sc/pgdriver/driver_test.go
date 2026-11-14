@@ -645,3 +645,40 @@ func TestAChildMachineRunsInsideAWorker(t *testing.T) {
 	require.Equal(t, []string{"shipped"}, snap.Active())
 	require.Equal(t, 5, snap.Context.Count)
 }
+
+func TestTheChartsOwnActionsServicesAndTimersRunFromTheOutbox(t *testing.T) {
+	t.Parallel()
+
+	rec := &recorder{mu: sync.Mutex{}, calls: nil}
+	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
+		chart := b.Chart().Entry("opened", func(context.Context, order) { rec.add("opened") })
+		load := chart.Invoke("load", func(context.Context, order) (string, error) { return "rcpt", nil })
+		load.OnDone().Assign("setReceipt", func(o order, d sc.Done[string]) order { o.Receipt = d.Result; return o })
+		load.OnError().To("closed")
+		chart.After(200 * time.Millisecond).To("closed")
+		chart.Exit("closed", func(context.Context, order) { rec.add("closed") })
+
+		b.Initial("open")
+		b.State("open")
+		b.Final("closed").Output(func(o order) string { return "closed with " + o.Receipt })
+	})
+	require.NoError(t, err)
+
+	d := mustNew(t, m)
+	_, err = d.Create(t.Context(), "o1", order{})
+	require.NoError(t, err)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		drain(t, d)
+
+		snap, err := d.Load(t.Context(), "o1")
+		if assert.NoError(c, err) && assert.True(c, snap.Done()) {
+			output, ok := m.Output(snap)
+			assert.True(c, ok)
+			assert.Equal(c, "closed with rcpt", output)
+		}
+	}, 10*time.Second, 50*time.Millisecond)
+
+	drain(t, d)
+	require.Equal(t, []string{"opened", "closed"}, rec.list())
+}

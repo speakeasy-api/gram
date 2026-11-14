@@ -622,6 +622,15 @@ func (m *Machine[S, C]) Explore(c C, x Exploration[S, C]) (Report[S, C], error) 
 
 // canFinish reports whether the chart has a top-level final state.
 func (m *Machine[S, C]) canFinish() bool {
+	finishes := func(n *node[S, C]) bool {
+		return n.kind == kindFinal || slices.ContainsFunc(n.children, func(c *node[S, C]) bool { return c.kind == kindFinal })
+	}
+
+	// A chart of regions finishes when every region can.
+	if m.root.kind == kindParallel {
+		return !slices.ContainsFunc(m.root.states(), func(n *node[S, C]) bool { return !finishes(n) })
+	}
+
 	return slices.ContainsFunc(m.root.children, func(n *node[S, C]) bool { return n.kind == kindFinal })
 }
 
@@ -666,14 +675,14 @@ func (m *Machine[S, C]) candidates(snap Snapshot[S, C], now time.Time, x Explora
 			continue
 		}
 
-		service := m.nodes[inv.state].name + "." + inv.name
+		service := m.at(inv.state, inv.root).name + "." + inv.name
 		if key, spawned := SpawnKey(inv.id); spawned {
 			service += fmt.Sprintf("[%q]", key)
 		}
 
 		// A service under a Within budget can only report before the
 		// deadline, and fails with the deadline at it.
-		deadline := m.serviceDeadline(snap, inv.state)
+		deadline := m.serviceDeadline(snap, m.at(inv.state, inv.root))
 		if deadline.IsZero() || now.Before(deadline) {
 			for i, outcome := range x.Outcomes[inv.name] {
 				add(now, outcome(inv.id, now), fmt.Sprintf("service %s outcome %d", service, i))
@@ -729,9 +738,9 @@ func reachableWithout(preds [][]edge, roots int, ignoring []any) []bool {
 }
 
 // serviceDeadline is the earliest Within deadline around state, or zero.
-func (m *Machine[S, C]) serviceDeadline(snap Snapshot[S, C], state S) time.Time {
-	var deadline time.Time
-	for n := m.nodes[state]; n != nil && !n.root; n = n.parent {
+func (m *Machine[S, C]) serviceDeadline(snap Snapshot[S, C], state *node[S, C]) time.Time {
+	deadline := snap.rootScope
+	for n := state; n != nil && !n.root; n = n.parent {
 		if d, ok := snap.scopes[n.id]; ok && (deadline.IsZero() || d.Before(deadline)) {
 			deadline = d
 		}
@@ -822,7 +831,7 @@ type stateIdentity struct {
 
 // timerLabel names a pending timer by what it is for rather than by its ID.
 func (m *Machine[S, C]) timerLabel(t pendingTimer[S]) string {
-	state := m.nodes[t.state].name
+	state := m.at(t.state, t.root).name
 
 	switch t.kind {
 	case timerAfter:
@@ -874,13 +883,16 @@ func (m *Machine[S, C]) stateKey(snap Snapshot[S, C], now time.Time, key func(C,
 
 	for _, inv := range snap.invocations {
 		// Quoting keeps a name that ends like the marker apart from it.
-		id.Services = append(id.Services, fmt.Sprintf("%q %q %q held=%t attempt=%d", m.nodes[inv.state].name, inv.name, keyOf(inv.id), inv.acquired, inv.attempt))
+		id.Services = append(id.Services, fmt.Sprintf("%q %q %q held=%t attempt=%d", m.at(inv.state, inv.root).name, inv.name, keyOf(inv.id), inv.acquired, inv.attempt))
 	}
 	slices.Sort(id.Services)
 
 	// A budget that has run out behaves the same however long ago it did.
 	for state, deadline := range snap.scopes {
 		id.Budgets = append(id.Budgets, fmt.Sprintf("%s in %s", m.nodes[state].name, max(deadline.Sub(now), 0)))
+	}
+	if !snap.rootScope.IsZero() {
+		id.Budgets = append(id.Budgets, fmt.Sprintf("%s in %s", m.root.name, max(snap.rootScope.Sub(now), 0)))
 	}
 	slices.Sort(id.Budgets)
 

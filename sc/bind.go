@@ -94,7 +94,7 @@ func (b *Binder[S, C]) Resource[R any](name string, acquire func(context.Context
 // kind is declared under name.
 func (b *Binder[S, C]) bindKind(kind string, resource bool, name string, doneType reflect.Type, run func(context.Context, C, string) iter.Seq[any]) bool {
 	found := false
-	for _, n := range b.m.ordered {
+	for _, n := range b.m.all() {
 		for _, inv := range n.invocations {
 			if inv.name != name || (inv.resource != nil) != resource {
 				continue
@@ -159,7 +159,7 @@ func (m *Machine[S, C]) Bind(def func(b *Binder[S, C])) (*Machine[S, C], error) 
 // them when they run; checking Unbound at start-up finds that sooner.
 func (m *Machine[S, C]) Unbound() []string {
 	var missing []string
-	for _, n := range m.ordered {
+	for _, n := range m.all() {
 		for _, inv := range n.invocations {
 			kind := "service "
 			if inv.resource != nil {
@@ -209,7 +209,7 @@ func (m *Machine[S, C]) resourceRelease(inv *invocation[S, C]) func(context.Cont
 // chart.
 func (m *Machine[S, C]) Resources() []string {
 	var out []string
-	for _, n := range m.ordered {
+	for _, n := range m.all() {
 		for _, inv := range n.invocations {
 			if inv.resource != nil {
 				out = append(out, n.name+"."+inv.name)

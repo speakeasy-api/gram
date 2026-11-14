@@ -19,9 +19,14 @@
 //
 // A transition may have several guards, all of which must hold, and may depend
 // on other active states with [Transition.WhenIn] and [Transition.WhenNotIn].
-// The Builder given to [New] declares transitions too, with [Builder.On]:
-// they belong to the chart itself and apply in every state that does not
-// handle the event first. A state can change the context as it is entered
+// The chart itself is a state like any other, reached with [Builder.Chart]:
+// it can run entry and exit actions, invoke services, carry timers and a
+// budget, and take transitions, all for as long as the instance lives. Its
+// transitions apply in every state that does not handle the event first.
+// [Builder.Regions] makes the top-level states regions that are all active
+// at once. A final state reports an output with [FinalBuilder.Output], which
+// the enclosing state's [StateBuilder.OnDoneWith] transitions receive and,
+// for a top-level final state, [Machine.Output] returns. A state can change the context as it is entered
 // or exited with [StateBuilder.AssignOnEntry] and [StateBuilder.AssignOnExit].
 // An event that changes nothing is ignored: the snapshot comes back unchanged.
 // [StateBuilder.OnAny] catches the events a state's other transitions do not

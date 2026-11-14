@@ -114,6 +114,12 @@ type node[S comparable, C any] struct {
 	// tags are the labels declared with Tag.
 	tags []string
 
+	// output is set for a final state declared with Output: it computes
+	// the completion event of the enclosing state, a Done carrying the
+	// output, and outputValue the output alone.
+	output      func(C) any
+	outputValue func(C) any
+
 	// built is set once the chart is complete, after which self holds
 	// the state alone, regions what states returns, handles the event types the state's own
 	// transitions take, catchAll whether one of them takes any event, and

@@ -42,6 +42,9 @@ type Snapshot[S comparable, C any] struct {
 	// in that order. Both are shared between snapshots and never changed.
 	config []bool
 	nodes  []*node[S, C]
+
+	// rootScope is the deadline of the chart's own budget, or zero.
+	rootScope time.Time
 }
 
 // pendingTimer is a delayed transition whose timer has not fired.
@@ -59,6 +62,10 @@ type pendingTimer[S comparable] struct {
 	// attempt is, for a retry, how many times the service has failed.
 	attempt int
 
+	// root is set for a timer of the chart itself, whose state is then
+	// the zero value.
+	root bool
+
 	// raised is a delayed raise's event, and eventName its name.
 	raised    any
 	eventName string
@@ -73,6 +80,10 @@ type runningInvocation[S comparable] struct {
 	id    string
 	state S
 	name  string
+
+	// root is set for a service of the chart itself, whose state is then
+	// the zero value.
+	root bool
 
 	// resource marks a resource; acquired is set once it is held.
 	resource bool
@@ -214,6 +225,16 @@ func (s Snapshot[S, C]) In(state S) bool { return slices.Contains(s.active, stat
 func (s Snapshot[S, C]) WithSeed(opt StartOption) Snapshot[S, C] {
 	s.seed = seedFor(time.Time{}, []StartOption{opt})
 	return s
+}
+
+// stateName is the stored name of a state a timer or service belongs to:
+// the machine's own for the chart itself.
+func (s Snapshot[S, C]) stateName(state S, root bool) string {
+	if root {
+		return s.machine
+	}
+
+	return fmt.Sprint(state)
 }
 
 // HasTag reports whether any active state was declared with tag, with
@@ -379,7 +400,7 @@ func (s Snapshot[S, C]) MarshalJSON() ([]byte, error) {
 	}
 
 	for _, t := range s.timers {
-		rt := RawTimer{ID: t.id, State: fmt.Sprint(t.state), Index: t.index, DelayNanos: int64(t.delay), Due: t.due, Seq: t.seq, Kind: string(t.kind), Name: "", Attempt: t.attempt, Jitter: 0, EventName: "", Event: nil, Key: t.key, Saved: t.saved}
+		rt := RawTimer{ID: t.id, State: s.stateName(t.state, t.root), Index: t.index, DelayNanos: int64(t.delay), Due: t.due, Seq: t.seq, Kind: string(t.kind), Name: "", Attempt: t.attempt, Jitter: 0, EventName: "", Event: nil, Key: t.key, Saved: t.saved}
 
 		switch t.kind {
 		case timerAfter:
@@ -397,11 +418,14 @@ func (s Snapshot[S, C]) MarshalJSON() ([]byte, error) {
 	}
 
 	for _, inv := range s.invocations {
-		raw.Invocations = append(raw.Invocations, RawInvocation{ID: inv.id, State: fmt.Sprint(inv.state), Name: inv.name, Resource: inv.resource, Acquired: inv.acquired, Attempt: inv.attempt, Saved: inv.saved})
+		raw.Invocations = append(raw.Invocations, RawInvocation{ID: inv.id, State: s.stateName(inv.state, inv.root), Name: inv.name, Resource: inv.resource, Acquired: inv.acquired, Attempt: inv.attempt, Saved: inv.saved})
 	}
 
 	for state, deadline := range s.scopes {
 		raw.Scopes[fmt.Sprint(state)] = deadline
+	}
+	if !s.rootScope.IsZero() {
+		raw.Scopes[s.machine] = s.rootScope
 	}
 
 	data, err := json.Marshal(raw)
@@ -504,6 +528,7 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 		changed:  false,
 		cause:    nil,
 		sends:    nil,
+		starting: false,
 		list:     nil,
 		listed:   false,
 	}
@@ -517,7 +542,7 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 	}
 
 	for name, deadline := range raw.Scopes {
-		if n, ok := m.names[name]; ok && r.config[n.order] && n.budget > 0 {
+		if n, ok := m.owner(name); ok && r.config[n.order] && n.budget > 0 {
 			r.setScope(n, deadline)
 		}
 	}
@@ -635,6 +660,7 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 		changed:  false,
 		cause:    nil,
 		sends:    nil,
+		starting: false,
 		list:     nil,
 		listed:   false,
 	}
@@ -654,20 +680,18 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 		return zero, nil, err
 	}
 
-	for _, n := range r.active() {
-		if n.kind == kindFinal && n.parent.root {
-			r.done = true
-		}
-	}
+	r.done = r.completed(m.root)
 
 	if !r.done {
-		for _, n := range r.active() {
+		everything := append([]*node[S, C]{m.root}, r.active()...)
+
+		for _, n := range everything {
 			if n.budget > 0 {
 				r.setScope(n, now.Add(n.budget))
 			}
 		}
 
-		for _, n := range r.active() {
+		for _, n := range everything {
 			for _, t := range n.transitions {
 				if t.trigger == triggerAfter {
 					r.startTimer(t)
@@ -690,7 +714,7 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 // entering them would have started.
 func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bool) error {
 	for _, rt := range raw.Timers {
-		n, ok := r.m.names[rt.State]
+		n, ok := r.m.owner(rt.State)
 		kept := false
 
 		switch {
@@ -731,7 +755,7 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 	}
 
 	for _, ri := range raw.Invocations {
-		n, ok := r.m.names[ri.State]
+		n, ok := r.m.owner(ri.State)
 		kept := false
 
 		if ok && r.config[n.order] && !r.done {

@@ -133,19 +133,20 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	root.root = true
 
 	b := &build[S, C]{
-		root:      root,
-		nodes:     map[S]*node[S, C]{},
-		ordered:   nil,
-		errs:      nil,
-		actions:   map[string]chartAction[S, C]{},
-		kinds:     map[string]bool{},
-		raises:    map[string]bool{},
-		cancels:   nil,
-		sends:     nil,
-		emits:     false,
-		releases:  nil,
-		spawns:    nil,
-		emitTypes: nil,
+		root:        root,
+		nodes:       map[S]*node[S, C]{},
+		ordered:     nil,
+		errs:        nil,
+		actions:     map[string]chartAction[S, C]{},
+		kinds:       map[string]bool{},
+		raises:      map[string]bool{},
+		cancels:     nil,
+		sends:       nil,
+		emits:       false,
+		releases:    nil,
+		spawns:      nil,
+		emitTypes:   nil,
+		outputTypes: nil,
 	}
 	def(&Builder[S, C]{b: b, parent: root})
 
@@ -190,7 +191,7 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	}
 	for _, name := range b.spawns {
 		spawned := false
-		for _, n := range m.ordered {
+		for _, n := range m.all() {
 			for _, inv := range n.invocations {
 				spawned = spawned || (inv.name == name && inv.spawned)
 			}
@@ -233,6 +234,29 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	return m, nil
 }
 
+// all returns the chart itself followed by every state in document order.
+func (m *Machine[S, C]) all() []*node[S, C] {
+	return append([]*node[S, C]{m.root}, m.ordered...)
+}
+
+// Output returns the output of a machine that is done: what the top-level
+// final state it ended in declared with [FinalBuilder.Output], computed from
+// the context it ended with. It reports false while the machine is not
+// done, and when that final state declares no output.
+func (m *Machine[S, C]) Output(snap Snapshot[S, C]) (any, bool) {
+	if !snap.done {
+		return nil, false
+	}
+
+	for _, n := range snap.nodes {
+		if n.kind == kindFinal && n.parent.root && n.outputValue != nil {
+			return n.outputValue(snap.Context), true
+		}
+	}
+
+	return nil, false
+}
+
 // ID returns the machine's identifier.
 func (m *Machine[S, C]) ID() string { return m.id }
 
@@ -246,8 +270,9 @@ func (m *Machine[S, C]) resolve(b *build[S, C]) {
 
 		// The chart's own actions are named after the machine, so a state
 		// of that name would take them for its own.
-		if n.name == m.root.name && len(m.root.transitions) > 0 {
-			b.errorf("state %q: has the machine's name, which the chart's own transitions use", n.name)
+		root := m.root
+		if n.name == root.name && len(root.transitions)+len(root.entry)+len(root.exit)+len(root.entryRuns)+len(root.exitRuns)+len(root.invocations) > 0 {
+			b.errorf("state %q: has the machine's name, which the chart's own actions, services and timers use", n.name)
 		}
 	}
 
@@ -487,7 +512,11 @@ func (m *Machine[S, C]) registerEvents(b *build[S, C]) {
 		register(t, eventTypeName(t))
 	}
 
-	for _, n := range m.ordered {
+	for _, t := range b.outputTypes {
+		register(t, "sc.done:"+t.String())
+	}
+
+	for _, n := range m.all() {
 		for _, inv := range n.invocations {
 			if inv.resource != nil {
 				register(inv.doneType, "sc.acquired:"+inv.doneType.String())
@@ -556,6 +585,11 @@ func (m *Machine[S, C]) checkReachable(b *build[S, C]) {
 	}
 
 	mark(m.root.initial)
+	if m.root.kind == kindParallel {
+		for _, region := range m.root.states() {
+			mark(region)
+		}
+	}
 
 	for changed := true; changed; {
 		before := len(reached)
@@ -590,6 +624,9 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 	write("state %q %s %s", n.name, n.kind, n.historyKind)
 	if n.initial != nil {
 		write(" initial=%q", n.initial.name)
+	}
+	if n.output != nil {
+		write(" output")
 	}
 	for _, def := range n.defaultNodes {
 		write(" default=%q", def.name)

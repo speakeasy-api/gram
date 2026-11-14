@@ -274,6 +274,10 @@ type run[S comparable, C any] struct {
 
 	// sends holds the events sent to services during the step.
 	sends []outgoing
+
+	// starting is set while a new instance takes its first step, in which
+	// the chart itself is entered.
+	starting bool
 }
 
 // noteCause records the event of stim as the one being processed.
@@ -369,6 +373,7 @@ func (m *Machine[S, C]) start(c C, now time.Time, seed uint64) (Snapshot[S, C], 
 		changed:  false,
 		cause:    nil,
 		sends:    nil,
+		starting: false,
 		list:     nil,
 		listed:   false,
 	}
@@ -379,6 +384,14 @@ func (m *Machine[S, C]) start(c C, now time.Time, seed uint64) (Snapshot[S, C], 
 	enter.target = m.root.initial
 	enter.targets = []*node[S, C]{m.root.initial}
 
+	// A chart whose top-level states are regions enters all of them.
+	if m.root.kind == kindParallel {
+		enter.targets = m.root.states()
+		enter.target = enter.targets[0]
+	}
+
+	// The chart itself is entered by the same step, before its states.
+	r.starting = true
 	r.microstep([]*transition[S, C]{enter}, on[S, C](triggerAlways))
 	r.settle()
 	r.fireDue()
@@ -546,6 +559,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 		changed:  false,
 		cause:    nil,
 		sends:    nil,
+		starting: false,
 		list:     snap.nodes,
 		listed:   true,
 	}
@@ -559,7 +573,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 	}
 
 	for _, pt := range snap.timers {
-		n := m.nodes[pt.state]
+		n := m.at(pt.state, pt.root)
 
 		switch pt.kind {
 		case timerAfter:
@@ -582,9 +596,12 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 	for s, deadline := range snap.scopes {
 		r.setScope(m.nodes[s], deadline)
 	}
+	if !snap.rootScope.IsZero() {
+		r.setScope(m.root, snap.rootScope)
+	}
 
 	for _, ri := range snap.invocations {
-		for _, inv := range m.nodes[ri.state].invocations {
+		for _, inv := range m.at(ri.state, ri.root).invocations {
 			if inv.name == ri.name {
 				r.services = append(r.services, service[S, C]{id: ri.id, inv: inv, acquired: ri.acquired, attempt: ri.attempt, saved: ri.saved})
 			}
@@ -613,12 +630,13 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 		tags:        nil,
 		config:      r.config,
 		nodes:       r.active(),
+		rootScope:   time.Time{},
 	}
 
 	// The working state ends here, so the snapshot keeps its set of active
 	// states, not a copy.
 
-	for _, n := range r.active() {
+	for _, n := range append([]*node[S, C]{r.m.root}, r.active()...) {
 		for _, tag := range n.tags {
 			if !slices.Contains(snap.tags, tag) {
 				snap.tags = append(snap.tags, tag)
@@ -631,6 +649,10 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 		snap.scopes = make(map[S]time.Time, len(r.scopes))
 	}
 	for n, deadline := range r.scopes {
+		if n.root {
+			snap.rootScope = deadline
+			continue
+		}
 		snap.scopes[n.id] = deadline
 	}
 
@@ -656,7 +678,7 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 		}
 
 		snap.timers = append(snap.timers, pendingTimer[S]{
-			id: t.id, kind: t.kind, state: t.state().id, index: index, name: t.name(),
+			id: t.id, kind: t.kind, state: t.state().id, root: t.state().root, index: index, name: t.name(),
 			delay: t.delay, due: t.due, seq: t.seq, jitter: t.jitter,
 			attempt: t.attempt, raised: t.raised, eventName: "",
 			key: t.key, saved: t.saved,
@@ -667,7 +689,7 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 	}
 
 	for _, s := range r.services {
-		snap.invocations = append(snap.invocations, runningInvocation[S]{id: s.id, state: s.inv.state.id, name: s.inv.name, resource: s.inv.resource != nil, acquired: s.acquired, attempt: s.attempt, saved: s.saved})
+		snap.invocations = append(snap.invocations, runningInvocation[S]{id: s.id, state: s.inv.state.id, root: s.inv.state.root, name: s.inv.name, resource: s.inv.resource != nil, acquired: s.acquired, attempt: s.attempt, saved: s.saved})
 	}
 
 	return snap
@@ -1085,6 +1107,11 @@ func (r *run[S, C]) microstep(ts []*transition[S, C], stim stimulus[S, C]) {
 		r.runSteps(t, stim)
 	}
 
+	if r.starting {
+		r.starting = false
+		r.enter(r.m.root, stim.event)
+	}
+
 	for _, n := range r.entrySet(ts) {
 		r.enter(n, stim.event)
 	}
@@ -1365,7 +1392,9 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 		r.setScope(n, r.now.Add(n.budget))
 	}
 	r.entered = append(r.entered, n)
-	r.passed = append(r.passed, n)
+	if !n.root {
+		r.passed = append(r.passed, n)
+	}
 
 	for _, assign := range n.entryAssigns {
 		r.ctx = assign.fn(r.ctx)
@@ -1390,31 +1419,41 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 		return
 	}
 
-	parent := n.parent
-	if parent.root {
-		r.done = true
-		return
-	}
+	// A final state completes the compound state it is a child of, and
+	// reports its output with that. One declared directly in a parallel
+	// state is a region of it. The chart completing ends the machine.
+	p := n.parent
+	if p.kind != kindParallel {
+		if p.root {
+			r.done = true
+			return
+		}
 
-	// A final state completes the compound state it is a child of. One
-	// declared directly in a parallel state is a region of it.
-	p := parent
-	if parent.kind != kindParallel {
-		r.queueDone(parent)
-		p = parent.parent
+		var output any
+		if n.output != nil {
+			output = n.output(r.ctx)
+		}
+		r.queueDone(p, output)
+		p = p.parent
 	}
 
 	// A parallel state completes once every region has, and that may in
 	// turn complete a parallel state it is a region of.
-	for ; p.kind == kindParallel && r.allRegionsFinal(p); p = p.parent {
-		r.queueDone(p)
+	for ; p != nil && p.kind == kindParallel && r.allRegionsFinal(p); p = p.parent {
+		if p.root {
+			r.done = true
+			return
+		}
+		r.queueDone(p, nil)
 	}
 }
 
-// queueDone queues the completion of n for its OnDone transitions.
-func (r *run[S, C]) queueDone(n *node[S, C]) {
+// queueDone queues the completion of n for its OnDone transitions, with the
+// completion event of the final state reached, if it declared an output.
+func (r *run[S, C]) queueDone(n *node[S, C], output any) {
 	stim := on[S, C](triggerStateDone)
 	stim.done = n
+	stim.event = output
 	r.queue = append(r.queue, stim)
 }
 
@@ -1908,6 +1947,8 @@ func (r *run[S, C]) settle() {
 	}
 
 	if r.done {
+		r.complete()
+
 		for _, t := range r.timers {
 			r.effects = append(r.effects, r.bare(EffectCancelTimer, t.id, t.state(), ""))
 		}
@@ -1951,6 +1992,38 @@ func (r *run[S, C]) deliver() {
 			e.Event = send.event
 			r.effects = append(r.effects, e)
 		}
+	}
+}
+
+// complete runs what the active states, innermost first, and then the chart
+// itself do on exit, for a machine that has just finished. The states stay
+// in the snapshot, which goes on saying where the machine ended.
+func (r *run[S, C]) complete() {
+	names := r.activeNames()
+	move := Move[S]{Source: r.m.root.id, From: r.m.stateIDs(names), To: r.m.stateIDs(names), Event: r.cause}
+
+	leaving := slices.Clone(r.active())
+	slices.Reverse(leaving)
+
+	for _, n := range append(leaving, r.m.root) {
+		for _, assign := range n.exitAssigns {
+			r.ctx = assign.fn(r.ctx)
+		}
+
+		for _, a := range n.exit {
+			r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: names, To: names, Needs: nil, Saved: nil})
+		}
+
+		for k, name := range n.exitRuns {
+			move.Source = n.id
+			if cond := n.exitConds[k]; cond == nil || cond(move) {
+				e := r.chartActionEffect(n, name, nil)
+				e.From, e.To = names, names
+				r.effects = append(r.effects, e)
+			}
+		}
+
+		r.message(n, nil, n.exitEmits)
 	}
 }
 
@@ -2047,7 +2120,7 @@ func (r *run[S, C]) dropShortLivedTimers() {
 // active.
 func (r *run[S, C]) spawnable(name string) []*invocation[S, C] {
 	var out []*invocation[S, C]
-	for _, n := range r.active() {
+	for _, n := range append([]*node[S, C]{r.m.root}, r.active()...) {
 		for _, inv := range n.invocations {
 			if inv.spawned && inv.name == name {
 				out = append(out, inv)
@@ -2118,4 +2191,13 @@ func (m *Machine[S, C]) inert(snap Snapshot[S, C], ev any, now time.Time) bool {
 	}
 
 	return true
+}
+
+// at returns the state a stored timer or service belongs to.
+func (m *Machine[S, C]) at(state S, root bool) *node[S, C] {
+	if root {
+		return m.root
+	}
+
+	return m.nodes[state]
 }

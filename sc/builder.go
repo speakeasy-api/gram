@@ -46,8 +46,10 @@ type build[S comparable, C any] struct {
 	// spawns holds the services Spawn and StopSpawned name.
 	spawns []string
 
-	// emitTypes holds the types of the events Emit steps return.
-	emitTypes []reflect.Type
+	// emitTypes holds the types of the events Emit steps return, and
+	// outputTypes those of the completion events final states report.
+	emitTypes   []reflect.Type
+	outputTypes []reflect.Type
 }
 
 func (b *build[S, C]) errorf(format string, args ...any) {
@@ -104,6 +106,35 @@ func (b *Builder[S, C]) Initial(s S) {
 	}
 
 	b.parent.initialID = &s
+}
+
+// Chart returns the builder for the chart itself, which is a state like
+// any other: it can run entry and exit actions, invoke services and child
+// machines, hold resources, carry timers and a budget, and take
+// transitions. What it declares applies for as long as the instance lives.
+// Its entry actions run when the instance starts and its exit actions when
+// the machine finishes; its services run from start to finish; and its
+// transitions are taken in any state that does not handle the event first.
+//
+// In snapshots, effects and hooks the chart goes by the machine's name.
+func (b *Builder[S, C]) Chart() *StateBuilder[S, C] {
+	return &StateBuilder[S, C]{b: b.b, n: b.b.root}
+}
+
+// Regions makes the top-level states regions that are all active at once,
+// as [Builder.Parallel] does for the states inside it, so the chart needs no
+// initial state. The machine finishes when every region has: each is in a
+// final state of its own, or is itself a final state. Call it on the
+// Builder given to [New].
+func (b *Builder[S, C]) Regions() {
+	switch {
+	case !b.parent.root:
+		b.b.errorf("state %q: Regions applies to the chart itself; use Parallel for a state", b.parent.name)
+	case b.parent.initialID != nil:
+		b.b.errorf("a chart of regions has no initial state")
+	default:
+		b.parent.kind = kindParallel
+	}
 }
 
 // On declares a transition on the enclosing state, as [StateBuilder.On]
@@ -227,6 +258,25 @@ func (f *FinalBuilder[S, C]) AssignOnEntry(name string, fn func(C) C) *FinalBuil
 // is entered, as [StateBuilder.RaiseOnEntry] does.
 func (f *FinalBuilder[S, C]) RaiseOnEntry(name string, fn func(C) any) *FinalBuilder[S, C] {
 	f.n.entryRaises = append(f.n.entryRaises, stateRaise[C]{name: name, fn: fn})
+	return f
+}
+
+// Output declares what entering the final state reports. The enclosing
+// state's completion then carries it: a transition declared there with
+// [StateBuilder.OnDoneWith] receives a [Done] whose Result is the value f
+// returns for the context, as it is after the final state's own entry
+// assignments, and whose ID is the final state's name. For a top-level
+// final state it is the machine's output, read with [Machine.Output].
+func (f *FinalBuilder[S, C]) Output[R any](fn func(C) R) *FinalBuilder[S, C] {
+	if f.n.output != nil {
+		f.b.errorf("final state %q: output declared twice", f.n.name)
+	}
+
+	name := f.n.name
+	f.n.output = func(c C) any { return Done[R]{ID: name, Result: fn(c)} }
+	f.n.outputValue = func(c C) any { return fn(c) }
+	f.b.outputTypes = append(f.b.outputTypes, reflect.TypeFor[Done[R]]())
+
 	return f
 }
 
@@ -386,6 +436,17 @@ func (s *StateBuilder[S, C]) after() *Transition[S, C, struct{}] {
 // parallel state has.
 func (s *StateBuilder[S, C]) OnDone() *Transition[S, C, struct{}] {
 	return newTransition[S, C, struct{}](s.b, s.n, triggerStateDone)
+}
+
+// OnDoneWith declares a transition taken when the state completes, as
+// [StateBuilder.OnDone] does, that receives the output of the final state
+// reached: a [Done] whose Result is what that state declared with
+// [FinalBuilder.Output] and whose ID is its name, so one transition can
+// tell several final states apart. It receives the zero value when the
+// final state declares no output, or one of another type, and for a
+// parallel state, whose regions each end in a final state of their own.
+func (s *StateBuilder[S, C]) OnDoneWith[R any]() *Transition[S, C, Done[R]] {
+	return newTransition[S, C, Done[R]](s.b, s.n, triggerStateDone)
 }
 
 // Within gives every service run in the state or any state inside it a
