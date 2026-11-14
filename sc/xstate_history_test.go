@@ -101,8 +101,15 @@ func xhistRun(m *xhistMachine, events ...any) (xhistSnap, []sc.Effect[xhistCtx])
 // XState's trackEntries test helper does.
 func xhistTrack(b *xhistBuilder, states ...string) {
 	for _, s := range states {
-		b.State(s).Entry("enter", xhistNoop).Exit("exit", xhistNoop)
+		xhistEnterExit(b.State(s), "enter", "exit")
 	}
+}
+
+// xhistEnterExit gives a state an entry action named enter and an exit
+// action named exit, both doing nothing.
+func xhistEnterExit(s *sc.StateBuilder[string, xhistCtx], enter, exit string) {
+	s.Entry().Do(enter, xhistNoop)
+	s.Exit().Do(exit, xhistNoop)
 }
 
 // xhistCount counts the effects named name.
@@ -239,7 +246,7 @@ func TestXHistReentersPersistedStateDuringReenteringTransitionTargetingAHistoryS
 		b.State("a", func(b *xhistBuilder) {
 			b.Initial("a1")
 			b.State("a1").On[xhistNext]().To("a2")
-			b.State("a2").Entry("entered", xhistNoop).Exit("exited", xhistNoop)
+			xhistEnterExit(b.State("a2"), "entered", "exited")
 			b.History("a3", sc.Shallow).Default("a1")
 		}).On[xhistReenter]().To("a3").Reenter()
 	})
@@ -299,7 +306,7 @@ func TestXHistExecutesParentEntryActionsWhenAHistoryDefaultIsUsedBeforeItsParent
 			b.Initial("b1")
 			b.State("b1")
 			b.History("hist", sc.Shallow).Default("b1")
-		}).Entry("spy", xhistNoop)
+		}).Entry().Do("spy", xhistNoop)
 	})
 
 	snap, effects := xhistRun(m, xhistNext{})
@@ -394,7 +401,8 @@ func xhistSpyChart(t *testing.T, leave bool) *xhistMachine {
 			b.State("b1")
 			b.History("hist", sc.Shallow).Default("b3")
 			b.State("b3")
-		}).Entry("spy", xhistNoop)
+		})
+		parent.Entry().Do("spy", xhistNoop)
 		if leave {
 			parent.On[xhistNext]().To("a")
 		}
@@ -424,7 +432,7 @@ func TestXHistExecutesActionsOfTheInitialTransitionWhenItSelectsAHistoryStateAsT
 			b.Initial("b1")
 			b.History("b1", sc.Shallow).Default("b2")
 			b.State("b2")
-		}).Entry("spy", xhistNoop)
+		}).Entry().Do("spy", xhistNoop)
 	})
 
 	snap, effects := xhistRun(m, xhistNext{})
@@ -491,7 +499,7 @@ func xhistDoorChart(t *testing.T) *xhistMachine {
 		}).On[xhistClick]().To("closed")
 		xhistTrack(b, "closed", "open")
 		// trackEntries tracks the chart itself as well.
-		b.Chart().Entry("enter", xhistNoop).Exit("exit", xhistNoop)
+		xhistEnterExit(b.Chart(), "enter", "exit")
 	})
 }
 

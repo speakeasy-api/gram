@@ -113,8 +113,8 @@ type InvokeDefinition struct {
 // Definition returns a description of the chart for export.
 //
 // The format has no place for a condition on a single action, so a chart
-// action run conditionally, with RunIf, OnEntryIf or OnExitIf, is listed
-// like one that always runs.
+// action run conditionally with RunIf, on a transition or in an entry or
+// exit list, is listed like one that always runs.
 func (m *Machine[S, C]) Definition() *Definition {
 	return m.define(m.root)
 }
@@ -151,14 +151,8 @@ func (m *Machine[S, C]) define(n *node[S, C]) *Definition {
 		def.Initial = n.initial.name
 	}
 
-	for _, a := range n.entry {
-		def.Entry = append(def.Entry, a.name)
-	}
-	for _, a := range n.exit {
-		def.Exit = append(def.Exit, a.name)
-	}
-	def.Entry = append(def.Entry, n.entryRuns...)
-	def.Exit = append(def.Exit, n.exitRuns...)
+	def.Entry = stepNames(n.onEntry)
+	def.Exit = stepNames(n.onExit)
 
 	invokes := map[*invocation[S, C]]int{}
 	for _, inv := range n.invocations {
@@ -249,4 +243,18 @@ func describeRetry(p *Retry) string {
 	}
 
 	return times + ", " + waits
+}
+
+// stepNames lists the names of t's steps in order, nil for none.
+func stepNames[S comparable, C any](t *transition[S, C]) []string {
+	if t == nil {
+		return nil
+	}
+
+	var names []string
+	for _, s := range t.steps {
+		names = append(names, s.name)
+	}
+
+	return names
 }

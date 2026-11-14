@@ -420,21 +420,11 @@ func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)
 }
 
 func (m *Machine[S, C]) execAction(ctx context.Context, n *node[S, C], e Effect[C]) error {
-	for _, a := range n.entry {
-		if a.name == e.Name {
-			a.fn(ctx, e.Context)
-			return nil
+	for _, t := range append([]*transition[S, C]{n.onEntry, n.onExit}, n.transitions...) {
+		if t == nil {
+			continue
 		}
-	}
 
-	for _, a := range n.exit {
-		if a.name == e.Name {
-			a.fn(ctx, e.Context)
-			return nil
-		}
-	}
-
-	for _, t := range n.transitions {
 		for _, s := range t.steps {
 			if s.kind == stepDo && s.name == e.Name {
 				s.do(ctx, e.Context, e.Event)

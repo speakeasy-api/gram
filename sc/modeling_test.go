@@ -525,14 +525,19 @@ func statusChart(t *testing.T, record func(mv sc.Move[string])) *sc.Machine[stri
 	t.Helper()
 
 	m, err := sc.New("status", func(b *sc.Builder[string, counter]) {
-		b.Action("record", func(_ context.Context, _ counter, mv sc.Move[string]) { record(mv) })
+		rec := b.Action("record", func(_ context.Context, _ counter, mv sc.Move[string]) { record(mv) })
 
 		b.Initial("offline")
-		b.State("offline").OnEntry("record").On[connect]().To("connecting")
-		connecting := b.State("connecting").OnEntry("record")
+		offline := b.State("offline")
+		offline.Entry().Run(rec)
+		offline.On[connect]().To("connecting")
+		connecting := b.State("connecting")
+		connecting.Entry().Run(rec)
 		connecting.On[tick]().To("online")
-		connecting.On[disconnect]().Run("record")
-		b.State("online").OnEntry("record").On[disconnect]().To("offline")
+		connecting.On[disconnect]().Run(rec)
+		online := b.State("online")
+		online.Entry().Run(rec)
+		online.On[disconnect]().To("offline")
 	})
 	require.NoError(t, err)
 
@@ -580,17 +585,27 @@ func TestChartActionsSeeTheMoveTheyRunIn(t *testing.T) {
 func TestNewRejectsUndeclaredAndClashingChartActions(t *testing.T) {
 	t.Parallel()
 
-	_, err := sc.New("bad", func(b *sc.Builder[string, counter]) {
+	var missing, absent *sc.Action[string, counter]
+	_, err := sc.New("other", func(b *sc.Builder[string, counter]) {
+		missing = b.Action("missing", func(context.Context, counter, sc.Move[string]) {})
+		absent = b.RequiresAction("absent")
+		b.Initial("a")
+		b.State("a")
+	})
+	require.NoError(t, err)
+
+	_, err = sc.New("bad", func(b *sc.Builder[string, counter]) {
 		b.Action("record", func(context.Context, counter, sc.Move[string]) {})
 		b.Action("record", func(context.Context, counter, sc.Move[string]) {})
 		b.Initial("a")
-		b.State("a").OnEntry("missing").Entry("record", noop).On[tick]().Run("absent").To("b")
+		a := b.State("a")
+		a.Entry().Run(missing).Do("record", noop)
+		a.On[tick]().Run(absent).To("b")
 		b.State("b")
 	})
 
 	require.ErrorContains(t, err, `chart action "record" is declared twice`)
-	require.ErrorContains(t, err, `state "a": runs chart action "missing", which is not declared`)
-	require.ErrorContains(t, err, `state "a": runs chart action "absent", which is not declared`)
+	require.ErrorContains(t, err, `state "a": runs a chart action of another chart`)
 	require.ErrorContains(t, err, `state "a": action "record" has the name of a chart action`)
 }
 

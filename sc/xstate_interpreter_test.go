@@ -15,7 +15,7 @@ package sc_test
 // Await under a context.
 //
 // XState raises delayed events from entry actions, and so does sc
-// (StateBuilder.RaiseAfterOnEntry).
+// (Steps.RaiseAfter on StateBuilder.Entry).
 //
 // The cases that are not ported are listed at the end of the file.
 
@@ -192,14 +192,18 @@ func (l *xintRecorder) all() []string {
 func xintLight(t *testing.T) *xintMachine {
 	t.Helper()
 
-	timer := func(counter) any { return xintTimer{} }
+	timer := func(counter) xintTimer { return xintTimer{} }
 
 	return xintNew(t, "light", func(b *xintBuilder) {
+		timer1, yellowTimer := b.Delayed("TIMER1"), b.Delayed("yellowTimer")
 		b.Initial("green")
-		green := b.State("green").RaiseAfterOnEntry("TIMER1", xintMs(10), timer)
+		green := b.State("green")
+		green.Entry().RaiseAfter(timer1, xintMs(10), timer)
 		green.On[xintTimer]().To("yellow")
-		green.On[xintKeepGoing]().CancelRaise("TIMER1")
-		b.State("yellow").RaiseAfterOnEntry("yellowTimer", xintMs(10), timer).On[xintTimer]().To("red")
+		green.On[xintKeepGoing]().CancelRaise(timer1)
+		yellow := b.State("yellow")
+		yellow.Entry().RaiseAfter(yellowTimer, xintMs(10), timer)
+		yellow.On[xintTimer]().To("red")
 		b.State("red").After(xintMs(10)).To("green")
 	})
 }
@@ -223,8 +227,8 @@ func TestXIntInterpreterGetSnapshotReturnsInitialState(t *testing.T) {
 // XState: interpreter > initial state > initially spawned actors should not
 // be spawned when reading initial state
 //
-// The promise XState spawns from the entry action is a service the state
-// invokes.
+// The promise XState spawns from the entry action is a spawned service the
+// state's entry spawns.
 func TestXIntInterpreterInitialServicesNotStartedWhenReadingInitialState(t *testing.T) {
 	t.Parallel()
 
@@ -233,12 +237,15 @@ func TestXIntInterpreterInitialServicesNotStartedWhenReadingInitialState(t *test
 
 		m := xintNew(t, "m", func(b *xintBuilder) {
 			b.Initial("idle")
-			b.State("idle").Invoke("promise", func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
+			idle := b.State("idle")
+			promise := idle.Invoke("promise", func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 				spawned.Add(1)
 				<-ctx.Done()
 
 				return 0, ctx.Err()
-			}).OnError().Stay()
+			}).Spawned()
+			promise.OnError().Stay()
+			idle.Entry().Spawn("spawn", promise, func(counter) string { return "promise" })
 		})
 
 		a := m.Actor(counter{N: 0})
@@ -320,7 +327,7 @@ func TestXIntInterpreterDoesNotExecuteActionsOutsidePersistedState(t *testing.T)
 	m := xintNew(t, "m", func(b *xintBuilder) {
 		b.Initial("a")
 		a := b.State("a")
-		a.Entry("call", func(context.Context, counter) { called.Store(true) })
+		a.Entry().Do("call", func(context.Context, counter) { called.Store(true) })
 		a.Always().To("b")
 		b.State("b")
 	})
@@ -395,10 +402,11 @@ func TestXIntInterpreterSendWithDelayCanSendEventAfterDelay(t *testing.T) {
 	t.Parallel()
 
 	m := xintNew(t, "m", func(b *xintBuilder) {
+		timer := b.Delayed("timer")
 		b.Initial("foo")
-		b.State("foo").
-			RaiseAfterOnEntry("timer", xintMs(10), func(counter) any { return xintTimer{} }).
-			On[xintTimer]().To("bar")
+		foo := b.State("foo")
+		foo.Entry().RaiseAfter(timer, xintMs(10), func(counter) xintTimer { return xintTimer{} })
+		foo.On[xintTimer]().To("bar")
 		b.State("bar")
 	})
 
@@ -428,7 +436,7 @@ func TestXIntInterpreterSendWithDelayCanSendEventAfterDelay(t *testing.T) {
 //
 // DIVERGES from XState: XState's entry action raises FINISH after a delay it
 // computes from the context and from the event that entered the state. sc's
-// RaiseAfterOnEntry takes a fixed duration, and its computed delays (Delay)
+// entry RaiseAfter takes a fixed duration, and its computed delays (Delay)
 // belong to delayed transitions and see only the context. So ACTIVATE copies its
 // wait into the context, and pending leaves by a delayed transition instead
 // of raising FINISH for itself.
@@ -506,9 +514,9 @@ func TestXIntInterpreterSendWithDelayDelayedTransitions(t *testing.T) {
 		// DIVERGES from XState: XState hands delayD the event that
 		// entered d. An sc delay sees only the context, so the transition
 		// copies the event's value into it first.
-		b.State("c").
-			RaiseAfterOnEntry("fireDelay", xintMs(20), func(xintDelays) any { return xintFireDelay{Value: 200} }).
-			On[xintFireDelay]().
+		c := b.State("c")
+		c.Entry().RaiseAfter(b.Delayed("fireDelay"), xintMs(20), func(xintDelays) xintFireDelay { return xintFireDelay{Value: 200} })
+		c.On[xintFireDelay]().
 			Assign("keepValue", func(c xintDelays, ev xintFireDelay) xintDelays {
 				c.Wait = ev.Value
 				return c
@@ -707,11 +715,13 @@ func TestXIntInterpreterCanCancelDelayedEventByID(t *testing.T) {
 	t.Parallel()
 
 	m := xintNew(t, "m", func(b *xintBuilder) {
+		foo, bar := b.Delayed("foo"), b.Delayed("bar")
 		b.Initial("first")
-		first := b.State("first").
-			RaiseAfterOnEntry("foo", xintMs(100), func(counter) any { return xintFoo{} }).
-			RaiseAfterOnEntry("bar", xintMs(200), func(counter) any { return xintBar{} }).
-			CancelRaiseOnEntry("foo")
+		first := b.State("first")
+		first.Entry().
+			RaiseAfter(foo, xintMs(100), func(counter) xintFoo { return xintFoo{} }).
+			RaiseAfter(bar, xintMs(200), func(counter) xintBar { return xintBar{} }).
+			CancelRaise(foo)
 		first.On[xintFoo]().To("fail")
 		first.On[xintBar]().To("pass")
 		b.Final("fail")
@@ -879,7 +889,7 @@ func TestXIntInterpreterLogActionReceivesCorrectEvent(t *testing.T) {
 	m := xintNew(t, "m", func(b *xintBuilder) {
 		b.Initial("foo")
 		b.State("foo").On[xintExternal]().
-			Raise("raise", func(counter, xintExternal) any { return xintRaised{} }).
+			Raise("raise", func(counter, xintExternal) xintRaised { return xintRaised{} }).
 			Do("log", func(_ context.Context, _ counter, ev xintExternal) { logs.add(name(ev)) })
 		b.OnAny().Do("logAny", func(_ context.Context, _ counter, ev any) { logs.add(name(ev)) })
 	})
@@ -902,7 +912,7 @@ func TestXIntInterpreterSendEventExpressions(t *testing.T) {
 	m, err := sc.New("sendexpr", func(b *sc.Builder[string, xintPassword]) {
 		b.Initial("start")
 		start := b.State("start")
-		start.RaiseOnEntry("next", func(c xintPassword) any { return xintNext(c) })
+		start.Entry().Raise("next", func(c xintPassword) xintNext { return xintNext(c) })
 		start.On[xintNext]().
 			When("isFoo", func(_ xintPassword, ev xintNext) bool { return ev.Password == "foo" }).
 			To("finish")
@@ -927,7 +937,7 @@ func TestXIntInterpreterSendParentEventExpressions(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		child, err := sc.New("child", func(b *sc.Builder[string, xintPassword]) {
 			b.Initial("start")
-			b.State("start").EmitOnEntry("next", func(c xintPassword) xintNext { return xintNext(c) })
+			b.State("start").Entry().Emit("next", func(c xintPassword) xintNext { return xintNext(c) })
 		})
 		require.NoError(t, err)
 
@@ -1057,7 +1067,7 @@ func TestXIntInterpreterStartInitializesService(t *testing.T) {
 	var entered atomic.Int32
 
 	m := xintNew(t, "m", func(b *xintBuilder) {
-		b.Chart().Entry("entry", func(context.Context, counter) { entered.Add(1) })
+		b.Chart().Entry().Do("entry", func(context.Context, counter) { entered.Add(1) })
 		b.Initial("foo")
 		b.State("foo")
 	})
@@ -1078,7 +1088,7 @@ func TestXIntInterpreterStartDoesNotReinitializeStartedService(t *testing.T) {
 		var entered atomic.Int32
 
 		m := xintNew(t, "m", func(b *xintBuilder) {
-			b.Chart().Entry("entry", func(context.Context, counter) { entered.Add(1) })
+			b.Chart().Entry().Do("entry", func(context.Context, counter) { entered.Add(1) })
 		})
 
 		ctx, cancel := context.WithCancel(t.Context())
@@ -1205,7 +1215,7 @@ func xintWaiting(t *testing.T, called *atomic.Bool) *xintMachine {
 	return xintNew(t, "m", func(b *xintBuilder) {
 		b.Initial("waiting")
 		b.State("waiting").On[xintTrigger]().To("active")
-		b.State("active").Entry("call", func(context.Context, counter) { called.Store(true) })
+		b.State("active").Entry().Do("call", func(context.Context, counter) { called.Store(true) })
 	})
 }
 
@@ -1742,7 +1752,7 @@ func xintRootEntry(t *testing.T, entered *atomic.Int32) *xintMachine {
 	t.Helper()
 
 	return xintNew(t, "m", func(b *xintBuilder) {
-		b.Chart().Entry("entry", func(context.Context, counter) { entered.Add(1) })
+		b.Chart().Entry().Do("entry", func(context.Context, counter) { entered.Add(1) })
 	})
 }
 
@@ -1857,12 +1867,13 @@ func TestXIntInterpreterEventsRaisedOnEntryWaitForInitialEntryActions(t *testing
 
 	m := xintNew(t, "m", func(b *xintBuilder) {
 		root := b.Chart()
-		root.Entry("initial root entry start", noop)
-		root.RaiseOnEntry("raise", func(counter) any { return xintEv{} })
-		root.Entry("initial root entry end", noop)
+		root.Entry().
+			Do("initial root entry start", noop).
+			Raise("raise", func(counter) xintEv { return xintEv{} }).
+			Do("initial root entry end", noop)
 		b.On[xintEv]().Do("EV transition", func(context.Context, counter, xintEv) {})
 		b.Initial("a")
-		b.State("a").Entry("initial nested entry", noop)
+		b.State("a").Entry().Do("initial nested entry", noop)
 	})
 
 	_, effects := m.Start(counter{N: 0}, epoch)
@@ -1912,7 +1923,7 @@ func TestXIntInterpreterErroredLogicReportsItsError(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		m := xintNew(t, "m", func(b *xintBuilder) {
-			b.Chart().Entry("entry", func(context.Context, counter) { panic(errors.New("error")) })
+			b.Chart().Entry().Do("entry", func(context.Context, counter) { panic(errors.New("error")) })
 			// Named so that the send below reaches the stopped actor
 			// instead of being refused as unknown.
 			b.On[xintEv]().Do("ev", func(context.Context, counter, xintEv) {})
@@ -2277,14 +2288,15 @@ func TestXIntClockReconsidersCancellationAndOrderAfterEachTimer(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("clock", func(b *sc.Builder[string, xintTimes]) {
+		late, fresh := b.Delayed("late"), b.Delayed("new")
 		b.Initial("running")
 		running := b.Parallel("running", func(b *sc.Builder[string, xintTimes]) {
 			b.State("one", func(b *sc.Builder[string, xintTimes]) {
 				b.Initial("a1")
 				b.State("a1").After(xintMs(2000)).
 					Assign("first", xintTrace[struct{}]("first")).
-					CancelRaise("late").
-					RaiseAfter("new", 0, func(xintTimes, struct{}) any { return xintNew1{} }).
+					CancelRaise(late).
+					RaiseAfter(fresh, 0, func(xintTimes, struct{}) xintNew1 { return xintNew1{} }).
 					To("a2")
 				b.State("a2")
 			})
@@ -2294,7 +2306,7 @@ func TestXIntClockReconsidersCancellationAndOrderAfterEachTimer(t *testing.T) {
 				b.State("b2")
 			})
 		})
-		running.RaiseAfterOnEntry("late", xintMs(6000), func(xintTimes) any { return xintLate{} })
+		running.Entry().RaiseAfter(late, xintMs(6000), func(xintTimes) xintLate { return xintLate{} })
 		running.On[xintLate]().Assign("canceled", xintTrace[xintLate]("canceled"))
 		running.On[xintNew1]().Assign("new", xintTrace[xintNew1]("new"))
 	})
@@ -2369,11 +2381,13 @@ func TestXIntClockIsDefaultClockForInvokedMachine(t *testing.T) {
 			b.State("b")
 		})
 
+		var handle *sc.Child[string, counter, string, counter, struct{}]
 		parent := xintNew(t, "parent", func(b *xintBuilder) {
-			b.Chart().InvokeMachine("child", child,
+			handle = b.Chart().InvokeMachine("child", child,
 				func(c counter) counter { return c },
 				func(xintSnapshot) (struct{}, error) { return struct{}{}, nil },
-			).OnError().Stay()
+			)
+			handle.OnError().Stay()
 		})
 
 		clock := xintNewClock()
@@ -2384,7 +2398,7 @@ func TestXIntClockIsDefaultClockForInvokedMachine(t *testing.T) {
 		childState := func() []string {
 			synctest.Wait()
 
-			snap, ok := inst.Snapshot().Child(child, "child")
+			snap, ok := handle.Snapshot(inst.Snapshot())
 			require.True(t, ok)
 
 			return snap.Active()
@@ -2596,12 +2610,13 @@ func TestXIntTimersDelayedRaiseBeforeAlwaysAndSettlesBeforeRaisedEvents(t *testi
 
 	m := xintNew(t, "m", func(b *xintBuilder) {
 		b.Initial("waiting")
-		waiting := b.State("waiting").RaiseAfterOnEntry("expire", xintMs(10), func(counter) any { return xintExpire{} })
+		waiting := b.State("waiting")
+		waiting.Entry().RaiseAfter(b.Delayed("expire"), xintMs(10), func(counter) xintExpire { return xintExpire{} })
 		waiting.Always().When("ready", func(counter, struct{}) bool { return ready.Load() }).To("early")
 		waiting.On[xintExpire]().To("elapsed")
 		b.State("early")
 		elapsed := b.State("elapsed")
-		elapsed.RaiseOnEntry("internal", func(counter) any { return xintInternal{} })
+		elapsed.Entry().Raise("internal", func(counter) xintInternal { return xintInternal{} })
 		elapsed.Always().
 			WhenEvent("isExpire", func(_ counter, ev any) bool { _, ok := ev.(xintExpire); return ok }).
 			To("settled")
@@ -2662,9 +2677,9 @@ func TestXIntTimersReevaluatesAlwaysAfterUnhandledDelayedRaise(t *testing.T) {
 
 	m := xintNew(t, "m", func(b *xintBuilder) {
 		b.Initial("waiting")
-		b.State("waiting").
-			RaiseAfterOnEntry("ignored", xintMs(10), func(counter) any { return xintIgnored{} }).
-			Always().
+		waiting := b.State("waiting")
+		waiting.Entry().RaiseAfter(b.Delayed("ignored"), xintMs(10), func(counter) xintIgnored { return xintIgnored{} })
+		waiting.Always().
 			WhenEvent("isIgnored", func(_ counter, ev any) bool { _, ok := ev.(xintIgnored); return ok }).
 			To("settled")
 		// A delayed event must be of a type the chart names in an On
@@ -2696,8 +2711,8 @@ func TestXIntTimersDelayedEffectsAreIdentifiedDeterministically(t *testing.T) {
 
 	m := xintNew(t, "m", func(b *xintBuilder) {
 		b.On[xintSchedule]().
-			RaiseAfter("first", xintMs(10), func(counter, xintSchedule) any { return xintFirst{} }).
-			RaiseAfter("second", xintMs(20), func(counter, xintSchedule) any { return xintSecond{} })
+			RaiseAfter(b.Delayed("first"), xintMs(10), func(counter, xintSchedule) xintFirst { return xintFirst{} }).
+			RaiseAfter(b.Delayed("second"), xintMs(20), func(counter, xintSchedule) xintSecond { return xintSecond{} })
 		b.On[xintFirst]().Stay()
 		b.On[xintSecond]().Stay()
 	})
@@ -2733,7 +2748,7 @@ func TestXIntTimersCancelsRemainingTimersWhenReachingFinal(t *testing.T) {
 			return func(func(any, error) bool) { <-ctx.Done() }
 		}).OnError().Stay()
 		active.On[xintFinish]().
-			RaiseAfter("late", xintMs(100), func(counter, xintFinish) any { return xintLate{} }).
+			RaiseAfter(b.Delayed("late"), xintMs(100), func(counter, xintFinish) xintLate { return xintLate{} }).
 			To("done")
 		active.On[xintLate]().Stay()
 		b.Final("done")
@@ -2760,9 +2775,9 @@ func TestXIntTimersCancelsRemainingTimersWhenReachingFinal(t *testing.T) {
 // interpreter.test.ts
 //   - "state.children should reference spawned actors" and "stopped spawned
 //     actors should be cleaned up in parent": XState skips both (it.skip).
-//     They spawn actors from the root's entry action and keep them in the
-//     snapshot's children; sc spawns only from a transition, and a snapshot
-//     holds no actor refs.
+//     They spawn actors from the root's entry action, as sc's entry Spawn
+//     can, but keep them in the snapshot's children, and a snapshot holds
+//     no actor refs.
 //
 // waitFor.test.ts
 //   - "should not subscribe when the predicate immediately matches", "should

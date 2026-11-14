@@ -41,11 +41,11 @@ type (
 //
 // In an exploration of the parent the child is a service like any other,
 // with the outcomes given for name; explore the child on its own.
-func (s *StateBuilder[S, C]) InvokeMachine[S2 comparable, C2, R any](name string, child *Machine[S2, C2], input func(C) C2, output func(Snapshot[S2, C2]) (R, error), opts ...RunOption) *Receiving[S, C, any, R] {
+func (s *StateBuilder[S, C]) InvokeMachine[S2 comparable, C2, R any](name string, child *Machine[S2, C2], input func(C) C2, output func(Snapshot[S2, C2]) (R, error), opts ...RunOption) *Child[S, C, S2, C2, R] {
 	inv := s.addInvocation(newInvocation[S, C, R](name, runChild(child, func(c C, _ string) C2 { return input(c) }, output, opts)))
 	inv.inboxType = reflect.TypeFor[any]()
 
-	return &Receiving[S, C, any, R]{Invocation: &Invocation[S, C, R]{b: s.b, n: s.n, inv: inv}, Port: Port[any]{name: name}}
+	return newChild[S, C, S2, C2, R](s, inv, child)
 }
 
 // SpawnMachine declares a child machine like [StateBuilder.InvokeMachine],
@@ -56,12 +56,19 @@ func (s *StateBuilder[S, C]) InvokeMachine[S2 comparable, C2, R any](name string
 // [SpawnKey] on their IDs. An event a child emits arrives as a plain event,
 // so a child that must be told apart puts its identity, which input gave
 // it, in the events it emits.
-func (s *StateBuilder[S, C]) SpawnMachine[S2 comparable, C2, R any](name string, child *Machine[S2, C2], input func(c C, key string) C2, output func(Snapshot[S2, C2]) (R, error), opts ...RunOption) *Receiving[S, C, any, R] {
+func (s *StateBuilder[S, C]) SpawnMachine[S2 comparable, C2, R any](name string, child *Machine[S2, C2], input func(c C, key string) C2, output func(Snapshot[S2, C2]) (R, error), opts ...RunOption) *Child[S, C, S2, C2, R] {
 	inv := s.addInvocation(newInvocation[S, C, R](name, runChild(child, input, output, opts)))
 	inv.inboxType = reflect.TypeFor[any]()
 	inv.spawned = true
 
-	return &Receiving[S, C, any, R]{Invocation: &Invocation[S, C, R]{b: s.b, n: s.n, inv: inv}, Port: Port[any]{name: name}}
+	return newChild[S, C, S2, C2, R](s, inv, child)
+}
+
+// newChild is the handle of the child machine inv runs.
+func newChild[S comparable, C any, S2 comparable, C2, R any](s *StateBuilder[S, C], inv *invocation[S, C], child *Machine[S2, C2]) *Child[S, C, S2, C2, R] {
+	receiving := &Receiving[S, C, any, R]{Invocation: &Invocation[S, C, R]{b: s.b, n: s.n, inv: inv}, Port: Port[any]{name: inv.name}}
+
+	return &Child[S, C, S2, C2, R]{Receiving: receiving, machine: child}
 }
 
 // runChild is the service that runs child for a parent.

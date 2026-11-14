@@ -124,7 +124,16 @@ func xparDo[Ev any](context.Context, xparCtx, Ev) {}
 // xparTracked gives a state the entry and exit actions that XState's
 // trackEntries test helper adds to every state.
 func xparTracked(s *sc.StateBuilder[string, xparCtx]) *sc.StateBuilder[string, xparCtx] {
-	return s.Entry("enter", xparNoop).Exit("exit", xparNoop)
+	return xparEnterExit(s, "enter", "exit")
+}
+
+// xparEnterExit gives a state an entry action named enter and an exit action
+// named exit, both doing nothing.
+func xparEnterExit(s *sc.StateBuilder[string, xparCtx], enter, exit string) *sc.StateBuilder[string, xparCtx] {
+	s.Entry().Do(enter, xparNoop)
+	s.Exit().Do(exit, xparNoop)
+
+	return s
 }
 
 // xparTrace lists the entries and exits of tracked states among effects, in
@@ -156,8 +165,8 @@ func xparCount(effects []sc.Effect[xparCtx], name string) int {
 }
 
 // xparRaise returns the function an entry raise needs to raise ev.
-func xparRaise(ev any) func(xparCtx) any {
-	return func(xparCtx) any { return ev }
+func xparRaise[T any](ev T) func(xparCtx) T {
+	return func(xparCtx) T { return ev }
 }
 
 // xparWordMachine is XState's wordMachine.
@@ -306,18 +315,18 @@ func TestXParShouldHaveAllParallelStatesRepresentedInTheStateValue2(t *testing.T
 	// XState's wakMachine, with its entry and exit actions.
 	m, err := sc.New("wakMachine", func(b *xparBuilder) {
 		b.Regions()
-		b.State("wak1", func(b *xparBuilder) {
+		wak1 := b.State("wak1", func(b *xparBuilder) {
 			b.Initial("wak1sonA")
-			b.State("wak1sonA").Entry("wak1sonAenter", xparNoop).Exit("wak1sonAexit", xparNoop)
-			b.State("wak1sonB").Entry("wak1sonBenter", xparNoop).Exit("wak1sonBexit", xparNoop)
-		}).Entry("wak1enter", xparNoop).Exit("wak1exit", xparNoop).
-			On[xparWak1]().To("wak1sonB")
-		b.State("wak2", func(b *xparBuilder) {
+			xparEnterExit(b.State("wak1sonA"), "wak1sonAenter", "wak1sonAexit")
+			xparEnterExit(b.State("wak1sonB"), "wak1sonBenter", "wak1sonBexit")
+		})
+		xparEnterExit(wak1, "wak1enter", "wak1exit").On[xparWak1]().To("wak1sonB")
+		wak2 := b.State("wak2", func(b *xparBuilder) {
 			b.Initial("wak2sonA")
-			b.State("wak2sonA").Entry("wak2sonAenter", xparNoop).Exit("wak2sonAexit", xparNoop)
-			b.State("wak2sonB").Entry("wak2sonBenter", xparNoop).Exit("wak2sonBexit", xparNoop)
-		}).Entry("wak2enter", xparNoop).Exit("wak2exit", xparNoop).
-			On[xparWak2]().To("wak2sonB")
+			xparEnterExit(b.State("wak2sonA"), "wak2sonAenter", "wak2sonAexit")
+			xparEnterExit(b.State("wak2sonB"), "wak2sonBenter", "wak2sonBexit")
+		})
+		xparEnterExit(wak2, "wak2enter", "wak2exit").On[xparWak2]().To("wak2sonB")
 	})
 	require.NoError(t, err)
 
@@ -384,11 +393,13 @@ func TestXParShouldProperlyTransitionToRelativeSubstate(t *testing.T) {
 			b.Parallel("StructureEdit", func(b *xparBuilder) {
 				selection := b.State("SE.SelectionStatus", func(b *xparBuilder) {
 					b.Initial("SE.SelectedNone")
-					b.State("SE.SelectedNone").Entry("redraw", xparNoop)
-					b.State("SE.SelectedActivity").Entry("redraw", xparNoop).
-						On[xparSingleClickCanvas]().Do("selectNone", xparDo[xparSingleClickCanvas]).To("SE.SelectedNone")
-					b.State("SE.SelectedLink").Entry("redraw", xparNoop).
-						On[xparSingleClickCanvas]().Do("selectNone", xparDo[xparSingleClickCanvas]).To("SE.SelectedNone")
+					b.State("SE.SelectedNone").Entry().Do("redraw", xparNoop)
+					seActivity := b.State("SE.SelectedActivity")
+					seActivity.Entry().Do("redraw", xparNoop)
+					seActivity.On[xparSingleClickCanvas]().Do("selectNone", xparDo[xparSingleClickCanvas]).To("SE.SelectedNone")
+					seLink := b.State("SE.SelectedLink")
+					seLink.Entry().Do("redraw", xparNoop)
+					seLink.On[xparSingleClickCanvas]().Do("selectNone", xparDo[xparSingleClickCanvas]).To("SE.SelectedNone")
 				})
 				selection.On[xparSingleClickActivity]().
 					Do("selectActivity", xparDo[xparSingleClickActivity]).To("SE.SelectedActivity")
@@ -397,7 +408,8 @@ func TestXParShouldProperlyTransitionToRelativeSubstate(t *testing.T) {
 
 				b.State("SE.ClipboardStatus", func(b *xparBuilder) {
 					b.Initial("Empty")
-					empty := b.State("Empty").Entry("emptyClipboard", xparNoop)
+					empty := b.State("Empty")
+					empty.Entry().Do("emptyClipboard", xparNoop)
 					empty.On[xparCutInClipboardSuccess]().To("FilledByCut")
 					empty.On[xparCopyInClipboardSuccess]().To("FilledByCopy")
 					byCopy := b.State("FilledByCopy")
@@ -414,18 +426,20 @@ func TestXParShouldProperlyTransitionToRelativeSubstate(t *testing.T) {
 			b.Parallel("ProjectManagement", func(b *xparBuilder) {
 				selection := b.State("PM.SelectionStatus", func(b *xparBuilder) {
 					b.Initial("PM.SelectedNone")
-					b.State("PM.SelectedNone").Entry("redraw", xparNoop)
-					b.State("PM.SelectedActivity").Entry("redraw", xparNoop).
-						On[xparSingleClickCanvas]().To("PM.SelectedNone")
-					b.State("PM.SelectedLink").Entry("redraw", xparNoop).
-						On[xparSingleClickCanvas]().Do("selectNone", xparDo[xparSingleClickCanvas]).To("PM.SelectedNone")
+					b.State("PM.SelectedNone").Entry().Do("redraw", xparNoop)
+					pmActivity := b.State("PM.SelectedActivity")
+					pmActivity.Entry().Do("redraw", xparNoop)
+					pmActivity.On[xparSingleClickCanvas]().To("PM.SelectedNone")
+					pmLink := b.State("PM.SelectedLink")
+					pmLink.Entry().Do("redraw", xparNoop)
+					pmLink.On[xparSingleClickCanvas]().Do("selectNone", xparDo[xparSingleClickCanvas]).To("PM.SelectedNone")
 				})
 				selection.On[xparSingleClickActivity]().
 					Do("selectActivity", xparDo[xparSingleClickActivity]).To("PM.SelectedActivity")
 				selection.On[xparSingleClickLink]().
 					Do("selectLink", xparDo[xparSingleClickLink]).To("PM.SelectedLink")
 			}).On[xparSwitchToStructureEdit]().To("StructureEdit")
-		}).Entry("selectNone", xparNoop)
+		}).Entry().Do("selectNone", xparNoop)
 	})
 	require.NoError(t, err)
 
@@ -447,7 +461,7 @@ func TestXParShouldProperlyTransitionAccordingToEntryEventsOnAnInitialState(t *t
 		b.State("OUTER1", func(b *xparBuilder) {
 			b.Initial("B")
 			b.State("A")
-			b.State("B").RaiseOnEntry("raiseClear", xparRaise(xparClear{}))
+			b.State("B").Entry().Raise("raiseClear", xparRaise(xparClear{}))
 		})
 		b.Parallel("OUTER2", func(b *xparBuilder) {
 			b.State("INNER1", func(b *xparBuilder) {
@@ -482,15 +496,15 @@ func TestXParShouldProperlyTransitionWhenRaisingEventsForAParallelState(t *testi
 		b.State("OUTER1", func(b *xparBuilder) {
 			b.Initial("C")
 			a := b.State("A")
-			a.RaiseOnEntry("raiseTurnOff", xparRaise(xparTurnOff{}))
+			a.Entry().Raise("raiseTurnOff", xparRaise(xparTurnOff{}))
 			a.On[xparOuter1B]().To("B")
 			a.On[xparOuter1C]().To("C")
 			bb := b.State("B")
-			bb.RaiseOnEntry("raiseTurnOn", xparRaise(xparTurnOn{}))
+			bb.Entry().Raise("raiseTurnOn", xparRaise(xparTurnOn{}))
 			bb.On[xparOuter1A]().To("A")
 			bb.On[xparOuter1C]().To("C")
 			c := b.State("C")
-			c.RaiseOnEntry("raiseClear", xparRaise(xparClear{}))
+			c.Entry().Raise("raiseClear", xparRaise(xparClear{}))
 			c.On[xparOuter1A]().To("A")
 			c.On[xparOuter1B]().To("B")
 		})
@@ -554,7 +568,7 @@ func TestXParShouldExecuteActionsOfARegionWhenEnteringTheInitialStateNodesOfAMac
 		b.State("a", func(b *xparBuilder) {
 			b.Initial("a1")
 			b.State("a1")
-		}).Entry("spy", xparNoop)
+		}).Entry().Do("spy", xparNoop)
 	})
 	require.NoError(t, err)
 
@@ -574,8 +588,8 @@ func TestXParShouldExecuteActionsOfARegionWhenTheParallelStateIsTargetedExplicit
 			b.State("c", func(b *xparBuilder) {
 				b.Initial("c1")
 				b.State("c1")
-			}).Entry("spy", xparNoop)
-		}).Entry("bEntry", xparNoop)
+			}).Entry().Do("spy", xparNoop)
+		}).Entry().Do("bEntry", xparNoop)
 	})
 	require.NoError(t, err)
 
@@ -791,12 +805,12 @@ func TestXParShouldCalculateTheEntrySetForReenteringTransitionsInParallelStates(
 		b.State("foo", func(b *xparBuilder) {
 			b.Initial("foobar")
 			b.State("foobar").On[xparGotoFoobaz]().To("foobaz")
-			b.State("foobaz").
-				AssignOnEntry("logEntry", func(c xparCtx) xparCtx {
-					c.Log = append(append([]string(nil), c.Log...), "entered foobaz")
-					return c
-				}).
-				On[xparGotoFoobaz]().To("foobaz").Reenter()
+			foobaz := b.State("foobaz")
+			foobaz.Entry().Assign("logEntry", func(c xparCtx) xparCtx {
+				c.Log = append(append([]string(nil), c.Log...), "entered foobaz")
+				return c
+			})
+			foobaz.On[xparGotoFoobaz]().To("foobaz").Reenter()
 		})
 		b.State("bar")
 	})
@@ -1234,8 +1248,8 @@ func TestXParConformanceReenterInOneRegionShouldNotRerunSiblingRegionEntryAction
 			b.Initial("c")
 			b.State("c")
 			b.State("d")
-		}).AssignOnEntry("count", func(c xparCtx) xparCtx { c.Count++; return c })
-		b.Chart().Entry("reentered", xparNoop) // not in XState: shows how far Reenter reaches
+		}).Entry().Assign("count", func(c xparCtx) xparCtx { c.Count++; return c })
+		b.Chart().Entry().Do("reentered", xparNoop) // not in XState: shows how far Reenter reaches
 	}, sc.AllowUnreachable())
 	require.NoError(t, err)
 

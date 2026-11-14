@@ -118,16 +118,17 @@ func TestAParentDecidesOnWhereItsChildIs(t *testing.T) {
 		})
 		require.NoError(t, err)
 
+		var door *sc.Child[string, counter, string, counter, int]
 		m, err := sc.New("house", func(b *sc.Builder[string, counter]) {
 			b.Initial("home")
 			home := b.State("home")
-			door := home.InvokeMachine("door", child,
+			door = home.InvokeMachine("door", child,
 				func(counter) counter { return counter{N: 0} },
 				func(sc.Snapshot[string, counter]) (int, error) { return 0, nil },
 			)
 			door.OnError().Stay()
 			home.On[tick]().SendTo("push", door, func(_ counter, ev tick) any { return ev })
-			home.On[leave]().WhenChildIn("door", "open").To("away")
+			home.On[leave]().WhenChildIn(door, "open").To("away")
 			b.State("away")
 		})
 		require.NoError(t, err)
@@ -142,30 +143,47 @@ func TestAParentDecidesOnWhereItsChildIs(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, step.Accepted())
 
-		door, ok := inst.Snapshot().Child(child, "door")
+		doorSnap, ok := door.Snapshot(inst.Snapshot())
 		require.True(t, ok)
-		require.Equal(t, []string{"closed"}, door.Active())
+		require.Equal(t, []string{"closed"}, doorSnap.Active())
 
 		// Once the child has moved, the parent sees it.
 		_, err = inst.Send(t.Context(), tick{})
 		require.NoError(t, err)
 		synctest.Wait()
 
-		door, ok = inst.Snapshot().Child(child, "door")
+		doorSnap, ok = door.Snapshot(inst.Snapshot())
 		require.True(t, ok)
-		require.Equal(t, []string{"open"}, door.Active())
+		require.Equal(t, []string{"open"}, doorSnap.Active())
 
 		step, err = inst.Send(t.Context(), leave{})
 		require.NoError(t, err)
 		require.Equal(t, []string{"away"}, step.To.Active())
 	})
 
-	_, err := sc.New("nobody", func(b *sc.Builder[string, counter]) {
+	ghost, err := sc.New("ghost", func(b *sc.Builder[string, counter]) {
+		b.Initial("open")
+		b.State("open")
+	})
+	require.NoError(t, err)
+
+	var foreign *sc.Child[string, counter, string, counter, int]
+	_, err = sc.New("other", func(b *sc.Builder[string, counter]) {
 		b.Initial("a")
-		b.State("a").On[tick]().WhenChildIn("ghost", "open").To("b")
+		foreign = b.State("a").InvokeMachine("ghost", ghost,
+			func(counter) counter { return counter{N: 0} },
+			func(sc.Snapshot[string, counter]) (int, error) { return 0, nil },
+		)
+		foreign.OnError().Stay()
+	})
+	require.NoError(t, err)
+
+	_, err = sc.New("nobody", func(b *sc.Builder[string, counter]) {
+		b.Initial("a")
+		b.State("a").On[tick]().WhenChildIn(foreign, "open").To("b")
 		b.State("b")
 	})
-	require.ErrorContains(t, err, "not a service of the chart")
+	require.ErrorContains(t, err, "WhenChildIn names a child machine of another chart")
 }
 
 func TestAServiceHearsWhatItIsToldAsItIsStopped(t *testing.T) {
@@ -186,7 +204,7 @@ func TestAServiceHearsWhatItIsToldAsItIsStopped(t *testing.T) {
 
 				return 0, context.Cause(ctx)
 			})
-			working.SendOnExit("flush", inv, func(counter) any { return ping{} })
+			working.Exit().SendTo("flush", inv, func(counter) any { return ping{} })
 			inv.OnDone().Stay()
 			inv.OnError().Stay()
 			working.On[leave]().
@@ -219,7 +237,7 @@ func TestAPanickingHookDoesNotLeaveAStepHalfDone(t *testing.T) {
 		m, err := sc.New("hooked", func(b *sc.Builder[string, counter]) {
 			b.Initial("a")
 			b.State("a").On[tick]().To("b")
-			b.State("b").Entry("count", func(context.Context, counter) { entered++ })
+			b.State("b").Entry().Do("count", func(context.Context, counter) { entered++ })
 		})
 		require.NoError(t, err)
 

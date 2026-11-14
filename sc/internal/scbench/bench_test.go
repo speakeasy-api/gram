@@ -155,7 +155,7 @@ func deep(tb testing.TB) *sc.Machine[string, order] {
 				b.State("up", func(b *sc.Builder[string, order]) {
 					b.Initial("steady")
 					b.State("steady").On[beat]().Assign("count", func(o order, _ beat) order { o.Attempts++; return o })
-				}).Entry("announce", func(context.Context, order) {})
+				}).Entry().Do("announce", func(context.Context, order) {})
 				b.State("failed")
 			})
 			b.State("health", func(b *sc.Builder[string, order]) {

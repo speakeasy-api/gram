@@ -231,13 +231,14 @@ func reminderChart(t *testing.T) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("reminder", func(b *sc.Builder[string, counter]) {
+		remind := b.Delayed("remind")
 		b.Initial("idle")
 		b.State("idle").On[arm]().
-			RaiseAfter("remind", time.Minute, func(counter, arm) any { return expired{Reason: "armed"} }).
+			RaiseAfter(remind, time.Minute, func(counter, arm) expired { return expired{Reason: "armed"} }).
 			To("armed")
 		armed := b.State("armed")
 		armed.On[tick]().To("elsewhere")
-		armed.On[disarm]().CancelRaise("remind").To("idle")
+		armed.On[disarm]().CancelRaise(remind).To("idle")
 		armed.On[expired]().To("late")
 		b.State("elsewhere").On[expired]().
 			Assign("note", func(c counter, ev expired) counter { c.N = len(ev.Reason); return c }).
@@ -289,12 +290,20 @@ func TestCancelRaiseDropsAWaitingEvent(t *testing.T) {
 	snap, _ = m.Advance(snap, epoch.Add(time.Hour))
 	require.Equal(t, []string{"idle"}, snap.Active())
 
-	_, err := sc.New("dangling", func(b *sc.Builder[string, counter]) {
+	var foreign *sc.Delayed[string, counter]
+	_, err := sc.New("other", func(b *sc.Builder[string, counter]) {
+		foreign = b.Delayed("nothing")
 		b.Initial("a")
-		b.State("a").On[tick]().CancelRaise("nothing").To("b")
+		b.State("a")
+	})
+	require.NoError(t, err)
+
+	_, err = sc.New("dangling", func(b *sc.Builder[string, counter]) {
+		b.Initial("a")
+		b.State("a").On[tick]().CancelRaise(foreign).To("b")
 		b.State("b")
 	})
-	require.ErrorContains(t, err, "no RaiseAfter declares")
+	require.ErrorContains(t, err, "uses a delayed event of another chart")
 }
 
 type (
@@ -721,10 +730,11 @@ func TestReleaseGivesAResourceBackWhileItsStateStaysActive(t *testing.T) {
 
 		m, err := sc.New("secret", func(b *sc.Builder[string, counter]) {
 			b.Initial("session")
+			var using *sc.StateBuilder[string, counter]
 			session := b.State("session", func(b *sc.Builder[string, counter]) {
 				b.Initial("starting")
 				b.State("starting")
-				b.State("using").On[tick]().Release("token").To("finishing")
+				using = b.State("using")
 				b.State("finishing").On[tick]().To("closed")
 			})
 			token = session.Holds("token",
@@ -735,6 +745,7 @@ func TestReleaseGivesAResourceBackWhileItsStateStaysActive(t *testing.T) {
 			)
 			token.OnAcquired().To("using")
 			token.OnError().To("closed")
+			using.On[tick]().Release(token).To("finishing")
 			b.Final("closed")
 		})
 		require.NoError(t, err)
@@ -761,12 +772,23 @@ func TestReleaseGivesAResourceBackWhileItsStateStaysActive(t *testing.T) {
 		require.Len(t, released, 1)
 	})
 
-	_, err := sc.New("wrong", func(b *sc.Builder[string, counter]) {
+	var foreign *sc.Resource[string, counter, string]
+	_, err := sc.New("other", func(b *sc.Builder[string, counter]) {
 		b.Initial("a")
-		b.State("a").On[tick]().Release("nothing").To("b")
+		foreign = b.State("a").Holds("nothing",
+			func(context.Context, *sc.Run, counter) (string, error) { return "", nil },
+			func(context.Context, string, sc.Leave[string]) {},
+		)
+		foreign.OnError().Stay()
+	})
+	require.NoError(t, err)
+
+	_, err = sc.New("wrong", func(b *sc.Builder[string, counter]) {
+		b.Initial("a")
+		b.State("a").On[tick]().Release(foreign).To("b")
 		b.State("b")
 	})
-	require.ErrorContains(t, err, "not a resource of the chart")
+	require.ErrorContains(t, err, "releases a resource of another chart")
 }
 
 // countingWaiter lets every run through and counts them.
@@ -837,8 +859,8 @@ func uploadsChart(t *testing.T) *sc.Machine[string, order] {
 		})
 		upload.OnError().Stay()
 
-		open.On[add]().Spawn("start", "upload", func(_ order, ev add) string { return ev.Key })
-		open.On[remove]().StopSpawned("stop", "upload", func(_ order, ev remove) string { return ev.Key })
+		open.On[add]().Spawn("start", upload, func(_ order, ev add) string { return ev.Key })
+		open.On[remove]().StopSpawned("stop", upload, func(_ order, ev remove) string { return ev.Key })
 		open.On[finishOne]().SendToKey("finish", upload,
 			func(_ order, ev finishOne) string { return ev.Key },
 			func(_ order, ev finishOne) finishOne { return ev },
@@ -911,7 +933,7 @@ func TestSpawnMachineRunsOneChildPerKey(t *testing.T) {
 				return o
 			})
 			download.OnError().Stay()
-			open.On[add]().Spawn("start", "download", func(_ order, ev add) string { return ev.Key })
+			open.On[add]().Spawn("start", download, func(_ order, ev add) string { return ev.Key })
 			open.On[finishOne]().SendToKey("finish", download,
 				func(_ order, ev finishOne) string { return ev.Key },
 				func(order, finishOne) any { return finish{Fail: false} },
@@ -946,10 +968,10 @@ func TestSpawnMachineRunsOneChildPerKey(t *testing.T) {
 		inv := a.Invoke("work", func(context.Context, *sc.Run, counter) (int, error) { return 0, nil })
 		inv.OnDone().To("b")
 		inv.OnError().To("b")
-		a.On[tick]().Spawn("start", "work", func(counter, tick) string { return "k" })
+		a.On[tick]().Spawn("start", inv, func(counter, tick) string { return "k" })
 		b.Final("b")
 	})
-	require.ErrorContains(t, err, "not a service declared Spawned")
+	require.ErrorContains(t, err, "which is not declared Spawned")
 }
 
 func TestARetriedRunKeepsTheProgressOfTheOneThatFailed(t *testing.T) {

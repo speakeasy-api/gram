@@ -19,12 +19,11 @@ func sessionChart(t *testing.T, heartbeat func(context.Context, *sc.Run, counter
 	t.Helper()
 
 	m, err := sc.New("session", func(b *sc.Builder[string, counter]) {
-		chart := b.Chart().
-			Tag("live").
-			Within(time.Hour).
-			AssignOnEntry("begin", func(c counter) counter { c.N = 1; return c }).
-			Entry("opened", noop).
-			Exit("closed", noop)
+		chart := b.Chart().Tag("live").Within(time.Hour)
+		chart.Entry().
+			Assign("begin", func(c counter) counter { c.N = 1; return c }).
+			Do("opened", noop)
+		chart.Exit().Do("closed", noop)
 		beat := chart.Invoke("heartbeat", heartbeat)
 		beat.OnDone().Assign("beats", increment[sc.Done[int]])
 		beat.OnError().To("failed")
@@ -127,11 +126,13 @@ func TestAChartOfRegionsFinishesWhenEveryRegionHas(t *testing.T) {
 
 	m, err := sc.New("both", func(b *sc.Builder[string, counter]) {
 		b.Regions()
-		b.Chart().Exit("finished", noop)
+		b.Chart().Exit().Do("finished", noop)
 
 		b.State("upload", func(b *sc.Builder[string, counter]) {
 			b.Initial("uploading")
-			b.State("uploading").Exit("stop", noop).On[tick]().To("uploaded")
+			uploading := b.State("uploading")
+			uploading.Exit().Do("stop", noop)
+			uploading.On[tick]().To("uploaded")
 			b.Final("uploaded")
 		})
 		b.State("scan", func(b *sc.Builder[string, counter]) {
@@ -176,6 +177,7 @@ type verdict struct {
 func TestAFinalStateReportsAnOutput(t *testing.T) {
 	t.Parallel()
 
+	var merged *sc.Ending[string, counter, string]
 	m, err := sc.New("review", func(b *sc.Builder[string, counter]) {
 		b.Initial("reviewing")
 
@@ -184,9 +186,9 @@ func TestAFinalStateReportsAnOutput(t *testing.T) {
 			open := b.State("open")
 			open.On[tick]().To("approved")
 			open.On[leave]().To("rejected")
-			b.Final("approved").
-				AssignOnEntry("count", func(c counter) counter { c.N++; return c }).
-				Output(func(c counter) verdict { return verdict{Approved: true, By: "reviewer"} })
+			approved := b.Final("approved")
+			approved.Entry().Assign("count", func(c counter) counter { c.N++; return c })
+			approved.Output(func(c counter) verdict { return verdict{Approved: true, By: "reviewer"} })
 			b.Final("rejected").Output(func(counter) verdict { return verdict{Approved: false, By: "reviewer"} })
 		})
 
@@ -197,7 +199,7 @@ func TestAFinalStateReportsAnOutput(t *testing.T) {
 			To("merged")
 		reviewing.OnDone().To("closed")
 
-		b.Final("merged").Output(func(c counter) string { return "merged after 1 review" })
+		merged = b.Final("merged").Output(func(c counter) string { return "merged after 1 review" })
 		b.Final("closed")
 	})
 	require.NoError(t, err)
@@ -208,13 +210,20 @@ func TestAFinalStateReportsAnOutput(t *testing.T) {
 
 	// The approving final state's output reaches the guard and the action,
 	// and the machine's own output comes from the final state it ends in.
-	merged, effects := m.Transition(start, tick{}, epoch)
-	require.Equal(t, []string{"merged"}, merged.Active())
+	end, effects := m.Transition(start, tick{}, epoch)
+	require.Equal(t, []string{"merged"}, end.Active())
 	require.Equal(t, sc.Done[verdict]{ID: "approved", Result: verdict{Approved: true, By: "reviewer"}}, effects[0].Event)
 
-	output, has := m.Output(merged)
+	output, has := m.Output(end)
 	require.True(t, has)
 	require.Equal(t, "merged after 1 review", output)
+
+	// The final state's handle reads the same output, typed.
+	typed, has := merged.Reached(end)
+	require.True(t, has)
+	require.Equal(t, "merged after 1 review", typed)
+	_, has = merged.Reached(start)
+	require.False(t, has)
 
 	// The action's event survives being stored with its effect.
 	data, err := m.EncodeEffect(effects[0])
@@ -234,7 +243,8 @@ func TestAChartNeedsNoStates(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("tally", func(b *sc.Builder[string, counter]) {
-		chart := b.Chart().Entry("opened", noop)
+		chart := b.Chart()
+		chart.Entry().Do("opened", noop)
 		chart.On[tick]().Assign("count", increment[tick])
 		chart.On[leave]().
 			When("counted", func(c counter, _ leave) bool { return c.N > 0 }).
@@ -272,12 +282,15 @@ func TestATransitionGoesBackToWhereTheChartStarts(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("wizard", func(b *sc.Builder[string, counter]) {
-		b.Chart().Entry("opened", noop).Exit("closed", noop)
+		b.Chart().Entry().Do("opened", noop)
+		b.Chart().Exit().Do("closed", noop)
 		b.Chart().On[leave]().ToChart()
 		b.Chart().On[back]().ToChart().Reenter()
 
 		b.Initial("first")
-		b.State("first").Entry("show", noop).On[tick]().To("second")
+		first := b.State("first")
+		first.Entry().Do("show", noop)
+		first.On[tick]().To("second")
 		b.State("second").On[tick]().Assign("count", increment[tick]).To("third")
 		b.State("third")
 	})
@@ -304,10 +317,12 @@ func TestAStateRaisesAnEventAWhileAfterItIsEntered(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("reminding", func(b *sc.Builder[string, counter]) {
+		nudge := b.Delayed("nudge")
 		b.Initial("waiting")
-		waiting := b.State("waiting").RaiseAfterOnEntry("nudge", time.Minute, func(counter) any { return ping{} })
+		waiting := b.State("waiting")
+		waiting.Entry().RaiseAfter(nudge, time.Minute, func(counter) ping { return ping{} })
 		waiting.On[tick]().To("busy")
-		waiting.On[leave]().CancelRaise("nudge").To("busy")
+		waiting.On[leave]().CancelRaise(nudge).To("busy")
 		b.State("busy").On[ping]().To("nudged")
 		b.State("nudged")
 	})
@@ -331,11 +346,13 @@ func TestAStateCancelsADelayedEventItRaisedOnEntry(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("choosing", func(b *sc.Builder[string, counter]) {
+		foo, bar := b.Delayed("foo"), b.Delayed("bar")
 		b.Initial("first")
-		first := b.State("first").
-			RaiseAfterOnEntry("foo", time.Second, func(counter) any { return tick{} }).
-			RaiseAfterOnEntry("bar", 2*time.Second, func(counter) any { return ping{} }).
-			CancelRaiseOnEntry("foo")
+		first := b.State("first")
+		first.Entry().
+			RaiseAfter(foo, time.Second, func(counter) tick { return tick{} }).
+			RaiseAfter(bar, 2*time.Second, func(counter) ping { return ping{} }).
+			CancelRaise(foo)
 		first.On[tick]().To("wrong")
 		first.On[ping]().To("right")
 		b.Final("wrong")
@@ -354,10 +371,14 @@ func TestAStateCancelsADelayedEventItRaisedOnEntry(t *testing.T) {
 	snap, _ = m.Advance(snap, epoch.Add(2*time.Second))
 	require.Equal(t, []string{"right"}, snap.Active())
 
+	// A delayed event belongs to the chart that declares it.
+	var foreign *sc.Delayed[string, counter]
+	_, err = sc.New("owner", func(b *sc.Builder[string, counter]) { foreign = b.Delayed("nothing") })
+	require.NoError(t, err)
 	_, err = sc.New("dangling", func(b *sc.Builder[string, counter]) {
-		b.Chart().CancelRaiseOnEntry("nothing")
+		b.Chart().Entry().CancelRaise(foreign)
 	})
-	require.ErrorContains(t, err, "no RaiseAfter declares")
+	require.ErrorContains(t, err, "uses a delayed event of another chart")
 }
 
 func TestATransitionCancelsADelayedTransitionWithoutLeaving(t *testing.T) {

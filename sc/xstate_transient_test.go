@@ -165,10 +165,11 @@ func TestXTraTransientCarriesActionsFromPreviousTransitions(t *testing.T) {
 
 	m, err := sc.New("carry", func(b *xtraBuilder) {
 		b.Initial("A")
-		b.State("A").Exit("exit_A", noop).
-			On[xtraTimer]().Do("timer", func(context.Context, counter, xtraTimer) {}).To("T")
+		a := b.State("A")
+		a.Exit().Do("exit_A", noop)
+		a.On[xtraTimer]().Do("timer", func(context.Context, counter, xtraTimer) {}).To("T")
 		b.State("T").Always().To("B")
-		b.State("B").Entry("enter_B", noop)
+		b.State("B").Entry().Do("enter_B", noop)
 	})
 	require.NoError(t, err)
 
@@ -189,12 +190,12 @@ func TestXTraTransientExecutesAllInternalEventsInOrder(t *testing.T) {
 		b.State("A", func(b *xtraBuilder) {
 			b.Initial("A1")
 			b.State("A1").On[xtraE]().To("A2")
-			b.State("A2").RaiseOnEntry("raiseInt1", func(counter) any { return xtraInt1{} })
+			b.State("A2").Entry().Raise("raiseInt1", func(counter) xtraInt1 { return xtraInt1{} })
 		})
 		b.State("B", func(b *xtraBuilder) {
 			b.Initial("B1")
 			b.State("B1").On[xtraE]().To("B2")
-			b.State("B2").RaiseOnEntry("raiseInt2", func(counter) any { return xtraInt2{} })
+			b.State("B2").Entry().Raise("raiseInt2", func(counter) xtraInt2 { return xtraInt2{} })
 		})
 		b.State("C", func(b *xtraBuilder) {
 			b.Initial("C1")
@@ -308,7 +309,8 @@ func TestXTraTransientSelectsEventlessTransitionBeforeRaisedEvents(t *testing.T)
 	m, err := sc.New("before_raised", func(b *xtraBuilder) {
 		b.Initial("a")
 		b.State("a").On[xtraFoo]().To("b")
-		sb := b.State("b").RaiseOnEntry("raiseBar", func(counter) any { return xtraBar{} })
+		sb := b.State("b")
+		sb.Entry().Raise("raiseBar", func(counter) xtraBar { return xtraBar{} })
 		sb.Always().To("c")
 		sb.On[xtraBar]().To("d")
 		b.State("c").On[xtraBar]().To("e")
@@ -529,7 +531,7 @@ func TestXTraTransientEventsPreservedInActions(t *testing.T) {
 		b.Initial("a")
 		b.State("a").On[xtraEvent]().To("b")
 		b.State("b").Always().Do("check", func(context.Context, counter, struct{}) {}).To("c")
-		b.State("c").Entry("check", noop)
+		b.State("c").Entry().Do("check", noop)
 	})
 	require.NoError(t, err)
 
@@ -543,11 +545,9 @@ func TestXTraTransientEventsPreservedInActions(t *testing.T) {
 	// event that started the step.
 	require.Equal(t, xtraEvent{Value: 42}, effects[0].Event)
 
-	// DIVERGES from XState: XState also gives the entry action of the state
-	// the eventless transition enters that event, {type: 'EVENT', value: 42}.
-	// In sc a state's own entry actions never receive an event, and their
-	// effect's Event is nil.
-	require.Nil(t, effects[1].Event)
+	// As in XState, so is the entry action of the state the eventless
+	// transition enters.
+	require.Equal(t, xtraEvent{Value: 42}, effects[1].Event)
 }
 
 // XState: transient states (eventless transitions) > should avoid infinite
@@ -580,8 +580,9 @@ func TestXTraTransientAvoidsInfiniteLoopsWithRaisedEvents(t *testing.T) {
 	m, err := sc.New("loop_raised", func(b *xtraBuilder) {
 		b.Initial("a")
 		b.State("a").Always().To("b")
-		b.State("b").RaiseOnEntry("raiseEvent", func(counter) any { return xtraEvent{Value: 0} }).
-			On[xtraEvent]().To("c")
+		sb := b.State("b")
+		sb.Entry().Raise("raiseEvent", func(counter) xtraEvent { return xtraEvent{Value: 0} })
+		sb.On[xtraEvent]().To("c")
 		b.State("c").Always().To("a")
 	})
 	require.NoError(t, err)
@@ -725,7 +726,10 @@ func TestXTraTransientExecutesAlwaysAfterRaisedTransition(t *testing.T) {
 // xtraTracked declares entry and exit actions named "enter" and "exit" on a
 // state, the way XState's cases track them.
 func xtraTracked(s *sc.StateBuilder[string, counter]) *sc.StateBuilder[string, counter] {
-	return s.Entry("enter", noop).Exit("exit", noop)
+	s.Entry().Do("enter", noop)
+	s.Exit().Do("exit", noop)
+
+	return s
 }
 
 // XState: internal transitions > parent state should enter child state
@@ -945,10 +949,12 @@ func xtraNested(t *testing.T, exits bool) *sc.Machine[string, xtraVisits] {
 
 	count := func(s *sc.StateBuilder[string, xtraVisits], f func(xtraVisits) xtraVisits) *sc.StateBuilder[string, xtraVisits] {
 		if exits {
-			return s.AssignOnExit("count", f)
+			s.Exit().Assign("count", f)
+		} else {
+			s.Entry().Assign("count", f)
 		}
 
-		return s.AssignOnEntry("count", f)
+		return s
 	}
 
 	m, err := sc.New("nested", func(b *sc.Builder[string, xtraVisits]) {

@@ -15,12 +15,12 @@ func declaredChart(t *testing.T) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("declared", func(b *sc.Builder[string, counter]) {
-		b.RequiresAction("notify")
+		notify := b.RequiresAction("notify")
 		b.Initial("working")
 		inv := b.State("working").Requires[int]("compute")
 		inv.OnDone().
 			Assign("store", func(c counter, d sc.Done[int]) counter { c.N = d.Result; return c }).
-			Run("notify").
+			Run(notify).
 			To("done")
 		inv.OnError().To("failed")
 		b.Final("done")

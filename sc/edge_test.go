@@ -18,7 +18,7 @@ func gateChart(t *testing.T, gate func(counter)) *sc.Machine[string, counter] {
 
 	m, err := sc.New("gate", func(b *sc.Builder[string, counter]) {
 		b.Initial("open")
-		b.State("open").Entry("gate", func(_ context.Context, c counter) { gate(c) })
+		b.State("open").Entry().Do("gate", func(_ context.Context, c counter) { gate(c) })
 	})
 	require.NoError(t, err)
 

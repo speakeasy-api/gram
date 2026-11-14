@@ -26,11 +26,22 @@
 // [Builder.Regions] makes the top-level states regions that are all active
 // at once. A chart need not declare any states at all: its own transitions,
 // services and timers may be the whole of it. [Transition.ToChart] goes back
-// to where the chart starts. A final state reports an output with [FinalBuilder.Output], which
-// the enclosing state's [StateBuilder.OnDoneWith] transitions receive and,
-// for a top-level final state, [Machine.Output] returns. A parallel state
-// reports the outputs of its regions, by region name. A state can change the context as it is entered
-// or exited with [StateBuilder.AssignOnEntry] and [StateBuilder.AssignOnExit].
+// to where the chart starts.
+//
+// What a state does as it is entered or exited is a list of steps, the same
+// steps a transition takes, declared with [StateBuilder.Entry] and
+// [StateBuilder.Exit] and taken in the order they are declared: assignments,
+// actions, raises, sends, emits, spawns.
+//
+// A final state reports an output with [FinalBuilder.Output], whose handle
+// reads it from a snapshot with [Ending.Reached]; the enclosing state's
+// [StateBuilder.OnDoneWith] transitions receive it too. A parallel state
+// reports the outputs of its regions, by region name.
+//
+// Everything a chart refers to by identity is a handle the declaration
+// returned, not a name: chart actions, delayed events, spawned services,
+// resources, child machines and the services messages are sent to. A handle
+// from another chart is a declaration error.
 // An event that changes nothing is ignored: the snapshot comes back unchanged.
 // [StateBuilder.OnAny] catches the events a state's other transitions do not
 // take. [StateBuilder.Tag] labels states, so a caller can ask a snapshot what
@@ -46,10 +57,9 @@
 // the order they started when due together, so their order never depends on
 // a driver. [Machine.Advance] fires them without an event, which is how a read
 // sees an expiry nothing has processed. [StateBuilder.Within] gives the
-// services inside a state one shared deadline. [Transition.RaiseAfter] and
-// [StateBuilder.RaiseAfterOnEntry] send the chart an event after a wait,
-// wherever it is by then, and [Transition.CancelRaise] and
-// [StateBuilder.CancelRaiseOnEntry] drop it again. [Transition.CancelAfter]
+// services inside a state one shared deadline. [Transition.RaiseAfter] sends
+// the chart a [Builder.Delayed] event after a wait, wherever it is by then,
+// and [Transition.CancelRaise] drops it again. [Transition.CancelAfter]
 // cancels a state's delayed transitions while it stays active.
 //
 // # Actions and services
@@ -83,11 +93,11 @@
 // [Transition.SendTo], and the child reports back with [Transition.Emit],
 // which the parent handles like any other event. Sends address the handle
 // the receiving service's declaration returned, so the message's type is
-// checked by the compiler. A state does both as it is entered or
-// exited with [StateBuilder.SendOnEntry] and [StateBuilder.EmitOnEntry], so
-// it can greet the service it invokes, and a service that a step stops
-// still hears what that step sent it. A parent reads where its child is
-// with [Snapshot.Child], and guards on it with [Transition.WhenChildIn]. The child's snapshot is kept inside the
+// checked by the compiler. A state's entry steps can send too, so it can
+// greet the service it invokes, and a service that a step stops still hears
+// what that step sent it. A parent reads where its child is with
+// [Child.Snapshot], and guards on it with [Transition.WhenChildIn]. The
+// child's snapshot is kept inside the
 // parent's, so a stored parent resumes its child where it was. Any service
 // can do the same for its own progress with [Run.Checkpoint] and
 // [Run.Resumed], and [Run.ID] gives it an idempotency key that survives being

@@ -88,7 +88,7 @@ func TestInstanceStopsAServiceBeforeTheNextEffectsRun(t *testing.T) {
 				return 0, ctx.Err()
 			}).OnError().Stay()
 			working.On[leave]().To("next")
-			b.State("next").Entry("check", func(context.Context, counter) { exitedAtEntry.Store(exited.Load()) })
+			b.State("next").Entry().Do("check", func(context.Context, counter) { exitedAtEntry.Store(exited.Load()) })
 		})
 		require.NoError(t, err)
 

@@ -113,13 +113,18 @@ func TestConditionalRunsAppearInTheEffectsOnlyWhenTheyRun(t *testing.T) {
 	}
 
 	m, err := sc.New("wake", func(b *sc.Builder[string, counter]) {
-		b.Action("wake", func(context.Context, counter, sc.Move[string]) {})
+		wake := b.Action("wake", func(context.Context, counter, sc.Move[string]) {})
 		b.Initial("offline")
-		b.State("offline").OnEntryIf("wake", crossesOnline).On[connect]().To("connecting")
-		connecting := b.State("connecting").OnEntryIf("wake", crossesOnline)
+		offline := b.State("offline")
+		offline.Entry().RunIf(wake, crossesOnline)
+		offline.On[connect]().To("connecting")
+		connecting := b.State("connecting")
+		connecting.Entry().RunIf(wake, crossesOnline)
 		connecting.On[tick]().To("online")
-		connecting.On[pong]().RunIf("wake", crossesOnline)
-		b.State("online").OnEntryIf("wake", crossesOnline).On[disconnect]().To("offline")
+		connecting.On[pong]().RunIf(wake, crossesOnline)
+		online := b.State("online")
+		online.Entry().RunIf(wake, crossesOnline)
+		online.On[disconnect]().To("offline")
 	})
 	require.NoError(t, err)
 
@@ -181,9 +186,9 @@ func TestInstanceReturnsNoInstanceWhenItsStartFails(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("failing start", func(b *sc.Builder[string, counter]) {
-		b.RequiresAction("hello")
+		hello := b.RequiresAction("hello")
 		b.Initial("a")
-		b.State("a").OnEntry("hello")
+		b.State("a").Entry().Run(hello)
 	})
 	require.NoError(t, err)
 

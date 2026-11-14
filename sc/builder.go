@@ -30,21 +30,15 @@ type build[S comparable, C any] struct {
 	// whether it names a resource.
 	kinds map[string]bool
 
-	// raises holds the names given to RaiseAfter, and cancels the names
-	// CancelRaise refers to.
-	raises  map[string]bool
-	cancels []string
+	// raises holds the names of the delayed events declared with Delayed,
+	// and raisedTypes the types of the events raises produce.
+	raises      map[string]bool
+	raisedTypes []reflect.Type
 
 	// sends holds the services sends address, and emits is set once any
 	// transition emits.
 	sends []sendTarget
 	emits bool
-
-	// releases holds the resources Release names.
-	releases []string
-
-	// spawns holds the services Spawn and StopSpawned name.
-	spawns []string
 
 	// emitTypes holds the types of the events Emit steps return, and
 	// outputTypes those of the completion events final states report.
@@ -63,32 +57,32 @@ type Builder[S comparable, C any] struct {
 	parent *node[S, C]
 }
 
-// Action declares an action named once for the whole chart, which any
-// transition runs with [Transition.Run] and any state with
-// [StateBuilder.OnEntry] and [StateBuilder.OnExit]. fn receives the move it
+// Action declares an action named once for the whole chart and returns its
+// handle, by which any transition or step list runs it with
+// [Transition.Run] and [Steps.Run]. fn receives the move it
 // runs in: the state that runs it and the active states before and after,
 // so one action can do what depends on where the chart came from and where
 // it went, such as recording a status and then notifying when it crossed a
 // boundary. A chart action's name must not be used by a state's own
 // actions. Like every action, its effect may be carried out more than once.
-func (b *Builder[S, C]) Action(name string, fn func(ctx context.Context, c C, mv Move[S])) {
-	if name == "" {
+func (b *Builder[S, C]) Action(name string, fn func(ctx context.Context, c C, mv Move[S])) *Action[S, C] {
+	switch _, declared := b.b.actions[name]; {
+	case name == "":
 		b.b.errorf("a chart action has no name")
-		return
-	}
-	if _, ok := b.b.actions[name]; ok {
+	case declared:
 		b.b.errorf("chart action %q is declared twice", name)
-		return
+	default:
+		b.b.actions[name] = fn
 	}
 
-	b.b.actions[name] = fn
+	return &Action[S, C]{b: b.b, name: name}
 }
 
 // RequiresAction declares a chart action like [Builder.Action], by name
 // only. Its implementation is given later with [Machine.Bind]. Running it
 // while still unbound fails with [ErrNotBound].
-func (b *Builder[S, C]) RequiresAction(name string) {
-	b.Action(name, nil)
+func (b *Builder[S, C]) RequiresAction(name string) *Action[S, C] {
+	return b.Action(name, nil)
 }
 
 // Initial names the child state that is entered when the enclosing state is
@@ -253,28 +247,14 @@ func (f *FinalBuilder[S, C]) Tag(tags ...string) *FinalBuilder[S, C] {
 	return f
 }
 
-// AssignOnEntry replaces the context when the final state is entered, as
-// [StateBuilder.AssignOnEntry] does, so the transitions taken on the
-// enclosing state's completion see the result.
-func (f *FinalBuilder[S, C]) AssignOnEntry(name string, fn func(C) C) *FinalBuilder[S, C] {
-	f.n.entryAssigns = append(f.n.entryAssigns, stateAssign[C]{name: name, fn: fn})
-	return f
-}
-
-// RaiseOnEntry queues an event for the machine itself when the final state
-// is entered, as [StateBuilder.RaiseOnEntry] does.
-func (f *FinalBuilder[S, C]) RaiseOnEntry(name string, fn func(C) any) *FinalBuilder[S, C] {
-	f.n.entryRaises = append(f.n.entryRaises, stateRaise[C]{name: name, fn: fn})
-	return f
-}
-
 // Output declares what entering the final state reports. The enclosing
 // state's completion then carries it: a transition declared there with
 // [StateBuilder.OnDoneWith] receives a [Done] whose Result is the value f
 // returns for the context, as it is after the final state's own entry
 // assignments, and whose ID is the final state's name. For a top-level
-// final state it is the machine's output, read with [Machine.Output].
-func (f *FinalBuilder[S, C]) Output[R any](fn func(C) R) *FinalBuilder[S, C] {
+// final state it is the machine's output. The returned handle reads it from
+// a snapshot with [Ending.Reached].
+func (f *FinalBuilder[S, C]) Output[R any](fn func(C) R) *Ending[S, C, R] {
 	if f.n.output != nil {
 		f.b.errorf("final state %q: output declared twice", f.n.name)
 	}
@@ -285,21 +265,7 @@ func (f *FinalBuilder[S, C]) Output[R any](fn func(C) R) *FinalBuilder[S, C] {
 	f.n.outputType = reflect.TypeFor[R]()
 	f.b.outputTypes = append(f.b.outputTypes, reflect.TypeFor[Done[R]]())
 
-	return f
-}
-
-// EmitOnEntry hands the event f returns to whoever runs the machine when
-// the final state is entered, as [StateBuilder.EmitOnEntry] does: a child
-// machine's last word to its parent.
-func (f *FinalBuilder[S, C]) EmitOnEntry[T any](name string, fn func(C) T) *FinalBuilder[S, C] {
-	f.n.entryEmits = append(f.n.entryEmits, emitter(f.b, f.n, name, fn))
-	return f
-}
-
-// Entry adds an action that runs when the final state is entered.
-func (f *FinalBuilder[S, C]) Entry(name string, fn func(context.Context, C)) *FinalBuilder[S, C] {
-	f.n.entry = append(f.n.entry, action[C]{name: name, fn: fn})
-	return f
+	return &Ending[S, C, R]{FinalBuilder: f, output: fn}
 }
 
 // HistoryBuilder declares the behaviour of a history state.
@@ -487,123 +453,6 @@ func (s *StateBuilder[S, C]) Within(d time.Duration) *StateBuilder[S, C] {
 	return s
 }
 
-// Entry adds an action that runs when the state is entered. The name must be
-// unique among the state's actions.
-func (s *StateBuilder[S, C]) Entry(name string, fn func(context.Context, C)) *StateBuilder[S, C] {
-	s.n.entry = append(s.n.entry, action[C]{name: name, fn: fn})
-	return s
-}
-
-// Exit adds an action that runs when the state is exited. The name must be
-// unique among the state's actions.
-func (s *StateBuilder[S, C]) Exit(name string, fn func(context.Context, C)) *StateBuilder[S, C] {
-	s.n.exit = append(s.n.exit, action[C]{name: name, fn: fn})
-	return s
-}
-
-// AssignOnEntry replaces the context with the value f returns whenever the
-// state is entered, before its entry actions, which see the new context. It
-// is the place to reset what belongs to one visit of the state, such as a
-// count of attempts.
-func (s *StateBuilder[S, C]) AssignOnEntry(name string, f func(C) C) *StateBuilder[S, C] {
-	if name == "" {
-		s.b.errorf("state %q: an assignment has no name", s.n.name)
-	}
-	s.n.entryAssigns = append(s.n.entryAssigns, stateAssign[C]{name: name, fn: f})
-
-	return s
-}
-
-// AssignOnExit replaces the context whenever the state is exited, before
-// its exit actions, as AssignOnEntry does on entry.
-func (s *StateBuilder[S, C]) AssignOnExit(name string, f func(C) C) *StateBuilder[S, C] {
-	if name == "" {
-		s.b.errorf("state %q: an assignment has no name", s.n.name)
-	}
-	s.n.exitAssigns = append(s.n.exitAssigns, stateAssign[C]{name: name, fn: f})
-
-	return s
-}
-
-// RaiseOnEntry queues the event f returns for the machine itself whenever
-// the state is entered, as [Transition.Raise] does from a transition. It is
-// processed in the same call to [Machine.Transition], once the step that
-// entered the state is complete.
-func (s *StateBuilder[S, C]) RaiseOnEntry(name string, f func(C) any) *StateBuilder[S, C] {
-	if name == "" {
-		s.b.errorf("state %q: a raise has no name", s.n.name)
-	}
-	s.n.entryRaises = append(s.n.entryRaises, stateRaise[C]{name: name, fn: f})
-
-	return s
-}
-
-// RaiseAfterOnEntry queues the event f returns for the machine itself, to be
-// delivered once d has passed since the state was entered, as
-// [Transition.RaiseAfter] does from a transition. The event is delivered
-// wherever the chart is by then; cancel it with [Transition.CancelRaise] of
-// the same name, or use [StateBuilder.After] when leaving the state should
-// cancel it.
-func (s *StateBuilder[S, C]) RaiseAfterOnEntry(name string, d time.Duration, f func(C) any) *StateBuilder[S, C] {
-	switch {
-	case name == "":
-		s.b.errorf("state %q: a raise has no name", s.n.name)
-	case d < 0:
-		s.b.errorf("state %q: raise %q has a negative delay %s", s.n.name, name, d)
-	}
-
-	s.b.raises[name] = true
-	s.n.entryDelayed = append(s.n.entryDelayed, delayedRaise[C]{name: name, delay: d, fn: f, cancel: false})
-
-	return s
-}
-
-// CancelRaiseOnEntry drops, whenever the state is entered, the events that
-// a raise named name is still waiting to deliver, as [Transition.CancelRaise]
-// does from a transition. It runs in order with the state's
-// [StateBuilder.RaiseAfterOnEntry] calls, so a state can raise several
-// delayed events and cancel one of them as it is entered.
-func (s *StateBuilder[S, C]) CancelRaiseOnEntry(name string) *StateBuilder[S, C] {
-	s.b.cancels = append(s.b.cancels, name)
-	s.n.entryDelayed = append(s.n.entryDelayed, delayedRaise[C]{name: name, delay: 0, fn: nil, cancel: true})
-
-	return s
-}
-
-// RaiseOnExit queues the event f returns for the machine itself whenever the
-// state is exited, as RaiseOnEntry does on entry.
-func (s *StateBuilder[S, C]) RaiseOnExit(name string, f func(C) any) *StateBuilder[S, C] {
-	if name == "" {
-		s.b.errorf("state %q: a raise has no name", s.n.name)
-	}
-	s.n.exitRaises = append(s.n.exitRaises, stateRaise[C]{name: name, fn: f})
-
-	return s
-}
-
-// SendOnEntry sends the message f returns to the service to addresses
-// whenever the state is entered, as [Transition.SendTo] does from a
-// transition. It reaches a service the state itself invokes, which is how a
-// state greets its own child machine or gives a service its first
-// instruction.
-func (s *StateBuilder[S, C]) SendOnEntry[M any](name string, to Mailbox[M], f func(C) M) *StateBuilder[S, C] {
-	service := s.b.sendTo(to)
-	s.n.entrySends = append(s.n.entrySends, stateSend[C]{name: name, service: service, fn: func(c C) any { return f(c) }})
-
-	return s
-}
-
-// SendOnExit sends a message to a service whenever the state is exited, as
-// SendOnEntry does on entry. A service the state itself invokes is told
-// before it is stopped: the message is still in its inbox after its context
-// ends, so it hears the last thing it was sent.
-func (s *StateBuilder[S, C]) SendOnExit[M any](name string, to Mailbox[M], f func(C) M) *StateBuilder[S, C] {
-	service := s.b.sendTo(to)
-	s.n.exitSends = append(s.n.exitSends, stateSend[C]{name: name, service: service, fn: func(c C) any { return f(c) }})
-
-	return s
-}
-
 // sendTarget is a service a send addresses, with the type of message sent.
 type sendTarget struct {
 	service string
@@ -621,76 +470,6 @@ func (b *build[S, C]) sendTo[M any](to Mailbox[M]) string {
 	b.sends = append(b.sends, sendTarget{service: name, message: reflect.TypeFor[M]()})
 
 	return name
-}
-
-// EmitOnEntry hands the event f returns to whoever runs the machine
-// whenever the state is entered, as [Transition.Emit] does from a
-// transition. T must be a concrete type.
-func (s *StateBuilder[S, C]) EmitOnEntry[T any](name string, f func(C) T) *StateBuilder[S, C] {
-	s.n.entryEmits = append(s.n.entryEmits, emitter(s.b, s.n, name, f))
-	return s
-}
-
-// EmitOnExit hands an event to whoever runs the machine whenever the state
-// is exited, as EmitOnEntry does on entry.
-func (s *StateBuilder[S, C]) EmitOnExit[T any](name string, f func(C) T) *StateBuilder[S, C] {
-	s.n.exitEmits = append(s.n.exitEmits, emitter(s.b, s.n, name, f))
-	return s
-}
-
-// emitter records an event a state emits, and the type it emits.
-func emitter[S comparable, C, T any](b *build[S, C], n *node[S, C], name string, f func(C) T) stateRaise[C] {
-	emitted := reflect.TypeFor[T]()
-	if emitted.Kind() == reflect.Interface {
-		b.errorf("state %q: emit %q returns %s, an interface; emit a concrete type", n.name, name, emitted)
-	} else {
-		b.emitTypes = append(b.emitTypes, emitted)
-	}
-	b.emits = true
-
-	return stateRaise[C]{name: name, fn: func(c C) any { return f(c) }}
-}
-
-// OnEntry runs chart actions, declared with [Builder.Action], when the state
-// is entered, after its own entry actions.
-func (s *StateBuilder[S, C]) OnEntry(names ...string) *StateBuilder[S, C] {
-	s.n.entryRuns = append(s.n.entryRuns, names...)
-	for range names {
-		s.n.entryConds = append(s.n.entryConds, nil)
-	}
-
-	return s
-}
-
-// OnEntryIf runs a chart action on entry, as OnEntry does, only when cond
-// holds for the step's [Move]. Because the decision is made in the core, the
-// action appears in the step's effects only when it runs, where exploration
-// and step invariants can check it. cond must be a pure function of the move.
-func (s *StateBuilder[S, C]) OnEntryIf(name string, cond func(Move[S]) bool) *StateBuilder[S, C] {
-	s.n.entryRuns = append(s.n.entryRuns, name)
-	s.n.entryConds = append(s.n.entryConds, cond)
-
-	return s
-}
-
-// OnExit runs chart actions, declared with [Builder.Action], when the state
-// is exited, after its own exit actions.
-func (s *StateBuilder[S, C]) OnExit(names ...string) *StateBuilder[S, C] {
-	s.n.exitRuns = append(s.n.exitRuns, names...)
-	for range names {
-		s.n.exitConds = append(s.n.exitConds, nil)
-	}
-
-	return s
-}
-
-// OnExitIf runs a chart action on exit, as OnExit does, only when cond holds
-// for the step's [Move].
-func (s *StateBuilder[S, C]) OnExitIf(name string, cond func(Move[S]) bool) *StateBuilder[S, C] {
-	s.n.exitRuns = append(s.n.exitRuns, name)
-	s.n.exitConds = append(s.n.exitConds, cond)
-
-	return s
 }
 
 // Invoke declares a service that runs while the state is active. It starts
@@ -1006,26 +785,6 @@ func (t *Transition[S, C, Ev]) WhenEvent(name string, g func(c C, ev any) bool) 
 	return t
 }
 
-// WhenChildIn restricts the transition to times when the child machine that
-// the service named service runs has every one of states active. It is how
-// a parent decides on where its child is without the child having to report
-// each move: the core reads the snapshot the child last handed up. The
-// condition fails when the child is not running. states are the child's
-// state identifiers.
-func (t *Transition[S, C, Ev]) WhenChildIn(service string, states ...any) *Transition[S, C, Ev] {
-	if len(states) == 0 {
-		t.b.errorf("state %q: WhenChildIn names no states", t.t.source.name)
-	}
-
-	cond := childCond{service: service, states: nil}
-	for _, state := range states {
-		cond.states = append(cond.states, fmt.Sprint(state))
-	}
-	t.t.childConds = append(t.t.childConds, cond)
-
-	return t
-}
-
 // WhenIn restricts the transition to times when every one of states is
 // active. It lets one parallel region react to where another region is,
 // which a guard cannot see. It combines with [Transition.When]: both must
@@ -1141,32 +900,44 @@ func (t *Transition[S, C, Ev]) Do(name string, f func(context.Context, C, Ev)) *
 
 // Run runs chart actions, declared with [Builder.Action], as steps of the
 // transition, in order with its other steps.
-func (t *Transition[S, C, Ev]) Run(names ...string) *Transition[S, C, Ev] {
-	for _, name := range names {
-		t.t.steps = append(t.t.steps, step[C]{kind: stepRun, name: name, assign: nil, do: nil, raise: nil, random: false})
+func (t *Transition[S, C, Ev]) Run(actions ...*Action[S, C]) *Transition[S, C, Ev] {
+	for _, action := range actions {
+		t.t.steps = append(t.t.steps, step[C]{kind: stepRun, name: t.action(action), assign: nil, do: nil, raise: nil, random: false})
 	}
 
 	return t
+}
+
+// action returns the name of a chart action, reporting one of another chart.
+func (t *Transition[S, C, Ev]) action(a *Action[S, C]) string {
+	if a == nil || a.b != t.b {
+		t.b.errorf("state %q: runs a chart action of another chart", t.t.source.name)
+		return ""
+	}
+
+	return a.name
 }
 
 // RunIf runs a chart action as a step of the transition, as Run does, only
 // when cond holds for the step's [Move]. The decision is made in the core, so
 // the action appears in the step's effects only when it runs. cond must be a
 // pure function of the move.
-func (t *Transition[S, C, Ev]) RunIf(name string, cond func(Move[S]) bool) *Transition[S, C, Ev] {
+func (t *Transition[S, C, Ev]) RunIf(action *Action[S, C], cond func(Move[S]) bool) *Transition[S, C, Ev] {
 	if t.t.runConds == nil {
 		t.t.runConds = map[int]func(Move[S]) bool{}
 	}
 	t.t.runConds[len(t.t.steps)] = cond
-	t.t.steps = append(t.t.steps, step[C]{kind: stepRun, name: name, assign: nil, do: nil, raise: nil, random: false})
+	t.t.steps = append(t.t.steps, step[C]{kind: stepRun, name: t.action(action), assign: nil, do: nil, raise: nil, random: false})
 
 	return t
 }
 
 // Raise queues the event f returns for the machine itself. It is processed
 // in the same call to [Machine.Transition], after the current transitions
-// complete, which lets one parallel region signal another.
-func (t *Transition[S, C, Ev]) Raise(name string, f func(C, Ev) any) *Transition[S, C, Ev] {
+// complete, which lets one parallel region signal another. It is a
+// declaration error for T to be a type no transition of the chart takes.
+func (t *Transition[S, C, Ev]) Raise[T any](name string, f func(C, Ev) T) *Transition[S, C, Ev] {
+	t.b.raisedType(reflect.TypeFor[T]())
 	t.t.steps = append(t.t.steps, step[C]{
 		kind:   stepRaise,
 		name:   name,
@@ -1179,7 +950,7 @@ func (t *Transition[S, C, Ev]) Raise(name string, f func(C, Ev) any) *Transition
 	return t
 }
 
-// Release gives back the resource named name now, although the state that
+// Release gives back resource now, although the state that
 // holds it stays active: a secret that is only needed for the first step
 // inside the state, a lock that later steps must not keep. Its release
 // function runs as it would on leaving the state, [Resource.Held] reports
@@ -1187,26 +958,37 @@ func (t *Transition[S, C, Ev]) Raise(name string, f func(C, Ev) any) *Transition
 // state is entered again. It does nothing when the resource is not held; an
 // acquisition still in flight is released when it arrives, without its
 // OnAcquired being taken.
-func (t *Transition[S, C, Ev]) Release(name string) *Transition[S, C, Ev] {
-	t.b.releases = append(t.b.releases, name)
+func (t *Transition[S, C, Ev]) Release(resource Releasable[S, C]) *Transition[S, C, Ev] {
+	var inv *invocation[S, C]
+	if resource != nil {
+		inv = resource.resource()
+	}
+
+	name := ""
+	if !t.b.owns(inv) {
+		t.b.errorf("state %q: releases a resource of another chart", t.t.source.name)
+	} else {
+		name = inv.name
+	}
+
 	t.t.steps = append(t.t.steps, step[C]{kind: stepRelease, name: name, assign: nil, do: nil, raise: nil, random: false})
 
 	return t
 }
 
-// Spawn starts a run of the spawned service named service under the key
+// Spawn starts a run of the spawned service the handle names under the key
 // that key returns, with the context as it is at this step. It does nothing
 // when a run with that key is already going, or when the service's state is
 // not active: a transition that enters the state cannot spawn in the same
 // step.
-func (t *Transition[S, C, Ev]) Spawn(name, service string, key func(C, Ev) string) *Transition[S, C, Ev] {
+func (t *Transition[S, C, Ev]) Spawn(name string, service Spawnable[S, C], key func(C, Ev) string) *Transition[S, C, Ev] {
 	return t.keyed(stepSpawn, name, service, key)
 }
 
-// StopSpawned stops the run of the spawned service named service that has
+// StopSpawned stops the run of the spawned service the handle names that has
 // the key that key returns, and drops what it reports from then on. It does
 // nothing when there is none.
-func (t *Transition[S, C, Ev]) StopSpawned(name, service string, key func(C, Ev) string) *Transition[S, C, Ev] {
+func (t *Transition[S, C, Ev]) StopSpawned(name string, service Spawnable[S, C], key func(C, Ev) string) *Transition[S, C, Ev] {
 	return t.keyed(stepStop, name, service, key)
 }
 
@@ -1220,10 +1002,25 @@ func (t *Transition[S, C, Ev]) SendToKey[M any](name string, to Mailbox[M], key 
 }
 
 // keyed adds a step about one run of a spawned service.
-func (t *Transition[S, C, Ev]) keyed(kind stepKind, name, service string, key func(C, Ev) string) *Transition[S, C, Ev] {
-	t.t.sendTargets[len(t.t.steps)] = service
+func (t *Transition[S, C, Ev]) keyed(kind stepKind, name string, service Spawnable[S, C], key func(C, Ev) string) *Transition[S, C, Ev] {
+	var inv *invocation[S, C]
+	if service != nil {
+		inv = service.invocation()
+	}
+
+	switch {
+	case !t.b.owns(inv):
+		t.b.errorf("state %q: %s names a service of another chart", t.t.source.name, kind)
+	case !inv.spawned:
+		t.b.errorf("state %q: %s names service %q, which is not declared Spawned", t.t.source.name, kind, inv.name)
+	}
+
+	serviceName := ""
+	if inv != nil {
+		serviceName = inv.name
+	}
+	t.t.sendTargets[len(t.t.steps)] = serviceName
 	t.t.keys[len(t.t.steps)] = func(c C, ev any) string { return key(c, event[Ev](ev)) }
-	t.b.spawns = append(t.b.spawns, service)
 	t.t.steps = append(t.t.steps, step[C]{kind: kind, name: name, assign: nil, do: nil, raise: nil, random: false})
 
 	return t
@@ -1293,13 +1090,15 @@ func (t *Transition[S, C, Ev]) Emit[T any](name string, f func(C, Ev) T) *Transi
 // RaiseAfter queues the event f returns for the machine itself, to be
 // delivered once d has passed, like an event sent then. Unlike a delayed
 // transition it belongs to no state: it is delivered wherever the chart is
-// by then, unless a [Transition.CancelRaise] of the same name runs first or
-// the machine finishes. The driver keeps the timer, and the event waits in
-// the snapshot, so it survives a restart.
+// by then, unless a [Transition.CancelRaise] of the same delayed event runs
+// first or the machine finishes. The driver keeps the timer, and the event
+// waits in the snapshot, so it survives a restart. raise is the handle
+// [Builder.Delayed] returned.
 //
-// The event's type must be one the chart handles with an On somewhere, so
-// that a stored snapshot can name it; raising any other type panics.
-func (t *Transition[S, C, Ev]) RaiseAfter(name string, d time.Duration, f func(C, Ev) any) *Transition[S, C, Ev] {
+// It is a declaration error for T to be a type no transition of the chart
+// takes, since a stored snapshot must be able to name the waiting event.
+func (t *Transition[S, C, Ev]) RaiseAfter[T any](raise *Delayed[S, C], d time.Duration, f func(C, Ev) T) *Transition[S, C, Ev] {
+	name := t.delayed(raise)
 	if d < 0 {
 		t.b.errorf("state %q: raise %q has a negative delay %s", t.t.source.name, name, d)
 	}
@@ -1308,18 +1107,27 @@ func (t *Transition[S, C, Ev]) RaiseAfter(name string, d time.Duration, f func(C
 		t.t.raiseDelays = map[int]time.Duration{}
 	}
 	t.t.raiseDelays[len(t.t.steps)] = d
-	t.b.raises[name] = true
 
 	return t.Raise(name, f)
 }
 
-// CancelRaise drops the events that the [Transition.RaiseAfter] named name
-// raised and that are still waiting. It does nothing when none is.
-func (t *Transition[S, C, Ev]) CancelRaise(name string) *Transition[S, C, Ev] {
-	t.t.steps = append(t.t.steps, step[C]{kind: stepCancel, name: name, assign: nil, do: nil, raise: nil, random: false})
-	t.b.cancels = append(t.b.cancels, name)
+// CancelRaise drops the events raise is still waiting to deliver. It does
+// nothing when none is.
+func (t *Transition[S, C, Ev]) CancelRaise(raise *Delayed[S, C]) *Transition[S, C, Ev] {
+	t.t.steps = append(t.t.steps, step[C]{kind: stepCancel, name: t.delayed(raise), assign: nil, do: nil, raise: nil, random: false})
 
 	return t
+}
+
+// delayed returns the name of a delayed event, reporting one of another
+// chart.
+func (t *Transition[S, C, Ev]) delayed(raise *Delayed[S, C]) string {
+	if raise == nil || raise.b != t.b {
+		t.b.errorf("state %q: uses a delayed event of another chart", t.t.source.name)
+		return ""
+	}
+
+	return raise.name
 }
 
 // To sets the state the transition enters. Targeting a history state

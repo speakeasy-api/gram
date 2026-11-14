@@ -165,7 +165,7 @@ func newDriver(t *testing.T, rec *recorder, charge func(context.Context, *sc.Run
 			To("charging")
 		retrying.On[cancel]().To("cancelled")
 
-		b.Final("paid").Entry("ship", func(_ context.Context, o order) { rec.add("ship " + o.Receipt) })
+		b.Final("paid").Entry().Do("ship", func(_ context.Context, o order) { rec.add("ship " + o.Receipt) })
 		b.Final("cancelled")
 	})
 	require.NoError(t, err)
@@ -651,17 +651,19 @@ func TestTheChartsOwnActionsServicesAndTimersRunFromTheOutbox(t *testing.T) {
 	t.Parallel()
 
 	rec := &recorder{mu: sync.Mutex{}, calls: nil}
+	var closed *sc.Ending[string, order, string]
 	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
-		chart := b.Chart().Entry("opened", func(context.Context, order) { rec.add("opened") })
+		chart := b.Chart()
+		chart.Entry().Do("opened", func(context.Context, order) { rec.add("opened") })
 		load := chart.Invoke("load", func(context.Context, *sc.Run, order) (string, error) { return "rcpt", nil })
 		load.OnDone().Assign("setReceipt", func(o order, d sc.Done[string]) order { o.Receipt = d.Result; return o })
 		load.OnError().To("closed")
 		chart.After(200 * time.Millisecond).To("closed")
-		chart.Exit("closed", func(context.Context, order) { rec.add("closed") })
+		chart.Exit().Do("closed", func(context.Context, order) { rec.add("closed") })
 
 		b.Initial("open")
 		b.State("open")
-		b.Final("closed").Output(func(o order) string { return "closed with " + o.Receipt })
+		closed = b.Final("closed").Output(func(o order) string { return "closed with " + o.Receipt })
 	})
 	require.NoError(t, err)
 
@@ -674,7 +676,7 @@ func TestTheChartsOwnActionsServicesAndTimersRunFromTheOutbox(t *testing.T) {
 
 		snap, err := d.Load(t.Context(), "o1")
 		if assert.NoError(c, err) && assert.True(c, snap.Done()) {
-			output, ok := m.Output(snap)
+			output, ok := closed.Reached(snap)
 			assert.True(c, ok)
 			assert.Equal(c, "closed with rcpt", output)
 		}

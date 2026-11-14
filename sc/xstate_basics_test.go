@@ -455,7 +455,9 @@ func TestXBasDeterministicStateKeyNames(t *testing.T) {
 
 	m, err := sc.New("keys", func(b *xbasBuilder) {
 		b.Initial("test")
-		test := b.State("test").Entry("entry", noop).Exit("exit", noop)
+		test := b.State("test")
+		test.Entry().Do("entry", noop)
+		test.Exit().Do("exit", noop)
 		test.Stream("activity", func(context.Context, *sc.Run, counter) iter.Seq2[any, error] {
 			return func(func(any, error) bool) {}
 		}).OnError().Stay()
@@ -669,7 +671,9 @@ func xbasOrder(t *testing.T) *xbasMachine {
 		b.On[xbasFail]().Do("fail", func(context.Context, counter, xbasFail) {
 			panic("payment provider down")
 		})
-		b.State("pending").Entry("entry", noop).On[xbasPay]().To("paid")
+		pending := b.State("pending")
+		pending.Entry().Do("entry", noop)
+		pending.On[xbasPay]().To("paid")
 		b.Final("paid")
 	})
 	require.NoError(t, err)
@@ -1333,7 +1337,8 @@ func xbasNest(b *xbasBuilder, ids ...string) []*xbasState {
 			out[i] = b.State(ids[i])
 		}
 
-		out[i].Entry("enter", noop).Exit("exit", noop)
+		out[i].Entry().Do("enter", noop)
+		out[i].Exit().Do("exit", noop)
 	}
 	declare(b, 0)
 

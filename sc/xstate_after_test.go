@@ -156,7 +156,8 @@ func TestXAftAfterResolvesNamedDelayWithContextUpdatedBySameStateEntry(t *testin
 	m, err := sc.New("named_delay", func(b *sc.Builder[string, xaftMs]) {
 		b.Initial("a")
 		b.State("a").On[xaftGo]().To("b")
-		sb := b.State("b").AssignOnEntry("setMs", func(c xaftMs) xaftMs {
+		sb := b.State("b")
+		sb.Entry().Assign("setMs", func(c xaftMs) xaftMs {
 			c.Ms = 300
 			return c
 		})
@@ -184,14 +185,15 @@ func TestXAftAfterResolvesAllInitialStateDelaysAfterEntryContextPatch(t *testing
 
 	m, err := sc.New("initial_delays", func(b *sc.Builder[string, xaftMs]) {
 		b.Initial("waiting")
-		waiting := b.State("waiting").
-			AssignOnEntry("patch", func(c xaftMs) xaftMs {
+		waiting := b.State("waiting")
+		waiting.Entry().
+			Assign("patch", func(c xaftMs) xaftMs {
 				order = append(order, "entry")
 				c.Ms = 300
 
 				return c
 			}).
-			Entry("effect", xaftEntry[xaftMs])
+			Do("effect", xaftEntry[xaftMs])
 		waiting.Delay("first", func(c xaftMs) time.Duration {
 			order = append(order, "first")
 			return xaftMillis(c.Ms + c.Offset)
@@ -227,15 +229,15 @@ func TestXAftAfterResolvesAllInitialStateDelaysAfterEntryContextPatch(t *testing
 // with a delayed transition and an event that cancels its timer without
 // leaving it.
 //
-// XState's entry action also tries to cancel the timer, which does nothing
-// because the timer is scheduled after the entry actions run; the port
-// leaves that attempt out, since sc starts the timer at the same point.
+// As in XState, the entry step that cancels the state's timers does nothing,
+// because the state's timers start after its entry steps run.
 func xaftCancellable(t *testing.T) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("cancel", func(b *xaftBuilder) {
 		b.Initial("waiting")
 		waiting := b.State("waiting")
+		waiting.Entry().CancelAfter("waiting")
 		waiting.After(xaftMillis(100)).To("done")
 		waiting.On[xaftCancel]().CancelAfter("waiting")
 		b.State("done")
@@ -420,9 +422,12 @@ func TestXAftAfterParentEntersChildWithoutReenteringSelf(t *testing.T) {
 		b.Initial("one")
 		one := b.State("one", func(b *xaftBuilder) {
 			b.Initial("two")
-			b.State("two").Entry("entered", noop)
-			b.State("three").Entry("entered", noop).Always().To("end")
-		}).Entry("entered", noop)
+			b.State("two").Entry().Do("entered", noop)
+			three := b.State("three")
+			three.Entry().Do("entered", noop)
+			three.Always().To("end")
+		})
+		one.Entry().Do("entered", noop)
 		one.After(xaftMillis(10)).To("three")
 		b.Final("end")
 	})
@@ -739,8 +744,8 @@ func xaftGuardNoCondition(t *testing.T) *sc.Machine[string, counter] {
 		a.On[xaftElapsedTimer]().
 			When("over100", func(_ counter, ev xaftElapsedTimer) bool { return ev.Elapsed > 100 }).
 			To("c")
-		b.State("b").Entry("enter", noop)
-		b.State("c").Entry("enter", noop)
+		b.State("b").Entry().Do("enter", noop)
+		b.State("c").Entry().Do("enter", noop)
 	})
 	require.NoError(t, err)
 
@@ -1200,7 +1205,8 @@ func TestXAftGuardsSelfGetSnapshotReturnsSnapshotCommittedBeforeMacrostep(t *tes
 		b.State("mid").Always().
 			Do("seeAlways", func(context.Context, counter, struct{}) { seen["always"] = inst.Snapshot().Active() }).
 			To("b")
-		sb := b.State("b").RaiseOnEntry("raiseCheck", func(counter) any { return xaftCheck{} })
+		sb := b.State("b")
+		sb.Entry().Raise("raiseCheck", func(counter) xaftCheck { return xaftCheck{} })
 		sb.On[xaftCheck]().
 			Do("seeRaised", func(context.Context, counter, xaftCheck) { seen["raised"] = inst.Snapshot().Active() })
 	})
@@ -1458,7 +1464,7 @@ func TestXAftExecCallsMixedCustomAndBuiltinActionsInDefinitionOrder(t *testing.T
 	m, err := sc.New("mixed", func(b *xaftBuilder) {
 		b.Initial("a")
 		b.State("a").On[xaftNext]().To("b")
-		b.State("b").Entry("custom", noop).Entry("assign", noop)
+		b.State("b").Entry().Do("custom", noop).Do("assign", noop)
 	})
 	require.NoError(t, err)
 
@@ -1479,7 +1485,7 @@ func TestXAftExecCallsInitialCustomActionsWhenStarting(t *testing.T) {
 	called := false
 
 	m, err := sc.New("initial_actions", func(b *xaftBuilder) {
-		b.Chart().Entry("call", func(context.Context, counter) { called = true })
+		b.Chart().Entry().Do("call", func(context.Context, counter) { called = true })
 	})
 	require.NoError(t, err)
 	require.False(t, called)
@@ -1503,7 +1509,7 @@ func TestXAftExecResolvesInitialAssignActionsBeforeStarting(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("initial_assign", func(b *sc.Builder[string, xaftFlag]) {
-		b.Chart().AssignOnEntry("call", func(c xaftFlag) xaftFlag {
+		b.Chart().Entry().Assign("call", func(c xaftFlag) xaftFlag {
 			c.Flag = true
 			return c
 		})
@@ -1522,7 +1528,8 @@ func xaftRaisedChart(t *testing.T) *sc.Machine[string, counter] {
 	m, err := sc.New("raised", func(b *xaftBuilder) {
 		b.Initial("a")
 		b.State("a").On[xaftNext]().To("b")
-		sb := b.State("b").RaiseOnEntry("raise", func(counter) any { return xaftRaised{} })
+		sb := b.State("b")
+		sb.Entry().Raise("raise", func(counter) xaftRaised { return xaftRaised{} })
 		sb.On[xaftRaised]().Do("capture", xaftDo[counter, xaftRaised]).To("c")
 		b.State("c")
 	})
@@ -1568,8 +1575,9 @@ func TestXAftExecCallsInvokeCreatorWithRaisedEvent(t *testing.T) {
 	m, err := sc.New("invoke_creator", func(b *xaftBuilder) {
 		b.Initial("a")
 		b.State("a").On[xaftNext]().To("b")
-		b.State("b").RaiseOnEntry("raise", func(counter) any { return xaftRaised{} }).
-			On[xaftRaised]().To("c")
+		sb := b.State("b")
+		sb.Entry().Raise("raise", func(counter) xaftRaised { return xaftRaised{} })
+		sb.On[xaftRaised]().To("c")
 		b.State("c").InvokeOn[xaftRaised]("creator", func(context.Context, *sc.Run, counter, xaftRaised) (struct{}, error) {
 			return struct{}{}, nil
 		}).OnError().Stay()
@@ -1649,25 +1657,20 @@ func TestXAftExecProvidesIntermediateContextToActionBetweenAssigns(t *testing.T)
 	m, err := sc.New("intermediate", func(b *xaftBuilder) {
 		b.Initial("a")
 		b.State("a").On[xaftNext]().To("b")
-		b.State("b").
-			AssignOnEntry("one", set(1)).
-			Entry("capture", noop).
-			AssignOnEntry("two", set(2))
+		b.State("b").Entry().
+			Assign("one", set(1)).
+			Do("capture", noop).
+			Assign("two", set(2))
 	})
 	require.NoError(t, err)
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
 	snap, effects := m.Transition(snap, xaftNext{}, epoch)
 	require.Equal(t, 2, snap.Context.N)
+	require.Equal(t, 1, effect(t, effects, sc.EffectAction).Context.N)
 
-	// DIVERGES from XState: XState expects the action enqueued between the
-	// two context values to be called with the first, 1. sc runs every
-	// AssignOnEntry of a state before any of its entry actions, whatever
-	// order they are declared in, so the action sees the last, 2.
-	require.Equal(t, 2, effect(t, effects, sc.EffectAction).Context.N)
-
-	// The steps of a transition do run in the order they are declared, so
-	// the same sequence placed there gives XState's answer.
+	// The steps of a transition run in the order they are declared too, so
+	// the same sequence placed there gives the same answer.
 	onTransition, err := sc.New("intermediate_steps", func(b *xaftBuilder) {
 		b.Initial("a")
 		b.State("a").On[xaftNext]().
@@ -1696,12 +1699,12 @@ func TestXAftExecInitialActionsReceiveContextUpdatedOnlyByPrecedingAssigns(t *te
 	}
 
 	m, err := sc.New("preceding", func(b *xaftBuilder) {
-		b.Chart().
-			Entry("count0", noop).
-			AssignOnEntry("inc1", inc).
-			Entry("count1", noop).
-			AssignOnEntry("inc2", inc).
-			Entry("count2", noop)
+		b.Chart().Entry().
+			Do("count0", noop).
+			Assign("inc1", inc).
+			Do("count1", noop).
+			Assign("inc2", inc).
+			Do("count2", noop)
 	})
 	require.NoError(t, err)
 
@@ -1714,31 +1717,33 @@ func TestXAftExecInitialActionsReceiveContextUpdatedOnlyByPrecedingAssigns(t *te
 		actual = append(actual, e.Context.N)
 	}
 
-	// DIVERGES from XState: XState expects [0, 1, 2], each action seeing
-	// only the assignments before it. sc runs every AssignOnEntry of a state
-	// before any of its entry actions, so all three see the final context.
-	require.Equal(t, []int{2, 2, 2}, actual)
+	// As in XState, each action sees only the assignments before it.
+	require.Equal(t, []int{0, 1, 2}, actual)
 }
 
 // xaftReadingParent is the parent of the "read the updated state of a child"
 // cases. As in XState, the machine itself invokes the child, and the
 // transition for the child's event picks its target by where the child is.
-func xaftReadingParent(t *testing.T, child *sc.Machine[string, counter]) *sc.Machine[string, counter] {
+// It returns the parent with the handle of its child.
+func xaftReadingParent(t *testing.T, child *sc.Machine[string, counter]) (*sc.Machine[string, counter], *sc.Child[string, counter, string, counter, struct{}]) {
 	t.Helper()
 
+	var myChild *sc.Child[string, counter, string, counter, struct{}]
+
 	m, err := sc.New("reading_parent", func(b *xaftBuilder) {
-		b.Chart().InvokeMachine("myChild", child, xaftSameContext, xaftNoResult[string, counter]).OnError().Stay()
+		myChild = b.Chart().InvokeMachine("myChild", child, xaftSameContext, xaftNoResult[string, counter])
+		myChild.OnError().Stay()
 
 		b.Initial("initial")
 		initial := b.State("initial")
-		initial.On[xaftChildUpdated]().WhenChildIn("myChild", "b").To("success")
+		initial.On[xaftChildUpdated]().WhenChildIn(myChild, "b").To("success")
 		initial.On[xaftChildUpdated]().To("fail")
 		b.Final("success")
 		b.Final("fail")
 	})
 	require.NoError(t, err)
 
-	return m
+	return m, myChild
 }
 
 // xaftCheckReadingParent runs the parent to its end and checks that it found
@@ -1746,15 +1751,17 @@ func xaftReadingParent(t *testing.T, child *sc.Machine[string, counter]) *sc.Mac
 func xaftCheckReadingParent(t *testing.T, child *sc.Machine[string, counter]) {
 	t.Helper()
 
-	inst, err := xaftReadingParent(t, child).Instance(t.Context(), counter{N: 0})
+	parent, myChild := xaftReadingParent(t, child)
+
+	inst, err := parent.Instance(t.Context(), counter{N: 0})
 	require.NoError(t, err)
 	defer inst.Close()
 
 	// Once the child has started, the parent's snapshot holds the child's,
-	// read by its service's name.
+	// read through its handle.
 	synctest.Wait()
 
-	started, ok := inst.Snapshot().Child(child, "myChild")
+	started, ok := myChild.Snapshot(inst.Snapshot())
 	require.True(t, ok)
 	require.Equal(t, []string{"a"}, started.Active())
 
@@ -1776,7 +1783,7 @@ func TestXAftExecParentReadsUpdatedStateOfChildOnEventFromIt(t *testing.T) {
 		child, err := sc.New("updating_child", func(b *xaftBuilder) {
 			b.Initial("a")
 			b.State("a").After(time.Millisecond).To("b")
-			b.State("b").EmitOnEntry("childUpdated", func(counter) xaftChildUpdated { return xaftChildUpdated{} })
+			b.State("b").Entry().Emit("childUpdated", func(counter) xaftChildUpdated { return xaftChildUpdated{} })
 		})
 		require.NoError(t, err)
 
@@ -1790,7 +1797,7 @@ func TestXAftExecSendsImmediateEventsToInitiallyInvokedActors(t *testing.T) {
 	t.Parallel()
 
 	m := xaftPonger(t, func(waiting *sc.StateBuilder[string, counter], ponger sc.Mailbox[any]) {
-		waiting.SendOnEntry("ping", ponger, func(counter) any { return xaftPing{} })
+		waiting.Entry().SendTo("ping", ponger, func(counter) any { return xaftPing{} })
 	})
 
 	// The send comes after the start of the service it is for.
@@ -1852,12 +1859,12 @@ func TestXAftExecCreatesInvokeBasedOnContextUpdatedByEntryActions(t *testing.T) 
 	m, err := sc.New("invoke_context", func(b *sc.Builder[string, xaftFlag]) {
 		b.Initial("a")
 		b.State("a").On[xaftNext]().To("b")
-		b.State("b").
-			AssignOnEntry("update", func(c xaftFlag) xaftFlag {
-				c.Flag = true
-				return c
-			}).
-			Invoke("check", func(context.Context, *sc.Run, xaftFlag) (struct{}, error) { return struct{}{}, nil }).
+		sb := b.State("b")
+		sb.Entry().Assign("update", func(c xaftFlag) xaftFlag {
+			c.Flag = true
+			return c
+		})
+		sb.Invoke("check", func(context.Context, *sc.Run, xaftFlag) (struct{}, error) { return struct{}{}, nil }).
 			OnError().Stay()
 	})
 	require.NoError(t, err)
@@ -1886,7 +1893,7 @@ func TestXAftExecDeliversEventsSentFromEntryActionsToServiceInvokedInSameState(t
 		sb := b.State("b")
 		myChild := sb.InvokeMachine("myChild", child, xaftSameContext, xaftNoResult[string, counter])
 		myChild.OnError().Stay()
-		sb.SendOnEntry("knockKnock", myChild, func(counter) any { return xaftKnock{} })
+		sb.Entry().SendTo("knockKnock", myChild, func(counter) any { return xaftKnock{} })
 	})
 	require.NoError(t, err)
 
@@ -1969,7 +1976,7 @@ func TestXAftExecDeliversEventsSentFromExitActionsToServiceInvokedInSameState(t 
 			b.Initial("active")
 			active := b.State("active")
 			inv := active.Receive("my-service", service)
-			active.SendOnExit("myEvent", inv, func(counter) xaftMyEvent { return xaftMyEvent{} })
+			active.Exit().SendTo("myEvent", inv, func(counter) xaftMyEvent { return xaftMyEvent{} })
 			inv.OnDone().Stay()
 			inv.OnError().Stay()
 			active.On[xaftToggle]().To("inactive")

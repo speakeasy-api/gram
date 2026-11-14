@@ -66,7 +66,9 @@ func TestNewReportsDeclarationErrors(t *testing.T) {
 			name: "duplicate action name",
 			def: func(b *sc.Builder[string, counter]) {
 				b.Initial("a")
-				b.State("a").Entry("log", noop).Exit("log", noop)
+				a := b.State("a")
+				a.Entry().Do("log", noop)
+				a.Exit().Do("log", noop)
 			},
 			want: `state "a": more than one action is named "log"`,
 		},
@@ -123,7 +125,7 @@ func TestNewReportsEveryErrorAtOnce(t *testing.T) {
 	_, err := sc.New("bad", func(b *sc.Builder[string, counter]) {
 		b.Initial("a")
 		b.State("a").On[tick]().To("missing")
-		b.State("a").Entry("", noop)
+		b.State("a").Entry().Do("", noop)
 	})
 
 	require.ErrorContains(t, err, `transition targets undeclared state "missing"`)

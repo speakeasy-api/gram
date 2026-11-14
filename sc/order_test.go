@@ -116,7 +116,7 @@ func orderChart(t *testing.T, charge func(context.Context, *sc.Run, order) (stri
 		}).OnDone().To(shipped)
 
 		b.Final(shipped)
-		b.Final(cancelled).Entry("refund", func(context.Context, order) {})
+		b.Final(cancelled).Entry().Do("refund", func(context.Context, order) {})
 	}, opts...)
 	require.NoError(t, err)
 

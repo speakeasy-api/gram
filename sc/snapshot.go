@@ -185,30 +185,6 @@ func (s Snapshot[S, C]) Checkpoint(id string) json.RawMessage {
 	return nil
 }
 
-// Child returns the current snapshot of the child machine that the service
-// named service runs, as the child last handed it up, and reports whether
-// there is one. child is the machine the service was declared with. For a
-// spawned child machine it returns the first run; read a particular one
-// from [Snapshot.Checkpoint] with [Machine.Restore].
-func (s Snapshot[S, C]) Child[S2 comparable, C2 any](child *Machine[S2, C2], service string) (Snapshot[S2, C2], bool) {
-	var none Snapshot[S2, C2]
-
-	for _, inv := range s.invocations {
-		if inv.name != service || len(inv.saved) == 0 {
-			continue
-		}
-
-		snap, _, err := child.Restore(inv.saved, time.Time{})
-		if err != nil {
-			return none, false
-		}
-
-		return snap, true
-	}
-
-	return none, false
-}
-
 // HeldResource is a resource of an active state.
 type HeldResource[S comparable] struct {
 	// ID is the ID of the effect that acquires the resource.

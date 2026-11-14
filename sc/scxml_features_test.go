@@ -56,12 +56,12 @@ func TestAStateRaisesEventsOnEntryAndExit(t *testing.T) {
 
 	m, err := sc.New("raising", func(b *sc.Builder[string, counter]) {
 		b.Initial("a")
-		b.State("a").
-			RaiseOnExit("leaving", func(counter) any { return ping{} }).
-			On[tick]().To("b")
-		b.State("b").
-			RaiseOnEntry("arrived", func(counter) any { return back{} }).
-			On[ping]().Assign("count", increment[ping])
+		a := b.State("a")
+		a.Exit().Raise("leaving", func(counter) ping { return ping{} })
+		a.On[tick]().To("b")
+		bs := b.State("b")
+		bs.Entry().Raise("arrived", func(counter) back { return back{} })
+		bs.On[ping]().Assign("count", increment[ping])
 		b.State("b").On[back]().Assign("count", increment[back])
 	})
 	require.NoError(t, err)
@@ -163,11 +163,12 @@ func TestAStateAssignsOnEntryAndExit(t *testing.T) {
 	m, err := sc.New("visits", func(b *sc.Builder[string, counter]) {
 		b.Initial("idle")
 		b.State("idle").On[tick]().To("trying")
-		b.State("trying").
-			AssignOnEntry("reset", func(counter) counter { return counter{N: 0} }).
-			AssignOnExit("mark", func(c counter) counter { c.N += 1000; return c }).
-			Entry("announce", noop).
-			On[tick]().Assign("count", increment[tick])
+		trying := b.State("trying")
+		trying.Entry().
+			Assign("reset", func(counter) counter { return counter{N: 0} }).
+			Do("announce", noop)
+		trying.Exit().Assign("mark", func(c counter) counter { c.N += 1000; return c })
+		trying.On[tick]().Assign("count", increment[tick])
 		b.State("trying").On[leave]().To("idle")
 	})
 	require.NoError(t, err)
@@ -193,7 +194,7 @@ func TestAFinalStateAssignsBeforeItsParentCompletes(t *testing.T) {
 		b.State("work", func(b *sc.Builder[string, counter]) {
 			b.Initial("doing")
 			b.State("doing").On[tick]().To("finished")
-			b.Final("finished").AssignOnEntry("result", func(c counter) counter { c.N = 42; return c })
+			b.Final("finished").Entry().Assign("result", func(c counter) counter { c.N = 42; return c })
 		}).OnDone().
 			When("hasResult", func(c counter, _ struct{}) bool { return c.N == 42 }).
 			To("done")
@@ -217,14 +218,14 @@ func TestAStateSendsAndEmitsOnEntry(t *testing.T) {
 		b.Initial("idle")
 		b.State("idle").On[tick]().To("working")
 
-		working := b.State("working").
-			EmitOnEntry("announce", func(counter) greeting { return greeting{Text: "started"} })
+		working := b.State("working")
+		working.Entry().Emit("announce", func(counter) greeting { return greeting{Text: "started"} })
 		inv := working.Receive[ping]("work", func(context.Context, *sc.Run, counter, iter.Seq[ping]) (int, error) { return 0, nil })
-		working.SendOnEntry("greet", inv, func(counter) ping { return ping{} })
+		working.Entry().SendTo("greet", inv, func(counter) ping { return ping{} })
 		inv.OnDone().To("done")
 		inv.OnError().To("done")
 
-		b.Final("done").EmitOnEntry("farewell", func(counter) greeting { return greeting{Text: "finished"} })
+		b.Final("done").Entry().Emit("farewell", func(counter) greeting { return greeting{Text: "finished"} })
 	})
 	require.NoError(t, err)
 

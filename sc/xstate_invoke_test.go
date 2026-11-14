@@ -25,8 +25,9 @@ package sc_test
 //     Only InvokeMachine has an input mapper. A service declares the event
 //     its state was entered with by InvokeOn; a stream cannot, so a
 //     transition records what the stream needs in the context.
-//   - An XState entry action that sends to the parent is EmitOnEntry, and
-//     one that sends to an actor its state invokes is SendOnEntry.
+//   - An XState entry action that sends to the parent is an Emit entry step,
+//     and one that sends to an actor its state invokes is a SendTo entry
+//     step.
 //   - XState runs its promise cases twice, for a Promise and for a
 //     PromiseLike. Go has one kind of function, so each is ported once.
 
@@ -310,13 +311,13 @@ func TestXInvStartsServicesExplicitMachineInvokeConfig(t *testing.T) {
 		child, err := sc.New("fetch", func(b *sc.Builder[string, xinvFetchChild]) {
 			b.Initial("pending")
 			pending := b.State("pending")
-			pending.RaiseOnEntry("resolve", func(xinvFetchChild) any { return xinvResolve{User: "David"} })
+			pending.Entry().Raise("resolve", func(xinvFetchChild) xinvResolve { return xinvResolve{User: "David"} })
 			pending.On[xinvResolve]().
 				When("has user id", func(c xinvFetchChild, _ xinvResolve) bool { return c.UserID != "" }).
 				Assign("keep user", func(c xinvFetchChild, ev xinvResolve) xinvFetchChild { c.User = ev.User; return c }).
 				To("success")
 			b.Final("success")
-			b.State("failure").EmitOnEntry("reject", func(xinvFetchChild) xinvReject { return xinvReject{} })
+			b.State("failure").Entry().Emit("reject", func(xinvFetchChild) xinvReject { return xinvReject{} })
 		}, sc.AllowUnreachable())
 		require.NoError(t, err)
 
@@ -351,7 +352,7 @@ func TestXInvStartsServicesExplicitMachineInvokeMachine(t *testing.T) {
 		child, err := sc.New("child", func(b *xinvBuilder) {
 			b.Initial("pending")
 			pending := b.State("pending")
-			pending.RaiseOnEntry("resolve", func(counter) any { return xinvResolve{User: ""} })
+			pending.Entry().Raise("resolve", func(counter) xinvResolve { return xinvResolve{User: ""} })
 			pending.On[xinvResolve]().To("success")
 			b.Final("success")
 		})
@@ -382,7 +383,7 @@ func xinvSendingChild(t *testing.T) *sc.Machine[string, counter] {
 
 	child, err := sc.New("child", func(b *xinvBuilder) {
 		b.Initial("sending")
-		b.State("sending").EmitOnEntry("report", func(counter) xinvSuccess { return xinvSuccess{Data: 42} })
+		b.State("sending").Entry().Emit("report", func(counter) xinvSuccess { return xinvSuccess{Data: 42} })
 	})
 	require.NoError(t, err)
 
@@ -445,7 +446,7 @@ func xinvSubMachine(t *testing.T) *sc.Machine[string, counter] {
 	child, err := sc.New("child", func(b *xinvBuilder) {
 		b.Initial("one")
 		b.State("one").On[xinvNext]().To("two")
-		b.State("two").EmitOnEntry("tell parent", func(counter) xinvNext { return xinvNext{} })
+		b.State("two").Entry().Emit("tell parent", func(counter) xinvNext { return xinvNext{} })
 	})
 	require.NoError(t, err)
 
@@ -467,7 +468,8 @@ func TestXInvCommunicatesWithTheChildMachineInvokeOnMachine(t *testing.T) {
 			fooChild.OnError().Stay()
 
 			b.Initial("one")
-			one := b.State("one").SendOnEntry("send next", fooChild, func(counter) any { return xinvNext{} })
+			one := b.State("one")
+			one.Entry().SendTo("send next", fooChild, func(counter) any { return xinvNext{} })
 			one.On[xinvNext]().To("two")
 			b.Final("two")
 		})
@@ -501,7 +503,7 @@ func TestXInvCommunicatesWithTheChildMachineInvokeOnState(t *testing.T) {
 			one := b.State("one")
 			fooChild := one.InvokeMachine("foo-child", xinvSubMachine(t), xinvSame, xinvNoOutput[counter])
 			fooChild.OnError().Stay()
-			one.SendOnEntry("send next", fooChild, func(counter) any { return xinvNext{} })
+			one.Entry().SendTo("send next", fooChild, func(counter) any { return xinvNext{} })
 			one.On[xinvNext]().To("two")
 			b.Final("two")
 		})
@@ -535,7 +537,7 @@ func TestXInvTransitionsCorrectlyIfChildInvocationGoesDirectlyToFinalState(t *te
 			b.Initial("one")
 			one := b.State("one")
 			invoked := one.InvokeMachine("foo-child", child, xinvSame, xinvNoOutput[counter])
-			one.SendOnEntry("send next", invoked, func(counter) any { return xinvNext{} })
+			one.Entry().SendTo("send next", invoked, func(counter) any { return xinvNext{} })
 			invoked.OnDone().To("two")
 			invoked.OnError().Stay()
 			b.State("two").On[xinvNext]().To("three")
@@ -601,7 +603,7 @@ func TestXInvDoesNotReinvokeRootLevelInvocationsOnRootNonReenteringTransitions(t
 
 		m, err := sc.New("m", func(b *xinvBuilder) {
 			chart := b.Chart()
-			chart.Entry("count entry", func(context.Context, counter) { entries.Add(1) })
+			chart.Entry().Do("count entry", func(context.Context, counter) { entries.Add(1) })
 			chart.Stream("callback", xinvDisposable[counter](
 				func() { invoked.Add(1) },
 				func() { disposed.Add(1) },
@@ -1378,7 +1380,7 @@ func xinvPingPongChart(t *testing.T) *sc.Machine[string, counter] {
 		active := b.State("active")
 		child := active.ReceiveStream("child", xinvPonger)
 		child.OnError().Stay()
-		active.SendOnEntry("ping", child, func(counter) xinvPing { return xinvPing{} })
+		active.Entry().SendTo("ping", child, func(counter) xinvPing { return xinvPing{} })
 		active.On[xinvPong]().To("done")
 		b.Final("done")
 	})
@@ -1795,7 +1797,7 @@ func TestXInvLogicHasAReferenceToTheParent(t *testing.T) {
 			waiting := b.State("waiting")
 			ponger := waiting.ReceiveStream("ponger", xinvPonger)
 			ponger.OnError().Stay()
-			waiting.SendOnEntry("ping", ponger, func(counter) xinvPing { return xinvPing{} })
+			waiting.Entry().SendTo("ping", ponger, func(counter) xinvPing { return xinvPing{} })
 			waiting.On[xinvPong]().To("done")
 			b.Final("done")
 		})
@@ -1837,7 +1839,7 @@ func TestXInvTransitionFunctionEmitsOnSnapshot(t *testing.T) {
 				}
 			})
 			doubler.OnError().Stay()
-			chart.SendOnEntry("update", doubler, func(counter) xinvSetValue { return xinvSetValue{Value: 21} })
+			chart.Entry().SendTo("update", doubler, func(counter) xinvSetValue { return xinvSetValue{Value: 21} })
 			chart.On[xinvDoubled]().Assign("keep", func(c counter, ev xinvDoubled) counter { c.N = ev.Value; return c })
 		})
 		require.NoError(t, err)
@@ -1867,7 +1869,7 @@ func TestXInvCreatesInvocationsFromMachinesInNestedStates(t *testing.T) {
 				active := b.State("active")
 				pongActor := active.InvokeMachine("pong", pong, xinvSame, xinvNoOutput[counter])
 				pongActor.OnError().Stay()
-				active.SendOnEntry("ping", pongActor, func(counter) any { return xinvPing{} })
+				active.Entry().SendTo("ping", pongActor, func(counter) any { return xinvPing{} })
 				active.On[xinvPong]().To("innerSuccess")
 				b.Final("innerSuccess")
 			}).OnDone().To("done")
@@ -1882,7 +1884,7 @@ func TestXInvCreatesInvocationsFromMachinesInNestedStates(t *testing.T) {
 // XState: should emit onSnapshot (with machines)
 //
 // Partial port: sc has no onSnapshot, but a parent's snapshot keeps the
-// snapshot of the machine it invokes, read with Snapshot.Child, and every
+// snapshot of the machine it invokes, read with Child.Snapshot, and every
 // step of the child is a step of the parent. The port waits for the parent's
 // snapshot to hold a child that has reached "b". As in XState, the machine
 // has no states.
@@ -1897,14 +1899,17 @@ func TestXInvMachineEmitsOnSnapshot(t *testing.T) {
 		})
 		require.NoError(t, err)
 
+		var invoked *sc.Child[string, counter, string, counter, struct{}]
+
 		m, err := sc.New("m", func(b *xinvBuilder) {
-			b.Chart().InvokeMachine("child", child, xinvSame, xinvNoOutput[counter]).OnError().Stay()
+			invoked = b.Chart().InvokeMachine("child", child, xinvSame, xinvNoOutput[counter])
+			invoked.OnError().Stay()
 		})
 		require.NoError(t, err)
 
 		childIn := func(state string) func(sc.Snapshot[string, counter]) bool {
 			return func(s sc.Snapshot[string, counter]) bool {
-				snap, ok := s.Child(child, "child")
+				snap, ok := invoked.Snapshot(s)
 
 				return ok && snap.In(state)
 			}
@@ -2106,7 +2111,7 @@ func TestXInvInvokesAnActorWhenReenteringInvokingStateWithinASingleMacrostep(t *
 			active.Stream("callback", xinvDisposable[counter](func() { started.Add(1) }, func() {})).OnError().Stay()
 			active.Always().When("first visit", func(c counter, _ struct{}) bool { return c.N == 0 }).To("inactive")
 			inactive := b.State("inactive")
-			inactive.AssignOnEntry("count", func(c counter) counter { c.N++; return c })
+			inactive.Entry().Assign("count", func(c counter) counter { c.N++; return c })
 			inactive.Always().To("active")
 		})
 		require.NoError(t, err)
@@ -2598,5 +2603,5 @@ func TestXInvProvidesInputToAnActorCreator(t *testing.T) {
 //     (sc binds services by name with Machine.Bind, but not invoked machines)
 //   - should be able to receive a delayed event sent by the entry action of the invoking state
 //     (a delayed send to a child, carrying a reference to the sender; an sc
-//     state sends on entry at once, and only a delayed transition sends
-//     later)
+//     state sends to a child on entry at once, and what it raises later on
+//     entry is an event for itself)

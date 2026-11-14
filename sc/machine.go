@@ -159,11 +159,9 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 		actions:     map[string]chartAction[S, C]{},
 		kinds:       map[string]bool{},
 		raises:      map[string]bool{},
-		cancels:     nil,
+		raisedTypes: nil,
 		sends:       nil,
 		emits:       false,
-		releases:    nil,
-		spawns:      nil,
 		emitTypes:   nil,
 		outputTypes: nil,
 	}
@@ -201,11 +199,7 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	}
 
 	m.resolve(b)
-	for _, name := range b.cancels {
-		if !b.raises[name] {
-			b.errorf("CancelRaise names %q, which no RaiseAfter declares", name)
-		}
-	}
+
 	// Sends address a handle, so they reach a receiving service; what is
 	// left to check is that every service of that name reads the message.
 	for _, send := range b.sends {
@@ -233,24 +227,18 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 			b.errorf("a send addresses %q, which is not a service of the chart", send.service)
 		}
 	}
-	for _, name := range b.releases {
-		if resource, ok := b.kinds[name]; !ok || !resource {
-			b.errorf("Release names %q, which is not a resource of the chart", name)
-		}
-	}
-	for _, name := range b.spawns {
-		spawned := false
-		for _, n := range m.all() {
-			for _, inv := range n.invocations {
-				spawned = spawned || (inv.name == name && inv.spawned)
-			}
-		}
-		if !spawned {
-			b.errorf("Spawn or StopSpawned names %q, which is not a service declared Spawned", name)
-		}
-	}
+
 	m.sends, m.emits = len(b.sends) > 0, b.emits
 	m.registerEvents(b)
+
+	// A raised event no transition takes could never do anything, and a
+	// delayed one could not be stored.
+	for _, t := range b.raisedTypes {
+		if !m.anyEvent && !m.handled[t] {
+			b.errorf("an event of type %s is raised, but no transition of the chart takes it", t)
+		}
+	}
+
 	if len(b.errs) == 0 {
 		m.checkOutputs(b)
 		m.checkTriggers(b)
@@ -369,7 +357,7 @@ func (m *Machine[S, C]) resolve(b *build[S, C]) {
 		// The chart's own actions are named after the machine, so a state
 		// of that name would take them for its own.
 		root := m.root
-		if n.name == root.name && len(root.transitions)+len(root.entry)+len(root.exit)+len(root.entryRuns)+len(root.exitRuns)+len(root.invocations) > 0 {
+		if n.name == root.name && (len(root.transitions)+len(root.invocations) > 0 || hasSteps(root.onEntry) || hasSteps(root.onExit)) {
 			b.errorf("state %q: has the machine's name, which the chart's own actions, services and timers use", n.name)
 		}
 	}
@@ -451,20 +439,6 @@ func (m *Machine[S, C]) resolveBehaviour(b *build[S, C], n *node[S, C]) {
 		}
 	}
 
-	for _, name := range n.entryRuns {
-		known(name)
-	}
-	for _, name := range n.exitRuns {
-		known(name)
-	}
-
-	for _, a := range n.entry {
-		claim(a.name)
-	}
-	for _, a := range n.exit {
-		claim(a.name)
-	}
-
 	services := map[string]bool{}
 	for _, inv := range n.invocations {
 		if inv.name == "" || services[inv.name] {
@@ -488,19 +462,21 @@ func (m *Machine[S, C]) resolveBehaviour(b *build[S, C], n *node[S, C]) {
 		}
 	}
 
-	for _, t := range n.transitions {
+	// The steps of entry and exit are checked as a transition's are.
+	steps := n.transitions
+	for _, t := range []*transition[S, C]{n.onEntry, n.onExit} {
+		if t != nil {
+			steps = append(steps, t)
+		}
+	}
+
+	for _, t := range steps {
 		if t.trigger == triggerAfter && (t.delayFn != nil || t.deadlineFn != nil) && t.delayName == "" {
 			b.errorf("state %q: a delay has no name", n.name)
 		}
 
 		t.inNodes = m.resolveConditions(b, n, "WhenIn", t.inIDs)
 		t.notInNodes = m.resolveConditions(b, n, "WhenNotIn", t.notInIDs)
-
-		for _, cond := range t.childConds {
-			if resource, ok := b.kinds[cond.service]; !ok || resource {
-				b.errorf("state %q: WhenChildIn names %q, which is not a service of the chart", n.name, cond.service)
-			}
-		}
 
 		for _, g := range t.guards {
 			if g.name == "" {
@@ -540,7 +516,8 @@ func (m *Machine[S, C]) resolveBehaviour(b *build[S, C], n *node[S, C]) {
 		}
 
 		if t.targetID == nil {
-			if len(t.steps) == 0 && !t.stay {
+			// An entry or exit list may be empty: asking for one declares nothing.
+			if len(t.steps) == 0 && !t.stay && t.trigger != triggerNone {
 				b.errorf("state %q: a transition has neither a target nor any steps; mark it Stay to drop its event on purpose", n.name)
 			}
 			if t.reenter {
@@ -766,44 +743,13 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 	}
 	write("\n")
 
-	for _, a := range n.entry {
-		write("entry %q\n", a.name)
-	}
-	for _, a := range n.exit {
-		write("exit %q\n", a.name)
-	}
-	for k, name := range n.entryRuns {
-		write("entry run %q if=%t\n", name, n.entryConds[k] != nil)
-	}
-	for k, name := range n.exitRuns {
-		write("exit run %q if=%t\n", name, n.exitConds[k] != nil)
-	}
-	for _, assign := range n.entryAssigns {
-		write("entry assign %q\n", assign.name)
-	}
-	for _, assign := range n.exitAssigns {
-		write("exit assign %q\n", assign.name)
-	}
-	for _, send := range n.entrySends {
-		write("entry send %q to=%q\n", send.name, send.service)
-	}
-	for _, send := range n.exitSends {
-		write("exit send %q to=%q\n", send.name, send.service)
-	}
-	for _, emit := range n.entryEmits {
-		write("entry emit %q\n", emit.name)
-	}
-	for _, emit := range n.exitEmits {
-		write("exit emit %q\n", emit.name)
-	}
-	for _, raise := range n.entryRaises {
-		write("entry raise %q\n", raise.name)
-	}
-	for _, raise := range n.entryDelayed {
-		write("entry raise %q after=%d cancel=%t\n", raise.name, raise.delay, raise.cancel)
-	}
-	for _, raise := range n.exitRaises {
-		write("exit raise %q\n", raise.name)
+	for k, t := range []*transition[S, C]{n.onEntry, n.onExit} {
+		if !hasSteps(t) {
+			continue
+		}
+		write("%s", []string{"entry", "exit"}[k])
+		m.fingerprintSteps(w, t)
+		write("\n")
 	}
 	for _, inv := range n.invocations {
 		write("invoke %q %s resource=%t spawned=%t", inv.name, inv.doneType, inv.resource != nil, inv.spawned)
@@ -840,23 +786,13 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 			write(" notin=%q", out.name)
 		}
 		for _, cond := range t.childConds {
-			write(" child=%q in=%q", cond.service, cond.states)
+			write(" child=%q/%q in=%q", cond.inv.state.name, cond.inv.name, cond.states)
 		}
 		for _, g := range t.guards {
 			write(" guard=%q", g.name)
 		}
-		for k, s := range t.steps {
-			write(" %s=%q", s.kind, s.name)
-			if t.runConds[k] != nil {
-				write(" if")
-			}
-			if d, ok := t.raiseDelays[k]; ok {
-				write(" after=%d", d)
-			}
-			if to, ok := t.sendTargets[k]; ok {
-				write(" to=%q", to)
-			}
-		}
+		m.fingerprintSteps(w, t)
+
 		if t.target != nil {
 			write(" target=%q reenter=%t chart=%t", t.target.name, t.reenter, t.toChart)
 		}
@@ -998,4 +934,25 @@ func describeEntry[S comparable, C any](t *transition[S, C]) string {
 	}
 
 	return fmt.Sprintf("on %s, from %s", t.trigger, t.source.name)
+}
+
+// fingerprintSteps writes the steps of t.
+func (m *Machine[S, C]) fingerprintSteps(w io.Writer, t *transition[S, C]) {
+	write := func(format string, args ...any) {
+		// A hash.Hash never returns an error from Write.
+		_, _ = fmt.Fprintf(w, format, args...)
+	}
+
+	for k, s := range t.steps {
+		write(" %s=%q", s.kind, s.name)
+		if t.runConds[k] != nil {
+			write(" if")
+		}
+		if d, ok := t.raiseDelays[k]; ok {
+			write(" after=%d", d)
+		}
+		if to, ok := t.sendTargets[k]; ok {
+			write(" to=%q", to)
+		}
+	}
 }

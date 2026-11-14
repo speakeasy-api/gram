@@ -71,21 +71,11 @@ type node[S comparable, C any] struct {
 	// transitions are the outgoing transitions in declaration order.
 	transitions []*transition[S, C]
 
-	// entry are the actions run when the state is entered.
-	entry []action[C]
-
-	// exit are the actions run when the state is exited.
-	exit []action[C]
-
-	// entryRuns and exitRuns name chart actions run on entry and exit,
-	// after the state's own entry and exit actions.
-	entryRuns []string
-	exitRuns  []string
-
-	// entryConds and exitConds hold, at the same positions, the condition
-	// each run needs, or nil for one that always runs.
-	entryConds []func(Move[S]) bool
-	exitConds  []func(Move[S]) bool
+	// onEntry and onExit hold the steps the state takes as it is entered
+	// and exited, declared with Entry and Exit; nil for none. They are
+	// never selected as transitions.
+	onEntry *transition[S, C]
+	onExit  *transition[S, C]
 
 	// invocations are the services that run while the state is active.
 	invocations []*invocation[S, C]
@@ -131,62 +121,13 @@ type node[S comparable, C any] struct {
 	handles   map[reflect.Type]bool
 	catchAll  bool
 	eventless bool
-
-	// entryRaises and exitRaises are the events the state raises for the
-	// machine itself when it is entered and exited.
-	entryRaises []stateRaise[C]
-	exitRaises  []stateRaise[C]
-
-	// entryDelayed are the events the state raises for the machine itself
-	// some time after it is entered.
-	entryDelayed []delayedRaise[C]
-
-	// entryAssigns and exitAssigns replace the context when the state is
-	// entered and exited, before its entry and exit actions.
-	entryAssigns []stateAssign[C]
-	exitAssigns  []stateAssign[C]
-
-	// entrySends and exitSends are the events the state sends to services
-	// when it is entered and exited, and entryEmits and exitEmits those it
-	// hands to whoever runs the machine.
-	entrySends []stateSend[C]
-	exitSends  []stateSend[C]
-	entryEmits []stateRaise[C]
-	exitEmits  []stateRaise[C]
 }
 
-// childCond is a condition on where a child machine is.
-type childCond struct {
-	service string
-	states  []string
-}
-
-// stateSend is an event a state sends to a service on entry or exit.
-type stateSend[C any] struct {
-	name    string
-	service string
-	fn      func(C) any
-}
-
-// stateAssign is an assignment a state makes on entry or exit.
-type stateAssign[C any] struct {
-	name string
-	fn   func(C) C
-}
-
-// delayedRaise is an event a state raises a while after it is entered, or,
-// with cancel set, the cancellation of the waiting events of that name.
-type delayedRaise[C any] struct {
-	name   string
-	delay  time.Duration
-	fn     func(C) any
-	cancel bool
-}
-
-// stateRaise is an event a state raises on entry or exit.
-type stateRaise[C any] struct {
-	name string
-	fn   func(C) any
+// childCond is a condition on where a child machine is: the one service
+// declaration it names, since a name is unique only within its state.
+type childCond[S comparable, C any] struct {
+	inv    *invocation[S, C]
+	states []string
 }
 
 // reacts reports whether the state has a transition that an event of the
@@ -248,15 +189,6 @@ func (n *node[S, C]) below(anc *node[S, C]) bool {
 	return n != anc && n.within(anc)
 }
 
-// action is a named side effect attached to a state's entry or exit.
-type action[C any] struct {
-	// name identifies the action within its state.
-	name string
-
-	// fn is the caller's implementation.
-	fn func(context.Context, C)
-}
-
 // guard is a named condition on a transition.
 type guard[C any] struct {
 	// name labels the guard in exports.
@@ -284,7 +216,7 @@ const (
 	// Builder.Action.
 	stepRun stepKind = "run"
 
-	// stepCancel cancels the events a RaiseAfter of the same name raised
+	// stepCancel cancels the events a RaiseAfter of the same delayed event raised
 	// that are still waiting.
 	stepCancel stepKind = "cancel"
 
@@ -478,7 +410,7 @@ type transition[S comparable, C any] struct {
 
 	// childConds are the states child machines must be in for the
 	// transition to be taken.
-	childConds []childCond
+	childConds []childCond[S, C]
 
 	// sendTargets holds, by step index, the service a SendTo sends to, or
 	// a Spawn or StopSpawned step starts or stops a run of.

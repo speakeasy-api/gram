@@ -12,10 +12,9 @@ package sc_test
 // '@xstate.raise' is EffectStartTimer, '@xstate.cancel' is EffectCancelTimer,
 // '@xstate.sendTo' is EffectSend and an emitted event is EffectEmit.
 //
-// A child that XState spawns from an entry action (enq.spawn) is a service
-// declared Spawned on the chart, and started by a transition: an sc state
-// cannot spawn as it is entered. XState's session id of a child is the ID of
-// the sc service run.
+// A child that XState spawns (enq.spawn) is a service declared Spawned on
+// the chart, started by the entry steps or the transition that spawn it.
+// XState's session id of a child is the ID of the sc service run.
 
 import (
 	"context"
@@ -113,6 +112,15 @@ func xtrnNew(t *testing.T, id string, def func(b *xtrnBuilder), opts ...sc.Optio
 	return m
 }
 
+// xtrnTracked gives s an entry action named entry and an exit action named
+// exit, the way XState's cases track them, and returns s.
+func xtrnTracked(s *sc.StateBuilder[string, counter], entry, exit string) *sc.StateBuilder[string, counter] {
+	s.Entry().Do(entry, noop)
+	s.Exit().Do(exit, noop)
+
+	return s
+}
+
 // xtrnDo is a transition action that does nothing.
 func xtrnDo[Ev any](context.Context, counter, Ev) {}
 
@@ -195,6 +203,9 @@ func xtrnServiceIDs(snap sc.Snapshot[string, counter]) []string {
 // xtrnKey is the key every spawned child of this file runs under.
 func xtrnKey[Ev any](counter, Ev) string { return "child" }
 
+// xtrnEntryKey is xtrnKey for a spawn from entry steps.
+func xtrnEntryKey(counter) string { return "child" }
+
 // xtrnRejectsTargetlessReenter asserts that sc refuses a chart with a
 // transition that re-enters without a target.
 func xtrnRejectsTargetlessReenter(t *testing.T, def func(b *xtrnBuilder, reenter bool)) {
@@ -214,7 +225,7 @@ func TestXTrnTargetlessReentryReturnsNoLifecycleEffects(t *testing.T) {
 
 	def := func(b *xtrnBuilder, reenter bool) {
 		b.Initial("active")
-		g := b.State("active").Entry("entry", noop).Exit("exit", noop).On[xtrnGo]()
+		g := xtrnTracked(b.State("active"), "entry", "exit").On[xtrnGo]()
 		if reenter {
 			g.Reenter()
 		} else {
@@ -246,7 +257,7 @@ func TestXTrnTargetlessReentryPreservesTransitionEffectsAndContext(t *testing.T)
 
 	def := func(b *xtrnBuilder, reenter bool) {
 		b.Initial("active")
-		g := b.State("active").Entry("entry", noop).Exit("exit", noop).
+		g := xtrnTracked(b.State("active"), "entry", "exit").
 			On[xtrnGo]().
 			Do("transition", func(context.Context, counter, xtrnGo) { calls.Add(1) }).
 			Assign("count", increment[xtrnGo])
@@ -279,7 +290,7 @@ func TestXTrnExplicitSelfReentryReturnsExitAndEntryEffects(t *testing.T) {
 
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
 		b.Initial("active")
-		b.State("active").Entry("entry", noop).Exit("exit", noop).
+		xtrnTracked(b.State("active"), "entry", "exit").
 			On[xtrnGo]().To("active").Reenter()
 	})
 
@@ -299,7 +310,7 @@ func TestXTrnTargetlessSourceNotReenteredWhenAnotherRegionChanges(t *testing.T) 
 		b.Regions()
 		b.State("left", func(b *xtrnBuilder) {
 			b.Initial("active")
-			g := b.State("active").Entry("entry left", noop).Exit("exit left", noop).On[xtrnGo]()
+			g := xtrnTracked(b.State("active"), "entry left", "exit left").On[xtrnGo]()
 			if reenter {
 				g.Reenter()
 			} else {
@@ -308,8 +319,10 @@ func TestXTrnTargetlessSourceNotReenteredWhenAnotherRegionChanges(t *testing.T) 
 		})
 		b.State("right", func(b *xtrnBuilder) {
 			b.Initial("before")
-			b.State("before").Exit("exit right", noop).On[xtrnGo]().To("after")
-			b.State("after").Entry("entry right", noop)
+			before := b.State("before")
+			before.Exit().Do("exit right", noop)
+			before.On[xtrnGo]().To("after")
+			b.State("after").Entry().Do("entry right", noop)
 		})
 	}
 
@@ -335,19 +348,19 @@ func TestXTrnTargetlessSourceReenteredWhenParallelParentReenters(t *testing.T) {
 
 	def := func(b *xtrnBuilder, reenter bool) {
 		b.Initial("parent")
-		b.Parallel("parent", func(b *xtrnBuilder) {
-			b.State("left", func(b *xtrnBuilder) {
+		xtrnTracked(b.Parallel("parent", func(b *xtrnBuilder) {
+			xtrnTracked(b.State("left", func(b *xtrnBuilder) {
 				b.Initial("active")
-				g := b.State("active").Entry("entry", noop).Exit("exit", noop).On[xtrnGo]()
+				g := xtrnTracked(b.State("active"), "entry", "exit").On[xtrnGo]()
 				if reenter {
 					g.Reenter()
 				} else {
 					g.Stay()
 				}
-			}).Entry("entry", noop).Exit("exit", noop)
-			b.State("right").Entry("entry", noop).Exit("exit", noop).
+			}), "entry", "exit")
+			xtrnTracked(b.State("right"), "entry", "exit").
 				On[xtrnGo]().To("parent").Reenter()
-		}).Entry("entry", noop).Exit("exit", noop)
+		}), "entry", "exit")
 	}
 
 	// DIVERGES from XState: XState accepts reenter: true on a transition
@@ -383,11 +396,11 @@ func TestXTrnTargetlessReentryPreservesActiveDescendant(t *testing.T) {
 
 	def := func(b *xtrnBuilder, reenter bool) {
 		b.Initial("active")
-		g := b.State("active", func(b *xtrnBuilder) {
+		g := xtrnTracked(b.State("active", func(b *xtrnBuilder) {
 			b.Initial("first")
 			b.State("first").On[xtrnNext]().To("second")
-			b.State("second").Entry("entry second", noop).Exit("exit second", noop)
-		}).Entry("entry active", noop).Exit("exit active", noop).
+			xtrnTracked(b.State("second"), "entry second", "exit second")
+		}), "entry active", "exit active").
 			On[xtrnGo]().
 			Do("transition", xtrnDo[xtrnGo]).
 			Assign("count", increment[xtrnGo])
@@ -641,11 +654,12 @@ func TestXTrnCapturesActions(t *testing.T) {
 	var calls atomic.Int64
 
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
-		b.Chart().
-			AssignOnEntry("count", func(counter) counter { return counter{N: 100} }).
-			Entry("actionWithParams", func(context.Context, counter) { calls.Add(1) }).
-			Entry("stringAction", func(context.Context, counter) { calls.Add(1) }).
-			On[xtrnMsg]().Do("actionWithDynamicParams", func(context.Context, counter, xtrnMsg) { calls.Add(1) })
+		chart := b.Chart()
+		chart.Entry().
+			Assign("count", func(counter) counter { return counter{N: 100} }).
+			Do("actionWithParams", func(context.Context, counter) { calls.Add(1) }).
+			Do("stringAction", func(context.Context, counter) { calls.Add(1) })
+		chart.On[xtrnMsg]().Do("actionWithDynamicParams", func(context.Context, counter, xtrnMsg) { calls.Add(1) })
 	})
 
 	state0, actions0 := m.Start(counter{N: 0}, epoch)
@@ -675,8 +689,8 @@ func TestXTrnDoesNotExecuteReferencedAction(t *testing.T) {
 	var calls atomic.Int64
 
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
-		b.Action("foo", func(context.Context, counter, sc.Move[string]) { calls.Add(1) })
-		b.Chart().OnEntry("foo")
+		foo := b.Action("foo", func(context.Context, counter, sc.Move[string]) { calls.Add(1) })
+		b.Chart().Entry().Run(foo)
 	})
 
 	_, actions := m.Start(counter{N: 0}, epoch)
@@ -690,9 +704,9 @@ func TestXTrnCapturesEnqueuedActions(t *testing.T) {
 	t.Parallel()
 
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
-		b.Chart().
-			EmitOnEntry("stringAction", func(counter) xtrnStringAction { return xtrnStringAction{} }).
-			EmitOnEntry("objectAction", func(counter) xtrnObjectAction { return xtrnObjectAction{} })
+		b.Chart().Entry().
+			Emit("stringAction", func(counter) xtrnStringAction { return xtrnStringAction{} }).
+			Emit("objectAction", func(counter) xtrnObjectAction { return xtrnObjectAction{} })
 	})
 
 	_, actions := m.Start(counter{N: 0}, epoch)
@@ -708,12 +722,13 @@ func xtrnDelayedRaise(t *testing.T, cancel bool) *sc.Machine[string, counter] {
 	t.Helper()
 
 	return xtrnNew(t, "m", func(b *xtrnBuilder) {
+		myRaise := b.Delayed("myRaise")
 		b.Initial("a")
-		next := b.State("a").
-			RaiseAfterOnEntry("myRaise", 10*time.Millisecond, func(counter) any { return xtrnNext{} }).
-			On[xtrnNext]()
+		a := b.State("a")
+		a.Entry().RaiseAfter(myRaise, 10*time.Millisecond, func(counter) xtrnNext { return xtrnNext{} })
+		next := a.On[xtrnNext]()
 		if cancel {
-			next.CancelRaise("myRaise")
+			next.CancelRaise(myRaise)
 		}
 		next.To("b")
 		b.State("b")
@@ -856,14 +871,16 @@ func TestXTrnSpawnCreatesAndStartsChildOnce(t *testing.T) {
 			b.On[xtrnPing]().Assign("n", increment[xtrnPing])
 		})
 
+		var spawned *sc.Child[string, counter, string, counter, struct{}]
+
 		parent := xtrnNew(t, "parent", func(b *xtrnBuilder) {
-			spawned := b.Chart().SpawnMachine("child", child, func(counter, string) counter {
+			spawned = b.Chart().SpawnMachine("child", child, func(counter, string) counter {
 				constructions.Add(1)
 
 				return counter{N: 0}
 			}, xtrnNoOutput)
 			spawned.OnError().Stay()
-			b.On[xtrnSpawn]().Spawn("spawn", "child", xtrnKey[xtrnSpawn])
+			b.On[xtrnSpawn]().Spawn("spawn", spawned, xtrnKey[xtrnSpawn])
 			b.On[xtrnPing]().SendToKey("ping", spawned, xtrnKey[xtrnPing], func(counter, xtrnPing) any { return xtrnPing{} })
 		})
 
@@ -882,7 +899,7 @@ func TestXTrnSpawnCreatesAndStartsChildOnce(t *testing.T) {
 
 		synctest.Wait()
 
-		got, ok := inst.Snapshot().Child(child, "child")
+		got, ok := spawned.Snapshot(inst.Snapshot())
 		require.True(t, ok)
 		require.Equal(t, counter{N: 1}, got.Context)
 		require.Equal(t, int64(1), constructions.Load())
@@ -904,19 +921,21 @@ func TestXTrnBuiltInActionEffectsExposeMetadata(t *testing.T) {
 			chart := b.Chart()
 			invoked := chart.InvokeMachine("child", xtrnEmpty(t), func(counter) counter { return counter{N: 7} }, xtrnNoOutput)
 			invoked.OnError().Stay()
-			chart.Invoke("spawned", xtrnPending).Spawned().OnError().Stay()
+			spawned := chart.Invoke("spawned", xtrnPending).Spawned()
+			spawned.OnError().Stay()
 			chart.On[xtrnLater]().Stay()
+			raise := b.Delayed("raise-id")
 
 			b.Initial("a")
 			a := b.State("a")
 			next := a.On[xtrnNext]().
-				Spawn("spawn", "spawned", xtrnKey[xtrnNext]).
-				RaiseAfter("raise-id", 10*time.Millisecond, func(counter, xtrnNext) any { return xtrnLater{} }).
+				Spawn("spawn", spawned, xtrnKey[xtrnNext]).
+				RaiseAfter(raise, 10*time.Millisecond, func(counter, xtrnNext) xtrnLater { return xtrnLater{} }).
 				SendTo("send-id", invoked, func(counter, xtrnNext) any { return xtrnPing{} })
 			if cancel {
-				next.CancelRaise("raise-id")
+				next.CancelRaise(raise)
 			} else {
-				a.On[xtrnCancel]().CancelRaise("raise-id")
+				a.On[xtrnCancel]().CancelRaise(raise)
 			}
 		})
 	}
@@ -1022,7 +1041,7 @@ func TestXTrnInvokeStopOrderedAfterExitAction(t *testing.T) {
 	t.Parallel()
 
 	m := xtrnInvoking(t, func(_ *xtrnBuilder, active *sc.StateBuilder[string, counter]) {
-		active.Exit("exitAction", noop)
+		active.Exit().Do("exitAction", noop)
 	})
 
 	active, _ := m.Start(counter{N: 0}, epoch)
@@ -1043,7 +1062,7 @@ func TestXTrnNoPlaceholderEffectForInlineExitFunction(t *testing.T) {
 	var calls atomic.Int64
 
 	m := xtrnInvoking(t, func(_ *xtrnBuilder, active *sc.StateBuilder[string, counter]) {
-		active.AssignOnExit("exitAction", func(c counter) counter {
+		active.Exit().Assign("exitAction", func(c counter) counter {
 			calls.Add(1)
 
 			return c
@@ -1165,21 +1184,21 @@ func TestXTrnStopsRemainingChildrenOnFinalState(t *testing.T) {
 //
 // XState runs the actor and records the order the exit action and the
 // child's cleanup ran in; the order of the returned effects decides it.
-// The child is spawned by a transition, not by the root's entry action.
 func TestXTrnStopsSpawnedChildrenAfterRootExitActions(t *testing.T) {
 	t.Parallel()
 
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
-		chart := b.Chart().Exit("exit", noop)
-		chart.Invoke("child", xtrnPending).Spawned().OnError().Stay()
-		chart.On[xtrnSpawn]().Spawn("spawn", "child", xtrnKey[xtrnSpawn])
+		chart := b.Chart()
+		child := chart.Invoke("child", xtrnPending).Spawned()
+		child.OnError().Stay()
+		chart.Entry().Spawn("spawn", child, xtrnEntryKey)
+		chart.Exit().Do("exit", noop)
 		b.Initial("active")
 		b.State("active").On[xtrnFinish]().To("done")
 		b.Final("done")
 	})
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
-	snap, _ = m.Transition(snap, xtrnSpawn{}, epoch)
 	require.Len(t, snap.Services(), 1)
 
 	done, effects := m.Transition(snap, xtrnFinish{}, epoch)
@@ -1272,7 +1291,8 @@ func TestXTrnActorExecutesInvokeStopOnceAfterExitActions(t *testing.T) {
 
 		m := xtrnNew(t, "m", func(b *xtrnBuilder) {
 			b.Initial("active")
-			active := b.State("active").Exit("exit", func(context.Context, counter) { order.add("exit") })
+			active := b.State("active")
+			active.Exit().Do("exit", func(context.Context, counter) { order.add("exit") })
 			active.Stream("child", func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 				return func(func(any, error) bool) {
 					<-ctx.Done()
@@ -1299,14 +1319,14 @@ func TestXTrnActorExecutesInvokeStopOnceAfterExitActions(t *testing.T) {
 }
 
 // xtrnSpawner is the chart of the cases whose root spawns a child from its
-// entry action: here SPAWN spawns it, under the key "child". The child is a
-// promise that does not settle on its own.
+// entry action, under the key "child". The child is a promise that does not
+// settle on its own.
 func xtrnSpawner(t *testing.T, more func(b *xtrnBuilder, child *sc.Invocation[string, counter, int])) *sc.Machine[string, counter] {
 	t.Helper()
 
 	return xtrnNew(t, "m", func(b *xtrnBuilder) {
 		child := b.Chart().Invoke("child", xtrnPending).Spawned()
-		b.On[xtrnSpawn]().Spawn("spawn", "child", xtrnKey[xtrnSpawn])
+		b.Chart().Entry().Spawn("spawn", child, xtrnEntryKey)
 		if more != nil {
 			more(b, child)
 		} else {
@@ -1315,12 +1335,11 @@ func xtrnSpawner(t *testing.T, more func(b *xtrnBuilder, child *sc.Invocation[st
 	})
 }
 
-// xtrnSpawned starts the chart and spawns its child.
+// xtrnSpawned starts the chart, which spawns its child.
 func xtrnSpawned(t *testing.T, m *sc.Machine[string, counter]) sc.Snapshot[string, counter] {
 	t.Helper()
 
-	snap, _ := m.Start(counter{N: 0}, epoch)
-	snap, effects := m.Transition(snap, xtrnSpawn{}, epoch)
+	snap, effects := m.Start(counter{N: 0}, epoch)
 	require.Equal(t, []sc.EffectKind{sc.EffectStartInvocation}, kinds(effects))
 	require.Len(t, snap.Services(), 1)
 
@@ -1336,7 +1355,7 @@ func TestXTrnExplicitStopRemovesAndStopsChildOnce(t *testing.T) {
 
 	m := xtrnSpawner(t, func(b *xtrnBuilder, child *sc.Invocation[string, counter, int]) {
 		child.OnError().Stay()
-		b.On[xtrnStop]().StopSpawned("stop", "child", xtrnKey[xtrnStop])
+		b.On[xtrnStop]().StopSpawned("stop", child, xtrnKey[xtrnStop])
 	})
 
 	active := xtrnSpawned(t, m)
@@ -1508,6 +1527,20 @@ func TestXTrnEffectsIsolatedBetweenBranches(t *testing.T) {
 	require.Equal(t, []string{"a"}, a.Active())
 }
 
+// xtrnSpawnOnEvent is the chart of the two cases that spawn a child after
+// the snapshot they compare with: SPAWN spawns it under the key "child", and
+// CHECK runs an action and changes nothing else.
+func xtrnSpawnOnEvent(t *testing.T) *sc.Machine[string, counter] {
+	t.Helper()
+
+	return xtrnNew(t, "m", func(b *xtrnBuilder) {
+		child := b.Chart().Invoke("child", xtrnPending).Spawned()
+		child.OnError().Stay()
+		b.On[xtrnSpawn]().Spawn("spawn", child, xtrnKey[xtrnSpawn])
+		b.On[xtrnCheck]().Do("check", xtrnDo[xtrnCheck])
+	})
+}
+
 // XState: transition function > invoke stop effects > keeps pure system
 // registries isolated between branches
 //
@@ -1516,10 +1549,7 @@ func TestXTrnEffectsIsolatedBetweenBranches(t *testing.T) {
 func TestXTrnRunningServicesIsolatedBetweenBranches(t *testing.T) {
 	t.Parallel()
 
-	m := xtrnSpawner(t, func(b *xtrnBuilder, child *sc.Invocation[string, counter, int]) {
-		child.OnError().Stay()
-		b.On[xtrnCheck]().Do("check", xtrnDo[xtrnCheck])
-	})
+	m := xtrnSpawnOnEvent(t)
 
 	initial, _ := m.Start(counter{N: 0}, epoch)
 
@@ -1539,10 +1569,7 @@ func TestXTrnOldSnapshotsDoNotSeeLaterChildren(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m := xtrnSpawner(t, func(b *xtrnBuilder, child *sc.Invocation[string, counter, int]) {
-			child.OnError().Stay()
-			b.On[xtrnCheck]().Do("check", xtrnDo[xtrnCheck])
-		})
+		m := xtrnSpawnOnEvent(t)
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
 		require.NoError(t, err)
@@ -1713,8 +1740,8 @@ func TestXTrnStaleTerminalEventDoesNotRemoveReplacementChild(t *testing.T) {
 	m := xtrnSpawner(t, func(b *xtrnBuilder, child *sc.Invocation[string, counter, int]) {
 		child.OnError().Stay()
 		b.On[xtrnReplace]().
-			StopSpawned("stop", "child", xtrnKey[xtrnReplace]).
-			Spawn("spawn", "child", xtrnKey[xtrnReplace])
+			StopSpawned("stop", child, xtrnKey[xtrnReplace]).
+			Spawn("spawn", child, xtrnKey[xtrnReplace])
 	})
 
 	first := xtrnSpawned(t, m)
@@ -1803,25 +1830,23 @@ func TestXTrnIgnoresErrorFromStaleChild(t *testing.T) {
 
 // XState: transition function > terminal child cleanup > removes a
 // completed dynamically spawned child on the live path
-//
-// The child is spawned by a transition, not by the root's entry action.
 func TestXTrnRemovesCompletedSpawnedChildOnLivePath(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
 		m := xtrnNew(t, "m", func(b *xtrnBuilder) {
-			b.Chart().Invoke("completingChild", func(context.Context, *sc.Run, counter) (int, error) { return 42, nil }).
-				Spawned().OnError().Stay()
-			b.On[xtrnSpawn]().Spawn("spawn", "completingChild", xtrnKey[xtrnSpawn])
+			chart := b.Chart()
+			child := chart.Invoke("completingChild", func(context.Context, *sc.Run, counter) (int, error) { return 42, nil }).Spawned()
+			child.OnError().Stay()
+			chart.Entry().Spawn("spawn", child, xtrnEntryKey)
 		})
+
+		_, effects := m.Start(counter{N: 0}, epoch)
+		require.Equal(t, []sc.EffectKind{sc.EffectStartInvocation}, kinds(effects))
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
 		require.NoError(t, err)
 		defer inst.Close()
-
-		step, err := inst.Send(t.Context(), xtrnSpawn{})
-		require.NoError(t, err)
-		require.Equal(t, []sc.EffectKind{sc.EffectStartInvocation}, kinds(step.Effects))
 
 		synctest.Wait()
 
@@ -1868,7 +1893,7 @@ func TestXTrnInvokeStartComesAfterEntryActions(t *testing.T) {
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
 		chart := b.Chart()
 		chart.Stream("child", xtrnListen).OnError().Stay()
-		chart.Entry("listen", noop)
+		chart.Entry().Do("listen", noop)
 	})
 
 	_, effects := m.Start(counter{N: 0}, epoch)
@@ -1926,7 +1951,7 @@ func TestXTrnDoesNotExecuteEntryActions(t *testing.T) {
 	var calls atomic.Int64
 
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
-		b.Chart().Entry("fn", func(context.Context, counter) { calls.Add(1) })
+		b.Chart().Entry().Do("fn", func(context.Context, counter) { calls.Add(1) })
 		b.Initial("a")
 		b.State("a")
 		b.State("b")

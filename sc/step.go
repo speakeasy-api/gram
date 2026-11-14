@@ -930,9 +930,9 @@ func (r *run[S, C]) matches(t *transition[S, C], stim stimulus[S, C]) bool {
 // childIn reports whether the child machine a condition names is running
 // and has every one of the condition's states active, going by the snapshot
 // the child last handed up.
-func (r *run[S, C]) childIn(cond childCond) bool {
+func (r *run[S, C]) childIn(cond childCond[S, C]) bool {
 	for _, running := range r.services {
-		if running.inv.name != cond.service || len(running.saved) == 0 {
+		if running.inv != cond.inv || len(running.saved) == 0 {
 			continue
 		}
 
@@ -1240,25 +1240,32 @@ func (r *run[S, C]) microstep(ts []*transition[S, C], stim stimulus[S, C]) {
 		}
 	}
 
-	// Conditional runs are kept only when their condition holds for it.
-	if len(r.pending) > 0 {
-		from, to := r.m.stateIDs(before), r.m.stateIDs(after)
-		drop := map[int]bool{}
-		for _, p := range r.pending {
-			if !p.cond(Move[S]{Source: p.source.id, From: from, To: to, Event: stim.event}) {
-				drop[p.index] = true
-			}
-		}
+	r.resolvePending(first, before, after, stim.event)
+}
 
-		kept := r.effects[:first]
-		for i := first; i < len(r.effects); i++ {
-			if !drop[i] {
-				kept = append(kept, r.effects[i])
-			}
-		}
-		r.effects = kept
-		r.pending = r.pending[:0]
+// resolvePending keeps the conditional chart action runs produced since
+// first whose condition holds for the move from before to after.
+func (r *run[S, C]) resolvePending(first int, before, after []string, event any) {
+	if len(r.pending) == 0 {
+		return
 	}
+
+	from, to := r.m.stateIDs(before), r.m.stateIDs(after)
+	drop := map[int]bool{}
+	for _, p := range r.pending {
+		if !p.cond(Move[S]{Source: p.source.id, From: from, To: to, Event: event}) {
+			drop[p.index] = true
+		}
+	}
+
+	kept := r.effects[:first]
+	for i := first; i < len(r.effects); i++ {
+		if !drop[i] {
+			kept = append(kept, r.effects[i])
+		}
+	}
+	r.effects = kept
+	r.pending = r.pending[:0]
 }
 
 // activeNames returns the names of the active states in document order.
@@ -1332,18 +1339,7 @@ func (r *run[S, C]) record(h *node[S, C]) []*node[S, C] {
 }
 
 func (r *run[S, C]) exit(n *node[S, C], event any) {
-	for _, assign := range n.exitAssigns {
-		r.ctx = assign.fn(r.ctx)
-	}
-
-	for _, a := range n.exit {
-		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: nil, Saved: nil})
-	}
-	for k, name := range n.exitRuns {
-		r.emitRun(n, name, event, n.exitConds[k])
-	}
-	r.raise(n.exitRaises)
-	r.message(n, n.exitSends, n.exitEmits)
+	r.takeSteps(n.onExit, event)
 
 	r.timers = slices.DeleteFunc(r.timers, func(t timer[S, C]) bool {
 		if t.owner() != n {
@@ -1383,27 +1379,16 @@ func (r *run[S, C]) cancelRaise(name string) {
 	})
 }
 
-// raise queues the events a state raises on entry or exit.
-func (r *run[S, C]) raise(raises []stateRaise[C]) {
-	for _, raise := range raises {
-		raised := on[S, C](triggerEvent)
-		raised.event = raise.fn(r.ctx)
-		r.queue = append(r.queue, raised)
-	}
-}
-
-// message queues the events a state sends to services on entry or exit, and
-// emits those it hands to whoever runs the machine.
-func (r *run[S, C]) message(n *node[S, C], sends []stateSend[C], emits []stateRaise[C]) {
-	for _, send := range sends {
-		r.send(outgoing{service: send.service, keyed: false, key: "", event: send.fn(r.ctx), leaving: nil})
+// takeSteps takes the steps a state declares for its entry or exit, which
+// see the event that caused it when the chart can name its type.
+func (r *run[S, C]) takeSteps(t *transition[S, C], event any) {
+	if t == nil {
+		return
 	}
 
-	for _, emit := range emits {
-		e := r.bare(EffectEmit, "", n, emit.name)
-		e.Event = emit.fn(r.ctx)
-		r.effects = append(r.effects, e)
-	}
+	stim := on[S, C](triggerNone)
+	stim.event = r.namedEvent(event)
+	r.runSteps(t, stim)
 }
 
 // bare builds an effect that carries no context or event.
@@ -1524,26 +1509,7 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 		r.passed = append(r.passed, n)
 	}
 
-	for _, assign := range n.entryAssigns {
-		r.ctx = assign.fn(r.ctx)
-	}
-
-	for _, a := range n.entry {
-		r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: nil, Saved: nil})
-	}
-	for k, name := range n.entryRuns {
-		r.emitRun(n, name, event, n.entryConds[k])
-	}
-	r.raise(n.entryRaises)
-	for _, raise := range n.entryDelayed {
-		if raise.cancel {
-			r.cancelRaise(raise.name)
-			continue
-		}
-
-		r.startRaise(n, raise.name, raise.fn(r.ctx), raise.delay)
-	}
-	r.message(n, n.entrySends, n.entryEmits)
+	r.takeSteps(n.onEntry, event)
 
 	for _, t := range n.transitions {
 		if t.trigger == triggerAfter {
@@ -2192,31 +2158,24 @@ func (r *run[S, C]) deliver() {
 // in the snapshot, which goes on saying where the machine ended.
 func (r *run[S, C]) complete() {
 	names := r.activeNames()
-	move := Move[S]{Source: r.m.root.id, From: r.m.stateIDs(names), To: r.m.stateIDs(names), Event: r.cause}
+	first := len(r.effects)
+	r.pending = r.pending[:0]
 
 	leaving := slices.Clone(r.active())
 	slices.Reverse(leaving)
 
 	for _, n := range append(leaving, r.m.root) {
-		for _, assign := range n.exitAssigns {
-			r.ctx = assign.fn(r.ctx)
-		}
-
-		for _, a := range n.exit {
-			r.effects = append(r.effects, Effect[C]{Kind: EffectAction, ID: "", State: n.name, Name: a.name, Delay: 0, At: time.Time{}, Jitter: 0, Context: r.ctx, Event: nil, From: names, To: names, Needs: nil, Saved: nil})
-		}
-
-		for k, name := range n.exitRuns {
-			move.Source = n.id
-			if cond := n.exitConds[k]; cond == nil || cond(move) {
-				e := r.chartActionEffect(n, name, r.namedCause())
-				e.From, e.To = names, names
-				r.effects = append(r.effects, e)
-			}
-		}
-
-		r.message(n, nil, n.exitEmits)
+		r.takeSteps(n.onExit, r.cause)
 	}
+
+	// The steps' actions are told the move they belong to, which leaves
+	// the states where they are.
+	for i := first; i < len(r.effects); i++ {
+		if r.effects[i].Kind == EffectAction {
+			r.effects[i].From, r.effects[i].To = names, names
+		}
+	}
+	r.resolvePending(first, names, names, r.namedCause())
 }
 
 // startServices starts the services of entered states that are still active

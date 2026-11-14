@@ -55,7 +55,6 @@ type (
 	xerrNext        struct{}
 	xerrActivate    struct{}
 	xerrDo          struct{}
-	xerrSpawn       struct{}
 	xerrSomeEvent   struct{}
 	xerrEmitted     struct{ Foo string }
 	xerrPing        struct{}
@@ -242,6 +241,7 @@ type xerrFamily struct {
 	parent *sc.Machine[string, counter]
 	child  *sc.Machine[string, counter]
 
+	invoked *sc.Child[string, counter, string, counter, int]
 	cleanup *atomic.Int32
 	exit    *atomic.Int32
 	timer   *atomic.Int32
@@ -250,21 +250,23 @@ type xerrFamily struct {
 func xerrNewFamily(t *testing.T, failure string) xerrFamily {
 	t.Helper()
 
-	fam := xerrFamily{parent: nil, child: nil, cleanup: new(atomic.Int32), exit: new(atomic.Int32), timer: new(atomic.Int32)}
+	fam := xerrFamily{parent: nil, child: nil, invoked: nil, cleanup: new(atomic.Int32), exit: new(atomic.Int32), timer: new(atomic.Int32)}
 
 	child, err := sc.New("child", func(b *xerrBuilder) {
 		b.Initial("running")
-		running := b.State("running").Exit("exit", func(context.Context, counter) { fam.exit.Add(1) })
+		running := b.State("running")
+		running.Exit().Do("exit", func(context.Context, counter) { fam.exit.Add(1) })
 		running.Stream("callback", xerrCallback[counter](fam.cleanup)).OnError().Stay()
 		running.After(10*time.Millisecond).Do("timer", func(context.Context, counter, struct{}) { fam.timer.Add(1) })
 	})
 	require.NoError(t, err)
 
 	parent, err := sc.New("parent", func(b *xerrBuilder) {
-		b.Chart().InvokeMachine("child", child,
+		fam.invoked = b.Chart().InvokeMachine("child", child,
 			func(c counter) counter { return c },
 			func(sc.Snapshot[string, counter]) (int, error) { return 0, nil },
-		).OnError().Stay()
+		)
+		fam.invoked.OnError().Stay()
 
 		if failure == "effect" {
 			b.On[xerrFail]().Do("throw", func(context.Context, counter, xerrFail) { panic(errXerrParent) })
@@ -305,7 +307,7 @@ func TestXErrErrorsStopsDescendantsAfterAParentFails(t *testing.T) {
 			wait := xerrRun(t.Context(), a)
 			synctest.Wait()
 
-			kid, ok := a.Snapshot().Child(fam.child, "child")
+			kid, ok := fam.invoked.Snapshot(a.Snapshot())
 			require.True(t, ok)
 			require.Equal(t, []string{"running"}, kid.Active())
 
@@ -342,7 +344,7 @@ func TestXErrErrorsStopsDescendantsAfterAParentFails(t *testing.T) {
 			// timer fires. A stopped actor would refuse the event with
 			// sc.ErrActorStopped.
 			require.NoError(t, a.Send(t.Context(), xerrFail{}))
-			kid, ok := a.Snapshot().Child(fam.child, "child")
+			kid, ok := fam.invoked.Snapshot(a.Snapshot())
 			require.True(t, ok)
 			require.Equal(t, []string{"running"}, kid.Active())
 			require.Zero(t, fam.cleanup.Load())
@@ -374,7 +376,7 @@ func TestXErrErrorsStopsDescendantsAfterAParentFails(t *testing.T) {
 
 			// The instance is not stopped, and neither is its child, whose
 			// timer fires.
-			kid, ok := inst.Snapshot().Child(fam.child, "child")
+			kid, ok := fam.invoked.Snapshot(inst.Snapshot())
 			require.True(t, ok)
 			require.Equal(t, []string{"running"}, kid.Active())
 			require.Zero(t, fam.cleanup.Load())
@@ -388,9 +390,9 @@ func TestXErrErrorsStopsDescendantsAfterAParentFails(t *testing.T) {
 // its stop effect ran: %s (run with the stop before and after the action
 // that throws).
 //
-// Only a spawned service can be stopped by a transition in sc, and nothing
-// spawns when a chart starts, so an event spawns the child first. The spy on
-// XState's runtime stopActor is dropped.
+// Only a spawned service can be stopped by a transition in sc, so the chart
+// spawns the child on entry. The spy on XState's runtime stopActor is
+// dropped.
 func TestXErrErrorsStopsARemovedChildExactlyOnceWhenItsStopEffectRan(t *testing.T) {
 	t.Parallel()
 
@@ -407,16 +409,17 @@ func TestXErrErrorsStopsARemovedChildExactlyOnceWhenItsStopEffectRan(t *testing.
 				key := func(counter, xerrFail) string { return "child" }
 
 				m, err := sc.New("stopper", func(b *xerrBuilder) {
-					b.Chart().Stream("child", xerrCallback[counter](&cleanup)).Spawned().OnError().Stay()
-					b.On[xerrSpawn]().Spawn("start", "child", func(counter, xerrSpawn) string { return "child" })
+					child := b.Chart().Stream("child", xerrCallback[counter](&cleanup)).Spawned()
+					child.OnError().Stay()
+					b.Chart().Entry().Spawn("start", child, func(counter) string { return "child" })
 
 					fail := b.On[xerrFail]()
 					if test.stoppedFirst {
-						fail.StopSpawned("stop", "child", key)
+						fail.StopSpawned("stop", child, key)
 					}
 					fail.Do("throw", func(context.Context, counter, xerrFail) { panic(errXerrEffect) })
 					if !test.stoppedFirst {
-						fail.StopSpawned("stop", "child", key)
+						fail.StopSpawned("stop", child, key)
 					}
 				})
 				require.NoError(t, err)
@@ -426,9 +429,6 @@ func TestXErrErrorsStopsARemovedChildExactlyOnceWhenItsStopEffectRan(t *testing.
 
 				a := m.Actor(counter{})
 				wait := xerrRun(ctx, a)
-
-				_, err = a.Call(t.Context(), xerrSpawn{})
-				require.NoError(t, err)
 				synctest.Wait()
 				require.Len(t, a.Snapshot().Services(), 1)
 
@@ -594,8 +594,8 @@ func TestXErrErrorsUnhandledInvokedActorErrorsStopsSiblingInvokedActorsOfAState(
 // errors.test.ts: error handling > unhandled invoked actor errors > stops
 // spawned actors
 //
-// XState spawns the child as the context is created. Nothing spawns when an
-// sc chart starts, so an event spawns it.
+// XState spawns the child as the context is created. sc has no context
+// factory, so the chart spawns it on entry.
 //
 // DIVERGES from XState: as for the cases before it, the chart must route the
 // failure; routed to a top-level final state, it stops the spawned service.
@@ -608,8 +608,9 @@ func TestXErrErrorsUnhandledInvokedActorErrorsStopsSpawnedActors(t *testing.T) {
 		gate := make(chan struct{})
 
 		m, err := sc.New("root", func(b *xerrBuilder) {
-			b.Chart().Stream("spawned", xerrCallback[counter](&cleanup)).Spawned().OnError().Stay()
-			b.On[xerrSpawn]().Spawn("spawn", "spawned", func(counter, xerrSpawn) string { return "spawned" })
+			spawned := b.Chart().Stream("spawned", xerrCallback[counter](&cleanup)).Spawned()
+			spawned.OnError().Stay()
+			b.Chart().Entry().Spawn("spawn", spawned, func(counter) string { return "spawned" })
 			b.Chart().Invoke("failing", xerrRejectsWhen(gate, errXerrOops)).OnError().To("failed")
 			// As XState's machine has no states, the chart starts in none: its
 			// only state is the final one the failure leads to.
@@ -620,9 +621,6 @@ func TestXErrErrorsUnhandledInvokedActorErrorsStopsSpawnedActors(t *testing.T) {
 		inst, err := m.Instance(t.Context(), counter{})
 		require.NoError(t, err)
 		defer inst.Close()
-
-		_, err = inst.Send(t.Context(), xerrSpawn{})
-		require.NoError(t, err)
 		synctest.Wait()
 		require.Len(t, inst.Snapshot().Services(), 2)
 		require.Zero(t, cleanup.Load())
@@ -657,11 +655,14 @@ func TestXErrErrorsUnhandledInvokedActorErrorsStopsGrandchildrenAndTheirTimers(t
 		})
 		require.NoError(t, err)
 
+		var invoked *sc.Child[string, counter, string, counter, int]
+
 		m, err := sc.New("root", func(b *xerrBuilder) {
-			b.Chart().InvokeMachine("child", child,
+			invoked = b.Chart().InvokeMachine("child", child,
 				func(c counter) counter { return c },
 				func(sc.Snapshot[string, counter]) (int, error) { return 0, nil },
-			).OnError().Stay()
+			)
+			invoked.OnError().Stay()
 			b.Chart().Invoke("failing", xerrRejectsWhen(gate, errXerrOops)).OnError().To("failed")
 			// As XState's machine has no states, the chart starts in none: its
 			// only state is the final one the failure leads to.
@@ -674,7 +675,7 @@ func TestXErrErrorsUnhandledInvokedActorErrorsStopsGrandchildrenAndTheirTimers(t
 		defer inst.Close()
 		synctest.Wait()
 
-		kid, ok := inst.Snapshot().Child(child, "child")
+		kid, ok := invoked.Snapshot(inst.Snapshot())
 		require.True(t, ok)
 		require.Len(t, kid.Services(), 1)
 
@@ -843,9 +844,11 @@ func TestXErrErrorsUnhandledRejectionOfAPromiseActorShouldBeReportedToTheExistin
 		box := xerrNewBox()
 		child := xerrPending(t, xerrRejectingPromise, xerrDropped)
 
+		var inv *sc.Child[string, counter, string, counter, int]
+
 		m, err := sc.New("parent", func(b *xerrBuilder) {
 			b.Initial("pending")
-			inv := b.State("pending").InvokeMachine("child", child,
+			inv = b.State("pending").InvokeMachine("child", child,
 				func(c counter) counter { return c },
 				func(sc.Snapshot[string, counter]) (int, error) { return 0, nil },
 			)
@@ -863,7 +866,7 @@ func TestXErrErrorsUnhandledRejectionOfAPromiseActorShouldBeReportedToTheExistin
 		require.Empty(t, box.all())
 		require.Equal(t, []string{"pending"}, inst.Snapshot().Active())
 
-		kid, ok := inst.Snapshot().Child(child, "child")
+		kid, ok := inv.Snapshot(inst.Snapshot())
 		require.True(t, ok)
 		require.Equal(t, []string{"pending"}, kid.Active())
 		require.Empty(t, kid.Services())
@@ -1026,7 +1029,7 @@ func TestXErrErrorsErrorThrownInInitialCustomEntryActionShouldErrorTheActor(t *t
 	t.Parallel()
 
 	m, err := sc.New("machine", func(b *xerrBuilder) {
-		b.Chart().Entry("throw", func(context.Context, counter) { panic(errXerrEntry) })
+		b.Chart().Entry().Do("throw", func(context.Context, counter) { panic(errXerrEntry) })
 	})
 	require.NoError(t, err)
 
@@ -1054,7 +1057,7 @@ func TestXErrErrorsErrorThrownByACustomEntryActionWhenTransitioningShouldErrorTh
 	m, err := sc.New("machine", func(b *xerrBuilder) {
 		b.Initial("a")
 		b.State("a").On[xerrNext]().To("b")
-		b.State("b").Entry("throw", func(context.Context, counter) { panic(errXerrEntry) })
+		b.State("b").Entry().Do("throw", func(context.Context, counter) { panic(errXerrEntry) })
 	})
 	require.NoError(t, err)
 
@@ -1111,9 +1114,9 @@ func TestXErrErrorsShouldntExecuteDeferredInitialActionsThatComeAfterAnActionTha
 	var spy atomic.Int32
 
 	m, err := sc.New("machine", func(b *xerrBuilder) {
-		b.Chart().
-			Entry("throw", func(context.Context, counter) { panic(errXerrEntry) }).
-			Entry("spy", func(context.Context, counter) { spy.Add(1) })
+		b.Chart().Entry().
+			Do("throw", func(context.Context, counter) { panic(errXerrEntry) }).
+			Do("spy", func(context.Context, counter) { spy.Add(1) })
 	})
 	require.NoError(t, err)
 
@@ -1142,7 +1145,7 @@ func TestXErrErrorsShouldErrorTheParentOnErroredInitialStateOfAChild(t *testing.
 		box := xerrNewBox()
 
 		child, err := sc.New("child", func(b *xerrBuilder) {
-			b.Chart().Entry("fail", func(context.Context, counter) { panic("immediate error!") })
+			b.Chart().Entry().Do("fail", func(context.Context, counter) { panic("immediate error!") })
 		})
 		require.NoError(t, err)
 
@@ -1223,7 +1226,7 @@ func TestXErrErrorsStateOnErrorCatchesErrorsThrownByInitialEntryActions(t *testi
 
 	m, err := sc.New("machine", func(b *xerrBuilder) {
 		b.Initial("active")
-		b.State("active").Entry("throw", func(context.Context, counter) { panic("initial entry failed") })
+		b.State("active").Entry().Do("throw", func(context.Context, counter) { panic("initial entry failed") })
 		b.State("failed")
 	}, sc.AllowUnreachable())
 	require.NoError(t, err)
@@ -1323,7 +1326,7 @@ func TestXErrErrorsStateOnErrorCatchesErrorsThrownByTargetEntryActions(t *testin
 	m, err := sc.New("machine", func(b *xerrBuilder) {
 		b.Initial("active")
 		b.State("active").On[xerrNext]().To("loading")
-		b.State("loading").Entry("throw", func(context.Context, counter) { panic("target entry failed") })
+		b.State("loading").Entry().Do("throw", func(context.Context, counter) { panic("target entry failed") })
 		b.State("failed")
 	}, sc.AllowUnreachable())
 	require.NoError(t, err)
@@ -1613,9 +1616,8 @@ func TestXErrPrecedenceAThrowingSubscribeObserverOrOnListenerDoesNotKillTheActor
 // errorPrecedence.test.ts: error precedence > (g) a parent error stops all
 // of its invoked and spawned children
 //
-// XState spawns its child in the root's entry action. Nothing spawns when
-// an sc chart starts, so an event spawns it. The hooks tell when each
-// child's run has ended.
+// As in XState, the chart spawns its child on entry. The hooks tell when
+// each child's run has ended.
 //
 // DIVERGES from XState: XState's parent ends in its "error" status. The sc
 // actor's Run panics with the assignment's panic; on its way out it stops
@@ -1633,17 +1635,15 @@ func TestXErrPrecedenceAParentErrorStopsAllOfItsInvokedAndSpawnedChildren(t *tes
 
 		m, err := sc.New("parent", func(b *xerrBuilder) {
 			b.Chart().InvokeMachine("invoked", child, func(c counter) counter { return c }, output).OnError().Stay()
-			b.Chart().SpawnMachine("spawned", child, func(c counter, _ string) counter { return c }, output).OnError().Stay()
-			b.On[xerrSpawn]().Spawn("spawn", "spawned", func(counter, xerrSpawn) string { return "spawned" })
+			spawned := b.Chart().SpawnMachine("spawned", child, func(c counter, _ string) counter { return c }, output)
+			spawned.OnError().Stay()
+			b.Chart().Entry().Spawn("spawn", spawned, func(counter) string { return "spawned" })
 			b.On[xerrFail]().Assign("throw", func(counter, xerrFail) counter { panic(errXerrBoom) })
 		})
 		require.NoError(t, err)
 
 		a := m.Actor(counter{}, sc.WithHooks(xerrServiceEnds(box)))
 		wait := xerrRun(t.Context(), a)
-
-		_, err = a.Call(t.Context(), xerrSpawn{})
-		require.NoError(t, err)
 		synctest.Wait()
 
 		var running []string
@@ -1689,7 +1689,7 @@ func TestXErrPrecedenceAnInvokeFailureInOneParallelRegionIsRecoveredWithoutExiti
 			})
 			b.State("right", func(b *xerrBuilder) {
 				b.Initial("idle")
-				b.State("idle").Exit("siblingExit", func(context.Context, counter) { siblingExit.Add(1) })
+				b.State("idle").Exit().Do("siblingExit", func(context.Context, counter) { siblingExit.Add(1) })
 			})
 		})
 		require.NoError(t, err)
@@ -2109,7 +2109,9 @@ func TestXErrTimeoutPassesStateInputToEntryExitOnTimeoutOnTimeoutAndAfter(t *tes
 			return c
 		}).To("active")
 
-		active := b.State("active").Entry("entry", noop).Exit("exit", noop)
+		active := b.State("active")
+		active.Entry().Do("entry", noop)
+		active.Exit().Do("exit", noop)
 		active.Delay("timeout", func(c counter) time.Duration { return time.Duration(c.N) * time.Millisecond }).
 			Do("onTimeout", func(context.Context, counter, struct{}) {}).
 			To("idle")

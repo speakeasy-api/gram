@@ -125,7 +125,10 @@ func xactNew[C any](t *testing.T, id string, def func(b *sc.Builder[string, C]))
 // xactTracked gives a state the entry and exit actions XState's cases track
 // as 'enter: <state>' and 'exit: <state>'.
 func xactTracked(s *xactState) *xactState {
-	return s.Entry("enter", noop).Exit("exit", noop)
+	s.Entry().Do("enter", noop)
+	s.Exit().Do("exit", noop)
+
+	return s
 }
 
 // xactDo is a transition action that does nothing.
@@ -151,8 +154,8 @@ func xactSame(c counter) counter { return c }
 func xactNoOutput(sc.Snapshot[string, counter]) (struct{}, error) { return struct{}{}, nil }
 
 // xactRaise raises ev on entry.
-func xactRaise(ev any) func(counter) any {
-	return func(counter) any { return ev }
+func xactRaise[T any](ev T) func(counter) T {
+	return func(counter) T { return ev }
 }
 
 // xactLights is the chart of the "transition" and "deep transition" cases.
@@ -223,9 +226,9 @@ func TestXActStateActionsEntryActionsOfInitialState(t *testing.T) {
 	t.Parallel()
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Chart().Entry("enter", noop)
+		b.Chart().Entry().Do("enter", noop)
 		b.Initial("green")
-		b.State("green").Entry("enter", noop)
+		b.State("green").Entry().Do("enter", noop)
 	})
 
 	_, effects := m.Start(counter{N: 0}, epoch)
@@ -239,13 +242,17 @@ func TestXActStateActionsEntryActionsOfInitialStateDeep(t *testing.T) {
 	t.Parallel()
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Chart().Entry("enter", noop)
+		b.Chart().Entry().Do("enter", noop)
 		b.Initial("a")
-		b.State("a", func(b *xactBuilder) {
+		a := b.State("a", func(b *xactBuilder) {
 			b.Initial("a.a1")
-			b.State("a.a1").Entry("enter", noop).On[xactNext]().To("a.a2")
+			a1 := b.State("a.a1")
+			a1.Entry().Do("enter", noop)
+			a1.On[xactNext]().To("a.a2")
 			b.State("a.a2")
-		}).Entry("enter", noop).On[xactChange]().To("b")
+		})
+		a.Entry().Do("enter", noop)
+		a.On[xactChange]().To("b")
 		b.State("b")
 	})
 
@@ -261,15 +268,15 @@ func TestXActStateActionsEntryActionsOfInitialStateParallel(t *testing.T) {
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Regions()
-		b.Chart().Entry("enter", noop)
+		b.Chart().Entry().Do("enter", noop)
 		b.State("a", func(b *xactBuilder) {
 			b.Initial("a.a1")
-			b.State("a.a1").Entry("enter", noop)
-		}).Entry("enter", noop)
+			b.State("a.a1").Entry().Do("enter", noop)
+		}).Entry().Do("enter", noop)
 		b.State("b", func(b *xactBuilder) {
 			b.Initial("b.b1")
-			b.State("b.b1").Entry("enter", noop)
-		}).Entry("enter", noop)
+			b.State("b.b1").Entry().Do("enter", noop)
+		}).Entry().Do("enter", noop)
 	})
 
 	_, effects := m.Start(counter{N: 0}, epoch)
@@ -455,10 +462,10 @@ func TestXActStateActionsWorksWithFunctionActions(t *testing.T) {
 			b.Initial("a.a1")
 			xactTracked(b.State("a.a1")).On[xactNextFn]().To("a.a3")
 			xactTracked(b.State("a.a2"))
-			b.State("a.a3").
-				Entry("enter", noop).Entry("entrySpy", noop).
-				Exit("exit", noop).Exit("exitSpy", noop).
-				On[xactNext]().Do("transitionSpy", xactDo[xactNext]).To("a.a2")
+			a3 := b.State("a.a3")
+			a3.Entry().Do("enter", noop).Do("entrySpy", noop)
+			a3.Exit().Do("exit", noop).Do("exitSpy", noop)
+			a3.On[xactNext]().Do("transitionSpy", xactDo[xactNext]).To("a.a2")
 		})
 	})
 
@@ -479,7 +486,7 @@ func TestXActStateActionsExitsChildrenOfParallelStateNodes(t *testing.T) {
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Initial("B")
 		xactTracked(b.State("A")).On[xactToB]().To("B")
-		b.Parallel("B", func(b *xactBuilder) {
+		xactTracked(b.Parallel("B", func(b *xactBuilder) {
 			xactTracked(b.State("B.C", func(b *xactBuilder) {
 				b.Initial("B.C.C1")
 				xactTracked(b.State("B.C.C1"))
@@ -488,7 +495,7 @@ func TestXActStateActionsExitsChildrenOfParallelStateNodes(t *testing.T) {
 				b.Initial("B.D.D1")
 				xactTracked(b.State("B.D.D1"))
 			}))
-		}).Entry("enter", noop).Exit("exit", noop).On[xactToA]().To("A")
+		})).On[xactToA]().To("A")
 	})
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
@@ -909,11 +916,16 @@ func TestXActEntryExitPassesEnteredExitedStateToEntryAndExit(t *testing.T) {
 		b.Initial("m.a")
 		b.On[xactLeave]().To("m.b")
 		b.State("m.b")
-		b.State("m.a", func(b *xactBuilder) {
+		a := b.State("m.a", func(b *xactBuilder) {
 			b.Initial("m.a.a1")
-			b.State("m.a.a1").Entry("entry", noop).Exit("exit", noop).On[xactNext]().To("m.a.a2")
+			a1 := b.State("m.a.a1")
+			a1.Entry().Do("entry", noop)
+			a1.Exit().Do("exit", noop)
+			a1.On[xactNext]().To("m.a.a2")
 			b.State("m.a.a2")
-		}).Entry("entry", noop).Exit("exit", noop)
+		})
+		a.Entry().Do("entry", noop)
+		a.Exit().Do("exit", noop)
 	})
 
 	var log []string
@@ -943,10 +955,10 @@ func TestXActEntryExitEntryAssignmentComputesFromContext(t *testing.T) {
 
 	m := xactNew(t, "m", func(b *sc.Builder[string, xactAge]) {
 		b.Initial("start")
-		b.State("start").
-			Exit("seen", func(context.Context, xactAge) {}).
-			On[xactNext]().To("checked")
-		b.State("checked").AssignOnEntry("checkAdult", func(c xactAge) xactAge {
+		start := b.State("start")
+		start.Exit().Do("seen", func(context.Context, xactAge) {})
+		start.On[xactNext]().To("checked")
+		b.State("checked").Entry().Assign("checkAdult", func(c xactAge) xactAge {
 			c.Adult = c.Age >= 18
 			return c
 		})
@@ -968,7 +980,7 @@ func TestXActEntryExitRootExitAssignmentAppliesWhenMachineCompletes(t *testing.T
 	t.Parallel()
 
 	m := xactNew(t, "m", func(b *sc.Builder[string, xactClosed]) {
-		b.Chart().AssignOnExit("close", func(c xactClosed) xactClosed {
+		b.Chart().Exit().Assign("close", func(c xactClosed) xactClosed {
 			c.Closed = true
 			return c
 		})
@@ -999,10 +1011,12 @@ func TestXActEntryExitChildInvokeIsStoppedBeforeParentExitAction(t *testing.T) {
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Initial("parent")
-		b.State("parent", func(b *xactBuilder) {
+		parent := b.State("parent", func(b *xactBuilder) {
 			b.Initial("parent.child")
 			b.State("parent.child").Requires[struct{}]("worker").OnError().Stay()
-		}).Exit("exit", noop).On[xactLeave]().To("elsewhere")
+		})
+		parent.Exit().Do("exit", noop)
+		parent.On[xactLeave]().To("elsewhere")
 		b.State("elsewhere")
 	})
 
@@ -1025,7 +1039,8 @@ func TestXActEntryExitEventRaisedOnEntryIsCollected(t *testing.T) {
 	m := xactNew(t, "loader", func(b *xactBuilder) {
 		b.Initial("idle")
 		b.State("idle").On[xactLoad]().To("loading")
-		loading := b.State("loading").RaiseOnEntry("loaded", xactRaise(xactLoaded{}))
+		loading := b.State("loading")
+		loading.Entry().Raise("loaded", xactRaise(xactLoaded{}))
 		loading.On[xactLoaded]().To("ready")
 		loading.On[xactRetry]().To("idle")
 		b.State("ready").On[xactRetry]().To("idle")
@@ -1049,12 +1064,12 @@ func TestXActParallelEntryActionDefinedOnParallelState(t *testing.T) {
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Initial("start")
 		xactTracked(b.State("start")).On[xactEnterPar]().To("p1")
-		b.Parallel("p1", func(b *xactBuilder) {
+		xactTracked(b.Parallel("p1", func(b *xactBuilder) {
 			xactTracked(b.State("p1.nested", func(b *xactBuilder) {
 				b.Initial("p1.nested.inner")
 				xactTracked(b.State("p1.nested.inner"))
 			}))
-		}).Entry("enter", noop).Exit("exit", noop)
+		}))
 	})
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
@@ -1070,14 +1085,14 @@ func xactCamera(t *testing.T) *sc.Machine[string, counter] {
 
 	return xactNew(t, "m", func(b *xactBuilder) {
 		b.Initial("ready")
-		b.Parallel("ready", func(b *xactBuilder) {
+		xactTracked(b.Parallel("ready", func(b *xactBuilder) {
 			xactTracked(b.State("ready.devicesInfo"))
 			xactTracked(b.State("ready.camera", func(b *xactBuilder) {
 				b.Initial("ready.camera.on")
 				xactTracked(b.State("ready.camera.on"))
 				xactTracked(b.State("ready.camera.off"))
 			}))
-		}).Entry("enter", noop).Exit("exit", noop).On[xactFoo]().To("ready.camera.off").Reenter()
+		})).On[xactFoo]().To("ready.camera.off").Reenter()
 	})
 }
 
@@ -1159,21 +1174,21 @@ func TestXActTargetlessDelayedTransitionDoesNotExitState(t *testing.T) {
 
 // XState: entry/exit actions > when reaching a final state > exit actions
 // should be called when invoked machine reaches its final state
-//
-// Partial: XState also gives the final state a an exit action and expects it
-// called. An sc final state has no exit actions, so only the root's is
-// ported.
 func TestXActFinalExitActionsCalledWhenInvokedMachineReachesFinalState(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		var exitCalled atomic.Bool
+		var exitCalled, finalExitCalled atomic.Bool
 
 		child := xactNew(t, "child", func(b *xactBuilder) {
-			b.Chart().Exit("exit", func(context.Context, counter) { exitCalled.Store(true) })
+			b.Chart().Exit().Do("exit", func(context.Context, counter) { exitCalled.Store(true) })
 			b.Initial("a")
-			b.Final("a")
+			b.Final("a").Exit().Do("exit", func(context.Context, counter) { finalExitCalled.Store(true) })
 		})
+
+		snap, effects := child.Start(counter{N: 0}, epoch)
+		require.True(t, snap.Done())
+		require.Equal(t, []string{"a/exit", "child/exit"}, names(effects))
 
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
 			b.Initial("active")
@@ -1191,6 +1206,7 @@ func TestXActFinalExitActionsCalledWhenInvokedMachineReachesFinalState(t *testin
 
 		require.True(t, inst.Snapshot().Done())
 		require.True(t, exitCalled.Load())
+		require.True(t, finalExitCalled.Load())
 	})
 }
 
@@ -1202,9 +1218,9 @@ func TestXActStoppedExitActionsNotCalledWhenStoppingMachine(t *testing.T) {
 	rootCalled, childCalled := false, false
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Chart().Exit("rootSpy", func(context.Context, counter) { rootCalled = true })
+		b.Chart().Exit().Do("rootSpy", func(context.Context, counter) { rootCalled = true })
 		b.Initial("a")
-		b.State("a").Exit("childSpy", func(context.Context, counter) { childCalled = true })
+		b.State("a").Exit().Do("childSpy", func(context.Context, counter) { childCalled = true })
 	})
 
 	inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1221,23 +1237,26 @@ func TestXActStoppedExitActionsNotCalledWhenStoppingMachine(t *testing.T) {
 // received event
 //
 // XState's exit action is the root's. The port gives the root one of each
-// kind of sc action: its own Exit action and a chart action run with OnExit.
+// kind of sc action: its own exit action, declared with Do, and a chart
+// action run with Run.
 //
 // DIVERGES from XState: XState hands every exit action the event being
-// processed. In sc a state's own Exit action takes no event, and its effect's
-// Event is nil, on completion as on any other exit. A chart action run with
-// OnExit is told the event in its Move, and its effect carries it.
+// processed. In sc a state's own Do exit action takes no event; its effect
+// carries the event, on completion as on any other exit. A chart action run
+// with Run is told the event in its Move.
 func TestXActStoppedExitActionSeesLastReceivedEvent(t *testing.T) {
 	t.Parallel()
 
 	var got any
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Action("record", func(_ context.Context, _ counter, mv sc.Move[string]) { got = mv.Event })
-		b.Chart().Exit("inline", noop).OnExit("record")
+		record := b.Action("record", func(_ context.Context, _ counter, mv sc.Move[string]) { got = mv.Event })
+		b.Chart().Exit().Do("inline", noop).Run(record)
 		b.Initial("a")
-		b.State("a").OnExit("record").On[xactNext]().To("b")
-		b.State("a").On[xactLeave]().To("c")
+		a := b.State("a")
+		a.Exit().Run(record)
+		a.On[xactNext]().To("b")
+		a.On[xactLeave]().To("c")
 		b.Final("b")
 		b.State("c")
 	})
@@ -1248,7 +1267,7 @@ func TestXActStoppedExitActionSeesLastReceivedEvent(t *testing.T) {
 	require.True(t, snap.Done())
 	require.Equal(t, []string{"a/record", "m/inline", "m/record"}, names(effects))
 	require.Equal(t, xactNext{}, effects[0].Event)
-	require.Nil(t, effects[1].Event)
+	require.Equal(t, xactNext{}, effects[1].Event)
 	require.Equal(t, xactNext{}, effects[2].Event)
 
 	require.NoError(t, m.Exec(t.Context(), effects[2], func(any) {}))
@@ -1263,7 +1282,7 @@ func TestXActStoppedClosingParentOfChildThatEmitsOnExitDoesNotPanic(t *testing.T
 	synctest.Test(t, func(t *testing.T) {
 		child := xactNew(t, "child", func(b *xactBuilder) {
 			b.Initial("idle")
-			b.State("idle").EmitOnExit("exit", func(counter) xactExit { return xactExit{} })
+			b.State("idle").Exit().Emit("exit", func(counter) xactExit { return xactExit{} })
 		})
 
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
@@ -1291,7 +1310,7 @@ func TestXActStoppedEventsFromDoneChildAreReceivedByParent(t *testing.T) {
 		var received atomic.Bool
 
 		child := xactNew(t, "child", func(b *xactBuilder) {
-			b.Chart().EmitOnExit("childDone", func(counter) xactChildDone { return xactChildDone{} })
+			b.Chart().Exit().Emit("childDone", func(counter) xactChildDone { return xactChildDone{} })
 			b.Initial("active")
 			b.State("active").On[xactFinish]().To("done")
 			b.Final("done")
@@ -1337,7 +1356,7 @@ func TestXActStoppedEventsFromStoppedChildAreNotReceivedByItsChildren(t *testing
 			chart := b.Chart()
 			myChild := chart.InvokeMachine("myChild", grandchild, xactSame, xactNoOutput)
 			myChild.OnError().Stay()
-			chart.SendOnExit("stopped", myChild, func(counter) any { return xactStopped{} })
+			chart.Exit().SendTo("stopped", myChild, func(counter) any { return xactStopped{} })
 		})
 
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
@@ -1372,8 +1391,8 @@ func TestXActStoppedReferencedActionsNotExecutedWhenStopping(t *testing.T) {
 	called := false
 
 	m := xactNew(t, "parent", func(b *xactBuilder) {
-		b.Action("referencedAction", func(context.Context, counter, sc.Move[string]) { called = true })
-		b.Chart().OnExit("referencedAction")
+		referenced := b.Action("referencedAction", func(context.Context, counter, sc.Move[string]) { called = true })
+		b.Chart().Exit().Run(referenced)
 	})
 
 	inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1392,7 +1411,7 @@ func TestXActStoppedBuiltinActionsNotExecutedWhenStopping(t *testing.T) {
 	called := false
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Chart().Exit("action", func(context.Context, counter) { called = true })
+		b.Chart().Exit().Do("action", func(context.Context, counter) { called = true })
 	})
 
 	inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1420,15 +1439,16 @@ func TestXActStoppedNoExitActionsOfSettledStateAfterStopInsideMicrostep(t *testi
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Initial("foo")
-		b.State("foo").Exit("exit", record("foo exit action")).
-			On[xactInit]().
+		foo := b.State("foo")
+		foo.Exit().Do("exit", record("foo exit action"))
+		foo.On[xactInit]().
 			// Stops the instance while the event is still being processed.
 			Do("stop", func(context.Context, counter, xactInit) { inst.Close() }).
 			Do("transition", func(context.Context, counter, xactInit) {
 				executed = append(executed, "foo transition action")
 			}).
 			To("bar")
-		b.State("bar").Exit("exit", record("bar exit action"))
+		b.State("bar").Exit().Do("exit", record("bar exit action"))
 	})
 
 	inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1465,26 +1485,34 @@ func TestXActInvalidTransitionDoesNotRecallPreviousActions(t *testing.T) {
 //
 // The action is declared by name with RequiresAction and given with Bind, as
 // XState's provide gives it. XState also enqueues an action that is not
-// defined, which sc rejects at declaration.
+// defined. An sc chart runs a chart action by the handle its declaration
+// returned, so an undeclared action cannot be named; the nearest thing, the
+// handle of another chart's action, is rejected at declaration.
 func TestXActConfigReferencesActionsOfMachineOptionsEntryActions(t *testing.T) {
 	t.Parallel()
 
+	var foreign *sc.Action[string, counter]
+	_, err := sc.New("other", func(b *xactBuilder) {
+		foreign = b.RequiresAction("undefinedAction")
+	})
+	require.NoError(t, err)
+
 	chart := func(undefined bool) func(b *xactBuilder) {
 		return func(b *xactBuilder) {
-			b.RequiresAction("definedAction")
+			defined := b.RequiresAction("definedAction")
 			b.Initial("a")
 			b.On[xactE]().To("a")
 			b.State("a").On[xactEvent]().To("b")
 
-			entered := b.State("b").OnEntry("definedAction")
+			entered := b.State("b").Entry().Run(defined)
 			if undefined {
-				entered.OnEntry("undefinedAction")
+				entered.Run(foreign)
 			}
 		}
 	}
 
-	_, err := sc.New("m", chart(true))
-	require.ErrorContains(t, err, `runs chart action "undefinedAction", which is not declared`)
+	_, err = sc.New("m", chart(true))
+	require.ErrorContains(t, err, `runs a chart action of another chart`)
 
 	calls := 0
 	m, err := xactNew(t, "m", chart(false)).Bind(func(b *sc.Binder[string, counter]) {
@@ -1509,8 +1537,8 @@ func TestXActConfigReferencesActionsOfMachineOptionsInitialState(t *testing.T) {
 	calls := 0
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Action("definedAction", func(context.Context, counter, sc.Move[string]) { calls++ })
-		b.Chart().OnEntry("definedAction")
+		defined := b.Action("definedAction", func(context.Context, counter, sc.Move[string]) { calls++ })
+		b.Chart().Entry().Run(defined)
 	})
 
 	_, effects := m.Start(counter{N: 0}, epoch)
@@ -1525,11 +1553,12 @@ func TestXActConfigReferencesActionSourcesFromActionObjects(t *testing.T) {
 	t.Parallel()
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Action("definedAction", xactNoMove)
+		defined := b.Action("definedAction", xactNoMove)
 		b.Initial("a")
-		b.State("a").OnEntry("definedAction").
-			On[xactEvent]().
-			Run("definedAction").
+		a := b.State("a")
+		a.Entry().Run(defined)
+		a.On[xactEvent]().
+			Run(defined).
 			Assign("updateContext", func(counter, xactEvent) counter { return counter{N: 10} }).
 			To("b")
 		b.State("b")
@@ -1553,10 +1582,10 @@ func TestXActConfigWorksWithAnonymousFunctions(t *testing.T) {
 
 	m := xactNew(t, "anon", func(b *xactBuilder) {
 		b.Initial("active")
-		b.State("active").
-			Entry("entry", func(context.Context, counter) { entryCalled = true }).
-			Exit("exit", func(context.Context, counter) { exitCalled = true }).
-			On[xactEvent]().
+		active := b.State("active")
+		active.Entry().Do("entry", func(context.Context, counter) { entryCalled = true })
+		active.Exit().Do("exit", func(context.Context, counter) { exitCalled = true })
+		active.On[xactEvent]().
 			Do("action", func(context.Context, counter, xactEvent) { actionCalled = true }).
 			To("inactive")
 		b.State("inactive")
@@ -1582,7 +1611,7 @@ func TestXActMetaActionSeesContextValue(t *testing.T) {
 	got := 0
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Chart().Entry("entryAction", func(_ context.Context, c counter) { got = c.N })
+		b.Chart().Entry().Do("entryAction", func(_ context.Context, c counter) { got = c.N })
 	})
 
 	_, effects := m.Start(counter{N: 42}, epoch)
@@ -1665,13 +1694,15 @@ func xactSpyRoot(t *testing.T, calls map[string]int, runs ...string) *sc.Machine
 	t.Helper()
 
 	return xactNew(t, "m", func(b *xactBuilder) {
+		actions := map[string]*sc.Action[string, counter]{}
+		entry := b.Chart().Entry()
 		for _, name := range runs {
-			if _, ok := calls[name]; !ok {
+			if _, ok := actions[name]; !ok {
 				calls[name] = 0
-				b.Action(name, func(context.Context, counter, sc.Move[string]) { calls[name]++ })
+				actions[name] = b.Action(name, func(context.Context, counter, sc.Move[string]) { calls[name]++ })
 			}
+			entry.Run(actions[name])
 		}
-		b.Chart().OnEntry(runs...)
 	})
 }
 
@@ -1727,7 +1758,7 @@ func TestXActEnqueueExecutesFunction(t *testing.T) {
 	calls := 0
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Chart().Entry("spy", func(context.Context, counter) { calls++ })
+		b.Chart().Entry().Do("spy", func(context.Context, counter) { calls++ })
 	})
 
 	_, effects := m.Start(counter{N: 0}, epoch)
@@ -1742,7 +1773,7 @@ func xactRaisesRaised(t *testing.T) *sc.Machine[string, counter] {
 	t.Helper()
 
 	return xactNew(t, "m", func(b *xactBuilder) {
-		b.On[xactFoo]().Raise("raise", func(counter, xactFoo) any { return xactRaised{} })
+		b.On[xactFoo]().Raise("raise", func(counter, xactFoo) xactRaised { return xactRaised{} })
 		b.On[xactRaised]().Do("spy", xactDo[xactRaised])
 	})
 }
@@ -1778,7 +1809,7 @@ func TestXActEnqueueExecutesAssignsWhenResolvingInitialSnapshot(t *testing.T) {
 	t.Parallel()
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Chart().AssignOnEntry("setCount", func(counter) counter { return counter{N: 42} })
+		b.Chart().Entry().Assign("setCount", func(counter) counter { return counter{N: 42} })
 	})
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
@@ -1789,15 +1820,16 @@ func TestXActEnqueueExecutesAssignsWhenResolvingInitialSnapshot(t *testing.T) {
 // XState: enqueueActions > should be able to check a simple referenced guard
 //
 // Partial: an sc entry action cannot call a guard. The nearest thing is the
-// condition of OnEntryIf, which the core checks when the chart is entered.
+// condition of an entry RunIf, which the core checks when the chart is
+// entered.
 func TestXActEnqueueChecksConditionOnEntry(t *testing.T) {
 	t.Parallel()
 
 	checked := false
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Action("act", xactNoMove)
-		b.Chart().OnEntryIf("act", func(sc.Move[string]) bool {
+		act := b.Action("act", xactNoMove)
+		b.Chart().Entry().RunIf(act, func(sc.Move[string]) bool {
 			checked = true
 			return true
 		})
@@ -1817,7 +1849,7 @@ func TestXActEnqueueSendParent(t *testing.T) {
 		var calls atomic.Int64
 
 		child := xactNew(t, "child", func(b *xactBuilder) {
-			b.Chart().EmitOnEntry("sendParent", func(counter) xactParentEvent { return xactParentEvent{} })
+			b.Chart().Entry().Emit("sendParent", func(counter) xactParentEvent { return xactParentEvent{} })
 		})
 
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
@@ -1897,7 +1929,7 @@ func xactSpawner(t *testing.T, child *sc.Machine[string, counter], key string, s
 		worker := active.SpawnMachine("worker", child, func(c counter, _ string) counter { return c }, xactNoOutput)
 		worker.OnError().Stay()
 
-		start := active.On[xactStart]().Spawn("spawn", "worker", func(counter, xactStart) string { return key })
+		start := active.On[xactStart]().Spawn("spawn", worker, func(counter, xactStart) string { return key })
 		if sendAtOnce {
 			start.SendToKey("ping", worker,
 				func(counter, xactStart) string { return key },
@@ -2030,7 +2062,7 @@ func xactSendsOnEntry[Ev any](t *testing.T, start counter, send func(counter) an
 			chart := b.Chart()
 			childSvc := chart.InvokeMachine("child", child, xactSame, xactNoOutput)
 			childSvc.OnError().Stay()
-			chart.SendOnEntry("send", childSvc, send)
+			chart.Entry().SendTo("send", childSvc, send)
 		})
 
 		_, effects := parent.Start(start, epoch)
@@ -2088,8 +2120,8 @@ func TestXActSendToReadsTargetFromEvent(t *testing.T) {
 		})
 		actor.Spawned().OnError().Stay()
 		a.On[xactStart]().
-			Spawn("spawnFoo", "actor", func(counter, xactStart) string { return "foo" }).
-			Spawn("spawnBar", "actor", func(counter, xactStart) string { return "bar" })
+			Spawn("spawnFoo", actor, func(counter, xactStart) string { return "foo" }).
+			Spawn("spawnBar", actor, func(counter, xactStart) string { return "bar" })
 		a.On[xactNamed]().SendToKey("send", actor,
 			func(_ counter, ev xactNamed) string { return ev.Value },
 			func(counter, xactNamed) xactEvent { return xactEvent{} })
@@ -2117,10 +2149,11 @@ func xactCounterOne(t *testing.T) *sc.Machine[string, counter] {
 	return xactNew(t, "m", func(b *xactBuilder) {
 		b.Initial("a")
 		b.State("a").On[xactNext]().To("b")
-		b.State("b").
-			AssignOnEntry("setCounter", func(counter) counter { return counter{N: 1} }).
-			RaiseOnEntry("event", xactRaise(xactEvent{})).
-			On[xactEvent]().Do("spy", xactDo[xactEvent]).To("c")
+		sb := b.State("b")
+		sb.Entry().
+			Assign("setCounter", func(counter) counter { return counter{N: 1} }).
+			Raise("event", xactRaise(xactEvent{}))
+		sb.On[xactEvent]().Do("spy", xactDo[xactEvent]).To("c")
 		b.State("c")
 	})
 }
@@ -2155,7 +2188,9 @@ func xactDelayedSelf(t *testing.T, delay time.Duration, respond bool) *sc.Machin
 
 	return xactNew(t, "m", func(b *xactBuilder) {
 		b.Initial("a")
-		a := b.State("a").RaiseAfterOnEntry("event", delay, func(counter) any { return xactEvent{} })
+		event := b.Delayed("event")
+		a := b.State("a")
+		a.Entry().RaiseAfter(event, delay, xactRaise(xactEvent{}))
 		a.On[xactToB]().To("b")
 		if respond {
 			a.On[xactEvent]().To("b")
@@ -2208,7 +2243,9 @@ func TestXActRaiseRaisesEventAndRespondsInSameState(t *testing.T) {
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Initial("a")
-		b.State("a").RaiseOnEntry("toB", xactRaise(xactToB{})).On[xactToB]().To("b")
+		a := b.State("a")
+		a.Entry().Raise("toB", xactRaise(xactToB{}))
+		a.On[xactToB]().To("b")
 		b.Final("b")
 	})
 
@@ -2224,9 +2261,10 @@ func TestXActRaiseRaisesDelayedEventAndRespondsInSameState(t *testing.T) {
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Initial("a")
-		b.State("a").
-			RaiseAfterOnEntry("toB", 100*time.Millisecond, func(counter) any { return xactToB{} }).
-			On[xactToB]().To("b")
+		toB := b.Delayed("toB")
+		a := b.State("a")
+		a.Entry().RaiseAfter(toB, 100*time.Millisecond, xactRaise(xactToB{}))
+		a.On[xactToB]().To("b")
 		b.Final("b")
 	})
 
@@ -2248,7 +2286,7 @@ func TestXActRaiseAcceptsEventExpression(t *testing.T) {
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Initial("a")
 		a := b.State("a")
-		a.On[xactNext]().Raise("raise", func(counter, xactNext) any { return xactRaised{} })
+		a.On[xactNext]().Raise("raise", func(counter, xactNext) xactRaised { return xactRaised{} })
 		a.On[xactRaised]().To("b")
 		b.State("b")
 	})
@@ -2290,10 +2328,11 @@ func TestXActCancelCancelsRaisedDelayedEvent(t *testing.T) {
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Initial("a")
+		myID := b.Delayed("myId")
 		a := b.State("a")
-		a.On[xactNext]().RaiseAfter("myId", time.Millisecond, func(counter, xactNext) any { return xactRaised{} })
+		a.On[xactNext]().RaiseAfter(myID, time.Millisecond, func(counter, xactNext) xactRaised { return xactRaised{} })
 		a.On[xactRaised]().To("b")
-		a.On[xactCancel]().CancelRaise("myId")
+		a.On[xactCancel]().CancelRaise(myID)
 		b.State("b")
 	})
 
@@ -2317,9 +2356,11 @@ func xactSameIDChild(t *testing.T, id string, spy *atomic.Int64) *sc.Machine[str
 	t.Helper()
 
 	return xactNew(t, id, func(b *xactBuilder) {
-		run := b.Chart().RaiseAfterOnEntry("sameId", 100*time.Millisecond, func(counter) any { return xactEvent{} })
+		sameID := b.Delayed("sameId")
+		run := b.Chart()
+		run.Entry().RaiseAfter(sameID, 100*time.Millisecond, xactRaise(xactEvent{}))
 		run.On[xactEvent]().Do("spy", func(context.Context, counter, xactEvent) { spy.Add(1) })
-		run.On[xactCancel]().CancelRaise("sameId")
+		run.On[xactCancel]().CancelRaise(sameID)
 	})
 }
 
@@ -2383,31 +2424,32 @@ func TestXActCancelOnlyInMachineThatScheduledItSentSecond(t *testing.T) {
 // XState: cancel > should not try to clear an undefined timeout when
 // canceling an unscheduled timer
 //
-// DIVERGES from XState: XState lets a chart cancel an id nothing ever
-// schedules. sc rejects, at declaration, a CancelRaise that names no
-// RaiseAfter of the chart. For a raise that is declared but not waiting,
-// cancelling asks the driver to cancel nothing, as XState expects.
+// The id XState cancels is a delayed event the sc chart declares with
+// Delayed. The chart cancels it both where nothing ever raises it and where
+// a raise is declared but not waiting; either way the driver is asked to
+// cancel nothing.
 func TestXActCancelUnscheduledTimerCancelsNothing(t *testing.T) {
 	t.Parallel()
 
-	chart := func(declared bool) func(b *xactBuilder) {
+	chart := func(raised bool) func(b *xactBuilder) {
 		return func(b *xactBuilder) {
-			b.On[xactFoo]().CancelRaise("foo")
-			if declared {
-				b.On[xactBar]().RaiseAfter("foo", time.Millisecond, func(counter, xactBar) any { return xactRaised{} })
+			foo := b.Delayed("foo")
+			b.On[xactFoo]().CancelRaise(foo)
+			if raised {
+				b.On[xactBar]().RaiseAfter(foo, time.Millisecond, func(counter, xactBar) xactRaised { return xactRaised{} })
 				b.On[xactRaised]().Stay()
 			}
 		}
 	}
 
-	_, err := sc.New("m", chart(false))
-	require.ErrorContains(t, err, `CancelRaise names "foo", which no RaiseAfter declares`)
+	for _, raised := range []bool{false, true} {
+		m := xactNew(t, "m", chart(raised))
+		snap, _ := m.Start(counter{N: 0}, epoch)
+		next, effects := m.Transition(snap, xactFoo{}, epoch)
 
-	m := xactNew(t, "m", chart(true))
-	snap, _ := m.Start(counter{N: 0}, epoch)
-	_, effects := m.Transition(snap, xactFoo{}, epoch)
-
-	require.Empty(t, effects)
+		require.Empty(t, effects)
+		require.Empty(t, next.Timers())
+	}
 }
 
 // XState: cancel > should not be able to cancel a just scheduled non-delayed
@@ -2429,7 +2471,7 @@ func TestXActCancelSendToJustInvokedChildIsDelivered(t *testing.T) {
 			sb := b.State("b")
 			myChild := sb.InvokeMachine("myChild", child, xactSame, xactNoOutput)
 			myChild.OnError().Stay()
-			sb.SendOnEntry("ping", myChild, func(counter) any { return xactPing{Value: 0} })
+			sb.Entry().SendTo("ping", myChild, func(counter) any { return xactPing{Value: 0} })
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -2492,17 +2534,17 @@ func xactInitialRaise(t *testing.T, assign, referenced bool) *sc.Machine[string,
 	t.Helper()
 
 	return xactNew(t, "m", func(b *xactBuilder) {
-		b.Action("foo", xactNoMove)
+		foo := b.Action("foo", xactNoMove)
 
-		root := b.Chart()
+		root := b.Chart().Entry()
 		if assign {
-			root.AssignOnEntry("setCount", func(counter) counter { return counter{N: 42} })
+			root.Assign("setCount", func(counter) counter { return counter{N: 42} })
 		}
-		root.RaiseOnEntry("hello", xactRaise(xactHello{}))
+		root.Raise("hello", xactRaise(xactHello{}))
 
 		hello := b.On[xactHello]()
 		if referenced {
-			hello.Run("foo")
+			hello.Run(foo)
 		} else {
 			hello.Do("spy", xactDo[xactHello])
 		}

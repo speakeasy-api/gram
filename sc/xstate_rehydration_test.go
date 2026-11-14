@@ -23,7 +23,7 @@ package sc_test
 //   - machine.resolveState({value}) is Machine.StartIn.
 //   - XState keeps a child actor's snapshot under "children" in its parent's.
 //     sc keeps a child machine's snapshot inside the parent's too, and a
-//     test reads it with Snapshot.Child. sc has no reference to a running
+//     test reads it with the child's handle, Child.Snapshot. sc has no reference to a running
 //     child to send to, so a test sends to a child through a parent
 //     transition's SendTo.
 //   - XState's root-level entry, exit, invoke and on are declared on the
@@ -82,6 +82,8 @@ type (
 	xrehMachine = sc.Machine[string, counter]
 	xrehSnap    = sc.Snapshot[string, counter]
 	xrehInst    = sc.Instance[string, counter]
+	// xrehChild is the handle of a child machine of these charts.
+	xrehChild = sc.Child[string, counter, string, counter, int]
 )
 
 // xrehLog records the values an action saw, in order.
@@ -173,12 +175,12 @@ func xrehRestore[S comparable, C any](t *testing.T, m *sc.Machine[S, C], data []
 }
 
 // xrehChildOf is XState's snapshot.children[service].getSnapshot(): the
-// snapshot of the child machine that parent's service runs.
-func xrehChildOf(t *testing.T, child *xrehMachine, parent xrehSnap, service string) xrehSnap {
+// snapshot of the child machine that parent runs as child.
+func xrehChildOf(t *testing.T, child *xrehChild, parent xrehSnap) xrehSnap {
 	t.Helper()
 
-	snap, ok := parent.Child(child, service)
-	require.True(t, ok, "service %q has no child snapshot", service)
+	snap, ok := child.Snapshot(parent)
+	require.True(t, ok, "child machine has no snapshot")
 
 	return snap
 }
@@ -243,7 +245,7 @@ func xrehCounting(t *testing.T, id string, step int) *xrehMachine {
 
 // xrehInvoke makes st run child as the service name, starting it at start.
 // It returns the child's handle.
-func xrehInvoke(st *sc.StateBuilder[string, counter], name string, child *xrehMachine, start int) sc.Mailbox[any] {
+func xrehInvoke(st *sc.StateBuilder[string, counter], name string, child *xrehMachine, start int) *xrehChild {
 	inv := st.InvokeMachine(name, child, func(counter) counter { return counter{N: start} }, xrehOutput)
 	inv.OnError().Stay()
 
@@ -282,9 +284,9 @@ func TestXRehPersistedStateStoppedImmediatelyRunsNoExitActions(t *testing.T) {
 
 	var exits atomic.Int32
 	m := xrehNew(t, "exits", func(b *xrehBuilder) {
-		b.Chart().Exit("root", func(context.Context, counter) { exits.Add(1) })
+		b.Chart().Exit().Do("root", func(context.Context, counter) { exits.Add(1) })
 		b.Initial("a")
-		b.State("a").Exit("a", func(context.Context, counter) { exits.Add(1) })
+		b.State("a").Exit().Do("a", func(context.Context, counter) { exits.Add(1) })
 	})
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
@@ -319,10 +321,10 @@ func xrehActiveChart(t *testing.T, exits *atomic.Int32) *xrehMachine {
 	t.Helper()
 
 	return xrehNew(t, "value", func(b *xrehBuilder) {
-		b.Chart().Exit("root", func(context.Context, counter) { exits.Add(1) })
+		b.Chart().Exit().Do("root", func(context.Context, counter) { exits.Add(1) })
 		b.Initial("inactive")
 		b.State("inactive").On[xrehNext]().To("active")
-		b.State("active").Tag("foo").Exit("active", func(context.Context, counter) { exits.Add(1) })
+		b.State("active").Tag("foo").Exit().Do("active", func(context.Context, counter) { exits.Add(1) })
 	})
 }
 
@@ -406,7 +408,7 @@ func TestXRehDoesNotReplayActionsFromAPersistedState(t *testing.T) {
 
 	var entries atomic.Int32
 	m := xrehNew(t, "entry", func(b *xrehBuilder) {
-		b.Chart().Entry("spy", func(context.Context, counter) { entries.Add(1) })
+		b.Chart().Entry().Do("spy", func(context.Context, counter) { entries.Add(1) })
 	})
 
 	inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -650,12 +652,15 @@ func TestXRehRehydratesAnActorDeepInTheTree(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		grandchild := xrehCounting(t, "grandchild", 1)
 
+		var toGrandchild, toChild *xrehChild
 		child := xrehNew(t, "child", func(b *xrehBuilder) {
-			xrehForward(b.Chart(), xrehInvoke(b.Chart(), "grandchild", grandchild, 0))
+			toGrandchild = xrehInvoke(b.Chart(), "grandchild", grandchild, 0)
+			xrehForward(b.Chart(), toGrandchild)
 		})
 
 		m := xrehNew(t, "root", func(b *xrehBuilder) {
-			xrehForward(b.Chart(), xrehInvoke(b.Chart(), "child", child, 0))
+			toChild = xrehInvoke(b.Chart(), "child", child, 0)
+			xrehForward(b.Chart(), toChild)
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -668,8 +673,8 @@ func TestXRehRehydratesAnActorDeepInTheTree(t *testing.T) {
 		// As in XState, the restored actor is not started: the
 		// grandchild's count is read from the stored snapshot alone.
 		restored := xrehRestore(t, m, xrehPersist(t, inst.Snapshot()), time.Now())
-		restoredChild := xrehChildOf(t, child, restored, "child")
-		restoredGrandchild := xrehChildOf(t, grandchild, restoredChild, "grandchild")
+		restoredChild := xrehChildOf(t, toChild, restored)
+		restoredGrandchild := xrehChildOf(t, toGrandchild, restoredChild)
 
 		require.Equal(t, 1, restoredGrandchild.Context.N)
 	})
@@ -1069,12 +1074,14 @@ func TestXRehPersistsAndRestoresAnInlineInvoke(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		child := xrehCounting(t, "counter", 1)
+		var counting *xrehChild
 		m := xrehNew(t, "parent", func(b *xrehBuilder) {
 			b.Initial("active")
 			b.State("active", func(b *xrehBuilder) {
 				b.Initial("running")
 				running := b.State("running")
-				xrehForward(running, xrehInvoke(running, "counter", child, 0))
+				counting = xrehInvoke(running, "counter", child, 0)
+				xrehForward(running, counting)
 			})
 		})
 
@@ -1088,10 +1095,10 @@ func TestXRehPersistsAndRestoresAnInlineInvoke(t *testing.T) {
 
 		restored := xrehRestore(t, m, data, time.Now())
 		require.False(t, restored.Done())
-		require.Equal(t, 1, xrehChildOf(t, child, restored, "counter").Context.N)
+		require.Equal(t, 1, xrehChildOf(t, counting, restored).Context.N)
 
 		xrehSend(t, inst, xrehInc{})
-		require.Equal(t, 2, xrehChildOf(t, child, inst.Snapshot(), "counter").Context.N)
+		require.Equal(t, 2, xrehChildOf(t, counting, inst.Snapshot()).Context.N)
 	})
 }
 
@@ -1105,11 +1112,13 @@ func TestXRehRestoresInlineInvokesInParallelRegions(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		child := xrehCounting(t, "counter", 1)
 		other := xrehCounting(t, "other", 0)
+		var counting, others *xrehChild
 		m := xrehNew(t, "parent", func(b *xrehBuilder) {
 			b.Regions()
 			a := b.State("a")
-			xrehForward(a, xrehInvoke(a, "counter", child, 0))
-			xrehInvoke(b.State("b"), "other", other, 7)
+			counting = xrehInvoke(a, "counter", child, 0)
+			xrehForward(a, counting)
+			others = xrehInvoke(b.State("b"), "other", other, 7)
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1120,8 +1129,8 @@ func TestXRehRestoresInlineInvokesInParallelRegions(t *testing.T) {
 		inst, _ = xrehRestart(t, m, inst)
 		defer inst.Close()
 
-		require.Equal(t, 1, xrehChildOf(t, child, inst.Snapshot(), "counter").Context.N)
-		require.Equal(t, 7, xrehChildOf(t, other, inst.Snapshot(), "other").Context.N)
+		require.Equal(t, 1, xrehChildOf(t, counting, inst.Snapshot()).Context.N)
+		require.Equal(t, 7, xrehChildOf(t, others, inst.Snapshot()).Context.N)
 	})
 }
 
@@ -1133,13 +1142,15 @@ func TestXRehResolvesAReusedInvokeIDAgainstTheActiveState(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		child := xrehCounting(t, "counter", 1)
 		other := xrehCounting(t, "other", 100)
+		var worker *xrehChild
 		m := xrehNew(t, "parent", func(b *xrehBuilder) {
 			b.Initial("first")
 			first := b.State("first")
 			xrehInvoke(first, "worker", other, 100)
 			first.On[xrehNext]().To("second")
 			second := b.State("second")
-			xrehForward(second, xrehInvoke(second, "worker", child, 0))
+			worker = xrehInvoke(second, "worker", child, 0)
+			xrehForward(second, worker)
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1151,10 +1162,10 @@ func TestXRehResolvesAReusedInvokeIDAgainstTheActiveState(t *testing.T) {
 		inst, _ = xrehRestart(t, m, inst)
 		defer inst.Close()
 
-		require.Equal(t, 1, xrehChildOf(t, child, inst.Snapshot(), "worker").Context.N)
+		require.Equal(t, 1, xrehChildOf(t, worker, inst.Snapshot()).Context.N)
 
 		xrehSend(t, inst, xrehInc{})
-		require.Equal(t, 2, xrehChildOf(t, child, inst.Snapshot(), "worker").Context.N)
+		require.Equal(t, 2, xrehChildOf(t, worker, inst.Snapshot()).Context.N)
 	})
 }
 
@@ -1167,8 +1178,10 @@ func TestXRehKeepsTheSourceKeyOfARegisteredInvoke(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		child := xrehCounting(t, "counter", 1)
+		var counting *xrehChild
 		m := xrehNew(t, "parent", func(b *xrehBuilder) {
-			xrehForward(b.Chart(), xrehInvoke(b.Chart(), "counter", child, 0))
+			counting = xrehInvoke(b.Chart(), "counter", child, 0)
+			xrehForward(b.Chart(), counting)
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1183,7 +1196,7 @@ func TestXRehKeepsTheSourceKeyOfARegisteredInvoke(t *testing.T) {
 		require.Len(t, raw.Invocations, 1)
 		require.Equal(t, "counter", raw.Invocations[0].Name)
 		require.Equal(t, "parent", raw.Invocations[0].State)
-		require.Equal(t, 1, xrehChildOf(t, child, inst.Snapshot(), "counter").Context.N)
+		require.Equal(t, 1, xrehChildOf(t, counting, inst.Snapshot()).Context.N)
 	})
 }
 
@@ -1312,7 +1325,7 @@ func xrehTerminalChart(t *testing.T) *xrehMachine {
 	t.Helper()
 
 	return xrehNew(t, "terminal", func(b *xrehBuilder) {
-		b.Chart().Entry("entry", noop)
+		b.Chart().Entry().Do("entry", noop)
 		b.Initial("a")
 		b.State("a").On[xrehNext]().Do("action", func(context.Context, counter, xrehNext) {}).To("b")
 		b.State("b")
@@ -1768,9 +1781,10 @@ func TestXRehRestoresTheTimersOfRehydratedChildren(t *testing.T) {
 			b.State("waiting").After(time.Second).To("done")
 			b.Final("done")
 		})
+		var inv *xrehChild
 		m := xrehNew(t, "parent", func(b *xrehBuilder) {
 			b.Initial("working")
-			inv := b.State("working").InvokeMachine("child", child, func(c counter) counter { return c }, xrehOutput)
+			inv = b.State("working").InvokeMachine("child", child, func(c counter) counter { return c }, xrehOutput)
 			inv.OnDone().To("finished")
 			inv.OnError().Stay()
 			b.State("finished")
@@ -1784,7 +1798,7 @@ func TestXRehRestoresTheTimersOfRehydratedChildren(t *testing.T) {
 		inst, data := xrehRestart(t, m, inst)
 		defer inst.Close()
 
-		require.Len(t, xrehChildOf(t, child, xrehRestore(t, m, data, time.Now()), "child").Timers(), 1)
+		require.Len(t, xrehChildOf(t, inv, xrehRestore(t, m, data, time.Now())).Timers(), 1)
 		require.Equal(t, []string{"working"}, inst.Snapshot().Active())
 
 		xrehPass(999 * time.Millisecond)
@@ -1801,9 +1815,10 @@ func TestXRehRestoresTheTimersOfRehydratedChildren(t *testing.T) {
 // sc has no delayed SendTo. The parent raises an event for itself after the
 // delay with RaiseAfter, and sends to the child when that event arrives, so
 // the stored timer is a delayed event of the parent and names no target.
-func xrehPinging(st *sc.StateBuilder[string, counter], child *xrehMachine) {
+func xrehPinging(b *xrehBuilder, st *sc.StateBuilder[string, counter], child *xrehMachine) {
 	childSvc := xrehInvoke(st, "child", child, 0)
-	st.On[xrehSchedule]().RaiseAfter("ping", 100*time.Millisecond, func(counter, xrehSchedule) any { return xrehPingDue{} })
+	ping := b.Delayed("ping")
+	st.On[xrehSchedule]().RaiseAfter(ping, 100*time.Millisecond, func(counter, xrehSchedule) xrehPingDue { return xrehPingDue{} })
 	st.On[xrehPingDue]().SendTo("deliver", childSvc, func(counter, xrehPingDue) any { return xrehPing{} })
 }
 
@@ -1822,7 +1837,7 @@ func TestXRehRestoresADelayedSendToAChild(t *testing.T) {
 			b.On[xrehPing]().Do("received", func(context.Context, counter, xrehPing) { received.Add(1) })
 		})
 		m := xrehNew(t, "parent", func(b *xrehBuilder) {
-			xrehPinging(b.Chart(), child)
+			xrehPinging(b, b.Chart(), child)
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1861,13 +1876,14 @@ func TestXRehRestoresADelayedSendFromAChildToItsParent(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		child := xrehNew(t, "child", func(b *xrehBuilder) {
-			b.On[xrehSchedule]().RaiseAfter("ping-parent", 100*time.Millisecond, func(counter, xrehSchedule) any { return xrehPingDue{} })
+			b.On[xrehSchedule]().RaiseAfter(b.Delayed("ping-parent"), 100*time.Millisecond, func(counter, xrehSchedule) xrehPingDue { return xrehPingDue{} })
 			b.On[xrehPingDue]().Emit("ping", func(counter, xrehPingDue) xrehPing { return xrehPing{} })
 		})
 
 		var received atomic.Int32
+		var childSvc *xrehChild
 		m := xrehNew(t, "parent", func(b *xrehBuilder) {
-			childSvc := xrehInvoke(b.Chart(), "child", child, 0)
+			childSvc = xrehInvoke(b.Chart(), "child", child, 0)
 			b.On[xrehBegin]().SendTo("schedule", childSvc, func(counter, xrehBegin) any { return xrehSchedule{} })
 			b.On[xrehPing]().Do("received", func(context.Context, counter, xrehPing) { received.Add(1) })
 		})
@@ -1882,7 +1898,7 @@ func TestXRehRestoresADelayedSendFromAChildToItsParent(t *testing.T) {
 
 		require.Empty(t, xrehRaw(t, data).Timers)
 
-		timers := xrehChildOf(t, child, xrehRestore(t, m, data, time.Now()), "child").Timers()
+		timers := xrehChildOf(t, childSvc, xrehRestore(t, m, data, time.Now())).Timers()
 		require.Len(t, timers, 1)
 		require.Equal(t, "ping-parent", timers[0].Name)
 		require.Equal(t, xrehPingDue{}, timers[0].Raised)
@@ -1909,7 +1925,7 @@ func TestXRehADelayedSendAfterItsChildWasReplaced(t *testing.T) {
 	m := xrehNew(t, "parent", func(b *xrehBuilder) {
 		b.Initial("active")
 		active := b.State("active")
-		xrehPinging(active, child)
+		xrehPinging(b, active, child)
 		active.On[xrehReenter]().To("active").Reenter()
 	})
 

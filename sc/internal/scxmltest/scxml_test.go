@@ -252,14 +252,8 @@ func (c *chart) declare(b *sc.Builder[string, struct{}], parent *state) []error 
 			c.atomic[s.id] = true
 
 			f := b.Final(s.id)
-			for i, raised := range s.entry {
-				if raised != "" {
-					problems = append(problems, fmt.Errorf("%w: an event raised on entering a final state", errUnsupported))
-					continue
-				}
-
-				f.Entry(fmt.Sprintf("entry%d", i), func(context.Context, struct{}) {})
-			}
+			content(f.Entry, "entry", s.entry)
+			content(f.Exit, "exit", s.exit)
 		case "parallel":
 			problems = append(problems, c.behave(b.Parallel(s.id, nested), s)...)
 		default:
@@ -281,22 +275,8 @@ func (c *chart) declare(b *sc.Builder[string, struct{}], parent *state) []error 
 func (c *chart) behave(sb *sc.StateBuilder[string, struct{}], s *state) []error {
 	var problems []error
 
-	for i, raised := range s.entry {
-		if raised != "" {
-			sb.RaiseOnEntry(fmt.Sprintf("entry%d", i), func(struct{}) any { return event{Name: raised} })
-			continue
-		}
-
-		sb.Entry(fmt.Sprintf("entry%d", i), func(context.Context, struct{}) {})
-	}
-	for i, raised := range s.exit {
-		if raised != "" {
-			sb.RaiseOnExit(fmt.Sprintf("exit%d", i), func(struct{}) any { return event{Name: raised} })
-			continue
-		}
-
-		sb.Exit(fmt.Sprintf("exit%d", i), func(context.Context, struct{}) {})
-	}
+	content(sb.Entry, "entry", s.entry)
+	content(sb.Exit, "exit", s.exit)
 
 	for i, a := range s.arrows {
 		switch {
@@ -313,6 +293,25 @@ func (c *chart) behave(sb *sc.StateBuilder[string, struct{}], s *state) []error 
 	return problems
 }
 
+// content declares the executable content of an <onentry> or <onexit>, in
+// document order, as one list of steps: each raise as a raise and each log as
+// an action. It asks for the steps only when there is content, since an empty
+// list of steps is a declaration error.
+func content(steps func() *sc.Steps[string, struct{}], prefix string, list []string) {
+	if len(list) == 0 {
+		return
+	}
+
+	for i, raised := range list {
+		if raised == "" {
+			steps().Do(fmt.Sprintf("%s%d", prefix, i), func(context.Context, struct{}) {})
+			continue
+		}
+
+		steps().Raise(fmt.Sprintf("%s%d", prefix, i), func(struct{}) event { return event{Name: raised} })
+	}
+}
+
 // finish gives a transition its content and target.
 func finish[Ev any](t *sc.Transition[string, struct{}, Ev], s *state, a arrow, index int) {
 	for i, raised := range a.content {
@@ -321,7 +320,7 @@ func finish[Ev any](t *sc.Transition[string, struct{}, Ev], s *state, a arrow, i
 			continue
 		}
 
-		t.Raise(fmt.Sprintf("raise%d.%d", index, i), func(struct{}, Ev) any { return event{Name: raised} })
+		t.Raise(fmt.Sprintf("raise%d.%d", index, i), func(struct{}, Ev) event { return event{Name: raised} })
 	}
 
 	if len(a.targets) == 0 {

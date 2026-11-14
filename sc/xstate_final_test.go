@@ -160,9 +160,9 @@ func TestXFinExecutesFinalChildStateActionsFirst(t *testing.T) {
 			b.Initial("bar")
 			b.State("bar", func(b *xfinBuilder) {
 				b.Initial("baz")
-				b.Final("baz").Entry("bazAction", noop)
+				b.Final("baz").Entry().Do("bazAction", noop)
 			}).OnDone().To("barFinal")
-			b.Final("barFinal").Entry("barAction", noop)
+			b.Final("barFinal").Entry().Do("barAction", noop)
 		}).OnDone().Do("fooAction", xfinSpy)
 	})
 	require.NoError(t, err)
@@ -296,13 +296,14 @@ func TestXFinLeavesMachineOutputUndefinedWithoutFinalOutput(t *testing.T) {
 func TestXFinUsesTheReachedTopLevelFinalStateOutput(t *testing.T) {
 	t.Parallel()
 
+	var passed, failed *sc.Ending[string, counter, xfinStatus]
 	m, err := sc.New("m", func(b *xfinBuilder) {
 		b.Initial("start")
 		start := b.State("start")
 		start.On[xfinPass]().To("passed")
 		start.On[xfinFail]().To("failed")
-		b.Final("passed").Output(func(counter) xfinStatus { return xfinStatus{Status: "passed"} })
-		b.Final("failed").Output(func(counter) xfinStatus { return xfinStatus{Status: "failed"} })
+		passed = b.Final("passed").Output(func(counter) xfinStatus { return xfinStatus{Status: "passed"} })
+		failed = b.Final("failed").Output(func(counter) xfinStatus { return xfinStatus{Status: "failed"} })
 	})
 	require.NoError(t, err)
 
@@ -312,6 +313,13 @@ func TestXFinUsesTheReachedTopLevelFinalStateOutput(t *testing.T) {
 	output, has := m.Output(snap)
 	require.True(t, has)
 	require.Equal(t, xfinStatus{Status: "failed"}, output)
+
+	_, has = passed.Reached(snap)
+	require.False(t, has)
+
+	status, has := failed.Reached(snap)
+	require.True(t, has)
+	require.Equal(t, xfinStatus{Status: "failed"}, status)
 }
 
 // XState: should populate top-level final state output through pure transition
@@ -414,9 +422,9 @@ func TestXFinStateOutputUsesContextUpdatedByTheEntryOfTheReachedFinalState(t *te
 		b.State("a", func(b *xfinBuilder) {
 			b.Initial("a1")
 			b.State("a1").On[xfinNext1]().To("a2")
-			b.Final("a2").
-				AssignOnEntry("count", func(c counter) counter { c.N = 1; return c }).
-				Output(func(c counter) int { return c.N })
+			a2 := b.Final("a2")
+			a2.Entry().Assign("count", func(c counter) counter { c.N = 1; return c })
+			a2.Output(func(c counter) int { return c.N })
 		}).OnDoneWith[int]().Do("spy", func(context.Context, counter, sc.Done[int]) {})
 	})
 	require.NoError(t, err)
@@ -591,7 +599,7 @@ func TestXFinParallelRootCompletesWhenADirectFinalChildIsReached(t *testing.T) {
 
 	m, err := sc.New("m", func(b *xfinBuilder) {
 		b.Regions()
-		b.Chart().Exit("completed", noop)
+		b.Chart().Exit().Do("completed", noop)
 		b.Final("a")
 	})
 	require.NoError(t, err)
@@ -607,7 +615,7 @@ func TestXFinParallelRootCompletesWhenAFinalChildOfItsCompoundChildIsReached(t *
 
 	m, err := sc.New("m", func(b *xfinBuilder) {
 		b.Regions()
-		b.Chart().Exit("completed", noop)
+		b.Chart().Exit().Do("completed", noop)
 		b.State("a", func(b *xfinBuilder) {
 			b.Initial("b")
 			b.Final("b")
@@ -626,7 +634,7 @@ func TestXFinParallelRootCompletesWhenAFinalDescendantIsReachedTwoParallelLevels
 
 	m, err := sc.New("m", func(b *xfinBuilder) {
 		b.Regions()
-		b.Chart().Exit("completed", noop)
+		b.Chart().Exit().Do("completed", noop)
 		b.Parallel("a", func(b *xfinBuilder) {
 			b.State("b", func(b *xfinBuilder) {
 				b.Initial("c")
@@ -718,7 +726,7 @@ func TestXFinParallelRootCompletesOnceWhenSeveralRegionsCompleteAtOnce(t *testin
 
 	m, err := sc.New("m", func(b *xfinBuilder) {
 		b.Regions()
-		b.Chart().Exit("completed", noop)
+		b.Chart().Exit().Do("completed", noop)
 		b.Final("a")
 		b.Final("b")
 	})
@@ -773,18 +781,14 @@ func TestXFinParallelOnDoneIsTakenOnceWhenSeveralRegionsCompleteAtOnce(t *testin
 }
 
 // XState: should call exit actions in reversed document order when the machines reaches its final state
-//
-// Partial port: XState also expects "exit: b" between the entry of b and the
-// exit of the root. An sc final state has no exit actions, so that one cannot
-// be declared; everything else is as XState has it.
 func TestXFinExitOrderWhenTheMachineReachesItsFinalState(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("m", func(b *xfinBuilder) {
-		b.Chart().Entry("enter", noop).Exit("exit", noop)
+		xfinTrack(b.Chart())
 		b.Initial("a")
-		b.State("a").Entry("enter", noop).Exit("exit", noop).On[xfinNext1]().To("b")
-		b.Final("b").Entry("enter", noop)
+		xfinTrack(b.State("a")).On[xfinNext1]().To("b")
+		xfinTrack(b.Final("b"))
 	})
 	require.NoError(t, err)
 
@@ -799,33 +803,48 @@ func TestXFinExitOrderWhenTheMachineReachesItsFinalState(t *testing.T) {
 		"a/exit",
 		"b/enter",
 		// result of reaching final states
+		"b/exit",
 		"m/exit",
 	}, actions)
 }
 
+// xfinTracked is a state or final state whose entry and exit a test records.
+type xfinTracked interface {
+	Entry() *sc.Steps[string, counter]
+	Exit() *sc.Steps[string, counter]
+}
+
+// xfinTrack records the entry and exit of state, as "enter" and "exit".
+func xfinTrack[T xfinTracked](state T) T {
+	state.Entry().Do("enter", noop)
+	state.Exit().Do("exit", noop)
+
+	return state
+}
+
 // xfinTrackedRegionsChart is XState's parallel root with regions a and b,
 // each moving from its first child to a final one. Every state and the chart
-// record their entry and, where sc allows one, their exit. wire declares the
-// transitions out of child_a1 and child_b1.
+// record their entry and their exit. wire declares the transitions out of
+// child_a1 and child_b1.
 func xfinTrackedRegionsChart(t *testing.T, wire func(a1, b1 *sc.StateBuilder[string, counter])) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("m", func(b *xfinBuilder) {
 		b.Regions()
-		b.Chart().Entry("enter", noop).Exit("exit", noop)
+		xfinTrack(b.Chart())
 
 		var a1, b1 *sc.StateBuilder[string, counter]
 
-		b.State("a", func(b *xfinBuilder) {
+		xfinTrack(b.State("a", func(b *xfinBuilder) {
 			b.Initial("child_a1")
-			a1 = b.State("child_a1").Entry("enter", noop).Exit("exit", noop)
-			b.Final("child_a2").Entry("enter", noop)
-		}).Entry("enter", noop).Exit("exit", noop)
-		b.State("b", func(b *xfinBuilder) {
+			a1 = xfinTrack(b.State("child_a1"))
+			xfinTrack(b.Final("child_a2"))
+		}))
+		xfinTrack(b.State("b", func(b *xfinBuilder) {
 			b.Initial("child_b1")
-			b1 = b.State("child_b1").Entry("enter", noop).Exit("exit", noop)
-			b.Final("child_b2").Entry("enter", noop)
-		}).Entry("enter", noop).Exit("exit", noop)
+			b1 = xfinTrack(b.State("child_b1"))
+			xfinTrack(b.Final("child_b2"))
+		}))
 
 		wire(a1, b1)
 	})
@@ -842,10 +861,6 @@ func xfinWireSeparateEvents(a1, b1 *sc.StateBuilder[string, counter]) {
 }
 
 // XState: should call exit actions of parallel states in reversed document order when the machines reaches its final state after earlier region transition
-//
-// Partial port: XState also expects "exit: b.child_b2" before "exit: b" and
-// "exit: a.child_a2" before "exit: a". An sc final state has no exit actions,
-// so those two cannot be declared; everything else is as XState has it.
 func TestXFinExitOrderOfParallelStatesAfterEarlierRegionTransition(t *testing.T) {
 	t.Parallel()
 
@@ -861,7 +876,9 @@ func TestXFinExitOrderOfParallelStatesAfterEarlierRegionTransition(t *testing.T)
 		"child_a1/exit",
 		"child_a2/enter",
 		// result of reaching final states
+		"child_b2/exit",
 		"b/exit",
+		"child_a2/exit",
 		"a/exit",
 		"m/exit",
 	}, actions)
@@ -870,7 +887,7 @@ func TestXFinExitOrderOfParallelStatesAfterEarlierRegionTransition(t *testing.T)
 // XState: should call exit actions of parallel states in reversed document order when the machines reaches its final state after later region transition
 //
 // The XState case declares the same machine and sends the same events as the
-// one before it; see there for what is ported.
+// one before it.
 func TestXFinExitOrderOfParallelStatesAfterLaterRegionTransition(t *testing.T) {
 	t.Parallel()
 
@@ -884,15 +901,15 @@ func TestXFinExitOrderOfParallelStatesAfterLaterRegionTransition(t *testing.T) {
 	require.Equal(t, []string{
 		"child_a1/exit",
 		"child_a2/enter",
+		"child_b2/exit",
 		"b/exit",
+		"child_a2/exit",
 		"a/exit",
 		"m/exit",
 	}, actions)
 }
 
 // XState: should call exit actions of parallel states in reversed document order when the machines reaches its final state after multiple regions transition
-//
-// Partial port, as the two cases before it.
 func TestXFinExitOrderOfParallelStatesAfterMultipleRegionsTransition(t *testing.T) {
 	t.Parallel()
 
@@ -912,7 +929,9 @@ func TestXFinExitOrderOfParallelStatesAfterMultipleRegionsTransition(t *testing.
 		"child_a2/enter",
 		"child_b2/enter",
 		// result of reaching final states
+		"child_b2/exit",
 		"b/exit",
+		"child_a2/exit",
 		"a/exit",
 		"m/exit",
 	}, actions)
@@ -1044,10 +1063,10 @@ func TestXFinCallsExitActionsOnceWhenAChildMachineFinishesAndIsStoppedByItsParen
 		var exits atomic.Int32
 
 		child, err := sc.New("child", func(b *xfinBuilder) {
-			b.Chart().Exit("spy", func(context.Context, counter) { exits.Add(1) })
+			b.Chart().Exit().Do("spy", func(context.Context, counter) { exits.Add(1) })
 			b.Initial("start")
 			b.State("start").On[xfinCancel]().To("canceled")
-			b.Final("canceled").EmitOnEntry("notify", xfinNotifyParent)
+			b.Final("canceled").Entry().Emit("notify", xfinNotifyParent)
 		})
 		require.NoError(t, err)
 
@@ -1065,7 +1084,7 @@ func TestXFinDeliversFinalOutgoingEventsToTheParentBeforeTheDoneEvent(t *testing
 		child, err := sc.New("child", func(b *xfinBuilder) {
 			b.Initial("start")
 			b.State("start").On[xfinCancel]().To("canceled")
-			b.Final("canceled").EmitOnEntry("notify", xfinNotifyParent)
+			b.Final("canceled").Entry().Emit("notify", xfinNotifyParent)
 		})
 		require.NoError(t, err)
 
@@ -1081,7 +1100,7 @@ func TestXFinDeliversEventsOfTheRootExitToTheParentBeforeTheDoneEvent(t *testing
 
 	synctest.Test(t, func(t *testing.T) {
 		child, err := sc.New("child", func(b *xfinBuilder) {
-			b.Chart().EmitOnExit("notify", xfinNotifyParent)
+			b.Chart().Exit().Emit("notify", xfinNotifyParent)
 			b.Initial("start")
 			b.State("start").On[xfinCancel]().To("canceled")
 			b.Final("canceled")
@@ -1159,7 +1178,7 @@ func TestXFinPlainFinalStatesAreAccepted(t *testing.T) {
 //   - should be possible to complete with a null output (directly on root)
 //
 // An sc final state can declare only tags, an output and what it does on
-// entry, so it cannot have the transitions or services these cases are
+// entry and exit, so it cannot have the transitions or services these cases are
 // about, and sc has no warnings:
 //   - warns when a top-level final state declares invoke, on or after
 //   - does not start actors invoked by a top-level final state

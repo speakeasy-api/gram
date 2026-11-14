@@ -118,7 +118,7 @@ func WithPollInterval(d time.Duration) Option {
 }
 
 // Listen makes the driver call fn with each event of type T a chart emits
-// with [sc.Transition.Emit] or [sc.StateBuilder.EmitOnEntry], together with
+// with [sc.Transition.Emit] or an entry or exit step, together with
 // the ID of the instance that emitted it; T is inferred from fn, and there is
 // one Listen per type of event to hear. New fails for a listener of a type
 // the chart never emits.

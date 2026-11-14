@@ -97,7 +97,7 @@ func ManualTimers() RunOption {
 }
 
 // Listen makes the driver call fn with each event of type T the chart emits
-// with [Transition.Emit] or [StateBuilder.EmitOnEntry], in order, on the
+// with [Transition.Emit] or [Steps.Emit], in order, on the
 // goroutine processing the step that emitted it. T is inferred from fn;
 // give one Listen per type of event to hear. Several listeners for one type
 // are all called, in the order they were given. Building an instance with a
