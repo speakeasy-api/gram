@@ -5,11 +5,14 @@ package sc_test
 // case it ports. Cases that test an XState-only API are listed at the end of
 // the file with the reason they were not ported.
 //
-// Three differences in what sc can declare shape every port:
+// Four differences in what sc can declare shape every port:
 //
-//   - The root of an sc chart is always a compound state, so an XState
-//     machine whose root is parallel is declared as one top-level parallel
-//     state whose OnDone leads to a top-level final state.
+//   - XState's root is declared with Builder.Chart, and a parallel root with
+//     Builder.Regions. The chart's own actions are named after the machine,
+//     so XState's "exit: __root__" is "m/exit" here.
+//   - sc has no output on the root. A machine's output is that of the
+//     top-level final state it ended in, read with Machine.Output, and a
+//     final state's output is computed from the context alone.
 //   - State identifiers are unique in an sc chart, so XState's repeated
 //     local names ("start", "finish") are qualified by their region.
 //   - sc rejects a state nothing can reach, so a chart in which XState
@@ -18,6 +21,7 @@ package sc_test
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 
@@ -35,7 +39,23 @@ type (
 	xfinFail          struct{}
 	xfinCancel        struct{}
 	xfinChildCanceled struct{}
+	xfinFinish        struct{ Value int }
 )
+
+// xfinSecretCtx is the context of XState's chart that reveals a secret.
+type xfinSecretCtx struct {
+	RevealedSecret string
+}
+
+// xfinSecret is the output of that chart's nested final state.
+type xfinSecret struct {
+	Secret string
+}
+
+// xfinStatus is the output of XState's passed and failed final states.
+type xfinStatus struct {
+	Status string
+}
 
 type xfinBuilder = sc.Builder[string, counter]
 
@@ -53,6 +73,21 @@ func xfinActions(effects []sc.Effect[counter]) []string {
 	}
 
 	return out
+}
+
+// xfinEffect returns the action effect called name, as "state/name".
+func xfinEffect(t *testing.T, effects []sc.Effect[counter], name string) sc.Effect[counter] {
+	t.Helper()
+
+	for _, e := range effects {
+		if e.Kind == sc.EffectAction && e.State+"/"+e.Name == name {
+			return e
+		}
+	}
+
+	require.Failf(t, "no such action", "%s is not among %v", name, xfinActions(effects))
+
+	return sc.Effect[counter]{}
 }
 
 // xfinCount reports how many times name is in actions.
@@ -138,53 +173,127 @@ func TestXFinExecutesFinalChildStateActionsFirst(t *testing.T) {
 }
 
 // XState: should call output expressions on nested final nodes
-//
-// Partial port: sc's final states have no output and OnDone carries no
-// payload, so the secret cannot travel from the final state to the context.
-// What is ported is that reaching the nested final state completes its
-// parent, whose OnDone leads to the top-level final state.
-func TestXFinNestedFinalNodeCompletesItsParent(t *testing.T) {
+func TestXFinCallsOutputExpressionsOnNestedFinalNodes(t *testing.T) {
 	t.Parallel()
 
-	m, err := sc.New("m", func(b *xfinBuilder) {
+	m, err := sc.New("m", func(b *sc.Builder[string, xfinSecretCtx]) {
 		b.Initial("secret")
-		b.State("secret", func(b *xfinBuilder) {
+		b.State("secret", func(b *sc.Builder[string, xfinSecretCtx]) {
 			b.Initial("wait")
 			b.State("wait").On[xfinNext1]().To("reveal")
-			b.Final("reveal")
-		}).OnDone().To("success")
+			b.Final("reveal").Output(func(xfinSecretCtx) xfinSecret { return xfinSecret{Secret: "the secret"} })
+		}).OnDoneWith[xfinSecret]().
+			Assign("reveal", func(c xfinSecretCtx, done sc.Done[xfinSecret]) xfinSecretCtx {
+				c.RevealedSecret = done.Result.Secret
+				return c
+			}).
+			To("success")
 		b.Final("success")
 	})
 	require.NoError(t, err)
 
-	snap, _ := m.Start(counter{N: 0}, epoch)
+	snap, _ := m.Start(xfinSecretCtx{RevealedSecret: ""}, epoch)
 	require.False(t, snap.Done())
 
-	snap, _ = xfinSend(m, snap, xfinNext1{})
-	require.Equal(t, []string{"success"}, snap.Active())
+	snap, _ = m.Transition(snap, xfinNext1{}, epoch)
 	require.True(t, snap.Done())
+	require.Equal(t, xfinSecretCtx{RevealedSecret: "the secret"}, snap.Context)
 }
 
 // xfinStartEndChart is the chart most of XState's output cases use: start
-// moves to the top-level final state end on an event.
-func xfinStartEndChart(t *testing.T) *sc.Machine[string, counter] {
+// moves to the top-level final state end on an event. end declares what the
+// final state reports, if anything.
+func xfinStartEndChart(t *testing.T, end func(end *sc.FinalBuilder[string, counter])) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("m", func(b *xfinBuilder) {
 		b.Initial("start")
-		b.State("start").On[xfinNext1]().To("end")
-		b.Final("end")
+		b.State("start").On[xfinFinish]().
+			Assign("keep", func(c counter, ev xfinFinish) counter { c.N = ev.Value; return c }).
+			To("end")
+		final := b.Final("end")
+		if end != nil {
+			end(final)
+		}
 	})
 	require.NoError(t, err)
 
 	return m
 }
 
-// XState: should use the reached top-level final state output
+// xfinOutput declares that a final state reports value.
+func xfinOutput[R any](value R) func(*sc.FinalBuilder[string, counter]) {
+	return func(end *sc.FinalBuilder[string, counter]) {
+		end.Output(func(counter) R { return value })
+	}
+}
+
+// XState: should only call data expression once when entering root's final state
 //
-// Partial port: the output value is not expressible; which of the two
-// top-level final states was reached is.
-func TestXFinReachesTheTargetedTopLevelFinalState(t *testing.T) {
+// XState's data expression is the root's output. sc has no output on the
+// root, so the port counts the calls of the output of the top-level final
+// state, which is what Machine.Output reports.
+//
+// DIVERGES from XState: XState resolves the machine's output once, when the
+// machine completes, and keeps it in the snapshot. sc does not resolve it
+// while transitioning at all: Machine.Output computes it from the snapshot's
+// context each time it is asked.
+func TestXFinCallsDataExpressionWhenEnteringRootsFinalState(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	m := xfinStartEndChart(t, func(end *sc.FinalBuilder[string, counter]) {
+		end.Output(func(counter) string { calls++; return "output" })
+	})
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	snap, _ = xfinSend(m, snap, xfinFinish{Value: 1})
+
+	require.True(t, snap.Done())
+	require.Zero(t, calls)
+
+	_, has := m.Output(snap)
+	require.True(t, has)
+	require.Equal(t, 1, calls)
+}
+
+// XState: should use top-level final state output as machine output without root output
+//
+// XState's output reads the value of the FINISH event. An sc output sees the
+// context alone, so the transition keeps the value in the context.
+func TestXFinUsesTopLevelFinalStateOutputAsMachineOutput(t *testing.T) {
+	t.Parallel()
+
+	m := xfinStartEndChart(t, func(end *sc.FinalBuilder[string, counter]) {
+		end.Output(func(c counter) int { return c.N * 2 })
+	})
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	snap, _ = xfinSend(m, snap, xfinFinish{Value: 21})
+
+	output, has := m.Output(snap)
+	require.True(t, has)
+	require.Equal(t, 42, output)
+}
+
+// XState: should leave machine output undefined without final or root output
+func TestXFinLeavesMachineOutputUndefinedWithoutFinalOutput(t *testing.T) {
+	t.Parallel()
+
+	m := xfinStartEndChart(t, nil)
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	snap, _ = xfinSend(m, snap, xfinFinish{Value: 0})
+
+	require.True(t, snap.Done())
+
+	output, has := m.Output(snap)
+	require.False(t, has)
+	require.Nil(t, output)
+}
+
+// XState: should use the reached top-level final state output
+func TestXFinUsesTheReachedTopLevelFinalStateOutput(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("m", func(b *xfinBuilder) {
@@ -192,75 +301,130 @@ func TestXFinReachesTheTargetedTopLevelFinalState(t *testing.T) {
 		start := b.State("start")
 		start.On[xfinPass]().To("passed")
 		start.On[xfinFail]().To("failed")
-		b.Final("passed")
-		b.Final("failed")
+		b.Final("passed").Output(func(counter) xfinStatus { return xfinStatus{Status: "passed"} })
+		b.Final("failed").Output(func(counter) xfinStatus { return xfinStatus{Status: "failed"} })
 	})
 	require.NoError(t, err)
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
 	snap, _ = xfinSend(m, snap, xfinFail{})
 
-	require.Equal(t, []string{"failed"}, snap.Active())
-	require.True(t, snap.Done())
+	output, has := m.Output(snap)
+	require.True(t, has)
+	require.Equal(t, xfinStatus{Status: "failed"}, output)
 }
 
 // XState: should populate top-level final state output through pure transition
-//
-// Partial port: the output value is not expressible; that the pure
-// transition function reports the machine done is.
-func TestXFinPureTransitionReportsTheMachineDone(t *testing.T) {
+func TestXFinPopulatesTopLevelFinalStateOutputThroughPureTransition(t *testing.T) {
 	t.Parallel()
 
-	m := xfinStartEndChart(t)
+	m := xfinStartEndChart(t, xfinOutput("done"))
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
-	require.False(t, snap.Done())
+	_, has := m.Output(snap)
+	require.False(t, has)
 
-	next, _ := m.Transition(snap, xfinNext1{}, epoch)
-	require.Equal(t, []string{"end"}, next.Active())
-	require.True(t, next.Done())
+	next, _ := m.Transition(snap, xfinFinish{Value: 0}, epoch)
+
+	output, has := m.Output(next)
+	require.True(t, has)
+	require.Equal(t, "done", output)
 }
 
 // XState: should populate top-level final state output through pure initialTransition
-//
-// Partial port: the output value is not expressible; that a machine whose
-// initial state is final is done from the start is.
-func TestXFinPureStartReportsTheMachineDone(t *testing.T) {
+func TestXFinPopulatesTopLevelFinalStateOutputThroughPureStart(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("m", func(b *xfinBuilder) {
 		b.Initial("end")
-		b.Final("end")
+		b.Final("end").Output(func(counter) string { return "done" })
 	})
 	require.NoError(t, err)
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
 
-	require.Equal(t, []string{"end"}, snap.Active())
-	require.True(t, snap.Done())
+	output, has := m.Output(snap)
+	require.True(t, has)
+	require.Equal(t, "done", output)
 }
 
 // XState: should persist and restore top-level final state output
 //
-// Partial port: the output value is not expressible; that a done machine is
-// still done after being persisted and restored is.
-func TestXFinPersistsAndRestoresADoneMachine(t *testing.T) {
+// DIVERGES from XState: XState's persisted snapshot holds the output. sc's
+// does not: the output is not part of a snapshot, and Machine.Output computes
+// it again from the restored context. The restored machine reports the same
+// output either way.
+func TestXFinPersistsAndRestoresTopLevelFinalStateOutput(t *testing.T) {
 	t.Parallel()
 
-	m := xfinStartEndChart(t)
+	m := xfinStartEndChart(t, xfinOutput("persisted output"))
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
-	snap, _ = xfinSend(m, snap, xfinNext1{})
-	require.True(t, snap.Done())
+	snap, _ = xfinSend(m, snap, xfinFinish{Value: 0})
 
 	data, err := json.Marshal(snap)
 	require.NoError(t, err)
+	require.NotContains(t, string(data), "persisted output")
 
 	restored, effects, err := m.Restore(data, epoch)
 	require.NoError(t, err)
 	require.Empty(t, effects)
-	require.Equal(t, []string{"end"}, restored.Active())
 	require.True(t, restored.Done())
+
+	output, has := m.Output(restored)
+	require.True(t, has)
+	require.Equal(t, "persisted output", output)
+}
+
+// XState: should resolve top-level final state output once on completion
+//
+// XState's root output passes the final state's output on unchanged, which
+// is what Machine.Output does without one.
+//
+// DIVERGES from XState: XState resolves the final state's output once, on
+// completion, however often the snapshot is read. sc resolves it on demand:
+// not at all while transitioning, and once for each call of Machine.Output.
+func TestXFinResolvesTopLevelFinalStateOutputOnDemand(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	m := xfinStartEndChart(t, func(end *sc.FinalBuilder[string, counter]) {
+		end.Output(func(counter) string { calls++; return "final output" })
+	})
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	snap, _ = xfinSend(m, snap, xfinFinish{Value: 0})
+	require.Zero(t, calls)
+
+	_, _ = m.Output(snap)
+	_, _ = m.Output(snap)
+	output, has := m.Output(snap)
+
+	require.Equal(t, 3, calls)
+	require.True(t, has)
+	require.Equal(t, "final output", output)
+}
+
+// XState: state output should be able to use context updated by the entry action of the reached final state
+func TestXFinStateOutputUsesContextUpdatedByTheEntryOfTheReachedFinalState(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("m", func(b *xfinBuilder) {
+		b.Initial("a")
+		b.State("a", func(b *xfinBuilder) {
+			b.Initial("a1")
+			b.State("a1").On[xfinNext1]().To("a2")
+			b.Final("a2").
+				AssignOnEntry("count", func(c counter) counter { c.N = 1; return c }).
+				Output(func(c counter) int { return c.N })
+		}).OnDoneWith[int]().Do("spy", func(context.Context, counter, sc.Done[int]) {})
+	})
+	require.NoError(t, err)
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	_, effects := m.Transition(snap, xfinNext1{}, epoch)
+
+	require.Equal(t, sc.Done[int]{ID: "a2", Result: 1}, xfinEffect(t, effects, "a/spy").Event)
 }
 
 // xfinNestedParallelChart is a parallel state whose two regions are
@@ -398,10 +562,87 @@ func TestXFinReachesFinalStateWhenNestedParallelStateCompletesAtStart(t *testing
 	require.Equal(t, []string{"b"}, snap.Active())
 }
 
+// xfinRequireDoneWithOutput checks that a chart of regions is done from the
+// start and reports what its regions do, by region name, as XState's done
+// event of a parallel root does.
+func xfinRequireDoneWithOutput(t *testing.T, m *sc.Machine[string, counter], want map[string]any, active ...string) {
+	t.Helper()
+
+	snap, effects := m.Start(counter{N: 0}, epoch)
+
+	require.True(t, snap.Done())
+	require.Equal(t, active, snap.Active())
+	require.Equal(t, []string{"m/completed"}, xfinActions(effects))
+
+	output, has := m.Output(snap)
+	require.True(t, has)
+	require.Equal(t, want, output)
+}
+
+// XState: root output should be called with a "xstate.done.state.*" event of the parallel root when a direct final child of that parallel root is reached
+//
+// Partial port: sc has no output on the root, so there is nothing to call
+// with the done event of the parallel root, and that completion carries no
+// output of the regions (XState's is {a: undefined}). What is ported is that
+// the chart of regions completes at the start, once, and that Machine.Output
+// then reports no output. The chart's exit action stands for XState's spy.
+func TestXFinParallelRootCompletesWhenADirectFinalChildIsReached(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("m", func(b *xfinBuilder) {
+		b.Regions()
+		b.Chart().Exit("completed", noop)
+		b.Final("a")
+	})
+	require.NoError(t, err)
+
+	xfinRequireDoneWithOutput(t, m, map[string]any{"a": nil}, "a")
+}
+
+// XState: root output should be called with a "xstate.done.state.*" event of the parallel root when a final child of its compound child is reached
+//
+// Partial port, as the case before it.
+func TestXFinParallelRootCompletesWhenAFinalChildOfItsCompoundChildIsReached(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("m", func(b *xfinBuilder) {
+		b.Regions()
+		b.Chart().Exit("completed", noop)
+		b.State("a", func(b *xfinBuilder) {
+			b.Initial("b")
+			b.Final("b")
+		})
+	})
+	require.NoError(t, err)
+
+	xfinRequireDoneWithOutput(t, m, map[string]any{"a": nil}, "a", "b")
+}
+
+// XState: root output should be called with a "xstate.done.state.*" event of the parallel root when a final descendant is reached 2 parallel levels deep
+//
+// Partial port, as the two cases before it.
+func TestXFinParallelRootCompletesWhenAFinalDescendantIsReachedTwoParallelLevelsDeep(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("m", func(b *xfinBuilder) {
+		b.Regions()
+		b.Chart().Exit("completed", noop)
+		b.Parallel("a", func(b *xfinBuilder) {
+			b.State("b", func(b *xfinBuilder) {
+				b.Initial("c")
+				b.Final("c")
+			})
+		})
+	})
+	require.NoError(t, err)
+
+	xfinRequireDoneWithOutput(t, m, map[string]any{"a": map[string]any{"b": nil}}, "a", "b", "c")
+}
+
 // XState: onDone of an outer parallel state should be called with its own "xstate.done.state.*" event when its direct parallel child completes
 //
-// Partial port: the done event and its output are not expressible; that the
-// outer parallel state's OnDone is taken once is.
+// As in XState, the done event of a parallel state carries the outputs of
+// its regions, keyed by region and nested: {b: {c: undefined}} here.
 func TestXFinOuterParallelOnDoneIsTakenWhenItsDirectParallelChildCompletes(t *testing.T) {
 	t.Parallel()
 
@@ -414,14 +655,37 @@ func TestXFinOuterParallelOnDoneIsTakenWhenItsDirectParallelChildCompletes(t *te
 					b.Final("d")
 				})
 			})
-		}).OnDone().Do("spy", xfinSpy)
+		}).OnDoneWith[map[string]any]().Do("spy", func(context.Context, counter, sc.Done[map[string]any]) {})
 	})
 	require.NoError(t, err)
 
 	snap, effects := m.Start(counter{N: 0}, epoch)
 
 	require.Equal(t, 1, xfinCount(xfinActions(effects), "a/spy"))
+	require.Equal(t, sc.Done[map[string]any]{ID: "a", Result: map[string]any{"b": map[string]any{"c": nil}}}, xfinEffect(t, effects, "a/spy").Event)
 	require.Equal(t, []string{"a", "b", "c", "d"}, snap.Active())
+}
+
+// XState: onDone should not be called when the machine reaches its final state
+func TestXFinOnDoneIsNotCalledWhenTheMachineReachesItsFinalState(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("m", func(b *xfinBuilder) {
+		b.Regions()
+		b.Chart().OnDone().Do("spy", xfinSpy)
+		b.Parallel("a", func(b *xfinBuilder) {
+			b.State("b", func(b *xfinBuilder) {
+				b.Initial("c")
+				b.Final("c")
+			}).OnDone().Do("spy", xfinSpy)
+		}).OnDone().Do("spy", xfinSpy)
+	})
+	require.NoError(t, err)
+
+	snap, effects := m.Start(counter{N: 0}, epoch)
+
+	require.True(t, snap.Done())
+	require.Empty(t, xfinActions(effects))
 }
 
 // XState: machine should not complete when a parallel child of a compound state completes
@@ -445,6 +709,51 @@ func TestXFinMachineDoesNotCompleteWhenAParallelChildOfACompoundStateCompletes(t
 	require.Equal(t, []string{"a", "b", "c"}, snap.Active())
 }
 
+// XState: root output should only be called once when multiple parallel regions complete at once
+//
+// Partial port: sc has no output on the root. The chart's exit action stands
+// for XState's spy: it too runs when the machine completes, and once.
+func TestXFinParallelRootCompletesOnceWhenSeveralRegionsCompleteAtOnce(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("m", func(b *xfinBuilder) {
+		b.Regions()
+		b.Chart().Exit("completed", noop)
+		b.Final("a")
+		b.Final("b")
+	})
+	require.NoError(t, err)
+
+	xfinRequireDoneWithOutput(t, m, map[string]any{"a": nil, "b": nil}, "a", "b")
+}
+
+// XState: should require root output to produce output for a parallel root
+//
+// Partial port: the first half, a parallel root without a root output. The
+// second half needs a root output that passes on the outputs of the regions,
+// which sc has neither of.
+func TestXFinParallelRootWithoutRootOutputProducesNoOutput(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("m", func(b *xfinBuilder) {
+		b.Regions()
+		b.Final("a").Output(func(counter) string { return "a output" })
+		b.Final("b").Output(func(counter) string { return "b output" })
+	})
+	require.NoError(t, err)
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	require.True(t, snap.Done())
+
+	// DIVERGES from XState: XState's parallel root has no output unless a
+	// root output function builds one from the regions' outputs. An sc
+	// chart of regions has no such function and always reports its
+	// regions' outputs, by region name.
+	output, has := m.Output(snap)
+	require.True(t, has)
+	require.Equal(t, map[string]any{"a": "a output", "b": "b output"}, output)
+}
+
 // XState: onDone of a parallel state should only be called once when multiple parallel regions complete at once
 func TestXFinParallelOnDoneIsTakenOnceWhenSeveralRegionsCompleteAtOnce(t *testing.T) {
 	t.Parallel()
@@ -465,53 +774,60 @@ func TestXFinParallelOnDoneIsTakenOnceWhenSeveralRegionsCompleteAtOnce(t *testin
 
 // XState: should call exit actions in reversed document order when the machines reaches its final state
 //
-// Partial port: XState exits every active state, the root last, when the
-// machine completes, and expects "exit: b" and "exit: __root__" after the
-// transition. sc has no exit actions on a final state or on the root, so only
-// the transition's own actions can be observed.
-func TestXFinActionsWhenTheMachineReachesItsFinalState(t *testing.T) {
+// Partial port: XState also expects "exit: b" between the entry of b and the
+// exit of the root. An sc final state has no exit actions, so that one cannot
+// be declared; everything else is as XState has it.
+func TestXFinExitOrderWhenTheMachineReachesItsFinalState(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("m", func(b *xfinBuilder) {
+		b.Chart().Entry("enter", noop).Exit("exit", noop)
 		b.Initial("a")
 		b.State("a").Entry("enter", noop).Exit("exit", noop).On[xfinNext1]().To("b")
 		b.Final("b").Entry("enter", noop)
 	})
 	require.NoError(t, err)
 
-	snap, _ := m.Start(counter{N: 0}, epoch)
+	snap, effects := m.Start(counter{N: 0}, epoch)
+	require.Equal(t, []string{"m/enter", "a/enter"}, xfinActions(effects))
+
 	snap, actions := xfinSend(m, snap, xfinNext1{})
 
 	require.True(t, snap.Done())
-	require.Equal(t, []string{"a/exit", "b/enter"}, actions)
+	require.Equal(t, []string{
+		// result of the transition
+		"a/exit",
+		"b/enter",
+		// result of reaching final states
+		"m/exit",
+	}, actions)
 }
 
-// xfinTrackedRegionsChart stands for XState's parallel root with regions a
-// and b, each moving from its first child to a final one. Every state
-// records its entry and, where sc allows one, its exit. wire declares the
+// xfinTrackedRegionsChart is XState's parallel root with regions a and b,
+// each moving from its first child to a final one. Every state and the chart
+// record their entry and, where sc allows one, their exit. wire declares the
 // transitions out of child_a1 and child_b1.
 func xfinTrackedRegionsChart(t *testing.T, wire func(a1, b1 *sc.StateBuilder[string, counter])) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("m", func(b *xfinBuilder) {
-		b.Initial("root")
-		b.Parallel("root", func(b *xfinBuilder) {
-			var a1, b1 *sc.StateBuilder[string, counter]
+		b.Regions()
+		b.Chart().Entry("enter", noop).Exit("exit", noop)
 
-			b.State("a", func(b *xfinBuilder) {
-				b.Initial("child_a1")
-				a1 = b.State("child_a1").Entry("enter", noop).Exit("exit", noop)
-				b.Final("child_a2").Entry("enter", noop)
-			}).Entry("enter", noop).Exit("exit", noop)
-			b.State("b", func(b *xfinBuilder) {
-				b.Initial("child_b1")
-				b1 = b.State("child_b1").Entry("enter", noop).Exit("exit", noop)
-				b.Final("child_b2").Entry("enter", noop)
-			}).Entry("enter", noop).Exit("exit", noop)
+		var a1, b1 *sc.StateBuilder[string, counter]
 
-			wire(a1, b1)
-		}).Entry("enter", noop).Exit("exit", noop).OnDone().To("end")
-		b.Final("end").Entry("enter", noop)
+		b.State("a", func(b *xfinBuilder) {
+			b.Initial("child_a1")
+			a1 = b.State("child_a1").Entry("enter", noop).Exit("exit", noop)
+			b.Final("child_a2").Entry("enter", noop)
+		}).Entry("enter", noop).Exit("exit", noop)
+		b.State("b", func(b *xfinBuilder) {
+			b.Initial("child_b1")
+			b1 = b.State("child_b1").Entry("enter", noop).Exit("exit", noop)
+			b.Final("child_b2").Entry("enter", noop)
+		}).Entry("enter", noop).Exit("exit", noop)
+
+		wire(a1, b1)
 	})
 	require.NoError(t, err)
 
@@ -527,12 +843,9 @@ func xfinWireSeparateEvents(a1, b1 *sc.StateBuilder[string, counter]) {
 
 // XState: should call exit actions of parallel states in reversed document order when the machines reaches its final state after earlier region transition
 //
-// Partial port: XState's root is parallel and the exits happen because the
-// machine completes. Here they happen because the parallel state "root"
-// completes and its OnDone leaves it for the top-level final state. XState
-// expects, after the transition, "exit: b.child_b2", "exit: b",
-// "exit: a.child_a2", "exit: a", "exit: __root__"; sc's final states have no
-// exit actions, so those of child_b2 and child_a2 cannot be observed.
+// Partial port: XState also expects "exit: b.child_b2" before "exit: b" and
+// "exit: a.child_a2" before "exit: a". An sc final state has no exit actions,
+// so those two cannot be declared; everything else is as XState has it.
 func TestXFinExitOrderOfParallelStatesAfterEarlierRegionTransition(t *testing.T) {
 	t.Parallel()
 
@@ -550,8 +863,7 @@ func TestXFinExitOrderOfParallelStatesAfterEarlierRegionTransition(t *testing.T)
 		// result of reaching final states
 		"b/exit",
 		"a/exit",
-		"root/exit",
-		"end/enter",
+		"m/exit",
 	}, actions)
 }
 
@@ -574,8 +886,7 @@ func TestXFinExitOrderOfParallelStatesAfterLaterRegionTransition(t *testing.T) {
 		"child_a2/enter",
 		"b/exit",
 		"a/exit",
-		"root/exit",
-		"end/enter",
+		"m/exit",
 	}, actions)
 }
 
@@ -603,36 +914,32 @@ func TestXFinExitOrderOfParallelStatesAfterMultipleRegionsTransition(t *testing.
 		// result of reaching final states
 		"b/exit",
 		"a/exit",
-		"root/exit",
-		"end/enter",
+		"m/exit",
 	}, actions)
 }
 
-// xfinPartlyFinalChart stands for XState's parallel root with region A in
-// its final state from the start and region B not. direct declares A as a
-// final state directly inside the parallel state; otherwise A is a compound
-// state starting in a final state. As in XState nothing reaches B2.
+// xfinPartlyFinalChart is XState's parallel root with region A in its final
+// state from the start and region B not. direct declares A as a final state
+// directly in the root; otherwise A is a compound state starting in a final
+// state. As in XState nothing reaches B2.
 func xfinPartlyFinalChart(t *testing.T, direct bool) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("m", func(b *xfinBuilder) {
-		b.Initial("root")
-		b.Parallel("root", func(b *xfinBuilder) {
-			if direct {
-				b.Final("A")
-			} else {
-				b.State("A", func(b *xfinBuilder) {
-					b.Initial("A1")
-					b.Final("A1")
-				})
-			}
-			b.State("B", func(b *xfinBuilder) {
-				b.Initial("B1")
-				b.State("B1")
-				b.Final("B2")
+		b.Regions()
+		if direct {
+			b.Final("A")
+		} else {
+			b.State("A", func(b *xfinBuilder) {
+				b.Initial("A1")
+				b.Final("A1")
 			})
-		}).OnDone().To("end")
-		b.Final("end")
+		}
+		b.State("B", func(b *xfinBuilder) {
+			b.Initial("B1")
+			b.State("B1")
+			b.Final("B2")
+		})
 	}, sc.AllowUnreachable())
 	require.NoError(t, err)
 
@@ -648,7 +955,7 @@ func TestXFinParallelStateDoesNotCompleteWhenOnlySomeRegionsAreFinalCompoundRegi
 	snap, _ := m.Start(counter{N: 0}, epoch)
 
 	require.False(t, snap.Done())
-	require.Equal(t, []string{"root", "A", "A1", "B", "B1"}, snap.Active())
+	require.Equal(t, []string{"A", "A1", "B", "B1"}, snap.Active())
 }
 
 // XState: should not complete a parallel root immediately when only some of its regions are in their final states (a direct final child state reached)
@@ -660,59 +967,150 @@ func TestXFinParallelStateDoesNotCompleteWhenOnlySomeRegionsAreFinalDirectFinalC
 	snap, _ := m.Start(counter{N: 0}, epoch)
 
 	require.False(t, snap.Done())
-	require.Equal(t, []string{"root", "A", "B", "B1"}, snap.Active())
+	require.Equal(t, []string{"A", "B", "B1"}, snap.Active())
+}
+
+// XState: should not resolve output of a final state if its parent is a parallel state
+func TestXFinDoesNotResolveOutputOfAFinalStateWhoseParentIsAParallelState(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	m, err := sc.New("m", func(b *xfinBuilder) {
+		b.Initial("A")
+		b.Parallel("A", func(b *xfinBuilder) {
+			b.Final("B").Output(func(counter) string { calls++; return "B output" })
+			b.State("C", func(b *xfinBuilder) {
+				b.Initial("C1")
+				b.State("C1")
+			})
+		})
+	})
+	require.NoError(t, err)
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+
+	require.Equal(t, []string{"A", "B", "C", "C1"}, snap.Active())
+	require.Zero(t, calls)
+}
+
+// xfinCancelChild runs XState's parent chart with child as the machine its
+// start state invokes, has the child cancelled, and returns the states the
+// parent is in afterwards. It must be called inside a synctest bubble.
+//
+// XState sends CANCEL to the child's actor directly, where the sc parent
+// forwards it.
+func xfinCancelChild(t *testing.T, child *sc.Machine[string, counter]) []string {
+	t.Helper()
+
+	parent, err := sc.New("parent", func(b *xfinBuilder) {
+		b.Initial("start")
+		start := b.State("start")
+		invoked := start.InvokeMachine("child", child,
+			func(c counter) counter { return c },
+			func(sc.Snapshot[string, counter]) (struct{}, error) { return struct{}{}, nil },
+		)
+		invoked.OnDone().To("completed")
+		invoked.OnError().To("failed")
+		start.On[xfinChildCanceled]().To("canceled")
+		start.On[xfinCancel]().SendTo("forward", "child", func(_ counter, ev xfinCancel) any { return ev })
+		b.State("canceled")
+		b.State("completed")
+		b.State("failed")
+	})
+	require.NoError(t, err)
+
+	inst, err := parent.Instance(t.Context(), counter{N: 0})
+	require.NoError(t, err)
+	defer inst.Close()
+
+	synctest.Wait()
+
+	_, err = inst.Send(t.Context(), xfinCancel{})
+	require.NoError(t, err)
+
+	synctest.Wait()
+
+	return inst.Snapshot().Active()
+}
+
+// xfinNotifyParent is what a child tells its parent as it is cancelled.
+func xfinNotifyParent(counter) xfinChildCanceled { return xfinChildCanceled{} }
+
+// XState: should only call exit actions once when a child machine reaches its final state and sends an event to its parent that ends up stopping that child
+func TestXFinCallsExitActionsOnceWhenAChildMachineFinishesAndIsStoppedByItsParent(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		var exits atomic.Int32
+
+		child, err := sc.New("child", func(b *xfinBuilder) {
+			b.Chart().Exit("spy", func(context.Context, counter) { exits.Add(1) })
+			b.Initial("start")
+			b.State("start").On[xfinCancel]().To("canceled")
+			b.Final("canceled").EmitOnEntry("notify", xfinNotifyParent)
+		})
+		require.NoError(t, err)
+
+		// Not asserted by XState: the parent took the child's event.
+		require.Equal(t, []string{"canceled"}, xfinCancelChild(t, child))
+		require.Equal(t, int32(1), exits.Load())
+	})
 }
 
 // XState: should deliver final outgoing events (from final entry action) to the parent before delivering the `xstate.done.actor.*` event
-//
-// Two things are translated. An sc entry action cannot send, so the child
-// emits from the transition that enters its final state. And XState sends
-// CANCEL to the child's actor directly, where the sc parent forwards it.
 func TestXFinDeliversFinalOutgoingEventsToTheParentBeforeTheDoneEvent(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
 		child, err := sc.New("child", func(b *xfinBuilder) {
 			b.Initial("start")
-			b.State("start").On[xfinCancel]().
-				Emit("notify", func(counter, xfinCancel) xfinChildCanceled { return xfinChildCanceled{} }).
-				To("canceled")
+			b.State("start").On[xfinCancel]().To("canceled")
+			b.Final("canceled").EmitOnEntry("notify", xfinNotifyParent)
+		})
+		require.NoError(t, err)
+
+		// If the child's completion were delivered first, the parent
+		// would be in completed.
+		require.Equal(t, []string{"canceled"}, xfinCancelChild(t, child))
+	})
+}
+
+// XState: should deliver final outgoing events (from root exit action) to the parent before delivering the `xstate.done.actor.*` event
+func TestXFinDeliversEventsOfTheRootExitToTheParentBeforeTheDoneEvent(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		child, err := sc.New("child", func(b *xfinBuilder) {
+			b.Chart().EmitOnExit("notify", xfinNotifyParent)
+			b.Initial("start")
+			b.State("start").On[xfinCancel]().To("canceled")
 			b.Final("canceled")
 		})
 		require.NoError(t, err)
 
-		parent, err := sc.New("parent", func(b *xfinBuilder) {
-			b.Initial("start")
-			start := b.State("start")
-			invoked := start.InvokeMachine("child", child,
-				func(c counter) counter { return c },
-				func(sc.Snapshot[string, counter]) (struct{}, error) { return struct{}{}, nil },
-			)
-			invoked.OnDone().To("completed")
-			invoked.OnError().To("failed")
-			start.On[xfinChildCanceled]().To("canceled")
-			start.On[xfinCancel]().SendTo("forward", "child", func(_ counter, ev xfinCancel) any { return ev })
-			b.State("canceled")
-			b.State("completed")
-			b.State("failed")
-		})
-		require.NoError(t, err)
-
-		inst, err := parent.Instance(t.Context(), counter{N: 0})
-		require.NoError(t, err)
-		defer inst.Close()
-
-		synctest.Wait()
-
-		_, err = inst.Send(t.Context(), xfinCancel{})
-		require.NoError(t, err)
-
-		synctest.Wait()
-
 		// If the child's completion were delivered first, the parent
 		// would be in completed.
-		require.Equal(t, []string{"canceled"}, inst.Snapshot().Active())
+		require.Equal(t, []string{"canceled"}, xfinCancelChild(t, child))
 	})
+}
+
+// XState: should be possible to complete with a null output (resolving with final state's output)
+//
+// XState's root output passes the final state's output on unchanged, which
+// is what Machine.Output does without one.
+func TestXFinCompletesWithANilOutputOfTheFinalState(t *testing.T) {
+	t.Parallel()
+
+	m := xfinStartEndChart(t, func(end *sc.FinalBuilder[string, counter]) {
+		end.Output(func(counter) any { return nil })
+	})
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	snap, _ = xfinSend(m, snap, xfinFinish{Value: 0})
+
+	output, has := m.Output(snap)
+	require.True(t, has)
+	require.Nil(t, output)
 }
 
 // XState: does not warn for plain final states
@@ -749,42 +1147,20 @@ func TestXFinPlainFinalStatesAreAccepted(t *testing.T) {
 
 // XState cases that are not ported, by reason.
 //
-// The root of an sc chart cannot be a final state:
+// The root of an sc chart cannot itself be a final state:
 //   - status of a machine with a root state being final should be done
 //   - output of a machine with a root state being final should receive its state ID
 //
-// sc has no output on final states or on the machine, and a state's
-// completion carries no payload:
-//   - should only call data expression once when entering root's final state
-//   - should use top-level final state output as machine output without root output
+// sc has no output on the root: nothing maps the output of the final state
+// reached, and a machine has no output when that state declares none:
 //   - should pass top-level final state output to root output mapper
 //   - should keep root output-only behavior unchanged
-//   - should leave machine output undefined without final or root output
-//   - should resolve top-level final state output once on completion
 //   - output mapper should receive self
-//   - state output should be able to use context updated by the entry action of the reached final state
-//     (an sc final state cannot assign on entry either)
-//   - root output should be called with a "xstate.done.state.*" event of the parallel root when a direct final child of that parallel root is reached
-//   - root output should be called with a "xstate.done.state.*" event of the parallel root when a final child of its compound child is reached
-//   - root output should be called with a "xstate.done.state.*" event of the parallel root when a final descendant is reached 2 parallel levels deep
-//   - root output should only be called once when multiple parallel regions complete at once
-//   - should require root output to produce output for a parallel root
-//   - should not resolve output of a final state if its parent is a parallel state
 //   - should be possible to complete with a null output (directly on root)
-//   - should be possible to complete with a null output (resolving with final state's output)
 //
-// The root of an sc chart cannot be parallel and has no OnDone, so a machine
-// cannot complete in the step that completes its inner states:
-//   - onDone should not be called when the machine reaches its final state
-//
-// The root of an sc chart has no exit actions, and sc runs no exit actions
-// when a machine stops:
-//   - should only call exit actions once when a child machine reaches its final state and sends an event to its parent that ends up stopping that child
-//   - should deliver final outgoing events (from root exit action) to the parent before delivering the `xstate.done.actor.*` event
-//
-// An sc final state can declare only tags and entry actions, so it cannot
-// have the transitions or services these cases are about, and sc has no
-// warnings:
+// An sc final state can declare only tags, an output and what it does on
+// entry, so it cannot have the transitions or services these cases are
+// about, and sc has no warnings:
 //   - warns when a top-level final state declares invoke, on or after
 //   - does not start actors invoked by a top-level final state
 //   - warns when a nested or parallel-region final state declares on

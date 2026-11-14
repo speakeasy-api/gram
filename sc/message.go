@@ -72,6 +72,20 @@ func (b *inbox) events(ctx context.Context) iter.Seq[any] {
 			select {
 			case <-b.wake:
 			case <-ctx.Done():
+				// What was sent by the step that ended the reader is
+				// still handed over, so a service hears the last thing
+				// it was told before it stops.
+				b.mu.Lock()
+				queued := b.queue
+				b.queue = nil
+				b.mu.Unlock()
+
+				for _, ev := range queued {
+					if !yield(ev) {
+						return
+					}
+				}
+
 				return
 			}
 		}
@@ -201,4 +215,19 @@ type runID struct{}
 func RunID(ctx context.Context) string {
 	id, _ := ctx.Value(runID{}).(string)
 	return id
+}
+
+// trigger is the context key under which a service run finds the event it
+// was started for.
+type trigger struct{}
+
+// Trigger returns the event that was being processed when the state of the
+// service given ctx was entered: the event of the transition into it, so a
+// service can act on what it carries without the chart copying it into the
+// context first. It is nil when the state was entered as the instance
+// started or by a timer, and for an event of a type no On in the chart
+// names. The event is kept with the run, so a run started again after a
+// restart, or by [Invocation.Retry], sees the same one.
+func Trigger(ctx context.Context) any {
+	return ctx.Value(trigger{})
 }

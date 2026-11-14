@@ -377,6 +377,7 @@ func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)
 			}
 
 			ctx = context.WithValue(context.WithValue(ctx, savedProgress{}, e.Saved), runID{}, e.ID)
+			ctx = context.WithValue(ctx, trigger{}, e.Event)
 
 			for ev := range run(ctx, e.Context, e.ID) {
 				guardedSend(send, ev)

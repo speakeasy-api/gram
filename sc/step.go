@@ -150,6 +150,10 @@ type service[S comparable, C any] struct {
 
 	// saved is the progress the run last recorded with Checkpoint.
 	saved json.RawMessage
+
+	// cause is the event being processed when the run's state was
+	// entered, which the service reads with Trigger.
+	cause any
 }
 
 // endEffect is the effect that ends the run: a release for a resource, a
@@ -278,6 +282,28 @@ type run[S comparable, C any] struct {
 	// starting is set while a new instance takes its first step, in which
 	// the chart itself is entered.
 	starting bool
+
+	// ended lists the service runs the current microstep stopped.
+	ended []service[S, C]
+}
+
+// namedCause is the event being processed, if the chart names its type and
+// so can store it; otherwise nil.
+func (r *run[S, C]) namedCause() any {
+	if _, named := r.m.eventNames[reflect.TypeOf(r.cause)]; !named {
+		return nil
+	}
+
+	return r.cause
+}
+
+// causeName is the stored name of a service run's cause, or "".
+func (r *run[S, C]) causeName(cause any) string {
+	if cause == nil {
+		return ""
+	}
+
+	return r.m.EventName(cause)
 }
 
 // noteCause records the event of stim as the one being processed.
@@ -374,6 +400,7 @@ func (m *Machine[S, C]) start(c C, now time.Time, seed uint64) (Snapshot[S, C], 
 		cause:    nil,
 		sends:    nil,
 		starting: false,
+		ended:    nil,
 		list:     nil,
 		listed:   false,
 	}
@@ -458,12 +485,19 @@ func (m *Machine[S, C]) transition(snap Snapshot[S, C], ev any, now time.Time) (
 		// eventless transition is looked at again for it. Otherwise one
 		// that sends to a child machine would be taken for every step the
 		// child records, which the send itself causes.
-		if stim, ok := r.accept(ev); ok && stim.trigger != triggerNone {
+		stim, ok := r.accept(ev)
+
+		switch {
+		case ok && stim.trigger != triggerNone:
 			r.noteCause(stim)
 			if ts := r.selectTransitions(stim); len(ts) > 0 {
 				r.microstep(ts, stim)
 			}
 			r.settle()
+			r.fireDue()
+		case ok:
+			// It may still have started a timer that is due at once,
+			// such as a retry without a wait.
 			r.fireDue()
 		}
 	}
@@ -560,6 +594,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 		cause:    nil,
 		sends:    nil,
 		starting: false,
+		ended:    nil,
 		list:     snap.nodes,
 		listed:   true,
 	}
@@ -585,7 +620,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 		case timerRetry:
 			for _, inv := range n.invocations {
 				if inv.name == pt.name && inv.retry != nil {
-					r.timers = append(r.timers, timer[S, C]{id: pt.id, kind: timerRetry, t: nil, retry: inv, attempt: pt.attempt, source: nil, label: "", raised: nil, delay: pt.delay, due: pt.due, seq: pt.seq, jitter: pt.jitter, key: pt.key, saved: pt.saved})
+					r.timers = append(r.timers, timer[S, C]{id: pt.id, kind: timerRetry, t: nil, retry: inv, attempt: pt.attempt, source: nil, label: "", raised: pt.raised, delay: pt.delay, due: pt.due, seq: pt.seq, jitter: pt.jitter, key: pt.key, saved: pt.saved})
 				}
 			}
 		case timerRaise:
@@ -603,7 +638,7 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 	for _, ri := range snap.invocations {
 		for _, inv := range m.at(ri.state, ri.root).invocations {
 			if inv.name == ri.name {
-				r.services = append(r.services, service[S, C]{id: ri.id, inv: inv, acquired: ri.acquired, attempt: ri.attempt, saved: ri.saved})
+				r.services = append(r.services, service[S, C]{id: ri.id, inv: inv, acquired: ri.acquired, attempt: ri.attempt, saved: ri.saved, cause: ri.cause})
 			}
 		}
 	}
@@ -683,13 +718,13 @@ func (r *run[S, C]) snapshot(seq uint64) Snapshot[S, C] {
 			attempt: t.attempt, raised: t.raised, eventName: "",
 			key: t.key, saved: t.saved,
 		})
-		if t.kind == timerRaise {
+		if t.raised != nil {
 			snap.timers[len(snap.timers)-1].eventName = r.m.EventName(t.raised)
 		}
 	}
 
 	for _, s := range r.services {
-		snap.invocations = append(snap.invocations, runningInvocation[S]{id: s.id, state: s.inv.state.id, root: s.inv.state.root, name: s.inv.name, resource: s.inv.resource != nil, acquired: s.acquired, attempt: s.attempt, saved: s.saved})
+		snap.invocations = append(snap.invocations, runningInvocation[S]{id: s.id, state: s.inv.state.id, root: s.inv.state.root, name: s.inv.name, resource: s.inv.resource != nil, acquired: s.acquired, attempt: s.attempt, saved: s.saved, cause: s.cause, eventName: r.causeName(s.cause)})
 	}
 
 	return snap
@@ -861,6 +896,12 @@ func (r *run[S, C]) matches(t *transition[S, C], stim stimulus[S, C]) bool {
 		}
 	}
 
+	for _, cond := range t.childConds {
+		if !r.childIn(cond) {
+			return false
+		}
+	}
+
 	for _, g := range t.guards {
 		if !g.fn(r.ctx, stim.event, r.now) {
 			return false
@@ -868,6 +909,26 @@ func (r *run[S, C]) matches(t *transition[S, C], stim stimulus[S, C]) bool {
 	}
 
 	return true
+}
+
+// childIn reports whether the child machine a condition names is running
+// and has every one of the condition's states active, going by the snapshot
+// the child last handed up.
+func (r *run[S, C]) childIn(cond childCond) bool {
+	for _, running := range r.services {
+		if running.inv.name != cond.service || len(running.saved) == 0 {
+			continue
+		}
+
+		var raw RawSnapshot
+		if err := json.Unmarshal(running.saved, &raw); err != nil {
+			return false
+		}
+
+		return !slices.ContainsFunc(cond.states, func(state string) bool { return !slices.Contains(raw.Active, state) })
+	}
+
+	return false
 }
 
 // selectTransitions picks, for each active leaf state, the first matching
@@ -962,6 +1023,11 @@ func (r *run[S, C]) exitsOverlap(a, b *transition[S, C]) bool {
 func (r *run[S, C]) domain(t *transition[S, C]) *node[S, C] {
 	if t.target == nil {
 		return nil
+	}
+
+	// A new instance enters everything under the chart.
+	if r.starting {
+		return r.m.root
 	}
 
 	all := func(pred func(*node[S, C]) bool) bool {
@@ -1097,22 +1163,34 @@ func (r *run[S, C]) microstep(ts []*transition[S, C], stim stimulus[S, C]) {
 	// produced something that needs them.
 	beforeNodes := r.active()
 	first := len(r.effects)
+	r.ended = r.ended[:0]
 	r.pending = r.pending[:0]
 
 	for _, n := range exits {
 		r.exit(n, stim.event)
 	}
 
+	// A transition of the chart itself marked Reenter leaves the chart
+	// and enters it again: its exit and entry actions run, and its timers
+	// and services start afresh.
+	restart := slices.ContainsFunc(ts, func(t *transition[S, C]) bool { return t.source.root && t.reenter && t.target != nil })
+	if restart {
+		r.exit(r.m.root, stim.event)
+	}
+
 	for _, t := range ts {
 		r.runSteps(t, stim)
 	}
 
-	if r.starting {
+	// A new instance's first step enters the chart itself before its
+	// states, and so does a transition of the chart that re-enters it.
+	entering := r.entrySet(ts)
+	if r.starting || restart {
 		r.starting = false
 		r.enter(r.m.root, stim.event)
 	}
 
-	for _, n := range r.entrySet(ts) {
+	for _, n := range entering {
 		r.enter(n, stim.event)
 	}
 
@@ -1261,6 +1339,7 @@ func (r *run[S, C]) exit(n *node[S, C], event any) {
 		return s.inv.state == n
 	})
 	r.endServices(ending)
+	r.ended = append(r.ended, ending...)
 
 	r.deactivate(n)
 }
@@ -1278,7 +1357,7 @@ func (r *run[S, C]) raise(raises []stateRaise[C]) {
 // emits those it hands to whoever runs the machine.
 func (r *run[S, C]) message(n *node[S, C], sends []stateSend[C], emits []stateRaise[C]) {
 	for _, send := range sends {
-		r.sends = append(r.sends, outgoing{service: send.service, keyed: false, key: "", event: send.fn(r.ctx)})
+		r.send(outgoing{service: send.service, keyed: false, key: "", event: send.fn(r.ctx), leaving: nil})
 	}
 
 	for _, emit := range emits {
@@ -1364,11 +1443,11 @@ func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
 		case stepSend:
 			// The event is delivered once the step has settled, so that
 			// it reaches a service the step itself starts.
-			send := outgoing{service: t.sendTargets[k], keyed: false, key: "", event: s.raise(r.ctx, stim.event)}
+			send := outgoing{service: t.sendTargets[k], keyed: false, key: "", event: s.raise(r.ctx, stim.event), leaving: nil}
 			if keyFn, keyed := t.keys[k]; keyed {
 				send.keyed, send.key = true, keyFn(r.ctx, stim.event)
 			}
-			r.sends = append(r.sends, send)
+			r.send(send)
 		case stepEmit:
 			e := r.bare(EffectEmit, "", t.source, s.name)
 			e.Event = s.raise(r.ctx, stim.event)
@@ -1444,7 +1523,7 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 			r.done = true
 			return
 		}
-		r.queueDone(p, nil)
+		r.queueDone(p, Done[map[string]any]{ID: p.name, Result: r.m.outputs(p, r.config, r.ctx)})
 	}
 }
 
@@ -1606,7 +1685,7 @@ func (r *run[S, C]) fire(tm timer[S, C]) stimulus[S, C] {
 
 		return stim
 	case timerRetry:
-		r.startRun(tm.retry, tm.attempt, tm.key, tm.saved)
+		r.startRunFor(tm.retry, tm.attempt, tm.key, tm.saved, tm.raised)
 	case timerRaise:
 		stim := on[S, C](triggerEvent)
 		stim.event = tm.raised
@@ -1653,7 +1732,7 @@ func (r *run[S, C]) startRetry(ended service[S, C], failures int) {
 		attempt: failures,
 		source:  nil,
 		label:   "",
-		raised:  nil,
+		raised:  ended.cause,
 		delay:   p.wait(failures),
 		due:     time.Time{},
 		seq:     0,
@@ -1705,27 +1784,37 @@ func (r *run[S, C]) startService(inv *invocation[S, C]) {
 // startRun starts a run of inv that follows attempt failed ones.
 // key is the key of a spawned run, and saved the progress it carries on from.
 func (r *run[S, C]) startRun(inv *invocation[S, C], attempt int, key string, saved json.RawMessage) {
+	r.startRunFor(inv, attempt, key, saved, r.namedCause())
+}
+
+// startRunFor is startRun for a run whose cause is already known, as it is
+// for a run a retry starts.
+func (r *run[S, C]) startRunFor(inv *invocation[S, C], attempt int, key string, saved json.RawMessage, cause any) {
 	id := r.nextID(inv.state, inv.name)
 	if inv.spawned {
 		id += "/" + url.PathEscape(key)
 	}
 
-	r.services = append(r.services, service[S, C]{id: id, inv: inv, acquired: false, attempt: attempt, saved: saved})
+	r.services = append(r.services, service[S, C]{id: id, inv: inv, acquired: false, attempt: attempt, saved: saved, cause: cause})
 	r.effects = append(r.effects, r.serviceEffect(id, inv))
 }
 
 // serviceEffect is the effect that starts a run of inv, carrying the
 // deadline of the budgets around it.
 func (r *run[S, C]) serviceEffect(id string, inv *invocation[S, C]) Effect[C] {
-	// A run that is being started again carries the progress it recorded.
-	var saved json.RawMessage
+	// A run that is being started again carries the progress it recorded
+	// and the event it was started for.
+	var (
+		saved json.RawMessage
+		cause any
+	)
 
 	// A service or acquisition runs inside every held resource of its
 	// state and the states around it.
 	var needs []string
 	for _, s := range r.services {
 		if s.id == id {
-			saved = s.saved
+			saved, cause = s.saved, s.cause
 		}
 
 		if !s.acquired || s.inv == inv || !inv.state.within(s.inv.state) {
@@ -1746,7 +1835,7 @@ func (r *run[S, C]) serviceEffect(id string, inv *invocation[S, C]) Effect[C] {
 		return Effect[C]{Kind: EffectAcquire, ID: id, State: inv.state.name, Name: inv.name, Delay: 0, At: r.deadlineFor(inv.state), Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: needs, Saved: saved}
 	}
 
-	return Effect[C]{Kind: EffectStartInvocation, ID: id, State: inv.state.name, Name: inv.name, Delay: 0, At: r.deadlineFor(inv.state), Jitter: 0, Context: r.ctx, Event: nil, From: nil, To: nil, Needs: needs, Saved: saved}
+	return Effect[C]{Kind: EffectStartInvocation, ID: id, State: inv.state.name, Name: inv.name, Delay: 0, At: r.deadlineFor(inv.state), Jitter: 0, Context: r.ctx, Event: cause, From: nil, To: nil, Needs: needs, Saved: saved}
 }
 
 // deadlineFor returns the earliest deadline among the budgets of n and the
@@ -1976,21 +2065,61 @@ type outgoing struct {
 	keyed   bool
 	key     string
 	event   any
+
+	// leaving lists the runs the event is for that the same step stops:
+	// they are told before they are stopped.
+	leaving []string
+}
+
+// matches reports whether the event is for the given run.
+func (o outgoing) matches(id, name string, resource bool) bool {
+	return !resource && name == o.service && (!o.keyed || keyOf(id) == o.key)
+}
+
+// send queues an event for a service, noting the runs it is for that this
+// step is stopping, or is about to as their state is exited.
+func (r *run[S, C]) send(o outgoing) {
+	for _, ended := range r.ended {
+		if o.matches(ended.id, ended.inv.name, ended.inv.resource != nil) {
+			o.leaving = append(o.leaving, ended.id)
+		}
+	}
+	for _, running := range r.services {
+		if o.matches(running.id, running.inv.name, running.inv.resource != nil) {
+			o.leaving = append(o.leaving, running.id)
+		}
+	}
+
+	r.sends = append(r.sends, o)
 }
 
 // deliver turns the events sent during the step into effects for the
 // services that are running now that it has settled: those that were
-// running before and still are, and those the step started.
+// running before and still are, and those the step started. A service the
+// step stopped is sent what was meant for it before it is stopped.
 func (r *run[S, C]) deliver() {
 	for _, send := range r.sends {
 		for _, running := range r.services {
-			if running.inv.resource != nil || running.inv.name != send.service || (send.keyed && keyOf(running.id) != send.key) {
+			if !send.matches(running.id, running.inv.name, running.inv.resource != nil) {
 				continue
 			}
 
 			e := r.bare(EffectSend, running.id, running.inv.state, running.inv.name)
 			e.Event = send.event
 			r.effects = append(r.effects, e)
+		}
+
+		// A run the step stopped hears the event first: the send goes in
+		// just before its stop.
+		for _, id := range send.leaving {
+			stop := slices.IndexFunc(r.effects, func(e Effect[C]) bool { return e.Kind == EffectStopInvocation && e.ID == id })
+			if stop < 0 {
+				continue
+			}
+
+			e := r.effects[stop]
+			e.Kind, e.Event = EffectSend, send.event
+			r.effects = slices.Insert(r.effects, stop, e)
 		}
 	}
 }
@@ -2017,7 +2146,7 @@ func (r *run[S, C]) complete() {
 		for k, name := range n.exitRuns {
 			move.Source = n.id
 			if cond := n.exitConds[k]; cond == nil || cond(move) {
-				e := r.chartActionEffect(n, name, nil)
+				e := r.chartActionEffect(n, name, r.namedCause())
 				e.From, e.To = names, names
 				r.effects = append(r.effects, e)
 			}
@@ -2200,4 +2329,40 @@ func (m *Machine[S, C]) at(state S, root bool) *node[S, C] {
 	}
 
 	return m.nodes[state]
+}
+
+// outputs gathers what the regions of parallel state p report, by region
+// name: the output of the final state each ended in, nil where that state
+// declares none, and for a region that is itself parallel the outputs of
+// its own regions.
+func (m *Machine[S, C]) outputs(p *node[S, C], config []bool, c C) map[string]any {
+	out := make(map[string]any, len(p.states()))
+	for _, region := range p.states() {
+		out[region.name] = m.outputOf(region, config, c)
+	}
+
+	return out
+}
+
+// outputOf is what one completed state reports.
+func (m *Machine[S, C]) outputOf(n *node[S, C], config []bool, c C) any {
+	switch n.kind {
+	case kindParallel:
+		return m.outputs(n, config, c)
+	case kindFinal:
+		if n.outputValue != nil {
+			return n.outputValue(c)
+		}
+
+		return nil
+	case kindState, kindHistory:
+	}
+
+	for _, child := range n.children {
+		if child.kind == kindFinal && config[child.order] && child.outputValue != nil {
+			return child.outputValue(c)
+		}
+	}
+
+	return nil
 }

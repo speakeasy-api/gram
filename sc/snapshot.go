@@ -94,6 +94,10 @@ type runningInvocation[S comparable] struct {
 
 	// saved is the progress the run last recorded with Checkpoint.
 	saved json.RawMessage
+
+	// cause is the event the run was started for, and eventName its name.
+	cause     any
+	eventName string
 }
 
 // PendingTimer is a timer that has started and not yet fired or been
@@ -179,6 +183,30 @@ func (s Snapshot[S, C]) Checkpoint(id string) json.RawMessage {
 	}
 
 	return nil
+}
+
+// Child returns the current snapshot of the child machine that the service
+// named service runs, as the child last handed it up, and reports whether
+// there is one. child is the machine the service was declared with. For a
+// spawned child machine it returns the first run; read a particular one
+// from [Snapshot.Checkpoint] with [Machine.Restore].
+func (s Snapshot[S, C]) Child[S2 comparable, C2 any](child *Machine[S2, C2], service string) (Snapshot[S2, C2], bool) {
+	var none Snapshot[S2, C2]
+
+	for _, inv := range s.invocations {
+		if inv.name != service || len(inv.saved) == 0 {
+			continue
+		}
+
+		snap, _, err := child.Restore(inv.saved, time.Time{})
+		if err != nil {
+			return none, false
+		}
+
+		return snap, true
+	}
+
+	return none, false
 }
 
 // HeldResource is a resource of an active state.
@@ -362,6 +390,10 @@ type RawInvocation struct {
 
 	// Saved is the progress the run last recorded with Checkpoint.
 	Saved json.RawMessage `json:"saved,omitempty"`
+
+	// EventName and Event are the event the run was started for.
+	EventName string          `json:"event_name,omitempty"`
+	Event     json.RawMessage `json:"event,omitempty"`
 }
 
 // MarshalJSON encodes the snapshot in the [RawSnapshot] format.
@@ -406,6 +438,15 @@ func (s Snapshot[S, C]) MarshalJSON() ([]byte, error) {
 		case timerAfter:
 		case timerRetry:
 			rt.Name, rt.Jitter = t.name, t.jitter
+
+			// A retry keeps the event its service was started for.
+			if t.raised != nil {
+				ev, err := json.Marshal(t.raised)
+				if err != nil {
+					return nil, fmt.Errorf("marshal the event of retry %q: %w", t.name, err)
+				}
+				rt.EventName, rt.Event = t.eventName, ev
+			}
 		case timerRaise:
 			ev, err := json.Marshal(t.raised)
 			if err != nil {
@@ -418,7 +459,16 @@ func (s Snapshot[S, C]) MarshalJSON() ([]byte, error) {
 	}
 
 	for _, inv := range s.invocations {
-		raw.Invocations = append(raw.Invocations, RawInvocation{ID: inv.id, State: s.stateName(inv.state, inv.root), Name: inv.name, Resource: inv.resource, Acquired: inv.acquired, Attempt: inv.attempt, Saved: inv.saved})
+		ri := RawInvocation{ID: inv.id, State: s.stateName(inv.state, inv.root), Name: inv.name, Resource: inv.resource, Acquired: inv.acquired, Attempt: inv.attempt, Saved: inv.saved, EventName: "", Event: nil}
+		if inv.cause != nil {
+			ev, err := json.Marshal(inv.cause)
+			if err != nil {
+				return nil, fmt.Errorf("marshal the event of service %q: %w", inv.name, err)
+			}
+			ri.EventName, ri.Event = inv.eventName, ev
+		}
+
+		raw.Invocations = append(raw.Invocations, ri)
 	}
 
 	for state, deadline := range s.scopes {
@@ -529,6 +579,7 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 		cause:    nil,
 		sends:    nil,
 		starting: false,
+		ended:    nil,
 		list:     nil,
 		listed:   false,
 	}
@@ -661,6 +712,7 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 		cause:    nil,
 		sends:    nil,
 		starting: false,
+		ended:    nil,
 		list:     nil,
 		listed:   false,
 	}
@@ -735,7 +787,12 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 		case timerKind(rt.Kind) == timerRetry && ok && r.config[n.order] && !r.done:
 			for _, inv := range n.invocations {
 				if inv.name == rt.Name && inv.retry != nil {
-					r.timers = append(r.timers, timer[S, C]{id: rt.ID, kind: timerRetry, t: nil, retry: inv, attempt: rt.Attempt, source: nil, label: "", raised: nil, delay: time.Duration(rt.DelayNanos), due: rt.Due, seq: rt.Seq, jitter: rt.Jitter, key: rt.Key, saved: rt.Saved})
+					cause, err := r.m.decodeEvent(rt.EventName, rt.Event)
+					if err != nil {
+						return err
+					}
+
+					r.timers = append(r.timers, timer[S, C]{id: rt.ID, kind: timerRetry, t: nil, retry: inv, attempt: rt.Attempt, source: nil, label: "", raised: cause, delay: time.Duration(rt.DelayNanos), due: rt.Due, seq: rt.Seq, jitter: rt.Jitter, key: rt.Key, saved: rt.Saved})
 					kept = true
 				}
 			}
@@ -761,7 +818,12 @@ func (r *run[S, C]) restoreOutstanding(raw RawSnapshot, previously map[string]bo
 		if ok && r.config[n.order] && !r.done {
 			for _, inv := range n.invocations {
 				if inv.name == ri.Name && (inv.resource != nil) == ri.Resource {
-					r.services = append(r.services, service[S, C]{id: ri.ID, inv: inv, acquired: ri.Acquired, attempt: ri.Attempt, saved: ri.Saved})
+					cause, err := r.m.decodeEvent(ri.EventName, ri.Event)
+					if err != nil {
+						return err
+					}
+
+					r.services = append(r.services, service[S, C]{id: ri.ID, inv: inv, acquired: ri.Acquired, attempt: ri.Attempt, saved: ri.Saved, cause: cause})
 					kept = true
 				}
 			}
@@ -833,4 +895,24 @@ func (m *Machine[S, C]) Resume(snap Snapshot[S, C]) []Effect[C] {
 	}
 
 	return effects
+}
+
+// decodeEvent loads a stored event by the name the chart gave its type. An
+// empty name is no event.
+func (m *Machine[S, C]) decodeEvent(name string, data json.RawMessage) (any, error) {
+	if name == "" {
+		return nil, nil //nolint:nilnil // no event is a valid result, not an error.
+	}
+
+	t, known := m.eventTypes[name]
+	if !known {
+		return nil, fmt.Errorf("%w: stored event %q is not one the chart handles", ErrInvalidSnapshot, name)
+	}
+
+	ev := reflect.New(t)
+	if err := json.Unmarshal(data, ev.Interface()); err != nil {
+		return nil, fmt.Errorf("%w: unmarshal stored event %q: %w", ErrInvalidSnapshot, name, err)
+	}
+
+	return ev.Elem().Interface(), nil
 }

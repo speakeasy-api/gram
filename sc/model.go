@@ -150,6 +150,12 @@ type node[S comparable, C any] struct {
 	exitEmits  []stateRaise[C]
 }
 
+// childCond is a condition on where a child machine is.
+type childCond struct {
+	service string
+	states  []string
+}
+
 // stateSend is an event a state sends to a service on entry or exit.
 type stateSend[C any] struct {
 	name    string
@@ -443,6 +449,10 @@ type transition[S comparable, C any] struct {
 
 	// raiseDelays holds, by step index, how long a RaiseAfter waits.
 	raiseDelays map[int]time.Duration
+
+	// childConds are the states child machines must be in for the
+	// transition to be taken.
+	childConds []childCond
 
 	// sendTargets holds, by step index, the service a SendTo sends to, or
 	// a Spawn or StopSpawned step starts or stops a run of.

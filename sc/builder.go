@@ -545,8 +545,9 @@ func (s *StateBuilder[S, C]) SendOnEntry(name, service string, f func(C) any) *S
 }
 
 // SendOnExit sends an event to a service whenever the state is exited, as
-// SendOnEntry does on entry. A service the state itself invokes is stopped
-// by the exit and does not receive it.
+// SendOnEntry does on entry. A service the state itself invokes is told
+// before it is stopped: the event is still in its [Inbox] after its context
+// ends, so it hears the last thing it was sent.
 func (s *StateBuilder[S, C]) SendOnExit(name, service string, f func(C) any) *StateBuilder[S, C] {
 	s.b.sends = append(s.b.sends, service)
 	s.n.exitSends = append(s.n.exitSends, stateSend[C]{name: name, service: service, fn: f})
@@ -1007,6 +1008,26 @@ func (t *Transition[S, C, Ev]) WhenEvent(name string, g func(c C, ev any) bool) 
 	return t
 }
 
+// WhenChildIn restricts the transition to times when the child machine that
+// the service named service runs has every one of states active. It is how
+// a parent decides on where its child is without the child having to report
+// each move: the core reads the snapshot the child last handed up. The
+// condition fails when the child is not running. states are the child's
+// state identifiers.
+func (t *Transition[S, C, Ev]) WhenChildIn(service string, states ...any) *Transition[S, C, Ev] {
+	if len(states) == 0 {
+		t.b.errorf("state %q: WhenChildIn names no states", t.t.source.name)
+	}
+
+	cond := childCond{service: service, states: nil}
+	for _, state := range states {
+		cond.states = append(cond.states, fmt.Sprint(state))
+	}
+	t.t.childConds = append(t.t.childConds, cond)
+
+	return t
+}
+
 // WhenIn restricts the transition to times when every one of states is
 // active. It lets one parallel region react to where another region is,
 // which a guard cannot see. It combines with [Transition.When]: both must
@@ -1216,8 +1237,10 @@ func (t *Transition[S, C, Ev]) keyed(kind stepKind, name, service string, key fu
 // that takes instructions while it runs. The event goes to every service of
 // that name that is running once the step has settled, which includes one
 // the step itself starts, so a transition into a state can greet the service
-// that state invokes. When none is running, because its state is not active
-// or was left by this step, or it has finished, the event is dropped.
+// that state invokes. A service the step stops is told first: the event is
+// still in its [Inbox] after its context ends. When no such service is
+// running, because its state is not active or it has finished, the event
+// is dropped.
 //
 // Only the [Instance] and [Actor] drivers deliver such events; pgdriver
 // rejects a chart that sends them, because the service runs in another

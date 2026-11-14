@@ -241,11 +241,17 @@ func (m *Machine[S, C]) all() []*node[S, C] {
 
 // Output returns the output of a machine that is done: what the top-level
 // final state it ended in declared with [FinalBuilder.Output], computed from
-// the context it ended with. It reports false while the machine is not
+// the context it ended with. A chart of regions reports a map from each
+// region's name to its output. It reports false while the machine is not
 // done, and when that final state declares no output.
 func (m *Machine[S, C]) Output(snap Snapshot[S, C]) (any, bool) {
 	if !snap.done {
 		return nil, false
+	}
+
+	// A chart of regions reports what each region does, by name.
+	if m.root.kind == kindParallel {
+		return m.outputs(m.root, snap.config, snap.Context), true
 	}
 
 	for _, n := range snap.nodes {
@@ -400,6 +406,12 @@ func (m *Machine[S, C]) resolveBehaviour(b *build[S, C], n *node[S, C]) {
 		t.inNodes = m.resolveConditions(b, n, "WhenIn", t.inIDs)
 		t.notInNodes = m.resolveConditions(b, n, "WhenNotIn", t.notInIDs)
 
+		for _, cond := range t.childConds {
+			if resource, ok := b.kinds[cond.service]; !ok || resource {
+				b.errorf("state %q: WhenChildIn names %q, which is not a service of the chart", n.name, cond.service)
+			}
+		}
+
 		for _, g := range t.guards {
 			if g.name == "" {
 				b.errorf("state %q: a guard has no name", n.name)
@@ -515,6 +527,10 @@ func (m *Machine[S, C]) registerEvents(b *build[S, C]) {
 	for _, t := range b.outputTypes {
 		register(t, "sc.done:"+t.String())
 	}
+
+	// A parallel state's completion reports its regions' outputs.
+	regions := reflect.TypeFor[Done[map[string]any]]()
+	register(regions, "sc.done:"+regions.String())
 
 	for _, n := range m.all() {
 		for _, inv := range n.invocations {
@@ -708,6 +724,9 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 		}
 		for _, out := range t.notInNodes {
 			write(" notin=%q", out.name)
+		}
+		for _, cond := range t.childConds {
+			write(" child=%q in=%q", cond.service, cond.states)
 		}
 		for _, g := range t.guards {
 			write(" guard=%q", g.name)

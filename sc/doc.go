@@ -26,7 +26,8 @@
 // [Builder.Regions] makes the top-level states regions that are all active
 // at once. A final state reports an output with [FinalBuilder.Output], which
 // the enclosing state's [StateBuilder.OnDoneWith] transitions receive and,
-// for a top-level final state, [Machine.Output] returns. A state can change the context as it is entered
+// for a top-level final state, [Machine.Output] returns. A parallel state
+// reports the outputs of its regions, by region name. A state can change the context as it is entered
 // or exited with [StateBuilder.AssignOnEntry] and [StateBuilder.AssignOnExit].
 // An event that changes nothing is ignored: the snapshot comes back unchanged.
 // [StateBuilder.OnAny] catches the events a state's other transitions do not
@@ -54,7 +55,8 @@
 // [Move] it belongs to. Services run while their state is active and report
 // back as [Done] and [Failed] events. Implementations can be given later with
 // [Machine.Bind], so a chart can be declared, exported and explored without the
-// dependencies its services need. [Invocation.Retry] runs a failed service
+// dependencies its services need. A service reads the event its state was
+// entered with from [Trigger]. [Invocation.Retry] runs a failed service
 // again after growing waits, so the chart sees only the failure that is
 // final.
 //
@@ -67,7 +69,9 @@
 // which the parent handles like any other event. A plain service reads what
 // the chart sends it from [Inbox]. A state does both as it is entered or
 // exited with [StateBuilder.SendOnEntry] and [StateBuilder.EmitOnEntry], so
-// it can greet the service it invokes. The child's snapshot is kept inside the
+// it can greet the service it invokes, and a service that a step stops
+// still hears what that step sent it. A parent reads where its child is
+// with [Snapshot.Child], and guards on it with [Transition.WhenChildIn]. The child's snapshot is kept inside the
 // parent's, so a stored parent resumes its child where it was. Any service
 // can do the same for its own progress with [Checkpoint] and [Resumed], and
 // [RunID] gives it an idempotency key that survives being run again.

@@ -1555,13 +1555,12 @@ func TestXAftExecCallsInvokeCreatorWithRaisedEvent(t *testing.T) {
 	snap, effects := m.Transition(snap, xaftNext{}, epoch)
 	require.Equal(t, []string{"c"}, snap.Active())
 
-	// DIVERGES from XState: XState computes the invoked actor's input from
-	// the event that entered the state, here the raised one. An sc service
-	// is given the context only: its effect carries no event, so a chart
-	// that needs the event must assign it to the context first.
+	// As in XState, the invoked service is given the event that entered
+	// its state, here the raised one: the effect carries it, and the
+	// service reads it with sc.Trigger.
 	start := effect(t, effects, sc.EffectStartInvocation)
 	require.Equal(t, "c", start.State)
-	require.Nil(t, start.Event)
+	require.Equal(t, xaftRaised{}, start.Event)
 }
 
 // xaftChildChart is the machine of the two "invoked child" cases.
@@ -1994,9 +1993,9 @@ func TestXAftExecDeliversEventsSentFromExitActionsToServiceInvokedInSameState(t 
 	snap, effects := m.Transition(snap, xaftToggle{}, epoch)
 	require.Equal(t, []string{"inactive"}, snap.Active())
 
-	// DIVERGES from XState: XState expects the service to receive MY_EVENT
-	// (statelyai/xstate#3617). sc exits the source state, stopping its
-	// services, before it runs the transition's steps, so the send finds
-	// nothing running and is dropped: the only effect is the stop.
-	require.Equal(t, []sc.EffectKind{sc.EffectStopInvocation}, kinds(effects))
+	// As in XState (statelyai/xstate#3617), the service the step stops
+	// receives MY_EVENT first: the send goes in before the stop.
+	require.Equal(t, []sc.EffectKind{sc.EffectSend, sc.EffectStopInvocation}, kinds(effects))
+	require.Equal(t, xaftMyEvent{}, effects[0].Event)
+	require.Equal(t, effects[1].ID, effects[0].ID)
 }
