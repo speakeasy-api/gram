@@ -5,10 +5,12 @@ name: Queue version packages
 # self-approval, so the approver is a separate GitHub App, speakeasy-approvals
 # (it reviews as speakeasy-approvals[bot]).
 #
-# One-time setup for the approver app, installed on this repository only:
+# One-time setup for the approver app, installed only on the repositories that
+# use it:
 #   - Permissions: Pull requests (read and write), Contents (read and write)
-#   - Repository variable RELEASE_APPROVER_CLIENT_ID: the app's Client ID
-#   - Repository secret RELEASE_APPROVER_PRIVATE_KEY: the app's private key
+#   - Actions variable RELEASE_APPROVER_CLIENT_ID: the app's Client ID
+#   - Actions secret RELEASE_APPROVER_PRIVATE_KEY: the app's private key
+# Both are set at the organization level and shared with this repository.
 # Do not point these at gram-bot.
 #
 # GitHub cron is UTC and does not follow Pacific daylight saving. 03:00 UTC is
@@ -87,7 +89,7 @@ jobs:
           [[ -n "$PRIVATE_KEY" ]] || missing+=("secret RELEASE_APPROVER_PRIVATE_KEY")
           if (( ${#missing[@]} > 0 )); then
             for m in "${missing[@]}"; do
-              echo "::error title=Approver app not configured::Repository ${m} is not set. See the setup notes at the top of release-merge.yaml."
+              echo "::error title=Approver app not configured::Actions ${m} is not set or not shared with this repository. See the setup notes at the top of release-merge.yaml."
             done
             exit 1
           fi
