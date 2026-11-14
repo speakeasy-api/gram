@@ -26,8 +26,8 @@ export function LockoutPaygCheckoutPanel(): JSX.Element | null {
 
 /**
  * Renders nothing unless the viewer can actually check out, so the gate keeps
- * its booking-only shape for members, for organizations that are not walled
- * off, and for every unresolved state of the rollout flag.
+ * its booking-only shape for members and for organizations that are not walled
+ * off.
  */
 function GatedCheckoutPanel(): JSX.Element | null {
   const { eligible } = usePaygCheckoutAccess("gated");

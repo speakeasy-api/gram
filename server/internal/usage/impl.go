@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -64,7 +63,6 @@ type Service struct {
 	stripeClient    stripeclient.Client
 	stripeHandler   stripeWebhookHandler
 	stripeMetrics   stripeWebhookMetricsRecorder
-	featureFlags    feature.Provider
 	productFeatures productFeatureCacheUpdater
 	trial           trialemails.Notifier
 	now             func() time.Time
@@ -87,7 +85,7 @@ type openRouterBillingDBProvisioner interface {
 	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier, meterReadConn clickhouse.Conn) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier, meterReadConn clickhouse.Conn) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	if trialNotifier == nil {
@@ -114,7 +112,6 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		stripeClient:    stripeClient,
 		stripeHandler:   nil,
 		stripeMetrics:   newStripeWebhookMetrics(otel.GetMeterProvider(), logger),
-		featureFlags:    featureFlags,
 		productFeatures: productFeatures,
 		trial:           trialNotifier,
 		now:             time.Now,
@@ -146,7 +143,6 @@ func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient st
 		stripeClient:    stripeClient,
 		stripeHandler:   nil,
 		stripeMetrics:   nil,
-		featureFlags:    nil,
 		productFeatures: nil,
 		trial:           nil,
 		now:             time.Now,
@@ -405,25 +401,6 @@ func (s *Service) platformHostBaseURL(ctx context.Context, fallback *url.URL) st
 		serverURL = s.serverURL.String()
 	}
 	return requestorigin.PlatformHostBaseURL(ctx, serverURL, fallback.String())
-}
-
-func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckoutPayload) (res string, err error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return "", oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return "", err
-	}
-
-	baseURL := s.platformHostBaseURL(ctx, s.serverURL)
-	successURL := fmt.Sprintf("%s/%s/billing", baseURL, authCtx.OrganizationSlug)
-
-	checkoutURL, err := s.billingRepo.CreateCheckout(ctx, authCtx.ActiveOrganizationID, baseURL, successURL)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout").LogError(ctx, s.logger)
-	}
-	return checkoutURL, nil
 }
 
 func (s *Service) CreateTopUpCheckout(ctx context.Context, payload *gen.CreateTopUpCheckoutPayload) (res string, err error) {

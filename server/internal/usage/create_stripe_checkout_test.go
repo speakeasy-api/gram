@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
@@ -420,7 +419,6 @@ func TestNewStripeCheckoutIntent(t *testing.T) {
 type stripeCheckoutTestInstance struct {
 	service *Service
 	db      repo.DBTX
-	flags   *feature.InMemory
 	stripe  *checkoutStripeClient
 	orgID   string
 	orgSlug string
@@ -447,8 +445,6 @@ func newStripeCheckoutTestInstance(t *testing.T) *stripeCheckoutTestInstance {
 	})
 	require.NoError(t, err)
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagPaygSelfServeBilling, orgID, true)
 	stripe := newCheckoutStripeClient()
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
@@ -471,13 +467,11 @@ func newStripeCheckoutTestInstance(t *testing.T) *stripeCheckoutTestInstance {
 		openRouter:    openrouter.NewDevelopment(""),
 		stripeClient:  stripe,
 		stripeHandler: nil,
-		featureFlags:  flags,
 	}
 
 	return &stripeCheckoutTestInstance{
 		service: service,
 		db:      db,
-		flags:   flags,
 		stripe:  stripe,
 		orgID:   orgID,
 		orgSlug: orgSlug,
@@ -629,20 +623,6 @@ func TestCreateStripeCheckoutRequiresPublishableKey(t *testing.T) {
 	require.Empty(t, checkouts)
 }
 
-func TestCreateStripeCheckoutFailsClosedWhenRolloutDisabled(t *testing.T) {
-	t.Parallel()
-
-	ti := newStripeCheckoutTestInstance(t)
-	ti.flags.SetFlag(feature.FlagPaygSelfServeBilling, ti.orgID, false)
-
-	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeForbidden)
-	uniqueCustomers, _, checkouts := ti.stripe.snapshot()
-	require.Zero(t, uniqueCustomers)
-	require.Empty(t, checkouts)
-}
-
 func TestCreateStripeCheckoutAllowsGatedOrganizationAdmin(t *testing.T) {
 	t.Parallel()
 
@@ -679,20 +659,6 @@ func TestCreateStripeCheckoutAllowsGatedOrganizationAdmin(t *testing.T) {
 	require.Greater(t, checkouts[0].ExpiresAt, time.Now().UTC())
 	require.LessOrEqual(t, checkouts[0].ExpiresAt.Sub(time.Now().UTC()), maximumStripeCheckoutSessionLifetime)
 	require.Contains(t, checkouts[0].IdempotencyKey, "checkout-session:"+ti.orgID+":")
-}
-
-func TestCreateStripeCheckoutFailsClosedWithoutRolloutProvider(t *testing.T) {
-	t.Parallel()
-
-	ti := newStripeCheckoutTestInstance(t)
-	ti.service.featureFlags = nil
-
-	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeUnavailable)
-	uniqueCustomers, _, checkouts := ti.stripe.snapshot()
-	require.Zero(t, uniqueCustomers)
-	require.Empty(t, checkouts)
 }
 
 func TestCreateStripeCheckoutAlignsStripeTrialEndWithoutConvertingProductTrial(t *testing.T) {
