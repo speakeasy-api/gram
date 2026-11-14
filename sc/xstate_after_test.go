@@ -10,8 +10,8 @@ package sc_test
 // "<state>/<action>", the state of the chart's own actions being the
 // machine's id. An XState root that is parallel is Builder.Regions, and what
 // an XState root declares for itself (entry actions, delayed transitions,
-// services) is declared on Builder.Chart. sc asks a chart for at least one
-// state, so an XState machine that declares none has one inert state.
+// services) is declared on Builder.Chart. An XState machine that declares
+// no states is an sc chart without states.
 //
 // Cases that are not ported, with the reason:
 //
@@ -262,14 +262,12 @@ func TestXAftAfterSchedulesAfterEntryCancellationFalse(t *testing.T) {
 // state identity
 //
 // XState's machine declares the delayed transition on itself and has no
-// states; sc asks for one, so "idle" is there and does nothing.
+// states, nor does the chart.
 func TestXAftAfterUsesCanonicalAfterEventWithDelayAndStateIdentity(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("job", func(b *xaftBuilder) {
 		b.Chart().After(xaftMillis(10)).Do("spy", xaftDo[counter, struct{}])
-		b.Initial("idle")
-		b.State("idle")
 	})
 	require.NoError(t, err)
 
@@ -1441,7 +1439,7 @@ func TestXAftExecCallsMixedCustomAndBuiltinActionsInDefinitionOrder(t *testing.T
 // a service
 //
 // The entry action is the machine's own, as in XState, whose machine has no
-// states; sc asks for one, so "idle" is there and does nothing.
+// states.
 func TestXAftExecCallsInitialCustomActionsWhenStarting(t *testing.T) {
 	t.Parallel()
 
@@ -1449,8 +1447,6 @@ func TestXAftExecCallsInitialCustomActionsWhenStarting(t *testing.T) {
 
 	m, err := sc.New("initial_actions", func(b *xaftBuilder) {
 		b.Chart().Entry("call", func(context.Context, counter) { called = true })
-		b.Initial("idle")
-		b.State("idle")
 	})
 	require.NoError(t, err)
 	require.False(t, called)
@@ -1478,8 +1474,6 @@ func TestXAftExecResolvesInitialAssignActionsBeforeStarting(t *testing.T) {
 			c.Flag = true
 			return c
 		})
-		b.Initial("idle")
-		b.State("idle")
 	})
 	require.NoError(t, err)
 
@@ -1673,8 +1667,6 @@ func TestXAftExecInitialActionsReceiveContextUpdatedOnlyByPrecedingAssigns(t *te
 			Entry("count1", noop).
 			AssignOnEntry("inc2", inc).
 			Entry("count2", noop)
-		b.Initial("idle")
-		b.State("idle")
 	})
 	require.NoError(t, err)
 
@@ -1791,14 +1783,11 @@ func TestXAftExecSendsImmediateEventsToInitiallyInvokedActors(t *testing.T) {
 
 // xaftPonger is the parent of the "immediate events" cases: it invokes a
 // child that answers PING with PONG, and finishes on PONG. send declares how
-// "waiting" sends the PING. XState's child has no states; sc asks for one, so
-// "listening" is there and does nothing.
+// "waiting" sends the PING. The child has no states, as in XState.
 func xaftPonger(t *testing.T, send func(waiting *sc.StateBuilder[string, counter])) *sc.Machine[string, counter] {
 	t.Helper()
 
 	child, err := sc.New("ponger", func(b *xaftBuilder) {
-		b.Initial("listening")
-		b.State("listening")
 		b.On[xaftPing]().Emit("pong", func(counter, xaftPing) xaftPong { return xaftPong{} })
 	})
 	require.NoError(t, err)
@@ -1851,8 +1840,6 @@ func TestXAftExecDeliversEventsSentFromEntryActionsToServiceInvokedInSameState(t
 	received := make(chan any, 1)
 
 	child, err := sc.New("knocked", func(b *xaftBuilder) {
-		b.Initial("listening")
-		b.State("listening")
 		b.OnAny().Do("receive", func(_ context.Context, _ counter, ev any) { received <- ev })
 	})
 	require.NoError(t, err)

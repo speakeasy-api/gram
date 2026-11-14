@@ -34,8 +34,7 @@ package sc_test
 //   - A service must declare an OnError transition in sc. Where XState
 //     declares none, the port declares OnError().Stay().
 //   - What an XState root declares for itself is declared on Builder.Chart.
-//     sc asks a chart for at least one state, so an XState machine that
-//     declares none has one inert state.
+//     An XState machine that declares no states is a chart without states.
 
 import (
 	"context"
@@ -183,10 +182,7 @@ func xmsgSameKeyed(c counter, _ string) counter { return c }
 func xmsgInert(t *testing.T, id string) *sc.Machine[string, counter] {
 	t.Helper()
 
-	return xmsgNew(t, id, func(b *xmsgBuilder) {
-		b.Initial("idle")
-		b.State("idle")
-	})
+	return xmsgNew(t, id, func(*xmsgBuilder) {})
 }
 
 // xmsgCallback is a stream standing for an XState callback actor: it calls
@@ -217,8 +213,6 @@ func xmsgEmitter[T any](t *testing.T, emit func(counter, xmsgSomeEvent) T) *sc.M
 	t.Helper()
 
 	return xmsgNew(t, "emitter", func(b *xmsgBuilder) {
-		b.Initial("active")
-		b.State("active")
 		b.On[xmsgSomeEvent]().
 			Do("noop", func(context.Context, counter, xmsgSomeEvent) {}).
 			Emit("emitted", emit)
@@ -265,8 +259,6 @@ func TestXMsgEmitEnqueueEmitEventsCanBeListenedTo(t *testing.T) {
 	t.Parallel()
 
 	m := xmsgNew(t, "emitter", func(b *xmsgBuilder) {
-		b.Initial("active")
-		b.State("active")
 		b.On[xmsgSomeEvent]().
 			Emit("emitted", xmsgFooBar).
 			Emit("unknown", func(counter, xmsgSomeEvent) xmsgUnknown { return xmsgUnknown{} })
@@ -393,8 +385,6 @@ func TestXMsgEmitWildcardListenersReceiveAllEmittedEvents(t *testing.T) {
 	t.Parallel()
 
 	m := xmsgNew(t, "emitter", func(b *xmsgBuilder) {
-		b.Initial("active")
-		b.State("active")
 		b.On[xmsgEvent]().Emit("emitted", func(counter, xmsgEvent) xmsgEmitted { return xmsgEmitted{Foo: ""} })
 	})
 
@@ -420,8 +410,6 @@ func TestXMsgEmitFromAsyncLogic(t *testing.T) {
 		run := b.Chart().Invoke("run", func(context.Context, counter) (string, error) { return "hello", nil })
 		run.OnDone().Emit("emitted", func(_ counter, d sc.Done[string]) xmsgHello { return xmsgHello{Msg: d.Result} })
 		run.OnError().Stay()
-		b.Initial("active")
-		b.State("active")
 	})
 
 	synctest.Test(t, func(t *testing.T) {
@@ -442,8 +430,6 @@ func TestXMsgEmitFromCustomLogic(t *testing.T) {
 	t.Parallel()
 
 	m := xmsgNew(t, "logic", func(b *xmsgBuilder) {
-		b.Initial("active")
-		b.State("active")
 		b.On[xmsgEmitCmd]().Emit("emitted", func(counter, xmsgEmitCmd) xmsgHello { return xmsgHello{Msg: "hello"} })
 		b.On[xmsgOther]().Stay()
 	})
@@ -478,8 +464,6 @@ func xmsgRelayed(t *testing.T) {
 	m := xmsgNew(t, "logic", func(b *xmsgBuilder) {
 		b.Chart().Stream("logic", xmsgCallback[counter](xmsgNothing, xmsgNothing, xmsgHello{Msg: "hello"})).OnError().Stay()
 		b.On[xmsgHello]().Emit("emitted", func(_ counter, ev xmsgHello) xmsgHello { return ev })
-		b.Initial("active")
-		b.State("active")
 	})
 
 	synctest.Test(t, func(t *testing.T) {
@@ -526,8 +510,6 @@ func TestXMsgSpawnChildCanSpawn(t *testing.T) {
 		chart.RaiseOnEntry("spawn", func(counter) any { return xmsgSpawn{} })
 		chart.Invoke("promise", func(context.Context, counter) (int, error) { return 42, nil }).Spawned().OnError().Stay()
 		chart.On[xmsgSpawn]().Spawn("spawnChild", "promise", func(counter, xmsgSpawn) string { return "child" })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	snap, effects := m.Start(counter{N: 0}, epoch)
@@ -553,8 +535,6 @@ func TestXMsgSpawnChildCanSpawnFromNamedActor(t *testing.T) {
 		fetch.OnDone().Assign("keep", func(c counter, d sc.Done[int]) counter { c.N = d.Result; return c })
 		fetch.OnError().Stay()
 		chart.On[xmsgSpawnNum]().Spawn("spawnChild", "fetchNum", func(counter, xmsgSpawnNum) string { return "child" })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	m, err := declared.Bind(func(b *sc.Binder[string, counter]) {
@@ -632,8 +612,6 @@ func TestXMsgSpawnChildHandlesDynamicID(t *testing.T) {
 	var spy atomic.Int64
 
 	child := xmsgNew(t, "child", func(b *xmsgBuilder) {
-		b.Initial("idle")
-		b.State("idle")
 		b.On[xmsgFoo]().Do("spy", func(context.Context, counter, xmsgFoo) { spy.Add(1) })
 	})
 
@@ -649,8 +627,6 @@ func TestXMsgSpawnChildHandlesDynamicID(t *testing.T) {
 		chart.On[xmsgSpawn]().
 			Spawn("spawnChild", "child", childID).
 			SendToKey("foo", "child", childID, func(xmsgChildID, xmsgSpawn) any { return xmsgFoo{} })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	snap, effects := m.Start(xmsgChildID{ChildID: "myChild"}, epoch)
@@ -685,8 +661,6 @@ func TestXMsgSpawnChildSpawnedAndStoppedInSameEntryIsNotStarted(t *testing.T) {
 		chart.On[xmsgSpawn]().
 			Spawn("spawnChild", "callback", key).
 			StopSpawned("stopChild", "callback", key)
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	snap, effects := m.Start(counter{N: 0}, epoch)
@@ -765,8 +739,6 @@ func TestXMsgSpawnChildKeepsChildSpawnedOnEntryBesideInvoke(t *testing.T) {
 	autosave := xmsgNew(t, "autosave", func(b *xmsgBuilder) {
 		b.Chart().Stream("alive", xmsgCallback[counter](xmsgNothing, func() { stopped.Add(1) })).OnError().Stay()
 		b.On[xmsgPing]().Do("pinged", func(context.Context, counter, xmsgPing) { pinged.Add(1) })
-		b.Initial("idle")
-		b.State("idle")
 	})
 	loader := xmsgInert(t, "loader")
 
@@ -820,8 +792,6 @@ func TestXMsgSpawnChildDoesNotBringBackChildStoppedBesideInvoke(t *testing.T) {
 
 	autosave := xmsgNew(t, "autosave", func(b *xmsgBuilder) {
 		b.Chart().Stream("alive", xmsgCallback[counter](xmsgNothing, func() { stopped.Add(1) })).OnError().Stay()
-		b.Initial("idle")
-		b.State("idle")
 	})
 	archiver := xmsgInert(t, "archiver")
 
@@ -879,8 +849,6 @@ func TestXMsgSpawnCanEvaluatesSpawningTransitionWithoutSpawning(t *testing.T) {
 		chart := b.Chart()
 		chart.SpawnMachine("worker", xmsgInert(t, "worker"), xmsgSameKeyed, xmsgNoOutput[counter]).OnError().Stay()
 		chart.On[xmsgSpawn]().Spawn("spawnWorker", "worker", func(counter, xmsgSpawn) string { return "w" })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
@@ -948,8 +916,6 @@ func TestXMsgInputCreatesMachineWithInput(t *testing.T) {
 
 	m := xmsgNew(t, "machine", func(b *xmsgBuilder) {
 		b.Chart().Entry("spy", func(_ context.Context, c counter) { spy = append(spy, c.N) })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	fromInput := func(startCount int) counter { return counter{N: startCount} }
@@ -974,8 +940,6 @@ func TestXMsgInputInitialEventHasNoInput(t *testing.T) {
 
 	m := xmsgNew(t, "machine", func(b *sc.Builder[string, xmsgGreeting]) {
 		b.Chart().Entry("check", func(_ context.Context, c xmsgGreeting) { greeted = append(greeted, c.Greeting) })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	_, effects := m.Start(xmsgGreeting{Greeting: "hello"}, epoch)
@@ -994,8 +958,6 @@ func xmsgGreeted(t *testing.T, record func(string)) *sc.Machine[string, xmsgGree
 
 	return xmsgNew(t, "greeted", func(b *sc.Builder[string, xmsgGreeting]) {
 		b.Chart().Entry("check", func(_ context.Context, c xmsgGreeting) { record(c.Greeting) })
-		b.Initial("idle")
-		b.State("idle")
 	})
 }
 
@@ -1014,8 +976,6 @@ func TestXMsgInputProvidesInputToInvokedMachines(t *testing.T) {
 			func(counter) xmsgGreeting { return xmsgGreeting{Greeting: "hello"} },
 			xmsgNoOutput[xmsgGreeting],
 		).OnError().Stay()
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	synctest.Test(t, func(t *testing.T) {
@@ -1050,8 +1010,6 @@ func TestXMsgInputProvidesInputToSpawnedMachines(t *testing.T) {
 			xmsgNoOutput[xmsgGreeting],
 		).OnError().Stay()
 		chart.On[xmsgSpawn]().Spawn("spawnChild", "child", func(counter, xmsgSpawn) string { return "ref" })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	synctest.Test(t, func(t *testing.T) {
@@ -1128,10 +1086,7 @@ func TestXMsgInputInfersAsyncLogicInputFromSchemas(t *testing.T) {
 func TestXMsgInputCreatesTransitionFunctionActorWithInput(t *testing.T) {
 	t.Parallel()
 
-	m := xmsgNew(t, "transition", func(b *xmsgBuilder) {
-		b.Initial("active")
-		b.State("active")
-	})
+	m := xmsgNew(t, "transition", func(*xmsgBuilder) {})
 
 	snap, effects := m.Start(counter{N: 42}, epoch)
 
@@ -1154,8 +1109,6 @@ func TestXMsgInputCreatesObservableActorWithInput(t *testing.T) {
 			}
 		}).OnError().Stay()
 		b.On[xmsgCount]().Assign("keep", func(c counter, ev xmsgCount) counter { c.N = ev.Count * 2; return c })
-		b.Initial("active")
-		b.State("active")
 	})
 
 	snap, effects := m.Start(counter{N: 42}, epoch)
@@ -1187,8 +1140,6 @@ func TestXMsgInputCreatesCallbackActorWithInput(t *testing.T) {
 				inputs = append(inputs, c)
 			}
 		}).OnError().Stay()
-		b.Initial("active")
-		b.State("active")
 	})
 
 	_, effects := m.Start(counter{N: 42}, epoch)
@@ -1207,8 +1158,6 @@ func xmsgInputTo(t *testing.T, start counter, input func(counter) counter) count
 
 	m := xmsgNew(t, "machine", func(b *xmsgBuilder) {
 		b.Chart().InvokeMachine("child", child, input, xmsgNoOutput[counter]).OnError().Stay()
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	var got counter

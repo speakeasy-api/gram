@@ -139,10 +139,7 @@ func xtrnSame(c counter) counter { return c }
 func xtrnEmpty(t *testing.T) *sc.Machine[string, counter] {
 	t.Helper()
 
-	return xtrnNew(t, "empty", func(b *xtrnBuilder) {
-		b.Initial("idle")
-		b.State("idle")
-	})
+	return xtrnNew(t, "empty", func(*xtrnBuilder) {})
 }
 
 // xtrnOf returns the effects of one kind.
@@ -418,8 +415,6 @@ func TestXTrnContextOnlyPlanning(t *testing.T) {
 
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
 		b.On[xtrnInc]().Assign("count", increment[xtrnInc])
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	snap, effects := m.Start(counter{N: 0}, epoch)
@@ -453,8 +448,6 @@ func TestXTrnSelectedTransitionResolvedOncePerMicrostep(t *testing.T) {
 
 			return c
 		})
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
@@ -555,16 +548,12 @@ func TestXTrnDoesNotSendToParentDuringTransitionSelection(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		child := xtrnNew(t, "child", func(b *xtrnBuilder) {
 			b.On[xtrnCheck]().Emit("tell parent", func(counter, xtrnCheck) xtrnChildEv { return xtrnChildEv{} })
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		parent := xtrnNew(t, "parent", func(b *xtrnBuilder) {
 			b.Chart().InvokeMachine("child", child, xtrnSame, xtrnNoOutput).OnError().Stay()
 			b.On[xtrnPoke]().SendTo("check", "child", func(counter, xtrnPoke) any { return xtrnCheck{} })
 			b.On[xtrnChildEv]().Assign("received", increment[xtrnChildEv])
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		inst, err := parent.Instance(t.Context(), counter{N: 0})
@@ -648,8 +637,6 @@ func TestXTrnCapturesActions(t *testing.T) {
 			Entry("actionWithParams", func(context.Context, counter) { calls.Add(1) }).
 			Entry("stringAction", func(context.Context, counter) { calls.Add(1) }).
 			On[xtrnMsg]().Do("actionWithDynamicParams", func(context.Context, counter, xtrnMsg) { calls.Add(1) })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	state0, actions0 := m.Start(counter{N: 0}, epoch)
@@ -681,8 +668,6 @@ func TestXTrnDoesNotExecuteReferencedAction(t *testing.T) {
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
 		b.Action("foo", func(context.Context, counter, sc.Move[string]) { calls.Add(1) })
 		b.Chart().OnEntry("foo")
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	_, actions := m.Start(counter{N: 0}, epoch)
@@ -699,8 +684,6 @@ func TestXTrnCapturesEnqueuedActions(t *testing.T) {
 		b.Chart().
 			EmitOnEntry("stringAction", func(counter) xtrnStringAction { return xtrnStringAction{} }).
 			EmitOnEntry("objectAction", func(counter) xtrnObjectAction { return xtrnObjectAction{} })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	_, actions := m.Start(counter{N: 0}, epoch)
@@ -711,17 +694,15 @@ func TestXTrnCapturesEnqueuedActions(t *testing.T) {
 }
 
 // xtrnDelayedRaise is the chart of the two cases whose state a raises NEXT
-// after 10ms from its entry action. An sc state cannot raise after a delay
-// on entry, so an eventless transition from a start state into a does it.
+// after 10ms from its entry action.
 func xtrnDelayedRaise(t *testing.T, cancel bool) *sc.Machine[string, counter] {
 	t.Helper()
 
 	return xtrnNew(t, "m", func(b *xtrnBuilder) {
-		b.Initial("boot")
-		b.State("boot").Always().
-			RaiseAfter("myRaise", 10*time.Millisecond, func(counter, struct{}) any { return xtrnNext{} }).
-			To("a")
-		next := b.State("a").On[xtrnNext]()
+		b.Initial("a")
+		next := b.State("a").
+			RaiseAfterOnEntry("myRaise", 10*time.Millisecond, func(counter) any { return xtrnNext{} }).
+			On[xtrnNext]()
 		if cancel {
 			next.CancelRaise("myRaise")
 		}
@@ -854,8 +835,6 @@ func TestXTrnSpawnCreatesAndStartsChildOnce(t *testing.T) {
 
 		child := xtrnNew(t, "child", func(b *xtrnBuilder) {
 			b.On[xtrnPing]().Assign("n", increment[xtrnPing])
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		parent := xtrnNew(t, "parent", func(b *xtrnBuilder) {
@@ -866,8 +845,6 @@ func TestXTrnSpawnCreatesAndStartsChildOnce(t *testing.T) {
 			}, xtrnNoOutput).OnError().Stay()
 			b.On[xtrnSpawn]().Spawn("spawn", "child", xtrnKey[xtrnSpawn])
 			b.On[xtrnPing]().SendToKey("ping", "child", xtrnKey[xtrnPing], func(counter, xtrnPing) any { return xtrnPing{} })
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		inst, err := parent.Instance(t.Context(), counter{N: 0})
@@ -1309,8 +1286,6 @@ func xtrnSpawner(t *testing.T, more func(b *xtrnBuilder, child *sc.Invocation[st
 	return xtrnNew(t, "m", func(b *xtrnBuilder) {
 		child := b.Chart().Invoke("child", xtrnPending).Spawned()
 		b.On[xtrnSpawn]().Spawn("spawn", "child", xtrnKey[xtrnSpawn])
-		b.Initial("idle")
-		b.State("idle")
 		if more != nil {
 			more(b, child)
 		} else {
@@ -1401,8 +1376,6 @@ func TestXTrnExecutesImmediateSends(t *testing.T) {
 				}
 			}).OnError().Stay()
 			b.On[xtrnSend]().SendTo("ping", "child", func(counter, xtrnSend) any { return xtrnPing{} })
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1611,8 +1584,6 @@ func TestXTrnRunIDsAcrossInitialTransitions(t *testing.T) {
 
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
 		b.Chart().Stream("child", xtrnListen).OnError().Stay()
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	first, _ := m.Start(counter{N: 0}, epoch)
@@ -1822,8 +1793,6 @@ func TestXTrnRemovesCompletedSpawnedChildOnLivePath(t *testing.T) {
 			b.Chart().Invoke("completingChild", func(context.Context, counter) (int, error) { return 42, nil }).
 				Spawned().OnError().Stay()
 			b.On[xtrnSpawn]().Spawn("spawn", "completingChild", xtrnKey[xtrnSpawn])
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1880,14 +1849,12 @@ func TestXTrnInvokeStartComesAfterEntryActions(t *testing.T) {
 		chart := b.Chart()
 		chart.Stream("child", xtrnListen).OnError().Stay()
 		chart.Entry("listen", noop)
-		b.Initial("idle")
-		b.State("idle").Entry("entry", noop)
 	})
 
 	_, effects := m.Start(counter{N: 0}, epoch)
 
-	require.Equal(t, []string{"m/listen", "idle/entry", "m/child"}, names(effects))
-	require.Equal(t, []sc.EffectKind{sc.EffectAction, sc.EffectAction, sc.EffectStartInvocation}, kinds(effects))
+	require.Equal(t, []string{"m/listen", "m/child"}, names(effects))
+	require.Equal(t, []sc.EffectKind{sc.EffectAction, sc.EffectStartInvocation}, kinds(effects))
 }
 
 // XState: transition function > emit actions should be returned

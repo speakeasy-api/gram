@@ -19,9 +19,8 @@ package sc_test
 //     declares none, the port declares OnError().Stay().
 //   - What an XState root declares for itself (an invocation, an entry
 //     action, a delayed or a re-entering transition) is declared on
-//     Builder.Chart, and a parallel root is Builder.Regions. sc asks a chart
-//     for at least one state, so an XState machine that declares none has
-//     one inert state.
+//     Builder.Chart, and a parallel root is Builder.Regions. An XState
+//     machine that declares no states is a chart without states.
 //   - A service's input is the context as it is when the state is entered.
 //     Only InvokeMachine has an input mapper. A service reads the event its
 //     state was entered with from sc.Trigger.
@@ -581,9 +580,6 @@ func TestXInvWorksWithInvocationsDefinedInOrthogonalStateNodes(t *testing.T) {
 }
 
 // XState: should not reinvoke root-level invocations on root non-reentering transitions
-//
-// XState's machine has no states; sc asks for one, so "idle" is there and
-// does nothing.
 func TestXInvDoesNotReinvokeRootLevelInvocationsOnRootNonReenteringTransitions(t *testing.T) {
 	t.Parallel()
 
@@ -598,9 +594,6 @@ func TestXInvDoesNotReinvokeRootLevelInvocationsOnRootNonReenteringTransitions(t
 				func() { disposed.Add(1) },
 			)).OnError().Stay()
 			chart.On[xinvUpdate]().Do("count action", func(context.Context, counter, xinvUpdate) { actions.Add(1) })
-
-			b.Initial("idle")
-			b.State("idle")
 		})
 		require.NoError(t, err)
 
@@ -1631,14 +1624,15 @@ func xinvCheckObservable(t *testing.T, kind xinvObservableKind, wantState string
 }
 
 // xinvCheckObservableInput is XState's observable that emits its input: the
-// machine invokes it at its root with the input 42. The stream reads the 42
-// from the context. XState's machine has no states and resolves the test's
-// promise from onSnapshot; the sc chart leaves its one state for a final
-// state there.
+// machine, which has no states, invokes it at its root with the input 42.
+// The stream reads the 42 from the context, and the chart's action on the
+// event it yields resolves the test, as XState's does.
 func xinvCheckObservableInput(t *testing.T) {
 	t.Helper()
 
 	synctest.Test(t, func(t *testing.T) {
+		var resolved atomic.Bool
+
 		m, err := sc.New("m", func(b *xinvBuilder) {
 			chart := b.Chart()
 			chart.Stream("of", func(_ context.Context, c counter) iter.Seq2[any, error] {
@@ -1646,18 +1640,15 @@ func xinvCheckObservableInput(t *testing.T) {
 			}).OnError().Stay()
 			chart.On[xinvCount]().
 				When("is 42", func(_ counter, ev xinvCount) bool { return ev.Value == 42 }).
-				To("received")
-
-			b.Initial("waiting")
-			b.State("waiting")
-			b.Final("received")
+				Do("resolve", func(context.Context, counter, xinvCount) { resolved.Store(true) })
 		})
 		require.NoError(t, err)
 
 		inst := xinvInstance(t, m, counter{N: 42})
+		synctest.Wait()
 
-		snap := xinvDone(t, inst)
-		require.Equal(t, []string{"received"}, snap.Active())
+		require.True(t, resolved.Load())
+		require.Empty(t, inst.Snapshot().Active())
 	})
 }
 
@@ -1722,8 +1713,7 @@ func TestXInvEventObservableWorksWithInput(t *testing.T) {
 // count from its snapshot. An sc service has no snapshot a parent can read,
 // but it can record its progress with Checkpoint, which the parent's
 // snapshot keeps: the service counts the INC events in its inbox and
-// checkpoints the count. XState's machine has no states; sc asks for one, so
-// "idle" is there and does nothing.
+// checkpoints the count. As in XState, the machine has no states.
 func xinvCheckCountingLogic(t *testing.T) {
 	t.Helper()
 
@@ -1748,9 +1738,6 @@ func xinvCheckCountingLogic(t *testing.T) {
 			inv.OnDone().Stay()
 			inv.OnError().Stay()
 			chart.On[xinvInc]().SendTo("forward", "count", func(_ counter, ev xinvInc) any { return ev })
-
-			b.Initial("idle")
-			b.State("idle")
 		})
 		require.NoError(t, err)
 
@@ -1761,7 +1748,7 @@ func xinvCheckCountingLogic(t *testing.T) {
 		xinvSend(t, inst, xinvInc{})
 
 		snap := xinvAwait(t, inst, func(s sc.Snapshot[string, counter]) bool { return string(s.Checkpoint(run)) == "2" })
-		require.Equal(t, []string{"idle"}, snap.Active())
+		require.Empty(t, snap.Active())
 	})
 }
 
@@ -1810,8 +1797,8 @@ func TestXInvWorksWithATransitionFunction(t *testing.T) {
 //
 // Partial port: sc has no onSnapshot. The doubler is a stream that yields
 // its new value as an event each time it is sent one, which is the nearest
-// thing to a snapshot the parent sees. XState's machine has no states; sc
-// asks for one, so "idle" is there and does nothing.
+// thing to a snapshot the parent sees. As in XState, the machine has no
+// states.
 func TestXInvTransitionFunctionEmitsOnSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -1828,9 +1815,6 @@ func TestXInvTransitionFunctionEmitsOnSnapshot(t *testing.T) {
 				}
 			}).OnError().Stay()
 			chart.On[xinvDoubled]().Assign("keep", func(c counter, ev xinvDoubled) counter { c.N = ev.Value; return c })
-
-			b.Initial("idle")
-			b.State("idle")
 		})
 		require.NoError(t, err)
 
@@ -1874,8 +1858,8 @@ func TestXInvCreatesInvocationsFromMachinesInNestedStates(t *testing.T) {
 // Partial port: sc has no onSnapshot, but a parent's snapshot keeps the
 // snapshot of the machine it invokes, read with Snapshot.Child, and every
 // step of the child is a step of the parent. The port waits for the parent's
-// snapshot to hold a child that has reached "b". XState's machine has no
-// states; sc asks for one, so "idle" is there and does nothing.
+// snapshot to hold a child that has reached "b". As in XState, the machine
+// has no states.
 func TestXInvMachineEmitsOnSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -1889,9 +1873,6 @@ func TestXInvMachineEmitsOnSnapshot(t *testing.T) {
 
 		m, err := sc.New("m", func(b *xinvBuilder) {
 			b.Chart().InvokeMachine("child", child, xinvSame, xinvNoOutput[counter]).OnError().Stay()
-
-			b.Initial("idle")
-			b.State("idle")
 		})
 		require.NoError(t, err)
 
@@ -2237,10 +2218,7 @@ func TestXInvGeneratedIDIsPredictableFromTheStateNodeWhereItIsDefined(t *testing
 func TestXInvInvokeConfigRegistersUniqueAndPredictableChildInState(t *testing.T) {
 	t.Parallel()
 
-	empty, err := sc.New("someId", func(b *xinvBuilder) {
-		b.Initial("only")
-		b.State("only")
-	})
+	empty, err := sc.New("someId", func(*xinvBuilder) {})
 	require.NoError(t, err)
 
 	cases := map[string]func(*sc.StateBuilder[string, counter]){
@@ -2416,8 +2394,7 @@ func TestXInvInvocationsAreStoppedWhenTheMachineReachesDoneState(t *testing.T) {
 
 // XState: deep invocations should be stopped when the machine reaches done state
 //
-// XState's child has no states; sc asks for one, so "idle" is there and does
-// nothing.
+// As in XState, the child has no states.
 func TestXInvDeepInvocationsAreStoppedWhenTheMachineReachesDoneState(t *testing.T) {
 	t.Parallel()
 
@@ -2429,9 +2406,6 @@ func TestXInvDeepInvocationsAreStoppedWhenTheMachineReachesDoneState(t *testing.
 				func() { started.Store(true) },
 				func() { disposed.Store(true) },
 			)).OnError().Stay()
-
-			b.Initial("idle")
-			b.State("idle")
 		})
 		require.NoError(t, err)
 

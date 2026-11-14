@@ -834,8 +834,8 @@ func TestXBasUnhandledCallsIgnoredHook(t *testing.T) {
 //
 // Partial: event validation and the console warning have no counterpart, so
 // the four cases are two. 'xstate.done.actor.save' is a Done for a service
-// that is not running, and 'xstate.snapshot.actor' an Emitted for one. sc
-// requires a chart to declare a state, where XState's machine is empty.
+// that is not running, and 'xstate.snapshot.actor' an Emitted for one. As in
+// XState, the machine is empty.
 func TestXBasUnhandledReportsFrameworkEvents(t *testing.T) {
 	t.Parallel()
 
@@ -849,10 +849,7 @@ func TestXBasUnhandledReportsFrameworkEvents(t *testing.T) {
 			t.Parallel()
 
 			synctest.Test(t, func(t *testing.T) {
-				m, err := sc.New("empty", func(b *xbasBuilder) {
-					b.Initial("idle")
-					b.State("idle")
-				})
+				m, err := sc.New("empty", func(*xbasBuilder) {})
 				require.NoError(t, err)
 
 				log, hooks := xbasWatch[counter]()
@@ -880,8 +877,7 @@ func TestXBasUnhandledDoesNotReportChildCompletion(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		m, err := sc.New("parent", func(b *xbasBuilder) {
-			b.Initial("active")
-			b.State("active").Invoke("child", func(context.Context, counter) (string, error) {
+			b.Chart().Invoke("child", func(context.Context, counter) (string, error) {
 				return "done", nil
 			}).OnError().Stay()
 		})
@@ -907,10 +903,7 @@ func TestXBasUnhandledStaleTimer(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m, err := sc.New("empty", func(b *xbasBuilder) {
-			b.Initial("idle")
-			b.State("idle")
-		})
+		m, err := sc.New("empty", func(*xbasBuilder) {})
 		require.NoError(t, err)
 
 		log, hooks := xbasWatch[counter]()

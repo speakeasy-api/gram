@@ -8,8 +8,7 @@ package sc_test
 // the chart's id.
 //
 // A root with type: 'parallel' is declared with Builder.Regions, and the
-// root's own transitions on the chart itself. The one root that is still
-// wrapped in a state is greetingMachine's: see xtraGreeting.
+// root's own transitions on the chart itself.
 
 import (
 	"context"
@@ -94,31 +93,27 @@ func xtraCandidates(t *testing.T) *sc.Machine[string, xtraData] {
 	return m
 }
 
-// xtraGreeting is XState's greetingMachine. The state "greeting" stands for
-// the root, and a snapshot lists it among the active states: RECHECK targets
-// the root itself ('#greeting'), and an sc transition cannot name the chart
-// as its target, so the root's transitions are still declared on a state
-// that can be targeted.
+// xtraGreeting is XState's greetingMachine. RECHECK targets the chart itself
+// ('#greeting').
 func xtraGreeting(t *testing.T) *sc.Machine[string, xtraHour] {
 	t.Helper()
 
 	m, err := sc.New("greeting", func(b *sc.Builder[string, xtraHour]) {
-		b.Initial("greeting")
-		root := b.State("greeting", func(b *sc.Builder[string, xtraHour]) {
-			b.Initial("pending")
-			pending := b.State("pending")
-			pending.Always().When("beforeNoon", func(c xtraHour, _ struct{}) bool { return c.Hour < 12 }).To("morning")
-			pending.Always().When("beforeSix", func(c xtraHour, _ struct{}) bool { return c.Hour < 18 }).To("afternoon")
-			pending.Always().To("evening")
-			b.State("morning")
-			b.State("afternoon")
-			b.State("evening")
-		})
+		b.Initial("pending")
+		pending := b.State("pending")
+		pending.Always().When("beforeNoon", func(c xtraHour, _ struct{}) bool { return c.Hour < 12 }).To("morning")
+		pending.Always().When("beforeSix", func(c xtraHour, _ struct{}) bool { return c.Hour < 18 }).To("afternoon")
+		pending.Always().To("evening")
+		b.State("morning")
+		b.State("afternoon")
+		b.State("evening")
+
+		root := b.Chart()
 		root.On[xtraChange]().Assign("setHour", func(c xtraHour, _ xtraChange) xtraHour {
 			c.Hour = 20
 			return c
 		})
-		root.On[xtraRecheck]().To("greeting")
+		root.On[xtraRecheck]().ToChart()
 	})
 	require.NoError(t, err)
 
@@ -287,7 +282,7 @@ func TestXTraTransientResolvesInitialStateFromTransientState(t *testing.T) {
 
 	snap, _ := xtraGreeting(t).Start(xtraHour{Hour: 10}, epoch)
 
-	require.Equal(t, []string{"greeting", "morning"}, snap.Active())
+	require.Equal(t, []string{"morning"}, snap.Active())
 }
 
 // XState: transient states (eventless transitions) > should determine the
@@ -299,10 +294,10 @@ func TestXTraTransientResolvesStateFromInitialTransientState(t *testing.T) {
 	snap, _ := m.Start(xtraHour{Hour: 10}, epoch)
 
 	snap, _ = m.Transition(snap, xtraChange{}, epoch)
-	require.Equal(t, []string{"greeting", "morning"}, snap.Active())
+	require.Equal(t, []string{"morning"}, snap.Active())
 
 	snap, _ = m.Transition(snap, xtraRecheck{}, epoch)
-	require.Equal(t, []string{"greeting", "evening"}, snap.Active())
+	require.Equal(t, []string{"evening"}, snap.Active())
 }
 
 // XState: transient states (eventless transitions) > should select eventless
@@ -705,14 +700,11 @@ func TestXTraTransientLoopsForAssignActions(t *testing.T) {
 // always transition after a raised transition even if that raised transition
 // doesn't change the state
 //
-// The XState machine is a root with no states. An sc chart needs one, so
-// "idle" is added; the transitions are the root's, as in XState.
+// As in XState, the machine has no states.
 func TestXTraTransientExecutesAlwaysAfterRaisedTransition(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("always_action", func(b *xtraBuilder) {
-		b.Initial("idle")
-		b.State("idle")
 		b.Always().Do("spy", func(context.Context, counter, struct{}) {})
 		b.On[xtraEv]().Raise("raise", func(counter, xtraEv) any { return xtraRaised{} })
 		b.On[xtraRaised]().Do("count", func(context.Context, counter, xtraRaised) {})
@@ -726,7 +718,7 @@ func TestXTraTransientExecutesAlwaysAfterRaisedTransition(t *testing.T) {
 	require.Equal(t, []string{"always_action/spy"}, names(effects))
 
 	snap, effects = m.Transition(snap, xtraEv{}, epoch)
-	require.Equal(t, []string{"idle"}, snap.Active())
+	require.Empty(t, snap.Active())
 	require.Equal(t, []string{"always_action/spy", "always_action/count", "always_action/spy"}, names(effects))
 }
 

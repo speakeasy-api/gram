@@ -193,9 +193,7 @@ func xparWordMachine(t *testing.T) *sc.Machine[string, xparCtx] {
 			numbers.On[xparBullets]().To("bullets")
 			numbers.On[xparNone]().To("none")
 		})
-		// XState targets the chart itself, "#word". An sc transition names
-		// states, so this one names every region, which resets each.
-		b.Chart().On[xparReset]().To("bold", "underline", "italics", "list")
+		b.Chart().On[xparReset]().ToChart()
 	})
 	require.NoError(t, err)
 

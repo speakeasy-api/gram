@@ -8,17 +8,14 @@ package sc_test
 // "<state>/<action>". States are named after their XState paths, so XState's
 // 'enter: a.a1' is the effect "a.a1/enter" and 'exit: a.a1' is "a.a1/exit".
 //
-// Four translations recur and are not repeated at each case:
+// Three translations recur and are not repeated at each case:
 //   - XState's root is the chart itself, reached with Chart(). Its effects
 //     carry the machine's id as their state, so the root's 'enter: __root__'
 //     is the effect "m/enter" of a machine named m.
-//   - An sc chart declares at least one state. Where an XState machine is its
-//     root alone, the port gives it the empty state idle.
+//   - Where an XState machine is its root alone, the sc chart declares no
+//     states, so nothing is active.
 //   - XState accepts states nothing can reach; sc does only with the
 //     AllowUnreachable option, which every chart here is built with.
-//   - An sc state can raise, send to a service and emit on entry, but only a
-//     transition can raise after a delay. Where an XState entry action does
-//     that, an eventless transition into the state does.
 
 import (
 	"context"
@@ -1270,8 +1267,6 @@ func TestXActStoppedClosingParentOfChildThatEmitsOnExitDoesNotPanic(t *testing.T
 
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
 			b.Chart().InvokeMachine("child", child, xactSame, xactNoOutput).OnError().Stay()
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		inst, err := parent.Instance(t.Context(), counter{N: 0})
@@ -1306,8 +1301,6 @@ func TestXActStoppedEventsFromDoneChildAreReceivedByParent(t *testing.T) {
 			chart.InvokeMachine("child", child, xactSame, xactNoOutput).OnError().Stay()
 			chart.On[xactFinishChild]().SendTo("finish", "child", func(counter, xactFinishChild) any { return xactFinish{} })
 			chart.On[xactChildDone]().Do("received", func(context.Context, counter, xactChildDone) { received.Store(true) })
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		inst, err := parent.Instance(t.Context(), counter{N: 0})
@@ -1336,16 +1329,12 @@ func TestXActStoppedEventsFromStoppedChildAreNotReceivedByItsChildren(t *testing
 
 		grandchild := xactNew(t, "grandchild", func(b *xactBuilder) {
 			b.Chart().On[xactStopped]().Do("spy", func(context.Context, counter, xactStopped) { calls.Add(1) })
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		child := xactNew(t, "child", func(b *xactBuilder) {
 			chart := b.Chart()
 			chart.InvokeMachine("myChild", grandchild, xactSame, xactNoOutput).OnError().Stay()
 			chart.SendOnExit("stopped", "myChild", func(counter) any { return xactStopped{} })
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
@@ -1382,8 +1371,6 @@ func TestXActStoppedReferencedActionsNotExecutedWhenStopping(t *testing.T) {
 	m := xactNew(t, "parent", func(b *xactBuilder) {
 		b.Action("referencedAction", func(context.Context, counter, sc.Move[string]) { called = true })
 		b.Chart().OnExit("referencedAction")
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1403,8 +1390,6 @@ func TestXActStoppedBuiltinActionsNotExecutedWhenStopping(t *testing.T) {
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Chart().Exit("action", func(context.Context, counter) { called = true })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1523,8 +1508,6 @@ func TestXActConfigReferencesActionsOfMachineOptionsInitialState(t *testing.T) {
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Action("definedAction", func(context.Context, counter, sc.Move[string]) { calls++ })
 		b.Chart().OnEntry("definedAction")
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	_, effects := m.Start(counter{N: 0}, epoch)
@@ -1597,8 +1580,6 @@ func TestXActMetaActionSeesContextValue(t *testing.T) {
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Chart().Entry("entryAction", func(_ context.Context, c counter) { got = c.N })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	_, effects := m.Start(counter{N: 42}, epoch)
@@ -1617,8 +1598,6 @@ func TestXActMetaActionSeesEventValue(t *testing.T) {
 	got := 0
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Initial("idle")
-		b.State("idle")
 		b.On[xactSecret]().Do("myAction", func(_ context.Context, _ counter, ev xactSecret) { got = ev.Secret })
 	})
 
@@ -1689,8 +1668,6 @@ func xactSpyRoot(t *testing.T, calls map[string]int, runs ...string) *sc.Machine
 			}
 		}
 		b.Chart().OnEntry(runs...)
-		b.Initial("idle")
-		b.State("idle")
 	})
 }
 
@@ -1747,8 +1724,6 @@ func TestXActEnqueueExecutesFunction(t *testing.T) {
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Chart().Entry("spy", func(context.Context, counter) { calls++ })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	_, effects := m.Start(counter{N: 0}, epoch)
@@ -1763,8 +1738,6 @@ func xactRaisesRaised(t *testing.T) *sc.Machine[string, counter] {
 	t.Helper()
 
 	return xactNew(t, "m", func(b *xactBuilder) {
-		b.Initial("idle")
-		b.State("idle")
 		b.On[xactFoo]().Raise("raise", func(counter, xactFoo) any { return xactRaised{} })
 		b.On[xactRaised]().Do("spy", xactDo[xactRaised])
 	})
@@ -1802,8 +1775,6 @@ func TestXActEnqueueExecutesAssignsWhenResolvingInitialSnapshot(t *testing.T) {
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Chart().AssignOnEntry("setCount", func(counter) counter { return counter{N: 42} })
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
@@ -1826,8 +1797,6 @@ func TestXActEnqueueChecksConditionOnEntry(t *testing.T) {
 			checked = true
 			return true
 		})
-		b.Initial("idle")
-		b.State("idle")
 	})
 
 	_, effects := m.Start(counter{N: 0}, epoch)
@@ -1845,16 +1814,12 @@ func TestXActEnqueueSendParent(t *testing.T) {
 
 		child := xactNew(t, "child", func(b *xactBuilder) {
 			b.Chart().EmitOnEntry("sendParent", func(counter) xactParentEvent { return xactParentEvent{} })
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
 			chart := b.Chart()
 			chart.InvokeMachine("child", child, xactSame, xactNoOutput).OnError().Stay()
 			chart.On[xactParentEvent]().Do("parentSpy", func(context.Context, counter, xactParentEvent) { calls.Add(1) })
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		inst, err := parent.Instance(t.Context(), counter{N: 0})
@@ -1879,8 +1844,6 @@ func xactPingChild(t *testing.T, spy *xactSpy) *sc.Machine[string, counter] {
 	t.Helper()
 
 	return xactNew(t, "child", func(b *xactBuilder) {
-		b.Initial("idle")
-		b.State("idle")
 		b.On[xactPing]().Do("received", func(_ context.Context, _ counter, ev xactPing) {
 			spy.calls.Add(1)
 			spy.last.Store(int64(ev.Value))
@@ -1900,8 +1863,6 @@ func TestXActSendToSendsToInvokedChildByDeclaredID(t *testing.T) {
 			chart := b.Chart()
 			chart.InvokeMachine("worker", child, xactSame, xactNoOutput).OnError().Stay()
 			chart.On[xactSend]().SendTo("ping", "worker", func(counter, xactSend) any { return xactPing{Value: 42} })
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		inst, err := parent.Instance(t.Context(), counter{N: 0})
@@ -1927,9 +1888,6 @@ func xactSpawner(t *testing.T, child *sc.Machine[string, counter], key string, s
 	t.Helper()
 
 	return xactNew(t, "parent", func(b *xactBuilder) {
-		b.Initial("idle")
-		b.State("idle")
-
 		active := b.Chart()
 		active.SpawnMachine("worker", child, func(c counter, _ string) counter { return c }, xactNoOutput).OnError().Stay()
 
@@ -2053,8 +2011,6 @@ func xactSendsOnEntry[Ev any](t *testing.T, start counter, send func(counter) an
 			chart := b.Chart()
 			chart.InvokeMachine("child", child, xactSame, xactNoOutput).OnError().Stay()
 			chart.SendOnEntry("send", "child", send)
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		_, effects := parent.Start(start, epoch)
@@ -2169,19 +2125,14 @@ func TestXActSendToSelfEventHandlerSeesUpdatedContext(t *testing.T) {
 }
 
 // xactDelayedSelf is the chart of the cases that raise a delayed event from
-// the entry action of their initial state a. An sc state cannot raise after
-// a delay on entry, so an eventless transition from a start state into a
-// does it. a goes to b on TO_B and, when respond is set, on EVENT; b goes to
-// the final state c on EVENT.
+// the entry action of their initial state a. a goes to b on TO_B and, when
+// respond is set, on EVENT; b goes to the final state c on EVENT.
 func xactDelayedSelf(t *testing.T, delay time.Duration, respond bool) *sc.Machine[string, counter] {
 	t.Helper()
 
 	return xactNew(t, "m", func(b *xactBuilder) {
-		b.Initial("boot")
-		b.State("boot").Always().
-			RaiseAfter("event", delay, func(counter, struct{}) any { return xactEvent{} }).
-			To("a")
-		a := b.State("a")
+		b.Initial("a")
+		a := b.State("a").RaiseAfterOnEntry("event", delay, func(counter) any { return xactEvent{} })
 		a.On[xactToB]().To("b")
 		if respond {
 			a.On[xactEvent]().To("b")
@@ -2249,11 +2200,10 @@ func TestXActRaiseRaisesDelayedEventAndRespondsInSameState(t *testing.T) {
 	t.Parallel()
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Initial("boot")
-		b.State("boot").Always().
-			RaiseAfter("toB", 100*time.Millisecond, func(counter, struct{}) any { return xactToB{} }).
-			To("a")
-		b.State("a").On[xactToB]().To("b")
+		b.Initial("a")
+		b.State("a").
+			RaiseAfterOnEntry("toB", 100*time.Millisecond, func(counter) any { return xactToB{} }).
+			On[xactToB]().To("b")
 		b.Final("b")
 	})
 
@@ -2340,17 +2290,11 @@ func TestXActCancelCancelsRaisedDelayedEvent(t *testing.T) {
 // xactSameIDChild is a child machine of the two "same ID" cases: it raises
 // "event" after 100ms under the name sameId, which every such child shares,
 // counts the events it receives in spy, and cancels the raise on "cancel".
-// The delayed raise comes from an eventless transition out of a start state,
-// where XState's comes from the root's entry action.
 func xactSameIDChild(t *testing.T, id string, spy *atomic.Int64) *sc.Machine[string, counter] {
 	t.Helper()
 
 	return xactNew(t, id, func(b *xactBuilder) {
-		b.Initial("boot")
-		b.State("boot").Always().
-			RaiseAfter("sameId", 100*time.Millisecond, func(counter, struct{}) any { return xactEvent{} }).
-			To("run")
-		run := b.State("run")
+		run := b.Chart().RaiseAfterOnEntry("sameId", 100*time.Millisecond, func(counter) any { return xactEvent{} })
 		run.On[xactEvent]().Do("spy", func(context.Context, counter, xactEvent) { spy.Add(1) })
 		run.On[xactCancel]().CancelRaise("sameId")
 	})
@@ -2374,8 +2318,6 @@ func xactCancelSameID(t *testing.T, ev any, wantFoo, wantBar int64) {
 			chart.InvokeMachine("bar", bar, xactSame, xactNoOutput).OnError().Stay()
 			chart.On[xactCancelFoo]().SendTo("cancel", "foo", func(counter, xactCancelFoo) any { return xactCancel{} })
 			chart.On[xactCancelBar]().SendTo("cancel", "bar", func(counter, xactCancelBar) any { return xactCancel{} })
-			b.Initial("idle")
-			b.State("idle")
 		})
 
 		inst, err := parent.Instance(t.Context(), counter{N: 0})
@@ -2425,8 +2367,6 @@ func TestXActCancelUnscheduledTimerCancelsNothing(t *testing.T) {
 
 	chart := func(declared bool) func(b *xactBuilder) {
 		return func(b *xactBuilder) {
-			b.Initial("idle")
-			b.State("idle")
 			b.On[xactFoo]().CancelRaise("foo")
 			if declared {
 				b.On[xactBar]().RaiseAfter("foo", time.Millisecond, func(counter, xactBar) any { return xactRaised{} })
@@ -2526,8 +2466,6 @@ func xactInitialRaise(t *testing.T, assign, referenced bool) *sc.Machine[string,
 
 	return xactNew(t, "m", func(b *xactBuilder) {
 		b.Action("foo", xactNoMove)
-		b.Initial("idle")
-		b.State("idle")
 
 		root := b.Chart()
 		if assign {
@@ -2616,8 +2554,6 @@ func TestXActResultsTransitionAppliesContextPatchOfNamedAction(t *testing.T) {
 	t.Parallel()
 
 	m := xactNew(t, "m", func(b *sc.Builder[string, xactCurrency]) {
-		b.Initial("idle")
-		b.State("idle")
 		b.On[xactPick]().Assign("applyDefaults", func(xactCurrency, xactPick) xactCurrency {
 			return xactCurrency{Currency: "EUR"}
 		})

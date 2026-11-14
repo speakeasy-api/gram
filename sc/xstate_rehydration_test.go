@@ -30,8 +30,8 @@ package sc_test
 //     chart itself with Builder.Chart, and a root with type: 'parallel' with
 //     Builder.Regions. In effects and in the stored snapshot the chart goes
 //     by the machine's id.
-//   - An sc chart must declare at least one state. Where XState's machine is
-//     a root with no states, the port adds one state that declares nothing.
+//   - Where XState's machine is a root with no states, so is the sc chart,
+//     and nothing is active in it.
 //   - State identifiers are unique in an sc chart and a snapshot lists the
 //     active states by identifier, so XState's nested state values and state
 //     paths ("active.reviewing") become flat lists of names.
@@ -297,13 +297,11 @@ func TestXRehPersistedStateStoppedImmediatelyRunsNoExitActions(t *testing.T) {
 // rehydration.test.ts: rehydration > using persisted state > should get
 // correct result back from `can` immediately.
 //
-// XState's machine is a root with no states; "a" declares nothing.
+// As in XState, the machine has no states.
 func TestXRehPersistedStateCanImmediately(t *testing.T) {
 	t.Parallel()
 
 	m := xrehNew(t, "can", func(b *xrehBuilder) {
-		b.Initial("a")
-		b.State("a")
 		b.On[xrehFoo]().Do("act", func(context.Context, counter, xrehFoo) {})
 	})
 
@@ -399,15 +397,13 @@ func TestXRehStateValueErrorsOnIncompatibleDeepValue(t *testing.T) {
 // rehydration.test.ts: rehydration > should not replay actions when starting
 // from a persisted state.
 //
-// XState's machine is a root with no states; "a" declares nothing.
+// As in XState, the machine has no states.
 func TestXRehDoesNotReplayActionsFromAPersistedState(t *testing.T) {
 	t.Parallel()
 
 	var entries atomic.Int32
 	m := xrehNew(t, "entry", func(b *xrehBuilder) {
 		b.Chart().Entry("spy", func(context.Context, counter) { entries.Add(1) })
-		b.Initial("a")
-		b.State("a")
 	})
 
 	inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -472,8 +468,7 @@ func TestXRehStopsARehydratedChild(t *testing.T) {
 //
 // XState spawns the child from the context initialiser, which sc cannot do,
 // so the chart invokes the child instead; the system registration of the
-// original is not ported. XState's machine is a root with no states; "a"
-// declares nothing.
+// original is not ported. As in XState, the machine has no states.
 func TestXRehADoneChildDoesNotRenotifyItsParent(t *testing.T) {
 	t.Parallel()
 
@@ -490,8 +485,6 @@ func TestXRehADoneChildDoesNotRenotifyItsParent(t *testing.T) {
 			inv.OnDone().Do("spy", func(context.Context, counter, sc.Done[int]) { notified.Add(1) })
 			inv.OnError().Do("spyError", func(context.Context, counter, sc.Failed) { notified.Add(1) })
 			chart.OnAny().Do("spyAny", func(context.Context, counter, any) { notified.Add(1) })
-			b.Initial("a")
-			b.State("a")
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -512,15 +505,13 @@ func TestXRehADoneChildDoesNotRenotifyItsParent(t *testing.T) {
 // rehydration.test.ts: rehydration > should be possible to persist a
 // rehydrated actor that got its children rehydrated.
 //
-// XState's machine is a root with no states; "a" declares nothing.
+// As in XState, the machine has no states.
 func TestXRehPersistsARehydratedActorWithItsRehydratedChildren(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
 		m := xrehNew(t, "children", func(b *xrehBuilder) {
 			b.Chart().Invoke("foo", xrehBlock).OnError().Stay()
-			b.Initial("a")
-			b.State("a")
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -568,7 +559,7 @@ func TestXRehCompletesOnARehydratedFinalState(t *testing.T) {
 // rehydration.test.ts: rehydration > shouldn't re-notify the parent about
 // the error when rehydrating.
 //
-// XState's machine is a root with no states; "a" declares nothing.
+// As in XState, the machine has no states.
 func TestXRehDoesNotRenotifyTheParentAboutAnErrorWhenRehydrating(t *testing.T) {
 	t.Parallel()
 
@@ -581,8 +572,6 @@ func TestXRehDoesNotRenotifyTheParentAboutAnErrorWhenRehydrating(t *testing.T) {
 				return 0, errFlaky
 			})
 			inv.OnError().Do("spy", func(context.Context, counter, sc.Failed) { notified.Add(1) })
-			b.Initial("a")
-			b.State("a")
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -605,8 +594,8 @@ func TestXRehDoesNotRenotifyTheParentAboutAnErrorWhenRehydrating(t *testing.T) {
 //
 // XState's observable is an sc stream service, and each value it emits is
 // an event of the chart. As in XState, the first actor is never started:
-// only its initial snapshot is stored. XState's machine is a root with no
-// states; "a" declares nothing.
+// only its initial snapshot is stored. As in XState, the machine has no
+// states.
 func TestXRehContinuesSyncingSnapshots(t *testing.T) {
 	t.Parallel()
 
@@ -631,8 +620,6 @@ func TestXRehContinuesSyncingSnapshots(t *testing.T) {
 				}
 			}).OnError().Stay()
 			chart.On[xrehValue]().Do("spy", func(_ context.Context, _ counter, ev xrehValue) { seen.add(ev.N) })
-			b.Initial("a")
-			b.State("a")
 		})
 
 		snap, _ := m.Start(counter{N: 0}, time.Now())
@@ -653,8 +640,7 @@ func TestXRehContinuesSyncingSnapshots(t *testing.T) {
 // rehydration.test.ts: rehydration > should be able to rehydrate an actor
 // deep in the tree.
 //
-// XState's three machines are roots with no states; "active" declares
-// nothing in each.
+// As in XState, none of the three machines has states.
 func TestXRehRehydratesAnActorDeepInTheTree(t *testing.T) {
 	t.Parallel()
 
@@ -664,15 +650,11 @@ func TestXRehRehydratesAnActorDeepInTheTree(t *testing.T) {
 		child := xrehNew(t, "child", func(b *xrehBuilder) {
 			xrehInvoke(b.Chart(), "grandchild", grandchild, 0)
 			xrehForward(b.Chart(), "grandchild")
-			b.Initial("active")
-			b.State("active")
 		})
 
 		m := xrehNew(t, "root", func(b *xrehBuilder) {
 			xrehInvoke(b.Chart(), "child", child, 0)
 			xrehForward(b.Chart(), "child")
-			b.Initial("active")
-			b.State("active")
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1181,7 +1163,7 @@ func TestXRehResolvesAReusedInvokeIDAgainstTheActiveState(t *testing.T) {
 // rehydration.test.ts: inline invoke persistence > keeps the source key of a
 // registered invoke.
 //
-// XState's machine is a root with no states; "active" declares nothing.
+// As in XState, the machine has no states.
 func TestXRehKeepsTheSourceKeyOfARegisteredInvoke(t *testing.T) {
 	t.Parallel()
 
@@ -1190,8 +1172,6 @@ func TestXRehKeepsTheSourceKeyOfARegisteredInvoke(t *testing.T) {
 		m := xrehNew(t, "parent", func(b *xrehBuilder) {
 			xrehInvoke(b.Chart(), "counter", child, 0)
 			xrehForward(b.Chart(), "counter")
-			b.Initial("active")
-			b.State("active")
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1397,8 +1377,8 @@ func TestXRehSurfacesARestoreTimeFailure(t *testing.T) {
 // up each incarnation.
 //
 // XState restores the callback logic as an actor of its own. In sc the
-// callback is a service of the chart itself, which passes it what it is
-// sent; the state "listening" declares nothing.
+// callback is a service of the chart itself, which has no states and passes
+// it what it is sent.
 func TestXRehReattachesARestoredCallbackAndCleansUpEachIncarnation(t *testing.T) {
 	t.Parallel()
 
@@ -1419,8 +1399,6 @@ func TestXRehReattachesARestoredCallbackAndCleansUpEachIncarnation(t *testing.T)
 				return 0, context.Cause(ctx)
 			}).OnError().Stay()
 			chart.On[xrehPing]().SendTo("forward", "callback", func(_ counter, ev xrehPing) any { return ev })
-			b.Initial("listening")
-			b.State("listening")
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1444,8 +1422,8 @@ func TestXRehReattachesARestoredCallbackAndCleansUpEachIncarnation(t *testing.T)
 // sc has no keyed effects. The nearest thing a chart keeps across a restart
 // is a service run: one still running is started again, one that finished
 // is not. XState marks the effect completed by editing the stored snapshot;
-// here the service completes. The services are the chart's own; the state
-// "running" declares nothing.
+// here the service completes. The services are those of the chart, which
+// has no states.
 func TestXRehRestartsRunningServicesWithoutReplayingCompletedOnes(t *testing.T) {
 	t.Parallel()
 
@@ -1466,8 +1444,6 @@ func TestXRehRestartsRunningServicesWithoutReplayingCompletedOnes(t *testing.T) 
 			done.OnDone().Assign("keep", func(c counter, d sc.Done[int]) counter { c.N = d.Result; return c })
 			done.OnError().Stay()
 			chart.On[xrehPing]().Stay()
-			b.Initial("running")
-			b.State("running")
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1509,8 +1485,6 @@ func TestXRehStoresAndRestartsAServiceNamedLikeAJavaScriptProperty(t *testing.T)
 
 						return xrehBlock(ctx, c)
 					}).OnError().Stay()
-					b.Initial("running")
-					b.State("running")
 				})
 
 				inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1549,8 +1523,6 @@ func TestXRehReusesACompletedStepAfterARestart(t *testing.T) {
 				results := &xrehLog{mu: sync.Mutex{}, vals: nil}
 
 				m := xrehNew(t, "steps", func(b *xrehBuilder) {
-					b.Initial("running")
-					b.State("running")
 					b.Chart().Invoke(key, func(ctx context.Context, c counter) (int, error) {
 						result := 0
 
@@ -1843,8 +1815,8 @@ func xrehPinging(st *sc.StateBuilder[string, counter], child *xrehMachine) {
 // logical target of a delayed child send.
 //
 // XState expects the stored timer to be a sendTo naming the child. See
-// xrehPinging for what sc stores instead. XState's two machines are roots
-// with no states; "active" and "listening" declare nothing.
+// xrehPinging for what sc stores instead. As in XState, neither machine has
+// states.
 func TestXRehRestoresADelayedSendToAChild(t *testing.T) {
 	t.Parallel()
 
@@ -1852,13 +1824,9 @@ func TestXRehRestoresADelayedSendToAChild(t *testing.T) {
 		var received atomic.Int32
 		child := xrehNew(t, "child", func(b *xrehBuilder) {
 			b.On[xrehPing]().Do("received", func(context.Context, counter, xrehPing) { received.Add(1) })
-			b.Initial("listening")
-			b.State("listening")
 		})
 		m := xrehNew(t, "parent", func(b *xrehBuilder) {
 			xrehPinging(b.Chart(), child)
-			b.Initial("active")
-			b.State("active")
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1890,9 +1858,8 @@ func TestXRehRestoresADelayedSendToAChild(t *testing.T) {
 // XState expects the child's stored timer to be a sendTo whose target is
 // {type: 'parent'}. In sc the child raises an event for itself after the
 // delay and emits to its parent when it arrives, so the timer in the
-// child's stored snapshot is a delayed event of the child. XState's two
-// machines are roots with no states; "active" and "listening" declare
-// nothing.
+// child's stored snapshot is a delayed event of the child. As in XState,
+// neither machine has states.
 func TestXRehRestoresADelayedSendFromAChildToItsParent(t *testing.T) {
 	t.Parallel()
 
@@ -1900,8 +1867,6 @@ func TestXRehRestoresADelayedSendFromAChildToItsParent(t *testing.T) {
 		child := xrehNew(t, "child", func(b *xrehBuilder) {
 			b.On[xrehSchedule]().RaiseAfter("ping-parent", 100*time.Millisecond, func(counter, xrehSchedule) any { return xrehPingDue{} })
 			b.On[xrehPingDue]().Emit("ping", func(counter, xrehPingDue) xrehPing { return xrehPing{} })
-			b.Initial("listening")
-			b.State("listening")
 		})
 
 		var received atomic.Int32
@@ -1909,8 +1874,6 @@ func TestXRehRestoresADelayedSendFromAChildToItsParent(t *testing.T) {
 			xrehInvoke(b.Chart(), "child", child, 0)
 			b.On[xrehBegin]().SendTo("schedule", "child", func(counter, xrehBegin) any { return xrehSchedule{} })
 			b.On[xrehPing]().Do("received", func(context.Context, counter, xrehPing) { received.Add(1) })
-			b.Initial("active")
-			b.State("active")
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
