@@ -840,7 +840,6 @@ trackedFiles:
   src/funcs/unproxiedMcpGetServer.ts: {}
   src/funcs/unproxiedMcpListServers.ts: {}
   src/funcs/usageCancelStripeSubscription.ts: {}
-  src/funcs/usageCreateCheckout.ts: {}
   src/funcs/usageCreateCustomerSession.ts: {}
   src/funcs/usageCreateStripeCheckout.ts: {}
   src/funcs/usageCreateStripePortalSession.ts: {}
@@ -2361,7 +2360,6 @@ trackedFiles:
   src/models/operations/createawsiamcredential.ts: {}
   src/models/operations/createawskmskey.ts: {}
   src/models/operations/createchatsession.ts: {}
-  src/models/operations/createcheckout.ts: {}
   src/models/operations/createcimdorganizationremotesessionclient.ts: {}
   src/models/operations/createcimdremotesessionclient.ts: {}
   src/models/operations/createcustomdetectionrule.ts: {}
@@ -3309,7 +3307,6 @@ trackedFiles:
   src/react-query/createAuthClient.ts: {}
   src/react-query/createAwsIamCredential.ts: {}
   src/react-query/createAwsKmsKey.ts: {}
-  src/react-query/createCheckout.ts: {}
   src/react-query/createCimdOrganizationRemoteSessionClient.ts: {}
   src/react-query/createCimdRemoteSessionClient.ts: {}
   src/react-query/createCustomerSession.ts: {}

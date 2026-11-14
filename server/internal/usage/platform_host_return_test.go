@@ -26,7 +26,7 @@ func withPlatformOrigin(ctx context.Context, baseURL string) context.Context {
 	return requestorigin.WithContext(ctx, requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: baseURL})
 }
 
-func TestPolarCheckoutsReturnToRequestPlatformHost(t *testing.T) {
+func TestPolarTopUpCheckoutReturnsToRequestPlatformHost(t *testing.T) {
 	t.Parallel()
 
 	const serverURL = "https://app.example.test"
@@ -45,7 +45,6 @@ func TestPolarCheckoutsReturnToRequestPlatformHost(t *testing.T) {
 			orgID := "org-polar-return"
 			successURL := tc.wantBase + "/polar-org/billing"
 			billingMock := &mockBillingRepo{}
-			billingMock.On("CreateCheckout", mock.Anything, orgID, tc.wantBase, successURL).Return("https://polar.test/checkout", nil)
 			billingMock.On("CreateTopUpCheckout", mock.Anything, orgID, tc.wantBase, successURL).Return("https://polar.test/topup", nil)
 
 			svc := newTestService(t, billingMock, orgID, 0)
@@ -63,9 +62,7 @@ func TestPolarCheckoutsReturnToRequestPlatformHost(t *testing.T) {
 				ctx = withPlatformOrigin(ctx, tc.origin)
 			}
 
-			_, err := svc.CreateCheckout(ctx, &gen.CreateCheckoutPayload{})
-			require.NoError(t, err)
-			_, err = svc.CreateTopUpCheckout(ctx, &gen.CreateTopUpCheckoutPayload{})
+			_, err := svc.CreateTopUpCheckout(ctx, &gen.CreateTopUpCheckoutPayload{})
 			require.NoError(t, err)
 			billingMock.AssertExpectations(t)
 		})

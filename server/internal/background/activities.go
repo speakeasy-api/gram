@@ -506,7 +506,7 @@ func NewActivities(
 		mcpResearch:             mcpResearch,
 		memoryEvalRunner:        nil,
 		mcpApprovalRecheck:      mcpApprovalRecheck,
-		billingNotifications:    billingnotifications.NewService(logger, db, emailService, features, orgHosts),
+		billingNotifications:    billingnotifications.NewService(logger, db, emailService, orgHosts),
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.

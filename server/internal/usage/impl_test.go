@@ -105,11 +105,6 @@ func (m *mockBillingRepo) GetCustomerTier(ctx context.Context, orgID string) (*b
 	return tier, args.Bool(1), args.Error(2)
 }
 
-func (m *mockBillingRepo) CreateCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
-	args := m.Called(ctx, orgID, serverURL, successURL)
-	return args.String(0), args.Error(1)
-}
-
 func (m *mockBillingRepo) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
 	args := m.Called(ctx, orgID, serverURL, successURL)
 	return args.String(0), args.Error(1)

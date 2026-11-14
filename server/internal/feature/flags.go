@@ -94,11 +94,6 @@ const (
 	// entitlement if the analyzer becomes a sold capability.
 	FlagRiskLLMAnalyzer Flag = "gram-risk-llm-analyzer"
 
-	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
-	// Targeted by PostHog organization group (org slug) and removed once PAYG
-	// billing is generally available.
-	FlagPaygSelfServeBilling Flag = "gram-payg-self-serve-billing"
-
 	// FlagAssistantOAuthCIMD gates outbound Client ID Metadata Document
 	// (CIMD) support for assistant MCP OAuth clients. When on, and the
 	// upstream authorization server advertises

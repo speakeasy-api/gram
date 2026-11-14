@@ -203,7 +203,7 @@ func UsageCommands() []string {
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
-		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
+		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
 		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
@@ -4471,9 +4471,6 @@ func ParseEndpoint(
 		usageCreateCustomerSessionFlags            = flag.NewFlagSet("create-customer-session", flag.ExitOnError)
 		usageCreateCustomerSessionSessionTokenFlag = usageCreateCustomerSessionFlags.String("session-token", "", "")
 
-		usageCreateCheckoutFlags            = flag.NewFlagSet("create-checkout", flag.ExitOnError)
-		usageCreateCheckoutSessionTokenFlag = usageCreateCheckoutFlags.String("session-token", "", "")
-
 		usageGetStripeCheckoutStatusFlags            = flag.NewFlagSet("get-stripe-checkout-status", flag.ExitOnError)
 		usageGetStripeCheckoutStatusSessionIDFlag    = usageGetStripeCheckoutStatusFlags.String("session-id", "REQUIRED", "")
 		usageGetStripeCheckoutStatusSessionTokenFlag = usageGetStripeCheckoutStatusFlags.String("session-token", "", "")
@@ -6565,7 +6562,6 @@ func ParseEndpoint(
 	usageGetInferenceSpendCapsFlags.Usage = usageGetInferenceSpendCapsUsage
 	usageGetUsageTiersFlags.Usage = usageGetUsageTiersUsage
 	usageCreateCustomerSessionFlags.Usage = usageCreateCustomerSessionUsage
-	usageCreateCheckoutFlags.Usage = usageCreateCheckoutUsage
 	usageGetStripeCheckoutStatusFlags.Usage = usageGetStripeCheckoutStatusUsage
 	usageCreateStripeCheckoutFlags.Usage = usageCreateStripeCheckoutUsage
 	usageGetStripeSubscriptionFlags.Usage = usageGetStripeSubscriptionUsage
@@ -9661,9 +9657,6 @@ func ParseEndpoint(
 
 			case "create-customer-session":
 				epf = usageCreateCustomerSessionFlags
-
-			case "create-checkout":
-				epf = usageCreateCheckoutFlags
 
 			case "get-stripe-checkout-status":
 				epf = usageGetStripeCheckoutStatusFlags
@@ -13087,9 +13080,6 @@ func ParseEndpoint(
 			case "create-customer-session":
 				endpoint = c.CreateCustomerSession()
 				data, err = usagec.BuildCreateCustomerSessionPayload(*usageCreateCustomerSessionSessionTokenFlag)
-			case "create-checkout":
-				endpoint = c.CreateCheckout()
-				data, err = usagec.BuildCreateCheckoutPayload(*usageCreateCheckoutSessionTokenFlag)
 			case "get-stripe-checkout-status":
 				endpoint = c.GetStripeCheckoutStatus()
 				data, err = usagec.BuildGetStripeCheckoutStatusPayload(*usageGetStripeCheckoutStatusSessionIDFlag, *usageGetStripeCheckoutStatusSessionTokenFlag)
@@ -32480,7 +32470,6 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `    get-inference-spend-caps: List current usage and caps for the organization's materialized platform-managed inference keys`)
 	fmt.Fprintln(os.Stderr, `    get-usage-tiers: Get the usage tiers`)
 	fmt.Fprintln(os.Stderr, `    create-customer-session: Create a customer session for the user`)
-	fmt.Fprintln(os.Stderr, `    create-checkout: Create a checkout link for upgrading to the business plan`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-checkout-status: Read the current status of a Stripe Checkout session owned by the active organization`)
 	fmt.Fprintln(os.Stderr, `    create-stripe-checkout: Create an embedded Stripe Checkout session for starting PAYG billing`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription: Get the live lifecycle state of the organization's Stripe PAYG subscription`)
@@ -32705,24 +32694,6 @@ func usageCreateCustomerSessionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-customer-session --session-token \"abc123\"")
-}
-
-func usageCreateCheckoutUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] usage create-checkout", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a checkout link for upgrading to the business plan`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-checkout --session-token \"abc123\"")
 }
 
 func usageGetStripeCheckoutStatusUsage() {

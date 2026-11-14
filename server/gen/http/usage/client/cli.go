@@ -300,21 +300,6 @@ func BuildCreateCustomerSessionPayload(usageCreateCustomerSessionSessionToken st
 	return v, nil
 }
 
-// BuildCreateCheckoutPayload builds the payload for the usage createCheckout
-// endpoint from CLI flags.
-func BuildCreateCheckoutPayload(usageCreateCheckoutSessionToken string) (*usage.CreateCheckoutPayload, error) {
-	var sessionToken *string
-	{
-		if usageCreateCheckoutSessionToken != "" {
-			sessionToken = &usageCreateCheckoutSessionToken
-		}
-	}
-	v := &usage.CreateCheckoutPayload{}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
 // BuildGetStripeCheckoutStatusPayload builds the payload for the usage
 // getStripeCheckoutStatus endpoint from CLI flags.
 func BuildGetStripeCheckoutStatusPayload(usageGetStripeCheckoutStatusSessionID string, usageGetStripeCheckoutStatusSessionToken string) (*usage.GetStripeCheckoutStatusPayload, error) {

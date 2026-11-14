@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -140,21 +139,6 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, payload *gen.CreateS
 		return nil, err
 	}
 
-	if s.featureFlags == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "self-serve billing is temporarily unavailable").LogWarn(ctx, s.logger)
-	}
-	enabled, err := s.featureFlags.IsFlagEnabled(
-		ctx,
-		feature.FlagPaygSelfServeBilling,
-		authCtx.ActiveOrganizationID,
-		feature.OrgProjectGroups(authCtx.OrganizationSlug, ""),
-	)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnavailable, err, "self-serve billing is temporarily unavailable").LogWarn(ctx, s.logger)
-	}
-	if !enabled {
-		return nil, oops.E(oops.CodeForbidden, nil, "self-serve billing is not enabled").LogWarn(ctx, s.logger)
-	}
 	if s.stripeClient == nil || s.siteURL == nil || !stripeclient.IsConfigured(s.stripeClient.PublishableKey()) {
 		return nil, oops.E(oops.CodeUnavailable, nil, "self-serve billing is temporarily unavailable").LogWarn(ctx, s.logger)
 	}
