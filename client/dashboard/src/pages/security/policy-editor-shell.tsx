@@ -218,6 +218,7 @@ export function PolicyHeader({
   actionDisabled,
   onSubmit,
   onCreate,
+  createBlockedReason,
   nameGenerating,
 }: {
   kind: PolicyEditorKind;
@@ -229,6 +230,9 @@ export function PolicyHeader({
   actionDisabled: boolean;
   onSubmit: () => void;
   onCreate?: () => void;
+  /** Why Create stays off in a stepped wizard, such as steps not opened yet.
+   *  Shown next to the button. */
+  createBlockedReason?: string;
   // Shimmer the title while it's being auto-generated from the guardrail.
   nameGenerating?: boolean;
 }): JSX.Element {
@@ -250,8 +254,9 @@ export function PolicyHeader({
       align="center"
       justify="space-between"
       gap={4}
+      wrap="wrap"
     >
-      <Stack gap={1} className="min-w-0 flex-1">
+      <Stack gap={1} className="min-w-0 grow basis-80">
         <Stack direction="horizontal" gap={2} align="center">
           <KindIcon className="text-muted-foreground h-4 w-4 shrink-0" />
           {editingName ? (
@@ -319,13 +324,25 @@ export function PolicyHeader({
           </Text>
         )}
       </Stack>
-      <Stack direction="horizontal" gap={2} align="center" className="shrink-0">
+      <Stack
+        direction="horizontal"
+        gap={2}
+        align="center"
+        className="ml-auto max-w-full min-w-0"
+      >
+        {isCreate && createBlockedReason ? (
+          <Text small muted className="max-w-80 min-w-0 text-right">
+            {createBlockedReason}
+          </Text>
+        ) : null}
         <Button variant="tertiary" onClick={() => routes.policyCenter.goTo()}>
           <Button.Text>{isCreate ? "Cancel" : "Close"}</Button.Text>
         </Button>
         {isCreate ? (
           <CreateButton
-            disabled={actionDisabled || saving}
+            disabled={
+              actionDisabled || saving || createBlockedReason !== undefined
+            }
             saving={saving}
             onCreate={() => onCreate?.()}
           />
