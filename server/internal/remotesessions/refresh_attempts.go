@@ -52,6 +52,10 @@ func (s *RefreshService) recordRefresh(
 		mcpconnectionattempts.Detail(string(trigger)),
 		attribution.client,
 	}
+	// Our own decryption failed, not the provider.
+	if what == mcpconnectionattempts.CodeStoredSignInUnreadable {
+		opts = append(opts, mcpconnectionattempts.FailedElsewhere())
+	}
 	_, failed := what.(mcpconnectionattempts.Code)
 	if !attribution.attempt.IsZero() {
 		accepted := s.connections.Step(ctx, attribution.attempt, mcpconnectionattempts.StepProviderRefresh, what, opts...)

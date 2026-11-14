@@ -603,7 +603,8 @@ func (s *Service) claimAttemptEnding(ctx context.Context, logger *slog.Logger, a
 // session mismatch: no browser can complete that expired connection anymore.
 func (s *Service) recordRemoteLoginRefusal(r *http.Request, remote remotesessions.RemoteLoginState, err error) {
 	ctx := r.Context()
-	opts := append(remote.ConnectionOptions(), mcpconnectionattempts.FromRequest(r))
+	// Speakeasy's own checks refused it, not the provider.
+	opts := append(remote.ConnectionOptions(), mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.FailedElsewhere())
 	if errors.Is(err, redisCache.ErrCacheMiss) || errors.Is(err, errRecoveryLoginExpired) {
 		s.endAttemptOnce(ctx, s.logger, remote.Attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeExpired, opts...)
 		return

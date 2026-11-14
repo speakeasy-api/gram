@@ -576,6 +576,45 @@ func TestRecordConsentPage_CanceledReviewNeverCompletes(t *testing.T) {
 	rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
 }
 
+// A refused provider callback is Speakeasy's check, so its export never names the provider.
+func TestRecordRemoteLoginRefusal_ExportOmitsProviderHost(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		err      error
+		severity otellog.Severity
+	}{
+		{name: "connection changed", err: errRecoveryUnavailable, severity: otellog.SeverityWarn},
+		{name: "expired", err: errRecoveryLoginExpired, severity: otellog.SeverityError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
+			logsOn := func(context.Context, string) (bool, error) { return true, nil }
+			recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
+			service := &Service{connections: recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings(), logger: testenv.NewLogger(t)}
+			remote := remotesessions.RemoteLoginState{
+				Attempt:      mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope("org-test", uuid.New(), uuid.New(), mcpconnectionattempts.AppDCR)),
+				ProviderHost: "login.example.com:8443",
+			}
+
+			service.recordRemoteLoginRefusal(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/callback", nil), remote, tc.err)
+			require.NoError(t, service.attemptEndings.drain(t.Context()))
+			require.NoError(t, recorder.Shutdown(t.Context()))
+
+			require.Len(t, sink.records, 1)
+			require.Equal(t, tc.severity, sink.records[0].Severity())
+			sink.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+				require.NotEqual(t, string(attr.ServerAddressKey), kv.Key)
+				require.NotEqual(t, string(attr.ServerPortKey), kv.Key)
+				return true
+			})
+		})
+	}
+}
+
 func tokenRequest(t *testing.T) *http.Request {
 	t.Helper()
 	return httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/token", nil)
