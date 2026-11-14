@@ -282,6 +282,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 			RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			ChatID:         chatIDForBlock(metadata.SessionID),
 			ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			SessionID:      metadata.SessionID,
 		}); bURL != "" {
 			userReason = appendBlockURL(userReason, bURL)
 		}
