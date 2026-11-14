@@ -75,7 +75,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useLocation, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { useQueryState } from "nuqs";
 import {
@@ -96,6 +96,8 @@ import {
   type PolicyNewPrefill,
 } from "./policy-new-prefill";
 import {
+  conflictingShadowMCPBlockingPolicy,
+  shadowMCPBlockingSlotUnknown,
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
@@ -144,6 +146,7 @@ import {
   SummaryRow,
 } from "./policy-editor-shell";
 import { type PolicyStep, useStepParam } from "./use-step-param";
+import { useShadowAIPolicySlot } from "./use-shadow-ai-policy-slot";
 import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
 import {
   FLAG_ONLY_CATEGORIES,
@@ -3465,6 +3468,18 @@ export function StandardPolicyEditor({
     project.id,
     targetIsShadowMCPBlock,
   );
+  // The server allows one enabled blocking Shadow MCP policy per project.
+  // Look for it as soon as the detector is on, so the author learns before
+  // configuring the rest that this policy cannot block too.
+  const shadowMCPSelected = selectedCategories.has("shadow_mcp");
+  const shadowAISlot = useShadowAIPolicySlot({ enabled: shadowMCPSelected });
+  const blockingPolicyConflict = shadowMCPSelected
+    ? conflictingShadowMCPBlockingPolicy(shadowAISlot.existing, policy)
+    : undefined;
+  // A pending or failed list read is not proof the slot is free, so Block
+  // waits for it instead of reaching the server's rejection.
+  const blockingSlotUnknown =
+    shadowMCPSelected && shadowMCPBlockingSlotUnknown(shadowAISlot, policy);
   const policyID = policy?.id ?? null;
   const editorIdentity = policyID ?? "create";
   const originalHasShadowMCPBlockConfiguration = policy
@@ -3577,7 +3592,9 @@ export function StandardPolicyEditor({
     mcpScopeMissingServers ||
     mcpScopeIncompatible ||
     !inspectRowsValid ||
-    !shadowMCPSelectionInitialized;
+    !shadowMCPSelectionInitialized ||
+    (targetIsShadowMCPBlock &&
+      (blockingSlotUnknown || blockingPolicyConflict !== undefined));
 
   const shadowMCPSelectionDirty = shadowMCPSelectionIsDirty(
     targetIsShadowMCPBlock,
@@ -3875,6 +3892,26 @@ export function StandardPolicyEditor({
         onStep={setStep}
         prefilledStepIds={draft?.origin ? STANDARD_PREFILLED_STEPS : undefined}
       >
+        {blockingPolicyConflict && shadowAISlot.href ? (
+          <ShadowMCPBlockingPolicyConflictNotice
+            name={blockingPolicyConflict.name}
+            href={shadowAISlot.href}
+            blockSelected={targetIsShadowMCPBlock}
+          />
+        ) : null}
+        {targetIsShadowMCPBlock &&
+        blockingSlotUnknown &&
+        shadowAISlot.failed ? (
+          <Alert
+            variant="error"
+            title="Could not check for a Shadow MCP blocking policy"
+          >
+            <AlertDescription>
+              A project can have only one, so Block stays off until the check
+              works. Reload the page to try again, or choose another action.
+            </AlertDescription>
+          </Alert>
+        ) : null}
         {step === 0 && (
           <>
             <Card>
@@ -4064,6 +4101,38 @@ export function StandardPolicyEditor({
         />
       )}
     </>
+  );
+}
+
+// Shown while the Shadow AI detector is on and the project already has its
+// one enabled blocking Shadow MCP policy: this policy can still flag, but
+// Block would fail on create, so say so before the author configures it.
+export function ShadowMCPBlockingPolicyConflictNotice({
+  name,
+  href,
+  blockSelected,
+}: {
+  name: string;
+  href: string;
+  blockSelected: boolean;
+}): JSX.Element {
+  return (
+    <Alert
+      variant={blockSelected ? "error" : "warning"}
+      title="One Shadow MCP blocking policy per project"
+    >
+      <AlertDescription>
+        This project already has an enabled Shadow MCP blocking policy,{" "}
+        <Link to={href} className="font-medium underline underline-offset-2">
+          {name}
+        </Link>
+        . A project can have only one, so this policy cannot use Block with the
+        Shadow AI detector.{" "}
+        {blockSelected
+          ? `Choose another action, or disable or delete ${name} first.`
+          : `It can still flag Shadow MCP servers.`}
+      </AlertDescription>
+    </Alert>
   );
 }
 
