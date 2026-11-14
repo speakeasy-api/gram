@@ -61,6 +61,12 @@ import { CredentialPicker } from "./CredentialPicker";
 import { SignInPath } from "./SignInPath";
 import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
+import {
+  PLATFORM_STEPS_START,
+  WIZARD_STEPS as STEPS,
+  wizardStepIndex,
+  wizardStepParam,
+} from "./wizard-steps";
 import { hasPlatformSetup, platformSetup } from "./platformSetups";
 import {
   DEVICE_AGENT_SYNC_SCOPE,
@@ -125,16 +131,6 @@ import {
  * before Install is still a draft the user can abandon without leaving a
  * half-made agent behind.
  */
-
-/** Each step's name, and the one or two words it shrinks to in a full row. */
-const STEPS = [
-  { label: "Name", short: "Name" },
-  { label: "MCP Selection", short: "MCPs" },
-  { label: "MCP sign-in", short: "MCP sign-in" },
-  { label: "Agent sign-in", short: "Agent sign-in" },
-  { label: "Install", short: "Install" },
-  { label: "Verify", short: "Verify" },
-];
 
 /** How the agent proves who it is. */
 type Credential = "api-key" | "workload";
@@ -474,36 +470,14 @@ export function CredentialsWizard({
     : initialPlatformKey === undefined
       ? 0
       : 1;
-  // Presence first: `Number(null)` and `Number("")` are both 0, which reads as
-  // a deep link to the first step and leaves `defaultStep` unreachable.
-  const linked = params.get("step");
-  const fromUrl =
-    linked === null || linked.trim() === "" ? Number.NaN : Number(linked);
   // Editing is a tab on the agent's page, not a flow with an address per
   // step: it has two views, and which one is open is only this page's.
   // It opens on the sign-in view; the picker opens only from its button.
   const [editStep, setEditStep] = useState(SIGN_IN_STEP);
-  const urlStep =
-    Number.isInteger(fromUrl) && fromUrl >= 0 ? fromUrl : defaultStep;
+  // `?step=` names the step (`?step=servers`); an index from an older link
+  // still opens the step it meant.
+  const urlStep = wizardStepIndex(params.get("step"), defaultStep);
   const step = section ? editStep : urlStep;
-  // Stable, so an effect that corrects the step can depend on it.
-  const setStep = useCallback(
-    (next: number) => {
-      if (section) {
-        setEditStep(next);
-        return;
-      }
-      setParams(
-        (current) => {
-          const updated = new URLSearchParams(current);
-          updated.set("step", String(next));
-          return updated;
-        },
-        { replace: true },
-      );
-    },
-    [section, setParams],
-  );
   const [name, setName] = useState(agent?.name ?? "");
   // Names are unique in the organization, case aside. Asking once typing
   // pauses catches a taken name here instead of on Create agent, which still
@@ -1655,19 +1629,40 @@ export function CredentialsWizard({
   });
   // A platform's own setup steps are steps of this wizard, not a wizard of
   // their own: one stepper, one Back and one Continue throughout.
-  const stepNames =
-    credential === "workload" && workload.steps.length > 0
-      ? [
-          ...STEPS.slice(0, 4),
-          ...workload.steps.map((entry) => ({
-            label: entry.title,
-            short: entry.short,
-          })),
-        ]
-      : STEPS;
+  const platformSteps = credential === "workload" && workload.steps.length > 0;
+  const stepNames = platformSteps
+    ? [
+        ...STEPS.slice(0, PLATFORM_STEPS_START),
+        ...workload.steps.map((entry) => ({
+          label: entry.title,
+          short: entry.short,
+        })),
+      ]
+    : [...STEPS];
   /** The platform setup step on screen, when one is. */
   const workloadStep =
-    credential === "workload" ? workload.steps[step - 4] : undefined;
+    credential === "workload"
+      ? workload.steps[step - PLATFORM_STEPS_START]
+      : undefined;
+  // Stable while the steps are, so an effect that corrects the step can
+  // depend on it.
+  const setStep = useCallback(
+    (next: number) => {
+      if (section) {
+        setEditStep(next);
+        return;
+      }
+      setParams(
+        (current) => {
+          const updated = new URLSearchParams(current);
+          updated.set("step", wizardStepParam(next, platformSteps));
+          return updated;
+        },
+        { replace: true },
+      );
+    },
+    [section, setParams, platformSteps],
+  );
   // How many steps there are is only known here, once the platform's own have
   // been counted, so an out-of-range link is corrected rather than refused:
   // the URL is rewritten to the last real step instead of leaving the wizard

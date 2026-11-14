@@ -13,6 +13,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -111,7 +112,7 @@ func (s *Service) SendTrialEndingSoon(ctx context.Context, input SendTrialEnding
 	template := email.TrialEndingSoon{
 		OrganizationName: organization.Name,
 		TrialEndDate:     state.TrialEndsAt.UTC().Format("January 2, 2006"),
-		ActionURL:        s.actionURL(organization, "billing"),
+		ActionURL:        s.actionURL(organization, dashboardlinks.Billing(organization.Slug)),
 	}
 	return SendTrialEndingSoonResult{}, s.deliver(ctx, input.OrganizationID, "", recipients, resolutionErr, template,
 		"trial-ending-soon", input.OrganizationID, state.TrialCreatedAt.UTC().Format(time.RFC3339Nano), state.TrialEndsAt.UTC().Format(time.RFC3339Nano))
@@ -185,7 +186,7 @@ func (s *Service) SendAccessPaused(ctx context.Context, input SendAccessPausedIn
 	recipients, resolutionErr := s.resolveRecipients(ctx, s.db, input.OrganizationID, string(billing.TierPayg), configuredEmail)
 	template := email.AccessPaused{
 		OrganizationName: organization.Name,
-		ActionURL:        s.actionURL(organization),
+		ActionURL:        s.actionURL(organization, dashboardlinks.OrganizationHome(organization.Slug)),
 	}
 	return s.deliver(ctx, input.OrganizationID, input.EventID, recipients, resolutionErr, template, "access-paused", input.EventID)
 }
@@ -227,7 +228,7 @@ func (s *Service) SendPaygActivated(ctx context.Context, input SendPaygActivated
 	template := email.PaygActivated{
 		OrganizationName:      organization.Name,
 		TumPricePerMillionUsd: billing.TUMPricePerMillionUSD,
-		ActionURL:             s.actionURL(organization, "billing"),
+		ActionURL:             s.actionURL(organization, dashboardlinks.Billing(organization.Slug)),
 	}
 	return s.deliver(ctx, input.OrganizationID, input.EventID, recipients, resolutionErr, template, "payg-activated", input.EventID)
 }
@@ -235,12 +236,8 @@ func (s *Service) SendPaygActivated(ctx context.Context, input SendPaygActivated
 // actionURL links to a page of the organization's dashboard on its default
 // host. It is empty when the process has no dashboard URL for the
 // organization, as the other notification emails leave their links.
-func (s *Service) actionURL(organization orgrepo.OrganizationMetadatum, page ...string) string {
-	siteURL := s.orgHosts.SiteURL(organization.DefaultHost)
-	if siteURL == nil {
-		return ""
-	}
-	return siteURL.JoinPath(append([]string{organization.Slug}, page...)...).String()
+func (s *Service) actionURL(organization orgrepo.OrganizationMetadatum, page dashboardlinks.Link) string {
+	return page.URL(s.orgHosts.SiteURL(organization.DefaultHost))
 }
 
 // deliver sends one template to every resolved recipient. A recipient

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
@@ -203,7 +204,7 @@ func (s *PluginsService) pluginInstallInstructions(ctx context.Context, organiza
 	deviceAgentURL := ""
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID == organizationID && authCtx.OrganizationSlug != "" {
 		if _, dashboardURL := s.memberLinkBases(ctx, organizationID); dashboardURL != nil {
-			deviceAgentURL = dashboardURL.JoinPath(authCtx.OrganizationSlug, "device-agent").String()
+			deviceAgentURL = dashboardlinks.DeviceAgent(authCtx.OrganizationSlug).URL(dashboardURL)
 		}
 	}
 	output := GetMyInstallInstructionsOutput{

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"strings"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -1639,25 +1639,23 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	// state or a client-supplied project id.
 	manageAccessLink := ""
 	if siteURL := s.orgHosts.SiteURL(org.DefaultHost); siteURL != nil {
-		accessURL := siteURL.JoinPath(org.Slug, "access", "roles")
-		q := url.Values{}
-		q.Set("grant_user", ac.UserID)
-		q.Set("scope", payload.Scope)
-		if payload.ResourceID != nil && *payload.ResourceID != "" {
-			q.Set("resource_id", *payload.ResourceID)
-			if strings.HasPrefix(payload.Scope, "mcp:") {
-				projectID, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, *payload.ResourceID)
-				if resolveErr != nil {
-					logger.WarnContext(ctx, "could not resolve MCP project for access request link",
-						attr.SlogError(resolveErr),
-					)
-				} else {
-					q.Set("project_id", projectID)
-				}
+		resourceID := ""
+		if payload.ResourceID != nil {
+			resourceID = *payload.ResourceID
+		}
+		projectID := ""
+		if resourceID != "" && strings.HasPrefix(payload.Scope, "mcp:") {
+			resolved, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, resourceID)
+			if resolveErr != nil {
+				logger.WarnContext(ctx, "could not resolve MCP project for access request link",
+					attr.SlogError(resolveErr),
+				)
+			}
+			if resolveErr == nil {
+				projectID = resolved
 			}
 		}
-		accessURL.RawQuery = q.Encode()
-		manageAccessLink = accessURL.String()
+		manageAccessLink = dashboardlinks.AccessGrant(org.Slug, ac.UserID, payload.Scope, resourceID, projectID).URL(siteURL)
 	}
 
 	// Name the permission the way the role editor does, so the admin reads

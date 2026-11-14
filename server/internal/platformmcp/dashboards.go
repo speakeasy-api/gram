@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -449,7 +450,7 @@ func (scope dashboardScope) dashboardPath(id string) string {
 	if scope.organizationSlug == "" || id == "" {
 		return ""
 	}
-	return "/" + scope.organizationSlug + "/projects/" + scope.project.Slug + "/dashboards/" + id
+	return dashboardlinks.Dashboard(scope.organizationSlug, scope.project.Slug, id).Path()
 }
 
 func (scope dashboardScope) builtInPath(slug string) string {

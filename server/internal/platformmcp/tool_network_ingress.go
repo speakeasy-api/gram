@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -106,7 +107,7 @@ func (s *NetworkIngressStatusService) Get(ctx context.Context, principal Princip
 	}
 	output := GetNetworkIngressOutput{
 		Entitled:   entitled,
-		SetupURL:   s.dashboardURL.JoinPath(organization.Slug, "domains").String(),
+		SetupURL:   dashboardlinks.Domains(organization.Slug).URL(s.dashboardURL),
 		NextAction: networkIngressNextConfigure,
 	}
 	row, err := s.queries.GetPlatformMCPActiveNetworkIngress(ctx, principal.OrganizationID)

@@ -17,6 +17,7 @@ import (
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -164,10 +165,7 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 		return resolutionErr
 	}
 
-	viewUsageURL := ""
-	if siteURL := a.orgHosts.SiteURL(conv.ToPGTextEmpty(target.DefaultHost)); siteURL != nil {
-		viewUsageURL = siteURL.JoinPath(target.OrganizationSlug, "billing").String()
-	}
+	viewUsageURL := dashboardlinks.Billing(target.OrganizationSlug).URL(a.orgHosts.SiteURL(conv.ToPGTextEmpty(target.DefaultHost)))
 
 	showEstimatedSpend := accountType == string(billing.TierPayg)
 	tmpl := email.WeeklyUsageSummary{

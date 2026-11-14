@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"strings"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	deploymentrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 )
 
@@ -292,7 +292,7 @@ func (s *DeploymentRedeployService) Redeploy(ctx context.Context, principal Prin
 	if err != nil || stored.ProjectID != project.ID.String() || stored.SourceDeploymentID != input.DeploymentID {
 		return zero, redeployUnavailable(err)
 	}
-	out := RedeployDeploymentOutput{ProjectID: stored.ProjectID, SourceDeploymentID: stored.SourceDeploymentID, DeploymentID: stored.DeploymentID, Status: "unknown", Verified: false, Active: nil, Processing: "verification_unavailable", Replayed: receipt.Replayed, DashboardPath: "/" + url.PathEscape(organizationSlug) + "/projects/" + url.PathEscape(project.Slug) + "/deployments/" + stored.DeploymentID}
+	out := RedeployDeploymentOutput{ProjectID: stored.ProjectID, SourceDeploymentID: stored.SourceDeploymentID, DeploymentID: stored.DeploymentID, Status: "unknown", Verified: false, Active: nil, Processing: "verification_unavailable", Replayed: receipt.Replayed, DashboardPath: dashboardlinks.Deployment(organizationSlug, project.Slug, stored.DeploymentID).Path()}
 	current, err := s.readCommitted(ctx, principal, stored)
 	if err != nil {
 		return out, nil

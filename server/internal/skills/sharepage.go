@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
@@ -49,7 +50,7 @@ func (s *Service) ServeSharedSkillPage(w http.ResponseWriter, r *http.Request) e
 
 	domainCtx := customdomains.FromContext(ctx)
 	if domainCtx == nil {
-		http.Redirect(w, r, s.siteURL.JoinPath("shared", "skills", token).String(), http.StatusFound)
+		http.Redirect(w, r, dashboardlinks.SharedSkill(token).URL(s.siteURL), http.StatusFound)
 		return nil
 	}
 
@@ -116,7 +117,7 @@ func (s *Service) ServeSharedSkillMarkdown(w http.ResponseWriter, r *http.Reques
 
 	domainCtx := customdomains.FromContext(ctx)
 	if domainCtx == nil {
-		http.Redirect(w, r, s.siteURL.JoinPath("shared", "skills", token).String(), http.StatusFound)
+		http.Redirect(w, r, dashboardlinks.SharedSkill(token).URL(s.siteURL), http.StatusFound)
 		return nil
 	}
 

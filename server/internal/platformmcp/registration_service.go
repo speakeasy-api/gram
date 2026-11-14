@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 )
 
 var ErrRegistrationUnavailable = errors.New("platform mcp catalog registration unavailable")
@@ -387,14 +388,9 @@ func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principa
 	if setup.OrganizationSlug == "" || setup.MCPServerRoute == "" {
 		return "", ErrRegistrationUnavailable
 	}
-	settings := s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "settings")
 	// Every open step (credentials, OAuth client, sign-in) lives in the
 	// Authentication section; the step tells the page which one to explain.
-	if step := dashboardSetupStep(nextAction); step != "" {
-		settings.RawQuery = url.Values{"setup": {step}}.Encode()
-	}
-	settings.Fragment = "authentication"
-	return settings.String(), nil
+	return dashboardlinks.MCPServerAuthentication(setup.OrganizationSlug, project.Slug, setup.MCPServerRoute, dashboardSetupStep(nextAction)).URL(s.dashboardURL), nil
 }
 
 // DashboardAuthorization is where a user signs in to an MCP server's
@@ -433,7 +429,7 @@ func (s *RegistrationService) DashboardAuthorization(ctx context.Context, princi
 		return DashboardAuthorization{}, ErrRegistrationUnavailable
 	}
 	return DashboardAuthorization{
-		URL:        s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "inspect").String(),
+		URL:        dashboardlinks.MCPServerInspect(setup.OrganizationSlug, project.Slug, setup.MCPServerRoute).URL(s.dashboardURL),
 		ServerName: setup.ServerName,
 		Logo:       s.cardLogo(ctx, principal, project, registrationID),
 	}, nil

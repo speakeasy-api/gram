@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -283,7 +284,7 @@ func (s *PluginsService) pluginRepublishNotConfigured(ctx context.Context, princ
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if s.dashboardURL != nil && ok && authCtx != nil && authCtx.ActiveOrganizationID == principal.OrganizationID && strings.TrimSpace(authCtx.OrganizationSlug) != "" {
-		refusal.DashboardURL = requestDashboardURL(ctx, s.dashboardURL, s.serverURL).JoinPath(authCtx.OrganizationSlug, "projects", project.Slug, "plugins").String()
+		refusal.DashboardURL = dashboardlinks.Plugins(authCtx.OrganizationSlug, project.Slug).URL(requestDashboardURL(ctx, s.dashboardURL, s.serverURL))
 	}
 	return refusal
 }

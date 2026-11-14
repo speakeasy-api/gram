@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 
@@ -1612,7 +1613,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *auth
 		s.logger.ErrorContext(ctx, "failed to capture gram_assistants_signup event", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
 	}
 
-	return fmt.Sprintf("/%s/projects/%s/assistants/new?disposition=%s", org.Slug, projects[0].Slug, dispositionAssistants), nil
+	return dashboardlinks.NewAssistant(org.Slug, projects[0].Slug, dispositionAssistants).Path(), nil
 }
 
 // persistProvisionedOrganization writes the Speakeasy-side records for an

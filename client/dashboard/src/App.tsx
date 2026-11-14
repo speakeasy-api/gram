@@ -51,7 +51,7 @@ import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
 import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
 import { BlockPage } from "./pages/blocks/BlockDetail";
-import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
+import { STANDALONE_ROUTES } from "./standalone-routes";
 import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import TrialEnded from "./pages/demo/TrialEnded";
@@ -394,19 +394,22 @@ const RouteProvider = () => {
           element={<ShadowMCPRequestAccess />}
         />
         <Route
-          path="/risk-policy-bypass/request"
+          path={STANDALONE_ROUTES.riskPolicyBypassRequest}
           element={<ShadowMCPRequestAccess />}
         />
         <Route
-          path="/risk-policy-challenge/acknowledge"
+          path={STANDALONE_ROUTES.riskPolicyChallengeAcknowledge}
           element={<RiskPolicyChallengeAcknowledge />}
         />
         {/* Short form of the acknowledge link, /ack#<token>, for surfaces
             that cut a hook message off after a line or two (Claude Cowork). */}
-        <Route path="/ack" element={<RiskPolicyChallengeAcknowledge />} />
-        <Route path="/blocks/:id" element={<BlockPage />} />
         <Route
-          path={`${SHARED_SKILL_BASE_PATH}/:token`}
+          path={STANDALONE_ROUTES.riskPolicyChallengeAcknowledgeShort}
+          element={<RiskPolicyChallengeAcknowledge />}
+        />
+        <Route path={STANDALONE_ROUTES.block} element={<BlockPage />} />
+        <Route
+          path={STANDALONE_ROUTES.sharedSkill}
           element={<SharedSkillPage />}
         />
         <Route path="/" element={<LoginCheck />}>

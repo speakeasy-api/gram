@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 )
 
 // Epic G — "warn"/challenge acknowledgement token (rpak1).
@@ -122,11 +123,7 @@ func GeneratePolicyAckURL(ctx context.Context, c cache.Cache, siteURL *url.URL, 
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	ackURL := siteURL.JoinPath("risk-policy-challenge", "acknowledge")
-	query := url.Values{}
-	query.Set("ack_token", token)
-	ackURL.Fragment = query.Encode()
-	return ackURL.String(), expiry, nil
+	return dashboardlinks.RiskPolicyChallengeAcknowledge(token).URL(siteURL), expiry, nil
 }
 
 // policyAckShortIDLength is the length of a short link's bare id: 10 base62
@@ -213,9 +210,7 @@ func GeneratePolicyAckShortURL(ctx context.Context, c cache.Cache, siteURL *url.
 		if !stored {
 			continue
 		}
-		ackURL := siteURL.JoinPath("ack")
-		ackURL.Fragment = id
-		return ackURL.String(), record.ExpiresAt, nil
+		return dashboardlinks.RiskPolicyChallengeAcknowledgeShort(id).URL(siteURL), record.ExpiresAt, nil
 	}
 	return "", time.Time{}, fmt.Errorf("store risk policy ack: no free short id")
 }

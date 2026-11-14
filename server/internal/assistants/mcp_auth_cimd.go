@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
@@ -97,7 +98,7 @@ func assistantDashboardURI(siteURL *url.URL, orgSlug, projectSlug, assistantID s
 	if siteURL == nil || siteURL.Scheme != "https" || siteURL.Host == "" || siteURL.User != nil || orgSlug == "" || projectSlug == "" || assistantID == "" {
 		return ""
 	}
-	return siteURL.JoinPath(orgSlug, "projects", projectSlug, "assistants", assistantID).String()
+	return dashboardlinks.Assistant(orgSlug, projectSlug, assistantID).URL(siteURL)
 }
 
 func buildAssistantClientMetadataDocument(clientID, clientName, clientURI, redirectURI string) assistantClientMetadataDocument {

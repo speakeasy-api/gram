@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sigint"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
@@ -373,7 +374,7 @@ func projectAuthoringResult(ctx context.Context, project ResolvedProject, result
 	out.AffectedSensors = []sensorImpact{}
 
 	if auth, ok := contextvalues.GetAuthContext(ctx); ok && auth != nil && auth.OrganizationSlug != "" {
-		out.DashboardPath = "/" + auth.OrganizationSlug + "/projects/" + project.Slug + "/signals-intelligence"
+		out.DashboardPath = dashboardlinks.SignalsIntelligence(auth.OrganizationSlug, project.Slug).Path()
 	}
 
 	if result.Sensor != nil {
