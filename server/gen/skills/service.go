@@ -94,14 +94,15 @@ type Service interface {
 	ListDistributions(context.Context, *ListDistributionsPayload) (res *ListSkillDistributionsResult, err error)
 	// Link a skill to exactly one MCP surface that serves it over MCP. Repeating
 	// the request for the same skill and target updates the version pin or is a
-	// no-op. Requires the skills-over-mcp rollout for the organization.
+	// no-op. Requires the skills_over_mcp product feature for the organization.
 	Link(context.Context, *LinkPayload) (res *types.SkillLink, err error)
 	// Remove a skill link so its MCP surface stops serving the skill through it.
 	// Removing a link that is already gone is a no-op. Requires the
-	// skills-over-mcp rollout for the organization.
+	// skills_over_mcp product feature for the organization.
 	Unlink(context.Context, *UnlinkPayload) (err error)
 	// List the current project's live skill links, limited to MCP surfaces the
-	// caller can read. Requires the skills-over-mcp rollout for the organization.
+	// caller can read. Requires the skills_over_mcp product feature for the
+	// organization.
 	ListLinks(context.Context, *ListLinksPayload) (res *ListSkillLinksResult, err error)
 }
 

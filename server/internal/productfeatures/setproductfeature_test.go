@@ -340,6 +340,7 @@ func TestFeature_RequiresPlatformAdmin(t *testing.T) {
 		productfeatures.FeatureSessionPortability,
 		productfeatures.FeatureRemoteSessionAutoRefresh,
 		productfeatures.FeatureRemoteSessionAutoRefreshEnforced,
+		productfeatures.FeatureSkillsOverMCP,
 	}
 	for _, feature := range staffOnly {
 		require.Truef(t, feature.RequiresPlatformAdmin(), "feature %s must require platform admin", feature)

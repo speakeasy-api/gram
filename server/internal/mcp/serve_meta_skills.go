@@ -1,6 +1,6 @@
 // Skills over MCP on gateways: a stored gateway and the organization gateway
 // serve the skills linked to them plus the skills linked to every member
-// server the caller reaches through them, behind the skills-over-mcp flag.
+// server the caller reaches through them, behind the skills_over_mcp product feature.
 
 package mcp
 
@@ -42,7 +42,7 @@ func (s *Service) metaExtensions(ctx context.Context, gate *metaGateContext) []s
 
 // metaSkillMethod reports whether the request is answered from the skill
 // distribution: an extension method, or a read of a skill URI. It does not
-// consult the flag; callers check metaSkillsEnabled as well.
+// consult the feature; callers check metaSkillsEnabled as well.
 func metaSkillMethod(req *rawRequest) bool {
 	if mcpversions.KnownExtensionMethod(req.Method) {
 		return true

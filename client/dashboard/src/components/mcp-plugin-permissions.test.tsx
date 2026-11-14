@@ -51,12 +51,10 @@ const state = vi.hoisted(() => ({
   skillsOverMcp: false,
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: (flag: string) => ({
-    status:
-      flag === "skills-over-mcp" && state.skillsOverMcp
-        ? "enabled"
-        : "disabled",
-  }),
+  useFeatureFlag: () => ({ status: "disabled" }),
+}));
+vi.mock("@/pages/skills/use-skills-over-mcp", () => ({
+  useSkillsOverMcpEnabled: () => state.skillsOverMcp,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-a" }),
@@ -437,7 +435,7 @@ describe("remote MCP server Skills tab", () => {
     remoteMcpServerId: "remote-source-a",
   };
 
-  it("shows for a remote server with the flag on and project skill read", () => {
+  it("shows for a remote server with the feature on and skill read", () => {
     state.skillsOverMcp = true;
     state.mcpServer = remote;
     state.grants = [{ scope: "skill:read" }];
@@ -447,7 +445,7 @@ describe("remote MCP server Skills tab", () => {
 
   it.each([
     {
-      case: "flag off",
+      case: "skills over MCP off",
       flag: false,
       server: remote,
       grants: [{ scope: "skill:read" }],

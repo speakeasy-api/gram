@@ -78342,7 +78342,7 @@ paths:
                 name: SharedSkill
     /rpc/skills.link:
         post:
-            description: Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills-over-mcp rollout for the organization.
+            description: Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills_over_mcp product feature for the organization.
             operationId: linkSkill
             parameters:
                 - allowEmptyValue: true
@@ -78909,7 +78909,7 @@ paths:
                 name: SkillFeedback
     /rpc/skills.listLinks:
         get:
-            description: List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills-over-mcp rollout for the organization.
+            description: List the current project's live skill links, limited to MCP surfaces the caller can read. Requires the skills_over_mcp product feature for the organization.
             operationId: listSkillLinks
             parameters:
                 - allowEmptyValue: true
@@ -80085,7 +80085,7 @@ paths:
                 name: UndistributeSkill
     /rpc/skills.unlink:
         post:
-            description: Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills-over-mcp rollout for the organization.
+            description: Remove a skill link so its MCP surface stops serving the skill through it. Removing a link that is already gone is a no-op. Requires the skills_over_mcp product feature for the organization.
             operationId: unlinkSkill
             parameters:
                 - allowEmptyValue: true
@@ -124049,6 +124049,9 @@ components:
                 skills_enabled:
                     type: boolean
                     description: Whether the Skills page is enabled for the organization
+                skills_over_mcp_enabled:
+                    type: boolean
+                    description: Whether staff turned on serving managed skills over MCP for the organization. Off by default.
                 sso_enabled:
                     type: boolean
                     description: Whether SSO setup is enabled for the organization
@@ -124080,6 +124083,7 @@ components:
                 - signals_intelligence_enabled
                 - organization_gateway_disabled
                 - code_mode_enabled
+                - skills_over_mcp_enabled
                 - device_agent
         Project:
             type: object
@@ -130969,6 +130973,7 @@ components:
                         - signals_intelligence
                         - organization_gateway_disabled
                         - code_mode
+                        - skills_over_mcp
                     maxLength: 60
                 organization_id:
                     type: string
@@ -131094,6 +131099,7 @@ components:
                         - signals_intelligence
                         - organization_gateway_disabled
                         - code_mode
+                        - skills_over_mcp
                     maxLength: 60
                 organization_id:
                     type: string

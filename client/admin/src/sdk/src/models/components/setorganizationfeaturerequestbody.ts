@@ -28,6 +28,7 @@ export const FeatureName = {
   SignalsIntelligence: "signals_intelligence",
   OrganizationGatewayDisabled: "organization_gateway_disabled",
   CodeMode: "code_mode",
+  SkillsOverMcp: "skills_over_mcp",
 } as const;
 export type FeatureName = ClosedEnum<typeof FeatureName>;
 

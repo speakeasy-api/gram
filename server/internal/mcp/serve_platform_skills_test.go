@@ -1,8 +1,8 @@
 // Asserts the platform toolset serves the embedded reviewed skills over the
-// Skills extension (SEP-2640) behind the skills-over-mcp flag: the handshake
+// Skills extension (SEP-2640) behind the skills_over_mcp product feature: the handshake
 // advertises the extension, the listing is exactly the embedded set with
 // verifying digests, reads return the embedded bytes without recording an
-// activation, and with the flag off the surface is unchanged.
+// activation, and with the feature off the surface is unchanged.
 package mcp_test
 
 import (
@@ -22,7 +22,6 @@ import (
 
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -32,7 +31,7 @@ import (
 )
 
 // platformSkillsFixture is a project whose managed assistant can reach the
-// managed-assistant platform toolset, with the Skills extension flag on for
+// managed-assistant platform toolset, with the Skills extension feature on for
 // the owning organization.
 type platformSkillsFixture struct {
 	authCtx *contextvalues.AuthContext
@@ -53,7 +52,7 @@ func newPlatformSkillsFixture(t *testing.T, ctx context.Context, ti *testInstanc
 		AssistantID: managedID,
 	})
 	require.NoError(t, err)
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, authCtx.ActiveOrganizationID, true)
+	setSkillsOverMCP(t, ti, authCtx.ActiveOrganizationID, true)
 
 	return &platformSkillsFixture{
 		authCtx: authCtx,
@@ -95,7 +94,7 @@ func embeddedPlatformSkills(t *testing.T) map[string][]byte {
 	return sources
 }
 
-func TestServePlatformToolset_Skills_InitializeAdvertisesExtensionWhenFlagOn(t *testing.T) {
+func TestServePlatformToolset_Skills_InitializeAdvertisesExtensionWhenFeatureOn(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -107,12 +106,12 @@ func TestServePlatformToolset_Skills_InitializeAdvertisesExtensionWhenFlagOn(t *
 	requireSkillsCapability(t, result["capabilities"])
 }
 
-func TestServePlatformToolset_Skills_InitializeOmitsExtensionWhenFlagOff(t *testing.T) {
+func TestServePlatformToolset_Skills_InitializeOmitsExtensionWhenFeatureOff(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	f := newPlatformSkillsFixture(t, ctx, ti)
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, f.authCtx.ActiveOrganizationID, false)
+	setSkillsOverMCP(t, ti, f.authCtx.ActiveOrganizationID, false)
 
 	w, err := servePlatformHTTP(t, ti, f.slug, makeInitializeBody(), f.token)
 	require.NoError(t, err)
@@ -277,12 +276,12 @@ func TestServePlatformToolset_Skills_ResourcesListIsEmpty(t *testing.T) {
 	require.JSONEq(t, `[]`, string(result["resources"]), "skills are listed through skills/list, never as resources")
 }
 
-func TestServePlatformToolset_Skills_FlagOffLeavesSurfaceUnchanged(t *testing.T) {
+func TestServePlatformToolset_Skills_FeatureOffLeavesSurfaceUnchanged(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	f := newPlatformSkillsFixture(t, ctx, ti)
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, f.authCtx.ActiveOrganizationID, false)
+	setSkillsOverMCP(t, ti, f.authCtx.ActiveOrganizationID, false)
 	grantProjectLogRead(t, ti, f.authCtx)
 	name := slices.Sorted(maps.Keys(embeddedPlatformSkills(t)))[0]
 	uri := mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, name)

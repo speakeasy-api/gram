@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
@@ -30,7 +29,7 @@ import (
 )
 
 // skillsFixture is one public hosted toolset in the test user's project,
-// wrapped by one enabled MCP server, with the Skills extension flag on for the
+// wrapped by one enabled MCP server, with the Skills extension feature on for the
 // owning organization, plus the ids a test needs to link skills to it.
 type skillsFixture struct {
 	authCtx        *contextvalues.AuthContext
@@ -57,7 +56,7 @@ func newSkillsFixture(t *testing.T, ctx context.Context, ti *testInstance) *skil
 
 	slug := "skills-" + uuid.NewString()[:8]
 	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, authCtx.ActiveOrganizationID, true)
+	setSkillsOverMCP(t, ti, authCtx.ActiveOrganizationID, true)
 
 	return &skillsFixture{
 		authCtx:        authCtx,
@@ -210,7 +209,7 @@ func requireWireSkill(t *testing.T, f *skillsFixture, skill wireSkill, name, con
 	require.Equal(t, len(content), skill.Resources[0].Size)
 }
 
-func TestServePublic_Skills_InitializeAdvertisesExtensionWhenFlagOn(t *testing.T) {
+func TestServePublic_Skills_InitializeAdvertisesExtensionWhenFeatureOn(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -222,12 +221,12 @@ func TestServePublic_Skills_InitializeAdvertisesExtensionWhenFlagOn(t *testing.T
 	requireSkillsCapability(t, result["capabilities"])
 }
 
-func TestServePublic_Skills_InitializeOmitsExtensionWhenFlagOff(t *testing.T) {
+func TestServePublic_Skills_InitializeOmitsExtensionWhenFeatureOff(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, f.organizationID, false)
+	setSkillsOverMCP(t, ti, f.organizationID, false)
 
 	w, err := servePublicHTTP(t, ctx, ti, f.mcpSlug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
@@ -589,13 +588,13 @@ func TestServePublic_Skills_NonDashboardChatSessionIsServedNothing(t *testing.T)
 	}
 }
 
-func TestServePublic_Skills_FlagOffAnswersMethodNotFound(t *testing.T) {
+func TestServePublic_Skills_FeatureOffAnswersMethodNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	f := newSkillsFixture(t, ctx, ti)
 	servedSkill(t, ctx, ti, f, "gated-skill")
-	ti.features.SetFlag(feature.FlagSkillsOverMCP, f.organizationID, false)
+	setSkillsOverMCP(t, ti, f.organizationID, false)
 	uri := f.uri("gated-skill")
 
 	for _, method := range []string{mcpversions.MethodSkillsList, mcpversions.MethodSkillsGet} {

@@ -94,6 +94,14 @@ INSERT INTO organization_features (organization_id, feature_name)
 VALUES (@organization_id::text, 'code_mode')
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
+-- name: LocalEnableSkillsOverMCPFeature :exec
+-- Skills over MCP is a staff-managed entitlement, off by default everywhere
+-- else; enabled locally so the seeded skills are served over MCP without a
+-- trip to the admin app after every seed. The shared demo org never gets it.
+INSERT INTO organization_features (organization_id, feature_name)
+VALUES (@organization_id::text, 'skills_over_mcp')
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
+
 -- name: LocalAddToolApprover :exec
 -- The developer approves the seeded tool approval policy too, so the Tool
 -- approvals tab offers Approve once and Deny locally. The shared demo org keeps

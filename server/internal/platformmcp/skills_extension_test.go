@@ -91,7 +91,7 @@ func firstEmbeddedSkill(t *testing.T) (string, []byte) {
 	return "", nil
 }
 
-func TestRuntimeServesEmbeddedSkillsWhenFlagOn(t *testing.T) {
+func TestRuntimeServesEmbeddedSkillsWhenFeatureOn(t *testing.T) {
 	t.Parallel()
 
 	gate := &testSkillsGate{enabled: true}
@@ -168,11 +168,11 @@ func TestRuntimeServesEmbeddedSkillsWhenFlagOn(t *testing.T) {
 	require.Equal(t, -32602, cursor.Error.Code)
 
 	for _, org := range gate.orgs {
-		require.Equal(t, testPrincipal().OrganizationID, org, "the flag is evaluated for the caller's organization")
+		require.Equal(t, testPrincipal().OrganizationID, org, "the feature is evaluated for the caller's organization")
 	}
 }
 
-func TestRuntimeHidesSkillsWhenFlagOff(t *testing.T) {
+func TestRuntimeHidesSkillsWhenFeatureOff(t *testing.T) {
 	t.Parallel()
 
 	handler := newSkillsTestHandler(t, &testSkillsGate{enabled: false})
@@ -193,6 +193,6 @@ func TestRuntimeHidesSkillsWhenFlagOff(t *testing.T) {
 
 	name, _ := firstEmbeddedSkill(t)
 	read := postSkillsRPC(t, handler, "resources/read", map[string]any{"uri": mcpskills.SkillURI(mcpskills.EmbeddedProjectSlug, name)})
-	require.NotNil(t, read.Error, "a skill read is an ordinary unknown resource while the flag is off")
+	require.NotNil(t, read.Error, "a skill read is an ordinary unknown resource while the feature is off")
 	require.Nil(t, read.Result)
 }

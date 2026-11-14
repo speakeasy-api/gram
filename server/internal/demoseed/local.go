@@ -203,6 +203,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 			return q.LocalUpsertEnvironment(ctx, repo.LocalUpsertEnvironmentParams{ID: uuid.MustParse(localEnvironmentID()), OrganizationID: spec.OrgID, ProjectID: projectID})
 		}},
 		{"enable code mode", func() error { return q.LocalEnableCodeModeFeature(ctx, spec.OrgID) }},
+		{"enable skills over mcp", func() error { return q.LocalEnableSkillsOverMCPFeature(ctx, spec.OrgID) }},
 		{"code mode gateway", func() error {
 			return q.LocalSetCodeModeGateway(ctx, repo.LocalSetCodeModeGatewayParams{OrganizationID: spec.OrgID, ProjectID: projectID})
 		}},
@@ -352,6 +353,7 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		productfeatures.FeatureSkills,
 		productfeatures.FeaturePlatformMCP,
 		productfeatures.FeatureCodeMode,
+		productfeatures.FeatureSkillsOverMCP,
 		productfeatures.FeatureSSO,
 		productfeatures.FeatureSCIM,
 	} {
