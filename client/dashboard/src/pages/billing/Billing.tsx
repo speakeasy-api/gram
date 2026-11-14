@@ -10,22 +10,20 @@ import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
-import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import type { ProductTier } from "@/hooks/useProductTier";
 import { useProductTier } from "@/hooks/useProductTier";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { getServerURL } from "@/lib/utils";
 import type { TierLimits } from "@gram/client/models/components/tierlimits.js";
+import { useCreateCustomerSessionMutation } from "@gram/client/react-query/createCustomerSession.js";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage.js";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 import { useGetUsageTiers } from "@gram/client/react-query/getUsageTiers.js";
-import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
 import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
 import { BillingEmailSection } from "@/components/billing/billing-email-section";
@@ -276,125 +274,36 @@ const UsageSection = () => {
 const UsageTiers = () => {
   const productTier = useProductTier();
   const { data: usageTiers, isLoading } = useGetUsageTiers();
-  const client = useSdkClient();
   const telemetry = useTelemetry();
-  const [checkoutLink, setCheckoutLink] = useState("");
-  const [checkoutError, setCheckoutError] = useState(false);
-  const [isLoadingCheckout, setIsLoadingCheckout] = useState(true);
+  const customerSession = useCreateCustomerSessionMutation();
 
-  useEffect(() => {
-    const fetchCheckoutLink = async () => {
-      try {
-        const link = await client.usage.createCheckout();
-        if (!link) {
-          console.error("Failed to create checkout link: received empty link");
-          telemetry.capture("checkout_link_error", {
-            error: "Received empty checkout link",
-            accountType: productTier,
-          });
-          setCheckoutError(true);
-          return;
-        }
-        setCheckoutLink(link);
-        PolarEmbedCheckout.init();
-      } catch (error) {
-        console.error("Error creating checkout link:", error);
-        telemetry.capture("checkout_link_error", {
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to create checkout link",
-          accountType: productTier,
-        });
-        setCheckoutError(true);
-      } finally {
-        setIsLoadingCheckout(false);
-      }
-    };
-
-    void fetchCheckoutLink();
-  }, [client, telemetry, productTier]);
-
-  const handleFallbackClick = useCallback(() => {
-    telemetry.capture("checkout_fallback_clicked", {
+  const reportCustomerSessionError = (error: string) => {
+    console.error("Error creating customer session:", error);
+    telemetry.capture("customer_session_error", {
+      error,
       accountType: productTier,
     });
-  }, [telemetry, productTier]);
+  };
 
-  const UpgradeCTA = useMemo(() => {
-    if (checkoutError) {
-      return (
-        <Page.Section.CTA>
-          <div className="isolate">
-            <Button asChild variant="primary">
-              <a
-                href="mailto:gram@speakeasyapi.dev?subject=Upgrade%20Account"
-                className="inline-flex"
-                onClick={handleFallbackClick}
-              >
-                ADD CARD
-              </a>
-            </Button>
-          </div>
-        </Page.Section.CTA>
-      );
-    }
-
-    return (
-      <Page.Section.CTA>
-        {/* Isolate is needed to get the rainbow working */}
-        <div className="isolate">
-          <Button disabled={isLoadingCheckout} asChild variant="primary">
-            <a
-              href={checkoutLink}
-              data-polar-checkout
-              data-polar-checkout-theme={"light"}
-              className="inline-flex"
-            >
-              ADD CARD
-            </a>
-          </Button>
-        </div>
-      </Page.Section.CTA>
+  const openPolarPortal = () => {
+    customerSession.mutate(
+      {},
+      {
+        onSuccess: (link) => {
+          if (!link) {
+            reportCustomerSessionError("Received empty customer session link");
+            return;
+          }
+          openSafeExternalUrl(link);
+        },
+        onError: (error) => {
+          reportCustomerSessionError(
+            error.message || "Failed to create customer session",
+          );
+        },
+      },
     );
-  }, [checkoutLink, checkoutError, isLoadingCheckout, handleFallbackClick]);
-
-  const polarPortalCTA = (
-    <Page.Section.CTA>
-      <Button
-        onClick={() => {
-          void (async () => {
-            try {
-              const link = await client.usage.createCustomerSession();
-              if (!link) {
-                console.error(
-                  "Failed to create customer session: received empty link",
-                );
-                telemetry.capture("customer_session_error", {
-                  error: "Received empty customer session link",
-                  accountType: productTier,
-                });
-                return;
-              }
-              openSafeExternalUrl(link);
-            } catch (error) {
-              console.error("Error creating customer session:", error);
-              telemetry.capture("customer_session_error", {
-                error:
-                  error instanceof Error
-                    ? error.message
-                    : "Failed to create customer session",
-                accountType: productTier,
-              });
-            }
-          })();
-        }}
-        disabled={productTier === "enterprise"}
-      >
-        MANAGE BILLING
-      </Button>
-    </Page.Section.CTA>
-  );
+  };
 
   if (!usageTiers) {
     return <Cards isLoading={true} />;
@@ -507,7 +416,14 @@ const UsageTiers = () => {
         A breakdown of our pricing tiers.
       </Page.Section.Description>
       <RequireScope scope="org:admin" level="section">
-        {productTier === "base" ? UpgradeCTA : polarPortalCTA}
+        <Page.Section.CTA>
+          <Button
+            onClick={openPolarPortal}
+            disabled={customerSession.isPending}
+          >
+            Manage billing
+          </Button>
+        </Page.Section.CTA>
       </RequireScope>
       <Page.Section.Body>
         <Stack direction={"horizontal"} gap={4}>

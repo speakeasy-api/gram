@@ -9,29 +9,24 @@ import {
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { ProductTier } from "@/hooks/useProductTier";
 
 const mocks = vi.hoisted(() => ({
   productTier: vi.fn(),
-  flagResult: vi.fn(),
   hasScope: vi.fn(),
   session: vi.fn(),
   subscription: vi.fn(),
   periodUsage: vi.fn(),
   inferenceCaps: vi.fn(),
   usageTiers: vi.fn(),
-  sdk: { usage: { createCheckout: vi.fn() } },
+  sdk: { usage: {} },
+  customerSessionMutate: vi.fn(),
   telemetry: { capture: vi.fn() },
-  polarInit: vi.fn(),
+  openExternal: vi.fn(),
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
   useProductTier: () => mocks.productTier() as ProductTier,
-}));
-
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => mocks.flagResult() as FeatureFlagResult,
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -48,12 +43,19 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => mocks.sdk }));
+vi.mock("@/lib/safe-external-url", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/safe-external-url")>()),
+  openSafeExternalUrl: mocks.openExternal,
+}));
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => mocks.telemetry,
 }));
 
-vi.mock("@polar-sh/checkout/embed", () => ({
-  PolarEmbedCheckout: { init: mocks.polarInit },
+vi.mock("@gram/client/react-query/createCustomerSession.js", () => ({
+  useCreateCustomerSessionMutation: () => ({
+    mutate: mocks.customerSessionMutate,
+    isPending: false,
+  }),
 }));
 
 vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
@@ -238,11 +240,7 @@ function renderBilling() {
 describe("Billing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.sdk.usage.createCheckout.mockResolvedValue(
-      "https://checkout.example.com/session",
-    );
     mocks.productTier.mockReturnValue("base");
-    mocks.flagResult.mockReturnValue({ status: "enabled" });
     mocks.hasScope.mockReturnValue(true);
     mocks.inferenceCaps.mockReturnValue({ data: undefined, isError: false });
     mocks.session.mockReturnValue({
@@ -366,13 +364,12 @@ describe("Billing", () => {
     },
   );
 
-  it.each(["member", "disabled flag"])("hides setup for %s", (reason) => {
+  it("hides setup for members", () => {
     mocks.subscription.mockReturnValue({
       error: { statusCode: 404 },
       isError: true,
     });
-    if (reason === "member") mocks.hasScope.mockReturnValue(false);
-    else mocks.flagResult.mockReturnValue({ status: "disabled" });
+    mocks.hasScope.mockReturnValue(false);
     renderBilling();
     expect(cta()).toBeNull();
   });
@@ -644,22 +641,20 @@ describe("Billing", () => {
   );
 
   it.each<ProductTier>(["base_PAID", "__deprecated__pro"])(
-    "initializes Polar checkout for the legacy %s billing view",
+    "opens the Polar portal from the legacy %s view",
     async (tier) => {
       mocks.productTier.mockReturnValue(tier);
+      mocks.customerSessionMutate.mockImplementation(
+        (_vars: unknown, options: { onSuccess: (link: string) => void }) =>
+          options.onSuccess("https://portal.example.com/session"),
+      );
       renderBilling();
 
+      fireEvent.click(screen.getByRole("button", { name: "Manage billing" }));
       await waitFor(() =>
-        expect(mocks.polarInit).toHaveBeenCalledExactlyOnceWith(),
-      );
-      expect(mocks.sdk.usage.createCheckout).toHaveBeenCalledExactlyOnceWith();
-      expect(
-        screen.getByRole("button", { name: "MANAGE BILLING" }),
-      ).toBeTruthy();
-      expect(screen.queryByRole("link", { name: "ADD CARD" })).toBeNull();
-      expect(mocks.telemetry.capture).not.toHaveBeenCalledWith(
-        "checkout_link_error",
-        expect.anything(),
+        expect(mocks.openExternal).toHaveBeenCalledExactlyOnceWith(
+          "https://portal.example.com/session",
+        ),
       );
     },
   );
