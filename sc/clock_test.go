@@ -232,7 +232,7 @@ func TestTimersThatKeepFiringAtOnceAreReported(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.PanicsWithValue(t, `sc: machine "loop" does not settle: its timers keep firing at `+epoch.String(), func() {
+	require.PanicsWithValue(t, `sc: machine "loop" does not settle within 10000 steps: its timers keep firing at `+epoch.String()+`, in states [a]`, func() {
 		m.Start(expiry{}, epoch)
 	})
 }
@@ -274,7 +274,13 @@ func TestStartInPlacesAnInstanceInAStateWithItsTimersAndServices(t *testing.T) {
 	require.Equal(t, []sc.EffectKind{sc.EffectStartInvocation}, kinds(effects))
 	require.Len(t, snap.Services(), 1)
 
-	_, _, err = m.StartIn(order{}, epoch, packing)
+	// A state with children stands for the states entering it leads to,
+	// and the regions it does not name get their default entry.
+	snap, _, err = m.StartIn(order{}, epoch, packing)
+	require.NoError(t, err)
+	require.True(t, snap.In(packing))
+
+	_, _, err = m.StartIn(order{}, epoch, paying, onHold)
 	require.ErrorIs(t, err, sc.ErrInvalidSnapshot)
 
 	_, _, err = m.StartIn(order{}, epoch, picking, invoicing, drafting)

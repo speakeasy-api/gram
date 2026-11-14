@@ -15,9 +15,10 @@ import (
 	"time"
 )
 
-// maxSettleSteps bounds the eventless transitions and internal events one
-// call to Transition may process. A correct chart settles in a handful; the
-// bound turns an Always or Raise cycle into a panic instead of a hang.
+// maxSettleSteps bounds, unless [MaxSteps] says otherwise, the eventless
+// transitions and internal events one call to Transition may process. A
+// correct chart settles in a handful; the bound turns an Always or Raise
+// cycle into a panic instead of a hang.
 const maxSettleSteps = 10_000
 
 // timerKind is what a running timer does when it fires.
@@ -1641,8 +1642,8 @@ func (r *run[S, C]) fireDue() {
 	defer func() { r.now = callNow }()
 
 	for steps := 0; !r.done; steps++ {
-		if steps > maxSettleSteps {
-			panic(fmt.Sprintf("sc: machine %q does not settle: its timers keep firing at %s", r.m.id, callNow))
+		if steps > r.m.maxSteps {
+			panic(fmt.Sprintf("sc: machine %q does not settle within %d steps: its timers keep firing at %s, in states %v", r.m.id, r.m.maxSteps, callNow, r.activeNames()))
 		}
 
 		next := -1
@@ -1668,6 +1669,7 @@ func (r *run[S, C]) fireDue() {
 		}
 
 		stim := r.fire(tm)
+		r.noteCause(stim)
 		if ts := r.selectTransitions(stim); len(ts) > 0 {
 			r.microstep(ts, stim)
 		}
@@ -1996,8 +1998,8 @@ func (r *run[S, C]) settle() {
 	rested := false
 
 	for steps := 0; !r.done; steps++ {
-		if steps > maxSettleSteps {
-			panic(fmt.Sprintf("sc: machine %q does not settle: its Always transitions or raised events form a cycle", r.m.id))
+		if steps > r.m.maxSteps {
+			panic(fmt.Sprintf("sc: machine %q does not settle within %d steps: its Always transitions or raised events form a cycle, last processing %T in states %v", r.m.id, r.m.maxSteps, r.cause, r.activeNames()))
 		}
 
 		// An eventless transition that changed nothing, neither the active
@@ -2240,8 +2242,30 @@ func (r *run[S, C]) dropShortLivedTimers() {
 		}
 	}
 
+	// A service started and stopped within the same call never runs
+	// either: its start, its stop and anything sent to it are dropped.
+	begun := map[string]bool{}
+	ended := map[string]bool{}
+
+	for _, e := range r.effects {
+		switch {
+		case e.Kind == EffectStartInvocation:
+			begun[e.ID] = true
+		case e.Kind == EffectStopInvocation && begun[e.ID]:
+			ended[e.ID] = true
+		}
+	}
+
 	r.effects = slices.DeleteFunc(r.effects, func(e Effect[C]) bool {
-		return (e.Kind == EffectStartTimer || e.Kind == EffectCancelTimer) && cancelled[e.ID]
+		switch e.Kind {
+		case EffectStartTimer, EffectCancelTimer:
+			return cancelled[e.ID]
+		case EffectStartInvocation, EffectStopInvocation, EffectSend:
+			return ended[e.ID]
+		case EffectAction, EffectAcquire, EffectRelease, EffectEmit:
+		}
+
+		return false
 	})
 }
 

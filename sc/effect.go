@@ -81,7 +81,30 @@ func ErrorCode(err error) string {
 		return c.Code()
 	}
 
+	// The context's own errors have codes of their own, so that a stored
+	// failure can still be told for a timeout or a cancellation.
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return CodeDeadlineExceeded
+	case errors.Is(err, context.Canceled):
+		return CodeCanceled
+	}
+
 	return ""
+}
+
+// The codes [ErrorCode] gives the context's errors. A [Failed] event loaded
+// from storage with one of them matches the context error again under
+// errors.Is.
+const (
+	CodeDeadlineExceeded = "deadline_exceeded"
+	CodeCanceled         = "canceled"
+)
+
+// Is makes a stored timeout or cancellation match the context's error.
+func (e codedError) Is(target error) bool {
+	return (e.code == CodeDeadlineExceeded && target == context.DeadlineExceeded) ||
+		(e.code == CodeCanceled && target == context.Canceled)
 }
 
 func (f Failed) invocationID() string { return f.ID }

@@ -15,6 +15,10 @@ import (
 // once [Instance.Close] has been called.
 var ErrInstanceClosed = errors.New("instance is closed")
 
+// ErrInstanceDone is returned by [Instance.Await] when the machine has
+// finished without the condition holding, since nothing will change again.
+var ErrInstanceDone = errors.New("instance is done")
+
 // Instance drives one machine instance from its callers' goroutines. It has
 // no goroutine or mailbox of its own: an event is processed on the goroutine
 // that delivers it, whether that is a caller's [Instance.Send] or a service
@@ -277,12 +281,25 @@ func (i *Instance[S, C]) CancelAll() {
 // time itself, with [ManualTimers] or a clock of its own, moves the instance
 // on.
 func (i *Instance[S, C]) Advance(ctx context.Context) (Step[S, C], error) {
-	return i.Send(ctx, nil)
+	step, err := i.Send(ctx, nil)
+
+	// Child machines run on the same clock, and under manual timers they
+	// are moved on with their parent.
+	if i.manual {
+		i.mu.Lock()
+		for _, run := range i.running {
+			run.inbox.put(advance{})
+		}
+		i.mu.Unlock()
+	}
+
+	return step, err
 }
 
 // Await blocks until cond holds for the current snapshot, and returns that
 // snapshot. It checks the snapshot first, then after every change. ctx
-// bounds the wait.
+// bounds the wait. It fails with [ErrInstanceDone] or [ErrInstanceClosed]
+// when the instance has finished or been closed without cond holding.
 func (i *Instance[S, C]) Await(ctx context.Context, cond func(Snapshot[S, C]) bool) (Snapshot[S, C], error) {
 	for {
 		i.mu.Lock()
@@ -291,6 +308,18 @@ func (i *Instance[S, C]) Await(ctx context.Context, cond func(Snapshot[S, C]) bo
 
 		if cond(snap) {
 			return snap, nil
+		}
+
+		// A finished or closed instance never changes again.
+		i.mu.Lock()
+		closed := i.closed
+		i.mu.Unlock()
+
+		switch {
+		case snap.done:
+			return snap, ErrInstanceDone
+		case closed:
+			return snap, ErrInstanceClosed
 		}
 
 		select {
@@ -338,20 +367,36 @@ func (i *Instance[S, C]) process(ctx context.Context, ev any) (Step[S, C], error
 	next, effects, _ := i.m.transition(from, ev, at)
 	step := Step[S, C]{At: at, From: from, Event: ev, To: next, Effects: effects}
 
-	i.hooks.Observe(ctx, step)
-	err := i.apply(ctx, effects)
-
 	// The new snapshot is published once its effects have been carried
 	// out, so a reader never sees a state whose actions are still to run.
-	// It is published even when an action failed: the transition was
-	// taken, and the error goes to the sender.
-	i.mu.Lock()
-	if next.seq != from.seq {
-		i.snap = next
-		close(i.changed)
-		i.changed = make(chan struct{})
+	// It is published even when an action failed, and even when a hook
+	// panics: the transition was taken, and a snapshot left behind would
+	// have the driver stop services the chart still counts as running.
+	defer func() {
+		i.mu.Lock()
+		defer i.mu.Unlock()
+
+		if next.seq != from.seq {
+			i.snap = next
+			close(i.changed)
+			i.changed = make(chan struct{})
+		}
+	}()
+
+	// A hook that panics is the caller's to hear about, but only once the
+	// step's effects have been carried out: the chart has taken the step,
+	// and counts the work those effects start.
+	var failed any
+	func() {
+		defer func() { failed = recover() }()
+
+		i.hooks.Observe(ctx, step)
+	}()
+
+	err := i.apply(ctx, effects)
+	if failed != nil {
+		panic(failed)
 	}
-	i.mu.Unlock()
 
 	return step, err
 }
@@ -396,8 +441,8 @@ func (i *Instance[S, C]) apply(ctx context.Context, effects []Effect[C]) error {
 				i.overflow(e.ID, run)
 			}
 		case EffectEmit:
-			if i.emit != nil {
-				i.emit(ctx, e.Event)
+			if err := listen(ctx, i.emit, e); err != nil && first == nil {
+				first = err
 			}
 		case EffectStartTimer:
 			i.schedule(e)
@@ -419,7 +464,7 @@ func (i *Instance[S, C]) apply(ctx context.Context, effects []Effect[C]) error {
 // been stopped.
 func (i *Instance[S, C]) startService(ctx context.Context, e Effect[C]) {
 	box := newInbox(MaxInbox)
-	runCtx, stop := context.WithCancel(serviceContext(context.WithoutCancel(ctx), box, i.now))
+	runCtx, stop := context.WithCancel(serviceContext(context.WithoutCancel(ctx), box, i.now, i.manual))
 	execCtx, cancel := context.WithCancel(runCtx)
 	token, _ := ctx.Value(settleToken{}).(uint64)
 	run := serviceRun{stop: stop, cancel: cancel, token: token, done: make(chan struct{}), inbox: box}

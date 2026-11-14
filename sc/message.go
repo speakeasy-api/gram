@@ -101,8 +101,37 @@ type (
 
 // serviceContext returns ctx carrying what a driver gives each service run:
 // the inbox its chart can send to, and the driver's clock.
-func serviceContext(ctx context.Context, box *inbox, now func() time.Time) context.Context {
-	return context.WithValue(context.WithValue(ctx, serviceInbox{}, box), driverClock{}, now)
+func serviceContext(ctx context.Context, box *inbox, now func() time.Time, manual bool) context.Context {
+	ctx = context.WithValue(ctx, serviceInbox{}, box)
+	ctx = context.WithValue(ctx, driverClock{}, now)
+
+	return context.WithValue(ctx, manualClock{}, manual)
+}
+
+// manualClock is the context key under which a driver says whether its
+// timers are driven by the caller, and advance is what it puts in a
+// service's inbox when the caller moves time on.
+type (
+	manualClock struct{}
+	advance     struct{}
+)
+
+// listen hands an emitted event to a driver's listener. A listener that
+// panics fails like an action: the step it belongs to stands.
+func listen[C any](ctx context.Context, fn func(context.Context, any), e Effect[C]) (err error) {
+	if fn == nil {
+		return nil
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			err = fmt.Errorf("%w: listener for emit %q in state %q: %v", ErrPanicked, e.Name, e.State, p)
+		}
+	}()
+
+	fn(ctx, e.Event)
+
+	return nil
 }
 
 // Inbox returns the events the chart sends to the running service with
@@ -120,7 +149,19 @@ func Inbox(ctx context.Context) iter.Seq[any] {
 		return func(func(any) bool) {}
 	}
 
-	return box.events(ctx)
+	// What the driver tells a child machine about time is not the chart's
+	// to see.
+	return func(yield func(any) bool) {
+		for ev := range box.events(ctx) {
+			if _, internal := ev.(advance); internal {
+				continue
+			}
+
+			if !yield(ev) {
+				return
+			}
+		}
+	}
 }
 
 // clockFrom returns the clock of the driver running the service that was

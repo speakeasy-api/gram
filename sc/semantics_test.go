@@ -81,7 +81,7 @@ func TestAlwaysCycleIsReportedInsteadOfHanging(t *testing.T) {
 	snap, _ := m.Start(counter{}, epoch)
 
 	require.PanicsWithValue(t,
-		`sc: machine "cycle" does not settle: its Always transitions or raised events form a cycle`,
+		`sc: machine "cycle" does not settle within 10000 steps: its Always transitions or raised events form a cycle, last processing sc_test.tick in states [c]`,
 		func() { m.Transition(snap, tick{}, epoch) },
 	)
 }

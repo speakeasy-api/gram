@@ -172,16 +172,20 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 	}()
 
 	apply := func(effects []Effect[C]) error {
+		var first error
+
 		for _, e := range effects {
 			switch e.Kind {
 			case EffectAction:
-				if err := a.hooks.Exec(ctx, a.m, e, a.now(), deliver); err != nil {
-					return err
+				// A failed action does not hold up the rest of the step,
+				// which the chart has already taken.
+				if err := a.hooks.Exec(ctx, a.m, e, a.now(), deliver); err != nil && first == nil {
+					first = err
 				}
 			case EffectStartInvocation:
 				box := newInbox(MaxInbox)
 				inboxes[e.ID] = box
-				serviceCtx, stop := context.WithCancel(serviceContext(ctx, box, a.now))
+				serviceCtx, stop := context.WithCancel(serviceContext(ctx, box, a.now, false))
 				done := make(chan struct{})
 				stops[e.ID] = func() {
 					stop()
@@ -257,8 +261,8 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 					services.Go(func() { deliver(ctx, Failed{ID: e.ID, Err: ErrInboxFull}) })
 				}
 			case EffectEmit:
-				if a.emit != nil {
-					a.emit(ctx, e.Event)
+				if err := listen(ctx, a.emit, e); err != nil && first == nil {
+					first = err
 				}
 			case EffectAcquire:
 				res.begin(e)
@@ -312,7 +316,7 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 			}
 		}
 
-		return nil
+		return first
 	}
 
 	if err := apply(a.initial); err != nil {
@@ -339,13 +343,12 @@ func (a *Actor[S, C]) Run(ctx context.Context) error {
 			// are still to run. It is published even when an action
 			// failed: the transition was taken, and the error goes to
 			// the sender.
-			err := apply(effects)
+			// An action's error has no caller to go to under an actor;
+			// the hooks see it, and the actor carries on.
+			_ = apply(effects)
 			a.publish(next)
 			if env.reply != nil {
 				env.reply <- step
-			}
-			if err != nil {
-				return err
 			}
 		}
 	}

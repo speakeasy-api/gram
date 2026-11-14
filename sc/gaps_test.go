@@ -209,3 +209,34 @@ func TestAServiceHearsWhatItIsToldAsItIsStopped(t *testing.T) {
 		require.ElementsMatch(t, []any{ping{}, leave{}}, last)
 	})
 }
+
+func TestAPanickingHookDoesNotLeaveAStepHalfDone(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		entered := 0
+		m, err := sc.New("hooked", func(b *sc.Builder[string, counter]) {
+			b.Initial("a")
+			b.State("a").On[tick]().To("b")
+			b.State("b").Entry("count", func(context.Context, counter) { entered++ })
+		})
+		require.NoError(t, err)
+
+		hooks := &sc.Hooks[string, counter]{
+			Transition:     func(context.Context, sc.Step[string, counter]) { panic("hook bug") },
+			Ignored:        nil,
+			EffectStarted:  nil,
+			EffectFinished: nil,
+		}
+
+		inst, err := m.Instance(t.Context(), counter{N: 0}, sc.WithHooks(hooks))
+		require.NoError(t, err)
+		defer inst.Close()
+
+		// The hook's panic reaches the sender, and the step it was told
+		// about is complete: its action ran and the snapshot shows it.
+		require.PanicsWithValue(t, "hook bug", func() { _, _ = inst.Send(t.Context(), tick{}) })
+		require.Equal(t, 1, entered)
+		require.Equal(t, []string{"b"}, inst.Snapshot().Active())
+	})
+}

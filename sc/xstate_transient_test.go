@@ -71,8 +71,8 @@ type xtraBuilder = sc.Builder[string, counter]
 
 // xtraCycle is what the core panics with when a chart with the given id
 // never settles.
-func xtraCycle(id string) string {
-	return `sc: machine "` + id + `" does not settle: its Always transitions or raised events form a cycle`
+func xtraCycle(id, last string) string {
+	return `sc: machine "` + id + `" does not settle within 10000 steps: its Always transitions or raised events form a cycle, last processing ` + last + ` in states [c]`
 }
 
 // xtraCandidates is the chart of the three "candidate" cases: E leaves for D
@@ -572,7 +572,7 @@ func TestXTraTransientAvoidsInfiniteLoopsWithEventlessTransitions(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	require.PanicsWithValue(t, xtraCycle("loop_always"), func() { m.Start(counter{}, epoch) })
+	require.PanicsWithValue(t, xtraCycle("loop_always", "<nil>"), func() { m.Start(counter{}, epoch) })
 }
 
 // XState: transient states (eventless transitions) > should avoid infinite
@@ -591,7 +591,7 @@ func TestXTraTransientAvoidsInfiniteLoopsWithRaisedEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.PanicsWithValue(t, xtraCycle("loop_raised"), func() { m.Start(counter{}, epoch) })
+	require.PanicsWithValue(t, xtraCycle("loop_raised", "sc_test.xtraEvent"), func() { m.Start(counter{}, epoch) })
 }
 
 // XState: transient states (eventless transitions) > shouldn't end up in an

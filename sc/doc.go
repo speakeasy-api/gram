@@ -126,10 +126,11 @@
 //
 // The core's semantics are checked against two outside sources. The SCXML
 // conformance fixtures of the SCION test framework that need no scripting
-// run under internal/scxmltest. XState's own tests for parallel states,
-// history, final states, eventless transitions, actions, invoked services,
-// delayed transitions, guards and restoring are ported in the
-// xstate_*_test.go files,
+// run under internal/scxmltest. XState's own tests are ported in the
+// xstate_*_test.go files: its pure transition function, parallel states,
+// history, final states, eventless transitions, actions, guards, delayed
+// transitions, invoked services, spawning, emitting, errors and time
+// limits, the running interpreter, and restoring,
 // where a comment starting "DIVERGES from XState" marks each place sc
 // behaves differently on purpose.
 //

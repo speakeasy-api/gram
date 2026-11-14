@@ -90,6 +90,13 @@ func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input fun
 
 			settings := append([]RunOption{WithClock(clockFrom(ctx))}, opts...)
 
+			// Under a caller that drives time itself, the child's timers
+			// are driven with the parent's.
+			manual, _ := ctx.Value(manualClock{}).(bool)
+			if manual {
+				settings = append(settings, ManualTimers())
+			}
+
 			// What the child emits during a step waits until that step's
 			// snapshot has been handed up, so the parent never handles an
 			// event from a child it still sees in the state before.
@@ -136,9 +143,19 @@ func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input fun
 			defer stop()
 
 			go func() {
-				for ev := range Inbox(ctx) {
-					// An action's error has no caller here; the child's
-					// hooks see it.
+				box, ok := ctx.Value(serviceInbox{}).(*inbox)
+				if !ok {
+					return
+				}
+
+				// An action's error has no caller here; the child's hooks
+				// see it.
+				for ev := range box.events(ctx) {
+					if _, moved := ev.(advance); moved {
+						_, _ = inst.Advance(ctx)
+						continue
+					}
+
 					_, _ = inst.Send(ctx, ev)
 				}
 			}()

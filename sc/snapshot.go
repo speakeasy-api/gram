@@ -669,8 +669,10 @@ func (r *run[S, C]) checkConfig() error {
 }
 
 // StartIn returns a new instance with context c that is already in the
-// given states at now, as if it had arrived there. states names leaf states,
-// one per active region; their ancestors become active too. No entry action
+// given states at now, as if it had arrived there. states names one state
+// per active region; their ancestors become active too, a state with
+// children stands for the states entering it would lead to, and a region
+// that is not named gets its default entry. No entry action
 // runs, but the timers and services of every active state start, and an
 // Always transition whose guard holds is taken as it would be on arrival, so
 // the returned effects are the ones a driver must carry out to keep the
@@ -717,14 +719,30 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 		listed:   false,
 	}
 
+	// A state that has children stands for the states entering it leads
+	// to, and regions nobody names get their default entry.
+	set := &nodeSet[S, C]{in: make([]bool, len(m.ordered)+1), list: nil}
+
+	named := make([]*node[S, C], 0, len(states))
 	for _, s := range states {
 		n, ok := m.nodes[s]
 		if !ok || n.kind == kindHistory {
 			return zero, nil, fmt.Errorf("%w: %q is not a state of the chart", ErrInvalidSnapshot, fmt.Sprint(s))
 		}
+		named = append(named, n)
+	}
 
-		for a := n; a != nil; a = a.parent {
-			r.activate(a)
+	for _, n := range named {
+		r.addDescendants(set, n)
+	}
+	for _, n := range named {
+		r.addAncestors(set, n, m.root)
+	}
+	r.fillRegions(set, m.root)
+
+	for _, n := range set.list {
+		if set.in[n.order] {
+			r.activate(n)
 		}
 	}
 

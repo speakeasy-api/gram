@@ -57,6 +57,9 @@ type Machine[S comparable, C any] struct {
 	// strict is set by StrictSCXML.
 	strict bool
 
+	// maxSteps bounds the work of one step; see MaxSteps.
+	maxSteps int
+
 	// sends is set when a transition sends to a service, and emits when
 	// one emits.
 	sends bool
@@ -78,6 +81,14 @@ type options struct {
 	migrate          func(RawSnapshot) (RawSnapshot, error)
 	allowUnreachable bool
 	strictSCXML      bool
+	maxSteps         int
+}
+
+// MaxSteps sets how many eventless transitions and internal events one step
+// may process before the chart is taken to be in a cycle, which panics. The
+// default is 10,000; raise it for a chart that legitimately takes more.
+func MaxSteps(n int) Option {
+	return func(o *options) { o.maxSteps = n }
 }
 
 // StrictSCXML makes a transition marked [Transition.Reenter] follow SCXML's
@@ -165,12 +176,17 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 		bound:         map[string]boundService[C]{},
 		boundReleases: map[string]func(context.Context, any, Leave[S]){},
 		strict:        o.strictSCXML,
+		maxSteps:      maxSettleSteps,
 		sends:         false,
 		emits:         false,
 	}
 
 	if id == "" {
 		b.errorf("machine id is empty")
+	}
+
+	if o.maxSteps > 0 {
+		m.maxSteps = o.maxSteps
 	}
 
 	m.resolve(b)

@@ -79,6 +79,16 @@ func (h *Hooks[S, C]) Exec(ctx context.Context, m *Machine[S, C], e Effect[C], n
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, budget)
 		defer cancel()
+
+		// The budget holds whether or not the service heeds its context:
+		// when it runs out the chart is told the service failed, and
+		// whatever the service reports afterwards is ignored.
+		if e.Kind == EffectStartInvocation {
+			overdue := time.AfterFunc(budget, func() {
+				send(ctx, Failed{ID: e.ID, Err: context.DeadlineExceeded})
+			})
+			defer overdue.Stop()
+		}
 	}
 
 	if h != nil && h.EffectStarted != nil {
