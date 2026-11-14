@@ -11,8 +11,13 @@ export async function readBody(req: IncomingMessage): Promise<string> {
 
 /** Listens on a free loopback port and returns the server's base URL. */
 export async function listenOnLoopback(server: Server): Promise<string> {
-  await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", () => resolve());
+  await new Promise<void>((resolve, reject) => {
+    // Without this a bind failure leaves the setup waiting forever.
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
   });
   const { port } = server.address() as AddressInfo;
   return `http://127.0.0.1:${port}`;
