@@ -1464,7 +1464,7 @@ paths:
             x-speakeasy-name-override: getMemoryEvalRun
     /admin/memoryEval.runs:
         get:
-            description: Organizational Memory eval runs, newest first, without their reports.
+            description: Organizational Memory eval runs, newest first, without their reports. Read one run with getMemoryEvalRun for its report.
             operationId: adminListMemoryEvalRuns
             parameters:
                 - allowEmptyValue: true
@@ -1638,6 +1638,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - admin_auth_header_Authorization: []
             summary: startMemoryEvalRun admin
@@ -100156,7 +100162,15 @@ components:
                     format: int64
                 defaults:
                     $ref: '#/components/schemas/AdminMemoryEvalRunConfig'
-                runs_today:
+                max_answer_models:
+                    type: integer
+                    description: Most answer models one run may compare.
+                    format: int64
+                max_runs:
+                    type: integer
+                    description: Most repeats per answer model and arm.
+                    format: int64
+                runs_last_24h:
                     type: integer
                     description: Runs started in the last 24 hours.
                     format: int64
@@ -100165,7 +100179,9 @@ components:
                 - defaults
                 - allowed_models
                 - daily_run_limit
-                - runs_today
+                - runs_last_24h
+                - max_answer_models
+                - max_runs
         AdminMemoryEvalRun:
             type: object
             properties:

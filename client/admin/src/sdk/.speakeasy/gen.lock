@@ -1101,7 +1101,7 @@ examples:
     speakeasy-default-admin-get-memory-eval-options:
       responses:
         "200":
-          application/json: {"allowed_models": ["<value 1>", "<value 2>"], "daily_run_limit": 261511, "defaults": {"answer_models": ["<value 1>"], "digest_model": "<value>", "judge_model": "<value>", "runs": 871521, "summary_model": "<value>"}, "runs_today": 959694}
+          application/json: {"allowed_models": ["<value 1>", "<value 2>"], "daily_run_limit": 261511, "defaults": {"answer_models": ["<value 1>"], "digest_model": "<value>", "judge_model": "<value>", "runs": 871521, "summary_model": "<value>"}, "max_answer_models": 744715, "max_runs": 261511, "runs_last_24h": 312052}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

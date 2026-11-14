@@ -5,11 +5,6 @@
 
 import { z } from "zod";
 
-/** Server cap on answer models per run (evalrun.MaxAnswerModels). */
-export const MAX_ANSWER_MODELS = 4;
-/** Server cap on repeats per model and arm (evalrun.MaxRuns). */
-export const MAX_RUNS = 3;
-
 export type MemoryEvalStatus = "queued" | "running" | "succeeded" | "failed";
 
 export type MemoryEvalConfig = {
@@ -37,8 +32,18 @@ export type MemoryEvalOptions = {
   defaults: MemoryEvalConfig;
   allowed_models: string[];
   daily_run_limit: number;
-  runs_today: number;
+  runs_last_24h: number;
+  /** Server cap on answer models per run. */
+  max_answer_models: number;
+  /** Server cap on repeats per answer model and arm. */
+  max_runs: number;
 };
+
+/** The parts of the options a config is checked against. */
+export type ConfigLimits = Pick<
+  MemoryEvalOptions,
+  "allowed_models" | "max_answer_models" | "max_runs"
+>;
 
 export type KindScore = { correct: number; total: number };
 
@@ -293,21 +298,21 @@ export function citationRate(s: ArmScore): string {
   return percent(s.valid_cited / s.answerable);
 }
 
-/** validateConfig mirrors the server's caps so the form says why early. */
+/** validateConfig applies the server's caps so the form says why early. */
 export function validateConfig(
   cfg: MemoryEvalConfig,
-  allowed: string[],
+  limits: ConfigLimits,
 ): string | null {
   if (cfg.answer_models.length === 0) return "Pick at least one answer model.";
-  if (cfg.answer_models.length > MAX_ANSWER_MODELS)
-    return `Pick at most ${MAX_ANSWER_MODELS} answer models.`;
+  if (cfg.answer_models.length > limits.max_answer_models)
+    return `Pick at most ${limits.max_answer_models} answer models.`;
   if (new Set(cfg.answer_models).size !== cfg.answer_models.length)
     return "Each answer model can appear once.";
-  if (cfg.runs < 1 || cfg.runs > MAX_RUNS)
-    return `Runs must be between 1 and ${MAX_RUNS}.`;
+  if (cfg.runs < 1 || cfg.runs > limits.max_runs)
+    return `Runs must be between 1 and ${limits.max_runs}.`;
   if (cfg.answer_models.includes(cfg.judge_model))
     return "The judge must not also be an answer model; it would grade itself.";
-  const allowedSet = new Set(allowed);
+  const allowedSet = new Set(limits.allowed_models);
   for (const model of [
     ...cfg.answer_models,
     cfg.judge_model,

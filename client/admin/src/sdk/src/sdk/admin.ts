@@ -571,7 +571,7 @@ export class Admin extends ClientSDK {
    * listMemoryEvalRuns admin
    *
    * @remarks
-   * Organizational Memory eval runs, newest first, without their reports.
+   * Organizational Memory eval runs, newest first, without their reports. Read one run with getMemoryEvalRun for its report.
    */
   async listMemoryEvalRuns(
     request?: AdminListMemoryEvalRunsRequest | undefined,

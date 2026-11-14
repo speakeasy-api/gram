@@ -32,15 +32,17 @@ func (s *Service) SetMemoryEvalRunStarter(starter MemoryEvalRunStarter) {
 }
 
 func (s *Service) GetMemoryEvalOptions(ctx context.Context, _ *gen.GetMemoryEvalOptionsPayload) (*gen.AdminMemoryEvalOptions, error) {
-	today, err := evalrun.RunsInWindow(ctx, s.db)
+	recent, err := evalrun.RunsInWindow(ctx, s.db)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count memory eval runs").LogError(ctx, s.logger)
 	}
 	return &gen.AdminMemoryEvalOptions{
-		Defaults:      memoryEvalConfigView(evalrun.DefaultConfig()),
-		AllowedModels: openrouter.AllowedModels(),
-		DailyRunLimit: evalrun.DailyRunLimit,
-		RunsToday:     int(today),
+		Defaults:        memoryEvalConfigView(evalrun.DefaultConfig()),
+		AllowedModels:   openrouter.AllowedModels(),
+		DailyRunLimit:   evalrun.DailyRunLimit,
+		RunsLast24h:     int(recent),
+		MaxAnswerModels: evalrun.MaxAnswerModels,
+		MaxRuns:         evalrun.MaxRuns,
 	}, nil
 }
 
@@ -77,7 +79,7 @@ func (s *Service) ListMemoryEvalRuns(ctx context.Context, payload *gen.ListMemor
 	}
 	runs := make([]*gen.AdminMemoryEvalRun, 0, len(rows))
 	for _, row := range rows {
-		runs = append(runs, memoryEvalRunView(row, false))
+		runs = append(runs, memoryEvalRunView(listedRun(row)))
 	}
 	return &gen.ListMemoryEvalRunsResult{Runs: runs, NextCursor: next}, nil
 }
@@ -94,7 +96,7 @@ func (s *Service) GetMemoryEvalRun(ctx context.Context, payload *gen.GetMemoryEv
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "get memory eval run").LogError(ctx, s.logger)
 	}
-	return memoryEvalRunView(row, true), nil
+	return memoryEvalRunView(row), nil
 }
 
 func (s *Service) StartMemoryEvalRun(ctx context.Context, payload *gen.StartMemoryEvalRunPayload) (*gen.AdminMemoryEvalRun, error) {
@@ -133,7 +135,7 @@ func (s *Service) StartMemoryEvalRun(ctx context.Context, payload *gen.StartMemo
 		return nil, oops.E(oops.CodeUnexpected, err, "start memory eval run").LogError(ctx, logger)
 	}
 	logger.InfoContext(ctx, "started memory eval run")
-	return memoryEvalRunView(run, false), nil
+	return memoryEvalRunView(run), nil
 }
 
 func memoryEvalConfigView(cfg evalrun.Config) *gen.AdminMemoryEvalRunConfig {
@@ -159,9 +161,24 @@ func memoryEvalConfigFromPayload(cfg *gen.AdminMemoryEvalRunConfig) evalrun.Conf
 	}
 }
 
-// memoryEvalRunView maps a row; withReport adds the report, which the list
-// leaves out to keep pages small.
-func memoryEvalRunView(row repo.MemoryEvalRun, withReport bool) *gen.AdminMemoryEvalRun {
+// listedRun is a listed run as a run row. The list query leaves out the
+// report to keep pages small, so the view shows none.
+func listedRun(row repo.ListRunsRow) repo.MemoryEvalRun {
+	var run repo.MemoryEvalRun
+	run.ID = row.ID
+	run.Status = row.Status
+	run.Config = row.Config
+	run.Error = row.Error
+	run.CostUsd = row.CostUsd
+	run.RequestedBy = row.RequestedBy
+	run.StartedAt = row.StartedAt
+	run.FinishedAt = row.FinishedAt
+	run.CreatedAt = row.CreatedAt
+	return run
+}
+
+// memoryEvalRunView maps a row, with its report when the row carries one.
+func memoryEvalRunView(row repo.MemoryEvalRun) *gen.AdminMemoryEvalRun {
 	var cfg evalrun.Config
 	// Queue validated and encoded the config; a decode failure shows an empty
 	// config rather than hiding the run.
@@ -187,7 +204,7 @@ func memoryEvalRunView(row repo.MemoryEvalRun, withReport bool) *gen.AdminMemory
 	if row.Error.Valid {
 		view.Error = &row.Error.String
 	}
-	if withReport && len(row.Report) > 0 {
+	if len(row.Report) > 0 {
 		view.ReportJSON = conv.PtrEmpty(string(row.Report))
 	}
 	if row.StartedAt.Valid {

@@ -3304,7 +3304,11 @@ type GetMemoryEvalOptionsResponseBody struct {
 	// Runs allowed per rolling 24 hours, across all staff.
 	DailyRunLimit *int `form:"daily_run_limit,omitempty" json:"daily_run_limit,omitempty" xml:"daily_run_limit,omitempty"`
 	// Runs started in the last 24 hours.
-	RunsToday *int `form:"runs_today,omitempty" json:"runs_today,omitempty" xml:"runs_today,omitempty"`
+	RunsLast24h *int `form:"runs_last_24h,omitempty" json:"runs_last_24h,omitempty" xml:"runs_last_24h,omitempty"`
+	// Most answer models one run may compare.
+	MaxAnswerModels *int `form:"max_answer_models,omitempty" json:"max_answer_models,omitempty" xml:"max_answer_models,omitempty"`
+	// Most repeats per answer model and arm.
+	MaxRuns *int `form:"max_runs,omitempty" json:"max_runs,omitempty" xml:"max_runs,omitempty"`
 }
 
 // ListMemoryEvalRunsResponseBody is the type of the "admin" service
@@ -26021,6 +26025,24 @@ type GetMemoryEvalRunGatewayErrorResponseBody struct {
 // service "startMemoryEvalRun" endpoint HTTP response body for the
 // "rate_limit_exceeded" error.
 type StartMemoryEvalRunRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartMemoryEvalRunUnavailableResponseBody is the type of the "admin" service
+// "startMemoryEvalRun" endpoint HTTP response body for the "unavailable" error.
+type StartMemoryEvalRunUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -49911,8 +49933,10 @@ func NewDeleteGcpIamPlatformCredentialGatewayError(body *DeleteGcpIamPlatformCre
 // "getMemoryEvalOptions" endpoint result from a HTTP "OK" response.
 func NewGetMemoryEvalOptionsAdminMemoryEvalOptionsOK(body *GetMemoryEvalOptionsResponseBody) *admin.AdminMemoryEvalOptions {
 	v := &admin.AdminMemoryEvalOptions{
-		DailyRunLimit: *body.DailyRunLimit,
-		RunsToday:     *body.RunsToday,
+		DailyRunLimit:   *body.DailyRunLimit,
+		RunsLast24h:     *body.RunsLast24h,
+		MaxAnswerModels: *body.MaxAnswerModels,
+		MaxRuns:         *body.MaxRuns,
 	}
 	v.Defaults = unmarshalAdminMemoryEvalRunConfigResponseBodyToAdminAdminMemoryEvalRunConfig(body.Defaults)
 	v.AllowedModels = make([]string, len(body.AllowedModels))
@@ -50432,6 +50456,21 @@ func NewStartMemoryEvalRunAdminMemoryEvalRunOK(body *StartMemoryEvalRunResponseB
 // NewStartMemoryEvalRunRateLimitExceeded builds a admin service
 // startMemoryEvalRun endpoint rate_limit_exceeded error.
 func NewStartMemoryEvalRunRateLimitExceeded(body *StartMemoryEvalRunRateLimitExceededResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartMemoryEvalRunUnavailable builds a admin service startMemoryEvalRun
+// endpoint unavailable error.
+func NewStartMemoryEvalRunUnavailable(body *StartMemoryEvalRunUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -54735,8 +54774,14 @@ func ValidateGetMemoryEvalOptionsResponseBody(body *GetMemoryEvalOptionsResponse
 	if body.DailyRunLimit == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("daily_run_limit", "body"))
 	}
-	if body.RunsToday == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("runs_today", "body"))
+	if body.RunsLast24h == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runs_last_24h", "body"))
+	}
+	if body.MaxAnswerModels == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("max_answer_models", "body"))
+	}
+	if body.MaxRuns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("max_runs", "body"))
 	}
 	if body.Defaults != nil {
 		if err2 := ValidateAdminMemoryEvalRunConfigResponseBody(body.Defaults); err2 != nil {
@@ -84253,6 +84298,30 @@ func ValidateGetMemoryEvalRunGatewayErrorResponseBody(body *GetMemoryEvalRunGate
 // ValidateStartMemoryEvalRunRateLimitExceededResponseBody runs the validations
 // defined on startMemoryEvalRun_rate_limit_exceeded_response_body
 func ValidateStartMemoryEvalRunRateLimitExceededResponseBody(body *StartMemoryEvalRunRateLimitExceededResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartMemoryEvalRunUnavailableResponseBody runs the validations
+// defined on startMemoryEvalRun_unavailable_response_body
+func ValidateStartMemoryEvalRunUnavailableResponseBody(body *StartMemoryEvalRunUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
