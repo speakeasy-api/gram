@@ -3,6 +3,7 @@ package sc_test
 import (
 	"context"
 	"encoding/json"
+	"iter"
 	"testing"
 	"testing/synctest"
 
@@ -57,13 +58,13 @@ type charge struct {
 func TestAServiceReadsTheEventItsStateWasEnteredWith(t *testing.T) {
 	t.Parallel()
 
-	chart := func(t *testing.T, work func(context.Context, counter) (int, error)) *sc.Machine[string, counter] {
+	chart := func(t *testing.T, work func(context.Context, *sc.Run, counter, charge) (int, error)) *sc.Machine[string, counter] {
 		t.Helper()
 
 		m, err := sc.New("charging", func(b *sc.Builder[string, counter]) {
 			b.Initial("idle")
 			b.State("idle").On[charge]().To("charging")
-			inv := b.State("charging").Invoke("charge", work).Retry(sc.Retry{Max: 1, First: 0, Cap: 0, Jitter: 0, If: nil})
+			inv := b.State("charging").InvokeOn[charge]("charge", work).Retry(sc.Retry{Max: 1, First: 0, Cap: 0, Jitter: 0, If: nil})
 			inv.OnDone().Assign("keep", func(c counter, d sc.Done[int]) counter { c.N = d.Result; return c }).To("done")
 			inv.OnError().To("done")
 			b.Final("done")
@@ -76,8 +77,7 @@ func TestAServiceReadsTheEventItsStateWasEnteredWith(t *testing.T) {
 	// The service acts on the amount without the chart copying it into
 	// the context.
 	synctest.Test(t, func(t *testing.T) {
-		m := chart(t, func(ctx context.Context, _ counter) (int, error) {
-			ev, _ := sc.Trigger(ctx).(charge)
+		m := chart(t, func(_ context.Context, _ *sc.Run, _ counter, ev charge) (int, error) {
 			return ev.Amount, nil
 		})
 
@@ -126,7 +126,7 @@ func TestAParentDecidesOnWhereItsChildIs(t *testing.T) {
 				func(sc.Snapshot[string, counter]) (int, error) { return 0, nil },
 			)
 			door.OnError().Stay()
-			home.On[tick]().SendTo("push", "door", func(_ counter, ev tick) any { return ev })
+			home.On[tick]().SendTo("push", door, func(_ counter, ev tick) any { return ev })
 			home.On[leave]().WhenChildIn("door", "open").To("away")
 			b.State("away")
 		})
@@ -176,20 +176,21 @@ func TestAServiceHearsWhatItIsToldAsItIsStopped(t *testing.T) {
 
 		m, err := sc.New("worker", func(b *sc.Builder[string, counter]) {
 			b.Initial("working")
-			working := b.State("working").SendOnExit("flush", "work", func(counter) any { return ping{} })
-			inv := working.Invoke("work", func(ctx context.Context, _ counter) (int, error) {
+			working := b.State("working")
+			inv := working.Receive[any]("work", func(ctx context.Context, _ *sc.Run, _ counter, inbox iter.Seq[any]) (int, error) {
 				// The context ends when the state is left; what was sent
 				// by that step is still handed over.
-				for ev := range sc.Inbox(ctx) {
+				for ev := range inbox {
 					last = append(last, ev)
 				}
 
 				return 0, context.Cause(ctx)
 			})
+			working.SendOnExit("flush", inv, func(counter) any { return ping{} })
 			inv.OnDone().Stay()
 			inv.OnError().Stay()
 			working.On[leave]().
-				SendTo("bye", "work", func(_ counter, ev leave) any { return ev }).
+				SendTo("bye", inv, func(_ counter, ev leave) any { return ev }).
 				To("stopped")
 			b.State("stopped")
 		})

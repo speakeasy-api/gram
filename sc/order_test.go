@@ -64,7 +64,7 @@ var errCardDeclined = errors.New("card declined")
 var epoch = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 // orderChart is the chart most tests drive. charge is the payment service.
-func orderChart(t *testing.T, charge func(context.Context, order) (string, error), opts ...sc.Option) *sc.Machine[state, order] {
+func orderChart(t *testing.T, charge func(context.Context, *sc.Run, order) (string, error), opts ...sc.Option) *sc.Machine[state, order] {
 	t.Helper()
 
 	m, err := sc.New("order", func(b *sc.Builder[state, order]) {
@@ -123,7 +123,7 @@ func orderChart(t *testing.T, charge func(context.Context, order) (string, error
 	return m
 }
 
-func chargeOK(context.Context, order) (string, error) { return "rcpt-1", nil }
+func chargeOK(context.Context, *sc.Run, order) (string, error) { return "rcpt-1", nil }
 
 // effect finds the first effect of the given kind.
 func effect[C any](t *testing.T, effects []sc.Effect[C], kind sc.EffectKind) sc.Effect[C] {

@@ -1,6 +1,8 @@
 package sc_test
 
 import (
+	"context"
+	"iter"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -216,9 +218,9 @@ func TestAStateSendsAndEmitsOnEntry(t *testing.T) {
 		b.State("idle").On[tick]().To("working")
 
 		working := b.State("working").
-			SendOnEntry("greet", "work", func(counter) any { return ping{} }).
 			EmitOnEntry("announce", func(counter) greeting { return greeting{Text: "started"} })
-		inv := working.Requires[int]("work")
+		inv := working.Receive[ping]("work", func(context.Context, *sc.Run, counter, iter.Seq[ping]) (int, error) { return 0, nil })
+		working.SendOnEntry("greet", inv, func(counter) ping { return ping{} })
 		inv.OnDone().To("done")
 		inv.OnError().To("done")
 

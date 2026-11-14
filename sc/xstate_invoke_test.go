@@ -22,8 +22,9 @@ package sc_test
 //     Builder.Chart, and a parallel root is Builder.Regions. An XState
 //     machine that declares no states is a chart without states.
 //   - A service's input is the context as it is when the state is entered.
-//     Only InvokeMachine has an input mapper. A service reads the event its
-//     state was entered with from sc.Trigger.
+//     Only InvokeMachine has an input mapper. A service declares the event
+//     its state was entered with by InvokeOn; a stream cannot, so a
+//     transition records what the stream needs in the context.
 //   - An XState entry action that sends to the parent is EmitOnEntry, and
 //     one that sends to an actor its state invokes is SendOnEntry.
 //   - XState runs its promise cases twice, for a Promise and for a
@@ -109,6 +110,13 @@ type xinvFlags struct {
 	Foo bool `json:"foo"`
 }
 
+// xinvBegun is a context with XState's "foo" flag that also records whether
+// the BEGIN event was received.
+type xinvBegun struct {
+	Foo   bool `json:"foo"`
+	Began bool `json:"began"`
+}
+
 // xinvText is a context holding one string.
 type xinvText struct {
 	Value string `json:"value"`
@@ -154,8 +162,8 @@ func (l *xinvLog) all() []string {
 
 // xinvCallbackOf is a stream standing for an XState callback actor: it sends
 // events back and then stays alive until it is stopped.
-func xinvCallbackOf[C any](events ...any) func(context.Context, C) iter.Seq2[any, error] {
-	return func(ctx context.Context, _ C) iter.Seq2[any, error] {
+func xinvCallbackOf[C any](events ...any) func(context.Context, *sc.Run, C) iter.Seq2[any, error] {
+	return func(ctx context.Context, _ *sc.Run, _ C) iter.Seq2[any, error] {
 		return func(yield func(any, error) bool) {
 			for _, ev := range events {
 				if !yield(ev, nil) {
@@ -171,8 +179,8 @@ func xinvCallbackOf[C any](events ...any) func(context.Context, C) iter.Seq2[any
 // xinvDisposable is a stream standing for an XState callback actor that
 // returns a disposal function: it calls started, stays alive until it is
 // stopped, and then calls stopped.
-func xinvDisposable[C any](started, stopped func()) func(context.Context, C) iter.Seq2[any, error] {
-	return func(ctx context.Context, _ C) iter.Seq2[any, error] {
+func xinvDisposable[C any](started, stopped func()) func(context.Context, *sc.Run, C) iter.Seq2[any, error] {
+	return func(ctx context.Context, _ *sc.Run, _ C) iter.Seq2[any, error] {
 		return func(func(any, error) bool) {
 			started()
 			defer stopped()
@@ -184,15 +192,15 @@ func xinvDisposable[C any](started, stopped func()) func(context.Context, C) ite
 
 // xinvFailing is a stream standing for an XState callback actor that throws
 // as it starts.
-func xinvFailing[C any](context.Context, C) iter.Seq2[any, error] {
+func xinvFailing[C any](context.Context, *sc.Run, C) iter.Seq2[any, error] {
 	return func(yield func(any, error) bool) {
 		yield(nil, errXinvTest)
 	}
 }
 
 // xinvPromiseOf is a service that succeeds with value.
-func xinvPromiseOf[C, R any](value R) func(context.Context, C) (R, error) {
-	return func(context.Context, C) (R, error) { return value, nil }
+func xinvPromiseOf[C, R any](value R) func(context.Context, *sc.Run, C) (R, error) {
+	return func(context.Context, *sc.Run, C) (R, error) { return value, nil }
 }
 
 // xinvNoOutput is the output of a child machine whose result is not used.
@@ -269,10 +277,11 @@ func TestXInvChildCanImmediatelyRespondToTheParentWithMultipleEvents(t *testing.
 		parent, err := sc.New("parent", func(b *xinvBuilder) {
 			b.Initial("start")
 			start := b.State("start")
-			start.InvokeMachine("someService", child, xinvSame, xinvNoOutput[counter]).OnError().Stay()
+			someService := start.InvokeMachine("someService", child, xinvSame, xinvNoOutput[counter])
+			someService.OnError().Stay()
 			start.Always().When("minus three", func(c counter, _ struct{}) bool { return c.N == -3 }).To("stop")
 			start.On[xinvDec]().Assign("decrement", func(c counter, _ xinvDec) counter { c.N--; return c })
-			start.On[xinvForwardDec]().SendTo("forward", "someService", func(_ counter, ev xinvForwardDec) any { return ev })
+			start.On[xinvForwardDec]().SendTo("forward", someService, func(_ counter, ev xinvForwardDec) any { return ev })
 			b.Final("stop")
 		})
 		require.NoError(t, err)
@@ -454,10 +463,11 @@ func TestXInvCommunicatesWithTheChildMachineInvokeOnMachine(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		m, err := sc.New("parent", func(b *xinvBuilder) {
-			b.Chart().InvokeMachine("foo-child", xinvSubMachine(t), xinvSame, xinvNoOutput[counter]).OnError().Stay()
+			fooChild := b.Chart().InvokeMachine("foo-child", xinvSubMachine(t), xinvSame, xinvNoOutput[counter])
+			fooChild.OnError().Stay()
 
 			b.Initial("one")
-			one := b.State("one").SendOnEntry("send next", "foo-child", func(counter) any { return xinvNext{} })
+			one := b.State("one").SendOnEntry("send next", fooChild, func(counter) any { return xinvNext{} })
 			one.On[xinvNext]().To("two")
 			b.Final("two")
 		})
@@ -488,8 +498,10 @@ func TestXInvCommunicatesWithTheChildMachineInvokeOnState(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m, err := sc.New("parent", func(b *xinvBuilder) {
 			b.Initial("one")
-			one := b.State("one").SendOnEntry("send next", "foo-child", func(counter) any { return xinvNext{} })
-			one.InvokeMachine("foo-child", xinvSubMachine(t), xinvSame, xinvNoOutput[counter]).OnError().Stay()
+			one := b.State("one")
+			fooChild := one.InvokeMachine("foo-child", xinvSubMachine(t), xinvSame, xinvNoOutput[counter])
+			fooChild.OnError().Stay()
+			one.SendOnEntry("send next", fooChild, func(counter) any { return xinvNext{} })
 			one.On[xinvNext]().To("two")
 			b.Final("two")
 		})
@@ -521,8 +533,9 @@ func TestXInvTransitionsCorrectlyIfChildInvocationGoesDirectlyToFinalState(t *te
 
 		m, err := sc.New("parent", func(b *xinvBuilder) {
 			b.Initial("one")
-			one := b.State("one").SendOnEntry("send next", "foo-child", func(counter) any { return xinvNext{} })
+			one := b.State("one")
 			invoked := one.InvokeMachine("foo-child", child, xinvSame, xinvNoOutput[counter])
+			one.SendOnEntry("send next", invoked, func(counter) any { return xinvNext{} })
 			invoked.OnDone().To("two")
 			invoked.OnError().Stay()
 			b.State("two").On[xinvNext]().To("three")
@@ -620,7 +633,7 @@ func TestXInvDoesNotReinvokeRootLevelInvocationsOnRootNonReenteringTransitions(t
 // xinvRootInvokeChart is XState's machine that invokes a callback actor at
 // its root and completes on finish: the chart's service runs until the
 // machine is done.
-func xinvRootInvokeChart[Ev any](t *testing.T, stream func(context.Context, counter) iter.Seq2[any, error]) *sc.Machine[string, counter] {
+func xinvRootInvokeChart[Ev any](t *testing.T, stream func(context.Context, *sc.Run, counter) iter.Seq2[any, error]) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("machine", func(b *xinvBuilder) {
@@ -677,7 +690,7 @@ func TestXInvChildDoesNotInvokeAnActorWhenStoppedByItsParent(t *testing.T) {
 		child, err := sc.New("child", func(b *xinvBuilder) {
 			b.Initial("idle")
 			idle := b.State("idle")
-			idle.Stream("starter", func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+			idle.Stream("starter", func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 				return func(yield func(any, error) bool) {
 					// Only the first run sends, so the child cannot loop.
 					if invoked.Add(1) == 1 && !yield(xinvStarted{}, nil) {
@@ -720,7 +733,7 @@ func TestXInvChildDoesNotInvokeAnActorWhenStoppedByItsParent(t *testing.T) {
 
 // xinvPendingChart is the chart most of XState's promise cases use: pending
 // invokes a service, and its completion leads to the final state success.
-func xinvPendingChart[C, R any](t *testing.T, service func(context.Context, C) (R, error), done func(*sc.Transition[string, C, sc.Done[R]])) *sc.Machine[string, C] {
+func xinvPendingChart[C, R any](t *testing.T, service func(context.Context, *sc.Run, C) (R, error), done func(*sc.Transition[string, C, sc.Done[R]])) *sc.Machine[string, C] {
 	t.Helper()
 
 	m, err := sc.New("promise", func(b *sc.Builder[string, C]) {
@@ -759,7 +772,7 @@ func TestXInvPromiseRejectsThroughOnError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m, err := sc.New("invokePromise", func(b *sc.Builder[string, xinvPromise]) {
 			b.Initial("pending")
-			inv := b.State("pending").Invoke("promise", func(_ context.Context, c xinvPromise) (int, error) {
+			inv := b.State("pending").Invoke("promise", func(_ context.Context, _ *sc.Run, c xinvPromise) (int, error) {
 				if !c.Succeed {
 					return 0, fmt.Errorf("%w: failed on purpose for: %d", errXinvTest, c.ID)
 				}
@@ -834,7 +847,7 @@ func xinvCheckUnhandledError(t *testing.T, service func(*sc.StateBuilder[string,
 }
 
 func xinvFailingPromise(s *sc.StateBuilder[string, counter]) *sc.Invocation[string, counter, struct{}] {
-	return s.Invoke("failing", func(context.Context, counter) (struct{}, error) { return struct{}{}, errXinvTest })
+	return s.Invoke("failing", func(context.Context, *sc.Run, counter) (struct{}, error) { return struct{}{}, errXinvTest })
 }
 
 func xinvFailingCallback(s *sc.StateBuilder[string, counter]) *sc.Invocation[string, counter, struct{}] {
@@ -920,7 +933,7 @@ func TestXInvPromiseServiceResolvesThroughOnDoneForCompoundStateNodes(t *testing
 }
 
 // xinvCountPromise resolves with XState's { count: 1 }.
-func xinvCountPromise(context.Context, counter) (counter, error) { return counter{N: 1}, nil }
+func xinvCountPromise(context.Context, *sc.Run, counter) (counter, error) { return counter{N: 1}, nil }
 
 // XState: should assign the resolved data when invoked with a promise factory
 func TestXInvAssignsTheResolvedDataOfAPromiseFactory(t *testing.T) {
@@ -943,7 +956,7 @@ func TestXInvProvidesResolvedOutputDirectlyToOnDone(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		m := xinvPendingChart(t,
-			func(context.Context, xinvText) (xinvText, error) { return xinvText{Value: "David"}, nil },
+			func(context.Context, *sc.Run, xinvText) (xinvText, error) { return xinvText{Value: "David"}, nil },
 			func(done *sc.Transition[string, xinvText, sc.Done[xinvText]]) {
 				done.Assign("keep name", func(c xinvText, d sc.Done[xinvText]) xinvText { c.Value = d.Result.Value; return c })
 			},
@@ -1021,7 +1034,7 @@ func TestXInvProvidesTheResolvedDataOfAPromiseService(t *testing.T) {
 // XState: should be able to specify a Promise as a service
 //
 // XState's input mapper hands the promise the BEGIN event that entered the
-// state; the sc service reads it with sc.Trigger.
+// state; the sc service declares it with InvokeOn.
 func TestXInvSpecifiesAPromiseAsAService(t *testing.T) {
 	t.Parallel()
 
@@ -1031,8 +1044,8 @@ func TestXInvSpecifiesAPromiseAsAService(t *testing.T) {
 		m, err := sc.New("promise", func(b *sc.Builder[string, xinvFlags]) {
 			b.Initial("pending")
 			b.State("pending").On[xinvBegin]().To("first")
-			inv := b.State("first").Invoke("promise", func(ctx context.Context, c xinvFlags) (struct{}, error) {
-				if begin, ok := sc.Trigger(ctx).(xinvBegin); ok && c.Foo && begin.Payload {
+			inv := b.State("first").InvokeOn[xinvBegin]("promise", func(_ context.Context, _ *sc.Run, c xinvFlags, begin xinvBegin) (struct{}, error) {
+				if c.Foo && begin.Payload {
 					return struct{}{}, nil
 				}
 
@@ -1061,7 +1074,7 @@ func TestXInvReusesTheSamePromiseLogicWithAUniquePromisePerActor(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		var calls atomic.Int32
-		next := func(context.Context, xinvPair) (int, error) { return int(calls.Add(1)), nil }
+		next := func(context.Context, *sc.Run, xinvPair) (int, error) { return int(calls.Add(1)), nil }
 
 		region := func(b *sc.Builder[string, xinvPair], name string, keep func(xinvPair, sc.Done[int]) xinvPair) {
 			b.State(name, func(b *sc.Builder[string, xinvPair]) {
@@ -1107,7 +1120,7 @@ func TestXInvAStoppedPromiseReportsNothing(t *testing.T) {
 		m, err := sc.New("m", func(b *xinvBuilder) {
 			b.Initial("active")
 			active := b.State("active")
-			inv := active.Invoke("promise", func(context.Context, counter) (int, error) {
+			inv := active.Invoke("promise", func(context.Context, *sc.Run, counter) (int, error) {
 				<-time.After(5 * time.Millisecond)
 				returned.Store(true)
 
@@ -1136,19 +1149,23 @@ func TestXInvAStoppedPromiseReportsNothing(t *testing.T) {
 
 // XState: should be able to specify a callback as a service
 //
-// As for the promise, the callback's input holds the BEGIN event in XState;
-// the sc stream reads it with sc.Trigger.
+// As for the promise, the callback's input holds the BEGIN event in XState.
+// An sc stream cannot declare the event its state was entered with, as
+// InvokeOn does for a service, so the BEGIN transition records it in the
+// context the stream starts with.
 func TestXInvSpecifiesACallbackAsAService(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m, err := sc.New("callback", func(b *sc.Builder[string, xinvFlags]) {
+		m, err := sc.New("callback", func(b *sc.Builder[string, xinvBegun]) {
 			b.Initial("pending")
-			b.State("pending").On[xinvBegin]().To("first")
+			b.State("pending").On[xinvBegin]().
+				Assign("record begin", func(c xinvBegun, _ xinvBegin) xinvBegun { c.Began = true; return c }).
+				To("first")
 			first := b.State("first")
-			first.Stream("someCallback", func(ctx context.Context, c xinvFlags) iter.Seq2[any, error] {
+			first.Stream("someCallback", func(ctx context.Context, _ *sc.Run, c xinvBegun) iter.Seq2[any, error] {
 				return func(yield func(any, error) bool) {
-					if _, began := sc.Trigger(ctx).(xinvBegin); c.Foo && began {
+					if c.Foo && c.Began {
 						for _, data := range []int{40, 41, 42} {
 							if !yield(xinvCallback{Data: data}, nil) {
 								return
@@ -1160,13 +1177,13 @@ func TestXInvSpecifiesACallbackAsAService(t *testing.T) {
 				}
 			}).OnError().Stay()
 			first.On[xinvCallback]().
-				When("is 42", func(_ xinvFlags, ev xinvCallback) bool { return ev.Data == 42 }).
+				When("is 42", func(_ xinvBegun, ev xinvCallback) bool { return ev.Data == 42 }).
 				To("last")
 			b.Final("last")
 		})
 		require.NoError(t, err)
 
-		inst := xinvInstance(t, m, xinvFlags{Foo: true})
+		inst := xinvInstance(t, m, xinvBegun{Foo: true, Began: false})
 		xinvSend(t, inst, xinvBegin{Payload: true})
 
 		snap := xinvDone(t, inst)
@@ -1223,8 +1240,13 @@ func TestXInvTransitionsCorrectlyIfCallbackInvokedFromStartSendsAnEvent(t *testi
 		synctest.Wait()
 		require.Equal(t, []string{"intermediate"}, inst.Snapshot().Active())
 
-		// XState sends BEGIN, which nothing handles.
-		require.False(t, xinvSend(t, inst, xinvBegin{Payload: false}).Accepted())
+		// DIVERGES from XState: XState sends BEGIN, which nothing handles,
+		// and ignores it. sc refuses an event of a type no transition of
+		// the chart names, and the send changes nothing.
+		step, err := inst.Send(t.Context(), xinvBegin{Payload: false})
+		require.ErrorIs(t, err, sc.ErrUnknownEvent)
+		require.False(t, step.Accepted())
+		require.Equal(t, []string{"intermediate"}, inst.Snapshot().Active())
 	})
 }
 
@@ -1260,8 +1282,8 @@ func TestXInvTransitionsCorrectlyIfTransientTransitionHappensBeforeTheInvokingSt
 // what each(i) returns for 0, 1, 2 and so on, ten milliseconds apart. It
 // ends after limit values when limit is positive, with failure when that is
 // not nil.
-func xinvInterval(limit int, failure error, each func(i int) any) func(context.Context, counter) iter.Seq2[any, error] {
-	return func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+func xinvInterval(limit int, failure error, each func(i int) any) func(context.Context, *sc.Run, counter) iter.Seq2[any, error] {
+	return func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 		return func(yield func(any, error) bool) {
 			ticker := time.NewTicker(10 * time.Millisecond)
 			defer ticker.Stop()
@@ -1336,10 +1358,10 @@ func TestXInvDisposesOfTheCallback(t *testing.T) {
 
 // xinvPonger is a stream standing for an actor that answers each PING it is
 // sent with a PONG.
-func xinvPonger(ctx context.Context, _ counter) iter.Seq2[any, error] {
+func xinvPonger(_ context.Context, _ *sc.Run, _ counter, inbox iter.Seq[xinvPing]) iter.Seq2[any, error] {
 	return func(yield func(any, error) bool) {
-		for ev := range sc.Inbox(ctx) {
-			if _, ok := ev.(xinvPing); ok && !yield(xinvPong{}, nil) {
+		for range inbox {
+			if !yield(xinvPong{}, nil) {
 				return
 			}
 		}
@@ -1353,8 +1375,10 @@ func xinvPingPongChart(t *testing.T) *sc.Machine[string, counter] {
 
 	m, err := sc.New("ping-pong", func(b *xinvBuilder) {
 		b.Initial("active")
-		active := b.State("active").SendOnEntry("ping", "child", func(counter) any { return xinvPing{} })
-		active.Stream("child", xinvPonger).OnError().Stay()
+		active := b.State("active")
+		child := active.ReceiveStream("child", xinvPonger)
+		child.OnError().Stay()
+		active.SendOnEntry("ping", child, func(counter) xinvPing { return xinvPing{} })
 		active.On[xinvPong]().To("done")
 		b.Final("done")
 	})
@@ -1430,7 +1454,7 @@ func TestXInvCallsOnErrorOnlyOnTheStateWhichInvokedTheFailedService(t *testing.T
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		region := func(b *xinvBuilder, name string, stream func(context.Context, counter) iter.Seq2[any, error]) {
+		region := func(b *xinvBuilder, name string, stream func(context.Context, *sc.Run, counter) iter.Seq2[any, error]) {
 			b.State(name, func(b *xinvBuilder) {
 				b.Initial(name + ".waiting")
 				b.State(name+".waiting").Stream("callback", stream).OnError().To(name + ".failed")
@@ -1507,7 +1531,7 @@ func TestXInvCallbackWorksWithInput(t *testing.T) {
 
 		m, err := sc.New("m", func(b *sc.Builder[string, xinvText]) {
 			b.Initial("start")
-			b.State("start").Stream("callback", func(ctx context.Context, c xinvText) iter.Seq2[any, error] {
+			b.State("start").Stream("callback", func(ctx context.Context, _ *sc.Run, c xinvText) iter.Seq2[any, error] {
 				return func(func(any, error) bool) {
 					seen.add(c.Value)
 					<-ctx.Done()
@@ -1541,7 +1565,7 @@ func TestXInvSubInvokeRaceConditionEndsOnTheCompletedState(t *testing.T) {
 			invoked := begin.InvokeMachine("invoked.child", child, xinvSame, xinvNoOutput[counter])
 			invoked.OnDone().To("completed")
 			invoked.OnError().Stay()
-			begin.On[xinvStopChild]().SendTo("stop", "invoked.child", func(counter, xinvStopChild) any { return xinvStop{} })
+			begin.On[xinvStopChild]().SendTo("stop", invoked, func(counter, xinvStopChild) any { return xinvStop{} })
 			b.Final("completed")
 		})
 		require.NoError(t, err)
@@ -1635,7 +1659,7 @@ func xinvCheckObservableInput(t *testing.T) {
 
 		m, err := sc.New("m", func(b *xinvBuilder) {
 			chart := b.Chart()
-			chart.Stream("of", func(_ context.Context, c counter) iter.Seq2[any, error] {
+			chart.Stream("of", func(_ context.Context, _ *sc.Run, c counter) iter.Seq2[any, error] {
 				return func(yield func(any, error) bool) { yield(xinvCount{Value: c.N}, nil) }
 			}).OnError().Stay()
 			chart.On[xinvCount]().
@@ -1720,15 +1744,11 @@ func xinvCheckCountingLogic(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m, err := sc.New("count", func(b *xinvBuilder) {
 			chart := b.Chart()
-			inv := chart.Invoke("count", func(ctx context.Context, _ counter) (int, error) {
+			inv := chart.Receive("count", func(_ context.Context, run *sc.Run, _ counter, inbox iter.Seq[xinvInc]) (int, error) {
 				n := 0
-				for ev := range sc.Inbox(ctx) {
-					if _, ok := ev.(xinvInc); !ok {
-						continue
-					}
-
+				for range inbox {
 					n++
-					if err := sc.Checkpoint(ctx, n); err != nil {
+					if err := run.Checkpoint(n); err != nil {
 						return n, fmt.Errorf("save count: %w", err)
 					}
 				}
@@ -1737,7 +1757,7 @@ func xinvCheckCountingLogic(t *testing.T) {
 			})
 			inv.OnDone().Stay()
 			inv.OnError().Stay()
-			chart.On[xinvInc]().SendTo("forward", "count", func(_ counter, ev xinvInc) any { return ev })
+			chart.On[xinvInc]().SendTo("forward", inv, func(_ counter, ev xinvInc) xinvInc { return ev })
 		})
 		require.NoError(t, err)
 
@@ -1772,8 +1792,10 @@ func TestXInvLogicHasAReferenceToTheParent(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m, err := sc.New("ping", func(b *xinvBuilder) {
 			b.Initial("waiting")
-			waiting := b.State("waiting").SendOnEntry("ping", "ponger", func(counter) any { return xinvPing{} })
-			waiting.Stream("ponger", xinvPonger).OnError().Stay()
+			waiting := b.State("waiting")
+			ponger := waiting.ReceiveStream("ponger", xinvPonger)
+			ponger.OnError().Stay()
+			waiting.SendOnEntry("ping", ponger, func(counter) xinvPing { return xinvPing{} })
 			waiting.On[xinvPong]().To("done")
 			b.Final("done")
 		})
@@ -1804,16 +1826,18 @@ func TestXInvTransitionFunctionEmitsOnSnapshot(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		m, err := sc.New("m", func(b *xinvBuilder) {
-			chart := b.Chart().SendOnEntry("update", "doubler", func(counter) any { return xinvSetValue{Value: 21} })
-			chart.Stream("doubler", func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+			chart := b.Chart()
+			doubler := chart.ReceiveStream("doubler", func(_ context.Context, _ *sc.Run, _ counter, inbox iter.Seq[xinvSetValue]) iter.Seq2[any, error] {
 				return func(yield func(any, error) bool) {
-					for ev := range sc.Inbox(ctx) {
-						if update, ok := ev.(xinvSetValue); ok && !yield(xinvDoubled{Value: update.Value * 2}, nil) {
+					for update := range inbox {
+						if !yield(xinvDoubled{Value: update.Value * 2}, nil) {
 							return
 						}
 					}
 				}
-			}).OnError().Stay()
+			})
+			doubler.OnError().Stay()
+			chart.SendOnEntry("update", doubler, func(counter) xinvSetValue { return xinvSetValue{Value: 21} })
 			chart.On[xinvDoubled]().Assign("keep", func(c counter, ev xinvDoubled) counter { c.N = ev.Value; return c })
 		})
 		require.NoError(t, err)
@@ -1840,8 +1864,10 @@ func TestXInvCreatesInvocationsFromMachinesInNestedStates(t *testing.T) {
 			b.Initial("innerMachine")
 			b.State("innerMachine", func(b *xinvBuilder) {
 				b.Initial("active")
-				active := b.State("active").SendOnEntry("ping", "pong", func(counter) any { return xinvPing{} })
-				active.InvokeMachine("pong", pong, xinvSame, xinvNoOutput[counter]).OnError().Stay()
+				active := b.State("active")
+				pongActor := active.InvokeMachine("pong", pong, xinvSame, xinvNoOutput[counter])
+				pongActor.OnError().Stay()
+				active.SendOnEntry("ping", pongActor, func(counter) any { return xinvPing{} })
 				active.On[xinvPong]().To("innerSuccess")
 				b.Final("innerSuccess")
 			}).OnDone().To("done")
@@ -2107,7 +2133,7 @@ func xinvCheckEndpoint(t *testing.T) {
 
 		m, err := sc.New("m", func(b *sc.Builder[string, xinvText]) {
 			b.Initial("searching")
-			inv := b.State("searching").Invoke("search", func(_ context.Context, c xinvText) (int, error) {
+			inv := b.State("searching").Invoke("search", func(_ context.Context, _ *sc.Run, c xinvText) (int, error) {
 				seen.add(c.Value)
 				return 42, nil
 			})
@@ -2155,7 +2181,7 @@ func TestXInvDynamicInputReceivesTheContextUpdatedByTheSameTransition(t *testing
 			b.State("idle").On[xinvStart]().
 				Assign("set value", func(c counter, _ xinvStart) counter { c.N = 100; return c }).
 				To("active")
-			inv := b.State("active").Invoke("promise", func(_ context.Context, c counter) (int, error) {
+			inv := b.State("active").Invoke("promise", func(_ context.Context, _ *sc.Run, c counter) (int, error) {
 				seen.Store(int32(c.N)) //nolint:gosec // the value is 100.
 				return c.N, nil
 			})
@@ -2259,7 +2285,7 @@ func TestXInvDoneEventsOnlySelectOnDoneOnTheInvokingState(t *testing.T) {
 		region := func(b *xinvBuilder, name string) {
 			b.State(name, func(b *xinvBuilder) {
 				b.Initial(name + ".fetch")
-				inv := b.State(name+".fetch").Invoke("fetch", func(ctx context.Context, _ counter) (int, error) {
+				inv := b.State(name+".fetch").Invoke("fetch", func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 					// Only the first run resolves.
 					if invoked.Swap(true) {
 						<-ctx.Done()
@@ -2439,7 +2465,7 @@ func TestXInvRootInvocationsRestartOnRootReenteringTransitions(t *testing.T) {
 
 		m, err := sc.New("root", func(b *xinvBuilder) {
 			chart := b.Chart()
-			inv := chart.Invoke("promise", func(context.Context, counter) (int, error) {
+			inv := chart.Invoke("promise", func(context.Context, *sc.Run, counter) (int, error) {
 				count.Add(1)
 				return 42, nil
 			})
@@ -2477,7 +2503,7 @@ func TestXInvRestartsAnInvokeWhenReenteringTheInvokingState(t *testing.T) {
 			b.Initial("inactive")
 			b.State("inactive").On[xinvActivate]().To("active")
 			active := b.State("active")
-			active.Stream("callback", func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+			active.Stream("callback", func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 				return func(func(any, error) bool) {
 					id := invoked.Add(1)
 					actual.add(fmt.Sprintf("start %d", id))
@@ -2515,7 +2541,7 @@ func TestXInvProvidesInputToAnActorCreator(t *testing.T) {
 		var seen atomic.Int32
 
 		m := xinvPendingChart(t,
-			func(_ context.Context, c counter) (bool, error) {
+			func(_ context.Context, _ *sc.Run, c counter) (bool, error) {
 				seen.Store(int32(c.N * 2)) //nolint:gosec // the count is 42.
 				return true, nil
 			},

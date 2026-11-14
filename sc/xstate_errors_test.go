@@ -17,7 +17,7 @@ package sc_test
 //     transition functions and invoked actors throw. sc has no state-level
 //     onError. A service's failure, or its panic, arrives as sc.Failed at
 //     the OnError transition its invocation must declare. An action cannot
-//     fail a transition: its panic, or an OnEmit listener's, comes back
+//     fail a transition: its panic, or a Listen listener's, comes back
 //     from an Instance as an error wrapping sc.ErrPanicked after the
 //     transition was taken, and the rest of the step is still carried out.
 //     An Actor has no caller to hand it to and goes on running; only a
@@ -167,8 +167,8 @@ func xerrActionEnds(box *xerrBox) *sc.Hooks[string, counter] {
 
 // xerrCallback stands for an XState callback actor that returns a cleanup:
 // it runs until it is stopped and counts its cleanup then.
-func xerrCallback[C any](cleanup *atomic.Int32) func(context.Context, C) iter.Seq2[any, error] {
-	return func(ctx context.Context, _ C) iter.Seq2[any, error] {
+func xerrCallback[C any](cleanup *atomic.Int32) func(context.Context, *sc.Run, C) iter.Seq2[any, error] {
+	return func(ctx context.Context, _ *sc.Run, _ C) iter.Seq2[any, error] {
 		return func(func(any, error) bool) {
 			defer cleanup.Add(1)
 
@@ -178,19 +178,25 @@ func xerrCallback[C any](cleanup *atomic.Int32) func(context.Context, C) iter.Se
 }
 
 // xerrThrows stands for an XState callback actor that throws as it starts.
-func xerrThrows[C any](err error) func(context.Context, C) iter.Seq2[any, error] {
-	return func(context.Context, C) iter.Seq2[any, error] { panic(err) }
+func xerrThrows[C any](err error) func(context.Context, *sc.Run, C) iter.Seq2[any, error] {
+	return func(context.Context, *sc.Run, C) iter.Seq2[any, error] { panic(err) }
 }
 
 // xerrRejects stands for an XState promise actor that rejects with err.
-func xerrRejects[C any](err error) func(context.Context, C) (int, error) {
-	return func(context.Context, C) (int, error) { return 0, err }
+func xerrRejects[C any](err error) func(context.Context, *sc.Run, C) (int, error) {
+	return func(context.Context, *sc.Run, C) (int, error) { return 0, err }
 }
 
 // xerrRejectsWhen rejects once gate is closed, so a test can let the
 // services beside it start first.
-func xerrRejectsWhen(gate <-chan struct{}, err error) func(context.Context, counter) (int, error) {
-	return func(ctx context.Context, _ counter) (int, error) {
+// xerrReceives is a service that is sent messages of type M and fails, as
+// xerrRejects does, without reading them.
+func xerrReceives[M any](context.Context, *sc.Run, counter, iter.Seq[M]) (int, error) {
+	return 0, errXerrOops
+}
+
+func xerrRejectsWhen(gate <-chan struct{}, err error) func(context.Context, *sc.Run, counter) (int, error) {
+	return func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 		select {
 		case <-gate:
 			return 0, err
@@ -333,8 +339,9 @@ func TestXErrErrorsStopsDescendantsAfterAParentFails(t *testing.T) {
 			xerrSleep(20 * time.Millisecond)
 
 			// The actor is not stopped, and neither is its child, whose
-			// timer fires.
-			require.NoError(t, a.Send(t.Context(), xerrNext{}))
+			// timer fires. A stopped actor would refuse the event with
+			// sc.ErrActorStopped.
+			require.NoError(t, a.Send(t.Context(), xerrFail{}))
 			kid, ok := a.Snapshot().Child(fam.child, "child")
 			require.True(t, ok)
 			require.Equal(t, []string{"running"}, kid.Active())
@@ -459,7 +466,7 @@ func TestXErrErrorsUsesRuntimeChildStopsAndContinuesAfterAChildCleanupThrows(t *
 		var cleanup atomic.Int32
 
 		m, err := sc.New("stops", func(b *xerrBuilder) {
-			b.Chart().Stream("bad", func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+			b.Chart().Stream("bad", func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 				return func(func(any, error) bool) {
 					defer func() { panic(errXerrCleanup) }()
 
@@ -785,7 +792,7 @@ func xerrPending(t *testing.T, service func(b *sc.StateBuilder[string, counter])
 
 // xerrThrowingCallback invokes a callback actor that throws as it starts.
 func xerrThrowingCallback(b *sc.StateBuilder[string, counter]) *sc.Invocation[string, counter, int] {
-	return b.Invoke("callback", func(context.Context, counter) (int, error) { panic(errXerrStart) })
+	return b.Invoke("callback", func(context.Context, *sc.Run, counter) (int, error) { panic(errXerrStart) })
 }
 
 // xerrRejectingPromise invokes a promise actor that rejects.
@@ -986,7 +993,11 @@ func TestXErrErrorsUnhandledSyncErrorsThrownWhenStartingAnActorShouldCrashThePar
 	synctest.Test(t, func(t *testing.T) {
 		m, err := sc.New("machine", func(b *xerrBuilder) {
 			b.Initial("pending")
-			b.State("pending").Stream("callback", xerrThrows[counter](errXerrStart)).OnError().Stay()
+			pending := b.State("pending")
+			pending.Stream("callback", xerrThrows[counter](errXerrStart)).OnError().Stay()
+			// Not in XState's chart: an event for the instance to take,
+			// since Send rejects one of a type the chart never names.
+			pending.On[xerrDo]().Stay()
 		})
 		require.NoError(t, err)
 
@@ -999,8 +1010,9 @@ func TestXErrErrorsUnhandledSyncErrorsThrownWhenStartingAnActorShouldCrashThePar
 		require.False(t, inst.Snapshot().Done())
 		require.Empty(t, inst.Snapshot().Services())
 
-		_, err = inst.Send(t.Context(), xerrDo{})
+		step, err := inst.Send(t.Context(), xerrDo{})
 		require.NoError(t, err)
+		require.True(t, step.Accepted())
 	})
 }
 
@@ -1159,7 +1171,7 @@ func TestXErrErrorsShouldErrorTheParentOnErroredInitialStateOfAChild(t *testing.
 // emit callback errors
 //
 // DIVERGES from XState: XState contains the listener's error and reports it
-// out of band, so its send returns normally. sc calls the OnEmit listener
+// out of band, so its send returns normally. sc calls the Listen listener
 // inside Send and contains its panic too, but returns it from Send as an
 // error wrapping sc.ErrPanicked. The instance goes on working afterwards, as
 // XState's actor does.
@@ -1176,7 +1188,7 @@ func TestXErrErrorsActorContinuesToWorkNormallyAfterEmitCallbackErrors(t *testin
 		got   atomic.Value
 	)
 
-	inst, err := m.Instance(t.Context(), counter{}, sc.OnEmit(func(_ context.Context, ev any) {
+	inst, err := m.Instance(t.Context(), counter{}, sc.Listen(func(_ context.Context, ev xerrEmitted) {
 		if calls.Add(1) == 1 {
 			panic(errXerrOops)
 		}
@@ -1340,7 +1352,7 @@ func TestXErrErrorsStateOnErrorCatchesInvokedActorErrors(t *testing.T) {
 
 		m, err := sc.New("machine", func(b *xerrBuilder) {
 			b.Initial("active")
-			b.State("active").Stream("callback", func(context.Context, counter) iter.Seq2[any, error] {
+			b.State("active").Stream("callback", func(context.Context, *sc.Run, counter) iter.Seq2[any, error] {
 				panic("invoked actor failed")
 			}).OnError().Do("errorSpy", xerrRecord[counter](box)).To("failed")
 			b.State("failed")
@@ -1407,23 +1419,34 @@ func TestXErrErrorsStateOnErrorCatchesErrorsFromInvokedActorInitialization(t *te
 // neither.
 //
 // DIVERGES from XState: XState finds out as the event is sent, and
-// dead-letters it. sc rejects a chart whose SendTo names a service the
-// chart does not declare. A send to a declared service that is not running
-// is the nearer case: it is dropped without a trace, the core returning no
-// send effect at all.
+// dead-letters it. An sc send addresses the handle of a receiving service,
+// so the only way to name a service the chart does not declare is a handle
+// another chart's declaration returned, and sc rejects a chart that sends
+// to one. A send to a declared service that is not running is the nearer
+// case: it is dropped without a trace, the core returning no send effect at
+// all.
 func TestXErrErrorsMissingSendTargetsDeadLettersASendToAnUnknownChildID(t *testing.T) {
 	t.Parallel()
 
-	_, err := sc.New("sender", func(b *xerrBuilder) {
-		b.Initial("active")
-		b.State("active").On[xerrNext]().SendTo("ping", "worker", func(counter, xerrNext) any { return xerrPing{} })
+	var foreign sc.Mailbox[xerrPing]
+	_, err := sc.New("other", func(b *xerrBuilder) {
+		worker := b.Chart().Receive("worker", xerrReceives[xerrPing])
+		worker.OnError().Stay()
+		foreign = worker
 	})
-	require.ErrorContains(t, err, `SendTo names "worker", which is not a service of the chart`)
+	require.NoError(t, err)
+
+	_, err = sc.New("sender", func(b *xerrBuilder) {
+		b.Initial("active")
+		b.State("active").On[xerrNext]().SendTo("ping", foreign, func(counter, xerrNext) xerrPing { return xerrPing{} })
+	})
+	require.ErrorContains(t, err, `a send addresses "worker", which is not a service of the chart`)
 
 	m, err := sc.New("sender", func(b *xerrBuilder) {
 		b.Initial("active")
-		b.State("active").On[xerrNext]().SendTo("ping", "worker", func(counter, xerrNext) any { return xerrPing{} })
-		b.State("elsewhere").Invoke("worker", xerrRejects[counter](errXerrOops)).OnError().To("failed")
+		worker := b.State("elsewhere").Receive("worker", xerrReceives[xerrPing])
+		worker.OnError().To("failed")
+		b.State("active").On[xerrNext]().SendTo("ping", worker, func(counter, xerrNext) xerrPing { return xerrPing{} })
 		b.State("failed")
 	}, sc.AllowUnreachable())
 	require.NoError(t, err)
@@ -1487,8 +1510,9 @@ func TestXErrPrecedenceAnExecutionErrorRecoveredByStateLevelOnErrorDoesNotReachS
 	require.PanicsWithValue(t, errXerrBoom, func() { _, _ = inst.Send(t.Context(), xerrFail{}) })
 	require.Equal(t, []string{"active"}, inst.Snapshot().Active())
 
-	_, err = inst.Send(t.Context(), xerrNext{})
-	require.NoError(t, err)
+	// Still usable: the next event is processed, and fails the same way.
+	require.PanicsWithValue(t, errXerrBoom, func() { _, _ = inst.Send(t.Context(), xerrFail{}) })
+	require.Equal(t, []string{"active"}, inst.Snapshot().Active())
 }
 
 // errorPrecedence.test.ts: error precedence > (c) an unrecovered error goes
@@ -1537,7 +1561,7 @@ func xerrMover(t *testing.T) *sc.Machine[string, counter] {
 // errorPrecedence.test.ts: error precedence > (f) a throwing subscribe
 // observer or on() listener does not kill the actor
 //
-// Hooks.Transition stands for the subscriber and OnEmit for the on()
+// Hooks.Transition stands for the subscriber and Listen for the on()
 // listener. A hook's panic would hide the listener's, so each is checked on
 // an instance of its own.
 //
@@ -1555,7 +1579,7 @@ func TestXErrPrecedenceAThrowingSubscribeObserverOrOnListenerDoesNotKillTheActor
 
 	for name, opt := range map[string]sc.RunOption{
 		"observer": sc.WithHooks(xerrThrowingSubscriber(&observed, 2, errXerrObserver)),
-		"listener": sc.OnEmit(func(context.Context, any) {
+		"listener": sc.Listen(func(context.Context, xerrMoved) {
 			heard.Add(1)
 			panic(errXerrListener)
 		}),
@@ -1721,7 +1745,7 @@ func xerrMs(ms int) time.Time {
 // invokes a service under a time limit. XState's invoke timeout is the
 // state's budget, declared with Within, and its onTimeout is the OnError
 // that takes a failure carrying context.DeadlineExceeded.
-func xerrLimited[R any](t *testing.T, limit time.Duration, run func(context.Context, counter) (R, error), onDone func(*sc.Transition[string, counter, sc.Done[R]]), box *xerrBox) *sc.Machine[string, counter] {
+func xerrLimited[R any](t *testing.T, limit time.Duration, run func(context.Context, *sc.Run, counter) (R, error), onDone func(*sc.Transition[string, counter, sc.Done[R]]), box *xerrBox) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("machine", func(b *xerrBuilder) {
@@ -1744,8 +1768,8 @@ func xerrLimited[R any](t *testing.T, limit time.Duration, run func(context.Cont
 }
 
 // xerrTakes is a service that takes d and stops early when it is cancelled.
-func xerrTakes[C any](d time.Duration) func(context.Context, C) (string, error) {
-	return func(ctx context.Context, _ C) (string, error) {
+func xerrTakes[C any](d time.Duration) func(context.Context, *sc.Run, C) (string, error) {
+	return func(ctx context.Context, _ *sc.Run, _ C) (string, error) {
 		select {
 		case <-time.After(d):
 			return "ok", nil
@@ -1756,7 +1780,7 @@ func xerrTakes[C any](d time.Duration) func(context.Context, C) (string, error) 
 }
 
 // xerrResolves is a service that succeeds at once.
-func xerrResolves(context.Context, counter) (string, error) { return "ok", nil }
+func xerrResolves(context.Context, *sc.Run, counter) (string, error) { return "ok", nil }
 
 // timeout.test.ts: async logic timeout > aborts and errors when
 // createAsyncLogic exceeds its timeout
@@ -1774,7 +1798,7 @@ func TestXErrTimeoutAbortsAndErrorsWhenCreateAsyncLogicExceedsItsTimeout(t *test
 		started := make(chan context.Context, 1)
 		release := make(chan struct{})
 
-		m := xerrLimited(t, 10*time.Millisecond, func(ctx context.Context, _ counter) (string, error) {
+		m := xerrLimited(t, 10*time.Millisecond, func(ctx context.Context, _ *sc.Run, _ counter) (string, error) {
 			started <- ctx
 			<-release
 
@@ -1814,7 +1838,7 @@ func TestXErrTimeoutClearsTheTimeoutTimerWhenRunThrowsSynchronously(t *testing.T
 		m, err := sc.New("machine", func(b *xerrBuilder) {
 			b.Initial("working")
 			b.State("working").Within(30*time.Second).
-				Invoke("task", func(context.Context, counter) (int, error) { panic("not configured") }).
+				Invoke("task", func(context.Context, *sc.Run, counter) (int, error) { panic("not configured") }).
 				OnError().Do("record", xerrRecord[counter](box)).To("failed")
 			b.State("failed")
 		})
@@ -2269,10 +2293,8 @@ func TestXErrTimeoutCancelsTheTimeoutWhenInvokeOnDoneOnlyEnqueuesActions(t *test
 			tr.Emit("invokeDone", func(counter, sc.Done[string]) xerrInvokeDone { return xerrInvokeDone{} })
 		}, box)
 
-		inst, err := m.Instance(t.Context(), counter{}, sc.OnEmit(func(_ context.Context, ev any) {
-			if _, ok := ev.(xerrInvokeDone); ok {
-				emitted.Add(1)
-			}
+		inst, err := m.Instance(t.Context(), counter{}, sc.Listen(func(context.Context, xerrInvokeDone) {
+			emitted.Add(1)
 		}))
 		require.NoError(t, err)
 		defer inst.Close()
@@ -2339,7 +2361,7 @@ func TestXErrTimeoutThrowsAtConstructionWhenInvokeTimeoutIsSetWithoutOnTimeout(t
 	require.ErrorContains(t, err, `service "child" has no OnError transition`)
 }
 
-// Not an XState case: a regression test for a panic in an OnEmit listener,
+// Not an XState case: a regression test for a panic in a Listen listener,
 // which once came out of Instance.Send after the driver had carried out the
 // effects before it but before the step's snapshot was published, leaving
 // the instance reporting "a" with a service the driver had stopped. Here the
@@ -2362,7 +2384,7 @@ func TestXErrRegressionAListenerPanicDoesNotLeaveTheSnapshotBehindTheDriver(t *t
 		})
 		require.NoError(t, err)
 
-		inst, err := m.Instance(t.Context(), counter{}, sc.OnEmit(func(context.Context, any) { panic(errXerrListener) }))
+		inst, err := m.Instance(t.Context(), counter{}, sc.Listen(func(context.Context, xerrMoved) { panic(errXerrListener) }))
 		require.NoError(t, err)
 		defer inst.Close()
 		synctest.Wait()

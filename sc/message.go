@@ -2,7 +2,6 @@ package sc
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"iter"
@@ -134,36 +133,6 @@ func listen[C any](ctx context.Context, fn func(context.Context, any), e Effect[
 	return nil
 }
 
-// Inbox returns the events the chart sends to the running service with
-// [Transition.SendTo], in order, waiting for more until ctx ends. A service
-// ranges over it, usually on a goroutine of its own beside its work:
-//
-//	for ev := range sc.Inbox(ctx) { ... }
-//
-// ctx is the context the service was given. Under a driver that cannot
-// deliver events to a service, the sequence is empty. A service that lets
-// [MaxInbox] events wait unread is stopped and fails with [ErrInboxFull].
-func Inbox(ctx context.Context) iter.Seq[any] {
-	box, ok := ctx.Value(serviceInbox{}).(*inbox)
-	if !ok {
-		return func(func(any) bool) {}
-	}
-
-	// What the driver tells a child machine about time is not the chart's
-	// to see.
-	return func(yield func(any) bool) {
-		for ev := range box.events(ctx) {
-			if _, internal := ev.(advance); internal {
-				continue
-			}
-
-			if !yield(ev) {
-				return
-			}
-		}
-	}
-}
-
 // clockFrom returns the clock of the driver running the service that was
 // given ctx, or the wall clock.
 func clockFrom(ctx context.Context) func() time.Time {
@@ -175,100 +144,5 @@ func clockFrom(ctx context.Context) func() time.Time {
 }
 
 // savedProgress is the context key under which a service run finds the
-// progress it starts from, and progressRecorder the one under which it finds
-// how to record more.
-type (
-	savedProgress    struct{}
-	progressRecorder struct{}
-)
-
-// ErrNoCheckpoint is returned by [Checkpoint] when the context is not one a
-// service was given.
-var ErrNoCheckpoint = errors.New("context does not belong to a service run")
-
-// Checkpoint records v, encoded as JSON, as the progress of the service run
-// that was given ctx: a cursor, the pages fetched so far, the step it
-// reached. The progress is kept in the snapshot, so when the instance is
-// stored and the service is started again after a restart, the new run
-// reads it with [Resumed] and carries on instead of starting over. Each
-// call replaces the last and counts as a step of the instance.
-//
-// Call it from the service function itself, on the goroutine the function
-// was called on. A run started by [Invocation.Retry] after a failure starts
-// from the failed run's progress.
-func Checkpoint(ctx context.Context, v any) error {
-	record, ok := ctx.Value(progressRecorder{}).(func(json.RawMessage))
-	if !ok {
-		return ErrNoCheckpoint
-	}
-
-	data, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Errorf("marshal checkpoint: %w", err)
-	}
-
-	record(data)
-
-	return nil
-}
-
-// Resumed decodes into v the progress an earlier run of the service
-// recorded with [Checkpoint], and reports whether there was any. ctx is the
-// context the service was given.
-func Resumed(ctx context.Context, v any) (bool, error) {
-	data, _ := ctx.Value(savedProgress{}).(json.RawMessage)
-	if len(data) == 0 {
-		return false, nil
-	}
-
-	if err := json.Unmarshal(data, v); err != nil {
-		return false, fmt.Errorf("unmarshal checkpoint: %w", err)
-	}
-
-	return true, nil
-}
-
-// recording wraps yield for a service function: the returned context lets
-// the function record progress through it, and the returned yield stops
-// calling the driver once the driver has stopped listening.
-func recording(ctx context.Context, id string, yield func(any) bool) (context.Context, func(any)) {
-	stopped := false
-	emit := func(ev any) {
-		if !stopped && !yield(ev) {
-			stopped = true
-		}
-	}
-
-	record := func(data json.RawMessage) { emit(Checkpointed{ID: id, Data: data}) }
-
-	return context.WithValue(ctx, progressRecorder{}, record), emit
-}
-
-// runID is the context key under which a service run finds its ID.
-type runID struct{}
-
-// RunID returns the ID of the service run that was given ctx, or "" for any
-// other context. The ID is unique within its instance and stays the same
-// when a driver runs the same effect again after a crash, which makes it,
-// together with the instance's own identity, a ready idempotency key for
-// the call the service makes. A run started by entering the state again, or
-// by [Invocation.Retry], has a new ID.
-func RunID(ctx context.Context) string {
-	id, _ := ctx.Value(runID{}).(string)
-	return id
-}
-
-// trigger is the context key under which a service run finds the event it
-// was started for.
-type trigger struct{}
-
-// Trigger returns the event that was being processed when the state of the
-// service given ctx was entered: the event of the transition into it, so a
-// service can act on what it carries without the chart copying it into the
-// context first. It is nil when the state was entered as the instance
-// started or by a timer, and for an event of a type no On in the chart
-// names. The event is kept with the run, so a run started again after a
-// restart, or by [Invocation.Retry], sees the same one.
-func Trigger(ctx context.Context) any {
-	return ctx.Value(trigger{})
-}
+// progress it starts from.
+type savedProgress struct{}

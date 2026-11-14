@@ -92,7 +92,7 @@ type runningInvocation[S comparable] struct {
 	// attempt is how many times a retried service failed before this run.
 	attempt int
 
-	// saved is the progress the run last recorded with Checkpoint.
+	// saved is the progress the run last recorded with Run.Checkpoint.
 	saved json.RawMessage
 
 	// cause is the event the run was started for, and eventName its name.
@@ -174,7 +174,7 @@ func (s Snapshot[S, C]) Services() []RunningService[S] {
 }
 
 // Checkpoint returns the progress the service run id last recorded with
-// [Checkpoint], or nil when it recorded none or is not running.
+// [Run.Checkpoint], or nil when it recorded none or is not running.
 func (s Snapshot[S, C]) Checkpoint(id string) json.RawMessage {
 	for _, inv := range s.invocations {
 		if inv.id == id {
@@ -388,7 +388,7 @@ type RawInvocation struct {
 	// Attempt is how many times a retried service failed before this run.
 	Attempt int `json:"attempt,omitempty"`
 
-	// Saved is the progress the run last recorded with Checkpoint.
+	// Saved is the progress the run last recorded with Run.Checkpoint.
 	Saved json.RawMessage `json:"saved,omitempty"`
 
 	// EventName and Event are the event the run was started for.
@@ -555,33 +555,34 @@ func (m *Machine[S, C]) Restore(data []byte, now time.Time) (Snapshot[S, C], []E
 	}
 
 	r := &run[S, C]{
-		m:        m,
-		config:   m.rootOnly(),
-		history:  nil,
-		timers:   nil,
-		services: nil,
-		counter:  raw.Counter,
-		ctx:      zero.Context,
-		done:     raw.Done,
-		now:      now,
-		fired:    nil,
-		seed:     raw.Seed,
-		stream:   raw.Seq + 1,
-		rng:      nil,
-		scopes:   nil,
-		acquired: nil,
-		pending:  nil,
-		effects:  nil,
-		queue:    nil,
-		entered:  nil,
-		passed:   nil,
-		changed:  false,
-		cause:    nil,
-		sends:    nil,
-		starting: false,
-		ended:    nil,
-		list:     nil,
-		listed:   false,
+		m:          m,
+		config:     m.rootOnly(),
+		history:    nil,
+		timers:     nil,
+		services:   nil,
+		counter:    raw.Counter,
+		ctx:        zero.Context,
+		done:       raw.Done,
+		now:        now,
+		fired:      nil,
+		seed:       raw.Seed,
+		stream:     raw.Seq + 1,
+		rng:        nil,
+		scopes:     nil,
+		acquired:   nil,
+		pending:    nil,
+		effects:    nil,
+		queue:      nil,
+		entered:    nil,
+		passed:     nil,
+		changed:    false,
+		cause:      nil,
+		sends:      nil,
+		starting:   false,
+		ended:      nil,
+		entryCause: nil,
+		list:       nil,
+		listed:     false,
 	}
 
 	if err := json.Unmarshal(raw.Context, &r.ctx); err != nil {
@@ -692,33 +693,34 @@ func (m *Machine[S, C]) StartIn(c C, now time.Time, states ...S) (Snapshot[S, C]
 	var zero Snapshot[S, C]
 
 	r := &run[S, C]{
-		m:        m,
-		config:   m.rootOnly(),
-		history:  nil,
-		timers:   nil,
-		services: nil,
-		counter:  0,
-		ctx:      c,
-		done:     false,
-		now:      now,
-		fired:    nil,
-		seed:     seedFor(now, nil),
-		stream:   0,
-		rng:      nil,
-		scopes:   nil,
-		acquired: nil,
-		pending:  nil,
-		effects:  nil,
-		queue:    nil,
-		entered:  nil,
-		passed:   nil,
-		changed:  false,
-		cause:    nil,
-		sends:    nil,
-		starting: false,
-		ended:    nil,
-		list:     nil,
-		listed:   false,
+		m:          m,
+		config:     m.rootOnly(),
+		history:    nil,
+		timers:     nil,
+		services:   nil,
+		counter:    0,
+		ctx:        c,
+		done:       false,
+		now:        now,
+		fired:      nil,
+		seed:       seedFor(now, nil),
+		stream:     0,
+		rng:        nil,
+		scopes:     nil,
+		acquired:   nil,
+		pending:    nil,
+		effects:    nil,
+		queue:      nil,
+		entered:    nil,
+		passed:     nil,
+		changed:    false,
+		cause:      nil,
+		sends:      nil,
+		starting:   false,
+		ended:      nil,
+		entryCause: nil,
+		list:       nil,
+		listed:     false,
 	}
 
 	// A state that has children stands for the states entering it leads

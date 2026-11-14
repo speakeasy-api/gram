@@ -71,8 +71,8 @@ func linkChart(t *testing.T, l link) *sc.Machine[string, counter] {
 			b.State("dialling")
 
 			ready := b.State("ready")
-			use := ready.Invoke("use", func(ctx context.Context, _ counter) (int, error) {
-				ln, ok := held.From(ctx)
+			use := ready.Invoke("use", func(ctx context.Context, run *sc.Run, _ counter) (int, error) {
+				ln, ok := held.Held(run)
 				if !ok {
 					l.log.add("use: no line")
 					return 0, nil
@@ -89,7 +89,7 @@ func linkChart(t *testing.T, l link) *sc.Machine[string, counter] {
 		})
 
 		held = open.Holds("line",
-			func(ctx context.Context, _ counter) (*line, error) {
+			func(ctx context.Context, _ *sc.Run, _ counter) (*line, error) {
 				if l.acquire != nil {
 					return l.acquire(ctx)
 				}
@@ -305,7 +305,7 @@ func TestResourcesAreReleasedInnerFirstAndInReverseOrder(t *testing.T) {
 	var released []string
 	hold := func(sb *sc.StateBuilder[string, counter], name string) {
 		res := sb.Holds(name,
-			func(context.Context, counter) (string, error) { return name, nil },
+			func(context.Context, *sc.Run, counter) (string, error) { return name, nil },
 			func(_ context.Context, value string, _ sc.Leave[string]) {
 				mu.Lock()
 				defer mu.Unlock()
@@ -411,12 +411,12 @@ func TestAResourceCanBeDeclaredAndBoundLater(t *testing.T) {
 	require.Equal(t, []string{"open.number"}, m.Resources())
 
 	_, err = m.Bind(func(b *sc.Binder[string, counter]) {
-		b.Resource[string]("number", func(context.Context, counter) (string, error) { return "", nil }, func(context.Context, string, sc.Leave[string]) {})
+		b.Resource[string]("number", func(context.Context, *sc.Run, counter) (string, error) { return "", nil }, func(context.Context, string, sc.Leave[string]) {})
 	})
 	require.ErrorContains(t, err, `resource "number" in state "open" reports sc.Acquired[int], not sc.Acquired[string]`)
 
 	bound, err := m.Bind(func(b *sc.Binder[string, counter]) {
-		b.Resource[int]("number", func(context.Context, counter) (int, error) { return 7, nil }, func(context.Context, int, sc.Leave[string]) {})
+		b.Resource[int]("number", func(context.Context, *sc.Run, counter) (int, error) { return 7, nil }, func(context.Context, int, sc.Leave[string]) {})
 	})
 	require.NoError(t, err)
 	require.Empty(t, bound.Unbound())

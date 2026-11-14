@@ -19,6 +19,7 @@ package sc_test
 
 import (
 	"context"
+	"iter"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -1298,8 +1299,9 @@ func TestXActStoppedEventsFromDoneChildAreReceivedByParent(t *testing.T) {
 
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
 			chart := b.Chart()
-			chart.InvokeMachine("child", child, xactSame, xactNoOutput).OnError().Stay()
-			chart.On[xactFinishChild]().SendTo("finish", "child", func(counter, xactFinishChild) any { return xactFinish{} })
+			childSvc := chart.InvokeMachine("child", child, xactSame, xactNoOutput)
+			childSvc.OnError().Stay()
+			chart.On[xactFinishChild]().SendTo("finish", childSvc, func(counter, xactFinishChild) any { return xactFinish{} })
 			chart.On[xactChildDone]().Do("received", func(context.Context, counter, xactChildDone) { received.Store(true) })
 		})
 
@@ -1333,8 +1335,9 @@ func TestXActStoppedEventsFromStoppedChildAreNotReceivedByItsChildren(t *testing
 
 		child := xactNew(t, "child", func(b *xactBuilder) {
 			chart := b.Chart()
-			chart.InvokeMachine("myChild", grandchild, xactSame, xactNoOutput).OnError().Stay()
-			chart.SendOnExit("stopped", "myChild", func(counter) any { return xactStopped{} })
+			myChild := chart.InvokeMachine("myChild", grandchild, xactSame, xactNoOutput)
+			myChild.OnError().Stay()
+			chart.SendOnExit("stopped", myChild, func(counter) any { return xactStopped{} })
 		})
 
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
@@ -1634,8 +1637,9 @@ func TestXActForwardToForwardsEventToService(t *testing.T) {
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
 			b.Initial("first")
 			first := b.State("first")
-			first.InvokeMachine("myChild", child, xactSame, xactNoOutput).OnError().Stay()
-			first.On[xactValue]().SendTo("forward", "myChild", func(_ counter, ev xactValue) any { return ev })
+			myChild := first.InvokeMachine("myChild", child, xactSame, xactNoOutput)
+			myChild.OnError().Stay()
+			first.On[xactValue]().SendTo("forward", myChild, func(_ counter, ev xactValue) any { return ev })
 			first.On[xactSuccess]().To("last")
 			b.Final("last")
 		})
@@ -1861,8 +1865,9 @@ func TestXActSendToSendsToInvokedChildByDeclaredID(t *testing.T) {
 
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
 			chart := b.Chart()
-			chart.InvokeMachine("worker", child, xactSame, xactNoOutput).OnError().Stay()
-			chart.On[xactSend]().SendTo("ping", "worker", func(counter, xactSend) any { return xactPing{Value: 42} })
+			worker := chart.InvokeMachine("worker", child, xactSame, xactNoOutput)
+			worker.OnError().Stay()
+			chart.On[xactSend]().SendTo("ping", worker, func(counter, xactSend) any { return xactPing{Value: 42} })
 		})
 
 		inst, err := parent.Instance(t.Context(), counter{N: 0})
@@ -1889,16 +1894,17 @@ func xactSpawner(t *testing.T, child *sc.Machine[string, counter], key string, s
 
 	return xactNew(t, "parent", func(b *xactBuilder) {
 		active := b.Chart()
-		active.SpawnMachine("worker", child, func(c counter, _ string) counter { return c }, xactNoOutput).OnError().Stay()
+		worker := active.SpawnMachine("worker", child, func(c counter, _ string) counter { return c }, xactNoOutput)
+		worker.OnError().Stay()
 
 		start := active.On[xactStart]().Spawn("spawn", "worker", func(counter, xactStart) string { return key })
 		if sendAtOnce {
-			start.SendToKey("ping", "worker",
+			start.SendToKey("ping", worker,
 				func(counter, xactStart) string { return key },
 				func(counter, xactStart) any { return xactPing{Value: 0} })
 		}
 
-		active.On[xactSend]().SendToKey("ping", "worker",
+		active.On[xactSend]().SendToKey("ping", worker,
 			func(counter, xactSend) string { return key },
 			func(counter, xactSend) any { return xactPing{Value: 0} })
 	})
@@ -1957,28 +1963,41 @@ func TestXActSendToSendsToChildSpawnedWithEmptyStringID(t *testing.T) {
 //
 // DIVERGES from XState: XState declares the child id only in its schema and
 // reports the undelivered event to onRejectedEvent as a 'missingTarget'
-// rejection. sc rejects, at declaration, a SendTo that names no service of
-// the chart; and for a service that is declared but not running it drops the
-// event without telling anyone: the step has no effects and nothing reports
-// the drop. Both leave the chart in active without an error.
+// rejection. An sc send addresses the handle of a receiving service, so a
+// send to a child no chart declares cannot be written; one addressing the
+// handle of another chart's service is rejected at declaration, because the
+// chart has no service of that name. For a service that is declared but not
+// running sc drops the event without telling anyone: the step has no effects
+// and nothing reports the drop. Both leave the chart in active without an
+// error.
 func TestXActSendToUnknownChildIsDropped(t *testing.T) {
 	t.Parallel()
 
-	chart := func(declared bool) func(b *xactBuilder) {
-		return func(b *xactBuilder) {
-			b.Initial("active")
-			b.State("active").On[xactSend]().SendTo("ping", "worker", func(counter, xactSend) any { return xactPing{Value: 0} })
-			b.State("failed")
-			if declared {
-				b.State("working").Requires[struct{}]("worker").OnError().Stay()
-			}
-		}
+	receive := func(context.Context, *sc.Run, counter, iter.Seq[xactPing]) (struct{}, error) {
+		return struct{}{}, nil
 	}
 
-	_, err := sc.New("parent", chart(false), sc.AllowUnreachable())
-	require.ErrorContains(t, err, `SendTo names "worker", which is not a service of the chart`)
+	var foreign sc.Mailbox[xactPing]
+	_, err := sc.New("other", func(b *xactBuilder) {
+		worker := b.Chart().Receive("worker", receive)
+		worker.OnError().Stay()
+		foreign = worker
+	})
+	require.NoError(t, err)
 
-	m := xactNew(t, "parent", chart(true))
+	_, err = sc.New("parent", func(b *xactBuilder) {
+		b.Initial("active")
+		b.State("active").On[xactSend]().SendTo("ping", foreign, func(counter, xactSend) xactPing { return xactPing{Value: 0} })
+	})
+	require.ErrorContains(t, err, `"worker"`)
+
+	m := xactNew(t, "parent", func(b *xactBuilder) {
+		b.Initial("active")
+		worker := b.State("working").Receive("worker", receive)
+		worker.OnError().Stay()
+		b.State("active").On[xactSend]().SendTo("ping", worker, func(counter, xactSend) xactPing { return xactPing{Value: 0} })
+		b.State("failed")
+	})
 	snap, _ := m.Start(counter{N: 0}, epoch)
 	snap, effects := m.Transition(snap, xactSend{}, epoch)
 
@@ -2009,8 +2028,9 @@ func xactSendsOnEntry[Ev any](t *testing.T, start counter, send func(counter) an
 
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
 			chart := b.Chart()
-			chart.InvokeMachine("child", child, xactSame, xactNoOutput).OnError().Stay()
-			chart.SendOnEntry("send", "child", send)
+			childSvc := chart.InvokeMachine("child", child, xactSame, xactNoOutput)
+			childSvc.OnError().Stay()
+			chart.SendOnEntry("send", childSvc, send)
 		})
 
 		_, effects := parent.Start(start, epoch)
@@ -2063,13 +2083,16 @@ func TestXActSendToReadsTargetFromEvent(t *testing.T) {
 	m := xactNew(t, "m", func(b *xactBuilder) {
 		b.Initial("a")
 		a := b.State("a")
-		a.RequiresStream("actor").Spawned().OnError().Stay()
+		actor := a.ReceiveStream("actor", func(context.Context, *sc.Run, counter, iter.Seq[xactEvent]) iter.Seq2[any, error] {
+			return func(func(any, error) bool) {}
+		})
+		actor.Spawned().OnError().Stay()
 		a.On[xactStart]().
 			Spawn("spawnFoo", "actor", func(counter, xactStart) string { return "foo" }).
 			Spawn("spawnBar", "actor", func(counter, xactStart) string { return "bar" })
-		a.On[xactNamed]().SendToKey("send", "actor",
+		a.On[xactNamed]().SendToKey("send", actor,
 			func(_ counter, ev xactNamed) string { return ev.Value },
-			func(counter, xactNamed) any { return xactEvent{} })
+			func(counter, xactNamed) xactEvent { return xactEvent{} })
 	})
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
@@ -2314,10 +2337,12 @@ func xactCancelSameID(t *testing.T, ev any, wantFoo, wantBar int64) {
 
 		parent := xactNew(t, "parent", func(b *xactBuilder) {
 			chart := b.Chart()
-			chart.InvokeMachine("foo", foo, xactSame, xactNoOutput).OnError().Stay()
-			chart.InvokeMachine("bar", bar, xactSame, xactNoOutput).OnError().Stay()
-			chart.On[xactCancelFoo]().SendTo("cancel", "foo", func(counter, xactCancelFoo) any { return xactCancel{} })
-			chart.On[xactCancelBar]().SendTo("cancel", "bar", func(counter, xactCancelBar) any { return xactCancel{} })
+			fooSvc := chart.InvokeMachine("foo", foo, xactSame, xactNoOutput)
+			fooSvc.OnError().Stay()
+			barSvc := chart.InvokeMachine("bar", bar, xactSame, xactNoOutput)
+			barSvc.OnError().Stay()
+			chart.On[xactCancelFoo]().SendTo("cancel", fooSvc, func(counter, xactCancelFoo) any { return xactCancel{} })
+			chart.On[xactCancelBar]().SendTo("cancel", barSvc, func(counter, xactCancelBar) any { return xactCancel{} })
 		})
 
 		inst, err := parent.Instance(t.Context(), counter{N: 0})
@@ -2401,8 +2426,10 @@ func TestXActCancelSendToJustInvokedChildIsDelivered(t *testing.T) {
 		m := xactNew(t, "m", func(b *xactBuilder) {
 			b.Initial("a")
 			b.State("a").On[xactStart]().To("b")
-			sb := b.State("b").SendOnEntry("ping", "myChild", func(counter) any { return xactPing{Value: 0} })
-			sb.InvokeMachine("myChild", child, xactSame, xactNoOutput).OnError().Stay()
+			sb := b.State("b")
+			myChild := sb.InvokeMachine("myChild", child, xactSame, xactNoOutput)
+			myChild.OnError().Stay()
+			sb.SendOnEntry("ping", myChild, func(counter) any { return xactPing{Value: 0} })
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})

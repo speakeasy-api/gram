@@ -1012,7 +1012,7 @@ func xfinCancelChild(t *testing.T, child *sc.Machine[string, counter]) []string 
 		invoked.OnDone().To("completed")
 		invoked.OnError().To("failed")
 		start.On[xfinChildCanceled]().To("canceled")
-		start.On[xfinCancel]().SendTo("forward", "child", func(_ counter, ev xfinCancel) any { return ev })
+		start.On[xfinCancel]().SendTo("forward", invoked, func(_ counter, ev xfinCancel) any { return ev })
 		b.State("canceled")
 		b.State("completed")
 		b.State("failed")

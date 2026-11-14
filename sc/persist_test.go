@@ -74,7 +74,7 @@ func TestNewReportsDeclarationErrors(t *testing.T) {
 			name: "service without error route",
 			def: func(b *sc.Builder[string, counter]) {
 				b.Initial("a")
-				b.State("a").Invoke("load", func(context.Context, counter) (int, error) { return 0, nil }).OnDone().To("b")
+				b.State("a").Invoke("load", func(context.Context, *sc.Run, counter) (int, error) { return 0, nil }).OnDone().To("b")
 				b.State("b")
 			},
 			want: `state "a": service "load" has no OnError transition`,
@@ -262,7 +262,7 @@ func reviewChart(t *testing.T, version int) *sc.Machine[string, counter] {
 		}
 
 		b.State("open").On[tick]().To("review")
-		inv := b.State("review").Invoke("score", func(context.Context, counter) (int, error) { return 0, nil })
+		inv := b.State("review").Invoke("score", func(context.Context, *sc.Run, counter) (int, error) { return 0, nil })
 		inv.OnDone().To("approved")
 		inv.OnError().To("open")
 	}, sc.Version(version), sc.Migrate(func(old sc.RawSnapshot) (sc.RawSnapshot, error) {
@@ -351,7 +351,7 @@ func TestEffectRoundTripsThroughJSONAndExecutes(t *testing.T) {
 func TestExecRunsServiceAndReportsItsOutcome(t *testing.T) {
 	t.Parallel()
 
-	m := orderChart(t, func(_ context.Context, o order) (string, error) {
+	m := orderChart(t, func(_ context.Context, _ *sc.Run, o order) (string, error) {
 		if len(o.Items) > 1 {
 			return "", errCardDeclined
 		}

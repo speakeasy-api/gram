@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"log"
 	"os"
 	"sync"
@@ -134,7 +135,7 @@ func (r *recorder) list() []string {
 
 // newDriver builds an order chart with its own machine ID and a driver for
 // it. charge is the payment service.
-func newDriver(t *testing.T, rec *recorder, charge func(context.Context, order) (string, error)) *pgdriver.Driver[string, order] {
+func newDriver(t *testing.T, rec *recorder, charge func(context.Context, *sc.Run, order) (string, error)) *pgdriver.Driver[string, order] {
 	t.Helper()
 
 	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
@@ -213,7 +214,7 @@ func TestSendPersistsStateAndWorkerCarriesOutEffects(t *testing.T) {
 	t.Parallel()
 
 	rec := &recorder{mu: sync.Mutex{}, calls: nil}
-	d := newDriver(t, rec, func(_ context.Context, o order) (string, error) {
+	d := newDriver(t, rec, func(_ context.Context, _ *sc.Run, o order) (string, error) {
 		rec.add("charge")
 		return "rcpt-" + o.Items[0], nil
 	})
@@ -246,7 +247,7 @@ func TestSendTxEffectsRollBackWithTheCallersTransaction(t *testing.T) {
 	t.Parallel()
 
 	rec := &recorder{mu: sync.Mutex{}, calls: nil}
-	d := newDriver(t, rec, func(context.Context, order) (string, error) { return "rcpt", nil })
+	d := newDriver(t, rec, func(context.Context, *sc.Run, order) (string, error) { return "rcpt", nil })
 
 	_, err := d.Create(t.Context(), "o1", order{})
 	require.NoError(t, err)
@@ -278,7 +279,7 @@ func TestFailedServiceIsRetriedWhenItsTimerIsDue(t *testing.T) {
 	t.Parallel()
 
 	rec := &recorder{mu: sync.Mutex{}, calls: nil}
-	d := newDriver(t, rec, func(_ context.Context, o order) (string, error) {
+	d := newDriver(t, rec, func(_ context.Context, _ *sc.Run, o order) (string, error) {
 		if o.Attempts == 0 {
 			return "", errCardDeclined
 		}
@@ -322,7 +323,7 @@ func TestLeavingAStateRemovesItsTimerFromTheOutbox(t *testing.T) {
 	t.Parallel()
 
 	rec := &recorder{mu: sync.Mutex{}, calls: nil}
-	d := newDriver(t, rec, func(context.Context, order) (string, error) { return "", errCardDeclined })
+	d := newDriver(t, rec, func(context.Context, *sc.Run, order) (string, error) { return "", errCardDeclined })
 
 	_, err := d.Create(t.Context(), "o1", order{})
 	require.NoError(t, err)
@@ -345,7 +346,7 @@ func TestConcurrentSendsAreAppliedOneAfterAnother(t *testing.T) {
 	// enough that lost updates would show up.
 	const senders = 20
 
-	d := newDriver(t, &recorder{mu: sync.Mutex{}, calls: nil}, func(context.Context, order) (string, error) { return "", nil })
+	d := newDriver(t, &recorder{mu: sync.Mutex{}, calls: nil}, func(context.Context, *sc.Run, order) (string, error) { return "", nil })
 
 	_, err := d.Create(t.Context(), "o1", order{})
 	require.NoError(t, err)
@@ -375,7 +376,7 @@ func TestWorkRunsEffectsUntilCancelled(t *testing.T) {
 	t.Parallel()
 
 	rec := &recorder{mu: sync.Mutex{}, calls: nil}
-	d := newDriver(t, rec, func(context.Context, order) (string, error) { return "rcpt-work", nil })
+	d := newDriver(t, rec, func(context.Context, *sc.Run, order) (string, error) { return "rcpt-work", nil })
 
 	ctx, stop := context.WithCancel(t.Context())
 	stopped := make(chan error, 1)
@@ -400,7 +401,7 @@ func TestWorkRunsEffectsUntilCancelled(t *testing.T) {
 func TestCreateRejectsDuplicateAndSendRejectsUnknownInstance(t *testing.T) {
 	t.Parallel()
 
-	d := newDriver(t, &recorder{mu: sync.Mutex{}, calls: nil}, func(context.Context, order) (string, error) { return "", nil })
+	d := newDriver(t, &recorder{mu: sync.Mutex{}, calls: nil}, func(context.Context, *sc.Run, order) (string, error) { return "", nil })
 
 	_, err := d.Create(t.Context(), "o1", order{})
 	require.NoError(t, err)
@@ -450,7 +451,7 @@ func TestNewRejectsAChartThatHoldsResources(t *testing.T) {
 	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
 		b.Initial("open")
 		conn := b.State("open").Holds("conn",
-			func(context.Context, order) (int, error) { return 1, nil },
+			func(context.Context, *sc.Run, order) (int, error) { return 1, nil },
 			func(context.Context, int, sc.Leave[string]) {},
 		)
 		conn.OnError().To("closed")
@@ -470,10 +471,10 @@ func TestNewRejectsAChartThatSendsEventsToItsServices(t *testing.T) {
 	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
 		b.Initial("open")
 		open := b.State("open")
-		inv := open.Invoke("work", func(context.Context, order) (string, error) { return "", nil })
+		inv := open.Receive[tick]("work", func(context.Context, *sc.Run, order, iter.Seq[tick]) (string, error) { return "", nil })
 		inv.OnDone().To("closed")
 		inv.OnError().To("closed")
-		open.On[tick]().SendTo("nudge", "work", func(order, tick) any { return tick{} })
+		open.On[tick]().SendTo("nudge", inv, func(order, tick) tick { return tick{} })
 		b.Final("closed")
 	})
 	require.NoError(t, err)
@@ -489,7 +490,7 @@ func TestARetriedServiceRunsAgainFromTheOutbox(t *testing.T) {
 	var calls atomic.Int32
 	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
 		b.Initial("charging")
-		inv := b.State("charging").Invoke("charge", func(context.Context, order) (string, error) {
+		inv := b.State("charging").Invoke("charge", func(context.Context, *sc.Run, order) (string, error) {
 			if calls.Add(1) < 3 {
 				return "", errCardDeclined
 			}
@@ -552,7 +553,7 @@ func TestEmittedEventsAreDeliveredInOrderAfterTheirStepCommits(t *testing.T) {
 		got      []string
 		failures = 1
 	)
-	d := mustNew(t, emittingMachine(t), pgdriver.WithEmit(func(_ context.Context, instance string, ev any) error {
+	d := mustNew(t, emittingMachine(t), pgdriver.Listen(func(_ context.Context, instance string, ev counted) error {
 		mu.Lock()
 		defer mu.Unlock()
 
@@ -652,7 +653,7 @@ func TestTheChartsOwnActionsServicesAndTimersRunFromTheOutbox(t *testing.T) {
 	rec := &recorder{mu: sync.Mutex{}, calls: nil}
 	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
 		chart := b.Chart().Entry("opened", func(context.Context, order) { rec.add("opened") })
-		load := chart.Invoke("load", func(context.Context, order) (string, error) { return "rcpt", nil })
+		load := chart.Invoke("load", func(context.Context, *sc.Run, order) (string, error) { return "rcpt", nil })
 		load.OnDone().Assign("setReceipt", func(o order, d sc.Done[string]) order { o.Receipt = d.Result; return o })
 		load.OnError().To("closed")
 		chart.After(200 * time.Millisecond).To("closed")
@@ -681,4 +682,39 @@ func TestTheChartsOwnActionsServicesAndTimersRunFromTheOutbox(t *testing.T) {
 
 	drain(t, d)
 	require.Equal(t, []string{"opened", "closed"}, rec.list())
+}
+
+func TestTypedSendRefusesAPointerWhereTheChartNamesTheValue(t *testing.T) {
+	t.Parallel()
+
+	d := mustNew(t, emittingMachine(t))
+
+	_, err := d.Create(t.Context(), "o1", order{})
+	require.NoError(t, err)
+
+	_, err = d.Send(t.Context(), "o1", &tick{})
+	require.ErrorIs(t, err, sc.ErrUnknownEvent)
+	require.ErrorContains(t, err, "the chart handles pgdriver_test.tick, a value, not a pointer")
+
+	err = pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
+		if _, err := d.SendTx(t.Context(), tx, "o1", &tick{}); err != nil {
+			return fmt.Errorf("send in a transaction: %w", err)
+		}
+
+		return nil
+	})
+	require.ErrorIs(t, err, sc.ErrUnknownEvent)
+
+	// Nothing was written: the next tick is the first one counted.
+	step, err := d.Send(t.Context(), "o1", tick{})
+	require.NoError(t, err)
+	require.Equal(t, 1, step.To.Context.Count)
+}
+
+func TestTypedNewRefusesAListenerForANeverEmittedType(t *testing.T) {
+	t.Parallel()
+
+	_, err := pgdriver.New(pool, emittingMachine(t), pgdriver.Listen(func(context.Context, string, *counted) error { return nil }))
+	require.ErrorIs(t, err, sc.ErrNoSuchEmit)
+	require.ErrorContains(t, err, "*pgdriver_test.counted")
 }

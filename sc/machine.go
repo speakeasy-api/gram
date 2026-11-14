@@ -58,6 +58,13 @@ type Machine[S comparable, C any] struct {
 	// strict is set by StrictSCXML.
 	strict bool
 
+	// emitted holds the types of the events the chart emits, handled the
+	// types of the events its On transitions take, and anyEvent is set when
+	// one of its states has an OnAny.
+	emitted  map[reflect.Type]bool
+	handled  map[reflect.Type]bool
+	anyEvent bool
+
 	// maxSteps bounds the work of one step; see MaxSteps.
 	maxSteps int
 
@@ -177,6 +184,9 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 		bound:         map[string]boundService[C]{},
 		boundReleases: map[string]func(context.Context, any, Leave[S]){},
 		strict:        o.strictSCXML,
+		emitted:       map[reflect.Type]bool{},
+		handled:       map[reflect.Type]bool{},
+		anyEvent:      false,
 		maxSteps:      maxSettleSteps,
 		sends:         false,
 		emits:         false,
@@ -196,9 +206,31 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 			b.errorf("CancelRaise names %q, which no RaiseAfter declares", name)
 		}
 	}
-	for _, name := range b.sends {
-		if resource, ok := b.kinds[name]; !ok || resource {
-			b.errorf("SendTo names %q, which is not a service of the chart", name)
+	// Sends address a handle, so they reach a receiving service; what is
+	// left to check is that every service of that name reads the message.
+	for _, send := range b.sends {
+		found := false
+
+		for _, n := range m.all() {
+			for _, inv := range n.invocations {
+				if inv.name != send.service || inv.resource != nil {
+					continue
+				}
+				found = true
+
+				switch {
+				case inv.inboxType == nil:
+					b.errorf("state %q: service %q is sent %s but receives no messages", n.name, inv.name, send.message)
+				case inv.inboxType.Kind() != reflect.Interface && inv.inboxType != send.message:
+					b.errorf("state %q: service %q is sent %s but receives %s", n.name, inv.name, send.message, inv.inboxType)
+				}
+			}
+		}
+
+		// A handle from another chart, or a zero Port, names no service of
+		// this one, and its messages would go nowhere.
+		if !found {
+			b.errorf("a send addresses %q, which is not a service of the chart", send.service)
 		}
 	}
 	for _, name := range b.releases {
@@ -219,6 +251,10 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	}
 	m.sends, m.emits = len(b.sends) > 0, b.emits
 	m.registerEvents(b)
+	if len(b.errs) == 0 {
+		m.checkOutputs(b)
+		m.checkTriggers(b)
+	}
 	if len(b.errs) == 0 && !o.allowUnreachable {
 		m.checkReachable(b)
 	}
@@ -249,6 +285,45 @@ func New[S comparable, C any](id string, def func(b *Builder[S, C]), opts ...Opt
 	m.hash = hex.EncodeToString(h.Sum(nil))
 
 	return m, nil
+}
+
+// EmitsType reports whether the chart emits events of type t, with
+// [Transition.Emit] or one of the states' emits. A driver checks its
+// listeners against it.
+func (m *Machine[S, C]) EmitsType(t reflect.Type) bool { return m.emitted[t] }
+
+// ErrUnknownEvent is returned by a driver's Send for an event whose type no
+// transition of the chart names, when no state has an [StateBuilder.OnAny]
+// that could take it. Such an event could never change anything, so sending
+// one is a mistake: most often a pointer sent where the chart names the
+// value type, or the other way round.
+var ErrUnknownEvent = errors.New("event of a type the chart never handles")
+
+// CheckEvent reports, with an error wrapping [ErrUnknownEvent], an event
+// that no transition of the chart could ever take: one whose type no On
+// names, sent to a chart without an OnAny. An event the chart knows but its
+// current state does not handle passes; it is ignored as usual. The
+// drivers call it on what they are sent; the events they deliver from
+// timers and services are not checked.
+func (m *Machine[S, C]) CheckEvent(ev any) error {
+	t := reflect.TypeOf(ev)
+	if ev == nil || m.anyEvent || m.handled[t] {
+		return nil
+	}
+
+	switch ev.(type) {
+	case TimerFired, Emitted, Checkpointed, acquisition, invocationResult:
+		return nil
+	}
+
+	switch {
+	case t.Kind() == reflect.Pointer && m.handled[t.Elem()]:
+		return fmt.Errorf("%w: %s; the chart handles %s, a value, not a pointer", ErrUnknownEvent, t, t.Elem())
+	case m.handled[reflect.PointerTo(t)]:
+		return fmt.Errorf("%w: %s; the chart handles %s, a pointer", ErrUnknownEvent, t, reflect.PointerTo(t))
+	}
+
+	return fmt.Errorf("%w: %s", ErrUnknownEvent, t)
 }
 
 // all returns the chart itself followed by every state in document order.
@@ -553,6 +628,7 @@ func (m *Machine[S, C]) registerEvents(b *build[S, C]) {
 
 	for _, t := range b.emitTypes {
 		register(t, eventTypeName(t))
+		m.emitted[t] = true
 	}
 
 	for _, t := range b.outputTypes {
@@ -574,8 +650,12 @@ func (m *Machine[S, C]) registerEvents(b *build[S, C]) {
 		}
 
 		for _, t := range n.transitions {
-			if t.trigger == triggerEvent && !t.wildcard {
+			switch {
+			case t.trigger == triggerEvent && t.wildcard:
+				m.anyEvent = true
+			case t.trigger == triggerEvent:
 				register(t.eventType, eventTypeName(t.eventType))
+				m.handled[t.eventType] = true
 			}
 		}
 	}
@@ -814,4 +894,108 @@ func apart[S comparable, C any](a, b *node[S, C]) bool {
 // allFinal reports whether every one of states is a final state.
 func allFinal[S comparable, C any](states []*node[S, C]) bool {
 	return !slices.ContainsFunc(states, func(n *node[S, C]) bool { return n.kind != kindFinal })
+}
+
+// checkOutputs reports an OnDoneWith transition that would receive an output
+// of another type than it declares.
+func (m *Machine[S, C]) checkOutputs(b *build[S, C]) {
+	regions := reflect.TypeFor[map[string]any]()
+
+	for _, n := range m.all() {
+		for _, t := range n.transitions {
+			if t.doneWith == nil {
+				continue
+			}
+
+			if n.kind == kindParallel {
+				if t.doneWith != regions {
+					b.errorf("state %q: OnDoneWith[%s] on a parallel state, which reports map[string]any", n.name, t.doneWith)
+				}
+
+				continue
+			}
+
+			for _, c := range n.children {
+				if c.kind == kindFinal && c.outputType != nil && c.outputType != t.doneWith {
+					b.errorf("state %q: OnDoneWith[%s], but final state %q reports %s", n.name, t.doneWith, c.name, c.outputType)
+				}
+			}
+		}
+	}
+}
+
+// checkTriggers reports a service declared with InvokeOn whose state can be
+// entered other than by an event of the type the service is started with.
+func (m *Machine[S, C]) checkTriggers(b *build[S, C]) {
+	for _, n := range m.all() {
+		for _, inv := range n.invocations {
+			if inv.triggerType == nil {
+				continue
+			}
+
+			for _, way := range m.waysIn(n) {
+				if way.trigger != triggerEvent || way.wildcard || way.eventType != inv.triggerType {
+					b.errorf("state %q: service %q is started with %s, but the state is entered %s", n.name, inv.name, inv.triggerType, describeEntry(way))
+				}
+			}
+
+			if why := m.enteredByDefault(n); why != "" {
+				b.errorf("state %q: service %q is started with %s, but the state is entered %s", n.name, inv.name, inv.triggerType, why)
+			}
+		}
+	}
+}
+
+// enteredByDefault says how n is entered without a transition naming it, or
+// returns "".
+func (m *Machine[S, C]) enteredByDefault(n *node[S, C]) string {
+	switch {
+	case n.root:
+		return "as the instance starts"
+	case n.parent.kind == kindParallel:
+		return "with the other regions of " + n.parent.name
+	case n.parent.initial == n:
+		return "as the initial state of " + n.parent.name
+	}
+
+	return ""
+}
+
+// waysIn returns the transitions whose taking enters n: those whose target
+// is n or a state inside it, and those that target a history state that
+// could restore a state inside n.
+func (m *Machine[S, C]) waysIn(n *node[S, C]) []*transition[S, C] {
+	var ways []*transition[S, C]
+
+	for _, s := range m.all() {
+		for _, t := range s.transitions {
+			if slices.ContainsFunc(t.targets, func(x *node[S, C]) bool {
+				if x.kind == kindHistory {
+					return n.below(x.parent)
+				}
+
+				return x.within(n)
+			}) {
+				ways = append(ways, t)
+			}
+		}
+	}
+
+	return ways
+}
+
+// describeEntry names what takes a transition, for an error message.
+func describeEntry[S comparable, C any](t *transition[S, C]) string {
+	switch {
+	case t.trigger == triggerEvent && t.wildcard:
+		return "by any event, from " + t.source.name
+	case t.trigger == triggerEvent:
+		return fmt.Sprintf("by %s, from %s", t.eventType, t.source.name)
+	case t.trigger == triggerAfter:
+		return "by a timer, from " + t.source.name
+	case t.trigger == triggerAlways:
+		return "without an event, from " + t.source.name
+	}
+
+	return fmt.Sprintf("on %s, from %s", t.trigger, t.source.name)
 }

@@ -187,9 +187,9 @@ type Emitted struct {
 	Event any
 }
 
-// Checkpointed is the event a service run sends, through [Checkpoint], to
+// Checkpointed is the event a service run sends, through [Run.Checkpoint], to
 // record its progress in the snapshot. A run started again after a restart
-// reads the last one with [Resumed].
+// reads the last one with [Run.Resumed].
 type Checkpointed struct {
 	// ID identifies the run of the service that recorded the progress.
 	ID string
@@ -233,12 +233,12 @@ const (
 	EffectRelease EffectKind = "resource.release"
 
 	// EffectSend delivers Event to the running service with the same ID,
-	// which reads it from [Inbox]. A driver that cannot deliver it drops
+	// which reads it from its inbox. A driver that cannot deliver it drops
 	// it.
 	EffectSend EffectKind = "invocation.send"
 
 	// EffectEmit hands Event to whoever runs the machine, through the
-	// function given with [OnEmit].
+	// listeners given with [Listen].
 	EffectEmit EffectKind = "emit"
 
 	// EffectStartTimer asks for a [TimerFired] event with the effect's ID
@@ -304,8 +304,8 @@ type Effect[C any] struct {
 	Needs []string
 
 	// Saved is, for an EffectStartInvocation, the progress the service
-	// last recorded with [Checkpoint], which this run reads with
-	// [Resumed]; nil when it recorded none.
+	// last recorded with [Run.Checkpoint], which this run reads with
+	// [Run.Resumed]; nil when it recorded none.
 	Saved json.RawMessage
 }
 
@@ -399,8 +399,7 @@ func (m *Machine[S, C]) Exec(ctx context.Context, e Effect[C], send func(ev any)
 				return fmt.Errorf("%w: service %q in state %q", ErrNotBound, e.Name, e.State)
 			}
 
-			ctx = context.WithValue(context.WithValue(ctx, savedProgress{}, e.Saved), runID{}, e.ID)
-			ctx = context.WithValue(ctx, trigger{}, e.Event)
+			ctx = context.WithValue(context.WithValue(ctx, savedProgress{}, e.Saved), trigger{}, e.Event)
 
 			for ev := range run(ctx, e.Context, e.ID) {
 				guardedSend(send, ev)

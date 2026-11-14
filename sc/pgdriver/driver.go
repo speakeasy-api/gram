@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -79,14 +80,14 @@ var (
 // concurrent use, and several processes may run drivers for the same machine
 // against the same database.
 type Driver[S comparable, C any] struct {
-	pool   *pgxpool.Pool
-	m      *sc.Machine[S, C]
-	poll   time.Duration
-	hooks  *sc.Hooks[S, C]
-	store  Store[S, C]
-	sink   Sink[C]
-	outbox bool
-	emit   func(ctx context.Context, instance string, ev any) error
+	pool      *pgxpool.Pool
+	m         *sc.Machine[S, C]
+	poll      time.Duration
+	hooks     *sc.Hooks[S, C]
+	store     Store[S, C]
+	sink      Sink[C]
+	outbox    bool
+	listeners map[reflect.Type][]func(ctx context.Context, instance string, ev any) error
 }
 
 // config holds what the Option values passed to New configure.
@@ -99,7 +100,7 @@ type config struct {
 	store any
 	sink  any
 
-	emit func(ctx context.Context, instance string, ev any) error
+	listeners map[reflect.Type][]func(ctx context.Context, instance string, ev any) error
 }
 
 // Option configures a [Driver].
@@ -116,16 +117,30 @@ func WithPollInterval(d time.Duration) Option {
 	}
 }
 
-// WithEmit makes the driver call fn with each event a chart emits with
-// [sc.Transition.Emit], together with the ID of the instance that emitted
-// it. An emitted event is recorded with the step that produced it and
-// delivered after that step commits, so fn never sees an event from a step
-// that was rolled back. Delivery is at least once: when fn returns an error
-// the event is delivered again later, so fn must be idempotent. One
-// instance's events arrive in the order it emitted them, in step with its
-// actions. Without this option emitted events are dropped.
-func WithEmit(fn func(ctx context.Context, instance string, ev any) error) Option {
-	return func(c *config) { c.emit = fn }
+// Listen makes the driver call fn with each event of type T a chart emits
+// with [sc.Transition.Emit] or [sc.StateBuilder.EmitOnEntry], together with
+// the ID of the instance that emitted it; T is inferred from fn, and there is
+// one Listen per type of event to hear. New fails for a listener of a type
+// the chart never emits.
+//
+// An emitted event is recorded with the step that produced it and delivered
+// after that step commits, so fn never sees an event from a step that was
+// rolled back. Delivery is at least once: when fn returns an error the event
+// is delivered again later, so fn must be idempotent. One instance's events
+// arrive in the order it emitted them, in step with its actions. An event
+// nothing listens for is dropped.
+func Listen[T any](fn func(ctx context.Context, instance string, ev T) error) Option {
+	return func(c *config) {
+		t := reflect.TypeFor[T]()
+		c.listeners[t] = append(c.listeners[t], func(ctx context.Context, instance string, ev any) error {
+			typed, ok := ev.(T)
+			if !ok {
+				return nil
+			}
+
+			return fn(ctx, instance, typed)
+		})
+	}
 }
 
 // WithHooks makes the driver report to h. [Driver.Send] reports a step
@@ -164,20 +179,26 @@ func New[S comparable, C any](pool *pgxpool.Pool, m *sc.Machine[S, C], opts ...O
 		return nil, ErrMessaging
 	}
 
-	cfg := config{poll: defaultPollInterval, hooks: nil, store: nil, sink: nil, emit: nil}
+	cfg := config{poll: defaultPollInterval, hooks: nil, store: nil, sink: nil, listeners: map[reflect.Type][]func(context.Context, string, any) error{}}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 
 	d := &Driver[S, C]{
-		pool:   pool,
-		m:      m,
-		poll:   cfg.poll,
-		hooks:  typed[*sc.Hooks[S, C]](cfg.hooks, "WithHooks", m.ID()),
-		store:  typed[Store[S, C]](cfg.store, "WithStore", m.ID()),
-		sink:   typed[Sink[C]](cfg.sink, "WithSink", m.ID()),
-		outbox: false,
-		emit:   cfg.emit,
+		pool:      pool,
+		m:         m,
+		poll:      cfg.poll,
+		hooks:     typed[*sc.Hooks[S, C]](cfg.hooks, "WithHooks", m.ID()),
+		store:     typed[Store[S, C]](cfg.store, "WithStore", m.ID()),
+		sink:      typed[Sink[C]](cfg.sink, "WithSink", m.ID()),
+		outbox:    false,
+		listeners: cfg.listeners,
+	}
+
+	for t := range cfg.listeners {
+		if !m.EmitsType(t) {
+			return nil, fmt.Errorf("%w: %s", sc.ErrNoSuchEmit, t)
+		}
 	}
 
 	if d.store == nil {
@@ -317,6 +338,10 @@ func (d *Driver[S, C]) Send(ctx context.Context, id string, ev any) (sc.Step[S, 
 func (d *Driver[S, C]) SendTx(ctx context.Context, tx pgx.Tx, id string, ev any) (sc.Step[S, C], error) {
 	var step sc.Step[S, C]
 
+	if err := d.m.CheckEvent(ev); err != nil {
+		return step, fmt.Errorf("send to instance %q: %w", id, err)
+	}
+
 	data, err := d.store.Lock(ctx, tx, id)
 	if err != nil {
 		return step, fmt.Errorf("send to instance %q: %w", id, err)
@@ -392,12 +417,12 @@ func (d *Driver[S, C]) Perform(ctx context.Context, instance string, data []byte
 	}
 
 	if e.Kind == sc.EffectEmit {
-		if d.emit == nil {
-			return nil
-		}
-
-		if err := d.emit(ctx, instance, e.Event); err != nil {
-			return fmt.Errorf("deliver emitted event: %w", err)
+		// Every listener hears the event; the first error has it delivered
+		// again, to all of them, which is why each must be idempotent.
+		for _, listen := range d.listeners[reflect.TypeOf(e.Event)] {
+			if err := listen(ctx, instance, e.Event); err != nil {
+				return fmt.Errorf("deliver emitted event: %w", err)
+			}
 		}
 
 		return nil

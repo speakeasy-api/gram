@@ -60,8 +60,18 @@
 // [Move] it belongs to. Services run while their state is active and report
 // back as [Done] and [Failed] events. Implementations can be given later with
 // [Machine.Bind], so a chart can be declared, exported and explored without the
-// dependencies its services need. A service reads the event its state was
-// entered with from [Trigger]. [Invocation.Retry] runs a failed service
+// dependencies its services need.
+//
+// A service function is given a context, for cancellation, deadlines and
+// tracing, and a [Run], for what the driver keeps for it: its ID, the
+// progress it recorded on an earlier run with [Run.Checkpoint], and the
+// resources of the states around it with [Resource.Held]. Nothing about the
+// run is read from the context, and nothing is typed any. A service that
+// needs the event its state was entered with is declared with
+// [StateBuilder.InvokeOn], which hands it the event as its own type; one
+// that takes instructions while it runs is declared with
+// [StateBuilder.Receive], which hands it a typed inbox. [Invocation.Retry]
+// runs a failed service
 // again after growing waits, so the chart sees only the failure that is
 // final.
 //
@@ -71,15 +81,24 @@
 // is active: the child starts from the parent's context and its last
 // snapshot becomes the service's result. The parent sends it events with
 // [Transition.SendTo], and the child reports back with [Transition.Emit],
-// which the parent handles like any other event. A plain service reads what
-// the chart sends it from [Inbox]. A state does both as it is entered or
+// which the parent handles like any other event. Sends address the handle
+// the receiving service's declaration returned, so the message's type is
+// checked by the compiler. A state does both as it is entered or
 // exited with [StateBuilder.SendOnEntry] and [StateBuilder.EmitOnEntry], so
 // it can greet the service it invokes, and a service that a step stops
 // still hears what that step sent it. A parent reads where its child is
 // with [Snapshot.Child], and guards on it with [Transition.WhenChildIn]. The child's snapshot is kept inside the
 // parent's, so a stored parent resumes its child where it was. Any service
-// can do the same for its own progress with [Checkpoint] and [Resumed], and
-// [RunID] gives it an idempotency key that survives being run again.
+// can do the same for its own progress with [Run.Checkpoint] and
+// [Run.Resumed], and [Run.ID] gives it an idempotency key that survives being
+// run again.
+//
+// Emitted events reach whoever runs the machine through [Listen], one
+// listener per event type, the type inferred from the listener; a listener
+// for a type the chart never emits fails when the driver is built. A driver's
+// Send refuses an event whose type no transition of the chart names, with
+// [ErrUnknownEvent], which catches a pointer sent where the chart handles the
+// value.
 //
 // A service or child machine declared [Invocation.Spawned], or with
 // [StateBuilder.SpawnMachine], runs any number of times at once, each run
@@ -89,8 +108,9 @@
 //
 // A state can hold a live resource, such as a connection, for as long as it
 // is active: [StateBuilder.Holds] acquires it on entry and releases it on
-// exit, the driver keeps the value out of the snapshot, and the services and
-// actions inside the state read it with [Resource.From].
+// exit, the driver keeps the value out of the snapshot, and the services
+// inside the state read it with [Resource.Held], actions with
+// [Resource.From].
 // [StateBuilder.HoldsPermit] is a resource that takes one unit of a shared
 // budget without waiting, which caps how many instances are in a state at
 // once. [Transition.Release] gives a resource back early, while its state

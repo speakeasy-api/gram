@@ -35,9 +35,9 @@ type build[S comparable, C any] struct {
 	raises  map[string]bool
 	cancels []string
 
-	// sends holds the services SendTo names, and emits is set once any
+	// sends holds the services sends address, and emits is set once any
 	// transition emits.
-	sends []string
+	sends []sendTarget
 	emits bool
 
 	// releases holds the resources Release names.
@@ -282,6 +282,7 @@ func (f *FinalBuilder[S, C]) Output[R any](fn func(C) R) *FinalBuilder[S, C] {
 	name := f.n.name
 	f.n.output = func(c C) any { return Done[R]{ID: name, Result: fn(c)} }
 	f.n.outputValue = func(c C) any { return fn(c) }
+	f.n.outputType = reflect.TypeFor[R]()
 	f.b.outputTypes = append(f.b.outputTypes, reflect.TypeFor[Done[R]]())
 
 	return f
@@ -450,15 +451,19 @@ func (s *StateBuilder[S, C]) OnDone() *Transition[S, C, struct{}] {
 // reached: a [Done] whose Result is what that state declared with
 // [FinalBuilder.Output] and whose ID is its name, so one transition can
 // tell several final states apart. It receives the zero value when the
-// final state declares no output, or one of another type.
+// final state reached declares no output. It is a declaration error for a
+// final state of the state to declare an output of a type other than R.
 //
 // A parallel state completes when every region has, and reports them all:
-// declared with R as map[string]any, the transition receives a Done whose
+// R must then be map[string]any, and the transition receives a Done whose
 // ID is the parallel state's name and whose Result maps each region's name
 // to the output of the final state it ended in, nil for one that declares
 // none, and for a region that is itself parallel a map of its own.
 func (s *StateBuilder[S, C]) OnDoneWith[R any]() *Transition[S, C, Done[R]] {
-	return newTransition[S, C, Done[R]](s.b, s.n, triggerStateDone)
+	t := newTransition[S, C, Done[R]](s.b, s.n, triggerStateDone)
+	t.t.doneWith = reflect.TypeFor[R]()
+
+	return t
 }
 
 // Within gives every service run in the state or any state inside it a
@@ -576,27 +581,46 @@ func (s *StateBuilder[S, C]) RaiseOnExit(name string, f func(C) any) *StateBuild
 	return s
 }
 
-// SendOnEntry sends the event f returns to the service named service
+// SendOnEntry sends the message f returns to the service to addresses
 // whenever the state is entered, as [Transition.SendTo] does from a
 // transition. It reaches a service the state itself invokes, which is how a
 // state greets its own child machine or gives a service its first
 // instruction.
-func (s *StateBuilder[S, C]) SendOnEntry(name, service string, f func(C) any) *StateBuilder[S, C] {
-	s.b.sends = append(s.b.sends, service)
-	s.n.entrySends = append(s.n.entrySends, stateSend[C]{name: name, service: service, fn: f})
+func (s *StateBuilder[S, C]) SendOnEntry[M any](name string, to Mailbox[M], f func(C) M) *StateBuilder[S, C] {
+	service := s.b.sendTo(to)
+	s.n.entrySends = append(s.n.entrySends, stateSend[C]{name: name, service: service, fn: func(c C) any { return f(c) }})
 
 	return s
 }
 
-// SendOnExit sends an event to a service whenever the state is exited, as
+// SendOnExit sends a message to a service whenever the state is exited, as
 // SendOnEntry does on entry. A service the state itself invokes is told
-// before it is stopped: the event is still in its [Inbox] after its context
+// before it is stopped: the message is still in its inbox after its context
 // ends, so it hears the last thing it was sent.
-func (s *StateBuilder[S, C]) SendOnExit(name, service string, f func(C) any) *StateBuilder[S, C] {
-	s.b.sends = append(s.b.sends, service)
-	s.n.exitSends = append(s.n.exitSends, stateSend[C]{name: name, service: service, fn: f})
+func (s *StateBuilder[S, C]) SendOnExit[M any](name string, to Mailbox[M], f func(C) M) *StateBuilder[S, C] {
+	service := s.b.sendTo(to)
+	s.n.exitSends = append(s.n.exitSends, stateSend[C]{name: name, service: service, fn: func(c C) any { return f(c) }})
 
 	return s
+}
+
+// sendTarget is a service a send addresses, with the type of message sent.
+type sendTarget struct {
+	service string
+	message reflect.Type
+}
+
+// sendTo records a send to the service to names, and returns its name.
+func (b *build[S, C]) sendTo[M any](to Mailbox[M]) string {
+	if to == nil {
+		b.errorf("a send has no service to send to")
+		return ""
+	}
+
+	name := to.port().name
+	b.sends = append(b.sends, sendTarget{service: name, message: reflect.TypeFor[M]()})
+
+	return name
 }
 
 // EmitOnEntry hands the event f returns to whoever runs the machine
@@ -671,24 +695,71 @@ func (s *StateBuilder[S, C]) OnExitIf(name string, cond func(Move[S]) bool) *Sta
 
 // Invoke declares a service that runs while the state is active. It starts
 // when the state is entered and receives the context as it was at that
-// moment. Its result arrives as a [Done] event and its error as a [Failed]
-// event, routed with the returned [Invocation]. Leaving the state before the
-// service finishes stops it and discards its result.
+// moment, and a [Run] for what the driver keeps for it. Its result arrives
+// as a [Done] event and its error as a [Failed] event, routed with the
+// returned [Invocation]. Leaving the state before the service finishes stops
+// it and discards its result.
 //
 // Drivers may run a service more than once, so fn must be idempotent.
-func (s *StateBuilder[S, C]) Invoke[R any](name string, fn func(context.Context, C) (R, error)) *Invocation[S, C, R] {
-	inv := &invocation[S, C]{
-		state:    s.n,
-		name:     name,
-		doneType: reflect.TypeFor[Done[R]](),
-		run:      adaptService(fn),
-		resource: nil,
-		retry:    nil,
-		spawned:  false,
-	}
-	s.n.invocations = append(s.n.invocations, inv)
+func (s *StateBuilder[S, C]) Invoke[R any](name string, fn func(ctx context.Context, run *Run, c C) (R, error)) *Invocation[S, C, R] {
+	inv := s.addInvocation(newInvocation[S, C, R](name, adaptService(fn)))
 
 	return &Invocation[S, C, R]{b: s.b, n: s.n, inv: inv}
+}
+
+// InvokeOn declares a service like [StateBuilder.Invoke] that also receives
+// the event its state was entered with, as an Ev. Write Ev; R is inferred:
+//
+//	b.State("charging").InvokeOn[Checkout]("charge", func(ctx context.Context, run *sc.Run, o Order, ev Checkout) (Receipt, error) { ... })
+//
+// It is a declaration error for the state to be entered any other way than
+// by an event of type Ev: as the instance starts, as its parent's initial
+// state or a region of a parallel state, by a timer, or by another event. A
+// run that is started again, after a restart or by [Invocation.Retry],
+// receives the same event. An instance placed in the state with
+// [Machine.StartIn] gives the zero Ev.
+func (s *StateBuilder[S, C]) InvokeOn[Ev, R any](name string, fn func(ctx context.Context, run *Run, c C, ev Ev) (R, error)) *Invocation[S, C, R] {
+	inv := s.addInvocation(newInvocation[S, C, R](name, adaptService(func(ctx context.Context, run *Run, c C) (R, error) {
+		return fn(ctx, run, c, triggerOf[Ev](ctx))
+	})))
+	inv.triggerType = reflect.TypeFor[Ev]()
+
+	if inv.triggerType.Kind() == reflect.Interface {
+		s.b.errorf("state %q: service %q is started by %s, an interface; use a concrete event type", s.n.name, name, inv.triggerType)
+	}
+
+	return &Invocation[S, C, R]{b: s.b, n: s.n, inv: inv}
+}
+
+// Receive declares a service like [StateBuilder.Invoke] that also receives
+// messages of type M while it runs: the chart sends them with
+// [Transition.SendTo] and the other sends, addressed to the handle Receive
+// returns, and the service reads them from inbox. inbox ends when the
+// service's context does, still yielding what was sent by the step that
+// stopped it. A service that lets [MaxInbox] messages wait unread is
+// stopped and fails with [ErrInboxFull].
+//
+// Only the [Instance] and [Actor] drivers deliver messages; pgdriver rejects
+// a chart that sends them.
+func (s *StateBuilder[S, C]) Receive[M, R any](name string, fn func(ctx context.Context, run *Run, c C, inbox iter.Seq[M]) (R, error)) *Receiving[S, C, M, R] {
+	inv := s.addInvocation(newInvocation[S, C, R](name, adaptService(func(ctx context.Context, run *Run, c C) (R, error) {
+		return fn(ctx, run, c, messages[M](ctx))
+	})))
+	inv.inboxType = reflect.TypeFor[M]()
+
+	return &Receiving[S, C, M, R]{Invocation: &Invocation[S, C, R]{b: s.b, n: s.n, inv: inv}, Port: Port[M]{name: name}}
+}
+
+// ReceiveStream declares a service like [StateBuilder.Stream] that also
+// receives messages of type M, as [StateBuilder.Receive] does: a service
+// that both takes instructions and reports events while it runs.
+func (s *StateBuilder[S, C]) ReceiveStream[M any](name string, fn func(ctx context.Context, run *Run, c C, inbox iter.Seq[M]) iter.Seq2[any, error]) *Receiving[S, C, M, struct{}] {
+	inv := s.addInvocation(newInvocation[S, C, struct{}](name, adaptStream(func(ctx context.Context, run *Run, c C) iter.Seq2[any, error] {
+		return fn(ctx, run, c, messages[M](ctx))
+	})))
+	inv.inboxType = reflect.TypeFor[M]()
+
+	return &Receiving[S, C, M, struct{}]{Invocation: &Invocation[S, C, struct{}]{b: s.b, n: s.n, inv: inv}, Port: Port[M]{name: name}}
 }
 
 // Requires declares a service like [StateBuilder.Invoke], by its name and
@@ -697,16 +768,7 @@ func (s *StateBuilder[S, C]) Invoke[R any](name string, fn func(context.Context,
 // dependencies the service needs. A service run while still unbound fails
 // with [ErrNotBound].
 func (s *StateBuilder[S, C]) Requires[R any](name string) *Invocation[S, C, R] {
-	inv := &invocation[S, C]{
-		state:    s.n,
-		name:     name,
-		doneType: reflect.TypeFor[Done[R]](),
-		run:      nil,
-		resource: nil,
-		retry:    nil,
-		spawned:  false,
-	}
-	s.n.invocations = append(s.n.invocations, inv)
+	inv := s.addInvocation(newInvocation[S, C, R](name, nil))
 
 	return &Invocation[S, C, R]{b: s.b, n: s.n, inv: inv}
 }
@@ -726,17 +788,17 @@ func (s *StateBuilder[S, C]) RequiresStream(name string) *Invocation[S, C, struc
 //
 // A state's resources are acquired one after another, in the order they
 // were declared: each starts once the one before it is held, and its acquire
-// function can read the earlier ones with [Resource.From]. If one fails, the
+// function can read the earlier ones with [Resource.Held]. If one fails, the
 // later ones are not acquired.
 //
 // Acquiring does not hold anything else up: the services of the state, and
 // of the child states entered with it, start alongside the first
-// acquisition and may find [Resource.From] reporting false. Put work that
+// acquisition and may find [Resource.Held] reporting false. Put work that
 // needs the resource in a child state entered from OnAcquired.
 //
 // The value never enters the context or the snapshot. The driver keeps it,
-// and services and actions of the state and the states inside it read it
-// with [Resource.From]. Resources are released in the reverse of the order
+// and services of the state and the states inside it read it with
+// [Resource.Held], actions with [Resource.From]. Resources are released in the reverse of the order
 // they were declared, and those of inner states before those of outer ones.
 //
 // If the state is left while acquire is still running, acquire is left to
@@ -746,7 +808,7 @@ func (s *StateBuilder[S, C]) RequiresStream(name string) *Invocation[S, C, struc
 //
 // release cannot fail, like an action. Only the [Instance] and [Actor]
 // drivers hold resources; pgdriver rejects a chart that declares one.
-func (s *StateBuilder[S, C]) Holds[R any](name string, acquire func(context.Context, C) (R, error), release func(ctx context.Context, value R, why Leave[S])) *Resource[S, C, R] {
+func (s *StateBuilder[S, C]) Holds[R any](name string, acquire func(ctx context.Context, run *Run, c C) (R, error), release func(ctx context.Context, value R, why Leave[S])) *Resource[S, C, R] {
 	res := s.HoldsRequired[R](name)
 	res.inv.run = adaptAcquire(acquire)
 	res.inv.resource.release = adaptRelease(release)
@@ -758,16 +820,10 @@ func (s *StateBuilder[S, C]) Holds[R any](name string, acquire func(context.Cont
 // and type only. Its acquire and release functions are given later with
 // [Machine.Bind].
 func (s *StateBuilder[S, C]) HoldsRequired[R any](name string) *Resource[S, C, R] {
-	inv := &invocation[S, C]{
-		state:    s.n,
-		name:     name,
-		doneType: reflect.TypeFor[Acquired[R]](),
-		run:      nil,
-		resource: &resourceSpec[S]{key: s.n.name + "\x00" + name, release: nil},
-		retry:    nil,
-		spawned:  false,
-	}
-	s.n.invocations = append(s.n.invocations, inv)
+	inv := newInvocation[S, C, R](name, nil)
+	inv.doneType = reflect.TypeFor[Acquired[R]]()
+	inv.resource = &resourceSpec[S]{key: s.n.name + "\x00" + name, release: nil}
+	s.addInvocation(inv)
 
 	return &Resource[S, C, R]{b: s.b, n: s.n, inv: inv}
 }
@@ -800,115 +856,13 @@ func (r *Resource[S, C, R]) OnError() *Transition[S, C, Failed] {
 	return t
 }
 
-// From returns the resource's value from the context a service or action
-// was given. It reports false when the resource is not held: before it is
-// acquired, after its state is left, or under a driver that holds no
-// resources.
-func (r *Resource[S, C, R]) From(ctx context.Context) (R, bool) {
-	var zero R
-
-	lookup, ok := ctx.Value(heldResources{}).(func(key string) (any, bool))
-	if !ok {
-		return zero, false
-	}
-
-	value, ok := lookup(r.inv.resource.key)
-	if !ok {
-		return zero, false
-	}
-
-	typed, ok := value.(R)
-
-	return typed, ok
-}
-
-// heldResources is the context key under which a driver exposes the
-// resources it holds.
-type heldResources struct{}
-
-// adaptAcquire adapts an acquire function to the form the core runs.
-func adaptAcquire[C, R any](fn func(context.Context, C) (R, error)) func(context.Context, C, string) iter.Seq[any] {
-	return func(ctx context.Context, c C, id string) iter.Seq[any] {
-		return func(yield func(any) bool) {
-			value, err := fn(ctx, c)
-			if err != nil {
-				yield(Failed{ID: id, Err: err})
-				return
-			}
-
-			yield(Acquired[R]{ID: id, Value: value})
-		}
-	}
-}
-
-// adaptRelease adapts a release function to the form the core runs.
-func adaptRelease[S comparable, R any](fn func(context.Context, R, Leave[S])) func(context.Context, any, Leave[S]) {
-	return func(ctx context.Context, value any, why Leave[S]) {
-		if typed, ok := value.(R); ok {
-			fn(ctx, typed, why)
-		}
-	}
-}
-
-// adaptService adapts a service function to the form the core runs.
-func adaptService[C, R any](fn func(context.Context, C) (R, error)) func(context.Context, C, string) iter.Seq[any] {
-	return func(ctx context.Context, c C, id string) iter.Seq[any] {
-		return func(yield func(any) bool) {
-			ctx, emit := recording(ctx, id, yield)
-
-			res, err := fn(ctx, c)
-			if err != nil {
-				emit(Failed{ID: id, Err: err})
-				return
-			}
-
-			emit(Done[R]{ID: id, Result: res})
-		}
-	}
-}
-
-// adaptStream adapts a stream function to the form the core runs.
-func adaptStream[C any](fn func(context.Context, C) iter.Seq2[any, error]) func(context.Context, C, string) iter.Seq[any] {
-	return func(ctx context.Context, c C, id string) iter.Seq[any] {
-		return func(yield func(any) bool) {
-			stopped := false
-			ctx, emit := recording(ctx, id, func(ev any) bool {
-				stopped = !yield(ev)
-				return !stopped
-			})
-
-			for ev, err := range fn(ctx, c) {
-				if err != nil {
-					emit(Failed{ID: id, Err: err})
-					return
-				}
-
-				if emit(Emitted{ID: id, Event: ev}); stopped {
-					return
-				}
-			}
-
-			emit(Done[struct{}]{ID: id, Result: struct{}{}})
-		}
-	}
-}
-
 // Stream declares a service that sends events to the machine for as long as
 // the state is active. Each value the sequence yields is delivered as an
 // event. Yielding a non-nil error ends the service with a [Failed] event, and
 // a sequence that ends normally produces a [Done] event. When the state is
 // exited the driver stops ranging, so the function's deferred cleanup runs.
-func (s *StateBuilder[S, C]) Stream(name string, fn func(context.Context, C) iter.Seq2[any, error]) *Invocation[S, C, struct{}] {
-	inv := &invocation[S, C]{
-		state:    s.n,
-		name:     name,
-		doneType: reflect.TypeFor[Done[struct{}]](),
-		run:      adaptStream(fn),
-		resource: nil,
-		retry:    nil,
-		spawned:  false,
-	}
-	s.n.invocations = append(s.n.invocations, inv)
+func (s *StateBuilder[S, C]) Stream(name string, fn func(ctx context.Context, run *Run, c C) iter.Seq2[any, error]) *Invocation[S, C, struct{}] {
+	inv := s.addInvocation(newInvocation[S, C, struct{}](name, adaptStream(fn)))
 
 	return &Invocation[S, C, struct{}]{b: s.b, n: s.n, inv: inv}
 }
@@ -958,7 +912,7 @@ func (i *Invocation[S, C, R]) Retry(policy Retry) *Invocation[S, C, R] {
 //
 // The service's OnDone and OnError transitions are taken for every run, and
 // tell the runs apart with [SpawnKey] on the event's ID. The service reads
-// its own key with SpawnKey on [RunID].
+// its own key with [Run.Key].
 func (i *Invocation[S, C, R]) Spawned() *Invocation[S, C, R] {
 	i.inv.spawned = true
 	return i
@@ -1228,7 +1182,7 @@ func (t *Transition[S, C, Ev]) Raise(name string, f func(C, Ev) any) *Transition
 // Release gives back the resource named name now, although the state that
 // holds it stays active: a secret that is only needed for the first step
 // inside the state, a lock that later steps must not keep. Its release
-// function runs as it would on leaving the state, [Resource.From] reports
+// function runs as it would on leaving the state, [Resource.Held] reports
 // false from then on, and the resource is not acquired again until the
 // state is entered again. It does nothing when the resource is not held; an
 // acquisition still in flight is released when it arrives, without its
@@ -1258,8 +1212,8 @@ func (t *Transition[S, C, Ev]) StopSpawned(name, service string, key func(C, Ev)
 
 // SendToKey is [Transition.SendTo] for one run of a spawned service: the
 // one with the key that key returns.
-func (t *Transition[S, C, Ev]) SendToKey(name, service string, key func(C, Ev) string, f func(C, Ev) any) *Transition[S, C, Ev] {
-	t.SendTo(name, service, f)
+func (t *Transition[S, C, Ev]) SendToKey[M any](name string, to Mailbox[M], key func(C, Ev) string, f func(C, Ev) M) *Transition[S, C, Ev] {
+	t.SendTo(name, to, f)
 	t.t.keys[len(t.t.steps)-1] = func(c C, ev any) string { return key(c, event[Ev](ev)) }
 
 	return t
@@ -1275,23 +1229,24 @@ func (t *Transition[S, C, Ev]) keyed(kind stepKind, name, service string, key fu
 	return t
 }
 
-// SendTo sends the event f returns to the running service named service,
-// which reads it from [Inbox]. It is how a chart talks to work in progress:
-// a child machine declared with [StateBuilder.InvokeMachine], or a service
-// that takes instructions while it runs. The event goes to every service of
-// that name that is running once the step has settled, which includes one
+// SendTo sends the message f returns to the running service to addresses:
+// the handle [StateBuilder.Receive], [StateBuilder.ReceiveStream],
+// [StateBuilder.InvokeMachine] or [StateBuilder.SpawnMachine] returned. M is
+// inferred from it, so f must build the message type the service reads. It
+// is how a chart talks to work in progress. The message goes to every run of
+// that service that is running once the step has settled, which includes one
 // the step itself starts, so a transition into a state can greet the service
-// that state invokes. A service the step stops is told first: the event is
-// still in its [Inbox] after its context ends. When no such service is
-// running, because its state is not active or it has finished, the event
+// that state invokes. A service the step stops is told first: the message is
+// still in its inbox after its context ends. When no such service is
+// running, because its state is not active or it has finished, the message
 // is dropped.
 //
-// Only the [Instance] and [Actor] drivers deliver such events; pgdriver
-// rejects a chart that sends them, because the service runs in another
-// process than the one processing the event.
-func (t *Transition[S, C, Ev]) SendTo(name, service string, f func(C, Ev) any) *Transition[S, C, Ev] {
+// Only the [Instance] and [Actor] drivers deliver messages; pgdriver rejects
+// a chart that sends them, because the service runs in another process than
+// the one processing the event.
+func (t *Transition[S, C, Ev]) SendTo[M any](name string, to Mailbox[M], f func(C, Ev) M) *Transition[S, C, Ev] {
+	service := t.b.sendTo(to)
 	t.t.sendTargets[len(t.t.steps)] = service
-	t.b.sends = append(t.b.sends, service)
 
 	t.t.steps = append(t.t.steps, step[C]{
 		kind:   stepSend,
@@ -1305,10 +1260,10 @@ func (t *Transition[S, C, Ev]) SendTo(name, service string, f func(C, Ev) any) *
 	return t
 }
 
-// Emit hands the event f returns to whoever runs the machine: the function
-// its driver was given with [OnEmit], the parent of a machine run with
+// Emit hands the event f returns to whoever runs the machine: the listeners
+// for T its driver was given with [Listen], the parent of a machine run with
 // [StateBuilder.InvokeMachine], which receives it as an event of its own, or
-// the handler pgdriver was given with its WithEmit option, which receives it
+// the listeners pgdriver was given with its Listen option, which receive it
 // once the step has committed. It is how a machine reports progress without
 // knowing who listens. Without a listener the event is dropped.
 //

@@ -40,7 +40,7 @@ func TestHooksRecordSpansAndMetrics(t *testing.T) {
 		m, err := sc.New("payment", func(b *sc.Builder[string, int]) {
 			b.Initial("idle")
 			b.State("idle").On[submit]().Do("announce", func(context.Context, int, submit) {}).To("charging")
-			charge := b.State("charging").Invoke("charge", func(context.Context, int) (string, error) { return "", errDeclined })
+			charge := b.State("charging").Invoke("charge", func(context.Context, *sc.Run, int) (string, error) { return "", errDeclined })
 			charge.OnDone().To("paid")
 			charge.OnError().To("declined")
 			b.Final("paid")

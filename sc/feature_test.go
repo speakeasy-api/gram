@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"iter"
 	"math/rand/v2"
 	"slices"
 	"sync/atomic"
@@ -95,7 +96,7 @@ var errFlaky = errors.New("flaky")
 
 // retryChart runs a service that is retried twice, half a minute and then a
 // minute apart.
-func retryChart(t *testing.T, work func(context.Context, counter) (int, error), policy sc.Retry) *sc.Machine[string, counter] {
+func retryChart(t *testing.T, work func(context.Context, *sc.Run, counter) (int, error), policy sc.Retry) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("retrying", func(b *sc.Builder[string, counter]) {
@@ -199,7 +200,7 @@ func TestARetriedServiceRunsUntilItSucceedsUnderADriver(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		calls := 0
-		m := retryChart(t, func(context.Context, counter) (int, error) {
+		m := retryChart(t, func(context.Context, *sc.Run, counter) (int, error) {
 			calls++
 			if calls < 3 {
 				return 0, errFlaky
@@ -357,8 +358,8 @@ func parentChart(t *testing.T, child *sc.Machine[string, counter]) *sc.Machine[s
 			To("done")
 		download.OnError().To("failed")
 
-		downloading.On[tick]().SendTo("forward", "download", func(_ counter, ev tick) any { return ev })
-		downloading.On[finish]().SendTo("finish", "download", func(_ counter, ev finish) any { return ev })
+		downloading.On[tick]().SendTo("forward", download, func(_ counter, ev tick) any { return ev })
+		downloading.On[finish]().SendTo("finish", download, func(_ counter, ev finish) any { return ev })
 		downloading.On[progress]().Assign("seen", func(c counter, ev progress) counter { c.N = ev.Percent; return c })
 		downloading.On[pause]().To("idle")
 
@@ -478,9 +479,21 @@ func TestTheCoreReturnsSendsAndEmitsAsEffects(t *testing.T) {
 	})
 	require.ErrorContains(t, err, "emit a concrete type")
 
+	// A send takes a handle, so it can only name a service that exists;
+	// one taken from another chart names a service this one lacks.
+	var elsewhere sc.Mailbox[tick]
+	_, err = sc.New("other", func(b *sc.Builder[string, counter]) {
+		b.Initial("a")
+		inv := b.State("a").Receive[tick]("nobody", func(context.Context, *sc.Run, counter, iter.Seq[tick]) (int, error) { return 0, nil })
+		inv.OnDone().Stay()
+		inv.OnError().Stay()
+		elsewhere = inv
+	})
+	require.NoError(t, err)
+
 	_, err = sc.New("nowhere", func(b *sc.Builder[string, counter]) {
 		b.Initial("a")
-		b.State("a").On[tick]().SendTo("send", "nobody", func(counter, tick) any { return tick{} })
+		b.State("a").On[tick]().SendTo("send", elsewhere, func(counter, tick) tick { return tick{} })
 	})
 	require.ErrorContains(t, err, "not a service of the chart")
 }
@@ -488,14 +501,17 @@ func TestTheCoreReturnsSendsAndEmitsAsEffects(t *testing.T) {
 func TestAServiceReadsWhatTheChartSendsIt(t *testing.T) {
 	t.Parallel()
 
+	// note is what the chart tells the service: count one, or stop.
+	type note struct{ Stop bool }
+
 	synctest.Test(t, func(t *testing.T) {
 		m, err := sc.New("worker", func(b *sc.Builder[string, counter]) {
 			b.Initial("working")
 			working := b.State("working")
-			inv := working.Invoke("work", func(ctx context.Context, _ counter) (int, error) {
+			inv := working.Receive[note]("work", func(_ context.Context, _ *sc.Run, _ counter, inbox iter.Seq[note]) (int, error) {
 				total := 0
-				for ev := range sc.Inbox(ctx) {
-					if _, ok := ev.(finish); ok {
+				for msg := range inbox {
+					if msg.Stop {
 						break
 					}
 					total++
@@ -505,8 +521,8 @@ func TestAServiceReadsWhatTheChartSendsIt(t *testing.T) {
 			})
 			inv.OnDone().Assign("keep", func(c counter, d sc.Done[int]) counter { c.N = d.Result; return c }).To("done")
 			inv.OnError().To("done")
-			working.On[tick]().SendTo("count", "work", func(_ counter, ev tick) any { return ev })
-			working.On[finish]().SendTo("stop", "work", func(_ counter, ev finish) any { return ev })
+			working.On[tick]().SendTo("count", inv, func(counter, tick) note { return note{Stop: false} })
+			working.On[finish]().SendTo("stop", inv, func(counter, finish) note { return note{Stop: true} })
 			b.Final("done")
 		})
 		require.NoError(t, err)
@@ -539,9 +555,9 @@ func TestAServiceCarriesOnFromItsCheckpointAfterARestart(t *testing.T) {
 
 		m, err := sc.New("resumable", func(b *sc.Builder[string, counter]) {
 			b.Initial("working")
-			inv := b.State("working").Invoke("count", func(ctx context.Context, _ counter) (int, error) {
+			inv := b.State("working").Invoke("count", func(ctx context.Context, run *sc.Run, _ counter) (int, error) {
 				n := 0
-				if _, err := sc.Resumed(ctx, &n); err != nil {
+				if _, err := run.Resumed(&n); err != nil {
 					return 0, fmt.Errorf("resume count: %w", err)
 				}
 				starts = append(starts, n)
@@ -554,7 +570,7 @@ func TestAServiceCarriesOnFromItsCheckpointAfterARestart(t *testing.T) {
 					}
 
 					n++
-					if err := sc.Checkpoint(ctx, n); err != nil {
+					if err := run.Checkpoint(n); err != nil {
 						return 0, fmt.Errorf("save count: %w", err)
 					}
 				}
@@ -712,7 +728,7 @@ func TestReleaseGivesAResourceBackWhileItsStateStaysActive(t *testing.T) {
 				b.State("finishing").On[tick]().To("closed")
 			})
 			token = session.Holds("token",
-				func(context.Context, counter) (string, error) { return "s3cret", nil },
+				func(context.Context, *sc.Run, counter) (string, error) { return "s3cret", nil },
 				func(_ context.Context, value string, why sc.Leave[string]) {
 					released = append(released, value+" at "+why.Move.To[len(why.Move.To)-1])
 				},
@@ -766,8 +782,8 @@ func TestAServiceRunKnowsItsIDAndWaitsOnTheThrottle(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		var seen string
-		m := workChart(t, func(ctx context.Context, _ counter) (int, error) {
-			seen = sc.RunID(ctx)
+		m := workChart(t, func(_ context.Context, run *sc.Run, _ counter) (int, error) {
+			seen = run.ID()
 			return 1, nil
 		})
 
@@ -781,7 +797,11 @@ func TestAServiceRunKnowsItsIDAndWaitsOnTheThrottle(t *testing.T) {
 
 		require.Equal(t, effect(t, step.Effects, sc.EffectStartInvocation).ID, seen)
 		require.Equal(t, int32(1), throttle.waits.Load())
-		require.Empty(t, sc.RunID(t.Context()))
+
+		// A Run no driver handed out has no ID and cannot record progress.
+		var outside sc.Run
+		require.Empty(t, outside.ID())
+		require.ErrorIs(t, outside.Checkpoint(1), sc.ErrNoCheckpoint)
 	})
 }
 
@@ -800,14 +820,15 @@ func uploadsChart(t *testing.T) *sc.Machine[string, order] {
 		b.Initial("open")
 		open := b.State("open")
 
-		upload := open.Invoke("upload", func(ctx context.Context, _ order) (string, error) {
-			key, _ := sc.SpawnKey(sc.RunID(ctx))
-			for range sc.Inbox(ctx) {
+		upload := open.Receive[finishOne]("upload", func(ctx context.Context, run *sc.Run, _ order, inbox iter.Seq[finishOne]) (string, error) {
+			key, _ := run.Key()
+			for range inbox {
 				return "sent " + key, nil
 			}
 
 			return "", context.Cause(ctx)
-		}).Spawned()
+		})
+		upload.Spawned()
 		upload.OnDone().Assign("collect", func(o order, d sc.Done[string]) order {
 			key, _ := sc.SpawnKey(d.ID)
 			o.Items = append(slices.Clone(o.Items), key+"="+d.Result)
@@ -818,9 +839,9 @@ func uploadsChart(t *testing.T) *sc.Machine[string, order] {
 
 		open.On[add]().Spawn("start", "upload", func(_ order, ev add) string { return ev.Key })
 		open.On[remove]().StopSpawned("stop", "upload", func(_ order, ev remove) string { return ev.Key })
-		open.On[finishOne]().SendToKey("finish", "upload",
+		open.On[finishOne]().SendToKey("finish", upload,
 			func(_ order, ev finishOne) string { return ev.Key },
-			func(_ order, ev finishOne) any { return ev },
+			func(_ order, ev finishOne) finishOne { return ev },
 		)
 		open.On[leave]().To("closed")
 		b.Final("closed")
@@ -891,7 +912,7 @@ func TestSpawnMachineRunsOneChildPerKey(t *testing.T) {
 			})
 			download.OnError().Stay()
 			open.On[add]().Spawn("start", "download", func(_ order, ev add) string { return ev.Key })
-			open.On[finishOne]().SendToKey("finish", "download",
+			open.On[finishOne]().SendToKey("finish", download,
 				func(_ order, ev finishOne) string { return ev.Key },
 				func(order, finishOne) any { return finish{Fail: false} },
 			)
@@ -922,7 +943,7 @@ func TestSpawnMachineRunsOneChildPerKey(t *testing.T) {
 	_, err := sc.New("unspawned", func(b *sc.Builder[string, counter]) {
 		b.Initial("a")
 		a := b.State("a")
-		inv := a.Invoke("work", func(context.Context, counter) (int, error) { return 0, nil })
+		inv := a.Invoke("work", func(context.Context, *sc.Run, counter) (int, error) { return 0, nil })
 		inv.OnDone().To("b")
 		inv.OnError().To("b")
 		a.On[tick]().Spawn("start", "work", func(counter, tick) string { return "k" })
@@ -962,7 +983,7 @@ func TestAServiceThatFallsBehindItsInboxFails(t *testing.T) {
 			working := b.State("working")
 
 			// The service never reads what it is sent.
-			inv := working.Invoke("work", func(ctx context.Context, _ counter) (int, error) {
+			inv := working.Receive[tick]("work", func(ctx context.Context, _ *sc.Run, _ counter, _ iter.Seq[tick]) (int, error) {
 				<-ctx.Done()
 				return 0, context.Cause(ctx)
 			})
@@ -971,7 +992,7 @@ func TestAServiceThatFallsBehindItsInboxFails(t *testing.T) {
 				When("overflowed", func(_ counter, f sc.Failed) bool { return errors.Is(f.Err, sc.ErrInboxFull) }).
 				To("overflowed")
 			inv.OnError().To("done")
-			working.On[tick]().SendTo("nudge", "work", func(_ counter, ev tick) any { return ev })
+			working.On[tick]().SendTo("nudge", inv, func(_ counter, ev tick) tick { return ev })
 			b.Final("done")
 			b.Final("overflowed")
 		})

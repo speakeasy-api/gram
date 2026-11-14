@@ -103,7 +103,7 @@ func trackerChart(t *testing.T, iss issuer) *sc.Machine[string, tracker] {
 		b.State("running", func(b *sc.Builder[string, tracker]) {
 			b.Initial("obtaining")
 
-			obtain := b.State("obtaining").Invoke("obtain", func(ctx context.Context, _ tracker) (credential, error) {
+			obtain := b.State("obtaining").Invoke("obtain", func(ctx context.Context, _ *sc.Run, _ tracker) (credential, error) {
 				return iss.Obtain(ctx)
 			})
 			obtain.OnDone().Assign("hold", hold).To("serving")
@@ -115,7 +115,7 @@ func trackerChart(t *testing.T, iss issuer) *sc.Machine[string, tracker] {
 
 			b.State("serving").Deadline("renewAt", func(c tracker) time.Time { return c.Held.RenewAt }).To("renewing")
 
-			renew := b.State("renewing").Invoke("renew", func(ctx context.Context, c tracker) (credential, error) {
+			renew := b.State("renewing").Invoke("renew", func(ctx context.Context, _ *sc.Run, c tracker) (credential, error) {
 				return iss.Renew(ctx, *c.Held)
 			})
 			renew.OnDone().Assign("hold", hold).To("serving")

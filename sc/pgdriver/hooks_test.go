@@ -81,7 +81,7 @@ func TestDriverReportsCommittedStepsAndEffectsToItsHooks(t *testing.T) {
 	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
 		b.Initial("idle")
 		b.State("idle").On[submit]().Do("announce", func(context.Context, order, submit) {}).To("charging")
-		charge := b.State("charging").Invoke("charge", func(context.Context, order) (string, error) { return "", errCardDeclined })
+		charge := b.State("charging").Invoke("charge", func(context.Context, *sc.Run, order) (string, error) { return "", errCardDeclined })
 		charge.OnDone().To("paid")
 		charge.OnError().To("declined")
 		b.Final("paid")
@@ -153,7 +153,7 @@ func TestErrorRoutingWorksOnTypesBeforeStorageAndOnCodesAfter(t *testing.T) {
 
 	m, err := sc.New(machineID(t), func(b *sc.Builder[string, order]) {
 		b.Initial("charging")
-		charge := b.State("charging").Invoke("charge", func(context.Context, order) (string, error) {
+		charge := b.State("charging").Invoke("charge", func(context.Context, *sc.Run, order) (string, error) {
 			return "", fmt.Errorf("charge: %w", quotaError{retryIn: time.Minute})
 		})
 		charge.OnDone().To("paid")

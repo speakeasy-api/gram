@@ -30,15 +30,24 @@ func TestInstanceSendRunsTheActionsBeforeReturningAndSaysWhetherItWasAccepted(t 
 		require.NoError(t, err)
 		defer inst.Close()
 
-		ignored, err := inst.Send(t.Context(), pong{})
-		require.NoError(t, err)
-		require.Equal(t, ignored.From.Seq(), ignored.To.Seq())
+		// An event of a type the chart never names is refused.
+		before := inst.Snapshot().Seq()
+		_, err = inst.Send(t.Context(), pong{})
+		require.ErrorIs(t, err, sc.ErrUnknownEvent)
+		require.Equal(t, before, inst.Snapshot().Seq())
 
 		accepted, err := inst.Send(t.Context(), tick{})
 		require.NoError(t, err)
+		require.True(t, accepted.Accepted())
 		require.NotEqual(t, accepted.From.Seq(), accepted.To.Seq())
 		require.True(t, announced.Load())
 		require.True(t, inst.Snapshot().Done())
+
+		// One it names, where nothing handles it, is ignored.
+		ignored, err := inst.Send(t.Context(), tick{})
+		require.NoError(t, err)
+		require.False(t, ignored.Accepted())
+		require.Equal(t, ignored.From.Seq(), ignored.To.Seq())
 	})
 }
 
@@ -46,7 +55,7 @@ func TestInstanceRunsServicesInTheBackgroundAndAwaitSeesTheResult(t *testing.T) 
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m := workChart(t, func(context.Context, counter) (int, error) { return 1, nil })
+		m := workChart(t, func(context.Context, *sc.Run, counter) (int, error) { return 1, nil })
 
 		inst, err := m.Instance(t.Context(), counter{})
 		require.NoError(t, err)
@@ -72,7 +81,7 @@ func TestInstanceStopsAServiceBeforeTheNextEffectsRun(t *testing.T) {
 		m, err := sc.New("ordered stop", func(b *sc.Builder[string, counter]) {
 			b.Initial("working")
 			working := b.State("working")
-			working.Invoke("work", func(ctx context.Context, _ counter) (int, error) {
+			working.Invoke("work", func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 				defer exited.Store(true)
 				<-ctx.Done()
 
@@ -101,7 +110,7 @@ func TestInstanceStreamCanLeaveItsOwnState(t *testing.T) {
 		m, err := sc.New("self stop", func(b *sc.Builder[string, counter]) {
 			b.Initial("listening")
 			listening := b.State("listening")
-			listening.Stream("events", func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+			listening.Stream("events", func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 				return func(yield func(any, error) bool) {
 					if !yield(leave{}, nil) {
 						return
@@ -186,7 +195,7 @@ func TestClosedInstanceRefusesEventsAndStopsItsServices(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		var stopped atomic.Bool
-		m := workChart(t, func(ctx context.Context, _ counter) (int, error) {
+		m := workChart(t, func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 			<-ctx.Done()
 			stopped.Store(true)
 
@@ -210,12 +219,16 @@ func TestActorCallWaitsForTheStepAndAwaitForAState(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m := workChart(t, func(context.Context, counter) (int, error) { return 1, nil })
+		m := workChart(t, func(context.Context, *sc.Run, counter) (int, error) { return 1, nil })
 		a := m.Actor(counter{})
 		wait := runActor(t.Context(), a)
 
-		ignored, err := a.Call(t.Context(), pong{})
+		_, err := a.Call(t.Context(), pong{})
+		require.ErrorIs(t, err, sc.ErrUnknownEvent)
+
+		ignored, err := a.Call(t.Context(), leave{})
 		require.NoError(t, err)
+		require.False(t, ignored.Accepted())
 		require.Equal(t, ignored.From.Seq(), ignored.To.Seq())
 
 		step, err := a.Call(t.Context(), tick{})

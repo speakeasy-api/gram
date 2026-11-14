@@ -124,7 +124,7 @@ func New(provider Provider) (*sc.Machine[State, Order], error) {
 		charging := b.State(Charging)
 		charging.On[Cancel]().Assign("requestCancel", requestCancel)
 
-		charge := charging.Invoke("charge", func(ctx context.Context, o Order) (string, error) {
+		charge := charging.Invoke("charge", func(ctx context.Context, _ *sc.Run, o Order) (string, error) {
 			return provider.Charge(ctx, o.IdempotencyKey())
 		})
 		charge.OnDone().

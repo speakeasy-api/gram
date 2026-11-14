@@ -65,7 +65,7 @@ func (r *recorder) hooks(m *sc.Machine[string, counter]) *sc.Hooks[string, count
 	}
 }
 
-func workChart(t *testing.T, work func(context.Context, counter) (int, error)) *sc.Machine[string, counter] {
+func workChart(t *testing.T, work func(context.Context, *sc.Run, counter) (int, error)) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("work", func(b *sc.Builder[string, counter]) {
@@ -87,7 +87,7 @@ func TestActorReportsTransitionsEffectsAndIgnoredEventsToItsHooks(t *testing.T) 
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m := workChart(t, func(context.Context, counter) (int, error) { return 0, errWorkFailed })
+		m := workChart(t, func(context.Context, *sc.Run, counter) (int, error) { return 0, errWorkFailed })
 		rec := &recorder{mu: sync.Mutex{}, calls: nil}
 		a := m.Actor(counter{}, sc.WithHooks(rec.hooks(m)))
 		wait := runActor(t.Context(), a)
@@ -121,7 +121,7 @@ func TestActorReportsAServiceStoppedByLeavingItsState(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m := workChart(t, func(ctx context.Context, _ counter) (int, error) {
+		m := workChart(t, func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 			<-ctx.Done()
 			return 0, ctx.Err()
 		})
@@ -142,7 +142,7 @@ func TestActorReportsAServiceStoppedByLeavingItsState(t *testing.T) {
 func TestWithHooksForAnotherMachinePanics(t *testing.T) {
 	t.Parallel()
 
-	m := workChart(t, func(context.Context, counter) (int, error) { return 0, nil })
+	m := workChart(t, func(context.Context, *sc.Run, counter) (int, error) { return 0, nil })
 
 	require.PanicsWithValue(t, `sc: WithHooks was given *sc.Hooks[github.com/speakeasy-api/gram/sc_test.state,github.com/speakeasy-api/gram/sc_test.order], which is not for machine "work"`, func() {
 		m.Actor(counter{}, sc.WithHooks(&sc.Hooks[state, order]{}))
@@ -156,7 +156,7 @@ func TestLimitServicesBoundsServicesAcrossActors(t *testing.T) {
 		release := make(chan struct{})
 		var running, peak atomic.Int32
 
-		m := workChart(t, func(ctx context.Context, _ counter) (int, error) {
+		m := workChart(t, func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 			now := running.Add(1)
 			defer running.Add(-1)
 			if now > peak.Load() {
@@ -235,7 +235,7 @@ func TestJoinHooksGivesEachSetItsOwnEffectContext(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m := workChart(t, func(context.Context, counter) (int, error) { return 1, nil })
+		m := workChart(t, func(context.Context, *sc.Run, counter) (int, error) { return 1, nil })
 		first := &recorder{mu: sync.Mutex{}, calls: nil}
 		second := &recorder{mu: sync.Mutex{}, calls: nil}
 
@@ -274,7 +274,7 @@ func TestAPanickingServiceFailsInsteadOfCrashing(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m := workChart(t, func(context.Context, counter) (int, error) { panic("boom") })
+		m := workChart(t, func(context.Context, *sc.Run, counter) (int, error) { panic("boom") })
 
 		// The chart ends the same way whether the service succeeds or
 		// fails, so the failure itself is read from the hooks.
@@ -318,7 +318,7 @@ func TestAPanickingServiceFailsInsteadOfCrashing(t *testing.T) {
 func TestExecReturnsAPanicAsAnError(t *testing.T) {
 	t.Parallel()
 
-	m := workChart(t, func(context.Context, counter) (int, error) { panic("boom") })
+	m := workChart(t, func(context.Context, *sc.Run, counter) (int, error) { panic("boom") })
 	snap, _ := m.Start(counter{}, epoch)
 	_, effects := m.Transition(snap, tick{}, epoch)
 

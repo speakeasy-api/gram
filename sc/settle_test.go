@@ -17,7 +17,7 @@ func TestSendAndSettleWaitsForTheServicesTheStepStartedAndTheirFollowUps(t *test
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		slow := func(context.Context, counter) (int, error) {
+		slow := func(context.Context, *sc.Run, counter) (int, error) {
 			time.Sleep(time.Minute) //nolint:forbidigo // GG013: advances the synctest fake clock instantly (the only way to move past a timer inside a synctest.Test bubble); this exemption is valid ONLY within synctest.Test — do not copy it to a real-time time.Sleep
 			return 1, nil
 		}
@@ -50,7 +50,7 @@ func TestCancelInterruptsAServiceButStillDeliversItsResult(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m := workChart(t, func(ctx context.Context, _ counter) (int, error) {
+		m := workChart(t, func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 			<-ctx.Done()
 			return 0, ctx.Err()
 		})

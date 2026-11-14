@@ -48,7 +48,6 @@ type (
 	xintBar        struct{}
 	xintNextA      struct{}
 	xintNextB      struct{}
-	xintSomeEvent  struct{}
 	xintLog        struct{}
 	xintExternal   struct{}
 	xintRaised     struct{}
@@ -234,7 +233,7 @@ func TestXIntInterpreterInitialServicesNotStartedWhenReadingInitialState(t *test
 
 		m := xintNew(t, "m", func(b *xintBuilder) {
 			b.Initial("idle")
-			b.State("idle").Invoke("promise", func(ctx context.Context, _ counter) (int, error) {
+			b.State("idle").Invoke("promise", func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 				spawned.Add(1)
 				<-ctx.Done()
 
@@ -548,7 +547,7 @@ func xintActivity(t *testing.T, started, cleaned *atomic.Int32) *xintMachine {
 	return xintNew(t, "activity", func(b *xintBuilder) {
 		b.Initial("on")
 		on := b.State("on")
-		on.Stream("myActivity", func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+		on.Stream("myActivity", func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 			return func(func(any, error) bool) {
 				started.Add(1)
 				defer cleaned.Add(1)
@@ -640,7 +639,7 @@ func TestXIntInterpreterActivitiesRestartFromCompoundState(t *testing.T) {
 				b.State("A").On[xintSwitch]().To("B")
 				b.State("B").On[xintSwitch]().To("A")
 			})
-			on.Stream("blink", func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+			on.Stream("blink", func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 				return func(func(any, error) bool) {
 					active.Store(true)
 					defer active.Store(false)
@@ -741,11 +740,14 @@ func TestXIntInterpreterSendToUninitializedInterpreter(t *testing.T) {
 		// DIVERGES from XState: XState takes the event at once and keeps
 		// it until the actor starts. An sc actor has no buffer: Send
 		// blocks until Run takes the event, and gives up with the
-		// context's error when the context ends first.
+		// context's error when the context ends first. XState sends
+		// SOME_EVENT, which the light does not handle; sc refuses such an
+		// event before it waits for the actor, so the port sends KEEP_GOING,
+		// which the light handles.
 		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 		defer cancel()
 
-		err := a.Send(ctx, xintSomeEvent{})
+		err := a.Send(ctx, xintKeepGoing{})
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 }
@@ -1269,9 +1271,12 @@ func TestXIntInterpreterStopNotStartedInterpreter(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
+		// The chart names TOGGLE, which the port sends to the stopped
+		// actor: an event of a type it never names is refused as unknown
+		// before the actor is asked.
 		m := xintNew(t, "m", func(b *xintBuilder) {
 			b.Initial("a")
-			b.State("a")
+			b.State("a").On[xintToggle]().To("a")
 		})
 
 		ctx, cancel := context.WithCancel(t.Context())
@@ -1576,7 +1581,7 @@ func TestXIntInterpreterActorsCallbackReturningNothing(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m := xintNew(t, "m", func(b *xintBuilder) {
 			b.Initial("initial")
-			b.State("initial").Stream("testService", func(context.Context, counter) iter.Seq2[any, error] {
+			b.State("initial").Stream("testService", func(context.Context, *sc.Run, counter) iter.Seq2[any, error] {
 				return func(func(any, error) bool) {}
 			}).OnError().Stay()
 		})
@@ -1609,11 +1614,12 @@ func TestXIntInterpreterChildrenReferenceInvokedMachine(t *testing.T) {
 		parent := xintNew(t, "parent", func(b *xintBuilder) {
 			b.Initial("active")
 			active := b.State("active")
-			active.InvokeMachine("childActor", child,
+			childActor := active.InvokeMachine("childActor", child,
 				func(c counter) counter { return c },
 				func(xintSnapshot) (struct{}, error) { return struct{}{}, nil },
-			).OnError().Stay()
-			active.On[xintFire]().SendTo("fire", "childActor", func(counter, xintFire) any { return xintFire{} })
+			)
+			childActor.OnError().Stay()
+			active.On[xintFire]().SendTo("fire", childActor, func(counter, xintFire) any { return xintFire{} })
 			active.On[xintFired]().To("success")
 			b.Final("success")
 		})
@@ -1644,7 +1650,7 @@ func TestXIntInterpreterChildrenReferenceInvokedPromise(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m := xintNew(t, "parent", func(b *xintBuilder) {
 			b.Initial("active")
-			num := b.State("active").Invoke("childActor", func(ctx context.Context, _ counter) (int, error) {
+			num := b.State("active").Invoke("childActor", func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 				select {
 				case <-time.After(xintMs(100)):
 					return 42, nil
@@ -1686,7 +1692,7 @@ func TestXIntInterpreterChildrenReferenceInvokedObservable(t *testing.T) {
 		m := xintNew(t, "parent", func(b *xintBuilder) {
 			b.Initial("active")
 			active := b.State("active")
-			active.Stream("childActor", func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+			active.Stream("childActor", func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 				return func(yield func(any, error) bool) {
 					for n := 0; ; n++ {
 						select {
@@ -1836,11 +1842,11 @@ func TestXIntInterpreterStringEvent(t *testing.T) {
 	require.NoError(t, err)
 	defer inst.Close()
 
-	// DIVERGES from XState: XState throws when it is sent a bare string
-	// instead of an event object. To sc a string is an event like any
-	// other, of a type the chart does not handle, so it is ignored.
+	// As XState throws when it is sent a bare string instead of an event
+	// object, sc refuses an event of a type no transition of the chart
+	// names, and the send changes nothing.
 	step, err := inst.Send(t.Context(), "EVENT")
-	require.NoError(t, err)
+	require.ErrorIs(t, err, sc.ErrUnknownEvent)
 	require.Equal(t, step.From.Seq(), step.To.Seq())
 }
 
@@ -1907,6 +1913,9 @@ func TestXIntInterpreterErroredLogicReportsItsError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m := xintNew(t, "m", func(b *xintBuilder) {
 			b.Chart().Entry("entry", func(context.Context, counter) { panic(errors.New("error")) })
+			// Named so that the send below reaches the stopped actor
+			// instead of being refused as unknown.
+			b.On[xintEv]().Do("ev", func(context.Context, counter, xintEv) {})
 		})
 
 		_, err := m.Instance(t.Context(), counter{N: 0})
@@ -2720,7 +2729,7 @@ func TestXIntTimersCancelsRemainingTimersWhenReachingFinal(t *testing.T) {
 	m := xintNew(t, "m", func(b *xintBuilder) {
 		b.Initial("active")
 		active := b.State("active")
-		active.Stream("child", func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+		active.Stream("child", func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 			return func(func(any, error) bool) { <-ctx.Done() }
 		}).OnError().Stay()
 		active.On[xintFinish]().

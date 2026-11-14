@@ -119,6 +119,7 @@ type node[S comparable, C any] struct {
 	// output, and outputValue the output alone.
 	output      func(C) any
 	outputValue func(C) any
+	outputType  reflect.Type
 
 	// built is set once the chart is complete, after which self holds
 	// the state alone, regions what states returns, handles the event types the state's own
@@ -464,6 +465,10 @@ type transition[S comparable, C any] struct {
 	// the chart itself.
 	toChart bool
 
+	// doneWith is, for a transition declared with OnDoneWith, the type of
+	// output it receives.
+	doneWith reflect.Type
+
 	// runConds holds, by step index, the condition a chart action run by
 	// RunIf needs.
 	runConds map[int]func(Move[S]) bool
@@ -510,6 +515,14 @@ type invocation[S comparable, C any] struct {
 	// spawned marks a service whose runs are started by Spawn steps, any
 	// number at once, instead of one on entering the state.
 	spawned bool
+
+	// inboxType is the type of the messages the service receives, any for
+	// a child machine, and nil for a service that receives none.
+	inboxType reflect.Type
+
+	// triggerType is set for a service declared with InvokeOn: the type of
+	// the event its state must be entered with.
+	triggerType reflect.Type
 }
 
 // resourceSpec is what makes an invocation a resource.

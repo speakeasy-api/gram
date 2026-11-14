@@ -456,7 +456,7 @@ func TestXBasDeterministicStateKeyNames(t *testing.T) {
 	m, err := sc.New("keys", func(b *xbasBuilder) {
 		b.Initial("test")
 		test := b.State("test").Entry("entry", noop).Exit("exit", noop)
-		test.Stream("activity", func(context.Context, counter) iter.Seq2[any, error] {
+		test.Stream("activity", func(context.Context, *sc.Run, counter) iter.Seq2[any, error] {
 			return func(func(any, error) bool) {}
 		}).OnError().Stay()
 		test.On[xbasNext]().To("test")
@@ -522,7 +522,7 @@ func TestXBasDescriptorsSelectsActorEventsByActorID(t *testing.T) {
 
 	m, err := sc.New("job", func(b *xbasBuilder) {
 		b.Initial("pending")
-		job := b.State("pending").Invoke("job", func(context.Context, counter) (struct{}, error) {
+		job := b.State("pending").Invoke("job", func(context.Context, *sc.Run, counter) (struct{}, error) {
 			return struct{}{}, nil
 		})
 		job.OnDone().To("complete")
@@ -818,12 +818,28 @@ func TestXBasUnhandledCallsIgnoredHook(t *testing.T) {
 		require.NoError(t, err)
 		defer inst.Close()
 
+		// DIVERGES from XState: XState calls onUnhandledEvent for an event
+		// of a type no transition names. sc's Send rejects such an event
+		// with ErrUnknownEvent, changes nothing and tells no hook. An event
+		// of a type the chart names, which the current state does not
+		// handle, is the one that reaches Hooks.Ignored.
 		before := inst.Snapshot()
 		_, err = inst.Send(t.Context(), xbasUnknown{})
+		require.ErrorIs(t, err, sc.ErrUnknownEvent)
+		require.Equal(t, before.Seq(), inst.Snapshot().Seq())
+
+		ignored, _, _ := log.read()
+		require.Empty(t, ignored)
+
+		_, err = inst.Send(t.Context(), xbasNext{})
+		require.NoError(t, err)
+
+		before = inst.Snapshot()
+		_, err = inst.Send(t.Context(), xbasNoop{})
 		require.NoError(t, err)
 
 		ignored, seqs, _ := log.read()
-		require.Equal(t, []any{xbasUnknown{}}, ignored)
+		require.Equal(t, []any{xbasNoop{}}, ignored)
 		require.Equal(t, []uint64{before.Seq()}, seqs)
 		require.Equal(t, before.Seq(), inst.Snapshot().Seq())
 	})
@@ -877,7 +893,7 @@ func TestXBasUnhandledDoesNotReportChildCompletion(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		m, err := sc.New("parent", func(b *xbasBuilder) {
-			b.Chart().Invoke("child", func(context.Context, counter) (string, error) {
+			b.Chart().Invoke("child", func(context.Context, *sc.Run, counter) (string, error) {
 				return "done", nil
 			}).OnError().Stay()
 		})
@@ -937,8 +953,14 @@ func TestXBasUnhandledInTheHookStream(t *testing.T) {
 		require.NoError(t, err)
 		defer inst.Close()
 
+		// An event of a type no transition names is rejected by Send, as
+		// TestXBasUnhandledCallsIgnoredHook shows, so the unhandled event
+		// here is one of a type the chart names: NOOP, once in b.
+		_, err = inst.Send(t.Context(), xbasNext{})
+		require.NoError(t, err)
+
 		before := inst.Snapshot()
-		step, err := inst.Send(t.Context(), xbasUnknown{})
+		step, err := inst.Send(t.Context(), xbasNoop{})
 		require.NoError(t, err)
 		require.Equal(t, before.Seq(), step.To.Seq())
 
@@ -948,8 +970,8 @@ func TestXBasUnhandledInTheHookStream(t *testing.T) {
 		// event goes to Hooks.Ignored, with the unchanged snapshot, and not
 		// to Hooks.Transition.
 		ignored, seqs, taken := log.read()
-		require.Empty(t, taken)
-		require.Equal(t, []any{xbasUnknown{}}, ignored)
+		require.Equal(t, []any{xbasNext{}}, taken)
+		require.Equal(t, []any{xbasNoop{}}, ignored)
 		require.Equal(t, []uint64{before.Seq()}, seqs)
 	})
 }

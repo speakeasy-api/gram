@@ -8,10 +8,9 @@ package sc_test
 //
 // Several differences in what sc can declare shape every port:
 //
-//   - An emitted event is a Go value of a concrete struct type. A driver has
-//     one listener, given with sc.OnEmit, that hears every emitted event;
-//     there is no subscription per event type, so the ports that listen for
-//     one type pick it out of everything the listener heard. The pure core
+//   - An emitted event is a Go value of a concrete struct type. A driver is
+//     given one listener per event type, with sc.Listen, as XState's
+//     actorRef.on(type, …) is; there is no wildcard listener. The pure core
 //     reports the same events as EffectEmit effects.
 //   - XState's promise, callback, observable and step logics can be actors of
 //     their own, created with createActor, with listeners of their own. In sc
@@ -88,7 +87,7 @@ type xmsgChildID struct {
 	ChildID string `json:"child_id"`
 }
 
-// xmsgHeard collects what a driver's OnEmit listener is given.
+// xmsgHeard collects what a driver's listeners are given.
 type xmsgHeard struct {
 	mu     sync.Mutex
 	events []any
@@ -98,11 +97,17 @@ func xmsgListener() *xmsgHeard {
 	return &xmsgHeard{mu: sync.Mutex{}, events: nil}
 }
 
-func (h *xmsgHeard) listen(_ context.Context, ev any) {
+func (h *xmsgHeard) record(ev any) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	h.events = append(h.events, ev)
+}
+
+// xmsgHear is a listener for the emitted events of type T that records them
+// in h.
+func xmsgHear[T any](h *xmsgHeard) sc.RunOption {
+	return sc.Listen(func(_ context.Context, ev T) { h.record(ev) })
 }
 
 func (h *xmsgHeard) all() []any {
@@ -188,8 +193,8 @@ func xmsgInert(t *testing.T, id string) *sc.Machine[string, counter] {
 // xmsgCallback is a stream standing for an XState callback actor: it calls
 // started, sends events back and then stays alive until it is stopped, when
 // it calls stopped.
-func xmsgCallback[C any](started, stopped func(), events ...any) func(context.Context, C) iter.Seq2[any, error] {
-	return func(ctx context.Context, _ C) iter.Seq2[any, error] {
+func xmsgCallback[C any](started, stopped func(), events ...any) func(context.Context, *sc.Run, C) iter.Seq2[any, error] {
+	return func(ctx context.Context, _ *sc.Run, _ C) iter.Seq2[any, error] {
 		return func(yield func(any, error) bool) {
 			started()
 			defer stopped()
@@ -241,7 +246,7 @@ func TestXMsgEmitEventsCanBeListenedTo(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		heard := xmsgListener()
-		inst := xmsgInstance(t, m, counter{N: 0}, sc.OnEmit(heard.listen))
+		inst := xmsgInstance(t, m, counter{N: 0}, xmsgHear[xmsgEmitted](heard))
 
 		xmsgSend(t, inst, xmsgSomeEvent{})
 
@@ -252,9 +257,10 @@ func TestXMsgEmitEventsCanBeListenedTo(t *testing.T) {
 // XState: event emitter > enqueue.emit(…) emits events that can be listened
 // to on actorRef.on(…)
 //
-// XState's listener is registered for 'emitted' alone, and so never hears the
-// 'unknown' event the transition also emits. sc's one listener hears both, in
-// the order they were emitted.
+// As in XState, the listener registered for 'emitted' alone never hears the
+// 'unknown' event the transition also emits. The port also listens for both,
+// which XState's does not, to check they are heard in the order they were
+// emitted.
 func TestXMsgEmitEnqueueEmitEventsCanBeListenedTo(t *testing.T) {
 	t.Parallel()
 
@@ -266,11 +272,18 @@ func TestXMsgEmitEnqueueEmitEventsCanBeListenedTo(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		heard := xmsgListener()
-		inst := xmsgInstance(t, m, counter{N: 0}, sc.OnEmit(heard.listen))
+		inst := xmsgInstance(t, m, counter{N: 0}, xmsgHear[xmsgEmitted](heard))
 
 		xmsgSend(t, inst, xmsgSomeEvent{})
 
-		require.Equal(t, []any{xmsgEmitted{Foo: "bar"}, xmsgUnknown{}}, heard.all())
+		require.Equal(t, []any{xmsgEmitted{Foo: "bar"}}, heard.all())
+
+		both := xmsgListener()
+		inst = xmsgInstance(t, m, counter{N: 0}, xmsgHear[xmsgEmitted](both), xmsgHear[xmsgUnknown](both))
+
+		xmsgSend(t, inst, xmsgSomeEvent{})
+
+		require.Equal(t, []any{xmsgEmitted{Foo: "bar"}, xmsgUnknown{}}, both.all())
 	})
 }
 
@@ -300,7 +313,7 @@ func TestXMsgEmitHandlesErrors(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		calls := 0
-		inst := xmsgInstance(t, m, counter{N: 0}, sc.OnEmit(func(context.Context, any) {
+		inst := xmsgInstance(t, m, counter{N: 0}, sc.Listen(func(context.Context, xmsgEmitted) {
 			calls++
 			panic("oops")
 		}))
@@ -332,7 +345,7 @@ func TestXMsgEmitDynamicallyEmitsEvents(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		heard := xmsgListener()
-		inst := xmsgInstance(t, m, counter{N: 10}, sc.OnEmit(heard.listen))
+		inst := xmsgInstance(t, m, counter{N: 10}, xmsgHear[xmsgCounted](heard))
 
 		xmsgSend(t, inst, xmsgSomeEvent{})
 
@@ -365,7 +378,7 @@ func TestXMsgEmitListenerReadsSnapshotOfEmittingActor(t *testing.T) {
 			inst *sc.Instance[string, counter]
 			seen [][]string
 		)
-		inst = xmsgInstance(t, m, counter{N: 0}, sc.OnEmit(func(context.Context, any) {
+		inst = xmsgInstance(t, m, counter{N: 0}, sc.Listen(func(context.Context, xmsgNotice) {
 			seen = append(seen, inst.Snapshot().Active())
 		}))
 
@@ -380,7 +393,9 @@ func TestXMsgEmitListenerReadsSnapshotOfEmittingActor(t *testing.T) {
 // XState: event emitter > wildcard listeners should be able to receive all
 // emitted events
 //
-// sc's listener is always XState's wildcard: it is given every emitted event.
+// DIVERGES from XState: XState's '*' listener is given every emitted event,
+// whatever its type. sc has no wildcard listener: a listener hears one type,
+// so the port listens for the one type the chart emits.
 func TestXMsgEmitWildcardListenersReceiveAllEmittedEvents(t *testing.T) {
 	t.Parallel()
 
@@ -390,7 +405,7 @@ func TestXMsgEmitWildcardListenersReceiveAllEmittedEvents(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		heard := xmsgListener()
-		inst := xmsgInstance(t, m, counter{N: 0}, sc.OnEmit(heard.listen))
+		inst := xmsgInstance(t, m, counter{N: 0}, xmsgHear[xmsgEmitted](heard))
 
 		xmsgSend(t, inst, xmsgEvent{})
 
@@ -407,14 +422,14 @@ func TestXMsgEmitFromAsyncLogic(t *testing.T) {
 	t.Parallel()
 
 	m := xmsgNew(t, "logic", func(b *xmsgBuilder) {
-		run := b.Chart().Invoke("run", func(context.Context, counter) (string, error) { return "hello", nil })
+		run := b.Chart().Invoke("run", func(context.Context, *sc.Run, counter) (string, error) { return "hello", nil })
 		run.OnDone().Emit("emitted", func(_ counter, d sc.Done[string]) xmsgHello { return xmsgHello{Msg: d.Result} })
 		run.OnError().Stay()
 	})
 
 	synctest.Test(t, func(t *testing.T) {
 		heard := xmsgListener()
-		xmsgInstance(t, m, counter{N: 0}, sc.OnEmit(heard.listen))
+		xmsgInstance(t, m, counter{N: 0}, xmsgHear[xmsgHello](heard))
 
 		synctest.Wait()
 
@@ -442,7 +457,7 @@ func TestXMsgEmitFromCustomLogic(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		heard := xmsgListener()
-		inst := xmsgInstance(t, m, counter{N: 0}, sc.OnEmit(heard.listen))
+		inst := xmsgInstance(t, m, counter{N: 0}, xmsgHear[xmsgHello](heard))
 		require.Empty(t, heard.all())
 
 		xmsgSend(t, inst, xmsgEmitCmd{})
@@ -468,7 +483,7 @@ func xmsgRelayed(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		heard := xmsgListener()
-		xmsgInstance(t, m, counter{N: 0}, sc.OnEmit(heard.listen))
+		xmsgInstance(t, m, counter{N: 0}, xmsgHear[xmsgHello](heard))
 
 		synctest.Wait()
 
@@ -508,7 +523,7 @@ func TestXMsgSpawnChildCanSpawn(t *testing.T) {
 	m := xmsgNew(t, "parent", func(b *xmsgBuilder) {
 		chart := b.Chart()
 		chart.RaiseOnEntry("spawn", func(counter) any { return xmsgSpawn{} })
-		chart.Invoke("promise", func(context.Context, counter) (int, error) { return 42, nil }).Spawned().OnError().Stay()
+		chart.Invoke("promise", func(context.Context, *sc.Run, counter) (int, error) { return 42, nil }).Spawned().OnError().Stay()
 		chart.On[xmsgSpawn]().Spawn("spawnChild", "promise", func(counter, xmsgSpawn) string { return "child" })
 	})
 
@@ -522,9 +537,10 @@ func TestXMsgSpawnChildCanSpawn(t *testing.T) {
 //
 // XState provides the logic by name with .provide and gives it the input 21.
 // In sc the service is declared with Requires and bound with Bind; a plain
-// service has no input mapper, so the number travels in the event that
-// spawns it, which the service reads with sc.Trigger. XState only checks that
-// the child exists; the port also checks what it resolves with.
+// service has no input mapper and a bound one cannot be given the event that
+// spawned it, so the transition that spawns it assigns the number from the
+// event to the context, which the service sees. XState only checks that the
+// child exists; the port also checks what it resolves with.
 func TestXMsgSpawnChildCanSpawnFromNamedActor(t *testing.T) {
 	t.Parallel()
 
@@ -534,13 +550,14 @@ func TestXMsgSpawnChildCanSpawnFromNamedActor(t *testing.T) {
 		fetch := chart.Requires[int]("fetchNum").Spawned()
 		fetch.OnDone().Assign("keep", func(c counter, d sc.Done[int]) counter { c.N = d.Result; return c })
 		fetch.OnError().Stay()
-		chart.On[xmsgSpawnNum]().Spawn("spawnChild", "fetchNum", func(counter, xmsgSpawnNum) string { return "child" })
+		chart.On[xmsgSpawnNum]().
+			Assign("input", func(c counter, ev xmsgSpawnNum) counter { c.N = ev.Input; return c }).
+			Spawn("spawnChild", "fetchNum", func(counter, xmsgSpawnNum) string { return "child" })
 	})
 
 	m, err := declared.Bind(func(b *sc.Binder[string, counter]) {
-		b.Service[int]("fetchNum", func(ctx context.Context, _ counter) (int, error) {
-			spawned, _ := sc.Trigger(ctx).(xmsgSpawnNum)
-			return spawned.Input * 2, nil
+		b.Service[int]("fetchNum", func(_ context.Context, _ *sc.Run, c counter) (int, error) {
+			return c.N * 2, nil
 		})
 	})
 	require.NoError(t, err)
@@ -566,7 +583,7 @@ func TestXMsgSpawnChildCanSpawnFromNamedActor(t *testing.T) {
 func TestXMsgSpawnChildSyncSnapshot(t *testing.T) {
 	t.Parallel()
 
-	interval := func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+	interval := func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 		return func(yield func(any, error) bool) {
 			for n := 0; ; n++ {
 				select {
@@ -620,13 +637,14 @@ func TestXMsgSpawnChildHandlesDynamicID(t *testing.T) {
 	m := xmsgNew(t, "parent", func(b *sc.Builder[string, xmsgChildID]) {
 		chart := b.Chart()
 		chart.RaiseOnEntry("spawn", func(xmsgChildID) any { return xmsgSpawn{} })
-		chart.SpawnMachine("child", child,
+		childSvc := chart.SpawnMachine("child", child,
 			func(xmsgChildID, string) counter { return counter{N: 0} },
 			xmsgNoOutput[counter],
-		).OnError().Stay()
+		)
+		childSvc.OnError().Stay()
 		chart.On[xmsgSpawn]().
 			Spawn("spawnChild", "child", childID).
-			SendToKey("foo", "child", childID, func(xmsgChildID, xmsgSpawn) any { return xmsgFoo{} })
+			SendToKey("foo", childSvc, childID, func(xmsgChildID, xmsgSpawn) any { return xmsgFoo{} })
 	})
 
 	snap, effects := m.Start(xmsgChildID{ChildID: "myChild"}, epoch)
@@ -753,9 +771,10 @@ func TestXMsgSpawnChildKeepsChildSpawnedOnEntryBesideInvoke(t *testing.T) {
 			b.State("loading").InvokeMachine("loader", loader, xmsgSame, xmsgNoOutput[counter]).OnError().Stay()
 		})
 		editor.RaiseOnEntry("spawn", func(counter) any { return xmsgSpawn{} })
-		editor.SpawnMachine("autosave", autosave, xmsgSameKeyed, xmsgNoOutput[counter]).OnError().Stay()
+		autosaveSvc := editor.SpawnMachine("autosave", autosave, xmsgSameKeyed, xmsgNoOutput[counter])
+		autosaveSvc.OnError().Stay()
 		editor.On[xmsgSpawn]().Spawn("spawnAutosave", "autosave", key)
-		editor.On[xmsgSave]().SendToKey("ping", "autosave",
+		editor.On[xmsgSave]().SendToKey("ping", autosaveSvc,
 			func(counter, xmsgSave) string { return "autosave" },
 			func(counter, xmsgSave) any { return xmsgPing{} })
 	})
@@ -969,7 +988,7 @@ func TestXMsgInputProvidesInputToInvokedMachines(t *testing.T) {
 	t.Parallel()
 
 	heard := xmsgListener()
-	child := xmsgGreeted(t, func(greeting string) { heard.listen(t.Context(), greeting) })
+	child := xmsgGreeted(t, func(greeting string) { heard.record(greeting) })
 
 	m := xmsgNew(t, "machine", func(b *xmsgBuilder) {
 		b.Chart().InvokeMachine("child", child,
@@ -1000,7 +1019,7 @@ func TestXMsgInputProvidesInputToSpawnedMachines(t *testing.T) {
 	t.Parallel()
 
 	heard := xmsgListener()
-	child := xmsgGreeted(t, func(greeting string) { heard.listen(t.Context(), greeting) })
+	child := xmsgGreeted(t, func(greeting string) { heard.record(greeting) })
 
 	m := xmsgNew(t, "machine", func(b *xmsgBuilder) {
 		chart := b.Chart()
@@ -1029,7 +1048,7 @@ func xmsgPromise(t *testing.T) *sc.Machine[string, counter] {
 
 	return xmsgNew(t, "promise", func(b *xmsgBuilder) {
 		b.Initial("running")
-		run := b.State("running").Invoke("run", func(_ context.Context, c counter) (xmsgCount, error) {
+		run := b.State("running").Invoke("run", func(_ context.Context, _ *sc.Run, c counter) (xmsgCount, error) {
 			return xmsgCount{Count: c.N}, nil
 		})
 		run.OnDone().To("done")
@@ -1103,7 +1122,7 @@ func TestXMsgInputCreatesObservableActorWithInput(t *testing.T) {
 	t.Parallel()
 
 	m := xmsgNew(t, "observable", func(b *xmsgBuilder) {
-		b.Chart().Stream("of", func(_ context.Context, c counter) iter.Seq2[any, error] {
+		b.Chart().Stream("of", func(_ context.Context, _ *sc.Run, c counter) iter.Seq2[any, error] {
 			return func(yield func(any, error) bool) {
 				yield(xmsgCount{Count: c.N}, nil)
 			}
@@ -1135,7 +1154,7 @@ func TestXMsgInputCreatesCallbackActorWithInput(t *testing.T) {
 	var inputs []counter
 
 	m := xmsgNew(t, "callback", func(b *xmsgBuilder) {
-		b.Chart().Stream("callback", func(_ context.Context, c counter) iter.Seq2[any, error] {
+		b.Chart().Stream("callback", func(_ context.Context, _ *sc.Run, c counter) iter.Seq2[any, error] {
 			return func(func(any, error) bool) {
 				inputs = append(inputs, c)
 			}

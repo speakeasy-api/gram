@@ -18,7 +18,7 @@ const requestBudget = 2 * time.Minute
 
 // requestChart runs two steps one after the other inside a request state
 // with one budget for both.
-func requestChart(t *testing.T, step func(context.Context, counter) (int, error)) *sc.Machine[string, counter] {
+func requestChart(t *testing.T, step func(context.Context, *sc.Run, counter) (int, error)) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("request", func(b *sc.Builder[string, counter]) {
@@ -44,7 +44,7 @@ func requestChart(t *testing.T, step func(context.Context, counter) (int, error)
 func TestServicesInsideABudgetShareOneDeadline(t *testing.T) {
 	t.Parallel()
 
-	m := requestChart(t, func(context.Context, counter) (int, error) { return 0, nil })
+	m := requestChart(t, func(context.Context, *sc.Run, counter) (int, error) { return 0, nil })
 	snap, _ := m.Start(counter{}, epoch)
 
 	snap, effects := m.Transition(snap, tick{}, epoch)
@@ -60,7 +60,7 @@ func TestAServiceThatOverrunsItsBudgetFails(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m := requestChart(t, func(ctx context.Context, _ counter) (int, error) {
+		m := requestChart(t, func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 			<-ctx.Done()
 			return 0, ctx.Err()
 		})
@@ -82,7 +82,7 @@ func TestAServiceThatOverrunsItsBudgetFails(t *testing.T) {
 func TestABudgetSurvivesARestart(t *testing.T) {
 	t.Parallel()
 
-	m := requestChart(t, func(context.Context, counter) (int, error) { return 0, nil })
+	m := requestChart(t, func(context.Context, *sc.Run, counter) (int, error) { return 0, nil })
 	snap, _ := m.Start(counter{}, epoch)
 	snap, _ = m.Transition(snap, tick{}, epoch)
 
@@ -103,7 +103,7 @@ func TestTheEarlierOfNestedBudgetsApplies(t *testing.T) {
 		b.Initial("outer")
 		b.State("outer", func(b *sc.Builder[string, counter]) {
 			b.Initial("inner")
-			inv := b.State("inner").Within(time.Minute).Invoke("call", func(context.Context, counter) (int, error) { return 0, nil })
+			inv := b.State("inner").Within(time.Minute).Invoke("call", func(context.Context, *sc.Run, counter) (int, error) { return 0, nil })
 			inv.OnDone().Stay()
 			inv.OnError().Stay()
 		}).Within(time.Hour)
@@ -117,7 +117,7 @@ func TestTheEarlierOfNestedBudgetsApplies(t *testing.T) {
 func TestExploreFailsAServiceWhenItsBudgetRunsOut(t *testing.T) {
 	t.Parallel()
 
-	m := requestChart(t, func(context.Context, counter) (int, error) { return 0, nil })
+	m := requestChart(t, func(context.Context, *sc.Run, counter) (int, error) { return 0, nil })
 
 	report, err := m.Explore(counter{}, sc.Exploration[string, counter]{
 		Events:   []any{tick{}},

@@ -118,14 +118,22 @@ func xtrnDo[Ev any](context.Context, counter, Ev) {}
 
 // xtrnListen is XState's createCallbackLogic(() => {}): a service that runs
 // until it is stopped and reports nothing.
-func xtrnListen(ctx context.Context, _ counter) iter.Seq2[any, error] {
+func xtrnListen(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
+	return func(func(any, error) bool) {
+		<-ctx.Done()
+	}
+}
+
+// xtrnReceive is xtrnListen for a service that is sent messages of type M,
+// which it does not read.
+func xtrnReceive[M any](ctx context.Context, _ *sc.Run, _ counter, _ iter.Seq[M]) iter.Seq2[any, error] {
 	return func(func(any, error) bool) {
 		<-ctx.Done()
 	}
 }
 
 // xtrnPending is a promise that never settles.
-func xtrnPending(ctx context.Context, _ counter) (int, error) {
+func xtrnPending(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 	<-ctx.Done()
 
 	return 0, fmt.Errorf("stopped: %w", context.Cause(ctx))
@@ -551,8 +559,9 @@ func TestXTrnDoesNotSendToParentDuringTransitionSelection(t *testing.T) {
 		})
 
 		parent := xtrnNew(t, "parent", func(b *xtrnBuilder) {
-			b.Chart().InvokeMachine("child", child, xtrnSame, xtrnNoOutput).OnError().Stay()
-			b.On[xtrnPoke]().SendTo("check", "child", func(counter, xtrnPoke) any { return xtrnCheck{} })
+			invoked := b.Chart().InvokeMachine("child", child, xtrnSame, xtrnNoOutput)
+			invoked.OnError().Stay()
+			b.On[xtrnPoke]().SendTo("check", invoked, func(counter, xtrnPoke) any { return xtrnCheck{} })
 			b.On[xtrnChildEv]().Assign("received", increment[xtrnChildEv])
 		})
 
@@ -604,7 +613,7 @@ func TestXTrnResolvesMapperContextOnInvokeOnDone(t *testing.T) {
 
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
 		b.Initial("pending")
-		inv := b.State("pending").Invoke("promise", func(context.Context, counter) (int, error) { return 42, nil })
+		inv := b.State("pending").Invoke("promise", func(context.Context, *sc.Run, counter) (int, error) { return 42, nil })
 		inv.OnDone().
 			Assign("context", func(_ counter, d sc.Done[int]) counter { return counter{N: d.Result} }).
 			To("done")
@@ -773,9 +782,10 @@ func TestXTrnSendToActionIsReturned(t *testing.T) {
 	t.Parallel()
 
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
-		b.Chart().InvokeMachine("someActor", xtrnEmpty(t), xtrnSame, xtrnNoOutput).OnError().Stay()
+		someActor := b.Chart().InvokeMachine("someActor", xtrnEmpty(t), xtrnSame, xtrnNoOutput)
+		someActor.OnError().Stay()
 		b.Initial("a")
-		b.State("a").On[xtrnNext]().SendTo("send", "someActor", func(counter, xtrnNext) any { return xtrnSomeEvent{} })
+		b.State("a").On[xtrnNext]().SendTo("send", someActor, func(counter, xtrnNext) any { return xtrnSomeEvent{} })
 	})
 
 	state, actions0 := m.Start(counter{N: 0}, epoch)
@@ -799,12 +809,20 @@ func TestXTrnSendToMissingActorReturnsNoSendToAction(t *testing.T) {
 	t.Parallel()
 
 	// DIVERGES from XState: XState resolves children.missing when the
-	// transition runs and quietly returns no sendTo. sc names the service
-	// when the chart is declared, and a name no state invokes is a
-	// declaration error.
+	// transition runs and quietly returns no sendTo. An sc send addresses the
+	// handle a receiving service's declaration returned, so the only way to
+	// name a service the chart does not declare is a handle from another
+	// chart, and a send to one is a declaration error.
+	var foreign sc.Mailbox[xtrnSomeEvent]
+	xtrnNew(t, "other", func(b *xtrnBuilder) {
+		missing := b.Chart().ReceiveStream("missing", xtrnReceive[xtrnSomeEvent])
+		missing.OnError().Stay()
+		foreign = missing
+	})
+
 	_, err := sc.New("m", func(b *xtrnBuilder) {
 		b.Initial("a")
-		b.State("a").On[xtrnNext]().SendTo("send", "missing", func(counter, xtrnNext) any { return xtrnSomeEvent{} })
+		b.State("a").On[xtrnNext]().SendTo("send", foreign, func(counter, xtrnNext) xtrnSomeEvent { return xtrnSomeEvent{} })
 	})
 	require.ErrorContains(t, err, "missing")
 
@@ -812,10 +830,11 @@ func TestXTrnSendToMissingActorReturnsNoSendToAction(t *testing.T) {
 	// because its state is not active. No send is returned.
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
 		b.Initial("a")
+		missing := b.State("b").ReceiveStream("missing", xtrnReceive[xtrnSomeEvent])
+		missing.OnError().Stay()
 		a := b.State("a")
-		a.On[xtrnNext]().SendTo("send", "missing", func(counter, xtrnNext) any { return xtrnSomeEvent{} })
+		a.On[xtrnNext]().SendTo("send", missing, func(counter, xtrnNext) xtrnSomeEvent { return xtrnSomeEvent{} })
 		a.On[xtrnGo]().To("b")
-		b.State("b").Stream("missing", xtrnListen).OnError().Stay()
 	})
 
 	state, _ := m.Start(counter{N: 0}, epoch)
@@ -838,13 +857,14 @@ func TestXTrnSpawnCreatesAndStartsChildOnce(t *testing.T) {
 		})
 
 		parent := xtrnNew(t, "parent", func(b *xtrnBuilder) {
-			b.Chart().SpawnMachine("child", child, func(counter, string) counter {
+			spawned := b.Chart().SpawnMachine("child", child, func(counter, string) counter {
 				constructions.Add(1)
 
 				return counter{N: 0}
-			}, xtrnNoOutput).OnError().Stay()
+			}, xtrnNoOutput)
+			spawned.OnError().Stay()
 			b.On[xtrnSpawn]().Spawn("spawn", "child", xtrnKey[xtrnSpawn])
-			b.On[xtrnPing]().SendToKey("ping", "child", xtrnKey[xtrnPing], func(counter, xtrnPing) any { return xtrnPing{} })
+			b.On[xtrnPing]().SendToKey("ping", spawned, xtrnKey[xtrnPing], func(counter, xtrnPing) any { return xtrnPing{} })
 		})
 
 		inst, err := parent.Instance(t.Context(), counter{N: 0})
@@ -882,7 +902,8 @@ func TestXTrnBuiltInActionEffectsExposeMetadata(t *testing.T) {
 	chart := func(cancel bool) *sc.Machine[string, counter] {
 		return xtrnNew(t, "m", func(b *xtrnBuilder) {
 			chart := b.Chart()
-			chart.InvokeMachine("child", xtrnEmpty(t), func(counter) counter { return counter{N: 7} }, xtrnNoOutput).OnError().Stay()
+			invoked := chart.InvokeMachine("child", xtrnEmpty(t), func(counter) counter { return counter{N: 7} }, xtrnNoOutput)
+			invoked.OnError().Stay()
 			chart.Invoke("spawned", xtrnPending).Spawned().OnError().Stay()
 			chart.On[xtrnLater]().Stay()
 
@@ -891,7 +912,7 @@ func TestXTrnBuiltInActionEffectsExposeMetadata(t *testing.T) {
 			next := a.On[xtrnNext]().
 				Spawn("spawn", "spawned", xtrnKey[xtrnNext]).
 				RaiseAfter("raise-id", 10*time.Millisecond, func(counter, xtrnNext) any { return xtrnLater{} }).
-				SendTo("send-id", "child", func(counter, xtrnNext) any { return xtrnPing{} })
+				SendTo("send-id", invoked, func(counter, xtrnNext) any { return xtrnPing{} })
 			if cancel {
 				next.CancelRaise("raise-id")
 			} else {
@@ -1252,7 +1273,7 @@ func TestXTrnActorExecutesInvokeStopOnceAfterExitActions(t *testing.T) {
 		m := xtrnNew(t, "m", func(b *xtrnBuilder) {
 			b.Initial("active")
 			active := b.State("active").Exit("exit", func(context.Context, counter) { order.add("exit") })
-			active.Stream("child", func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+			active.Stream("child", func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 				return func(func(any, error) bool) {
 					<-ctx.Done()
 					order.add("stop")
@@ -1366,16 +1387,15 @@ func TestXTrnExecutesImmediateSends(t *testing.T) {
 		var received atomic.Int64
 
 		m := xtrnNew(t, "m", func(b *xtrnBuilder) {
-			b.Chart().Stream("child", func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+			child := b.Chart().ReceiveStream("child", func(_ context.Context, _ *sc.Run, _ counter, inbox iter.Seq[xtrnPing]) iter.Seq2[any, error] {
 				return func(func(any, error) bool) {
-					for ev := range sc.Inbox(ctx) {
-						if _, ok := ev.(xtrnPing); ok {
-							received.Add(1)
-						}
+					for range inbox {
+						received.Add(1)
 					}
 				}
-			}).OnError().Stay()
-			b.On[xtrnSend]().SendTo("ping", "child", func(counter, xtrnSend) any { return xtrnPing{} })
+			})
+			child.OnError().Stay()
+			b.On[xtrnSend]().SendTo("ping", child, func(counter, xtrnSend) xtrnPing { return xtrnPing{} })
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1790,7 +1810,7 @@ func TestXTrnRemovesCompletedSpawnedChildOnLivePath(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		m := xtrnNew(t, "m", func(b *xtrnBuilder) {
-			b.Chart().Invoke("completingChild", func(context.Context, counter) (int, error) { return 42, nil }).
+			b.Chart().Invoke("completingChild", func(context.Context, *sc.Run, counter) (int, error) { return 42, nil }).
 				Spawned().OnError().Stay()
 			b.On[xtrnSpawn]().Spawn("spawn", "completingChild", xtrnKey[xtrnSpawn])
 		})
@@ -2003,14 +2023,14 @@ func TestXTrnServerlessWorkflowExample(t *testing.T) {
 
 	m := xtrnNew(t, "m", func(b *xtrnBuilder) {
 		b.Initial("sendingWelcomeEmail")
-		email := b.State("sendingWelcomeEmail").Invoke("sendWelcomeEmail", func(context.Context, counter) (xtrnSent, error) {
+		email := b.State("sendingWelcomeEmail").Invoke("sendWelcomeEmail", func(context.Context, *sc.Run, counter) (xtrnSent, error) {
 			calls.add("sendWelcomeEmail")
 
 			return xtrnSent{Status: "sent"}, nil
 		})
 		email.OnDone().To("logSent")
 		email.OnError().Stay()
-		log := b.State("logSent").Invoke("log", func(context.Context, counter) (struct{}, error) { return struct{}{}, nil })
+		log := b.State("logSent").Invoke("log", func(context.Context, *sc.Run, counter) (struct{}, error) { return struct{}{}, nil })
 		log.OnDone().To("finish")
 		log.OnError().Stay()
 		b.State("finish")

@@ -25,13 +25,14 @@ type (
 // reaches the parent's OnError.
 //
 // The two talk in events. The parent sends to the child with
-// [Transition.SendTo], naming this service; the child sends to the parent
+// [Transition.SendTo], addressed to the handle InvokeMachine returns, whose
+// messages are the child's events of any type; the child sends to the parent
 // with [Transition.Emit], and the parent handles those events with On like
 // any other. Leaving the state closes the child.
 //
 // The child runs under an [Instance] with the parent driver's clock and
 // opts. Its snapshot is kept inside the parent's, as the service's
-// [Checkpoint], and replaced whenever the child moves, so each step of the
+// checkpoint, and replaced whenever the child moves, so each step of the
 // child is also a step of the parent. A parent resumed from a stored
 // snapshot continues its child from where the child was: the child's timers
 // and unfinished services start again, and it does not run its entry
@@ -40,19 +41,11 @@ type (
 //
 // In an exploration of the parent the child is a service like any other,
 // with the outcomes given for name; explore the child on its own.
-func (s *StateBuilder[S, C]) InvokeMachine[S2 comparable, C2, R any](name string, child *Machine[S2, C2], input func(C) C2, output func(Snapshot[S2, C2]) (R, error), opts ...RunOption) *Invocation[S, C, R] {
-	inv := &invocation[S, C]{
-		state:    s.n,
-		name:     name,
-		doneType: reflect.TypeFor[Done[R]](),
-		run:      runChild(child, func(c C, _ string) C2 { return input(c) }, output, opts),
-		resource: nil,
-		retry:    nil,
-		spawned:  false,
-	}
-	s.n.invocations = append(s.n.invocations, inv)
+func (s *StateBuilder[S, C]) InvokeMachine[S2 comparable, C2, R any](name string, child *Machine[S2, C2], input func(C) C2, output func(Snapshot[S2, C2]) (R, error), opts ...RunOption) *Receiving[S, C, any, R] {
+	inv := s.addInvocation(newInvocation[S, C, R](name, runChild(child, func(c C, _ string) C2 { return input(c) }, output, opts)))
+	inv.inboxType = reflect.TypeFor[any]()
 
-	return &Invocation[S, C, R]{b: s.b, n: s.n, inv: inv}
+	return &Receiving[S, C, any, R]{Invocation: &Invocation[S, C, R]{b: s.b, n: s.n, inv: inv}, Port: Port[any]{name: name}}
 }
 
 // SpawnMachine declares a child machine like [StateBuilder.InvokeMachine],
@@ -63,19 +56,12 @@ func (s *StateBuilder[S, C]) InvokeMachine[S2 comparable, C2, R any](name string
 // [SpawnKey] on their IDs. An event a child emits arrives as a plain event,
 // so a child that must be told apart puts its identity, which input gave
 // it, in the events it emits.
-func (s *StateBuilder[S, C]) SpawnMachine[S2 comparable, C2, R any](name string, child *Machine[S2, C2], input func(c C, key string) C2, output func(Snapshot[S2, C2]) (R, error), opts ...RunOption) *Invocation[S, C, R] {
-	inv := &invocation[S, C]{
-		state:    s.n,
-		name:     name,
-		doneType: reflect.TypeFor[Done[R]](),
-		run:      runChild(child, input, output, opts),
-		resource: nil,
-		retry:    nil,
-		spawned:  true,
-	}
-	s.n.invocations = append(s.n.invocations, inv)
+func (s *StateBuilder[S, C]) SpawnMachine[S2 comparable, C2, R any](name string, child *Machine[S2, C2], input func(c C, key string) C2, output func(Snapshot[S2, C2]) (R, error), opts ...RunOption) *Receiving[S, C, any, R] {
+	inv := s.addInvocation(newInvocation[S, C, R](name, runChild(child, input, output, opts)))
+	inv.inboxType = reflect.TypeFor[any]()
+	inv.spawned = true
 
-	return &Invocation[S, C, R]{b: s.b, n: s.n, inv: inv}
+	return &Receiving[S, C, any, R]{Invocation: &Invocation[S, C, R]{b: s.b, n: s.n, inv: inv}, Port: Port[any]{name: name}}
 }
 
 // runChild is the service that runs child for a parent.
@@ -104,7 +90,7 @@ func runChild[C any, S2 comparable, C2, R any](child *Machine[S2, C2], input fun
 				mu      sync.Mutex
 				emitted []any
 			)
-			settings = append(settings, OnEmit(func(_ context.Context, ev any) {
+			settings = append(settings, onEmit(func(_ context.Context, ev any) {
 				mu.Lock()
 				defer mu.Unlock()
 

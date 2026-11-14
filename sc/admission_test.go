@@ -160,7 +160,7 @@ func TestHostsShareACapAndEachHoldsItsNode(t *testing.T) {
 		m, err := chart.Bind(func(b *sc.Binder[string, counter]) {
 			b.Permit("cap", sem)
 			b.Resource[*line]("node",
-				func(context.Context, counter) (*line, error) {
+				func(context.Context, *sc.Run, counter) (*line, error) {
 					// The one-shot key is read and used here, and
 					// is gone when this returns.
 					key := "one-shot-key"
@@ -173,8 +173,8 @@ func TestHostsShareACapAndEachHoldsItsNode(t *testing.T) {
 					log.add("closed node, shutting down=%t", why.Closed)
 				},
 			)
-			b.Service[string]("probe", func(ctx context.Context, _ counter) (string, error) {
-				n, ok := node.From(ctx)
+			b.Service[string]("probe", func(_ context.Context, run *sc.Run, _ counter) (string, error) {
+				n, ok := node.Held(run)
 				if !ok {
 					return "", errWorkFailed
 				}

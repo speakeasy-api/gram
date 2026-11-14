@@ -2,7 +2,9 @@ package sc
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"golang.org/x/sync/semaphore"
@@ -19,7 +21,11 @@ type runOptions struct {
 
 	manualTimers bool
 
-	emit func(ctx context.Context, ev any)
+	// emit is an unexported catch-all for emitted events, which a child
+	// machine's runner uses to hand them to its parent, and listeners the
+	// typed listeners given with Listen, by event type.
+	emit      func(ctx context.Context, ev any)
+	listeners map[reflect.Type][]func(ctx context.Context, ev any)
 
 	throttle Waiter
 }
@@ -30,7 +36,7 @@ type RunOption func(*runOptions)
 
 // runSettings applies opts over the defaults.
 func runSettings(opts []RunOption) runOptions {
-	o := runOptions{hooks: nil, services: nil, now: time.Now, manualTimers: false, emit: nil, throttle: nil}
+	o := runOptions{hooks: nil, services: nil, now: time.Now, manualTimers: false, emit: nil, listeners: map[reflect.Type][]func(context.Context, any){}, throttle: nil}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -90,13 +96,67 @@ func ManualTimers() RunOption {
 	return func(o *runOptions) { o.manualTimers = true }
 }
 
-// OnEmit makes the driver call fn with each event the chart emits with
-// [Transition.Emit], in order, on the goroutine processing the step that
-// emitted it. fn must not block or send events to the same instance; hand
-// the event to a queue when the listener is slow. ctx is the context of the
-// event that caused the step.
-func OnEmit(fn func(ctx context.Context, ev any)) RunOption {
+// Listen makes the driver call fn with each event of type T the chart emits
+// with [Transition.Emit] or [StateBuilder.EmitOnEntry], in order, on the
+// goroutine processing the step that emitted it. T is inferred from fn;
+// give one Listen per type of event to hear. Several listeners for one type
+// are all called, in the order they were given. Building an instance with a
+// listener for a type the chart never emits fails, so a listener that can
+// never be called is caught at once.
+//
+// fn must not block or send events to the same instance; hand the event to a
+// queue when the listener is slow. ctx is the context of the event that
+// caused the step. A listener that panics fails like an action: the step
+// stands, and the panic is returned from the send as [ErrPanicked].
+func Listen[T any](fn func(ctx context.Context, ev T)) RunOption {
+	return func(o *runOptions) {
+		t := reflect.TypeFor[T]()
+		o.listeners[t] = append(o.listeners[t], func(ctx context.Context, ev any) {
+			if typed, ok := ev.(T); ok {
+				fn(ctx, typed)
+			}
+		})
+	}
+}
+
+// onEmit hands every emitted event to fn, whatever its type.
+func onEmit(fn func(ctx context.Context, ev any)) RunOption {
 	return func(o *runOptions) { o.emit = fn }
+}
+
+// listener returns what hears the chart's emitted events: the typed
+// listeners by type, and then the catch-all. It is nil when there is
+// neither.
+func (o runOptions) listener() func(context.Context, any) {
+	if len(o.listeners) == 0 && o.emit == nil {
+		return nil
+	}
+
+	listeners, all := o.listeners, o.emit
+
+	return func(ctx context.Context, ev any) {
+		for _, fn := range listeners[reflect.TypeOf(ev)] {
+			fn(ctx, ev)
+		}
+		if all != nil {
+			all(ctx, ev)
+		}
+	}
+}
+
+// ErrNoSuchEmit is returned when a driver is built with a listener for a
+// type of event the chart never emits.
+var ErrNoSuchEmit = errors.New("listener for an event the chart never emits")
+
+// checkListeners reports a listener for a type the chart never emits.
+func (m *Machine[S, C]) checkListeners(o runOptions) error {
+	for t := range o.listeners {
+		if !m.EmitsType(t) {
+			return fmt.Errorf("%w: %s", ErrNoSuchEmit, t)
+		}
+	}
+
+	return nil
 }
 
 // Waiter is something a service run waits on before it starts, such as a

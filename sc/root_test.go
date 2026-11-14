@@ -15,7 +15,7 @@ import (
 // sessionChart puts everything a state can have on the chart itself: entry
 // and exit actions, an entry assignment, a service, a timer, a budget, a tag
 // and a transition.
-func sessionChart(t *testing.T, heartbeat func(context.Context, counter) (int, error)) *sc.Machine[string, counter] {
+func sessionChart(t *testing.T, heartbeat func(context.Context, *sc.Run, counter) (int, error)) *sc.Machine[string, counter] {
 	t.Helper()
 
 	m, err := sc.New("session", func(b *sc.Builder[string, counter]) {
@@ -93,7 +93,7 @@ func TestTheChartsServiceRunsForTheLifeOfTheInstance(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		stopped := make(chan struct{})
-		m := sessionChart(t, func(ctx context.Context, _ counter) (int, error) {
+		m := sessionChart(t, func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 			<-ctx.Done()
 			close(stopped)
 
@@ -398,7 +398,7 @@ func TestAChartOfFinalStatesStartsInNone(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("job", func(b *sc.Builder[string, counter]) {
-		work := b.Chart().Invoke("work", func(context.Context, counter) (int, error) { return 0, errFlaky })
+		work := b.Chart().Invoke("work", func(context.Context, *sc.Run, counter) (int, error) { return 0, errFlaky })
 		work.OnDone().To("succeeded")
 		work.OnError().To("failed")
 		b.Final("succeeded")

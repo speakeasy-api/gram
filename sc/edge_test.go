@@ -149,7 +149,7 @@ func TestStartInTakesAnAlwaysTransitionThatHolds(t *testing.T) {
 func TestExecDoesNotTakeAPanicInSendForTheServices(t *testing.T) {
 	t.Parallel()
 
-	m := workChart(t, func(context.Context, counter) (int, error) { return 1, nil })
+	m := workChart(t, func(context.Context, *sc.Run, counter) (int, error) { return 1, nil })
 	snap, _ := m.Start(counter{N: 0}, epoch)
 	_, effects := m.Transition(snap, tick{}, epoch)
 
@@ -203,7 +203,7 @@ func TestSendAndSettleSettlesBeforeReturningAnActionsError(t *testing.T) {
 			b.Initial("idle")
 			b.State("idle").On[tick]().Do("fail", func(context.Context, counter, tick) { panic("boom") }).To("working")
 			working := b.State("working")
-			inv := working.Invoke("work", func(ctx context.Context, _ counter) (int, error) {
+			inv := working.Invoke("work", func(ctx context.Context, _ *sc.Run, _ counter) (int, error) {
 				select {
 				case <-time.After(time.Minute):
 					return 1, nil

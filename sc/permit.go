@@ -41,8 +41,8 @@ func (b *Binder[S, C]) Permit(name string, sem *semaphore.Weighted) {
 	b.Resource(name, acquire, release)
 }
 
-func permitFuncs[S comparable, C any](sem *semaphore.Weighted) (func(context.Context, C) (Permit, error), func(context.Context, Permit, Leave[S])) {
-	acquire := func(context.Context, C) (Permit, error) {
+func permitFuncs[S comparable, C any](sem *semaphore.Weighted) (func(context.Context, *Run, C) (Permit, error), func(context.Context, Permit, Leave[S])) {
+	acquire := func(context.Context, *Run, C) (Permit, error) {
 		if !sem.TryAcquire(1) {
 			return Permit{}, ErrNoPermit
 		}

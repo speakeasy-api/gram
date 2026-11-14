@@ -458,7 +458,7 @@ func TestXHistInvokesAnActorWhenReenteringTheStoredConfigurationThroughTheHistor
 		b.Initial("running")
 		running := b.State("running")
 		running.On[xhistPing]().To("refresh")
-		running.Invoke("callback", func(context.Context, xhistCtx) (struct{}, error) {
+		running.Invoke("callback", func(context.Context, *sc.Run, xhistCtx) (struct{}, error) {
 			return struct{}{}, nil
 		}).OnError().Stay()
 		b.History("refresh", sc.Shallow).Default("running")

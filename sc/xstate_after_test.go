@@ -31,6 +31,7 @@ package sc_test
 import (
 	"context"
 	"encoding/json"
+	"iter"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -1558,7 +1559,7 @@ func TestXAftExecCallsRaisedTransitionBuiltinActionsWithRaisedEvent(t *testing.T
 	require.Equal(t, xaftRaised{}, effect(t, effects, sc.EffectAction).Event)
 }
 
-func xaftIdle(context.Context, counter) (struct{}, error) { return struct{}{}, nil }
+func xaftIdle(context.Context, *sc.Run, counter) (struct{}, error) { return struct{}{}, nil }
 
 // XState: predictableExec > should call invoke creator with raised event
 func TestXAftExecCallsInvokeCreatorWithRaisedEvent(t *testing.T) {
@@ -1569,7 +1570,9 @@ func TestXAftExecCallsInvokeCreatorWithRaisedEvent(t *testing.T) {
 		b.State("a").On[xaftNext]().To("b")
 		b.State("b").RaiseOnEntry("raise", func(counter) any { return xaftRaised{} }).
 			On[xaftRaised]().To("c")
-		b.State("c").Invoke("creator", xaftIdle).OnError().Stay()
+		b.State("c").InvokeOn[xaftRaised]("creator", func(context.Context, *sc.Run, counter, xaftRaised) (struct{}, error) {
+			return struct{}{}, nil
+		}).OnError().Stay()
 	})
 	require.NoError(t, err)
 
@@ -1579,7 +1582,7 @@ func TestXAftExecCallsInvokeCreatorWithRaisedEvent(t *testing.T) {
 
 	// As in XState, the invoked service is given the event that entered
 	// its state, here the raised one: the effect carries it, and the
-	// service reads it with sc.Trigger.
+	// service declares it with InvokeOn.
 	start := effect(t, effects, sc.EffectStartInvocation)
 	require.Equal(t, "c", start.State)
 	require.Equal(t, xaftRaised{}, start.Event)
@@ -1786,8 +1789,8 @@ func TestXAftExecParentReadsUpdatedStateOfChildOnEventFromIt(t *testing.T) {
 func TestXAftExecSendsImmediateEventsToInitiallyInvokedActors(t *testing.T) {
 	t.Parallel()
 
-	m := xaftPonger(t, func(waiting *sc.StateBuilder[string, counter]) {
-		waiting.SendOnEntry("ping", "ponger", func(counter) any { return xaftPing{} })
+	m := xaftPonger(t, func(waiting *sc.StateBuilder[string, counter], ponger sc.Mailbox[any]) {
+		waiting.SendOnEntry("ping", ponger, func(counter) any { return xaftPing{} })
 	})
 
 	// The send comes after the start of the service it is for.
@@ -1816,7 +1819,7 @@ func TestXAftExecSendsImmediateEventsToInitiallyInvokedActors(t *testing.T) {
 // xaftPonger is the parent of the "immediate events" cases: it invokes a
 // child that answers PING with PONG, and finishes on PONG. send declares how
 // "waiting" sends the PING. The child has no states, as in XState.
-func xaftPonger(t *testing.T, send func(waiting *sc.StateBuilder[string, counter])) *sc.Machine[string, counter] {
+func xaftPonger(t *testing.T, send func(waiting *sc.StateBuilder[string, counter], ponger sc.Mailbox[any])) *sc.Machine[string, counter] {
 	t.Helper()
 
 	child, err := sc.New("ponger", func(b *xaftBuilder) {
@@ -1827,8 +1830,9 @@ func xaftPonger(t *testing.T, send func(waiting *sc.StateBuilder[string, counter
 	m, err := sc.New("pinger", func(b *xaftBuilder) {
 		b.Initial("waiting")
 		waiting := b.State("waiting")
-		waiting.InvokeMachine("ponger", child, xaftSameContext, xaftNoResult[string, counter]).OnError().Stay()
-		send(waiting)
+		ponger := waiting.InvokeMachine("ponger", child, xaftSameContext, xaftNoResult[string, counter])
+		ponger.OnError().Stay()
+		send(waiting, ponger)
 		waiting.On[xaftPong]().To("done")
 		b.Final("done")
 	})
@@ -1853,7 +1857,7 @@ func TestXAftExecCreatesInvokeBasedOnContextUpdatedByEntryActions(t *testing.T) 
 				c.Flag = true
 				return c
 			}).
-			Invoke("check", func(context.Context, xaftFlag) (struct{}, error) { return struct{}{}, nil }).
+			Invoke("check", func(context.Context, *sc.Run, xaftFlag) (struct{}, error) { return struct{}{}, nil }).
 			OnError().Stay()
 	})
 	require.NoError(t, err)
@@ -1879,8 +1883,10 @@ func TestXAftExecDeliversEventsSentFromEntryActionsToServiceInvokedInSameState(t
 	m, err := sc.New("knocker", func(b *xaftBuilder) {
 		b.Initial("a")
 		b.State("a").On[xaftNext]().To("b")
-		sb := b.State("b").SendOnEntry("knockKnock", "myChild", func(counter) any { return xaftKnock{} })
-		sb.InvokeMachine("myChild", child, xaftSameContext, xaftNoResult[string, counter]).OnError().Stay()
+		sb := b.State("b")
+		myChild := sb.InvokeMachine("myChild", child, xaftSameContext, xaftNoResult[string, counter])
+		myChild.OnError().Stay()
+		sb.SendOnEntry("knockKnock", myChild, func(counter) any { return xaftKnock{} })
 	})
 	require.NoError(t, err)
 
@@ -1939,8 +1945,8 @@ func TestXAftExecSendsDeferredEventsToInitiallyInvokedActors(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m := xaftPonger(t, func(waiting *sc.StateBuilder[string, counter]) {
-			waiting.After(time.Millisecond).SendTo("ping", "ponger", func(counter, struct{}) any { return xaftPing{} })
+		m := xaftPonger(t, func(waiting *sc.StateBuilder[string, counter], ponger sc.Mailbox[any]) {
+			waiting.After(time.Millisecond).SendTo("ping", ponger, func(counter, struct{}) any { return xaftPing{} })
 		})
 
 		inst, err := m.Instance(t.Context(), counter{N: 0})
@@ -1958,11 +1964,12 @@ func TestXAftExecSendsDeferredEventsToInitiallyInvokedActors(t *testing.T) {
 func TestXAftExecDeliversEventsSentFromExitActionsToServiceInvokedInSameState(t *testing.T) {
 	t.Parallel()
 
-	declare := func(service func(context.Context, counter) (struct{}, error)) *sc.Machine[string, counter] {
+	declare := func(service func(context.Context, *sc.Run, counter, iter.Seq[xaftMyEvent]) (struct{}, error)) *sc.Machine[string, counter] {
 		m, err := sc.New("exit_send", func(b *xaftBuilder) {
 			b.Initial("active")
-			active := b.State("active").SendOnExit("myEvent", "my-service", func(counter) any { return xaftMyEvent{} })
-			inv := active.Invoke("my-service", service)
+			active := b.State("active")
+			inv := active.Receive("my-service", service)
+			active.SendOnExit("myEvent", inv, func(counter) xaftMyEvent { return xaftMyEvent{} })
 			inv.OnDone().Stay()
 			inv.OnError().Stay()
 			active.On[xaftToggle]().To("inactive")
@@ -1973,7 +1980,9 @@ func TestXAftExecDeliversEventsSentFromExitActionsToServiceInvokedInSameState(t 
 		return m
 	}
 
-	m := declare(xaftIdle)
+	m := declare(func(context.Context, *sc.Run, counter, iter.Seq[xaftMyEvent]) (struct{}, error) {
+		return struct{}{}, nil
+	})
 	snap, _ := m.Start(counter{N: 0}, epoch)
 	snap, effects := m.Transition(snap, xaftToggle{}, epoch)
 	require.Equal(t, []string{"inactive"}, snap.Active())
@@ -1986,10 +1995,10 @@ func TestXAftExecDeliversEventsSentFromExitActionsToServiceInvokedInSameState(t 
 
 	// Under a driver the stopped service still hears it.
 	synctest.Test(t, func(t *testing.T) {
-		var received []any
+		var received []xaftMyEvent
 
-		m := declare(func(ctx context.Context, _ counter) (struct{}, error) {
-			for ev := range sc.Inbox(ctx) {
+		m := declare(func(ctx context.Context, _ *sc.Run, _ counter, inbox iter.Seq[xaftMyEvent]) (struct{}, error) {
+			for ev := range inbox {
 				received = append(received, ev)
 			}
 
@@ -2004,6 +2013,6 @@ func TestXAftExecDeliversEventsSentFromExitActionsToServiceInvokedInSameState(t 
 		// Send returns once the stopped service has returned.
 		_, err = inst.Send(t.Context(), xaftToggle{})
 		require.NoError(t, err)
-		require.Equal(t, []any{xaftMyEvent{}}, received)
+		require.Equal(t, []xaftMyEvent{{}}, received)
 	})
 }

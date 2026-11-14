@@ -48,6 +48,10 @@ type Actor[S comparable, C any] struct {
 	// emit receives the events the chart emits, when set.
 	emit func(context.Context, any)
 
+	// invalid is why the actor cannot run, such as a listener for an event
+	// the chart never emits; Run returns it.
+	invalid error
+
 	// throttle is what each service run waits on before it starts, when
 	// set.
 	throttle Waiter
@@ -109,7 +113,8 @@ func (m *Machine[S, C]) newActor(snap Snapshot[S, C], effects []Effect[C], o run
 		hooks:    hooks,
 		services: o.services,
 		now:      o.now,
-		emit:     o.emit,
+		emit:     o.listener(),
+		invalid:  m.checkListeners(o),
 		throttle: o.throttle,
 		stopped:  make(chan struct{}),
 		started:  atomic.Bool{},
@@ -128,6 +133,11 @@ func (m *Machine[S, C]) newActor(snap Snapshot[S, C], effects []Effect[C], o run
 func (a *Actor[S, C]) Run(ctx context.Context) error {
 	if !a.started.CompareAndSwap(false, true) {
 		return ErrActorStarted
+	}
+
+	if a.invalid != nil {
+		close(a.stopped)
+		return a.invalid
 	}
 	defer close(a.stopped)
 
@@ -372,6 +382,10 @@ func (a *Actor[S, C]) publish(next Snapshot[S, C]) {
 // sender backpressure; ctx bounds the wait. The actor's hooks see the event
 // with ctx's values, such as the sender's span.
 func (a *Actor[S, C]) Send(ctx context.Context, ev any) error {
+	if err := a.m.CheckEvent(ev); err != nil {
+		return fmt.Errorf("send to actor: %w", err)
+	}
+
 	select {
 	case a.mailbox <- envelope[S, C]{ctx: context.WithoutCancel(ctx), ev: ev, reply: nil}:
 		return nil
@@ -425,6 +439,10 @@ func (a *Actor[S, C]) Advance(ctx context.Context) error {
 // tells whether the event was accepted: it changed the instance when
 // step.To.Seq() differs from step.From.Seq(). ctx bounds both waits.
 func (a *Actor[S, C]) Call(ctx context.Context, ev any) (Step[S, C], error) {
+	if err := a.m.CheckEvent(ev); err != nil {
+		return Step[S, C]{}, fmt.Errorf("call actor: %w", err)
+	}
+
 	reply := make(chan Step[S, C], 1)
 
 	select {

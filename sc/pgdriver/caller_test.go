@@ -185,7 +185,19 @@ func TestSendTxWritesNothingForAnEventItIgnores(t *testing.T) {
 	require.NoError(t, err)
 	before := len(sink.encoded)
 
-	step, err := d.Send(t.Context(), "i1", tick{})
+	// An event of a type the chart never names is refused outright.
+	_, err = d.Send(t.Context(), "i1", tick{})
+	require.ErrorIs(t, err, sc.ErrUnknownEvent)
+	require.Len(t, sink.encoded, before)
+	require.Equal(t, "pending", store.statusOf(t, "i1"))
+
+	// One the chart names, sent where nothing handles it, is ignored.
+	_, err = d.Send(t.Context(), "i1", acceptInvite{})
+	require.NoError(t, err)
+	require.Equal(t, "accepted", store.statusOf(t, "i1"))
+	before = len(sink.encoded)
+
+	step, err := d.Send(t.Context(), "i1", acceptInvite{})
 	require.NoError(t, err)
 
 	require.False(t, step.Accepted())

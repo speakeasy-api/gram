@@ -39,7 +39,7 @@ func TestBindGivesImplementationsToADeclaredChart(t *testing.T) {
 
 	var notified []string
 	bound, err := m.Bind(func(b *sc.Binder[string, counter]) {
-		b.Service[int]("compute", func(context.Context, counter) (int, error) { return 42, nil })
+		b.Service[int]("compute", func(context.Context, *sc.Run, counter) (int, error) { return 42, nil })
 		b.Action("notify", func(_ context.Context, c counter, mv sc.Move[string]) {
 			notified = append(notified, mv.Source)
 		})
@@ -77,8 +77,8 @@ func TestBindReportsUndeclaredNamesAndMismatchedResultTypes(t *testing.T) {
 	t.Parallel()
 
 	_, err := declaredChart(t).Bind(func(b *sc.Binder[string, counter]) {
-		b.Service[string]("compute", func(context.Context, counter) (string, error) { return "", nil })
-		b.Service[int]("missing", func(context.Context, counter) (int, error) { return 0, nil })
+		b.Service[string]("compute", func(context.Context, *sc.Run, counter) (string, error) { return "", nil })
+		b.Service[int]("missing", func(context.Context, *sc.Run, counter) (int, error) { return 0, nil })
 		b.Action("absent", func(context.Context, counter, sc.Move[string]) {})
 	})
 
@@ -90,9 +90,9 @@ func TestBindReportsUndeclaredNamesAndMismatchedResultTypes(t *testing.T) {
 func TestBindReplacesAnImplementationForATest(t *testing.T) {
 	t.Parallel()
 
-	m := orderChart(t, func(context.Context, order) (string, error) { return "real", nil })
+	m := orderChart(t, func(context.Context, *sc.Run, order) (string, error) { return "real", nil })
 	fake, err := m.Bind(func(b *sc.Binder[state, order]) {
-		b.Service[string]("charge", func(context.Context, order) (string, error) { return "fake", nil })
+		b.Service[string]("charge", func(context.Context, *sc.Run, order) (string, error) { return "fake", nil })
 	})
 	require.NoError(t, err)
 

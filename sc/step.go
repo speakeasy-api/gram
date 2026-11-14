@@ -149,11 +149,11 @@ type service[S comparable, C any] struct {
 	// before this run.
 	attempt int
 
-	// saved is the progress the run last recorded with Checkpoint.
+	// saved is the progress the run last recorded with Run.Checkpoint.
 	saved json.RawMessage
 
 	// cause is the event being processed when the run's state was
-	// entered, which the service reads with Trigger.
+	// entered, which a service declared with InvokeOn receives.
 	cause any
 }
 
@@ -286,16 +286,26 @@ type run[S comparable, C any] struct {
 
 	// ended lists the service runs the current microstep stopped.
 	ended []service[S, C]
+
+	// entryCause records, for each state entered during the call, the
+	// event that entered it.
+	entryCause map[*node[S, C]]any
 }
 
 // namedCause is the event being processed, if the chart names its type and
 // so can store it; otherwise nil.
 func (r *run[S, C]) namedCause() any {
-	if _, named := r.m.eventNames[reflect.TypeOf(r.cause)]; !named {
+	return r.namedEvent(r.cause)
+}
+
+// namedEvent is ev if the chart names its type and so can store it;
+// otherwise nil.
+func (r *run[S, C]) namedEvent(ev any) any {
+	if _, named := r.m.eventNames[reflect.TypeOf(ev)]; !named {
 		return nil
 	}
 
-	return r.cause
+	return ev
 }
 
 // causeName is the stored name of a service run's cause, or "".
@@ -377,33 +387,34 @@ func (m *Machine[S, C]) Start(c C, now time.Time, opts ...StartOption) (Snapshot
 // start is Start, also returning every state entered on the way.
 func (m *Machine[S, C]) start(c C, now time.Time, seed uint64) (Snapshot[S, C], []Effect[C], []*node[S, C]) {
 	r := &run[S, C]{
-		m:        m,
-		config:   m.rootOnly(),
-		history:  nil,
-		timers:   nil,
-		services: nil,
-		counter:  0,
-		ctx:      c,
-		done:     false,
-		now:      now,
-		fired:    nil,
-		seed:     seed,
-		stream:   0,
-		rng:      nil,
-		scopes:   nil,
-		acquired: nil,
-		pending:  nil,
-		effects:  nil,
-		queue:    nil,
-		entered:  nil,
-		passed:   nil,
-		changed:  false,
-		cause:    nil,
-		sends:    nil,
-		starting: false,
-		ended:    nil,
-		list:     nil,
-		listed:   false,
+		m:          m,
+		config:     m.rootOnly(),
+		history:    nil,
+		timers:     nil,
+		services:   nil,
+		counter:    0,
+		ctx:        c,
+		done:       false,
+		now:        now,
+		fired:      nil,
+		seed:       seed,
+		stream:     0,
+		rng:        nil,
+		scopes:     nil,
+		acquired:   nil,
+		pending:    nil,
+		effects:    nil,
+		queue:      nil,
+		entered:    nil,
+		passed:     nil,
+		changed:    false,
+		cause:      nil,
+		sends:      nil,
+		starting:   false,
+		ended:      nil,
+		entryCause: nil,
+		list:       nil,
+		listed:     false,
 	}
 
 	enter := new(transition[S, C])
@@ -574,33 +585,34 @@ func (m *Machine[S, C]) load(snap Snapshot[S, C], now time.Time) *run[S, C] {
 	}
 
 	r := &run[S, C]{
-		m:        m,
-		config:   slices.Clone(snap.config),
-		history:  nil,
-		timers:   make([]timer[S, C], 0, len(snap.timers)),
-		services: make([]service[S, C], 0, len(snap.invocations)),
-		counter:  snap.counter,
-		ctx:      snap.Context,
-		done:     snap.done,
-		now:      now,
-		fired:    nil,
-		seed:     snap.seed,
-		stream:   snap.seq + 1,
-		rng:      nil,
-		scopes:   nil,
-		acquired: nil,
-		pending:  nil,
-		effects:  nil,
-		queue:    nil,
-		entered:  nil,
-		passed:   nil,
-		changed:  false,
-		cause:    nil,
-		sends:    nil,
-		starting: false,
-		ended:    nil,
-		list:     snap.nodes,
-		listed:   true,
+		m:          m,
+		config:     slices.Clone(snap.config),
+		history:    nil,
+		timers:     make([]timer[S, C], 0, len(snap.timers)),
+		services:   make([]service[S, C], 0, len(snap.invocations)),
+		counter:    snap.counter,
+		ctx:        snap.Context,
+		done:       snap.done,
+		now:        now,
+		fired:      nil,
+		seed:       snap.seed,
+		stream:     snap.seq + 1,
+		rng:        nil,
+		scopes:     nil,
+		acquired:   nil,
+		pending:    nil,
+		effects:    nil,
+		queue:      nil,
+		entered:    nil,
+		passed:     nil,
+		changed:    false,
+		cause:      nil,
+		sends:      nil,
+		starting:   false,
+		ended:      nil,
+		entryCause: nil,
+		list:       snap.nodes,
+		listed:     true,
 	}
 
 	for h, recorded := range snap.history {
@@ -1497,6 +1509,13 @@ func (r *run[S, C]) runSteps(t *transition[S, C], stim stimulus[S, C]) {
 
 func (r *run[S, C]) enter(n *node[S, C], event any) {
 	r.activate(n)
+
+	// The services the state starts once the step settles are told what
+	// entered it, which is not necessarily what the step ends on.
+	if r.entryCause == nil {
+		r.entryCause = map[*node[S, C]]any{}
+	}
+	r.entryCause[n] = r.namedEvent(event)
 	if n.budget > 0 {
 		r.setScope(n, r.now.Add(n.budget))
 	}
@@ -1817,7 +1836,12 @@ func (r *run[S, C]) startRaise(source *node[S, C], name string, ev any, delay ti
 }
 
 func (r *run[S, C]) startService(inv *invocation[S, C]) {
-	r.startRun(inv, 0, "", nil)
+	cause, entered := r.entryCause[inv.state]
+	if !entered {
+		cause = r.namedCause()
+	}
+
+	r.startRunFor(inv, 0, "", nil, cause)
 }
 
 // startRun starts a run of inv that follows attempt failed ones.
@@ -2330,8 +2354,7 @@ func keyOf(id string) string {
 // SpawnKey returns the key of the spawned service run with the given ID,
 // the one its [Transition.Spawn] gave it, and reports whether the ID is a
 // spawned run's at all. A transition reads it from the ID of the [Done],
-// [Failed] or [Emitted] event it handles, and a service from
-// [RunID].
+// [Failed] or [Emitted] event it handles, and a service from [Run.Key].
 func SpawnKey(id string) (string, bool) {
 	slash := strings.LastIndex(id, "/")
 	if slash < 0 || slash < strings.LastIndex(id, "#") {

@@ -394,7 +394,7 @@ func TestStreamEventsAreDeliveredOnlyWhileTheServiceRuns(t *testing.T) {
 	m, err := sc.New("stream", func(b *sc.Builder[string, counter]) {
 		b.Initial("listening")
 		listening := b.State("listening")
-		listening.Stream("ticks", func(context.Context, counter) iter.Seq2[any, error] {
+		listening.Stream("ticks", func(context.Context, *sc.Run, counter) iter.Seq2[any, error] {
 			return func(func(any, error) bool) {}
 		}).OnError().To("stopped")
 		listening.On[tick]().Assign("increment", increment[tick])

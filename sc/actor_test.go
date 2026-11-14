@@ -28,7 +28,7 @@ func TestActorRunsServicesAndTimersUntilTheMachineIsDone(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		var charges atomic.Int32
-		m := orderChart(t, func(context.Context, order) (string, error) {
+		m := orderChart(t, func(context.Context, *sc.Run, order) (string, error) {
 			if charges.Add(1) == 1 {
 				return "", errCardDeclined
 			}
@@ -67,7 +67,7 @@ func TestActorSnapshotsYieldsUntilTheMachineIsDone(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		// The charge never finishes, so the order stays in paying,
 		// where cancel is handled.
-		m := orderChart(t, func(ctx context.Context, _ order) (string, error) {
+		m := orderChart(t, func(ctx context.Context, _ *sc.Run, _ order) (string, error) {
 			<-ctx.Done()
 			return "", ctx.Err()
 		})
@@ -103,7 +103,7 @@ func TestActorStopsStreamServiceWhenItsStateIsExited(t *testing.T) {
 		m, err := sc.New("ticker", func(b *sc.Builder[string, counter]) {
 			b.Initial("listening")
 			listening := b.State("listening")
-			listening.Stream("ticks", func(ctx context.Context, _ counter) iter.Seq2[any, error] {
+			listening.Stream("ticks", func(ctx context.Context, _ *sc.Run, _ counter) iter.Seq2[any, error] {
 				return func(yield func(any, error) bool) {
 					defer close(cleanedUp)
 
@@ -141,7 +141,7 @@ func TestActorReturnsWhenItsContextIsCancelled(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		blocked := make(chan struct{})
-		m := orderChart(t, func(ctx context.Context, _ order) (string, error) {
+		m := orderChart(t, func(ctx context.Context, _ *sc.Run, _ order) (string, error) {
 			close(blocked)
 			<-ctx.Done()
 

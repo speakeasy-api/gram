@@ -54,7 +54,7 @@ func TestGroupInstancesShareTheGroupsOptions(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		m := workChart(t, func(context.Context, counter) (int, error) { return 1, nil })
+		m := workChart(t, func(context.Context, *sc.Run, counter) (int, error) { return 1, nil })
 		rec := &recorder{}
 		g := sc.NewGroup[int](m, sc.WithHooks(rec.hooks(m)))
 		defer g.Close()

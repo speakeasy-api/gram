@@ -138,13 +138,17 @@ func (m *Machine[S, C]) InstanceFrom(ctx context.Context, snap Snapshot[S, C], o
 }
 
 func (m *Machine[S, C]) newInstance(ctx context.Context, snap Snapshot[S, C], effects []Effect[C], o runOptions) (*Instance[S, C], error) {
+	if err := m.checkListeners(o); err != nil {
+		return nil, err
+	}
+
 	i := &Instance[S, C]{
 		m:         m,
 		hooks:     hooksFor[S, C](o, m.id),
 		services:  o.services,
 		now:       o.now,
 		manual:    o.manualTimers,
-		emit:      o.emit,
+		emit:      o.listener(),
 		throttle:  o.throttle,
 		base:      context.WithoutCancel(ctx),
 		turn:      make(chan struct{}, 1),
@@ -199,6 +203,12 @@ func (i *Instance[S, C]) Snapshot() Snapshot[S, C] {
 // An error is the first action that failed; the transition has still been
 // taken.
 func (i *Instance[S, C]) Send(ctx context.Context, ev any) (Step[S, C], error) {
+	if err := i.m.CheckEvent(ev); err != nil {
+		snap := i.Snapshot()
+
+		return Step[S, C]{At: time.Time{}, From: snap, Event: ev, To: snap, Effects: nil}, fmt.Errorf("send to instance: %w", err)
+	}
+
 	select {
 	case <-i.turn:
 	case <-ctx.Done():

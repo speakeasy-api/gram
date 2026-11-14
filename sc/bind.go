@@ -37,7 +37,7 @@ type Binder[S comparable, C any] struct {
 // [StateBuilder.Invoke], runs fn; for one declared with Invoke this replaces
 // its implementation, which is how a test substitutes a fake. R must be the
 // result type the chart declared.
-func (b *Binder[S, C]) Service[R any](name string, fn func(context.Context, C) (R, error)) {
+func (b *Binder[S, C]) Service[R any](name string, fn func(ctx context.Context, run *Run, c C) (R, error)) {
 	if fn == nil {
 		b.errs = append(b.errs, fmt.Errorf("service %q is bound to a nil function", name))
 		return
@@ -48,7 +48,7 @@ func (b *Binder[S, C]) Service[R any](name string, fn func(context.Context, C) (
 
 // Stream binds the stream service named name to fn, as Service does for
 // a service that returns one result.
-func (b *Binder[S, C]) Stream(name string, fn func(context.Context, C) iter.Seq2[any, error]) {
+func (b *Binder[S, C]) Stream(name string, fn func(ctx context.Context, run *Run, c C) iter.Seq2[any, error]) {
 	if fn == nil {
 		b.errs = append(b.errs, fmt.Errorf("stream service %q is bound to a nil function", name))
 		return
@@ -79,7 +79,7 @@ func (b *Binder[S, C]) bind(name string, doneType reflect.Type, run func(context
 
 // Resource binds the resource named name to its acquire and release
 // functions, replacing any it had. R must be the type the chart declared.
-func (b *Binder[S, C]) Resource[R any](name string, acquire func(context.Context, C) (R, error), release func(ctx context.Context, value R, why Leave[S])) {
+func (b *Binder[S, C]) Resource[R any](name string, acquire func(ctx context.Context, run *Run, c C) (R, error), release func(ctx context.Context, value R, why Leave[S])) {
 	if acquire == nil || release == nil {
 		b.errs = append(b.errs, fmt.Errorf("resource %q is bound to a nil function", name))
 		return

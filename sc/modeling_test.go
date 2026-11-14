@@ -277,7 +277,7 @@ func retryForeverChart(t *testing.T, final bool) *sc.Machine[string, counter] {
 
 	m, err := sc.New("retry", func(b *sc.Builder[string, counter]) {
 		b.Initial("charging")
-		charge := b.State("charging").Invoke("charge", func(context.Context, counter) (int, error) { return 0, nil })
+		charge := b.State("charging").Invoke("charge", func(context.Context, *sc.Run, counter) (int, error) { return 0, nil })
 		charge.OnDone().To("paid")
 		charge.OnError().To("retrying")
 		b.State("retrying").After(time.Second).To("charging")
@@ -448,7 +448,7 @@ func TestStayDropsAnExpectedEventOnPurpose(t *testing.T) {
 	m, err := sc.New("stay", func(b *sc.Builder[string, counter]) {
 		b.Initial("closing")
 		closing := b.State("closing")
-		inv := closing.Invoke("close", func(context.Context, counter) (int, error) { return 0, nil })
+		inv := closing.Invoke("close", func(context.Context, *sc.Run, counter) (int, error) { return 0, nil })
 		inv.OnDone().To("closed")
 		inv.OnError().Stay()
 		b.Final("closed")

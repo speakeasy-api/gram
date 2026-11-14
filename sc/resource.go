@@ -59,7 +59,7 @@ func newResourceTable[S comparable, C any](m *Machine[S, C], hooks *Hooks[S, C])
 	return &resourceTable[S, C]{m: m, hooks: hooks, mu: sync.Mutex{}, slots: map[string]*resourceSlot[C]{}, held: nil, closed: false}
 }
 
-// attach returns ctx carrying the table, for Resource.From.
+// attach returns ctx carrying the table, for Run and Resource.From.
 func (t *resourceTable[S, C]) attach(ctx context.Context) context.Context {
 	return context.WithValue(ctx, heldResources{}, t.lookup)
 }

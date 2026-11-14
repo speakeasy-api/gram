@@ -336,7 +336,7 @@ func BenchmarkService_RoundTrip_SC(b *testing.B) {
 	m, err := sc.New("svc", func(b *sc.Builder[string, order]) {
 		b.Initial("idle")
 		b.State("idle").On[work]().To("working")
-		inv := b.State("working").Invoke("do", func(context.Context, order) (int, error) { return 1, nil })
+		inv := b.State("working").Invoke("do", func(context.Context, *sc.Run, order) (int, error) { return 1, nil })
 		inv.OnDone().To("idle")
 		inv.OnError().To("idle")
 	})
