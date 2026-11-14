@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2011-2012 Jacob Beard, INFICON, and other SCION contributors
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<!--
+    In SCION < 3 semantics:
+      Illustrates one of the edge cases of these semantics. In SCION 2.0, "inital" attribute is no longer normalized
+      such that it is treated as a transition into an initial state. Instead, transition from "a" to "b1" is taken 
+      in the same small-step.
+      Thus event "s" is in the inner queue when machine enters "b1", which causes transition to be taken to "b1".
+    In SCION >= 3 semantics (SCXML Appendix D semantics):
+      The state machine will enter state 'b1', then transition to target 'b3' will be selected over transition to target 'b2', because transition to target 'b3' is an eventless transition. In the Algorithm for SCXML interpretation, transitions without events are selected before transitions with events; and transitions with events will only be selected if no eventless transitions are selected.
+     -->
+<scxml 
+    datamodel="ecmascript"
+    xmlns="http://www.w3.org/2005/07/scxml"
+    initial="a"
+    version="1.0">
+
+    <state id="a">
+        <transition target="b" event="t">
+            <raise event="s"/>
+        </transition>
+    </state>
+
+    <state id="b" initial="b1">
+        <state id="b1">
+            <transition event="s" target="b2"/>
+            <transition target="b3"/>
+        </state>
+
+        <state id="b2">
+        </state>
+
+        <state id="b3">
+        </state>
+    </state>
+</scxml>

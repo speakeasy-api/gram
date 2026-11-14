@@ -779,6 +779,70 @@ checksum = "sha256:4ccf353e484997dd4975361b6433f3b2661f5db614f2b382cddcac7eaa74a
 url = "https://github.com/jdx/hk/releases/download/v1.56.1/hk-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/jdx/hk/releases/assets/525632118"
 
+[[tools."http:tla2tools"]]
+version = "1.7.4"
+backend = "http:tla2tools"
+
+[tools."http:tla2tools"."platforms.linux-arm64"]
+checksum = "blake3:36e4d95a99aa33dde9ff7b288bf3092f3dfbb26e450fc9758ee765cdb250ce38"
+url = "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar"
+
+[tools."http:tla2tools"."platforms.linux-arm64-musl"]
+checksum = "sha256:936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+url = "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar"
+
+[tools."http:tla2tools"."platforms.linux-x64"]
+checksum = "sha256:936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+url = "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar"
+
+[tools."http:tla2tools"."platforms.linux-x64-musl"]
+checksum = "sha256:936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+url = "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar"
+
+[tools."http:tla2tools"."platforms.macos-arm64"]
+checksum = "sha256:936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+url = "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar"
+
+[tools."http:tla2tools"."platforms.macos-x64"]
+checksum = "sha256:936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+url = "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar"
+
+[tools."http:tla2tools"."platforms.windows-x64"]
+checksum = "sha256:936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+url = "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar"
+
+[[tools.java]]
+version = "temurin-jre-25.0.5+8.0.LTS"
+backend = "core:java"
+
+[tools.java."platforms.linux-arm64"]
+checksum = "sha256:963931723891302ebb2687178532c3d793d71e2577cd058061c7efb396140a86"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_aarch64_linux_hotspot_25.0.5_8.tar.gz"
+
+[tools.java."platforms.linux-arm64-musl"]
+checksum = "sha256:7c2b97b1b34947399f6c911e5aa69d171b745b0005ea79f47c4f3f1d47554bc2"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_aarch64_alpine-linux_hotspot_25.0.5_8.tar.gz"
+
+[tools.java."platforms.linux-x64"]
+checksum = "sha256:6fac98f0c8202efc3135a9e9e42aa61963ec42d1c5cbb40caf231e7b14a24ef6"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_x64_linux_hotspot_25.0.5_8.tar.gz"
+
+[tools.java."platforms.linux-x64-musl"]
+checksum = "sha256:b46e981318decb77eda728e006c7678a1ac0c56cf81ae3ad245710c2e4fa1a55"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_x64_alpine-linux_hotspot_25.0.5_8.tar.gz"
+
+[tools.java."platforms.macos-arm64"]
+checksum = "sha256:72ebd76b502c849e88dea39afae51baf5f82f2b5b1b6389c28ea707b20451bce"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_aarch64_mac_hotspot_25.0.5_8.tar.gz"
+
+[tools.java."platforms.macos-x64"]
+checksum = "sha256:806902c796c670969b7b27df73b8f0fe0924a61bd65083aa53064115e49cab2d"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_x64_mac_hotspot_25.0.5_8.tar.gz"
+
+[tools.java."platforms.windows-x64"]
+checksum = "sha256:da78d54a2fcdbba1e92d5e3f07dd30236f96297891c4a21a781c3f38f5c0beae"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_x64_windows_hotspot_25.0.5_8.zip"
+
 [[tools.jq]]
 version = "1.8.2"
 backend = "aqua:jqlang/jq"

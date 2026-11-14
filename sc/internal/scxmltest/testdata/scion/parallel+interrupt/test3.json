@@ -1,0 +1,9 @@
+{
+  "initialConfiguration": ["e", "f", "d"],
+  "events": [
+    {
+      "event": { "name": "t" },
+      "nextConfiguration": ["a1"]
+    }
+  ]
+}

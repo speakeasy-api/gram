@@ -62,6 +62,10 @@ rust = { version = "1.96.1", profile = "minimal", components = ["clippy", "rustf
 "github:ast-grep/ast-grep" = "0.45.0"
 pitchfork = "2.33.1"
 "npm:@playwright/cli" = "0.1.17"
+# TLA+ tools (TLC, SANY, PlusCal) ship as a bare jar, so they need a JVM and
+# are run through `mise run tlc` rather than a binary on PATH.
+java = "temurin-jre-25.0.5+8.0.LTS"
+"http:tla2tools" = { version = "1.7.4", url = "https://github.com/tlaplus/tlaplus/releases/download/v{{ version }}/tla2tools.jar", checksum = "sha256:936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88" }
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.

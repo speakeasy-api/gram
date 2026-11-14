@@ -41,6 +41,7 @@ jobs:
       tsframework: ${{ steps.gates.outputs.tsframework }}
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
+      sc: ${{ steps.gates.outputs.sc }}
       glint: ${{ steps.gates.outputs.glint }}
       infra: ${{ steps.gates.outputs.infra }}
       pystreams: ${{ steps.gates.outputs.pystreams }}
@@ -128,6 +129,7 @@ jobs:
           STEPS_FILTER_OUTPUTS_TSFRAMEWORK: ${{ steps.filter.outputs.tsframework }}
           STEPS_FILTER_OUTPUTS_MIGRATIONS: ${{ steps.filter.outputs.migrations }}
           STEPS_FILTER_OUTPUTS_PLOG: ${{ steps.filter.outputs.plog }}
+          STEPS_FILTER_OUTPUTS_SC: ${{ steps.filter.outputs.sc }}
           STEPS_FILTER_OUTPUTS_GLINT: ${{ steps.filter.outputs.glint }}
           STEPS_FILTER_OUTPUTS_INFRA: ${{ steps.filter.outputs.infra }}
           STEPS_FILTER_OUTPUTS_PYSTREAMS: ${{ steps.filter.outputs.pystreams }}
@@ -203,6 +205,13 @@ jobs:
             echo "Plog jobs will run."
           else
             echo "Plog jobs will be skipped."
+          fi
+
+          if [[ "${STEPS_FILTER_OUTPUTS_SC}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "sc=true" >> $GITHUB_OUTPUT
+            echo "sc jobs will run."
+          else
+            echo "sc jobs will be skipped."
           fi
 
           if [[ "${STEPS_FILTER_OUTPUTS_GLINT}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
@@ -1934,6 +1943,49 @@ jobs:
       - name: Check for dirty files
         run: mise run git:porcelain
 
+  # The statechart package lives in the root module but outside server/, so
+  # the server lint and test jobs do not reach it. Its pgdriver tests start a
+  # Postgres container with testcontainers.
+  sc-lint-test:
+    name: sc-lint-test
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.sc == 'true'
+    env:
+      GOMAXPROCS: 4
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      - name: Lint with golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
+          working-directory: sc
+
+      - name: Test
+        run: mise run test:sc
+
+      - name: Run "go mod tidy"
+        run: mise run go:tidy
+
+      - name: Check for dirty files
+        run: mise run git:porcelain
+
   # Decides how much of the server suite a run covers and how many shards
   # that takes. A pull request tests the packages its files belong to and the
   # packages that import one of those directly, on as few shards as that
@@ -3344,6 +3396,7 @@ jobs:
       - cli-build-lint
       - hooks-build-test
       - plog-build-lint
+      - sc-lint-test
       - glint-test
       - infra-build-lint
       - pystreams-build-lint
