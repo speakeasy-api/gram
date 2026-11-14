@@ -2,12 +2,13 @@ name: Queue version packages
 
 # Merges the Changesets release pull request by approving it and adding it to
 # the merge queue. gram-bot opens that pull request, and GitHub rejects a
-# self-approval, so the approver has to be a different GitHub App.
+# self-approval, so the approver is a separate GitHub App, speakeasy-approvals
+# (it reviews as speakeasy-approvals[bot]).
 #
 # One-time setup for the approver app, installed on this repository only:
 #   - Permissions: Pull requests (read and write), Contents (read and write)
-#   - Repository variable RELEASE_APPROVER_APP_ID
-#   - Repository secret RELEASE_APPROVER_PRIVATE_KEY
+#   - Repository variable RELEASE_APPROVER_CLIENT_ID: the app's Client ID
+#   - Repository secret RELEASE_APPROVER_PRIVATE_KEY: the app's private key
 # Do not point these at gram-bot.
 #
 # GitHub cron is UTC and does not follow Pacific daylight saving. 03:00 UTC is
@@ -75,11 +76,27 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check approver app configuration
+        env:
+          CLIENT_ID: ${{ vars.RELEASE_APPROVER_CLIENT_ID }}
+          PRIVATE_KEY: ${{ secrets.RELEASE_APPROVER_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "$CLIENT_ID" ]] || missing+=("variable RELEASE_APPROVER_CLIENT_ID")
+          [[ -n "$PRIVATE_KEY" ]] || missing+=("secret RELEASE_APPROVER_PRIVATE_KEY")
+          if (( ${#missing[@]} > 0 )); then
+            for m in "${missing[@]}"; do
+              echo "::error title=Approver app not configured::Repository ${m} is not set. See the setup notes at the top of release-merge.yaml."
+            done
+            exit 1
+          fi
+
       - name: Generate approver token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ vars.RELEASE_APPROVER_APP_ID }}
+          client-id: ${{ vars.RELEASE_APPROVER_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APPROVER_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
