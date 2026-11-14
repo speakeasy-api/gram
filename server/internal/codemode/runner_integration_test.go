@@ -186,6 +186,27 @@ await asyncio.gather(tools.call("remote--ping", {}), tools.call("remote--ping", 
 	require.EqualValues(t, 2, host.called.Load())
 }
 
+// The runner ends a run at its ninth concurrent helper. Each of the eight
+// calls it already sent appears in ToolCalls with its own outcome.
+func TestCodeRunnerConcurrencyLimitRecordsEveryCall(t *testing.T) {
+	t.Parallel()
+	client := realRunnerClient(t)
+	host := &runnerHost{entered: make(chan struct{}, 9), block: true}
+	result := client.Run(t.Context(), uuid.New(), `import asyncio
+async def one(i):
+    return await tools.call("remote--search", {"query": f"secrets {i}"})
+await asyncio.gather(*[one(i) for i in range(9)])`, func(context.Context) (Host, error) { return host, nil })
+	require.NotNil(t, result.Error)
+	require.Equal(t, "execution_failed", result.Error.Code)
+	require.Contains(t, result.Error.Message, "the call over the limit was not dispatched")
+	require.Len(t, result.ToolCalls, 8)
+	for _, call := range result.ToolCalls {
+		require.Equal(t, "remote--search", call.Path)
+		require.Contains(t, []string{"unknown", "not_dispatched"}, call.Outcome)
+	}
+	require.LessOrEqual(t, host.called.Load(), int64(8))
+}
+
 func TestCodeRunnerBurstDoesNotInterruptOtherExecutions(t *testing.T) {
 	t.Parallel()
 	client := realRunnerClient(t)
