@@ -443,8 +443,13 @@ func (s *StateBuilder[S, C]) OnDone() *Transition[S, C, struct{}] {
 // reached: a [Done] whose Result is what that state declared with
 // [FinalBuilder.Output] and whose ID is its name, so one transition can
 // tell several final states apart. It receives the zero value when the
-// final state declares no output, or one of another type, and for a
-// parallel state, whose regions each end in a final state of their own.
+// final state declares no output, or one of another type.
+//
+// A parallel state completes when every region has, and reports them all:
+// declared with R as map[string]any, the transition receives a Done whose
+// ID is the parallel state's name and whose Result maps each region's name
+// to the output of the final state it ended in, nil for one that declares
+// none, and for a region that is itself parallel a map of its own.
 func (s *StateBuilder[S, C]) OnDoneWith[R any]() *Transition[S, C, Done[R]] {
 	return newTransition[S, C, Done[R]](s.b, s.n, triggerStateDone)
 }

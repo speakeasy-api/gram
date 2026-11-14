@@ -8,7 +8,7 @@ package sc_test
 // "<state>/<action>". States are named after their XState paths, so XState's
 // 'enter: a.a1' is the effect "a.a1/enter" and 'exit: a.a1' is "a.a1/exit".
 //
-// Three translations recur and are not repeated at each case:
+// Four translations recur and are not repeated at each case:
 //   - XState's root is the chart itself, reached with Chart(). Its effects
 //     carry the machine's id as their state, so the root's 'enter: __root__'
 //     is the effect "m/enter" of a machine named m.
@@ -371,22 +371,20 @@ func TestXActStateActionsActionsForParallelMachines(t *testing.T) {
 	t.Parallel()
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Initial("p")
-		b.Parallel("p", func(b *xactBuilder) {
-			xactTracked(b.State("a", func(b *xactBuilder) {
-				b.Initial("a.a1")
-				xactTracked(b.State("a.a1")).On[xactChange]().
-					Do("do_a2", xactDo[xactChange]).
-					Do("another_do_a2", xactDo[xactChange]).
-					To("a.a2")
-				xactTracked(b.State("a.a2"))
-			}))
-			xactTracked(b.State("b", func(b *xactBuilder) {
-				b.Initial("b.b1")
-				xactTracked(b.State("b.b1")).On[xactChange]().Do("do_b2", xactDo[xactChange]).To("b.b2")
-				xactTracked(b.State("b.b2"))
-			}))
-		})
+		b.Regions()
+		xactTracked(b.State("a", func(b *xactBuilder) {
+			b.Initial("a.a1")
+			xactTracked(b.State("a.a1")).On[xactChange]().
+				Do("do_a2", xactDo[xactChange]).
+				Do("another_do_a2", xactDo[xactChange]).
+				To("a.a2")
+			xactTracked(b.State("a.a2"))
+		}))
+		xactTracked(b.State("b", func(b *xactBuilder) {
+			b.Initial("b.b1")
+			xactTracked(b.State("b.b1")).On[xactChange]().Do("do_b2", xactDo[xactChange]).To("b.b2")
+			xactTracked(b.State("b.b2"))
+		}))
 	})
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
@@ -1229,9 +1227,8 @@ func TestXActStoppedExitActionsNotCalledWhenStoppingMachine(t *testing.T) {
 //
 // DIVERGES from XState: XState hands every exit action the event being
 // processed. In sc a state's own Exit action takes no event, and its effect's
-// Event is nil. A chart action run with OnExit is told the event in its
-// Move, but the effect that runs it on completion carries no Event, where
-// the effect of a chart action run on an ordinary exit does.
+// Event is nil, on completion as on any other exit. A chart action run with
+// OnExit is told the event in its Move, and its effect carries it.
 func TestXActStoppedExitActionSeesLastReceivedEvent(t *testing.T) {
 	t.Parallel()
 
@@ -2490,11 +2487,9 @@ func TestXActActionsDocumentOrderForSameLevelParallelRegions(t *testing.T) {
 	t.Parallel()
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Initial("p")
-		b.Parallel("p", func(b *xactBuilder) {
-			b.State("a").On[xactFoo]().Do("push", xactDo[xactFoo])
-			b.State("b").On[xactFoo]().Do("push", xactDo[xactFoo])
-		})
+		b.Regions()
+		b.State("a").On[xactFoo]().Do("push", xactDo[xactFoo])
+		b.State("b").On[xactFoo]().Do("push", xactDo[xactFoo])
 	})
 
 	snap, _ := m.Start(counter{N: 0}, epoch)
@@ -2509,14 +2504,12 @@ func TestXActActionsDocumentOrderForDifferentLevelsOfParallelRegions(t *testing.
 	t.Parallel()
 
 	m := xactNew(t, "m", func(b *xactBuilder) {
-		b.Initial("p")
-		b.Parallel("p", func(b *xactBuilder) {
-			b.State("a", func(b *xactBuilder) {
-				b.Initial("a1")
-				b.State("a1").On[xactFoo]().Do("push", xactDo[xactFoo])
-			})
-			b.State("b").On[xactFoo]().Do("push", xactDo[xactFoo])
+		b.Regions()
+		b.State("a", func(b *xactBuilder) {
+			b.Initial("a1")
+			b.State("a1").On[xactFoo]().Do("push", xactDo[xactFoo])
 		})
+		b.State("b").On[xactFoo]().Do("push", xactDo[xactFoo])
 	})
 
 	snap, _ := m.Start(counter{N: 0}, epoch)

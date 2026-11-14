@@ -490,6 +490,8 @@ func xhistDoorChart(t *testing.T) *xhistMachine {
 			xhistTrack(b, "first", "second")
 		}).On[xhistClick]().To("closed")
 		xhistTrack(b, "closed", "open")
+		// trackEntries tracks the chart itself as well.
+		b.Chart().Entry("enter", xhistNoop).Exit("exit", xhistNoop)
 	})
 }
 

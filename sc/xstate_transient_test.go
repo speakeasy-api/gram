@@ -6,6 +6,10 @@ package sc_test
 // XState actions are observed through the effects the core returns, named
 // "<state>/<action>"; an action declared on the chart itself is named after
 // the chart's id.
+//
+// A root with type: 'parallel' is declared with Builder.Regions, and the
+// root's own transitions on the chart itself. The one root that is still
+// wrapped in a state is greetingMachine's: see xtraGreeting.
 
 import (
 	"context"
@@ -91,9 +95,10 @@ func xtraCandidates(t *testing.T) *sc.Machine[string, xtraData] {
 }
 
 // xtraGreeting is XState's greetingMachine. The state "greeting" stands for
-// the root: RECHECK targets the root itself ('#greeting'), and an sc
-// transition cannot name the chart as its target, so the root's transitions
-// are declared on a state that can be targeted.
+// the root, and a snapshot lists it among the active states: RECHECK targets
+// the root itself ('#greeting'), and an sc transition cannot name the chart
+// as its target, so the root's transitions are still declared on a state
+// that can be targeted.
 func xtraGreeting(t *testing.T) *sc.Machine[string, xtraHour] {
 	t.Helper()
 
@@ -185,27 +190,25 @@ func TestXTraTransientExecutesAllInternalEventsInOrder(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("internal", func(b *xtraBuilder) {
-		b.Initial("P")
-		b.Parallel("P", func(b *xtraBuilder) {
-			b.State("A", func(b *xtraBuilder) {
-				b.Initial("A1")
-				b.State("A1").On[xtraE]().To("A2")
-				b.State("A2").RaiseOnEntry("raiseInt1", func(counter) any { return xtraInt1{} })
-			})
-			b.State("B", func(b *xtraBuilder) {
-				b.Initial("B1")
-				b.State("B1").On[xtraE]().To("B2")
-				b.State("B2").RaiseOnEntry("raiseInt2", func(counter) any { return xtraInt2{} })
-			})
-			b.State("C", func(b *xtraBuilder) {
-				b.Initial("C1")
-				c1 := b.State("C1")
-				c1.On[xtraInt1]().To("C2")
-				c1.On[xtraInt2]().To("C3")
-				b.State("C2").On[xtraInt2]().To("C4")
-				b.State("C3").On[xtraInt1]().To("C4")
-				b.State("C4")
-			})
+		b.Regions()
+		b.State("A", func(b *xtraBuilder) {
+			b.Initial("A1")
+			b.State("A1").On[xtraE]().To("A2")
+			b.State("A2").RaiseOnEntry("raiseInt1", func(counter) any { return xtraInt1{} })
+		})
+		b.State("B", func(b *xtraBuilder) {
+			b.Initial("B1")
+			b.State("B1").On[xtraE]().To("B2")
+			b.State("B2").RaiseOnEntry("raiseInt2", func(counter) any { return xtraInt2{} })
+		})
+		b.State("C", func(b *xtraBuilder) {
+			b.Initial("C1")
+			c1 := b.State("C1")
+			c1.On[xtraInt1]().To("C2")
+			c1.On[xtraInt2]().To("C3")
+			b.State("C2").On[xtraInt2]().To("C4")
+			b.State("C3").On[xtraInt1]().To("C4")
+			b.State("C4")
 		})
 	})
 	require.NoError(t, err)
@@ -213,7 +216,7 @@ func TestXTraTransientExecutesAllInternalEventsInOrder(t *testing.T) {
 	snap, _ := m.Start(counter{}, epoch)
 	snap, _ = m.Transition(snap, xtraE{}, epoch)
 
-	require.Equal(t, []string{"P", "A", "A2", "B", "B2", "C", "C4"}, snap.Active())
+	require.Equal(t, []string{"A", "A2", "B", "B2", "C", "C4"}, snap.Active())
 }
 
 // XState: transient states (eventless transitions) > should execute all
@@ -222,22 +225,20 @@ func TestXTraTransientExecutesAllEventlessTransitionsInSameMicrostep(t *testing.
 	t.Parallel()
 
 	m, err := sc.New("microstep", func(b *xtraBuilder) {
-		b.Initial("P")
-		b.Parallel("P", func(b *xtraBuilder) {
-			b.State("A", func(b *xtraBuilder) {
-				b.Initial("A1")
-				b.State("A1").On[xtraE]().To("A2")
-				b.State("A2").Always().To("A3")
-				b.State("A3").Always().WhenIn("B3").To("A4")
-				b.State("A4")
-			})
-			b.State("B", func(b *xtraBuilder) {
-				b.Initial("B1")
-				b.State("B1").On[xtraE]().To("B2")
-				b.State("B2").Always().WhenIn("A2").To("B3")
-				b.State("B3").Always().WhenIn("A3").To("B4")
-				b.State("B4")
-			})
+		b.Regions()
+		b.State("A", func(b *xtraBuilder) {
+			b.Initial("A1")
+			b.State("A1").On[xtraE]().To("A2")
+			b.State("A2").Always().To("A3")
+			b.State("A3").Always().WhenIn("B3").To("A4")
+			b.State("A4")
+		})
+		b.State("B", func(b *xtraBuilder) {
+			b.Initial("B1")
+			b.State("B1").On[xtraE]().To("B2")
+			b.State("B2").Always().WhenIn("A2").To("B3")
+			b.State("B3").Always().WhenIn("A3").To("B4")
+			b.State("B4")
 		})
 	})
 	require.NoError(t, err)
@@ -245,7 +246,7 @@ func TestXTraTransientExecutesAllEventlessTransitionsInSameMicrostep(t *testing.
 	snap, _ := m.Start(counter{}, epoch)
 	snap, _ = m.Transition(snap, xtraE{}, epoch)
 
-	require.Equal(t, []string{"P", "A", "A4", "B", "B4"}, snap.Active())
+	require.Equal(t, []string{"A", "A4", "B", "B4"}, snap.Active())
 }
 
 // XState: transient states (eventless transitions) > should check for
@@ -254,23 +255,21 @@ func TestXTraTransientChecksAutomaticTransitionsAfterMicrosteps(t *testing.T) {
 	t.Parallel()
 
 	m, err := sc.New("automatic", func(b *xtraBuilder) {
-		b.Initial("P")
-		b.Parallel("P", func(b *xtraBuilder) {
-			b.State("A", func(b *xtraBuilder) {
-				b.Initial("A1")
-				b.State("A1").On[xtraA]().To("A2")
-				b.State("A2")
-			})
-			b.State("B", func(b *xtraBuilder) {
-				b.Initial("B1")
-				b.State("B1").Always().WhenIn("A2").To("B2")
-				b.State("B2")
-			})
-			b.State("C", func(b *xtraBuilder) {
-				b.Initial("C1")
-				b.State("C1").Always().WhenIn("A2").To("C2")
-				b.State("C2")
-			})
+		b.Regions()
+		b.State("A", func(b *xtraBuilder) {
+			b.Initial("A1")
+			b.State("A1").On[xtraA]().To("A2")
+			b.State("A2")
+		})
+		b.State("B", func(b *xtraBuilder) {
+			b.Initial("B1")
+			b.State("B1").Always().WhenIn("A2").To("B2")
+			b.State("B2")
+		})
+		b.State("C", func(b *xtraBuilder) {
+			b.Initial("C1")
+			b.State("C1").Always().WhenIn("A2").To("C2")
+			b.State("C2")
 		})
 	})
 	require.NoError(t, err)
@@ -278,7 +277,7 @@ func TestXTraTransientChecksAutomaticTransitionsAfterMicrosteps(t *testing.T) {
 	snap, _ := m.Start(counter{}, epoch)
 	snap, _ = m.Transition(snap, xtraA{}, epoch)
 
-	require.Equal(t, []string{"P", "A", "A2", "B", "B2", "C", "C2"}, snap.Active())
+	require.Equal(t, []string{"A", "A2", "B", "B2", "C", "C2"}, snap.Active())
 }
 
 // XState: transient states (eventless transitions) > should determine the
