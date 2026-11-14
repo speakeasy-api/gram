@@ -161,9 +161,20 @@ export async function streamChatTurn(options: {
   //
   // onError: AI SDK masks errors by default; surface the friendly
   // credits prompt for 402, otherwise keep the masking intact.
+  //
+  // Both streams need it. Errors from the model call reach the UI through
+  // toUIMessageStream, so its handler keeps that stream's default masked text;
+  // createUIMessageStream's handler covers errors thrown by `execute` itself.
   return createUIMessageStream({
     execute: ({ writer }) => {
-      writer.merge(toUIMessageStream({ stream: result.stream, tools }));
+      writer.merge(
+        toUIMessageStream({
+          stream: result.stream,
+          tools,
+          onError: (error) =>
+            describeStreamError(error) ?? "An error occurred.",
+        }),
+      );
     },
     originalMessages: messages,
     onError: (error) =>

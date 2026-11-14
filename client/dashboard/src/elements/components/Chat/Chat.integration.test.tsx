@@ -1,5 +1,6 @@
 import { Chat, GramElementsProvider } from "@/elements";
 import { DEFAULT_MODEL } from "@/elements/lib/models";
+import { CREDITS_EXHAUSTED_MESSAGE } from "@/elements/lib/streamErrorMessage";
 import type { ElementsConfig } from "@/elements/types";
 import {
   summarizeOpenRouterFixture,
@@ -170,6 +171,30 @@ describe("Playground chat UI", () => {
     // The tool result went back to the model.
     expect(JSON.stringify(modelRequests[1]!.body.messages)).toContain(
       WEATHER_TOOL_RESULT,
+    );
+  });
+
+  it("shows the credits message when the gateway returns 402", async () => {
+    await server.queueModelReplies({
+      kind: "error",
+      status: 402,
+      body: {
+        error: { message: "This request requires more credits", code: 402 },
+      },
+    });
+    // The provider logs every stream error.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const thread = await renderAndAskForWeather();
+
+    await waitFor(() => {
+      expect(
+        thread.querySelector(".aui-message-error-message")?.textContent,
+      ).toBe(CREDITS_EXHAUSTED_MESSAGE);
+    });
+    expect(logged).toHaveBeenCalledWith(
+      "Stream error in onError callback:",
+      expect.anything(),
     );
   });
 });

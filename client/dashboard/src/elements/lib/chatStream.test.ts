@@ -5,6 +5,7 @@ import {
   streamChatTurn,
 } from "@/elements/lib/chatStream";
 import { DEFAULT_MODEL } from "@/elements/lib/models";
+import { CREDITS_EXHAUSTED_MESSAGE } from "@/elements/lib/streamErrorMessage";
 import type { ApprovalHelpers } from "@/elements/lib/tools";
 import { createMCPClientWithVersionFallback } from "@/lib/mcp-client";
 import {
@@ -21,7 +22,15 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 // Runs Playground chat turns through the real AI SDK, OpenRouter provider and
 // @ai-sdk/mcp client. Only the network edges are local: a real MCP server and
@@ -225,6 +234,46 @@ describe(
       const history = JSON.stringify(server.modelRequests[0]!.body.messages);
       expect(history).toContain(weatherCallIn("tool-call-get-weather").id);
       expect(history).toContain(WEATHER_TOOL_RESULT);
+    });
+
+    it("shows the credits message when the gateway returns 402", async () => {
+      server.queueModelReplies({
+        kind: "error",
+        status: 402,
+        body: {
+          error: { message: "This request requires more credits", code: 402 },
+        },
+      });
+      const onStreamError = vi.fn<(error: unknown) => void>();
+
+      const { chunks } = await runTurn(
+        [userMessage("u1", "Hello")],
+        onStreamError,
+      );
+
+      expect(chunks).toContainEqual({
+        type: "error",
+        errorText: CREDITS_EXHAUSTED_MESSAGE,
+      });
+      expect(onStreamError).toHaveBeenCalledOnce();
+      expect(server.modelRequests).toHaveLength(1);
+    });
+
+    it("keeps other model errors masked", async () => {
+      server.queueModelReplies({
+        kind: "error",
+        status: 400,
+        body: {
+          error: { message: "Provider rejected the request", code: 400 },
+        },
+      });
+
+      const { chunks } = await runTurn([userMessage("u1", "Hello")]);
+
+      expect(chunks).toContainEqual({
+        type: "error",
+        errorText: "An error occurred.",
+      });
     });
   },
 );
