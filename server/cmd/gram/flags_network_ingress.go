@@ -130,6 +130,38 @@ func networkIngressProviderFlags() []cli.Flag {
 			Name: "network-ingress-kubernetes-api-port", Usage: "Kubernetes API destination port for private ingress NetworkPolicies",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_KUBERNETES_API_PORT"}, Action: validateNetworkIngressPort,
 		},
+		&cli.StringFlag{
+			Name: "network-ingress-proxy-class", Usage: "Cluster-scoped Tailscale ProxyClass that schedules and pins proxy pods",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_PROXY_CLASS"},
+			Action: func(_ *cli.Context, value string) error {
+				if value != "" && len(validation.IsDNS1123Subdomain(value)) > 0 {
+					return fmt.Errorf("invalid private ingress ProxyClass")
+				}
+				return nil
+			},
+		},
+		&cli.IntFlag{
+			Name: "network-ingress-proxy-replicas", Usage: "Proxy pods per ingress ProxyGroup; zero means one",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_PROXY_REPLICAS"}, Action: validateNetworkIngressReplicas,
+		},
+		&cli.IntFlag{
+			Name: "network-ingress-attestor-replicas", Usage: "Attestor pods per ingress; zero means one",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_ATTESTOR_REPLICAS"}, Action: validateNetworkIngressReplicas,
+		},
+		&cli.StringFlag{
+			Name: "network-ingress-workload-pool", Usage: "Node label and taint (key=value) of the dedicated attestor node pool",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_WORKLOAD_POOL"},
+			Action: func(_ *cli.Context, value string) error {
+				_, _, err := parseNetworkIngressWorkloadPool(value)
+				return err
+			},
+		},
+		&cli.BoolFlag{
+			Name:    "network-ingress-disruption-budgets-enabled",
+			Usage:   "Manage proxy and attestor PodDisruptionBudgets; requires the matching RBAC and admission foundation",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_DISRUPTION_BUDGETS_ENABLED"},
+			Value:   false,
+		},
 		&cli.StringSliceFlag{
 			Name: "network-ingress-cluster-cidrs", Usage: "Cluster destination CIDRs excluded from proxy internet egress",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_CLUSTER_CIDRS"},
@@ -162,6 +194,17 @@ func networkIngressConfigFromCLI(c *cli.Context) (networkingress.RuntimeConfig, 
 	if err != nil {
 		return config, fmt.Errorf("invalid private ingress backend pod labels")
 	}
+	proxyReplicas := c.Int("network-ingress-proxy-replicas")
+	attestorReplicas := c.Int("network-ingress-attestor-replicas")
+	for _, replicas := range []int{proxyReplicas, attestorReplicas} {
+		if err := validateNetworkIngressReplicas(c, replicas); err != nil {
+			return config, err
+		}
+	}
+	poolKey, poolValue, err := parseNetworkIngressWorkloadPool(c.String("network-ingress-workload-pool"))
+	if err != nil {
+		return config, err
+	}
 	config = networkingress.RuntimeConfig{
 		ReconcileTaskQueue:       c.String(networkIngressQueueFlag),
 		ProviderMutationsEnabled: c.Bool(networkIngressMutationFlag),
@@ -176,6 +219,12 @@ func networkIngressConfigFromCLI(c *cli.Context) (networkingress.RuntimeConfig, 
 			KubernetesAPICIDR: c.String("network-ingress-kubernetes-api-cidr"),
 			KubernetesAPIPort: int32(apiPort), // #nosec G115 -- validated port range before conversion.
 			ClusterCIDRs:      append([]string(nil), c.StringSlice("network-ingress-cluster-cidrs")...),
+			ProxyClass:        c.String("network-ingress-proxy-class"),
+			ProxyReplicas:     int32(proxyReplicas),    // #nosec G115 -- validated replica range before conversion.
+			AttestorReplicas:  int32(attestorReplicas), // #nosec G115 -- validated replica range before conversion.
+			WorkloadPoolKey:   poolKey,
+			WorkloadPoolValue: poolValue,
+			DisruptionBudgets: c.Bool("network-ingress-disruption-budgets-enabled"),
 		},
 		AttestorImage:  c.String("network-ingress-attestor-image"),
 		BackendService: c.String("network-ingress-backend-service"),
@@ -211,6 +260,26 @@ func validateNetworkIngressPort(_ *cli.Context, value int) error {
 		return fmt.Errorf("private ingress port must be between 1 and 65535, or zero when unconfigured")
 	}
 	return nil
+}
+
+func validateNetworkIngressReplicas(_ *cli.Context, value int) error {
+	if value < 0 || value > k8s.MaxNetworkIngressReplicas {
+		return fmt.Errorf("private ingress replicas must be between 0 and %d", k8s.MaxNetworkIngressReplicas)
+	}
+	return nil
+}
+
+// parseNetworkIngressWorkloadPool splits a "key=value" node label. An empty
+// value leaves attestors on the default scheduling.
+func parseNetworkIngressWorkloadPool(value string) (string, string, error) {
+	if value == "" {
+		return "", "", nil
+	}
+	key, poolValue, ok := strings.Cut(value, "=")
+	if !ok || key == "" || poolValue == "" || len(validation.IsQualifiedName(key)) > 0 || len(validation.IsValidLabelValue(poolValue)) > 0 {
+		return "", "", fmt.Errorf("invalid private ingress workload pool")
+	}
+	return key, poolValue, nil
 }
 
 func validateNetworkIngressTag(_ *cli.Context, value string) error {

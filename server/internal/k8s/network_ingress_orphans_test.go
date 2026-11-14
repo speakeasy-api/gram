@@ -159,6 +159,48 @@ func TestNetworkIngressOrphanScanInventoriesOwnedNamespaceWithoutDBRow(t *testin
 	require.Equal(t, orphanNames.Namespace, secretActions[0].GetNamespace())
 }
 
+func TestNetworkIngressOrphanScanInventoriesDisruptionBudgets(t *testing.T) {
+	t.Parallel()
+	provisioner, _, _, desired := newTestTailscaleProvisioner(t)
+	provisioner.config.DisruptionBudgets = true
+	provisioner.config.ProxyReplicas = 2
+	provisioner.config.AttestorReplicas = 2
+	client := newOrphanInventoryClient()
+	createInventoryObject(t, client, namespaceObject(desired.Resources))
+	createInventoryObject(t, client, ownedInventoryObject(disruptionBudgetTestGVR, "PodDisruptionBudget", desired.Resources.Namespace, desired.Resources.AttestorDeployment, desired.ID))
+	createInventoryObject(t, client, ownedInventoryObject(disruptionBudgetTestGVR, "PodDisruptionBudget", "tailscale", desired.Resources.ProxyNetworkPolicy, desired.ID))
+
+	orphanID := uuid.New()
+	orphanNames, err := NewNetworkIngressResourceNames(orphanID)
+	require.NoError(t, err)
+	createInventoryObject(t, client, ownedInventoryObject(disruptionBudgetTestGVR, "PodDisruptionBudget", "tailscale", orphanNames.ProxyNetworkPolicy, orphanID))
+
+	provisioner.dynamic = client
+	orphans, err := provisioner.FindOrphans(t.Context(), []NetworkIngressResourceNames{desired.Resources})
+	require.NoError(t, err)
+	require.Equal(t, []NetworkIngressOrphan{{OwnerID: orphanID, Kind: "poddisruptionbudgets"}}, orphans)
+	assertNamespacedInventoryIsScoped(t, client.Actions(), desired.Resources.Namespace, provisioner.config.OperatorNamespace)
+}
+
+func TestNetworkIngressOrphanScanFlagsSingleReplicaDisruptionBudgets(t *testing.T) {
+	t.Parallel()
+	provisioner, _, _, desired := newTestTailscaleProvisioner(t)
+	provisioner.config.DisruptionBudgets = true
+	provisioner.config.ProxyReplicas = 2
+	provisioner.config.AttestorReplicas = 1
+	client := newOrphanInventoryClient()
+	createInventoryObject(t, client, namespaceObject(desired.Resources))
+	createInventoryObject(t, client, ownedInventoryObject(disruptionBudgetTestGVR, "PodDisruptionBudget", desired.Resources.Namespace, desired.Resources.AttestorDeployment, desired.ID))
+	createInventoryObject(t, client, ownedInventoryObject(disruptionBudgetTestGVR, "PodDisruptionBudget", "tailscale", desired.Resources.ProxyNetworkPolicy, desired.ID))
+
+	provisioner.dynamic = client
+	orphans, err := provisioner.FindOrphans(t.Context(), []NetworkIngressResourceNames{desired.Resources})
+	require.NoError(t, err)
+	require.Equal(t, []NetworkIngressOrphan{{OwnerID: desired.ID, Kind: "poddisruptionbudgets"}}, orphans)
+}
+
+var disruptionBudgetTestGVR = schema.GroupVersionResource{Group: "policy", Version: "v1", Resource: "poddisruptionbudgets"}
+
 func newOrphanInventoryClient() *fake.FakeDynamicClient {
 	listKinds := map[schema.GroupVersionResource]string{
 		tailnetGVR: "TailnetList", proxyGroupGVR: "ProxyGroupList", proxyGroupPolicyGVR: "ProxyGroupPolicyList",
@@ -169,6 +211,7 @@ func newOrphanInventoryClient() *fake.FakeDynamicClient {
 		{Group: "apps", Version: "v1", Resource: "deployments"}:                  "DeploymentList",
 		{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}:       "IngressList",
 		{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}: "NetworkPolicyList",
+		disruptionBudgetTestGVR:                                                  "PodDisruptionBudgetList",
 	}
 	return fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), listKinds)
 }
@@ -221,9 +264,10 @@ func metaResourceForObject(object *unstructured.Unstructured) (schema.GroupVersi
 		panic(err)
 	}
 	resource := map[string]string{
-		"Namespace": "namespaces",
-		"Tailnet":   "tailnets",
-		"Secret":    "secrets",
+		"Namespace":           "namespaces",
+		"Tailnet":             "tailnets",
+		"Secret":              "secrets",
+		"PodDisruptionBudget": "poddisruptionbudgets",
 	}[object.GetKind()]
 	return gv.WithResource(resource), gv.WithKind(object.GetKind())
 }
@@ -231,20 +275,22 @@ func metaResourceForObject(object *unstructured.Unstructured) (schema.GroupVersi
 func assertNamespacedInventoryIsScoped(t *testing.T, actions []ktesting.Action, wantNamespace, operatorNamespace string) {
 	t.Helper()
 	namespacedResources := map[string]bool{
-		"proxygrouppolicies": true,
-		"deployments":        true,
-		"services":           true,
-		"serviceaccounts":    true,
-		"secrets":            true,
-		"ingresses":          true,
-		"networkpolicies":    true,
+		"proxygrouppolicies":   true,
+		"deployments":          true,
+		"services":             true,
+		"serviceaccounts":      true,
+		"secrets":              true,
+		"ingresses":            true,
+		"networkpolicies":      true,
+		"poddisruptionbudgets": true,
 	}
+	operatorScoped := map[string]bool{"networkpolicies": true, "poddisruptionbudgets": true}
 	for _, action := range actions {
 		if action.GetVerb() != "list" || !namespacedResources[action.GetResource().Resource] {
 			continue
 		}
 		require.NotEmpty(t, action.GetNamespace(), "namespaced inventory must never list across all namespaces")
-		if action.GetResource().Resource != "networkpolicies" || action.GetNamespace() != operatorNamespace {
+		if !operatorScoped[action.GetResource().Resource] || action.GetNamespace() != operatorNamespace {
 			require.Equal(t, wantNamespace, action.GetNamespace())
 		}
 	}

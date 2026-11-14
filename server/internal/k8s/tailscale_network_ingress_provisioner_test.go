@@ -3,13 +3,16 @@ package k8s
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
@@ -113,13 +117,6 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 
 	setUnstructuredReady(t, dynamicClient, tailnetGVR, "", desired.Resources.Tailnet, "TailnetReady")
 	setUnstructuredReady(t, dynamicClient, proxyGroupGVR, "", desired.Resources.ProxyGroup, "ProxyGroupReady")
-	deployment.Generation = 2
-	deployment.Status.ObservedGeneration = 2
-	deployment.Status.UpdatedReplicas = 1
-	deployment.Status.ReadyReplicas = 1
-	deployment.Status.AvailableReplicas = 1
-	_, err = typed.AppsV1().Deployments(desired.Resources.Namespace).UpdateStatus(t.Context(), deployment, metav1.UpdateOptions{})
-	require.NoError(t, err)
 	ingress, err := typed.NetworkingV1().Ingresses(desired.Resources.Namespace).Get(t.Context(), desired.Resources.Ingress, metav1.GetOptions{})
 	require.NoError(t, err)
 	ingress.Status.LoadBalancer.Ingress = []networkingv1.IngressLoadBalancerIngress{{Hostname: "Private-Test.Example.TS.NET."}}
@@ -128,31 +125,19 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 
 	_, err = provisioner.Apply(t.Context(), desired)
 	require.NoError(t, err)
-	deployment, err = typed.AppsV1().Deployments(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
+	pending, err := provisioner.Observe(t.Context(), desired.Resources)
 	require.NoError(t, err)
-	deployment.Status.ObservedGeneration = deployment.Generation
-	deployment.Status.UpdatedReplicas = 1
-	deployment.Status.ReadyReplicas = 1
-	deployment.Status.AvailableReplicas = 1
-	_, err = typed.AppsV1().Deployments(desired.Resources.Namespace).UpdateStatus(t.Context(), deployment, metav1.UpdateOptions{})
-	require.NoError(t, err)
+	require.Equal(t, NetworkIngressStatusPending, pending.Status, "no attestor pod is serving yet")
+	createAttestorPod(t, typed, desired, "attestor-a", "private-test.example.ts.net", true)
 	observation, err := provisioner.Observe(t.Context(), desired.Resources)
 	require.NoError(t, err)
 	require.Equal(t, NetworkIngressStatusOnline, observation.Status)
 	require.Equal(t, "private-test.example.ts.net", observation.DNSName)
 
-	deployment.Status.ObservedGeneration--
-	_, err = typed.AppsV1().Deployments(desired.Resources.Namespace).UpdateStatus(t.Context(), deployment, metav1.UpdateOptions{})
-	require.NoError(t, err)
-	pending, err := provisioner.observe(t.Context(), desired.Resources, desired.Hostname)
-	require.NoError(t, err)
-	require.Equal(t, NetworkIngressStatusPending, pending.Status)
-	deployment.Status.ObservedGeneration = deployment.Generation
-	_, err = typed.AppsV1().Deployments(desired.Resources.Namespace).UpdateStatus(t.Context(), deployment, metav1.UpdateOptions{})
-	require.NoError(t, err)
 	pending, err = provisioner.observe(t.Context(), desired.Resources, "renamed-private-test")
 	require.NoError(t, err)
 	require.Equal(t, NetworkIngressStatusPending, pending.Status)
+	require.NoError(t, typed.CoreV1().Pods(desired.Resources.Namespace).Delete(t.Context(), "attestor-a", metav1.DeleteOptions{}))
 
 	var mu sync.Mutex
 	var deletes []string
@@ -213,6 +198,227 @@ func TestTailscaleNetworkIngressProvisionerWritesOAuthSecretWithoutReadOrPatch(t
 	secret, ok := object.(*corev1.Secret)
 	require.True(t, ok)
 	require.Equal(t, []byte("second-secret"), secret.Data["client_secret"])
+}
+
+func TestTailscaleNetworkIngressProvisionerDefaultTopologyKeepsSingleReplicaShape(t *testing.T) {
+	t.Parallel()
+
+	provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
+	_, err := provisioner.Apply(t.Context(), desired)
+	require.NoError(t, err)
+
+	proxyGroup, err := dynamicClient.Resource(proxyGroupGVR).Get(t.Context(), desired.Resources.ProxyGroup, metav1.GetOptions{})
+	require.NoError(t, err)
+	_, found, err := unstructured.NestedString(proxyGroup.Object, "spec", "proxyClass")
+	require.NoError(t, err)
+	require.False(t, found)
+	deployment, err := typed.AppsV1().Deployments(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
+	require.NoError(t, err)
+	pod := deployment.Spec.Template.Spec
+	require.Equal(t, int32(1), *deployment.Spec.Replicas)
+	require.Empty(t, deployment.Spec.Strategy.Type)
+	require.Zero(t, deployment.Spec.MinReadySeconds)
+	require.Nil(t, pod.NodeSelector)
+	require.Nil(t, pod.Tolerations)
+	require.Nil(t, pod.TopologySpreadConstraints)
+	require.Nil(t, pod.TerminationGracePeriodSeconds)
+	require.Nil(t, pod.Containers[0].LivenessProbe)
+	require.Nil(t, pod.Containers[0].Lifecycle)
+	require.Empty(t, pod.Containers[0].Resources.Requests)
+
+	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
+	for _, action := range typed.Actions() {
+		require.NotEqual(t, "poddisruptionbudgets", action.GetResource().Resource, "budget RBAC may not exist without the opt-in")
+	}
+}
+
+func TestTailscaleNetworkIngressProvisionerAppliesHighAvailability(t *testing.T) {
+	t.Parallel()
+
+	provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
+	enableHighAvailability(provisioner)
+	_, err := provisioner.Apply(t.Context(), desired)
+	require.NoError(t, err)
+
+	proxyGroup, err := dynamicClient.Resource(proxyGroupGVR).Get(t.Context(), desired.Resources.ProxyGroup, metav1.GetOptions{})
+	require.NoError(t, err)
+	replicas, _, err := unstructured.NestedInt64(proxyGroup.Object, "spec", "replicas")
+	require.NoError(t, err)
+	require.Equal(t, int64(2), replicas)
+	proxyClass, _, err := unstructured.NestedString(proxyGroup.Object, "spec", "proxyClass")
+	require.NoError(t, err)
+	require.Equal(t, "gram-private-network", proxyClass)
+
+	deployment, err := typed.AppsV1().Deployments(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
+	require.NoError(t, err)
+	pod := deployment.Spec.Template.Spec
+	require.Equal(t, int32(2), *deployment.Spec.Replicas)
+	require.Equal(t, appsv1.RollingUpdateDeploymentStrategyType, deployment.Spec.Strategy.Type)
+	require.Equal(t, intstr.FromInt32(1), *deployment.Spec.Strategy.RollingUpdate.MaxSurge)
+	require.Equal(t, intstr.FromInt32(0), *deployment.Spec.Strategy.RollingUpdate.MaxUnavailable)
+	require.Equal(t, int32(attestorMinReadySeconds), deployment.Spec.MinReadySeconds)
+	require.Equal(t, map[string]string{"workload-type": "private-network"}, pod.NodeSelector)
+	require.Equal(t, []corev1.Toleration{{Key: "workload-type", Operator: corev1.TolerationOpEqual, Value: "private-network", Effect: corev1.TaintEffectNoSchedule}}, pod.Tolerations)
+	require.Len(t, pod.TopologySpreadConstraints, 2)
+	require.Equal(t, corev1.DoNotSchedule, pod.TopologySpreadConstraints[0].WhenUnsatisfiable)
+	require.Equal(t, []string{podTemplateHashLabel}, pod.TopologySpreadConstraints[0].MatchLabelKeys)
+	require.Equal(t, ingressLabels(desired), pod.TopologySpreadConstraints[0].LabelSelector.MatchLabels)
+	require.Equal(t, int64(attestorTerminationGracePeriodSeconds), *pod.TerminationGracePeriodSeconds)
+	require.Equal(t, int64(attestorPreStopSeconds), pod.Containers[0].Lifecycle.PreStop.Sleep.Seconds)
+	require.NotNil(t, pod.Containers[0].LivenessProbe)
+	require.Equal(t, attestorMemoryLimit, pod.Containers[0].Resources.Limits[corev1.ResourceMemory])
+
+	attestorBudget, err := typed.PolicyV1().PodDisruptionBudgets(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, ingressLabels(desired), attestorBudget.Spec.Selector.MatchLabels)
+	require.Equal(t, intstr.FromInt32(1), *attestorBudget.Spec.MaxUnavailable)
+	require.Equal(t, policyv1.AlwaysAllow, *attestorBudget.Spec.UnhealthyPodEvictionPolicy)
+	proxyBudget, err := typed.PolicyV1().PodDisruptionBudgets("tailscale").Get(t.Context(), desired.Resources.ProxyNetworkPolicy, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{tailscaleParentResourceType: "proxygroup", tailscaleParentResource: desired.Resources.ProxyGroup}, proxyBudget.Spec.Selector.MatchLabels)
+	require.NoError(t, ensureResourceOwned(proxyBudget.Labels, desired.ID.String()))
+}
+
+func TestTailscaleNetworkIngressProvisionerRemovesBudgetsWhenScaledDown(t *testing.T) {
+	t.Parallel()
+
+	provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
+	enableHighAvailability(provisioner)
+	_, err := provisioner.Apply(t.Context(), desired)
+	require.NoError(t, err)
+
+	provisioner.config.ProxyReplicas = 0
+	provisioner.config.AttestorReplicas = 1
+	_, err = provisioner.Apply(t.Context(), desired)
+	require.NoError(t, err)
+
+	_, err = typed.PolicyV1().PodDisruptionBudgets(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
+	require.True(t, k8serrors.IsNotFound(err))
+	_, err = typed.PolicyV1().PodDisruptionBudgets("tailscale").Get(t.Context(), desired.Resources.ProxyNetworkPolicy, metav1.GetOptions{})
+	require.True(t, k8serrors.IsNotFound(err))
+	proxyGroup, err := dynamicClient.Resource(proxyGroupGVR).Get(t.Context(), desired.Resources.ProxyGroup, metav1.GetOptions{})
+	require.NoError(t, err)
+	replicas, _, err := unstructured.NestedInt64(proxyGroup.Object, "spec", "replicas")
+	require.NoError(t, err)
+	require.Equal(t, int64(1), replicas)
+	deployment, err := typed.AppsV1().Deployments(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, int32(1), *deployment.Spec.Replicas)
+	require.Nil(t, deployment.Spec.Template.Spec.TopologySpreadConstraints)
+}
+
+func TestTailscaleNetworkIngressProvisionerRefusesUnownedBudget(t *testing.T) {
+	t.Parallel()
+
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	enableHighAvailability(provisioner)
+	_, err := typed.PolicyV1().PodDisruptionBudgets("tailscale").Create(t.Context(), &policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.ProxyNetworkPolicy, Namespace: "tailscale"}}, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	_, err = provisioner.Apply(t.Context(), desired)
+	require.ErrorContains(t, err, "refuse to adopt PodDisruptionBudget")
+}
+
+func TestTailscaleNetworkIngressDeleteRemovesBudgets(t *testing.T) {
+	t.Parallel()
+
+	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	enableHighAvailability(provisioner)
+	_, err := provisioner.Apply(t.Context(), desired)
+	require.NoError(t, err)
+
+	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
+	_, err = typed.PolicyV1().PodDisruptionBudgets(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
+	require.True(t, k8serrors.IsNotFound(err))
+	_, err = typed.PolicyV1().PodDisruptionBudgets("tailscale").Get(t.Context(), desired.Resources.ProxyNetworkPolicy, metav1.GetOptions{})
+	require.True(t, k8serrors.IsNotFound(err))
+}
+
+func TestTailscaleNetworkIngressObserveStaysOnlineWhileAnyReplicaServes(t *testing.T) {
+	t.Parallel()
+
+	provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
+	enableHighAvailability(provisioner)
+	markIngressServing(t, provisioner, typed, dynamicClient, desired)
+	createAttestorPod(t, typed, desired, "attestor-ready", "private-test.example.ts.net", true)
+	createAttestorPod(t, typed, desired, "attestor-starting", "private-test.example.ts.net", false)
+
+	observation, err := provisioner.observe(t.Context(), desired.Resources, desired.Hostname)
+	require.NoError(t, err)
+	require.Equal(t, NetworkIngressStatusOnline, observation.Status)
+
+	proxyGroup, err := dynamicClient.Resource(proxyGroupGVR).Get(t.Context(), desired.Resources.ProxyGroup, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NoError(t, unstructured.SetNestedSlice(proxyGroup.Object, []any{
+		map[string]any{"type": "ProxyGroupReady", "status": "False"},
+		map[string]any{"type": "ProxyGroupAvailable", "status": "True"},
+	}, "status", "conditions"))
+	_, err = dynamicClient.Resource(proxyGroupGVR).UpdateStatus(t.Context(), proxyGroup, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	observation, err = provisioner.observe(t.Context(), desired.Resources, desired.Hostname)
+	require.NoError(t, err)
+	require.Equal(t, NetworkIngressStatusOnline, observation.Status, "an available proxy replica keeps the ingress serving")
+}
+
+func TestTailscaleNetworkIngressObserveRequiresServingAttestor(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name         string
+		expectedHost string
+		ready        bool
+		terminating  bool
+	}{
+		{name: "not ready", expectedHost: "private-test.example.ts.net", ready: false},
+		{name: "terminating", expectedHost: "private-test.example.ts.net", ready: true, terminating: true},
+		{name: "previous hostname", expectedHost: "old-private-test.example.ts.net", ready: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
+			markIngressServing(t, provisioner, typed, dynamicClient, desired)
+			pod := createAttestorPod(t, typed, desired, "attestor", test.expectedHost, test.ready)
+			if test.terminating {
+				now := metav1.Now()
+				pod.DeletionTimestamp = &now
+				_, err := typed.CoreV1().Pods(desired.Resources.Namespace).Update(t.Context(), pod, metav1.UpdateOptions{})
+				require.NoError(t, err)
+			}
+
+			observation, err := provisioner.observe(t.Context(), desired.Resources, desired.Hostname)
+			require.NoError(t, err)
+			require.Equal(t, NetworkIngressStatusPending, observation.Status)
+		})
+	}
+}
+
+func TestTailscaleNetworkIngressConfigValidateTopology(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name   string
+		config TailscaleNetworkIngressConfig
+		valid  bool
+	}{
+		{name: "zero value", config: TailscaleNetworkIngressConfig{}, valid: true},
+		{name: "highly available", config: TailscaleNetworkIngressConfig{ProxyClass: "gram-private-network", ProxyReplicas: 2, AttestorReplicas: 2, WorkloadPoolKey: "workload-type", WorkloadPoolValue: "private-network", DisruptionBudgets: true}, valid: true},
+		{name: "replicas without budgets", config: TailscaleNetworkIngressConfig{AttestorReplicas: 2}},
+		{name: "too many replicas", config: TailscaleNetworkIngressConfig{ProxyReplicas: MaxNetworkIngressReplicas + 1, DisruptionBudgets: true}},
+		{name: "negative replicas", config: TailscaleNetworkIngressConfig{AttestorReplicas: -1}},
+		{name: "pool key only", config: TailscaleNetworkIngressConfig{WorkloadPoolKey: "workload-type"}},
+		{name: "invalid pool value", config: TailscaleNetworkIngressConfig{WorkloadPoolKey: "workload-type", WorkloadPoolValue: "not valid"}},
+		{name: "invalid proxy class", config: TailscaleNetworkIngressConfig{ProxyClass: "Invalid_Class"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			err := test.config.ValidateTopology()
+			if test.valid {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+		})
+	}
 }
 
 func TestDeleteWithoutReadConfirmationWaitsForPersistingSecret(t *testing.T) {
@@ -376,7 +582,9 @@ func TestTailscaleNetworkIngressProvisionerReplacesImmutableProxyGroup(t *testin
 	t.Parallel()
 
 	provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
-	wrong := proxyGroupObject(desired, "tag:wrong-proxy")
+	wrongConfig := provisioner.config
+	wrongConfig.ProxyTag = "tag:wrong-proxy"
+	wrong := proxyGroupObject(desired, wrongConfig)
 	_, err := dynamicClient.Resource(proxyGroupGVR).Create(t.Context(), wrong, metav1.CreateOptions{})
 	require.NoError(t, err)
 	_, err = typed.NetworkingV1().Ingresses(desired.Resources.Namespace).Create(t.Context(), &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Ingress, Namespace: desired.Resources.Namespace, Labels: ingressLabels(desired)}}, metav1.CreateOptions{})
@@ -685,6 +893,55 @@ func newTestTailscaleProvisioner(t *testing.T) (*TailscaleNetworkIngressProvisio
 		ID: id, Provider: NetworkIngressProviderTailscale, Hostname: "private-test", Credentials: []byte(`{"client_id":"test-client","client_secret":"test-secret"}`), Resources: resources,
 		AttestorImage: "gram-attestor@example", BackendService: "gram-server-private", BackendPort: 8443,
 	}
+}
+
+func enableHighAvailability(provisioner *TailscaleNetworkIngressProvisioner) {
+	provisioner.config.ProxyClass = "gram-private-network"
+	provisioner.config.ProxyReplicas = 2
+	provisioner.config.AttestorReplicas = 2
+	provisioner.config.WorkloadPoolKey = "workload-type"
+	provisioner.config.WorkloadPoolValue = "private-network"
+	provisioner.config.DisruptionBudgets = true
+}
+
+// markIngressServing applies the ingress and marks every resource except the
+// attestor pods as serving private-test.example.ts.net.
+func markIngressServing(t *testing.T, provisioner *TailscaleNetworkIngressProvisioner, typed *fake.Clientset, dynamicClient *dynamicfake.FakeDynamicClient, desired NetworkIngressDesired) {
+	t.Helper()
+	_, err := provisioner.Apply(t.Context(), desired)
+	require.NoError(t, err)
+	setUnstructuredReady(t, dynamicClient, tailnetGVR, "", desired.Resources.Tailnet, "TailnetReady")
+	setUnstructuredReady(t, dynamicClient, proxyGroupGVR, "", desired.Resources.ProxyGroup, "ProxyGroupReady")
+	ingress, err := typed.NetworkingV1().Ingresses(desired.Resources.Namespace).Get(t.Context(), desired.Resources.Ingress, metav1.GetOptions{})
+	require.NoError(t, err)
+	ingress.Status.LoadBalancer.Ingress = []networkingv1.IngressLoadBalancerIngress{{Hostname: "private-test.example.ts.net"}}
+	_, err = typed.NetworkingV1().Ingresses(desired.Resources.Namespace).UpdateStatus(t.Context(), ingress, metav1.UpdateOptions{})
+	require.NoError(t, err)
+}
+
+// createAttestorPod records an attestor pod built from the current Deployment
+// template, as the ReplicaSet controller would.
+func createAttestorPod(t *testing.T, typed *fake.Clientset, desired NetworkIngressDesired, name, expectedHost string, ready bool) *corev1.Pod {
+	t.Helper()
+	deployment, err := typed.AppsV1().Deployments(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
+	require.NoError(t, err)
+	spec := *deployment.Spec.Template.Spec.DeepCopy()
+	for i, argument := range spec.Containers[0].Args {
+		if strings.HasPrefix(argument, "--expected-host=") {
+			spec.Containers[0].Args[i] = "--expected-host=" + expectedHost
+		}
+	}
+	status := corev1.ConditionFalse
+	if ready {
+		status = corev1.ConditionTrue
+	}
+	pod, err := typed.CoreV1().Pods(desired.Resources.Namespace).Create(t.Context(), &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: desired.Resources.Namespace, Labels: deployment.Spec.Template.Labels},
+		Spec:       spec,
+		Status:     corev1.PodStatus{Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: status}}},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	return pod
 }
 
 func setUnstructuredReady(t *testing.T, client *dynamicfake.FakeDynamicClient, gvr schema.GroupVersionResource, namespace, name, conditionType string) {
