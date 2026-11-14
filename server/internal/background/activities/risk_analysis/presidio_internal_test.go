@@ -132,6 +132,35 @@ func TestConvertPresidioFindings_NHSNeedsContext(t *testing.T) {
 	assert.Equal(t, "4010232137", findings[0].Match)
 }
 
+// TestConvertPresidioFindings_CreditCardFalsePositives is the regression test
+// for AIS-720. Presidio's CreditCardRecognizer reports any Luhn-valid run at
+// maximum confidence, so published test cards in fixtures and consecutive PR
+// numbers in a Bash tool request triggered financial-data warnings. Both are
+// dropped; a real-looking card still reports.
+func TestConvertPresidioFindings_CreditCardFalsePositives(t *testing.T) {
+	t.Parallel()
+
+	cardRuleID := scanners.GuardRuleID(prefixPII + "credit_card")
+	cardFinding := func(text, match string) []presidioResult {
+		start := strings.Index(text, match)
+		return []presidioResult{{EntityType: "CREDIT_CARD", Start: start, End: start + len(match), Score: 1}}
+	}
+
+	text := "gh pr view 6651 6652 6653 6654 --json title"
+	findings := convertPresidioFindings(text, cardFinding(text, "6651 6652 6653 6654"))
+	assert.Empty(t, findings, "consecutive PR numbers are not a card number")
+
+	text = `f.content = "Customer card 4111 1111 1111 1111, exp 11/27."`
+	findings = convertPresidioFindings(text, cardFinding(text, "4111 1111 1111 1111"))
+	assert.Empty(t, findings, "a published test card in a fixture is not cardholder data")
+
+	text = "Please refund my order, my credit card is 4539 5787 6362 1486"
+	findings = convertPresidioFindings(text, cardFinding(text, "4539 5787 6362 1486"))
+	require.Len(t, findings, 1, "a real-looking card number must still report")
+	assert.Equal(t, cardRuleID, findings[0].RuleID)
+	assert.Equal(t, "4539 5787 6362 1486", findings[0].Match)
+}
+
 // isValueFalsePositive is the value-only view of isPresidioFalsePositive, for
 // the catalogs below that judge a match on its own. Passing no context is
 // never grounds for suppression, so this only ever reports what the value

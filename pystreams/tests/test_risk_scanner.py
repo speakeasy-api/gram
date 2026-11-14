@@ -245,6 +245,37 @@ async def test_uk_nhs_needs_context():
     assert detections[0].match == "4010232137"
 
 
+async def test_credit_card_false_positives():
+    """Regression for AIS-720. Presidio's ``CreditCardRecognizer`` reports any
+    Luhn-valid run at maximum confidence, so published test cards in fixtures and
+    consecutive PR numbers in a Bash tool request triggered financial-data
+    warnings. Both are dropped; a real-looking card still reports.
+    """
+
+    def card_result(content: str, match: str) -> list[Recognized]:
+        start = content.index(match)
+        return [_Result("CREDIT_CARD", start=start, end=start + len(match), score=1.0)]
+
+    content = "gh pr view 6651 6652 6653 6654 --json title"
+    analyzer = FakeAnalyzer({content: card_result(content, "6651 6652 6653 6654")})
+    assert await _scanner(analyzer).scan(content, None, 0.75) == [], (
+        "consecutive PR numbers are not a card number"
+    )
+
+    content = 'f.content = "Customer card 4111 1111 1111 1111, exp 11/27."'
+    analyzer = FakeAnalyzer({content: card_result(content, "4111 1111 1111 1111")})
+    assert await _scanner(analyzer).scan(content, None, 0.75) == [], (
+        "a published test card in a fixture is not cardholder data"
+    )
+
+    content = "Please refund my order, my credit card is 4539 5787 6362 1486"
+    analyzer = FakeAnalyzer({content: card_result(content, "4539 5787 6362 1486")})
+    detections = await _scanner(analyzer).scan(content, None, 0.75)
+    assert len(detections) == 1, "a real-looking card number must still report"
+    assert detections[0].entity_type == "CREDIT_CARD"
+    assert detections[0].match == "4539 5787 6362 1486"
+
+
 async def test_nothing_recognized_yields_no_detections():
     analyzer = FakeAnalyzer()  # recognizes nothing
 

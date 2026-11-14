@@ -31,11 +31,13 @@ func TestReason(t *testing.T) {
 	assert.NotEmpty(t, Reason(EntityTypeIPAddress, "  ::  "), "trimmed unspecified IP")
 	assert.NotEmpty(t, Reason(EntityTypeEmailAddress, "noreply@example.com"), "placeholder email")
 	assert.NotEmpty(t, Reason(EntityTypeUKNHS, "9434765919"), "NHS number outside the issued ranges")
+	assert.NotEmpty(t, Reason(EntityTypeCreditCard, "4111 1111 1111 1111"), "published test card")
 	assert.NotEmpty(t, Reason(EntityTypeUSDriverLicense, "N1234567"), "retired recognizer")
 
 	assert.Empty(t, Reason(EntityTypeIPAddress, "71.126.87.167"), "residential IP")
 	assert.Empty(t, Reason(EntityTypeEmailAddress, "ada@speakeasy.com"), "real email")
 	assert.Empty(t, Reason(EntityTypeUKNHS, "401 023 2137"), "issued NHS number, no context supplied")
+	assert.Empty(t, Reason(EntityTypeCreditCard, realLookingCard), "real-looking card number")
 
 	// Uncatalogued entity types never fire, even on a match another lane would
 	// flag.
@@ -78,6 +80,8 @@ func TestReasonByRuleID(t *testing.T) {
 	assert.NotEmpty(t, ReasonByRuleID("pii.us_driver_license", "N1234567"), "retired recognizer")
 
 	assert.Empty(t, ReasonByRuleID("pii.ip_address", "71.126.87.167"), "residential IP")
+	assert.NotEmpty(t, ReasonByRuleID("pii.credit_card", "4242-4242-4242-4242"), "published test card")
+	assert.Empty(t, ReasonByRuleID("pii.credit_card", realLookingCard), "real-looking card number")
 
 	// The context-keyed entry point is what a sweep uses once it has re-read the
 	// message a stored finding was anchored to.
@@ -96,6 +100,7 @@ func TestReasonByRuleID(t *testing.T) {
 		"pii.ip_address",
 		"pii.email_address",
 		"pii.uk_nhs",
+		"pii.credit_card",
 		"pii.us_driver_license",
 	}, RuleIDs())
 	assert.Equal(t, []string{"pii.uk_nhs"}, ContextRuleIDs())
