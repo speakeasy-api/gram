@@ -107,7 +107,15 @@ func (s speakeasySource) checkConsent(ctx context.Context, logger *slog.Logger, 
 }
 
 func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Logger, req Request, sel *selection, result signins.Result) Outcome {
-	if !result.Eligible() || result.Identity.UserID != req.UserID {
+	if !result.Eligible() {
+		// Only the consent page ends the loop: a reconnect reuses the same sign-in, so runtime keeps sending people there.
+		if !req.consent() {
+			return newOutcome(StageAuthorization, ReasonReauthenticationRequired, ConfidenceVerified, false)
+		}
+		logger.InfoContext(ctx, "Speakeasy will not vouch for the consent sign-in", attr.SlogReason(string(result.Reason)))
+		return newOutcome(StageAuthorization, signInRefusalReason(result.Reason), ConfidenceVerified, false)
+	}
+	if result.Identity.UserID != req.UserID {
 		return newOutcome(StageAuthorization, ReasonReauthenticationRequired, ConfidenceVerified, false)
 	}
 	status, outcome := s.configuration(ctx, logger, req.OrganizationID)
@@ -121,6 +129,19 @@ func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Log
 	sel.internalKeyPublishedAt = status.ActiveKey.CreatedAt.Time
 	sel.audience = sel.issuer
 	return success
+}
+
+// signInRefusalReason: refusals a new sign-in can fix ask for one; the rest are the admin's.
+func signInRefusalReason(reason signins.Reason) Reason {
+	switch reason {
+	case signins.ReasonUnmanagedAccount, signins.ReasonMethodNotEligible, signins.ReasonMethodNotAllowed, signins.ReasonTenantNotAllowed,
+		signins.ReasonOrganizationDisabled, signins.ReasonNotMember, signins.ReasonDeprovisioned, signins.ReasonEmailNotVerified, signins.ReasonEmailDomain:
+		return ReasonIneligibleIdentity
+	case signins.ReasonEligible, signins.ReasonSessionNotFound, signins.ReasonSessionExpired, signins.ReasonNotLinked, signins.ReasonNotUserSubject,
+		signins.ReasonSignInRevoked, signins.ReasonExpired, signins.ReasonEmailChanged, signins.ReasonAuthTimeUnknown:
+		return ReasonReauthenticationRequired
+	}
+	return ReasonReauthenticationRequired
 }
 
 // configuration checks live issuer readiness without requiring a user's grant

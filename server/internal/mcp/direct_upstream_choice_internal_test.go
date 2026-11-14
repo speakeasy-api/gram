@@ -17,6 +17,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -25,6 +27,7 @@ import (
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -146,4 +149,48 @@ func TestAgentKeyUngatedChallengeHasResourceMetadata(t *testing.T) {
 	}
 	require.True(t, found, "reconnect must record rejection telemetry")
 
+}
+
+// A chaining refusal on a direct server writes one request row naming who fixes it.
+func TestDirectUpstreamChainingRefusalWritesARequestRow(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_direct_chaining_refusal")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		stage  identitychaining.Stage
+		reason identitychaining.Reason
+		code   mcpconnectionattempts.Code
+	}{
+		{identitychaining.StageAuthorization, identitychaining.ReasonReauthenticationRequired, mcpconnectionattempts.CodeReauthenticationRequired},
+		// At runtime only the signer refuses an account as ineligible.
+		{identitychaining.StageExchange, identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.CodeIneligibleIdentity},
+	} {
+		t.Run(string(tc.reason), func(t *testing.T) {
+			t.Parallel()
+			f := newAuthClientFixture(t, pool)
+			subject := urn.NewUserSubject("user_1")
+			proof := validatedSessionProof(t, subject)
+			ctx := mcpidentity.NewValidatorBoundary().StampValidatedSession(t.Context(), proof)
+			ctx = context.WithValue(ctx, liveSessionPolicyKey{}, true)
+			ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: "user_1", ActiveOrganizationID: f.orgID})
+			f.service.upstreamTokens = &fakeUpstreamTokens{issuerID: uuid.New()}
+			chainer := &recordingChainer{outcome: identitychaining.Outcome{Stage: tc.stage, Reason: tc.reason, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, governs: true}
+			f.service.identityChainer = chainer
+			rec := mcpconnectionattemptstest.New(t)
+			f.service.connections = rec.Recorder
+			authentication := &issuerGateAuthentication{
+				// A toolset endpoint has no stored choice, so the preset client chains.
+				endpoint: &ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, UserSessionIssuerID: uuid.New(), McpServerID: uuid.NullUUID{}, ToolsetID: validUUID(uuid.New())},
+				subject:  subject, chosenClient: validUUID(f.registration),
+			}
+			_, err := f.service.resolveDirectUpstreamToken(ctx, httptest.NewRecorder(), testenv.NewLogger(t), authentication, "https://upstream.example.com", false, validUUID(f.issuerID))
+			if tc.reason == identitychaining.ReasonIneligibleIdentity {
+				require.Error(t, err, "an ineligible account is refused, not challenged")
+			}
+			require.Len(t, chainer.requests, 1)
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.code)
+			require.Equal(t, subject.String(), row.SubjectURN)
+			require.Len(t, rec.Rows(), 1)
+		})
+	}
 }
