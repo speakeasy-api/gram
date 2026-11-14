@@ -242,6 +242,7 @@ describe("Billing", () => {
     vi.clearAllMocks();
     mocks.productTier.mockReturnValue("base");
     mocks.hasScope.mockReturnValue(true);
+    mocks.openExternal.mockReturnValue(true);
     mocks.inferenceCaps.mockReturnValue({ data: undefined, isError: false });
     mocks.session.mockReturnValue({
       trial: {
@@ -656,8 +657,33 @@ describe("Billing", () => {
           "https://portal.example.com/session",
         ),
       );
+      expect(mocks.telemetry.capture).not.toHaveBeenCalled();
     },
   );
+
+  it("reports a Polar portal link that could not be opened", () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    mocks.productTier.mockReturnValue("base_PAID");
+    mocks.openExternal.mockReturnValue(false);
+    mocks.customerSessionMutate.mockImplementation(
+      (_vars: unknown, options: { onSuccess: (link: string) => void }) =>
+        options.onSuccess("https://portal.example.com/session"),
+    );
+    renderBilling();
+
+    fireEvent.click(screen.getByRole("button", { name: "Manage billing" }));
+
+    expect(mocks.telemetry.capture).toHaveBeenCalledExactlyOnceWith(
+      "customer_session_error",
+      {
+        error: "Customer session link was rejected or its tab was blocked",
+        accountType: "base_PAID",
+      },
+    );
+    consoleError.mockRestore();
+  });
 
   it("keeps the enterprise view on meter usage without Polar usage", () => {
     mocks.productTier.mockReturnValue("enterprise");

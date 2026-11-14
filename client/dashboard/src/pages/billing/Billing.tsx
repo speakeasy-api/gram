@@ -294,7 +294,11 @@ const UsageTiers = () => {
             reportCustomerSessionError("Received empty customer session link");
             return;
           }
-          openSafeExternalUrl(link);
+          if (!openSafeExternalUrl(link)) {
+            reportCustomerSessionError(
+              "Customer session link was rejected or its tab was blocked",
+            );
+          }
         },
         onError: (error) => {
           reportCustomerSessionError(
