@@ -90,9 +90,9 @@ func TestTemplates_PackageContract(t *testing.T) {
 			}
 			require.NoError(t, json.Unmarshal(raw, &pkg))
 
-			require.Equal(t, "speakeasy functions build", pkg.Scripts["_:build"])
-			require.Equal(t, "speakeasy functions push", pkg.Scripts["push"])
-			require.Contains(t, pkg.Scripts, "dev", "speakeasy functions dev runs this script")
+			require.Equal(t, "speakeasy-ai functions build", pkg.Scripts["_:build"])
+			require.Equal(t, "speakeasy-ai functions push", pkg.Scripts["push"])
+			require.Contains(t, pkg.Scripts, "dev", "speakeasy-ai functions dev runs this script")
 			for name, script := range pkg.Scripts {
 				require.NotRegexp(t, `(^|[\s;&|])gf\s`, script, "script %s still calls gf", name)
 			}
@@ -102,7 +102,7 @@ func TestTemplates_PackageContract(t *testing.T) {
 
 			steps, err := templatesFS.ReadFile(path.Join("templates", tmpl.Name, "NEXT_STEPS.txt"))
 			require.NoError(t, err)
-			require.Contains(t, string(steps), "speakeasy functions")
+			require.Contains(t, string(steps), "speakeasy-ai functions")
 		})
 	}
 }

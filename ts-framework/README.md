@@ -4,12 +4,12 @@ This directory contains the TypeScript packages for Speakeasy.
 
 ## Packages
 
-- `create-function` - Deprecated scaffolder for new Gram functions (`pnpm create @gram-ai/function`). Use `speakeasy functions init` instead.
+- `create-function` - Deprecated scaffolder for new Speakeasy Functions projects (`pnpm create @gram-ai/function`). Use `speakeasy-ai functions init` instead.
 - `functions` - Core framework for building Speakeasy functions, published as `@speakeasy-api/functions`
 - `functions-compat` - Deprecated `@gram-ai/functions` package. It depends on `@speakeasy-api/functions` at the same version and re-exports it, including every subpath and the `gf` command, so existing projects keep working
 
 The project templates live in `cli/internal/functions/templates`, where the
-`speakeasy` CLI embeds them. `create-function` copies them into its package
+`speakeasy-ai` CLI embeds them. `create-function` copies them into its package
 when it builds.
 
 ## Local Development

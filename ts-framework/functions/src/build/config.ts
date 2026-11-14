@@ -95,13 +95,13 @@ export type UserConfig = {
    */
   cwd?: string | undefined;
   /**
-   * The project to deploy to. If this is not set, then the speakeasy CLI will
-   * use the project that was chosen when `speakeasy auth` was run.
+   * The project to deploy to. If this is not set, then the speakeasy-ai CLI will
+   * use the project that was chosen when `speakeasy-ai auth` was run.
    */
   deployProject?: string | undefined;
   /**
    * The deployment configuration file to stage the function to and submit to
-   * the speakeasy CLI.
+   * the speakeasy-ai CLI.
    *
    * @default "speakeasy.deploy.json", or "gram.deploy.json" when only that
    * file exists

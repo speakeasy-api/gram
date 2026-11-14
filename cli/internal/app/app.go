@@ -17,7 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 )
 
-func newApp() *cli.App {
+// newApp builds the CLI. arg0 is the name the CLI was run as, which decides
+// how an SDK generator command is answered.
+func newApp(arg0 string) *cli.App {
 	shortSha := GitSHA
 	if len(GitSHA) > 7 {
 		shortSha = GitSHA[:7]
@@ -90,6 +92,9 @@ func newApp() *cli.App {
 				return nil
 			}
 			if c.Args().Present() {
+				if message, ok := sdkGeneratorCommandMessage(c.Args().First(), invokedAs(arg0)); ok {
+					return cli.Exit(message, unknownCommandExitCode)
+				}
 				return cli.ShowCommandHelp(c, c.Args().First())
 			}
 			return cli.ShowAppHelp(c)
@@ -133,13 +138,20 @@ func newApp() *cli.App {
 }
 
 const (
-	// commandName is the name the CLI is installed and documented under.
-	commandName = "speakeasy"
+	// commandName is the name the CLI is installed and documented under. It
+	// differs from the speakeasy binary of the Speakeasy SDK generator, so both
+	// CLIs can be on PATH.
+	commandName = "speakeasy-ai"
 
-	// legacyCommandName is the name the CLI shipped under before it became
-	// speakeasy. The gram Homebrew formulas still install the binary under
-	// this name so existing scripts keep working for one release cycle.
+	// legacyCommandName is the first name the CLI shipped under. The gram
+	// Homebrew formulas still install the binary under this name so existing
+	// scripts keep working for one release cycle.
 	legacyCommandName = "gram"
+
+	// sharedCommandName is the name the CLI shipped under before it became
+	// speakeasy-ai. The Speakeasy SDK generator installs a binary with the
+	// same name, so installs that still run this CLI as speakeasy get a notice.
+	sharedCommandName = "speakeasy"
 
 	// controlPlaneMarkerFlag is a hidden flag that prints controlPlaneMarker.
 	// Tools such as the Speakeasy Functions SDK run it to tell this CLI apart from
@@ -153,8 +165,14 @@ const (
 
 	// legacyCommandNotice is printed to stderr when the CLI runs as gram.
 	legacyCommandNotice = "Warning: the gram command is deprecated and will be removed in a future release. " +
-		"Install the speakeasy command with 'brew install speakeasy-api/tap/cli' or 'npm i -g @speakeasy-api/cli', " +
-		"then run 'speakeasy' instead of 'gram'."
+		"Install the speakeasy-ai command with 'brew install speakeasy-api/tap/cli' or 'npm i -g @speakeasy-api/cli', " +
+		"then run 'speakeasy-ai' instead of 'gram'."
+
+	// sharedCommandNotice is printed to stderr when the CLI runs as speakeasy.
+	sharedCommandNotice = "Warning: this CLI is now called speakeasy-ai, because the speakeasy name belongs to the Speakeasy SDK generator. " +
+		"Running it as speakeasy will stop working in a future release. " +
+		"Install speakeasy-ai with 'brew install speakeasy-api/tap/cli', 'npm i -g @speakeasy-api/cli' or 'curl -fsSL https://ai.speakeasy.com/cli.sh | bash', " +
+		"then run 'speakeasy-ai' instead of 'speakeasy'."
 )
 
 // invokedAs returns the command name the CLI was run as, derived from argv[0]
@@ -164,18 +182,23 @@ func invokedAs(arg0 string) string {
 	return strings.TrimSuffix(strings.ToLower(name), ".exe")
 }
 
-// writeLegacyCommandNotice writes the deprecation notice to w when the CLI was
-// run as the legacy gram command.
+// writeLegacyCommandNotice writes a deprecation notice to w when the CLI was
+// run as gram or speakeasy, the names it shipped under before speakeasy-ai.
 func writeLegacyCommandNotice(w io.Writer, arg0 string) {
-	if invokedAs(arg0) == legacyCommandName {
+	switch invokedAs(arg0) {
+	case legacyCommandName:
 		_, _ = fmt.Fprintln(w, legacyCommandNotice)
+	case sharedCommandName:
+		_, _ = fmt.Fprintln(w, sharedCommandNotice)
 	}
 }
 
 func Execute(ctx context.Context, osArgs []string) {
+	arg0 := ""
 	if len(osArgs) > 0 {
-		writeLegacyCommandNotice(os.Stderr, osArgs[0])
+		arg0 = osArgs[0]
 	}
+	writeLegacyCommandNotice(os.Stderr, arg0)
 	notice, err := flags.ApplyLegacyEnv(os.LookupEnv, os.Setenv)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -185,7 +208,7 @@ func Execute(ctx context.Context, osArgs []string) {
 		_, _ = fmt.Fprintln(os.Stderr, notice)
 	}
 
-	if err := newApp().RunContext(ctx, osArgs); err != nil {
+	if err := newApp(arg0).RunContext(ctx, osArgs); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

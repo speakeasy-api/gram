@@ -20,6 +20,8 @@ The function provides a single tool:
 1. Docker and Docker Compose for local development
 2. Node.js v22+ and npm
 3. The Chinook dataset (included in `../../assets/chinook_dataset.csv.zip`)
+4. The Speakeasy AI Control Plane CLI, installed as `speakeasy-ai`: `brew install speakeasy-api/tap/cli`,
+   `npm i -g @speakeasy-api/cli` or `curl -fsSL https://ai.speakeasy.com/cli.sh | bash`
 
 ## Setting up the ClickHouse Database
 

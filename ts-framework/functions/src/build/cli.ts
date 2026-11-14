@@ -63,8 +63,10 @@ function isLocalDev(env: CLIResolverDeps["env"]): boolean {
  * 1. The path in SPEAKEASY_AI_CLI_PATH, or the deprecated GRAM_CLI_PATH.
  * 2. The repository build at cli/bin/gram when SPEAKEASY_AI_DEV, or the
  *    deprecated GRAM_DEV, is set and the build exists.
- * 3. `speakeasy`, if it is the AI Control Plane CLI and not the SDK generator.
- * 4. The legacy `gram` command.
+ * 3. `speakeasy-ai`, the name the CLI installs under.
+ * 4. `speakeasy`, the name older releases installed under, if it is the AI
+ *    Control Plane CLI and not the SDK generator.
+ * 5. The legacy `gram` command.
  *
  * Throws with install instructions when none is available.
  */
@@ -78,6 +80,10 @@ export async function resolveCLI(deps: CLIResolverDeps): Promise<string> {
 
   if (isLocalDev(deps.env) && deps.fileExists(deps.localDevCLIPath)) {
     return deps.localDevCLIPath;
+  }
+
+  if (await deps.isControlPlaneCLI("speakeasy-ai")) {
+    return "speakeasy-ai";
   }
 
   if (await deps.isControlPlaneCLI("speakeasy")) {

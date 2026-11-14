@@ -280,7 +280,7 @@ func explicitAPIURL(c *cli.Context) string {
 func reportPushResult(ctx context.Context, logger *slog.Logger, result *PushResult, err error) error {
 	if err != nil {
 		if result != nil && result.DeploymentID != "" {
-			statusCommand := fmt.Sprintf("speakeasy status --id %s", result.DeploymentID)
+			statusCommand := fmt.Sprintf("speakeasy-ai status --id %s", result.DeploymentID)
 			logger.WarnContext(
 				ctx,
 				"Deployment issue",
