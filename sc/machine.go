@@ -312,8 +312,6 @@ func (m *Machine[S, C]) resolveStructure(b *build[S, C], n *node[S, C]) {
 		b.errorf("parallel state %q: has no regions", n.name)
 	case n.kind == kindState && len(states) > 0 && n.initialID == nil:
 		b.errorf("state %q: has child states but no initial state", n.name)
-	case n.kind == kindState && len(states) == 0 && n.root:
-		b.errorf("machine declares no states")
 	case n.initialID != nil:
 		init, ok := m.nodes[*n.initialID]
 		if !ok || init.parent != n {
@@ -445,8 +443,20 @@ func (m *Machine[S, C]) resolveBehaviour(b *build[S, C], n *node[S, C]) {
 			}
 		}
 
-		if t.stay && (t.targetID != nil || len(t.steps) > 0) {
+		if t.stay && (t.targetID != nil || t.toChart || len(t.steps) > 0) {
 			b.errorf("state %q: a transition marked Stay has a target or steps", n.name)
+		}
+
+		// A transition to the chart itself goes back to where the chart
+		// starts.
+		if t.toChart {
+			if t.targetID != nil {
+				b.errorf("state %q: a transition targets both the chart and a state", n.name)
+			}
+			t.target = m.root
+			t.targets = []*node[S, C]{m.root}
+
+			continue
 		}
 
 		if t.targetID == nil {
@@ -704,6 +714,9 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 	for _, raise := range n.entryRaises {
 		write("entry raise %q\n", raise.name)
 	}
+	for _, raise := range n.entryDelayed {
+		write("entry raise %q after=%d\n", raise.name, raise.delay)
+	}
 	for _, raise := range n.exitRaises {
 		write("exit raise %q\n", raise.name)
 	}
@@ -760,7 +773,7 @@ func (m *Machine[S, C]) fingerprint(w io.Writer, n *node[S, C]) {
 			}
 		}
 		if t.target != nil {
-			write(" target=%q reenter=%t", t.target.name, t.reenter)
+			write(" target=%q reenter=%t chart=%t", t.target.name, t.reenter, t.toChart)
 		}
 		for _, also := range t.targets[min(1, len(t.targets)):] {
 			write(" also=%q", also.name)

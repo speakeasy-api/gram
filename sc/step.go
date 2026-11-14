@@ -409,8 +409,11 @@ func (m *Machine[S, C]) start(c C, now time.Time, seed uint64) (Snapshot[S, C], 
 	enter := new(transition[S, C])
 	enter.source = m.root
 	enter.trigger = triggerAlways
-	enter.target = m.root.initial
-	enter.targets = []*node[S, C]{m.root.initial}
+	// A chart without states has only itself to enter.
+	if m.root.initial != nil {
+		enter.target = m.root.initial
+		enter.targets = []*node[S, C]{m.root.initial}
+	}
 
 	// A chart whose top-level states are regions enters all of them.
 	if m.root.kind == kindParallel {
@@ -938,7 +941,13 @@ func (r *run[S, C]) childIn(cond childCond) bool {
 func (r *run[S, C]) selectTransitions(stim stimulus[S, C]) []*transition[S, C] {
 	var enabled []*transition[S, C]
 
-	for _, leaf := range r.active() {
+	// A chart without states is its own only leaf.
+	leaves := r.active()
+	if len(leaves) == 0 {
+		leaves = r.m.root.self
+	}
+
+	for _, leaf := range leaves {
 		if !leaf.atomic() {
 			continue
 		}
@@ -1174,7 +1183,9 @@ func (r *run[S, C]) microstep(ts []*transition[S, C], stim stimulus[S, C]) {
 	// A transition of the chart itself marked Reenter leaves the chart
 	// and enters it again: its exit and entry actions run, and its timers
 	// and services start afresh.
-	restart := slices.ContainsFunc(ts, func(t *transition[S, C]) bool { return t.source.root && t.reenter && t.target != nil })
+	restart := slices.ContainsFunc(ts, func(t *transition[S, C]) bool {
+		return t.reenter && t.target != nil && (t.source.root || t.target.root)
+	})
 	if restart {
 		r.exit(r.m.root, stim.event)
 	}
@@ -1487,6 +1498,9 @@ func (r *run[S, C]) enter(n *node[S, C], event any) {
 		r.emitRun(n, name, event, n.entryConds[k])
 	}
 	r.raise(n.entryRaises)
+	for _, raise := range n.entryDelayed {
+		r.startRaise(n, raise.name, raise.fn(r.ctx), raise.delay)
+	}
 	r.message(n, n.entrySends, n.entryEmits)
 
 	for _, t := range n.transitions {

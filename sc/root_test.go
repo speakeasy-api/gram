@@ -229,3 +229,100 @@ func TestAFinalStateReportsAnOutput(t *testing.T) {
 	_, has = m.Output(closed)
 	require.False(t, has)
 }
+
+func TestAChartNeedsNoStates(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("tally", func(b *sc.Builder[string, counter]) {
+		chart := b.Chart().Entry("opened", noop)
+		chart.On[tick]().Assign("count", increment[tick])
+		chart.On[leave]().
+			When("counted", func(c counter, _ leave) bool { return c.N > 0 }).
+			Do("report", func(context.Context, counter, leave) {})
+		chart.After(time.Minute).Assign("expire", func(c counter, _ struct{}) counter { c.N = -1; return c })
+	})
+	require.NoError(t, err)
+
+	// The chart is the only thing there is: nothing is active, and its own
+	// transitions, actions and timer do the work.
+	snap, effects := m.Start(counter{N: 0}, epoch)
+	require.Empty(t, snap.Active())
+	require.Equal(t, []sc.EffectKind{sc.EffectAction, sc.EffectStartTimer}, kinds(effects))
+
+	ignored, _ := m.Transition(snap, leave{}, epoch)
+	require.Equal(t, snap.Seq(), ignored.Seq())
+
+	snap, _ = m.Transition(snap, tick{}, epoch)
+	require.Equal(t, 1, snap.Context.N)
+
+	_, effects = m.Transition(snap, leave{}, epoch)
+	require.Equal(t, []string{"tally/report"}, names(effects))
+
+	// It survives being stored, timer and all.
+	data, err := json.Marshal(snap)
+	require.NoError(t, err)
+	snap, _, err = m.Restore(data, epoch)
+	require.NoError(t, err)
+
+	snap, _ = m.Advance(snap, epoch.Add(time.Minute))
+	require.Equal(t, -1, snap.Context.N)
+}
+
+func TestATransitionGoesBackToWhereTheChartStarts(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("wizard", func(b *sc.Builder[string, counter]) {
+		b.Chart().Entry("opened", noop).Exit("closed", noop)
+		b.Chart().On[leave]().ToChart()
+		b.Chart().On[back]().ToChart().Reenter()
+
+		b.Initial("first")
+		b.State("first").Entry("show", noop).On[tick]().To("second")
+		b.State("second").On[tick]().Assign("count", increment[tick]).To("third")
+		b.State("third")
+	})
+	require.NoError(t, err)
+
+	snap, _ := m.Start(counter{N: 0}, epoch)
+	snap, _ = m.Transition(snap, tick{}, epoch)
+	snap, _ = m.Transition(snap, tick{}, epoch)
+	require.Equal(t, []string{"third"}, snap.Active())
+
+	// Going to the chart starts over from its initial state, keeping the
+	// context, without leaving the chart itself.
+	again, effects := m.Transition(snap, leave{}, epoch)
+	require.Equal(t, []string{"first"}, again.Active())
+	require.Equal(t, 1, again.Context.N)
+	require.Equal(t, []string{"first/show"}, names(effects))
+
+	// Re-entering leaves and enters the chart as well.
+	_, effects = m.Transition(snap, back{}, epoch)
+	require.Equal(t, []string{"wizard/closed", "wizard/opened", "first/show"}, names(effects))
+}
+
+func TestAStateRaisesAnEventAWhileAfterItIsEntered(t *testing.T) {
+	t.Parallel()
+
+	m, err := sc.New("reminding", func(b *sc.Builder[string, counter]) {
+		b.Initial("waiting")
+		waiting := b.State("waiting").RaiseAfterOnEntry("nudge", time.Minute, func(counter) any { return ping{} })
+		waiting.On[tick]().To("busy")
+		waiting.On[leave]().CancelRaise("nudge").To("busy")
+		b.State("busy").On[ping]().To("nudged")
+		b.State("nudged")
+	})
+	require.NoError(t, err)
+
+	start, effects := m.Start(counter{N: 0}, epoch)
+	require.Equal(t, []sc.EffectKind{sc.EffectStartTimer}, kinds(effects))
+
+	// The event arrives wherever the chart is by then.
+	moved, _ := m.Transition(start, tick{}, epoch)
+	moved, _ = m.Advance(moved, epoch.Add(time.Minute))
+	require.Equal(t, []string{"nudged"}, moved.Active())
+
+	// Unless it is cancelled first.
+	cancelled, _ := m.Transition(start, leave{}, epoch)
+	cancelled, _ = m.Advance(cancelled, epoch.Add(time.Hour))
+	require.Equal(t, []string{"busy"}, cancelled.Active())
+}

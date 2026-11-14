@@ -20,11 +20,6 @@ func TestNewReportsDeclarationErrors(t *testing.T) {
 		want string
 	}{
 		{
-			name: "no states",
-			def:  func(*sc.Builder[string, counter]) {},
-			want: "machine declares no states",
-		},
-		{
 			name: "missing initial",
 			def: func(b *sc.Builder[string, counter]) {
 				b.State("a")

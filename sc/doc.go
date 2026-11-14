@@ -24,7 +24,9 @@
 // budget, and take transitions, all for as long as the instance lives. Its
 // transitions apply in every state that does not handle the event first.
 // [Builder.Regions] makes the top-level states regions that are all active
-// at once. A final state reports an output with [FinalBuilder.Output], which
+// at once. A chart need not declare any states at all: its own transitions,
+// services and timers may be the whole of it. [Transition.ToChart] goes back
+// to where the chart starts. A final state reports an output with [FinalBuilder.Output], which
 // the enclosing state's [StateBuilder.OnDoneWith] transitions receive and,
 // for a top-level final state, [Machine.Output] returns. A parallel state
 // reports the outputs of its regions, by region name. A state can change the context as it is entered
@@ -44,8 +46,9 @@
 // the order they started when due together, so their order never depends on
 // a driver. [Machine.Advance] fires them without an event, which is how a read
 // sees an expiry nothing has processed. [StateBuilder.Within] gives the
-// services inside a state one shared deadline. [Transition.RaiseAfter] sends
-// the chart an event after a wait, wherever it is by then.
+// services inside a state one shared deadline. [Transition.RaiseAfter] and
+// [StateBuilder.RaiseAfterOnEntry] send the chart an event after a wait,
+// wherever it is by then.
 //
 // # Actions and services
 //

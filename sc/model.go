@@ -136,6 +136,10 @@ type node[S comparable, C any] struct {
 	entryRaises []stateRaise[C]
 	exitRaises  []stateRaise[C]
 
+	// entryDelayed are the events the state raises for the machine itself
+	// some time after it is entered.
+	entryDelayed []delayedRaise[C]
+
 	// entryAssigns and exitAssigns replace the context when the state is
 	// entered and exited, before its entry and exit actions.
 	entryAssigns []stateAssign[C]
@@ -167,6 +171,13 @@ type stateSend[C any] struct {
 type stateAssign[C any] struct {
 	name string
 	fn   func(C) C
+}
+
+// delayedRaise is an event a state raises a while after it is entered.
+type delayedRaise[C any] struct {
+	name  string
+	delay time.Duration
+	fn    func(C) any
 }
 
 // stateRaise is an event a state raises on entry or exit.
@@ -442,6 +453,10 @@ type transition[S comparable, C any] struct {
 	// wildcard marks a triggerEvent transition declared with OnAny, which
 	// matches an event of any type.
 	wildcard bool
+
+	// toChart marks a transition declared with ToChart, whose target is
+	// the chart itself.
+	toChart bool
 
 	// runConds holds, by step index, the condition a chart action run by
 	// RunIf needs.

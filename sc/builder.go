@@ -116,6 +116,9 @@ func (b *Builder[S, C]) Initial(s S) {
 // the machine finishes; its services run from start to finish; and its
 // transitions are taken in any state that does not handle the event first.
 //
+// A chart may consist of nothing else: with no states declared, the chart
+// is the only thing an instance is ever in.
+//
 // In snapshots, effects and hooks the chart goes by the machine's name.
 func (b *Builder[S, C]) Chart() *StateBuilder[S, C] {
 	return &StateBuilder[S, C]{b: b.b, n: b.b.root}
@@ -522,6 +525,26 @@ func (s *StateBuilder[S, C]) RaiseOnEntry(name string, f func(C) any) *StateBuil
 		s.b.errorf("state %q: a raise has no name", s.n.name)
 	}
 	s.n.entryRaises = append(s.n.entryRaises, stateRaise[C]{name: name, fn: f})
+
+	return s
+}
+
+// RaiseAfterOnEntry queues the event f returns for the machine itself, to be
+// delivered once d has passed since the state was entered, as
+// [Transition.RaiseAfter] does from a transition. The event is delivered
+// wherever the chart is by then; cancel it with [Transition.CancelRaise] of
+// the same name, or use [StateBuilder.After] when leaving the state should
+// cancel it.
+func (s *StateBuilder[S, C]) RaiseAfterOnEntry(name string, d time.Duration, f func(C) any) *StateBuilder[S, C] {
+	switch {
+	case name == "":
+		s.b.errorf("state %q: a raise has no name", s.n.name)
+	case d < 0:
+		s.b.errorf("state %q: raise %q has a negative delay %s", s.n.name, name, d)
+	}
+
+	s.b.raises[name] = true
+	s.n.entryDelayed = append(s.n.entryDelayed, delayedRaise[C]{name: name, delay: d, fn: f})
 
 	return s
 }
@@ -1346,6 +1369,17 @@ func (t *Transition[S, C, Ev]) To(target S, also ...S) *Transition[S, C, Ev] {
 	t.t.targetID = &target
 	t.t.alsoIDs = also
 
+	return t
+}
+
+// ToChart makes the chart itself the transition's target: every active state
+// is exited and the chart's initial states are entered again, as when the
+// instance started, with the context as it is now. The chart itself stays
+// entered, so its own services and timers carry on; add
+// [Transition.Reenter] to restart those as well, running the chart's exit
+// and entry actions.
+func (t *Transition[S, C, Ev]) ToChart() *Transition[S, C, Ev] {
+	t.t.toChart = true
 	return t
 }
 
