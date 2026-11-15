@@ -48,17 +48,15 @@ INSERT INTO toolsets (id, organization_id, project_id, name, slug, description,
                       external_oauth_server_id)
 VALUES
   (@toolset_1, @organization_id::text, @project_id::uuid, 'OpenAPI Server (API Key)', 'openapi-api-key',
-   'Support workflows: logs, refunds, customer lookups.', NULL),
-  (@toolset_2, @organization_id::text, @project_id::uuid, 'Read-Only Tool Subset', 'read-only-subset',
-   'Operational checks and deploy tooling.', NULL),
-  -- The OAuth-protected server, kept separate from the two above: attaching
+   'Hosted from an OpenAPI document; callers use a Speakeasy API key.', NULL),
+  -- The OAuth-protected server, kept separate from the one above: attaching
   -- a session issuer changes what a server's authentication tab and install
-  -- instructions say, and the support server is the one a visitor meets
+  -- instructions say, and the API key server is the one a visitor meets
   -- first.
   (@toolset_3, @organization_id::text, @project_id::uuid, 'Server-Specific Sign-In', 'server-specific-sign-in',
-   'Tools Acme exposes to partner agents, behind OAuth.', NULL),
+   'Hosted, with its own Speakeasy sign-in and session length.', NULL),
   (@toolset_4, @organization_id::text, @project_id::uuid, 'External OAuth Server', 'external-oauth',
-   'Demonstrates external OAuth metadata source choices.',
+   'Hosted; callers bring a token from an external OAuth server.',
    @external_oauth_server_id::uuid);
 
 -- Version = epoch seconds: the server caches toolset contents in Redis
@@ -68,7 +66,6 @@ VALUES
 -- name: DeployInsertToolsetVersions :exec
 INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VALUES
   (@toolset_1, extract(epoch FROM now())::bigint, @toolset_1_urns::text[], '{}'),
-  (@toolset_2, extract(epoch FROM now())::bigint, @toolset_2_urns::text[], '{}'),
   (@toolset_3, extract(epoch FROM now())::bigint, @toolset_3_urns::text[], '{}'),
   (@toolset_4, extract(epoch FROM now())::bigint, @toolset_4_urns::text[], '{}');
 

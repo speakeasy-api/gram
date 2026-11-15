@@ -368,8 +368,8 @@ type ServersInsertCodeGatewayMembersParams struct {
 	ProjectID       uuid.UUID
 	MetaID          uuid.UUID
 	SupportServerID uuid.UUID
-	OpsMemberID     uuid.UUID
-	OpsServerID     uuid.UUID
+	SignInMemberID  uuid.UUID
+	SignInServerID  uuid.UUID
 }
 
 func (q *Queries) ServersInsertCodeGatewayMembers(ctx context.Context, arg ServersInsertCodeGatewayMembersParams) error {
@@ -378,8 +378,8 @@ func (q *Queries) ServersInsertCodeGatewayMembers(ctx context.Context, arg Serve
 		arg.ProjectID,
 		arg.MetaID,
 		arg.SupportServerID,
-		arg.OpsMemberID,
-		arg.OpsServerID,
+		arg.SignInMemberID,
+		arg.SignInServerID,
 	)
 	return err
 }
@@ -969,18 +969,15 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
 SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
 FROM (VALUES
   ($1::uuid, $2::text, NULL::uuid, 'private'),
-  ($3::uuid, $4::text, NULL::uuid, 'private'),
-  ($5::uuid, $6::text, $7::uuid, 'private'),
-  ($8::uuid, $9::text, NULL::uuid, 'public')
+  ($3::uuid, $4::text, $5::uuid, 'private'),
+  ($6::uuid, $7::text, NULL::uuid, 'public')
 ) AS v(toolset_id, slug, user_session_issuer_id, visibility)
-JOIN toolsets t ON t.id = v.toolset_id AND t.project_id = $10::uuid AND t.deleted IS FALSE
+JOIN toolsets t ON t.id = v.toolset_id AND t.project_id = $8::uuid AND t.deleted IS FALSE
 `
 
 type ServersInsertHostedToolsetMCPServersParams struct {
 	Toolset1         uuid.UUID
 	SupportMcpSlug   string
-	Toolset2         uuid.UUID
-	OpsMcpSlug       string
 	Toolset3         uuid.UUID
 	PartnerMcpSlug   string
 	PartnerIssuerID  uuid.UUID
@@ -997,8 +994,6 @@ func (q *Queries) ServersInsertHostedToolsetMCPServers(ctx context.Context, arg 
 	_, err := q.db.Exec(ctx, serversInsertHostedToolsetMCPServers,
 		arg.Toolset1,
 		arg.SupportMcpSlug,
-		arg.Toolset2,
-		arg.OpsMcpSlug,
 		arg.Toolset3,
 		arg.PartnerMcpSlug,
 		arg.PartnerIssuerID,
@@ -1292,7 +1287,7 @@ type ServersInsertKillswitchVersionResourcesParams struct {
 	ActiveSelectedID uuid.UUID
 	SupportServerID  uuid.UUID
 	ChangedID        uuid.UUID
-	OpsServerID      uuid.UUID
+	SignInServerID   uuid.UUID
 	LinearServerID   uuid.UUID
 	LiftedID         uuid.UUID
 	SlackServerID    uuid.UUID
@@ -1305,12 +1300,98 @@ func (q *Queries) ServersInsertKillswitchVersionResources(ctx context.Context, a
 		arg.ActiveSelectedID,
 		arg.SupportServerID,
 		arg.ChangedID,
-		arg.OpsServerID,
+		arg.SignInServerID,
 		arg.LinearServerID,
 		arg.LiftedID,
 		arg.SlackServerID,
 		arg.ExpiredID,
 	)
+	return err
+}
+
+const serversInsertLinearAppClient = `-- name: ServersInsertLinearAppClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_id_metadata_uri, client_id_issued_at, token_endpoint_auth_method,
+   callback_base_url)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   $4::uuid, $5::text, $5::text,
+   clock_timestamp(), 'none', $6::text)
+`
+
+type ServersInsertLinearAppClientParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	RemoteSessionIssuerID uuid.UUID
+	ClientID              string
+	CallbackBaseUrl       string
+}
+
+// A client ID metadata document client: Speakeasy serves the document at
+// client_id, on the callback origin it records.
+func (q *Queries) ServersInsertLinearAppClient(ctx context.Context, arg ServersInsertLinearAppClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertLinearAppClient,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RemoteSessionIssuerID,
+		arg.ClientID,
+		arg.CallbackBaseUrl,
+	)
+	return err
+}
+
+const serversInsertLinearAppIssuer = `-- name: ServersInsertLinearAppIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
+   token_endpoint, registration_endpoint, revocation_endpoint,
+   scopes_supported, grant_types_supported, response_types_supported,
+   token_endpoint_auth_methods_supported, code_challenge_methods_supported,
+   client_id_metadata_document_supported, name, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, 'linear',
+   'https://mcp.linear.app', 'https://mcp.linear.app/authorize',
+   'https://mcp.linear.app/token', 'https://mcp.linear.app/register',
+   'https://mcp.linear.app/token',
+   ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['code'], ARRAY['client_secret_basic', 'client_secret_post', 'none'],
+   ARRAY['S256'], TRUE, 'Linear', clock_timestamp())
+`
+
+type ServersInsertLinearAppIssuerParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Linear's authorization server, as its metadata document describes it
+// (https://mcp.linear.app/.well-known/oauth-authorization-server).
+func (q *Queries) ServersInsertLinearAppIssuer(ctx context.Context, arg ServersInsertLinearAppIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertLinearAppIssuer, arg.ID, arg.ProjectID, arg.OrganizationID)
+	return err
+}
+
+const serversInsertLinearAppProtectedResource = `-- name: ServersInsertLinearAppProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text,
+   'https://mcp.linear.app/mcp',
+   'https://mcp.linear.app/.well-known/oauth-protected-resource/mcp',
+   ARRAY['https://mcp.linear.app'], ARRAY['read', 'write'], clock_timestamp())
+`
+
+type ServersInsertLinearAppProtectedResourceParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ServersInsertLinearAppProtectedResource(ctx context.Context, arg ServersInsertLinearAppProtectedResourceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertLinearAppProtectedResource, arg.ID, arg.ProjectID, arg.OrganizationID)
 	return err
 }
 
@@ -1351,11 +1432,13 @@ type ServersInsertLinearAppServerParams struct {
 	ServerID   uuid.UUID
 }
 
-// Linear: the real vendor's MCP server, with its own endpoint and sign-in.
-// The shared seed holds no client or credential, so in the public demo org
-// an admin sets up its sign-in from the server's page, as with any vendor.
-// The local seed registers a client with Linear itself (local_linear.go), so
-// a developer signs in to their own Linear account right after seeding.
+// Linear: the real vendor's MCP server, with its own endpoint and sign-in,
+// set up as Auto-Configure would: Linear's authorization server, a client ID
+// metadata document client Speakeasy serves at the deployment's own URL, and
+// the server's links to them. Linear fetches the document when someone signs
+// in, so nothing is registered ahead of time and each caller signs in to
+// their own Linear account. Locally, where Linear cannot reach the document,
+// the client becomes one registered by DCR (local_linear.go).
 func (q *Queries) ServersInsertLinearAppServer(ctx context.Context, arg ServersInsertLinearAppServerParams) error {
 	_, err := q.db.Exec(ctx, serversInsertLinearAppServer,
 		arg.EndpointID,
@@ -1479,7 +1562,7 @@ func (q *Queries) ServersInsertMCPServers(ctx context.Context, arg ServersInsert
 const serversInsertMetaMCPServer = `-- name: ServersInsertMetaMCPServer :exec
 INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
                               user_session_issuer_id) VALUES
-  ($1::uuid, $2::text, $3::uuid, 'Acme Agent Gateway',
+  ($1::uuid, $2::text, $3::uuid, 'Multi-Server Gateway',
    $4::uuid)
 `
 
@@ -1508,9 +1591,7 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
   ($5::uuid, $2::uuid,
    $3::uuid, $6::uuid, 1),
   ($7::uuid, $2::uuid,
-   $3::uuid, $8::uuid, 2),
-  ($9::uuid, $2::uuid,
-   $3::uuid, $10::uuid, 3)
+   $3::uuid, $8::uuid, 2)
 `
 
 type ServersInsertMetaMCPServerMembersParams struct {
@@ -1518,8 +1599,6 @@ type ServersInsertMetaMCPServerMembersParams struct {
 	ProjectID       uuid.UUID
 	MetaID          uuid.UUID
 	SupportServerID uuid.UUID
-	OpsMemberID     uuid.UUID
-	OpsServerID     uuid.UUID
 	LinearMemberID  uuid.UUID
 	LinearServerID  uuid.UUID
 	SlackMemberID   uuid.UUID
@@ -1533,8 +1612,6 @@ func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg Ser
 		arg.ProjectID,
 		arg.MetaID,
 		arg.SupportServerID,
-		arg.OpsMemberID,
-		arg.OpsServerID,
 		arg.LinearMemberID,
 		arg.LinearServerID,
 		arg.SlackMemberID,
@@ -1782,7 +1859,7 @@ const serversInsertRemovedGitHubMember = `-- name: ServersInsertRemovedGitHubMem
 INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order, deleted_at) VALUES
   ($1::uuid, $2::uuid,
-   $3::uuid, $4::uuid, 4,
+   $3::uuid, $4::uuid, 3,
    now() - interval '3 days')
 `
 
@@ -1816,11 +1893,11 @@ JOIN organization_roles r ON a.principal_urn = 'role:organization:' || r.id
 CROSS JOIN mcp_servers s
 WHERE p.organization_id = $1::text AND p.project_id = $2::uuid
   AND s.project_id = $2::uuid
-  -- Of the hosted toolsets' wrappers, distribute the OpenAPI Server (API Key)
-  -- and the Read-Only Tool Subset; the server-specific sign-in and external
-  -- OAuth toolsets stay out of plugins.
+  -- Of the hosted toolsets' wrappers, distribute only the OpenAPI Server
+  -- (API Key); the server-specific sign-in and external OAuth toolsets stay
+  -- out of plugins.
   AND (s.id IS DISTINCT FROM s.toolset_id
-       OR s.id IN ($3::uuid, $4::uuid))
+       OR s.id = $3::uuid)
   AND EXISTS (
     SELECT 1 FROM principal_grants g
     WHERE g.organization_id = $1::text AND g.principal_urn = a.principal_urn
@@ -1833,7 +1910,6 @@ type ServersInsertRoleServerMembershipsParams struct {
 	OrgID           string
 	ProjectID       uuid.UUID
 	SupportServerID uuid.UUID
-	OpsServerID     uuid.UUID
 }
 
 // Distribute these servers to the seeded organization roles holding
@@ -1841,12 +1917,7 @@ type ServersInsertRoleServerMembershipsParams struct {
 // mcp:write neither allow connecting nor deliver servers. Store server identities, not legacy toolset memberships. Content
 // has no manual/automatic distinction and never widens a plugin's audience.
 func (q *Queries) ServersInsertRoleServerMemberships(ctx context.Context, arg ServersInsertRoleServerMembershipsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, serversInsertRoleServerMemberships,
-		arg.OrgID,
-		arg.ProjectID,
-		arg.SupportServerID,
-		arg.OpsServerID,
-	)
+	result, err := q.db.Exec(ctx, serversInsertRoleServerMemberships, arg.OrgID, arg.ProjectID, arg.SupportServerID)
 	if err != nil {
 		return 0, err
 	}

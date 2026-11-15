@@ -844,7 +844,7 @@ func (s *seeder) chInsertMCPNetworkRequests(ctx context.Context, ch driver.Conn)
 		kind, surface, serverID string
 	}{
 		{"mcp", "public", s.supportServer().String()},
-		{"mcp", "private", s.opsServer().String()},
+		{"mcp", "private", s.signInServer().String()},
 		{"meta", "public", s.det("metamcp-1").String()},
 		{"meta", "private", s.det("metamcp-1").String()},
 	}

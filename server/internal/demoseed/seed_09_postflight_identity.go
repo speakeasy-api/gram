@@ -182,12 +182,12 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byOrg(s.q.PostflightIDTrustedIssuerSessions), 0, "demo seed postflight: expected no trusted issuer sessions, found %d"},
 		{byOrg(s.q.PostflightIDSavedEMAProviders), 0, "demo seed postflight: expected no saved EMA provider, found %d"},
 		// The Per-User OAuth Server's remote identity provider, the identity chaining example, Jamf
-		// Pro, and the Enterprise Sign-In (ID-JAG) Server's authorization server.
-		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 4, "demo seed postflight: expected 4 project remote session issuers, found %d"},
+		// Pro, the Enterprise Sign-In (ID-JAG) Server's authorization server, and Linear.
+		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 5, "demo seed postflight: expected 5 project remote session issuers, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDRemoteIdentityClients(ctx, repo.PostflightIDRemoteIdentityClientsParams{ProjectID: proj, OrgID: org})
-		}, 1, "demo seed postflight: expected 1 Remote MCP identity client, found %d"},
-		{byProj(s.q.PostflightIDRemoteIdentityBindings), 2, "demo seed postflight: expected 2 Remote MCP User Identity bindings, found %d"},
+		}, 2, "demo seed postflight: expected 2 Remote MCP identity clients (the Per-User OAuth Server's and Linear's), found %d"},
+		{byProj(s.q.PostflightIDRemoteIdentityBindings), 3, "demo seed postflight: expected 3 Remote MCP User Identity bindings, found %d"},
 		// The stamp has to be what ResyncMCPServerRemoteSessionIssuers would
 		// derive: every live client bound to the Per-User OAuth Server's user session issuer names
 		// one remote issuer, and it is the stamped one. The query returns no
@@ -213,16 +213,16 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 			})
 		}, 1, "demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %d"},
 		{byProj(s.q.PostflightIDLinearProtectedResource), 1, "demo seed postflight: expected the Per-User OAuth Server's protected resource pinned to read, found %d matching rows"},
-		// The Per-User OAuth Server's one OAuth client, and the Enterprise
-		// Sign-In (ID-JAG) Server's own client.
-		{byProj(s.q.PostflightIDServerClientAssociations), 2, "demo seed postflight: expected 2 MCP server upstream client associations, found %d"},
+		// The Per-User OAuth Server's one OAuth client, the Enterprise
+		// Sign-In (ID-JAG) Server's own client, and Linear's.
+		{byProj(s.q.PostflightIDServerClientAssociations), 3, "demo seed postflight: expected 3 MCP server upstream client associations, found %d"},
 		// One per server each seeded sign-in reaches: the Per-User OAuth Server
 		// and Service Account Server sign-ins on their own server, the gateway
 		// sign-ins on both members.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion"), s.det("mcpserver-linear-app")},
+				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion")},
 				GithubServerID:     s.det("mcpserver-github"),
 				GithubAuthClientID: s.det("auth-client-github-forwarded"),
 				ProjectID:          proj,
@@ -236,7 +236,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion"), s.det("mcpserver-linear-app")},
+				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion")},
 				GithubServerID:     s.det("mcpserver-github"),
 				GithubAuthClientID: s.det("auth-client-github-forwarded"),
 				ProjectID:          proj,

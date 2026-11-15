@@ -178,8 +178,8 @@ open their effective assignments; the dropdown always offers compact member sear
     one Scheduled, one Lifted, and one Expired, and scope labels include both
     selected servers and all current/future MCP servers. Amara's panel holds two
     simultaneously effective rows whose record overlap panels identify each
-    other. Open Jonas's changed row and confirm history narrows **Acme Support
-    Tools / Read-Only Tool Subset / Per-User OAuth Server** to **OpenAPI Server (API Key)** without losing the
+    other. Open Jonas's changed row and confirm history narrows **OpenAPI
+    Server (API Key) / Server-Specific Sign-In / Per-User OAuth Server** to **OpenAPI Server (API Key)** without losing the
     removed-server diff. Open the lifted and expired rows and confirm their
     complete history and terminal status. On the active selected row, the
     external message renders the newline, `<script>alert("demo")</script>`, and
@@ -207,19 +207,19 @@ open their effective assignments; the dropdown always offers compact member sear
     hardware identifiers. Jonas's detail shows Claude Code, Cursor, and Aider,
     proving each page is filtered to its canonical enrolled-user identity.
 
-16. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
+16. **Gateway overview Activity** — open MCP → **Multi-Server Gateway** → Overview.
     The Activity section shows non-zero tool calls over the last 7 days, a
     Gateway tool usage chart with all four tools populated, the three discovery tools
     decreasing (list_servers > describe_server > describe_tools) and
     execute_tool counting the member calls, and a Calls-by-member
-    table listing OpenAPI Server (API Key), Read-Only Tool Subset, the Per-User OAuth Server, and the Service Account Server with Read-Only Tool Subset
+    table listing OpenAPI Server (API Key), the Per-User OAuth Server, and the Service Account Server with the Per-User OAuth Server
     carrying most of the errors — and no Pass-Through Token Server row, even though that server's
     dispatches from before it left the gateway still count in the totals.
     The "Dispatched calls over time" title opens Tool Logs and the "Gateway
-    tool usage" title opens MCP & Tools, both with the Acme Agent Gateway
+    tool usage" title opens MCP & Tools, both with the Multi-Server Gateway
     server filter applied; on Tool Logs the hook-observed rows are tagged
     Gateway (not Shadow MCP) and link back to the gateway, and each member
-    dispatch carries a "via Acme Agent Gateway" marker. Back on the MCP
+    dispatch carries a "via Multi-Server Gateway" marker. Back on the MCP
     listing, the gateway card shows no "never used" marker.
 17. **Organization setup wizard** — open `/acme-demo/setup` (no setup feature
     flag required). Confirm the task rail shows the 9 visible seeded tasks.
@@ -645,7 +645,7 @@ open their effective assignments; the dropdown always offers compact member sear
     - With a custom-domain allowlist enabled, the platform-host consent page must refuse approval, link to the custom domain, and make no upstream discovery or identity-provider exchanges. Approval from the admitted custom domain may capture tools. The page must show usable connection status before JavaScript loads.
     - Choose All tools (frozen), approve, then reconnect the MCP client without new browser consent: listing and schema discovery must work without contacting upstream servers. Calls still reach the upstream and enforce current access.
     - Choose All tools (live), approve, then add a new gateway member or connect one that was unavailable. Neither may appear or execute until the person consents again. New tools on an already approved member may appear in live mode.
-    - Connect an MCP client to the Acme Agent Gateway. On the consent screen, choose Specific tools: tools are grouped under each member server and show their tool names without the server prefix.
+    - Connect an MCP client to the Multi-Server Gateway. On the consent screen, choose Specific tools: tools are grouped under each member server and show their tool names without the server prefix.
     - Select one server's heading, then a single tool from another server, and approve. The connection's tools list, Progressive `describe_tools`, and `execute_tool` only reach the chosen tools; calls to the others are refused.
     - Reconnect: the consent screen opens with the previous choice selected.
     - Repeat on the organization gateway (`/mcp/gateway/acme-demo` on the demo org, or `/mcp/gateway/speakeasy` after `mise run seed`; the local seed leaves the organization gateway off, so first open MCP → Organization Gateway and enable it): its picker groups tools from every project you can reach, and the chosen tools are the only ones listed, described or callable.
@@ -680,7 +680,7 @@ open their effective assignments; the dropdown always offers compact member sear
       Triage Incident, each with a Latest badge and a "Last loaded over MCP"
       value. As a writer, **Add skill** opens a picker without those two and
       each row has a remove button.
-    - Open **MCP → Acme Agent Gateway → Skills**. It lists Triage Incident and
+    - Open **MCP → Multi-Server Gateway → Skills**. It lists Triage Incident and
       Runbook.
     - Open **Skills → Runbook → Usage**. "Served over MCP" lists Acme Agent
       Gateway (opens the gateway's Skills tab) and Organization gateway, and
@@ -714,18 +714,17 @@ open their effective assignments; the dropdown always offers compact member sear
 36. **Seeded MCP servers** (names in both orgs; live checks local only)
     - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
       server appears once, named for what it tests: OpenAPI Server (API Key),
-      Read-Only Tool Subset, Server-Specific Sign-In, External OAuth Server
+      Server-Specific Sign-In, External OAuth Server
       (each toolset's canonical wrapper), Per-User OAuth Server, Service
       Account Server, Pass-Through Token Server, Auto-Configured OAuth Server,
       Tunnelled Private Server and Enterprise Sign-In (ID-JAG) Server, plus
-      Linear: eleven in all. No server is named for a vendor it does not
+      Linear: ten in all. No server is named for a vendor it does not
       reach.
     - Locally, with the `mcp-fixture` daemon up (`pitchfork status
       mcp-fixture`), connect an MCP client to each `GRAM_SERVER_URL/mcp/<org>-<slug>`
       endpoint and call a tool:
-      - `openapi-api-key` (`get_customer`) and `read-only-subset`
-        (`check_health`) with the seeded `GRAM_API_KEY` as a bearer token:
-        the fixture's API stub answers.
+      - `openapi-api-key` (`get_customer`) with the seeded `GRAM_API_KEY` as
+        a bearer token: the fixture's API stub answers.
       - `server-specific-sign-in` (`get_customer`) after its own Speakeasy
         sign-in.
       - `external-oauth` (`search_logs`): the client signs in at the
@@ -758,7 +757,9 @@ open their effective assignments; the dropdown always offers compact member sear
         exchange.
       - `linear` (needs your own Linear account and internet access): the
         seed log says `registered the seeded Linear server's client with
-        Linear`. The consent page lists **Linear**; **Connect** opens Linear's
+        Linear`. In the demo org the same server uses a client ID metadata
+        document client at `GRAM_SERVER_URL/.well-known/oauth-client/<id>`,
+        which that URL serves. The consent page lists **Linear**; **Connect** opens Linear's
         own sign-in and consent page. After **Give access**, a Linear tool
         (for example `list_teams`) returns your workspace's data. Its server
         page reads **Connected** under **Settings → Identity**.

@@ -27,9 +27,9 @@ func TestLocalServerClientAssociations(t *testing.T) {
 // The Pass-Through Token Server has its own issuer with no bound client, so
 // it uses none. The Enterprise Sign-In
 // (ID-JAG) Server has its own issuer and uses its authorization server's
-// client. The Auto-Configured OAuth Server and the Linear vendor server
-// (mcpserver-linear-app; mcpserver-linear is the Per-User OAuth Server) have
-// their own issuers and no client in the shared seed.
+// client. The Linear vendor server (mcpserver-linear-app; mcpserver-linear is
+// the Per-User OAuth Server) uses its metadata document client. The
+// Auto-Configured OAuth Server has its own issuer and no seeded client.
 func testServerClientAssociations(t *testing.T, spec Spec) {
 	t.Helper()
 	ctx := t.Context()
@@ -40,6 +40,7 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 	want := map[uuid.UUID][]uuid.UUID{
 		det("mcpserver-linear"):             {det("remote-identity-client-linear")},
 		det("mcpserver-enterprise-sign-in"): {det("ema-client-enterprise-sign-in")},
+		det("mcpserver-linear-app"):         {det("remote-identity-client-linear-app")},
 	}
 
 	for range 2 {

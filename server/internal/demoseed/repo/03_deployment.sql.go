@@ -605,15 +605,12 @@ const deployInsertToolsetVersions = `-- name: DeployInsertToolsetVersions :exec
 INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VALUES
   ($1, extract(epoch FROM now())::bigint, $2::text[], '{}'),
   ($3, extract(epoch FROM now())::bigint, $4::text[], '{}'),
-  ($5, extract(epoch FROM now())::bigint, $6::text[], '{}'),
-  ($7, extract(epoch FROM now())::bigint, $8::text[], '{}')
+  ($5, extract(epoch FROM now())::bigint, $6::text[], '{}')
 `
 
 type DeployInsertToolsetVersionsParams struct {
 	Toolset1     uuid.UUID
 	Toolset1Urns []string
-	Toolset2     uuid.UUID
-	Toolset2Urns []string
 	Toolset3     uuid.UUID
 	Toolset3Urns []string
 	Toolset4     uuid.UUID
@@ -628,8 +625,6 @@ func (q *Queries) DeployInsertToolsetVersions(ctx context.Context, arg DeployIns
 	_, err := q.db.Exec(ctx, deployInsertToolsetVersions,
 		arg.Toolset1,
 		arg.Toolset1Urns,
-		arg.Toolset2,
-		arg.Toolset2Urns,
 		arg.Toolset3,
 		arg.Toolset3Urns,
 		arg.Toolset4,
@@ -643,25 +638,22 @@ INSERT INTO toolsets (id, organization_id, project_id, name, slug, description,
                       external_oauth_server_id)
 VALUES
   ($1, $2::text, $3::uuid, 'OpenAPI Server (API Key)', 'openapi-api-key',
-   'Support workflows: logs, refunds, customer lookups.', NULL),
-  ($4, $2::text, $3::uuid, 'Read-Only Tool Subset', 'read-only-subset',
-   'Operational checks and deploy tooling.', NULL),
-  -- The OAuth-protected server, kept separate from the two above: attaching
+   'Hosted from an OpenAPI document; callers use a Speakeasy API key.', NULL),
+  -- The OAuth-protected server, kept separate from the one above: attaching
   -- a session issuer changes what a server's authentication tab and install
-  -- instructions say, and the support server is the one a visitor meets
+  -- instructions say, and the API key server is the one a visitor meets
   -- first.
-  ($5, $2::text, $3::uuid, 'Server-Specific Sign-In', 'server-specific-sign-in',
-   'Tools Acme exposes to partner agents, behind OAuth.', NULL),
-  ($6, $2::text, $3::uuid, 'External OAuth Server', 'external-oauth',
-   'Demonstrates external OAuth metadata source choices.',
-   $7::uuid)
+  ($4, $2::text, $3::uuid, 'Server-Specific Sign-In', 'server-specific-sign-in',
+   'Hosted, with its own Speakeasy sign-in and session length.', NULL),
+  ($5, $2::text, $3::uuid, 'External OAuth Server', 'external-oauth',
+   'Hosted; callers bring a token from an external OAuth server.',
+   $6::uuid)
 `
 
 type DeployInsertToolsetsParams struct {
 	Toolset1              uuid.UUID
 	OrganizationID        string
 	ProjectID             uuid.UUID
-	Toolset2              uuid.UUID
 	Toolset3              uuid.UUID
 	Toolset4              uuid.UUID
 	ExternalOauthServerID uuid.UUID
@@ -675,7 +667,6 @@ func (q *Queries) DeployInsertToolsets(ctx context.Context, arg DeployInsertTool
 		arg.Toolset1,
 		arg.OrganizationID,
 		arg.ProjectID,
-		arg.Toolset2,
 		arg.Toolset3,
 		arg.Toolset4,
 		arg.ExternalOauthServerID,

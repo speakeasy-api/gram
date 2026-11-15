@@ -94,8 +94,6 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	if err := s.q.ServersInsertHostedToolsetMCPServers(ctx, repo.ServersInsertHostedToolsetMCPServersParams{
 		Toolset1:         s.toolset1(),
 		SupportMcpSlug:   s.spec.OrgSlug + "-openapi-api-key",
-		Toolset2:         s.toolset2(),
-		OpsMcpSlug:       s.spec.OrgSlug + "-read-only-subset",
 		Toolset3:         s.toolset3(),
 		PartnerMcpSlug:   s.spec.OrgSlug + "-server-specific-sign-in",
 		PartnerIssuerID:  s.usIssuer(),
@@ -158,13 +156,12 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		OrgID:           org,
 		ProjectID:       proj,
 		SupportServerID: s.supportServer(),
-		OpsServerID:     s.opsServer(),
 	})
 	if err != nil {
 		return fmt.Errorf("insert demo role server memberships: %w", err)
 	}
-	if n != 25 {
-		return fmt.Errorf("demo seed: expected 25 role server memberships, found %d", n)
+	if n != 20 {
+		return fmt.Errorf("demo seed: expected 20 role server memberships, found %d", n)
 	}
 
 	pluginID, err := s.q.ServersInsertEngineeringEssentialsPlugin(ctx, repo.ServersInsertEngineeringEssentialsPluginParams{
@@ -267,8 +264,6 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		ProjectID:       proj,
 		MetaID:          s.det("metamcp-1"),
 		SupportServerID: s.supportServer(),
-		OpsMemberID:     s.det("metamember-ops"),
-		OpsServerID:     s.opsServer(),
 		LinearMemberID:  s.det("metamember-linear"),
 		LinearServerID:  s.det("mcpserver-linear"),
 		SlackMemberID:   s.det("metamember-slack"),
@@ -289,8 +284,8 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		ProjectID:       proj,
 		MetaID:          s.det("metamcp-code"),
 		SupportServerID: s.supportServer(),
-		OpsMemberID:     s.det("metamember-code-ops"),
-		OpsServerID:     s.opsServer(),
+		SignInMemberID:  s.det("metamember-code-sign-in"),
+		SignInServerID:  s.signInServer(),
 	}); err != nil {
 		return fmt.Errorf("insert demo code gateway members: %w", err)
 	}
@@ -468,6 +463,8 @@ func (s *seeder) seedServers(ctx context.Context) error {
 				client = uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}
 			case "enterprise-sign-in":
 				client = uuid.NullUUID{UUID: s.det("ema-client-enterprise-sign-in"), Valid: true}
+			case "linear-app":
+				client = uuid.NullUUID{UUID: s.det("remote-identity-client-linear-app"), Valid: true}
 			}
 			if err := s.q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
 				ID: s.det("org-gateway-choice-" + strconv.Itoa(i) + "-" + server), ProjectID: proj, OrgID: org,
@@ -592,7 +589,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		ActiveSelectedID: s.det("killswitch-active-selected"),
 		SupportServerID:  s.supportServer(),
 		ChangedID:        s.det("killswitch-changed"),
-		OpsServerID:      s.opsServer(),
+		SignInServerID:   s.signInServer(),
 		LinearServerID:   s.det("mcpserver-linear"),
 		LiftedID:         s.det("killswitch-lifted"),
 		SlackServerID:    s.det("mcpserver-slack"),
@@ -967,5 +964,5 @@ func (s *seeder) seedSignInExampleServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo linear server: %w", err)
 	}
-	return nil
+	return s.seedLinearApp(ctx)
 }

@@ -530,8 +530,9 @@ func (s *seeder) chfRiskFindings(ctx context.Context, ch driver.Conn) error {
 			if supp == 2 || supp == 3 {
 				falsePositiveAt = new(chatDT.Add(3 * time.Hour))
 			}
-			// Same chat-to-server rule as telemetry_logs (i % 5 = 0 is Acme
-			// Ops), so the Risk Events MCP filter agrees with the call details.
+			// Same chat-to-server rule as telemetry_logs (i % 5 = 0 is
+			// Server-Specific Sign-In), so the Risk Events MCP filter agrees
+			// with the call details.
 			var execID, mcpServerID, toolsetID, toolName, phase, mediation, method, principal, outcome string
 			if !onUser {
 				execID = s.det("mcp-execution-" + strconv.Itoa(i)).String()
@@ -539,9 +540,9 @@ func (s *seeder) chfRiskFindings(ctx context.Context, ch driver.Conn) error {
 				toolsetID = s.toolset1().String()
 				toolName = "get_customer"
 				if i%5 == 0 {
-					mcpServerID = s.opsServer().String()
-					toolsetID = s.toolset2().String()
-					toolName = "check_health"
+					mcpServerID = s.signInServer().String()
+					toolsetID = s.toolset3().String()
+					toolName = "query_db"
 				}
 				phase, mediation, method, principal, outcome = "response", "hosted_mcp", "tools/call", "user_session", "logged"
 			}
@@ -792,10 +793,10 @@ func chfEmailClient(email string) string {
 	return chfClientAttrs(hash64("gwcli", email), hash64("gwcliv", email), hash64("gwcliseen", email))
 }
 
-// chfGatewayDiscovery is gateway (meta MCP) traffic for the Acme Agent
-// Gateway, which fronts the four mcp_servers seeded in postgres.sql. Ids
-// reproduce s.det("metamcp-1"), gatewayMemberServer (the toolsets' canonical
-// wrappers for support and ops, s.det("mcpserver-<member>") for the remotes)
+// chfGatewayDiscovery is gateway (meta MCP) traffic for the Multi-Server
+// Gateway, which fronts three of the seeded MCP servers. Ids
+// reproduce s.det("metamcp-1"), gatewayMemberServer (the toolset's canonical
+// wrapper for support, s.det("mcpserver-<member>") for the remotes)
 // and s.det("remotemcp-<member>"), so ClickHouse rows join the Postgres rows.
 //
 // Discovery calls (list_servers / describe_server / describe_tools) land under
@@ -846,15 +847,15 @@ func (s *seeder) chfGatewayDiscovery(ctx context.Context, ch driver.Conn) error 
 }
 
 var (
-	// Weighted member pick: support 5, ops 3, Per-User OAuth Server 1, slack 1 of every 10.
-	chfGatewayMembers = [10]string{"support", "support", "support", "support", "support", "ops", "ops", "ops", "linear", "slack"}
+	// Weighted member pick: OpenAPI Server (API Key) 5, Per-User OAuth Server
+	// 3, Service Account Server 2 of every 10.
+	chfGatewayMembers = [10]string{"support", "support", "support", "support", "support", "linear", "linear", "linear", "slack", "slack"}
 	chfGatewayTools   = map[string][]string{
 		"support": {"search_logs", "get_customer", "query_db", "fetch_traces"},
-		"ops":     {"list_deploys", "check_health", "get_metrics", "fetch_traces"},
 		"linear":  {"list_notes", "add_note", "whoami"},
 		"slack":   {"whoami", "echo"},
 	}
-	chfGatewayToolsets = map[string]string{"support": "openapi-api-key", "ops": "read-only-subset"}
+	chfGatewayToolsets = map[string]string{"support": "openapi-api-key"}
 )
 
 // chfGatewayMemberCalls: member calls dispatched through the gateway. They
@@ -863,7 +864,7 @@ var (
 // the "tools:externalmcp:<remote id>:" urn the proxy emits), plus
 // gram.meta_mcp_server.id. One row serves the member's own usage, the gateway
 // Activity section, and the MCP listing marker alike, so call totals never
-// double. Ops carries most of the failures.
+// double. The Per-User OAuth Server carries most of the failures.
 func (s *seeder) chfGatewayMemberCalls(ctx context.Context, ch driver.Conn) error {
 	rows := s.chfDispatchedCalls(s.det("metamcp-1").String(), "gw", 240)
 	return s.chfInsertTelemetry(ctx, ch, "gateway member call telemetry", rows)
@@ -885,8 +886,6 @@ func (s *seeder) gatewayMemberServer(mkey string) uuid.UUID {
 	switch mkey {
 	case "support":
 		return s.supportServer()
-	case "ops":
-		return s.opsServer()
 	default:
 		return s.det("mcpserver-" + mkey)
 	}
@@ -909,7 +908,7 @@ func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTeleme
 			toolURNStr = toolURN(tool)
 		}
 		status := 200
-		if (mkey == "ops" && hash64(salt+"err", n)%5 == 0) || hash64(salt+"bg", n)%40 == 0 {
+		if (mkey == "linear" && hash64(salt+"err", n)%5 == 0) || hash64(salt+"bg", n)%40 == 0 {
 			status = 500
 		}
 		// Gateway endpoints see more kinds of client than a hosted server

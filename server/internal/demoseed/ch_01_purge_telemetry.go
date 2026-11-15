@@ -489,10 +489,10 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 					attrs += `,"gram.auth_client.type":"static_credential","gram.auth_client.id":"` + s.det("auth-client-github-token").String() + `"`
 				}
 			}
-			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "read-only-subset", "openapi-api-key") + `"`
+			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "server-specific-sign-in", "openapi-api-key") + `"`
 			// The serving wrapper's id; every seventh chat models calls recorded before stamping.
 			if i%7 != 0 {
-				attrs += `,"gram.mcp_server.id":"` + chIf(i%5 == 0, s.opsServer().String(), s.toolset1().String()) + `"`
+				attrs += `,"gram.mcp_server.id":"` + chIf(i%5 == 0, s.signInServer().String(), s.toolset1().String()) + `"`
 			}
 			attrs += `,"http.response.status_code":` + chIf(failed, "500", "200") +
 				`,"gram.outcome":"` + chIf(failed || toolError, "error", "ok") + `"` +

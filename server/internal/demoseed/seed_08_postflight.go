@@ -166,7 +166,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
-			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),
+			fail:  postflightMustEqual(5, "expected 5 auth client associations, found %d"),
 		},
 		{
 			what:  "setup tasks",
@@ -451,7 +451,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway members",
 			count: byProject(s.q.PostflightCountGatewayMembers),
-			fail:  postflightMustEqual(6, "expected 6 gateway members, found %d"),
+			fail:  postflightMustEqual(5, "expected 5 gateway members, found %d"),
 		},
 		{
 			what:  "removed gateway members",
@@ -471,7 +471,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "canonical wrappers",
 			count: byProject(s.q.PostflightCountCanonicalWrappers),
-			fail:  postflightMustEqual(4, "expected 4 canonical hosted MCP servers (support, ops, partner, discovery), found %d"),
+			fail:  postflightMustEqual(3, "expected 3 canonical hosted MCP servers (support, partner, discovery), found %d"),
 		},
 		{
 			what:  "gateway endpoints",

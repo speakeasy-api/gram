@@ -136,7 +136,7 @@ needs and the shared demo org must never have:
   Playground's MCP App: a Speakeasy Function zipped in-memory from
   `server/internal/demoseed/mcpapp/` and hung off the seeded deployment, so the
   demo org never gets a functions deployment production would have to run.
-- **Working upstream servers.** The seed has eleven MCP servers: ten named
+- **Working upstream servers.** The seed has ten MCP servers: nine named
   for the configuration they test, plus Linear, a real vendor. In the local
   org each one works right after `mise run seed`. The stack starts a throwaway MCP fixture server
   (`mcp-fixture/`, pitchfork daemon `mcp-fixture`, `GRAM_MCP_FIXTURE_URL`): an
@@ -149,19 +149,18 @@ needs and the shared demo org must never have:
   `fixtureauth` and are checked in on purpose. `local_mcp_fixture.go` points
   the local org at it:
 
-  | Server                             | Tests                                                                                                | Locally                                                                                                      |
-  | ---------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-  | OpenAPI Server (API Key)           | A server generated from an OpenAPI document, reached with a Speakeasy API key                        | Calls the fixture's API stub (`ACME_SERVER_URL` system environment)                                          |
-  | Read-Only Tool Subset              | A second toolset over the same API with only read-only tools; gateway membership, killswitch history | Same API stub                                                                                                |
-  | Server-Specific Sign-In            | A hosted server with its own Speakeasy sign-in                                                       | Same API stub                                                                                                |
-  | External OAuth Server              | Callers bring a token from the customer's own OAuth server                                           | Its authorization server metadata is the fixture's                                                           |
-  | Per-User OAuth Server              | Each person signs in upstream: expiry, refresh, scope pins, agent connections                        | `/mcp/oauth`, through a client ID metadata document client; seeded sign-ins hold real fixture tokens         |
-  | Service Account Server             | One static shared credential for every caller                                                        | `/mcp/shared` with the checked-in shared token                                                               |
-  | Pass-Through Token Server          | Each caller's own token, forwarded upstream                                                          | `/mcp/own-token`; the caller's `X-Upstream-Token` header is forwarded (create one at `/tokens`)              |
-  | Auto-Configured OAuth Server       | An admin sets up sign-in through discovery and client registration                                   | `/dcr/mcp/auto`, whose authorization server takes only dynamic registration: Auto-Configure registers by DCR |
-  | Tunnelled Private Server           | A server on a private network, reached through a tunnel                                              | The fixture's tunnel agent connects with `fixtureauth.TunnelKey` and serves `/mcp/open`                      |
-  | Enterprise Sign-In (ID-JAG) Server | Sign-in through the company identity provider, exchanged for an ID-JAG                               | `/mcp/ema`, through the dev-idp (below)                                                                      |
-  | Linear                             | A real vendor's MCP server; each person signs in to their own Linear account                         | `https://mcp.linear.app/mcp`, with a client the seed registers at Linear (below)                             |
+  | Server                             | Tests                                                                         | Locally                                                                                                      |
+  | ---------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+  | OpenAPI Server (API Key)           | A server generated from an OpenAPI document, reached with a Speakeasy API key | Calls the fixture's API stub (`ACME_SERVER_URL` system environment)                                          |
+  | Server-Specific Sign-In            | A hosted server with its own Speakeasy sign-in                                | Same API stub                                                                                                |
+  | External OAuth Server              | Callers bring a token from the customer's own OAuth server                    | Its authorization server metadata is the fixture's                                                           |
+  | Per-User OAuth Server              | Each person signs in upstream: expiry, refresh, scope pins, agent connections | `/mcp/oauth`, through a client ID metadata document client; seeded sign-ins hold real fixture tokens         |
+  | Service Account Server             | One static shared credential for every caller                                 | `/mcp/shared` with the checked-in shared token                                                               |
+  | Pass-Through Token Server          | Each caller's own token, forwarded upstream                                   | `/mcp/own-token`; the caller's `X-Upstream-Token` header is forwarded (create one at `/tokens`)              |
+  | Auto-Configured OAuth Server       | An admin sets up sign-in through discovery and client registration            | `/dcr/mcp/auto`, whose authorization server takes only dynamic registration: Auto-Configure registers by DCR |
+  | Tunnelled Private Server           | A server on a private network, reached through a tunnel                       | The fixture's tunnel agent connects with `fixtureauth.TunnelKey` and serves `/mcp/open`                      |
+  | Enterprise Sign-In (ID-JAG) Server | Sign-in through the company identity provider, exchanged for an ID-JAG        | `/mcp/ema`, through the dev-idp (below)                                                                      |
+  | Linear                             | A real vendor's MCP server; each person signs in to their own Linear account  | `https://mcp.linear.app/mcp`, with a client the seed registers at Linear (below)                             |
 
   The Enterprise Sign-In (ID-JAG) Server is wired by `local_ema.go`. The
   dev-idp plays the company identity provider: the seed creates its EMA app,
@@ -175,16 +174,19 @@ needs and the shared demo org must never have:
   (`GRAM_IDP_CLIENT_ID`) serves all three legs, with a checked-in local
   secret. A dev-idp that cannot be reached leaves the server display-only.
 
-  Linear is wired by `local_linear.go`. Linear supports client ID metadata
-  documents, but it fetches the document from Speakeasy and cannot reach
-  localhost, so the seed registers a public client at Linear's `/register`
-  (as an admin's Auto-Configure would) and records the provider, client and
-  links. The client id is cached in `GRAM_DEMOSEED_CACHE_DIR`
-  (`local/cache/demoseed-linear-client.json`, gitignored) per callback URL, so
-  reseeding reuses it. Signing in needs your own Linear account, and the tools
-  return your real Linear data: mask it in any recording. Offline, the seed
-  warns and leaves Linear for an admin to set up. The public demo org has no
-  Linear client: an admin there sets up its sign-in from the server's page.
+  Linear (`local_linear.go`) is set up in every org as an admin's
+  Auto-Configure would: Linear's authorization server, a client ID metadata
+  document client served at the deployment's own URL (`GRAM_SERVER_URL`, which
+  the prod CronJob sets), and the server's links to both. Linear fetches the
+  document when someone signs in, so in the public demo org each visitor signs
+  in to their own Linear account. Locally Linear cannot reach the document on
+  localhost, so the seed registers a public client at Linear's `/register` and
+  puts it in that client's place. The client id is cached in
+  `GRAM_DEMOSEED_CACHE_DIR` (`local/cache/demoseed-linear-client.json`,
+  gitignored) per callback URL, so reseeding reuses it. Signing in needs your
+  own Linear account, and the tools return your real Linear data: mask it in
+  any recording. Offline, the local seed warns and keeps the metadata document
+  client, which cannot sign in locally.
 
   The shared seed uses the placeholder host `mcp-fixture.example.com`; the
   public demo org keeps those display-only values because prod cannot reach

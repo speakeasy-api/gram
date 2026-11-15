@@ -102,7 +102,7 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		u := demoUsers[i%6]
 		subject := "OpenAPI Server (API Key)"
 		if i%2 == 0 {
-			subject = "Read-Only Tool Subset"
+			subject = "Server-Specific Sign-In"
 		}
 		if err := s.q.ActivityInsertProjectAuditLog(ctx, repo.ActivityInsertProjectAuditLogParams{
 			ID:                 s.det("audit-" + strconv.Itoa(i)),

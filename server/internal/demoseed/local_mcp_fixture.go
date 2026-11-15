@@ -105,7 +105,7 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 	}
 
 	spec := LocalSpec()
-	s := &seeder{spec: spec, q: repo.New(tx), logger: logger, enc: opts.Encryption, assistantIssuer: "", now: time.Now(), signalSequences: nil}
+	s := &seeder{spec: spec, q: repo.New(tx), logger: logger, enc: opts.Encryption, assistantIssuer: "", serverURL: opts.ServerURL, now: time.Now(), signalSequences: nil}
 	q := s.q
 	org := spec.OrgID
 	proj := s.projectID()
@@ -134,7 +134,7 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 	}
 	n, err = q.LocalFixtureLinkToolsetEnvironments(ctx, repo.LocalFixtureLinkToolsetEnvironmentsParams{
 		EnvironmentID: envID, ProjectID: proj,
-		ToolsetIds: []uuid.UUID{s.toolset1(), s.toolset2(), s.toolset3(), s.toolset4()},
+		ToolsetIds: []uuid.UUID{s.toolset1(), s.toolset3(), s.toolset4()},
 	})
 	if err := expect("link toolset environments", n, err); err != nil {
 		return err

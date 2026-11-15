@@ -121,7 +121,6 @@ func (s *seeder) seedDeploymentToolsets(ctx context.Context) error {
 		Toolset1:              s.toolset1(),
 		OrganizationID:        s.orgID(),
 		ProjectID:             proj,
-		Toolset2:              s.toolset2(),
 		Toolset3:              s.toolset3(),
 		Toolset4:              s.toolset4(),
 		ExternalOauthServerID: externalOAuthID,
@@ -139,8 +138,6 @@ func (s *seeder) seedDeploymentToolsets(ctx context.Context) error {
 	if err := s.q.DeployInsertToolsetVersions(ctx, repo.DeployInsertToolsetVersionsParams{
 		Toolset1:     s.toolset1(),
 		Toolset1Urns: urns(0, 1, 2, 3, 4, 5, 6, 7),
-		Toolset2:     s.toolset2(),
-		Toolset2Urns: urns(0, 1, 4, 6, 7),
 		Toolset3:     s.toolset3(),
 		Toolset3Urns: urns(0, 2, 3),
 		Toolset4:     s.toolset4(),

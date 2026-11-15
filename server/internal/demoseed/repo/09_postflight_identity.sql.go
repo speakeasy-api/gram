@@ -894,7 +894,7 @@ WHERE project_id = $1::uuid AND deleted IS FALSE
 `
 
 // The Per-User OAuth Server's remote identity provider, the identity chaining example, Jamf
-// Pro, and the Enterprise Sign-In (ID-JAG) Server's authorization server.
+// Pro, the Enterprise Sign-In (ID-JAG) Server's authorization server, and Linear.
 func (q *Queries) PostflightIDProjectRemoteSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectRemoteSessionIssuers, projectID)
 	var count int64

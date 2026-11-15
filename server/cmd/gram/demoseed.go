@@ -103,7 +103,7 @@ func newDemoSeedCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:    "server-url",
-				Usage:   "Speakeasy's own URL, which the local MCP fixture redirects sign-ins back to",
+				Usage:   "Speakeasy's own URL: the seeded Linear client's metadata document is served there, and the local MCP fixture redirects sign-ins back to it",
 				EnvVars: []string{"GRAM_SERVER_URL"},
 			},
 			&cli.StringFlag{
@@ -174,7 +174,7 @@ func newDemoSeedCommand() *cli.Command {
 			}
 
 			if !c.Bool("local") {
-				if err := demoseed.Run(ctx, logger, db, ch, blob, enc, issuerURL, demoseed.DefaultSpec()); err != nil {
+				if err := demoseed.Run(ctx, logger, db, ch, blob, enc, issuerURL, c.String("server-url"), demoseed.DefaultSpec()); err != nil {
 					return fmt.Errorf("apply seed: %w", err)
 				}
 				return nil
@@ -190,7 +190,7 @@ func newDemoSeedCommand() *cli.Command {
 			// one that lifts the BookDemo gate, so a demo-org failure
 			// (ClickHouse is the flaky half locally) leaves a usable
 			// environment behind.
-			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, issuerURL, demoseed.LocalSpec()); err != nil {
+			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, issuerURL, c.String("server-url"), demoseed.LocalSpec()); err != nil {
 				return fmt.Errorf("apply seed: %w", err)
 			}
 
@@ -235,7 +235,7 @@ func newDemoSeedCommand() *cli.Command {
 				return fmt.Errorf("apply local fixtures: %w", err)
 			}
 
-			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, issuerURL, demoseed.DefaultSpec()); err != nil {
+			if err := demoseed.Run(ctx, logger, db, ch, blob, enc, issuerURL, c.String("server-url"), demoseed.DefaultSpec()); err != nil {
 				return fmt.Errorf("apply demo org seed: %w", err)
 			}
 

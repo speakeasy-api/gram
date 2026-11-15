@@ -75,7 +75,6 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
 SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
 FROM (VALUES
   (@toolset_1::uuid, @support_mcp_slug::text, NULL::uuid, 'private'),
-  (@toolset_2::uuid, @ops_mcp_slug::text, NULL::uuid, 'private'),
   (@toolset_3::uuid, @partner_mcp_slug::text, @partner_issuer_id::uuid, 'private'),
   (@toolset_4::uuid, @discovery_mcp_slug::text, NULL::uuid, 'public')
 ) AS v(toolset_id, slug, user_session_issuer_id, visibility)
@@ -148,11 +147,11 @@ JOIN organization_roles r ON a.principal_urn = 'role:organization:' || r.id
 CROSS JOIN mcp_servers s
 WHERE p.organization_id = @org_id::text AND p.project_id = @project_id::uuid
   AND s.project_id = @project_id::uuid
-  -- Of the hosted toolsets' wrappers, distribute the OpenAPI Server (API Key)
-  -- and the Read-Only Tool Subset; the server-specific sign-in and external
-  -- OAuth toolsets stay out of plugins.
+  -- Of the hosted toolsets' wrappers, distribute only the OpenAPI Server
+  -- (API Key); the server-specific sign-in and external OAuth toolsets stay
+  -- out of plugins.
   AND (s.id IS DISTINCT FROM s.toolset_id
-       OR s.id IN (@support_server_id::uuid, @ops_server_id::uuid))
+       OR s.id = @support_server_id::uuid)
   AND EXISTS (
     SELECT 1 FROM principal_grants g
     WHERE g.organization_id = @org_id::text AND g.principal_urn = a.principal_urn
@@ -216,11 +215,13 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
   (@notion_endpoint_id::uuid, @project_id::uuid, NULL,
    @notion_server_id::uuid, @notion_slug::text);
 
--- Linear: the real vendor's MCP server, with its own endpoint and sign-in.
--- The shared seed holds no client or credential, so in the public demo org
--- an admin sets up its sign-in from the server's page, as with any vendor.
--- The local seed registers a client with Linear itself (local_linear.go), so
--- a developer signs in to their own Linear account right after seeding.
+-- Linear: the real vendor's MCP server, with its own endpoint and sign-in,
+-- set up as Auto-Configure would: Linear's authorization server, a client ID
+-- metadata document client Speakeasy serves at the deployment's own URL, and
+-- the server's links to them. Linear fetches the document when someone signs
+-- in, so nothing is registered ahead of time and each caller signs in to
+-- their own Linear account. Locally, where Linear cannot reach the document,
+-- the client becomes one registered by DCR (local_linear.go).
 -- name: ServersInsertLinearAppServer :exec
 WITH remote AS (
   INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
@@ -246,6 +247,46 @@ WITH remote AS (
 INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug)
 SELECT @endpoint_id::uuid, @project_id::uuid, NULL, server.id, @slug::text
 FROM server;
+
+-- Linear's authorization server, as its metadata document describes it
+-- (https://mcp.linear.app/.well-known/oauth-authorization-server).
+-- name: ServersInsertLinearAppIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
+   token_endpoint, registration_endpoint, revocation_endpoint,
+   scopes_supported, grant_types_supported, response_types_supported,
+   token_endpoint_auth_methods_supported, code_challenge_methods_supported,
+   client_id_metadata_document_supported, name, metadata_fetched_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @organization_id::text, 'linear',
+   'https://mcp.linear.app', 'https://mcp.linear.app/authorize',
+   'https://mcp.linear.app/token', 'https://mcp.linear.app/register',
+   'https://mcp.linear.app/token',
+   ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['code'], ARRAY['client_secret_basic', 'client_secret_post', 'none'],
+   ARRAY['S256'], TRUE, 'Linear', clock_timestamp());
+
+-- A client ID metadata document client: Speakeasy serves the document at
+-- client_id, on the callback origin it records.
+-- name: ServersInsertLinearAppClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_id_metadata_uri, client_id_issued_at, token_endpoint_auth_method,
+   callback_base_url)
+VALUES
+  (@id::uuid, @project_id::uuid, @organization_id::text,
+   @remote_session_issuer_id::uuid, @client_id::text, @client_id::text,
+   clock_timestamp(), 'none', @callback_base_url::text);
+
+-- name: ServersInsertLinearAppProtectedResource :exec
+INSERT INTO remote_protected_resources
+  (id, project_id, organization_id, resource_identifier, metadata_url,
+   authorization_servers, scopes_supported, metadata_fetched_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @organization_id::text,
+   'https://mcp.linear.app/mcp',
+   'https://mcp.linear.app/.well-known/oauth-protected-resource/mcp',
+   ARRAY['https://mcp.linear.app'], ARRAY['read', 'write'], clock_timestamp());
 
 -- name: ServersInsertLinearRemoteSessionIssuer :exec
 INSERT INTO remote_session_issuers
@@ -357,7 +398,7 @@ VALUES
 -- name: ServersInsertMetaMCPServer :exec
 INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
                               user_session_issuer_id) VALUES
-  (@id::uuid, @org_id::text, @project_id::uuid, 'Acme Agent Gateway',
+  (@id::uuid, @org_id::text, @project_id::uuid, 'Multi-Server Gateway',
    @user_session_issuer_id::uuid);
 
 -- sort_order is the order agents see members in list_servers.
@@ -366,12 +407,10 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order) VALUES
   (@support_member_id::uuid, @project_id::uuid,
    @meta_id::uuid, @support_server_id::uuid, 0),
-  (@ops_member_id::uuid, @project_id::uuid,
-   @meta_id::uuid, @ops_server_id::uuid, 1),
   (@linear_member_id::uuid, @project_id::uuid,
-   @meta_id::uuid, @linear_server_id::uuid, 2),
+   @meta_id::uuid, @linear_server_id::uuid, 1),
   (@slack_member_id::uuid, @project_id::uuid,
-   @meta_id::uuid, @slack_server_id::uuid, 3);
+   @meta_id::uuid, @slack_server_id::uuid, 2);
 
 -- Stored as Progressive (the column default) because the shared demo org has
 -- no code runtime; local fixtures switch it to code_mode (RunLocalFixtures).
@@ -386,8 +425,8 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order) VALUES
   (@support_member_id::uuid, @project_id::uuid,
    @meta_id::uuid, @support_server_id::uuid, 0),
-  (@ops_member_id::uuid, @project_id::uuid,
-   @meta_id::uuid, @ops_server_id::uuid, 1);
+  (@sign_in_member_id::uuid, @project_id::uuid,
+   @meta_id::uuid, @sign_in_server_id::uuid, 1);
 
 -- name: ServersInsertCodeGatewayEndpoint :exec
 INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
@@ -400,7 +439,7 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
 INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order, deleted_at) VALUES
   (@id::uuid, @project_id::uuid,
-   @meta_id::uuid, @github_server_id::uuid, 4,
+   @meta_id::uuid, @github_server_id::uuid, 3,
    now() - interval '3 days');
 
 -- Endpoint slugs on the platform domain are globally unique and org-slug
@@ -780,12 +819,12 @@ INSERT INTO killswitch_prescription_version_resources
 VALUES
   (@org_id::text, @active_selected_id::uuid, 1, (@support_server_id::uuid)::text),
   (@org_id::text, @changed_id::uuid, 1, (@support_server_id::uuid)::text),
-  (@org_id::text, @changed_id::uuid, 1, (@ops_server_id::uuid)::text),
+  (@org_id::text, @changed_id::uuid, 1, (@sign_in_server_id::uuid)::text),
   (@org_id::text, @changed_id::uuid, 1, (@linear_server_id::uuid)::text),
   (@org_id::text, @changed_id::uuid, 2, (@support_server_id::uuid)::text),
   (@org_id::text, @lifted_id::uuid, 1, (@slack_server_id::uuid)::text),
   (@org_id::text, @lifted_id::uuid, 2, (@slack_server_id::uuid)::text),
-  (@org_id::text, @expired_id::uuid, 1, (@ops_server_id::uuid)::text);
+  (@org_id::text, @expired_id::uuid, 1, (@sign_in_server_id::uuid)::text);
 
 -- name: ServersInsertKillswitchExpiryEvent :exec
 INSERT INTO killswitch_expiry_events
