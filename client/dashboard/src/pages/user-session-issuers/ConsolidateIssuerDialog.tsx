@@ -1,5 +1,10 @@
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { Dialog } from "@/components/ui/Dialog";
 import { Label } from "@/components/ui/Label";
 import {
@@ -13,14 +18,25 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import type { OrganizationUserSessionIssuerMigratePreflight } from "@gram/client/models/components/organizationusersessionissuermigratepreflight.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import type { UserSessionIssuerMigrationClient } from "@gram/client/models/components/usersessionissuermigrationclient.js";
+import type { UserSessionIssuerMigrationServerImpact } from "@gram/client/models/components/usersessionissuermigrationserverimpact.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useMigrateOrganizationUserSessionIssuerMutation } from "@gram/client/react-query/migrateOrganizationUserSessionIssuer.js";
-import { useOrganizationUserSessionIssuerMigratePreflight } from "@gram/client/react-query/organizationUserSessionIssuerMigratePreflight.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { buildOrganizationUserSessionIssuerMigratePreflightQuery } from "@gram/client/react-query/organizationUserSessionIssuerMigratePreflight.core.js";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { invalidateIssuers } from "./invalidateIssuers";
-import { changesIssuerUrl, describeMismatch } from "./issuerDisplay";
+import {
+  changesIssuerUrl,
+  describeMismatch,
+  describeServerImpact,
+  impactServerName,
+  providersLabel,
+  serverImpactRemedy,
+} from "./issuerDisplay";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 /**
@@ -53,11 +69,30 @@ export function ConsolidateIssuerDialog({
   const queryClient = useQueryClient();
   const [targetId, setTargetId] = useState("");
 
-  const preflight = useOrganizationUserSessionIssuerMigratePreflight(
-    { sourceId: source.id, targetId },
-    undefined,
-    { enabled: targetId !== "", throwOnError: false, retry: false },
-  );
+  // The preview runs the consolidation and rolls it back under the
+  // consolidation's locks, so it refreshes only when asked: on a new target,
+  // a retry, "Check again", or a refused confirmation. It is never kept once
+  // the dialog closes, so reopening it after fixing a server checks afresh.
+  const gramClient = useGramContext();
+  const preflightQuery =
+    buildOrganizationUserSessionIssuerMigratePreflightQuery(gramClient, {
+      getUserSessionIssuerMigratePreflightRequestBody: {
+        sourceId: source.id,
+        targetId,
+      },
+    });
+  const preflight = useQuery({
+    ...preflightQuery,
+    // The generated key leaves out the request body, so it would serve one
+    // target's preview for another; name the pair being previewed.
+    queryKey: [...preflightQuery.queryKey, source.id, targetId],
+    enabled: targetId !== "",
+    throwOnError: false,
+    retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    gcTime: 0,
+  });
 
   const migrate = useMigrateOrganizationUserSessionIssuerMutation({
     onSuccess: async (result) => {
@@ -148,7 +183,12 @@ export function ConsolidateIssuerDialog({
             preflight={current}
             isLoading={preflight.isFetching}
             hasFailed={preflight.isError}
+            error={preflight.error}
             onRetry={() => void preflight.refetch()}
+            onCheckAgain={() => {
+              migrate.reset();
+              void preflight.refetch();
+            }}
           />
         )}
 
@@ -179,7 +219,8 @@ export function ConsolidateIssuerDialog({
                   migrateIssuerRequestBody2: {
                     sourceId: source.id,
                     targetId,
-                    // Confirms the warnings shown above, exactly.
+                    // Confirms the warnings and server changes shown above,
+                    // exactly.
                     confirmedWarningsFingerprint:
                       current.warningsFingerprint || undefined,
                   },
@@ -229,19 +270,27 @@ function ConsolidateImpact({
   preflight,
   isLoading,
   hasFailed,
+  error,
   onRetry,
+  onCheckAgain,
 }: {
   preflight: OrganizationUserSessionIssuerMigratePreflight | undefined;
   isLoading: boolean;
   hasFailed: boolean;
+  /** Why the preview failed, when known: a 409 means another writer holds its locks. */
+  error: unknown;
   onRetry: () => void;
+  /** Runs the preview again, for after the admin fixed what blocks it. */
+  onCheckAgain: () => void;
 }): JSX.Element {
   if (hasFailed && !isLoading) {
     return (
       <Alert variant="error" dismissible={false}>
         <Stack direction="horizontal" align="center" gap={3}>
           <span className="text-sm">
-            Couldn't check what consolidating changes.
+            {error instanceof GramError && error.statusCode === 409
+              ? "Another change to these authorization servers is in progress. Try again in a moment."
+              : "Couldn't check what consolidating changes."}
           </span>
           <Button variant="secondary" size="sm" onClick={onRetry}>
             <Button.Text>Retry</Button.Text>
@@ -268,21 +317,46 @@ function ConsolidateImpact({
       `${plural(preflight.principalBindingConflictCount, "person is", "people are")} linked to an identity provider account through both. Contact Speakeasy support to consolidate these.`,
     preflight.emaBindingConflictCount > 0 &&
       `The target already has ${plural(preflight.emaBindingConflictCount, "enterprise-managed authorization link", "enterprise-managed authorization links")}. Contact Speakeasy support to consolidate these.`,
+    ...preflight.serverImpacts
+      .filter((impact) => impact.impactSeverity === "blocker")
+      .map(
+        (impact) =>
+          `${impactServerName(impact)} (${impact.projectName}): ${describeServerImpact(impact)} ${serverImpactRemedy(impact)}`,
+      ),
   ].filter((blocker): blocker is string => typeof blocker === "string");
+
+  const changed = preflight.serverImpacts.filter(
+    (impact) => impact.impactSeverity === "warning",
+  );
+  const kept = preflight.serverImpacts.filter(
+    (impact) => impact.impactSeverity === "info",
+  );
+  const dropped = preflight.droppedClientLinks;
 
   return (
     <Stack gap={3}>
       <Text small muted>
         {moves(preflight)} move to the target.
+        {preflight.unscopedSessionCount > 0 &&
+          preflight.newlyReachableServerCount > 0 &&
+          ` ${plural(preflight.unscopedSessionCount, "sign-in", "sign-ins")} will also work on the target's ${plural(preflight.newlyReachableServerCount, "MCP server", "MCP servers")}.`}
       </Text>
 
       {blockers.length > 0 && (
         <Alert variant="error" dismissible={false}>
           <ul className="list-disc space-y-1 pl-4">
-            {blockers.map((blocker) => (
-              <li key={blocker}>{blocker}</li>
+            {blockers.map((blocker, index) => (
+              <li key={index}>{blocker}</li>
             ))}
           </ul>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-2"
+            onClick={onCheckAgain}
+          >
+            <Button.Text>Check again</Button.Text>
+          </Button>
         </Alert>
       )}
 
@@ -305,6 +379,115 @@ function ConsolidateImpact({
           </ul>
         </Alert>
       )}
+
+      {(changed.length > 0 || dropped.length > 0) && (
+        <Alert variant="warning" dismissible={false}>
+          {changed.length > 0 && (
+            <>
+              <p className="mb-2 text-sm">
+                These MCP servers would change which accounts people connect.
+              </p>
+              <ul className="mb-2 space-y-1">
+                {changed.map((impact) => (
+                  <li key={impact.mcpServerId} className="text-sm break-words">
+                    <span className="font-medium">
+                      {impactServerName(impact)}
+                    </span>{" "}
+                    <span className="text-muted-foreground">
+                      · {impact.projectName}
+                    </span>
+                    : {describeServerImpact(impact)}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {dropped.length > 0 && (
+            <p className="text-sm break-words">
+              {plural(dropped.length, "OAuth client", "OAuth clients")} for{" "}
+              {providersLabel(dropped)} won't move, because nothing signs in
+              through {dropped.length === 1 ? "it" : "them"} afterwards. Linked
+              accounts work again if you add{" "}
+              {dropped.length === 1 ? "it" : "them"} to the target later.
+            </p>
+          )}
+        </Alert>
+      )}
+
+      {(preflight.serverImpacts.length > 0 || dropped.length > 0) && (
+        <ConsolidateTechnicalDetails
+          impacts={preflight.serverImpacts}
+          dropped={dropped}
+        />
+      )}
+
+      {kept.length > 0 && (
+        <Text small muted>
+          {kept
+            .map(
+              (impact) => `${impactServerName(impact)} (${impact.projectName})`,
+            )
+            .join(", ")}{" "}
+          {kept.length === 1 ? "keeps its" : "keep their"} current OAuth client.
+        </Text>
+      )}
     </Stack>
+  );
+}
+
+/** One OAuth client as the technical details name it. */
+function clientLabel(client: UserSessionIssuerMigrationClient): string {
+  return `${client.clientId || "Unknown client"} (${providersLabel([client])})`;
+}
+
+/**
+ * The OAuth client IDs behind the sentences above, for an admin matching them
+ * to their provider's app registrations. Closed by default.
+ */
+function ConsolidateTechnicalDetails({
+  impacts,
+  dropped,
+}: {
+  impacts: UserSessionIssuerMigrationServerImpact[];
+  dropped: UserSessionIssuerMigrationClient[];
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs">
+        {open ? (
+          <ChevronDown className="size-3" />
+        ) : (
+          <ChevronRight className="size-3" />
+        )}
+        Technical details
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <ul className="mt-2 space-y-2 text-xs break-all">
+          {impacts.map((impact) => (
+            <li key={impact.mcpServerId}>
+              <span className="font-medium">{impactServerName(impact)}</span>{" "}
+              <span className="text-muted-foreground">
+                · {impact.projectName}
+              </span>
+              <div>
+                Now:{" "}
+                {impact.clientsBefore.map(clientLabel).join(", ") || "none"}
+              </div>
+              <div>
+                After:{" "}
+                {impact.clientsAfter.map(clientLabel).join(", ") || "none"}
+              </div>
+            </li>
+          ))}
+          {dropped.length > 0 && (
+            <li>
+              <span className="font-medium">Won't move:</span>{" "}
+              {dropped.map(clientLabel).join(", ")}
+            </li>
+          )}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

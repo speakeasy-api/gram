@@ -1,6 +1,7 @@
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { SPEAKEASY_RAINBOW } from "@/components/icon-dither";
 import { Badge } from "@/components/ui/Badge";
+import { McpKindBadge } from "./McpKindBadge";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { ArrowRight } from "lucide-react";
@@ -46,9 +47,7 @@ export function OrganizationGatewayCard({
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         <div className="flex items-center gap-2">
-          <Badge variant="neutral">
-            <Badge.Text>Gateway</Badge.Text>
-          </Badge>
+          <McpKindBadge kind="gateway" />
           {isOff && (
             <Badge variant="warning">
               <Badge.Text>Off</Badge.Text>

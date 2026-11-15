@@ -138,6 +138,8 @@ func TestAssistantRuntimeToolContract(t *testing.T) {
 	require.Contains(t, a.Description, "organization administrator")
 	require.NotContains(t, a.Description, "project:write")
 	require.Contains(t, a.Description, "not authorization")
+	require.Contains(t, a.Description, "none is incompatible")
+	require.Contains(t, a.Description, "set_assistant_reasoning_effort")
 }
 
 func TestAssistantRuntimePermissionDescription(t *testing.T) {
@@ -150,4 +152,15 @@ func TestAssistantRuntimePermissionDescription(t *testing.T) {
 	require.Contains(t, content.Text, "assistant:write")
 	require.Contains(t, content.Text, "organization administrator")
 	require.NotContains(t, content.Text, "project:write")
+}
+
+func TestAssistantRuntimeReasoningCompatibilityRefusalGuidance(t *testing.T) {
+	t.Parallel()
+	result, ok := assistantRuntimeToolResult(oops.C(oops.CodeBadRequest))
+	require.True(t, ok)
+	content, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	text := content.Text
+	require.Contains(t, text, "Kit requires reasoning effort low, medium, or high")
+	require.Contains(t, text, "change its effort first")
 }

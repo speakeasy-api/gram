@@ -2384,7 +2384,7 @@ SELECT subject_urn, access_token_encrypted, refresh_token_encrypted FROM remote_
 
 type GetDeletedRemoteSessionCredentialsFixtureRow struct {
 	SubjectUrn            urn.SessionSubject
-	AccessTokenEncrypted  string
+	AccessTokenEncrypted  pgtype.Text
 	RefreshTokenEncrypted pgtype.Text
 }
 
@@ -4708,7 +4708,7 @@ ORDER BY id
 
 type ListRemoteSessionTokensFixtureRow struct {
 	ID                    uuid.UUID
-	AccessTokenEncrypted  string
+	AccessTokenEncrypted  pgtype.Text
 	RefreshTokenEncrypted string
 	AutoRefresh           bool
 }

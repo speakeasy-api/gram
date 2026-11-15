@@ -6,6 +6,7 @@ import type {
   OrgRouteStructure,
   RouteStructure,
 } from "./routes";
+import { SetupTaskRedirect, SetupWizard } from "./route-pages.lazy";
 import Channels from "./pages/channels/Channels";
 import AssistantPage from "./pages/assistants/Assistant";
 import AssistantsIndex, { AssistantsRoot } from "./pages/assistants/Assistants";
@@ -171,11 +172,6 @@ import {
   KillswitchIndexRedirect,
   KillswitchRecordRedirect,
 } from "./pages/killswitch/KillswitchesRoot";
-
-const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
-const SetupTaskRedirect = React.lazy(
-  () => import("./pages/setup/SetupTaskRedirect"),
-);
 
 /**
  * The page each route renders. Route paths, titles and the `useRoutes` /

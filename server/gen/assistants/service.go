@@ -107,6 +107,8 @@ type CreateAssistantPayload struct {
 	Name string
 	// The model identifier used by the assistant.
 	Model string
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string
 	// The system instructions for the assistant.
 	Instructions string
 	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
@@ -320,6 +322,8 @@ type UpdateAssistantPayload struct {
 	Name *string
 	// The model identifier used by the assistant.
 	Model *string
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string
 	// The system instructions for the assistant.
 	Instructions *string
 	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,

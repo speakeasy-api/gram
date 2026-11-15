@@ -111,12 +111,13 @@ it("finds a cached registration and opens its canonical gateway with private mat
     useGatewayConnectionCandidates({ enabled: true, inProject: true }),
   );
   expect(result.current.map((candidate) => candidate.title)).toEqual([
+    "Organization Gateway",
     "Organization Gateway Connections",
     "Organization Gateway Activity",
     "Example gateway",
     "Example desktop",
   ]);
-  const registration = result.current[3]!;
+  const registration = result.current[4]!;
   expect(registration.keywords).toContain("public-client");
   void registration.run("open");
   expect(state.navigate).toHaveBeenCalledWith(
@@ -124,9 +125,13 @@ it("finds a cached registration and opens its canonical gateway with private mat
   );
   void result.current[0]!.run("open");
   expect(state.navigate).toHaveBeenCalledWith(
-    "/acme/projects/project-one/mcp/organization-gateway?tab=connections",
+    "/acme/projects/project-one/mcp/organization-gateway",
   );
   void result.current[1]!.run("open");
+  expect(state.navigate).toHaveBeenCalledWith(
+    "/acme/projects/project-one/mcp/organization-gateway?tab=connections",
+  );
+  void result.current[2]!.run("open");
   expect(state.navigate).toHaveBeenCalledWith(
     "/acme/projects/project-one/mcp/organization-gateway?tab=activity",
   );
@@ -184,7 +189,7 @@ it("keys both inventories by organization and project and offers org navigation 
     ],
     staleTime: 30_000,
   });
-  void result.current[0]!.run("open");
+  void result.current[1]!.run("open");
   expect(state.navigate).toHaveBeenLastCalledWith(
     "/acme/projects/project-one/mcp/organization-gateway?tab=connections",
   );
@@ -192,6 +197,7 @@ it("keys both inventories by organization and project and offers org navigation 
   state.project = "project-two";
   rerender({ inProject: false });
   expect(result.current.map((c) => c.title)).toEqual([
+    "Organization Gateway",
     "Organization Gateway Connections",
     "Organization Gateway Activity",
   ]);

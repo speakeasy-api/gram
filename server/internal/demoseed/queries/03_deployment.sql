@@ -209,10 +209,10 @@ VALUES
 
 -- name: DeployInsertAssistant :exec
 INSERT INTO assistants
-  (id, organization_id, project_id, created_by_user_id, name, model, instructions)
+  (id, organization_id, project_id, created_by_user_id, name, model, reasoning_effort, instructions)
 VALUES
   (@id, @organization_id::text, @project_id::uuid, @created_by_user_id::text,
-   @name, 'anthropic/claude-sonnet-4.6', 'Help summarize project activity.');
+   @name, 'anthropic/claude-sonnet-4.6', 'medium', 'Help summarize project activity.');
 
 -- name: DeployInsertAgent :exec
 INSERT INTO agents (id, organization_id, project_id, owner_user_id, name)

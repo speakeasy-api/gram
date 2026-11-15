@@ -89,7 +89,8 @@ func TestLocalFixturesPointServersAtMCPFixture(t *testing.T) {
 		require.NotEmpty(t, sessions, "the seed must leave live sign-ins on the OAuth server")
 		for _, sess := range sessions {
 			require.True(t, sess.AutoRefresh)
-			access, err := enc.Decrypt(sess.AccessTokenEncrypted)
+			require.True(t, sess.AccessTokenEncrypted.Valid, "session %s must hold an access token", sess.ID)
+			access, err := enc.Decrypt(sess.AccessTokenEncrypted.String)
 			require.NoError(t, err)
 			claims, err := fixtureauth.Parse(access, fixtureauth.KindAccess)
 			require.NoError(t, err, "session %s must hold a fixture access token", sess.ID)

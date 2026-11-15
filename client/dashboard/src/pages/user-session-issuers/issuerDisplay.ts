@@ -1,5 +1,7 @@
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import type { UserSessionIssuerFieldMismatch } from "@gram/client/models/components/usersessionissuerfieldmismatch.js";
+import type { UserSessionIssuerMigrationClient } from "@gram/client/models/components/usersessionissuermigrationclient.js";
+import type { UserSessionIssuerMigrationServerImpact } from "@gram/client/models/components/usersessionissuermigrationserverimpact.js";
 
 /**
  * How the authorization server's MCP servers sign clients in. A shared one
@@ -151,4 +153,103 @@ export function changesIssuerUrl(
   warnings: UserSessionIssuerFieldMismatch[],
 ): boolean {
   return warnings.some((warning) => warning.field === "issuer_url");
+}
+
+/**
+ * The provider an OAuth client signs people in with, as its host: an issuer
+ * URL reads as a site the user recognizes. Falls back to the raw value, or
+ * "an unknown provider" when there is none.
+ */
+export function providerLabel(
+  client: Pick<UserSessionIssuerMigrationClient, "providerIssuer">,
+): string {
+  if (!client.providerIssuer) return "an unknown provider";
+  try {
+    return new URL(client.providerIssuer).host;
+  } catch {
+    return client.providerIssuer;
+  }
+}
+
+/** The distinct providers of some OAuth clients, joined for a sentence. */
+export function providersLabel(
+  clients: Pick<UserSessionIssuerMigrationClient, "providerIssuer">[],
+): string {
+  const labels = [...new Set(clients.map(providerLabel))];
+  if (labels.length <= 1) return labels[0] ?? "no provider";
+  return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+}
+
+/** An MCP server in a consolidation preview, by name, then slug. */
+export function impactServerName(
+  impact: Pick<
+    UserSessionIssuerMigrationServerImpact,
+    "mcpServerName" | "mcpServerSlug"
+  >,
+): string {
+  return impact.mcpServerName || impact.mcpServerSlug || "Unnamed MCP server";
+}
+
+/**
+ * What consolidating does to one MCP server's OAuth clients, in one sentence.
+ * The most serious reason decides it: a blocker over a change, a change over
+ * a pinned client.
+ */
+export function describeServerImpact(
+  impact: UserSessionIssuerMigrationServerImpact,
+): string {
+  const before = providersLabel(impact.clientsBefore);
+  const after = providersLabel(impact.clientsAfter);
+  const reasons = new Set<string>(impact.reasons);
+  if (reasons.has("provider_not_in_metadata")) {
+    // The offending clients are the ones it gains; it already used the rest.
+    const before = new Set(
+      impact.clientsBefore.map((client) => client.remoteSessionClientId),
+    );
+    const gained = impact.clientsAfter.filter(
+      (client) => !before.has(client.remoteSessionClientId),
+    );
+    return `Would use an OAuth client for ${providersLabel(gained.length > 0 ? gained : impact.clientsAfter)}, which its upstream doesn't accept.`;
+  }
+  if (reasons.has("multiple_clients_for_provider")) {
+    // Name only the providers that would have several clients.
+    const counts = new Map<string, number>();
+    for (const client of impact.clientsAfter) {
+      const label = providerLabel(client);
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    const duplicated = impact.clientsAfter.filter(
+      (client) => (counts.get(providerLabel(client)) ?? 0) > 1,
+    );
+    const named = duplicated.length > 0 ? providersLabel(duplicated) : after;
+    return `Would use more than one OAuth client for ${named}.`;
+  }
+  if (reasons.has("gains_client")) {
+    return `Would start asking people to connect ${after}.`;
+  }
+  if (reasons.has("loses_client")) {
+    return `Would stop asking people to connect ${before}.`;
+  }
+  if (reasons.has("changes_provider")) {
+    return `Would switch from ${before} to ${after}.`;
+  }
+  if (reasons.has("changes_clients")) {
+    return `Would use a different OAuth client for ${after}.`;
+  }
+  return "Keeps its current OAuth client.";
+}
+
+/** What an admin does to clear a server's blocker before consolidating. */
+export function serverImpactRemedy(
+  impact: Pick<UserSessionIssuerMigrationServerImpact, "hosted" | "reasons">,
+): string {
+  // A hosted server uses every OAuth client its authorization server lists,
+  // so only removing one from that list changes what it uses.
+  if (impact.hosted) {
+    return "Remove the extra OAuth client from one of these authorization servers, then try again.";
+  }
+  if (impact.reasons.includes("multiple_clients_for_provider")) {
+    return "Keep one OAuth client for that provider in its authentication settings, then try again.";
+  }
+  return "Choose an OAuth client its upstream accepts in its authentication settings, then try again.";
 }

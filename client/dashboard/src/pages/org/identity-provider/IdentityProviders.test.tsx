@@ -67,10 +67,7 @@ vi.mock("./services/EmaServiceWorkspace", () => ({
     <div>Service page: {vendorIssuer}</div>
   ),
 }));
-function show(
-  query = "",
-  props = { showExternal: true, showSpeakeasy: false },
-) {
+function show(query = "", props = { showSpeakeasy: false }) {
   render(
     <MemoryRouter
       initialEntries={[`/example/identity?tab=identity-providers${query}`]}
@@ -198,22 +195,6 @@ describe("Identity providers", () => {
         .getAttribute("href"),
     ).toBe("/example/identity?tab=identity-providers&provider=okta&view=setup");
   });
-  it("offers only the service when the named provider is hidden by its rollout", () => {
-    show("&provider=okta&service=https%3A%2F%2Flinear.example.com", {
-      showExternal: false,
-      showSpeakeasy: true,
-    });
-    expect(
-      screen.queryByRole("link", { name: "Open the identity provider" }),
-    ).toBeNull();
-    expect(
-      screen
-        .getByRole("link", { name: "Open the service" })
-        .getAttribute("href"),
-    ).toBe(
-      "/example/identity?tab=identity-providers&service=https%3A%2F%2Flinear.example.com",
-    );
-  });
   it("shows the provider list for unknown providers", () => {
     show("&provider=unsupported");
     expect(
@@ -236,24 +217,15 @@ describe("Identity providers", () => {
 
 describe("provider cards", () => {
   it("lists Speakeasy beside external providers", () => {
-    show("", { showExternal: true, showSpeakeasy: true });
+    show("", { showSpeakeasy: true });
     expect(
       screen.getByRole("article", { name: "Speakeasy identity provider" }),
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: /Okta/ })).toBeTruthy();
   });
 
-  it("lists only Speakeasy without the external-provider rollout", () => {
-    show("&provider=okta", { showExternal: false, showSpeakeasy: true });
-    expect(
-      screen.getByRole("article", { name: "Speakeasy identity provider" }),
-    ).toBeTruthy();
-    expect(screen.queryByText(/Okta content/)).toBeNull();
-    expect(screen.queryByRole("link", { name: /Okta/ })).toBeNull();
-  });
-
   it("opens the Speakeasy page from its provider link", () => {
-    show("", { showExternal: false, showSpeakeasy: true });
+    show("", { showSpeakeasy: true });
     fireEvent.click(screen.getByRole("link", { name: "Set up Speakeasy" }));
     expect(screen.getByText("Speakeasy page")).toBeTruthy();
     expect(
@@ -262,7 +234,7 @@ describe("provider cards", () => {
   });
 
   it("does not open the Speakeasy page when it is not offered", () => {
-    show("&provider=speakeasy", { showExternal: true, showSpeakeasy: false });
+    show("&provider=speakeasy", { showSpeakeasy: false });
     expect(screen.queryByText("Speakeasy page")).toBeNull();
     expect(
       screen.getByRole("heading", { name: "Identity providers" }),

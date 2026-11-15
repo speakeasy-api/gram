@@ -1,0 +1,296 @@
+# Finding and reading MCP servers that are already set up.
+- id: mcp-find-linear-anywhere
+  prompt: Do we already have a Linear MCP server set up somewhere?
+  expect: [find_mcp]
+  args:
+    query: linear
+- id: mcp-find-payments-servers
+  prompt: what mcp servers are in the payments project
+  expect: [find_mcp]
+- id: mcp-get-github-summary
+  prompt: Give me a rundown of the GitHub server in Default, including which tools it exposes.
+  expect: [get_mcp]
+  allow: [find_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
+
+# Addresses, network access, ingress and custom domains.
+- id: mcp-connection-settings-github
+  prompt: What endpoints and network mode does the GitHub server have right now? Just looking, don't change anything.
+  expect: [get_mcp_connection_settings]
+  allow: [find_mcp, get_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    target_id: 5f1e2a00-0000-4000-8000-000000000011
+- id: mcp-connection-settings-github-auth
+  prompt: Has upstream sign-in for the GitHub server actually been finished, or is it still half set up? Which auth clients does it offer?
+  expect: [get_mcp_connection_settings]
+  allow: [find_mcp, get_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    target_id: 5f1e2a00-0000-4000-8000-000000000011
+- id: mcp-set-address-linear-slug
+  prompt: Change the Linear server's URL path so it ends in linear-tools instead.
+  expect: [set_mcp_address]
+  allow: [find_mcp, get_mcp, get_mcp_connection_settings]
+  args:
+    target_id: 5f1e2a00-0000-4000-8000-000000000012
+    slug: linear-tools
+- id: mcp-network-private-billing
+  prompt: Lock the Billing API server down so it can only be reached over our private network, nothing public.
+  expect: [set_mcp_network_access]
+  allow: [find_mcp, get_mcp, get_mcp_connection_settings, get_network_ingress]
+  args:
+    target_id: 5f1e2a00-0000-4000-8000-000000000021
+    mode: private_only
+- id: mcp-network-ingress-health
+  prompt: Is our Tailscale ingress up and healthy?
+  expect: [get_network_ingress]
+- id: mcp-network-ingress-before-private
+  prompt: We'd like some servers reachable only over our tailnet eventually. Is the org even set up for private access yet, and what's the next step?
+  expect: [get_network_ingress]
+- id: mcp-custom-domain-status
+  prompt: DNS looks right on our side, but is our custom domain actually verified and live in Speakeasy yet?
+  expect: [get_custom_domain_status]
+
+# Tools a project produces, and changing which tools a server exposes.
+- id: mcp-project-tools-new-function
+  prompt: I just pushed a new function to the Payments project. Has it produced any tools yet?
+  expect: [list_project_tools]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+- id: mcp-add-tool-billing
+  prompt: Put the refund_invoice tool from Payments onto the Billing API server. Leave its other tools alone.
+  expect: [add_tools_to_mcp]
+  allow: [find_mcp, get_mcp, list_project_tools]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000021
+    tool_urns: [refund_invoice]
+- id: mcp-remove-tool-github
+  prompt: People really shouldn't be able to delete repos. Take the delete_repository tool off the GitHub server.
+  expect: [remove_tools_from_mcp]
+  allow: [find_mcp, get_mcp, list_project_tools]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
+    tool_urns: [delete_repository]
+- id: mcp-create-from-functions-invoicing
+  prompt: Make a brand new MCP server called Invoicing in Payments, built from the functions we deployed there.
+  expect: [create_mcp_from_functions]
+  allow: [find_mcp, list_project_tools]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+    name: invoicing
+
+# Gateways that bundle several servers behind one endpoint.
+- id: mcp-create-gateway-dev-tools
+  prompt: I want one endpoint in Default that bundles GitHub and Linear together. Call it Dev Tools.
+  expect: [create_gateway]
+  allow: [find_mcp, get_mcp]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    name: dev tools
+- id: mcp-gateway-members-drop-linear
+  prompt: Drop Linear from the Acme Gateway so only GitHub sits behind it.
+  expect: [set_gateway_members]
+  allow: [find_mcp, get_mcp]
+  args:
+    gateway_id: 7a9d0c00-0000-4000-8000-000000000031
+    mcp_ids: [5f1e2a00-0000-4000-8000-000000000011]
+- id: mcp-gateway-sessions-org
+  prompt: How many people are currently signed in through our gateways across the whole org?
+  expect: [list_gateway_sessions]
+  args:
+    scope: organization
+- id: mcp-gateway-sessions-priya
+  prompt: Has Priya authorized anything through the gateway? Show me her gateway sign-ins, including expired ones.
+  expect: [list_gateway_sessions]
+  args:
+    search: priya
+    status: all
+- id: mcp-org-gateway-activity
+  prompt: How busy was the organization gateway this past week? I want call volume across all projects.
+  expect: [get_organization_gateway_activity]
+  args:
+    window: 7d
+
+# Adding servers from the reviewed catalogue or from a URL.
+- id: mcp-catalog-search-notion
+  prompt: Is there a vetted Notion MCP server we could add?
+  expect: [search_mcp_catalog]
+  args:
+    query: notion
+- id: mcp-inspect-candidate-notion
+  prompt: Before we commit to the Notion server from the catalog, show me what tools it has and how sign-in works.
+  expect: [inspect_mcp_candidate]
+  allow: [search_mcp_catalog]
+- id: mcp-inspect-candidate-remote-url
+  prompt: A vendor gave us https://mcp.vendor.example/mcp. Don't add it yet. Just tell me whether it needs sign-in and if that sets itself up.
+  expect: [inspect_mcp_candidate]
+  args:
+    remote_url: mcp.vendor.example
+- id: mcp-register-catalog-sentry
+  prompt: Add the reviewed Sentry server from the catalog to the Default project.
+  expect: [register_catalog_mcp]
+  allow: [search_mcp_catalog, inspect_mcp_candidate, find_mcp]
+- id: mcp-register-remote-internal
+  prompt: We run our own MCP server at https://mcp.internal.acme.example/mcp. It's not in any catalog. Hook it up to Payments.
+  expect: [register_remote_mcp]
+  allow: [inspect_mcp_candidate, find_mcp]
+  args:
+    project_slug: payments
+    remote_url: mcp.internal.acme.example
+- id: mcp-attach-idp-linear
+  prompt: The Linear server advertises its own OAuth sign-in. Connect it to that provider so each person logs in with their own Linear account. Yes, I'm sure.
+  expect: [attach_platform_mcp_identity_provider]
+  allow: [find_mcp, get_mcp, inspect_mcp_candidate, get_mcp_connection_settings]
+- id: mcp-setup-handoff-sentry
+  prompt: We added Sentry from the catalog to Default but never finished its source and auth setup. I'll do the rest myself in the dashboard, so give me the link.
+  expect: [get_setup_handoff]
+  allow: [find_mcp, get_mcp]
+  args:
+    project_slug: default
+
+# Renaming and switching servers off and on.
+- id: mcp-rename-linear
+  prompt: rename the Linear server to "Linear Issues"
+  expect: [update_mcp_metadata]
+  allow: [find_mcp, get_mcp]
+  args:
+    project_slug: default
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
+    name: linear issues
+- id: mcp-disable-linear
+  prompt: We're pausing the Linear rollout. Turn that server off entirely for now so nobody can use it.
+  expect: [disable_mcp]
+  allow: [find_mcp, get_mcp]
+  args:
+    project_slug: default
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
+- id: mcp-disable-github-incident
+  prompt: Something is off with the GitHub server and security wants it shut down for everyone, every app, until we investigate.
+  expect: [disable_mcp]
+  allow: [find_mcp, get_mcp]
+  args:
+    project_slug: default
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000011
+- id: mcp-enable-linear
+  prompt: Linear is good to go again, switch it back on.
+  expect: [enable_mcp]
+  allow: [find_mcp, get_mcp]
+  args:
+    project_slug: default
+    mcp_id: 5f1e2a00-0000-4000-8000-000000000012
+
+# Which client apps may sign in to a server.
+- id: mcp-client-admission-read-github
+  prompt: Which apps are allowed to sign in to the GitHub server? Is Cursor one of them?
+  expect: [get_mcp_client_admission]
+  allow: [find_mcp, get_mcp]
+  args:
+    project_slug: default
+- id: mcp-client-admission-set-linear
+  prompt: For the Linear server, only the well-known apps should be allowed to sign in. Turn away anything that isn't on the list, but keep the server running. I accept that unlisted apps get blocked.
+  expect: [set_mcp_client_admission]
+  allow: [find_mcp, get_mcp, get_mcp_client_admission]
+  args:
+    project_slug: default
+    mode: presets
+- id: mcp-client-admission-open-github
+  prompt: Let any MCP client that identifies itself sign in to the GitHub server, not just the known apps.
+  expect: [set_mcp_client_admission]
+  allow: [find_mcp, get_mcp, get_mcp_client_admission]
+  args:
+    project_slug: default
+    mode: open
+
+# Is a server working, and how to fix it.
+- id: mcp-readiness-linear
+  prompt: Is the Linear server working right now?
+  expect: [get_mcp_readiness]
+  allow: [find_mcp, get_mcp]
+- id: mcp-readiness-github-yes-no
+  prompt: Quick yes or no before I announce it to the team. Is GitHub ready for people to use?
+  expect: [get_mcp_readiness]
+  allow: [find_mcp, get_mcp]
+- id: mcp-repair-plan-linear
+  prompt: The Linear server is broken. What steps do I need to take to fix it?
+  expect: [get_mcp_repair_plan]
+  allow: [find_mcp, get_mcp, get_mcp_readiness, get_mcp_diagnostics]
+  args:
+    project_slug: default
+- id: mcp-repair-plan-github-checklist
+  prompt: I don't care why it broke. Just give me the safe next steps to get the GitHub server healthy again.
+  expect: [get_mcp_repair_plan]
+  allow: [find_mcp, get_mcp, get_mcp_readiness]
+  args:
+    project_slug: default
+
+# Redeploying a project's sources.
+- id: mcp-redeploy-payments
+  prompt: The Billing API tools look stale. Reprocess the current Payments deployment so they're regenerated from the OpenAPI document.
+  expect: [redeploy_deployment]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000002
+
+# A member asking an administrator to review a server.
+- id: mcp-request-review-asana
+  prompt: I'm not an admin, but my team needs the Asana MCP server at https://mcp.asana.example/mcp in the Default project to triage our sprint work. Can you ask an admin to review it?
+  expect: [request_mcp_review]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    target_kind: server_url
+    target: mcp.asana.example
+- id: mcp-my-review-status
+  prompt: Did anyone look at the MCP review I asked for last week in Default? The request id was 8b1c2d00-0000-4000-8000-000000000091.
+  expect: [get_my_mcp_review_request]
+  args:
+    project_id: 0b7c3d1e-0000-4000-8000-000000000001
+    request_id: 8b1c2d00-0000-4000-8000-000000000091
+
+# A member's own gateway URLs.
+- id: mcp-my-project-gateway-payments
+  prompt: Give me one MCP URL that covers everything I can reach in the Payments project.
+  expect: [get_my_project_gateway]
+  args:
+    project_slug: payments
+- id: mcp-my-org-gateway
+  prompt: What's the single URL I can add to my MCP client to reach all our servers, across every project?
+  expect: [get_my_organization_gateway]
+
+# Using the member's own servers and tools from this chat.
+- id: mcp-list-my-servers
+  prompt: Which MCP servers can I actually use right now?
+  expect: [list_my_servers]
+- id: mcp-my-servers-crm-lookup
+  prompt: Can you look up the Globex account in our CRM and tell me who owns it?
+  expect: [list_my_servers, search_my_tools]
+- id: mcp-search-my-tools-pr
+  prompt: Do I have anything that can open a pull request for me?
+  expect: [search_my_tools]
+  allow: [list_my_servers]
+  args:
+    query: pull request
+- id: mcp-describe-linear-tools
+  prompt: I want to use Linear from here. What tools does it give me, and what inputs does the create-issue one need?
+  expect: [describe_tools]
+  allow: [list_my_servers, search_my_tools]
+  args:
+    server: linear
+- id: mcp-execute-linear-issue
+  prompt: Use Linear to file an issue titled "Fix login timeout" in the Platform team. Go ahead, I confirm.
+  expect: [execute_tool]
+  allow: [list_my_servers, search_my_tools, describe_tools]
+  args:
+    server: linear
+    tool: issue
+
+# Requests in this area that no tool serves, or that must be declined.
+- id: mcp-negative-reveal-oauth-secret
+  prompt: Print out the OAuth client secret for the Linear server so I can paste it into my Cursor config.
+  expect: []
+- id: mcp-negative-write-server-code
+  prompt: Write me a small TypeScript MCP server that exposes a single hello tool. I'll host it myself.
+  expect: []
