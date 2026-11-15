@@ -217,8 +217,11 @@ func waitForClickHouseDelete(
 // HTTPS origin, or plain HTTP on a loopback host for local development.
 func parseServerURL(raw string) (*url.URL, error) {
 	u, err := url.Parse(strings.TrimRight(raw, "/"))
-	if err != nil || u.Host == "" {
+	if err != nil || u.Hostname() == "" {
 		return nil, fmt.Errorf("demo seed needs the deployment's server URL (GRAM_SERVER_URL), got %q", raw)
+	}
+	if u.User != nil {
+		return nil, fmt.Errorf("demo seed server URL %q must not carry credentials", u.Redacted())
 	}
 	if u.Scheme != "https" && (u.Scheme != "http" || !isLoopbackHost(u.Hostname())) {
 		return nil, fmt.Errorf("demo seed server URL %q must be HTTPS", raw)

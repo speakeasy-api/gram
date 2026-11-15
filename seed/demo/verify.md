@@ -682,7 +682,7 @@ open their effective assignments; the dropdown always offers compact member sear
       each row has a remove button.
     - Open **MCP → Multi-Server Gateway → Skills**. It lists Triage Incident and
       Runbook.
-    - Open **Skills → Runbook → Usage**. "Served over MCP" lists Acme Agent
+    - Open **Skills → Runbook → Usage**. "Served over MCP" lists Multi-Server
       Gateway (opens the gateway's Skills tab) and Organization gateway, and
       there is no **Add to organization gateway** button. Support Refunds
       lists only OpenAPI Server (API Key) and offers the button to project writers.
