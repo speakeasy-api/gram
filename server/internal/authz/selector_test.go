@@ -10,54 +10,65 @@ import (
 func TestSelector_Matches_wildcardGrantMatchesAnything(t *testing.T) {
 	t.Parallel()
 
-	grant := Selector{"resource_id": "*"}
-	require.True(t, grant.Matches(Selector{"resource_id": "proj_123"}))
-	require.True(t, grant.Matches(Selector{"resource_id": "anything"}))
-	require.True(t, grant.Matches(Selector{"resource_id": "*"}))
+	grant := Selector{"resource_kind": "project", "resource_id": "*"}
+	require.True(t, grant.Matches(Selector{"resource_kind": "project", "resource_id": "proj_123"}))
+	require.True(t, grant.Matches(Selector{"resource_kind": "project", "resource_id": "anything"}))
+	require.True(t, grant.Matches(Selector{"resource_kind": "project", "resource_id": "*"}))
 }
 
-func TestSelector_Matches_emptyGrantMatchesAnything(t *testing.T) {
+func TestSelector_Matches_grantMissingResourceKeyMatchesNothing(t *testing.T) {
 	t.Parallel()
 
-	// Defensive: empty selector still matches (no keys to fail on).
-	grant := Selector{}
-	require.True(t, grant.Matches(Selector{"resource_id": "proj_123"}))
-	require.True(t, grant.Matches(Selector{}))
+	check := Selector{"resource_kind": "mcp", "resource_id": "server_123", "tool": "search"}
+	tests := []struct {
+		name  string
+		grant Selector
+	}{
+		{name: "nil", grant: nil},
+		{name: "empty", grant: Selector{}},
+		{name: "missing resource_kind", grant: Selector{"resource_id": "*"}},
+		{name: "missing resource_kind with exact id", grant: Selector{"resource_id": "server_123"}},
+		{name: "missing resource_id", grant: Selector{"resource_kind": "mcp"}},
+		{name: "missing resource_id with wildcard kind", grant: Selector{"resource_kind": "*"}},
+		{name: "narrowing key only", grant: Selector{"tool": "search"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.False(t, tt.grant.Matches(check))
+			require.False(t, tt.grant.StrictMatches(check))
+		})
+	}
 }
 
 func TestSelector_Matches_exactKeyMatch(t *testing.T) {
 	t.Parallel()
 
-	grant := Selector{"resource_id": "proj_123"}
-	require.True(t, grant.Matches(Selector{"resource_id": "proj_123"}))
-	require.False(t, grant.Matches(Selector{"resource_id": "proj_456"}))
+	grant := Selector{"resource_kind": "project", "resource_id": "proj_123"}
+	require.True(t, grant.Matches(Selector{"resource_kind": "project", "resource_id": "proj_123"}))
+	require.False(t, grant.Matches(Selector{"resource_kind": "project", "resource_id": "proj_456"}))
 }
 
 func TestSelector_Matches_grantKeyMissingInCheckSkipped(t *testing.T) {
 	t.Parallel()
 
-	// When a key exists in the grant but not in the check, it's skipped —
-	// the check isn't constraining that dimension.
-	grant := Selector{"resource_id": "proj_123"}
-	require.True(t, grant.Matches(Selector{}))
-	require.True(t, grant.Matches(Selector{"other_key": "proj_123"}))
+	// When a narrowing key exists in the grant but not in the check, it's
+	// skipped — the check isn't constraining that dimension.
+	grant := Selector{"resource_kind": "mcp", "resource_id": "server_123", "tool": "search"}
+	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "server_123"}))
+	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "server_123", "other_key": "x"}))
 }
 
 func TestSelector_Matches_multipleKeys(t *testing.T) {
 	t.Parallel()
 
-	grant := Selector{"resource_id": "proj_123", "tool_id": "tool_abc"}
-	require.True(t, grant.Matches(Selector{"resource_id": "proj_123", "tool_id": "tool_abc"}))
-	require.False(t, grant.Matches(Selector{"resource_id": "proj_123", "tool_id": "tool_xyz"}))
-	// Check without tool_id — not constraining that dimension, so grant matches.
-	require.True(t, grant.Matches(Selector{"resource_id": "proj_123"}))
-}
-
-func TestSelector_Matches_nilGrantMatchesAnything(t *testing.T) {
-	t.Parallel()
-
-	var grant Selector
-	require.True(t, grant.Matches(Selector{"resource_id": "proj_123"}))
+	grant := Selector{"resource_kind": "mcp", "resource_id": "server_123", "tool": "tool_abc"}
+	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "server_123", "tool": "tool_abc"}))
+	require.False(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "server_123", "tool": "tool_xyz"}))
+	// Check without tool — not constraining that dimension, so grant matches.
+	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "server_123"}))
 }
 
 func TestSelector_ResourceID_present(t *testing.T) {
@@ -75,8 +86,9 @@ func TestSelector_ResourceID_wildcard(t *testing.T) {
 func TestSelector_ResourceID_absent(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "*", Selector{}.ResourceID())
-	require.Equal(t, "*", Selector(nil).ResourceID())
+	require.Empty(t, Selector{"resource_kind": "project"}.ResourceID())
+	require.Empty(t, Selector{}.ResourceID())
+	require.Empty(t, Selector(nil).ResourceID())
 }
 
 func TestSelector_CoversEveryResource(t *testing.T) {
@@ -87,7 +99,10 @@ func TestSelector_CoversEveryResource(t *testing.T) {
 		selector Selector
 		covers   bool
 	}{
-		{name: "nil", selector: nil, covers: true},
+		{name: "nil", selector: nil, covers: false},
+		{name: "empty", selector: Selector{}, covers: false},
+		{name: "missing resource kind", selector: Selector{"resource_id": "*"}, covers: false},
+		{name: "missing resource id", selector: Selector{"resource_kind": "log"}, covers: false},
 		{name: "pure wildcard", selector: Selector{"resource_kind": "*", "resource_id": "*"}, covers: true},
 		{name: "stored unrestricted grant", selector: NewSelector(ScopeLogRead, WildcardResource), covers: true},
 		{name: "one resource", selector: NewSelector(ScopeLogRead, "project-1"), covers: false},
@@ -127,9 +142,9 @@ func TestSelector_IsRestricted(t *testing.T) {
 			restricted: true,
 		},
 		{
-			name:       "legacy resource wildcard is unrestricted",
+			name:       "missing resource kind is restricted",
 			selector:   Selector{"resource_id": "*"},
-			restricted: false,
+			restricted: true,
 		},
 		{
 			name:       "missing resource id is restricted",
@@ -147,14 +162,14 @@ func TestSelector_IsRestricted(t *testing.T) {
 			restricted: true,
 		},
 		{
-			name:       "nil is unrestricted wildcard",
+			name:       "nil is restricted",
 			selector:   nil,
-			restricted: false,
+			restricted: true,
 		},
 		{
-			name:       "empty is unrestricted wildcard",
+			name:       "empty is restricted",
 			selector:   Selector{},
-			restricted: false,
+			restricted: true,
 		},
 	}
 
