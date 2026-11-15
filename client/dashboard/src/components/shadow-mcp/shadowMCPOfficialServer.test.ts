@@ -155,6 +155,37 @@ describe("onboardReadiness", () => {
     expect(readiness.blocker).toBeUndefined();
   });
 
+  it("names the registration method the sign-in provider supports", () => {
+    const prm = "https://mcp.example.com/.well-known/oauth-protected-resource";
+    expect(
+      onboardReadiness({
+        outcome: "authentication_required",
+        protectedResourceMetadataUrl: prm,
+        signInSetup: "dcr",
+      }).checks[2]?.detail,
+    ).toContain("dynamic client registration");
+    expect(
+      onboardReadiness({
+        outcome: "authentication_required",
+        protectedResourceMetadataUrl: prm,
+        signInSetup: "cimd",
+      }).checks[2]?.detail,
+    ).toContain("client ID metadata document");
+  });
+
+  it("is not ready when a client must be registered by hand", () => {
+    const readiness = onboardReadiness({
+      outcome: "authentication_required",
+      protectedResourceMetadataUrl:
+        "https://mcp.example.com/.well-known/oauth-protected-resource",
+      signInSetup: "manual",
+    });
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.blockerCode).toBe("sign_in_manual");
+    expect(readiness.checks[2]?.state).toBe("fail");
+  });
+
   it("is not ready when sign-in needs a key nobody can discover", () => {
     const readiness = onboardReadiness({ outcome: "authentication_required" });
 

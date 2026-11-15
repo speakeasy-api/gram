@@ -132,7 +132,7 @@ function unreachableDetail(reason: string | undefined): string {
 export function onboardReadiness(
   probe: Pick<
     ProbeURLResult,
-    "outcome" | "reason" | "protectedResourceMetadataUrl"
+    "outcome" | "reason" | "protectedResourceMetadataUrl" | "signInSetup"
   >,
 ): OnboardReadiness {
   const reachableLabel = "Speakeasy can reach it";
@@ -157,7 +157,7 @@ export function onboardReadiness(
     id: "reachable",
     label: reachableLabel,
     state: "pass",
-    detail: "It is on the public internet.",
+    detail: "Speakeasy connected to it.",
   };
 
   if (probe.outcome === "invalid_mcp_response") {
@@ -201,18 +201,37 @@ export function onboardReadiness(
     probe.outcome === "authentication_required" &&
     probe.protectedResourceMetadataUrl
   ) {
+    // The provider decides whether Speakeasy can register itself: by
+    // dynamic client registration, or by publishing a client ID metadata
+    // document. Without either, someone registers a client by hand.
+    if (probe.signInSetup === "manual" || probe.signInSetup === "unknown") {
+      const detail =
+        probe.signInSetup === "manual"
+          ? "Its sign-in provider needs a client registered by hand."
+          : "Its sign-in provider's details could not be read.";
+      return {
+        ready: false,
+        blocker: detail,
+        blockerCode: `sign_in_${probe.signInSetup}`,
+        checks: [
+          reachable,
+          mcp,
+          { id: "sign-in", label: signInLabel, state: "fail", detail },
+        ],
+      };
+    }
+    const detail =
+      probe.signInSetup === "dcr"
+        ? "Its sign-in provider lets Speakeasy register itself (dynamic client registration)."
+        : probe.signInSetup === "cimd"
+          ? "Its sign-in provider accepts Speakeasy's client ID metadata document."
+          : "It names its sign-in provider, so each person signs in once.";
     return {
       ready: true,
       checks: [
         reachable,
         mcp,
-        {
-          id: "sign-in",
-          label: signInLabel,
-          state: "pass",
-          detail:
-            "It names its sign-in provider, so each person signs in once.",
-        },
+        { id: "sign-in", label: signInLabel, state: "pass", detail },
       ],
     };
   }

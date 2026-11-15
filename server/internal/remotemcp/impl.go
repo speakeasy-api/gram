@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -429,7 +430,17 @@ func (s *Service) ProbeURL(ctx context.Context, payload *gen.ProbeURLPayload) (*
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 
-	return buildProbeURLResult(probeRemoteMcpURL(probeCtx, s.policy, payload.URL).result), nil
+	result := buildProbeURLResult(probeRemoteMcpURL(probeCtx, s.policy, payload.URL).result)
+	// A sign-in challenge says nothing about whether Speakeasy can register
+	// with the provider, which decides whether the server can be set up
+	// without a person registering a client by hand. Discovery reads public
+	// metadata only and registers nothing. It gets its own deadline: the
+	// probe may have used most of the first one.
+	if result.Outcome == ProbeOutcomeAuthenticationRequired && result.ProtectedResourceMetadataURL != nil {
+		discovery := catalogauth.Discover(ctx, s.policy, payload.URL, "oauth")
+		result.SignInSetup = &discovery.AuthSetup
+	}
+	return result, nil
 }
 
 func buildProbeURLResult(result ProbeResult) *gen.ProbeURLResult {
@@ -438,6 +449,7 @@ func buildProbeURLResult(result ProbeResult) *gen.ProbeURLResult {
 		ProtectedResourceMetadataURL: result.ProtectedResourceMetadataURL,
 		HTTPStatus:                   result.HTTPStatus,
 		Reason:                       result.Reason,
+		SignInSetup:                  nil,
 	}
 }
 

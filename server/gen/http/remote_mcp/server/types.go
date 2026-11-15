@@ -309,6 +309,12 @@ type ProbeURLResponseBody struct {
 	// unreachable; currently timeout, rate_limited, server_error, dns_error,
 	// tls_error, guardian_rejected, or transport_error.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// How Speakeasy can register as a client with the server's sign-in provider.
+	// Present only when authentication is required and the challenge advertised
+	// protected resource metadata: dcr (dynamic client registration), cimd (client
+	// ID metadata document), manual (a client must be registered by hand), or
+	// unknown (the provider's metadata could not be read).
+	SignInSetup *string `form:"sign_in_setup,omitempty" json:"sign_in_setup,omitempty" xml:"sign_in_setup,omitempty"`
 }
 
 // VerifyURLResponseBody is the type of the "remoteMcp" service "verifyURL"
@@ -3756,6 +3762,7 @@ func NewProbeURLResponseBody(res *remotemcp.ProbeURLResult) *ProbeURLResponseBod
 		ProtectedResourceMetadataURL: res.ProtectedResourceMetadataURL,
 		HTTPStatus:                   res.HTTPStatus,
 		Reason:                       res.Reason,
+		SignInSetup:                  res.SignInSetup,
 	}
 	return body
 }

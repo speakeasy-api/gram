@@ -123564,6 +123564,14 @@ components:
                 reason:
                     type: string
                     description: Stable machine-readable reason code. Present only when outcome is unreachable; currently timeout, rate_limited, server_error, dns_error, tls_error, guardian_rejected, or transport_error.
+                sign_in_setup:
+                    type: string
+                    description: 'How Speakeasy can register as a client with the server''s sign-in provider. Present only when authentication is required and the challenge advertised protected resource metadata: dcr (dynamic client registration), cimd (client ID metadata document), manual (a client must be registered by hand), or unknown (the provider''s metadata could not be read).'
+                    enum:
+                        - dcr
+                        - cimd
+                        - manual
+                        - unknown
             description: Structured outcome of probing a remote MCP server URL. Variant-specific fields are populated only when applicable.
             required:
                 - outcome
