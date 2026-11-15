@@ -19,7 +19,6 @@ const mocks = vi.hoisted(() => ({
   invalidate: vi.fn(() => Promise.resolve()),
   dismissOptions: vi.fn(),
   restoreOptions: vi.fn(),
-  projects: [{ id: "p1", slug: "default", name: "Default" }],
 }));
 vi.mock("@/pages/catalog/hooks", () => ({ useListMCPCatalog: mocks.catalog }));
 vi.mock("@/lib/theme", () => ({ useIsDarkTheme: mocks.dark }));
@@ -39,9 +38,6 @@ vi.mock("@gram/client/react-query/restoreOktaServerSuggestion.js", () => ({
     return { isPending: false, mutate: mocks.restore };
   },
 }));
-vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ id: "org", slug: "org", projects: mocks.projects }),
-}));
 vi.mock("@/pages/catalog/AddServerDialog", () => ({
   AddServerDialog: (props: unknown) => {
     mocks.dialog(props);
@@ -54,7 +50,6 @@ afterEach(() => {
   mocks.catalog.mockReturnValue({ data: undefined });
   mocks.dark.mockReturnValue(false);
   vi.clearAllMocks();
-  mocks.projects.splice(1);
 });
 
 function suggestion(
@@ -126,7 +121,7 @@ function show(
   render(
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <OktaServerSuggestions />
+        <OktaServerSuggestions projectSlug="default" />
       </TooltipProvider>
     </QueryClientProvider>,
   );
@@ -269,22 +264,6 @@ it("disables Add and explains when no endpoint can be installed", () => {
   const add = screen.getByRole("button", { name: "Add server" });
   expect(add.hasAttribute("disabled")).toBe(true);
   expect(screen.getByText(/cannot be added from here yet/)).toBeTruthy();
-});
-
-it("shows a project picker only when the organization has several projects", () => {
-  show([suggestion()]);
-  expect(
-    screen.queryByRole("combobox", { name: "Project to add servers to" }),
-  ).toBeNull();
-  cleanup();
-  mocks.catalog.mockReset();
-  mocks.catalog.mockReturnValue({ data: undefined });
-  mocks.dark.mockReturnValue(false);
-  mocks.projects.push({ id: "p2", slug: "second", name: "Second" });
-  show([suggestion()]);
-  expect(
-    screen.getByRole("combobox", { name: "Project to add servers to" }),
-  ).toBeTruthy();
 });
 
 it("maps streamable HTTP remotes and headers onto the catalog server", () => {

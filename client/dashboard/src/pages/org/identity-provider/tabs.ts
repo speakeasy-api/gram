@@ -8,12 +8,7 @@ export type IdentityPageTab = (typeof IDENTITY_TABS)[number];
 export const PROVIDER_IDS = ["okta", "speakeasy"] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
-export const OKTA_VIEWS = [
-  "overview",
-  "setup",
-  "applications",
-  "cross-app-access",
-] as const;
+export const OKTA_VIEWS = ["overview", "setup", "cross-app-access"] as const;
 export type OktaView = (typeof OKTA_VIEWS)[number];
 
 export const CONNECTION_SECTION_ID = "connection";

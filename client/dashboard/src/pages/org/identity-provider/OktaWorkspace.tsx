@@ -16,7 +16,6 @@ import type { OktaIdentityProviderConnection } from "@gram/client/models/compone
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useOrgRoutes } from "@/routes";
-import { ApplicationsTab } from "./tabs/applications/ApplicationsTab";
 import { CONNECTION_STATUS, isConnected } from "./connectionView";
 import { OktaOverview } from "./OktaOverview";
 import { connectionsUnavailable, parseEmaReturn } from "./oktaEma";
@@ -109,7 +108,6 @@ export function OktaProviderCard(): JSX.Element {
 const VIEW_LABELS: Record<OktaView, string> = {
   overview: "Overview",
   setup: "Connection",
-  applications: "Applications",
   "cross-app-access": "Cross App Access",
 };
 
@@ -134,11 +132,9 @@ export function OktaWorkspace(): JSX.Element {
   const connected = !unknownProvider && isConnected(connection);
   const unknownStatus =
     connection != null && !connected && connection.status !== "revoked";
-  // Applications and Cross App Access read synced applications, so they wait
-  // for a connection.
+  // Cross App Access reviews synced applications, so it waits for a connection.
   const views = OKTA_VIEWS.filter(
-    (item) =>
-      (item !== "applications" && item !== "cross-app-access") || connected,
+    (item) => item !== "cross-app-access" || connected,
   );
   const shownView = views.includes(view) ? view : "overview";
   return (
@@ -227,12 +223,6 @@ function ViewContent({
   switch (view) {
     case "setup":
       return <OktaConnectionTab connection={connection} />;
-    case "applications":
-      return connection ? (
-        <ApplicationsTab connection={connection} />
-      ) : (
-        <OktaConnectionTab connection={connection} />
-      );
     case "cross-app-access":
       return connection ? (
         <CrossAppAccessTab connection={connection} />

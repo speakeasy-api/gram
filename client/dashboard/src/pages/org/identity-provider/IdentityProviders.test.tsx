@@ -31,9 +31,6 @@ vi.mock("@gram/client/react-query/identityProviderConnection.js", () => ({
 vi.mock("./tabs/setup/OktaConnectionTab", () => ({
   OktaConnectionTab: () => <div>Okta content: setup</div>,
 }));
-vi.mock("./tabs/applications/ApplicationsTab", () => ({
-  ApplicationsTab: () => <div>Okta content: applications</div>,
-}));
 vi.mock("./tabs/cross-app-access/CrossAppAccessTab", () => ({
   CrossAppAccessTab: () => <div>Okta content: cross-app-access</div>,
 }));
@@ -105,7 +102,7 @@ describe("Identity providers", () => {
       "/example/identity?tab=identity-providers&provider=okta&view=overview",
     );
     expect(screen.queryByRole("radio")).toBeNull();
-    expect(screen.queryByRole("tab", { name: "Applications" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Cross App Access" })).toBeNull();
   });
   it.each(["pending", "verified", "degraded"])(
     "offers management for a %s connection",
@@ -156,16 +153,16 @@ describe("Identity providers", () => {
     fireEvent.click(screen.getByRole("link", { name: "Manage Okta" }));
     expect(screen.getByText("Okta overview")).toBeTruthy();
     // Installed Radix Tabs activates pointer selection on mouseDown, not click.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Applications" }), {
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Cross App Access" }), {
       button: 0,
       ctrlKey: false,
     });
     expect(
       screen
-        .getByRole("tab", { name: "Applications" })
+        .getByRole("tab", { name: "Cross App Access" })
         .getAttribute("aria-selected"),
     ).toBe("true");
-    expect(screen.getByText("Okta content: applications")).toBeTruthy();
+    expect(screen.getByText("Okta content: cross-app-access")).toBeTruthy();
     fireEvent.click(
       screen.getByRole("link", { name: "All identity providers" }),
     );
@@ -212,7 +209,7 @@ describe("Identity providers", () => {
   });
   it("does not render an Okta workspace for nonadmins", () => {
     mocks.admin = false;
-    show("&provider=okta&view=applications");
+    show("&provider=okta&view=setup");
     expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.queryByText(/Okta content:/)).toBeNull();
   });

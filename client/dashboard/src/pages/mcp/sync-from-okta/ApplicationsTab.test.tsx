@@ -69,6 +69,8 @@ function show(
               status: "verified",
             } as OktaIdentityProviderConnection
           }
+          projectSlug="default"
+          setupHref={(search) => search}
         />
       </TooltipProvider>
     </QueryClientProvider>,

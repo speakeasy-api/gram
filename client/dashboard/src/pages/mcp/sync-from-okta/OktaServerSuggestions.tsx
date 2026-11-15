@@ -9,17 +9,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { SkeletonParagraph } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { useOrganization } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useIsDarkTheme } from "@/lib/theme";
 import { useListMCPCatalog, type CatalogServer } from "@/pages/catalog/hooks";
@@ -36,7 +28,7 @@ import {
 } from "@gram/client/react-query/oktaServerSuggestions.js";
 import { useRestoreOktaServerSuggestionMutation } from "@gram/client/react-query/restoreOktaServerSuggestion.js";
 
-import { SESSION_SECURITY } from "../../identityProviderQueries";
+import { SESSION_SECURITY } from "@/pages/org/identity-provider/identityProviderQueries";
 import { humanizeOktaToken } from "./applicationsView";
 import {
   isSuggestionInstallable,
@@ -67,13 +59,13 @@ function inlineError(error: unknown): void {
  * snapshot. Nothing is created until the admin adds one through the usual
  * remote MCP install flow; dismissals are remembered per organization.
  */
-export function OktaServerSuggestions(): JSX.Element {
+export function OktaServerSuggestions({
+  projectSlug,
+}: {
+  projectSlug: string;
+}): JSX.Element {
   const queryClient = useQueryClient();
-  const organization = useOrganization();
   const [filter, setFilter] = useState<Filter>("open");
-  const [projectSlug, setProjectSlug] = useState(
-    organization.projects[0]?.slug ?? "",
-  );
   const catalog = useListMCPCatalog(undefined, undefined, {
     projectSlug,
     enabled: projectSlug !== "",
@@ -139,25 +131,11 @@ export function OktaServerSuggestions(): JSX.Element {
           </span>
           <Text muted small className="max-w-2xl">
             Catalog servers for applications your organization has in Okta. Add
-            one to create it with its endpoint filled in, or dismiss it;
+            one to this project with its endpoint filled in, or dismiss it;
             dismissals are remembered for the organization.
           </Text>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {organization.projects.length > 1 && (
-            <Select value={projectSlug} onValueChange={setProjectSlug}>
-              <SelectTrigger aria-label="Project to add servers to">
-                <SelectValue placeholder="Project" />
-              </SelectTrigger>
-              <SelectContent>
-                {organization.projects.map((project) => (
-                  <SelectItem key={project.id} value={project.slug}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
           <SegmentedControl<Filter>
             value={filter}
             onChange={setFilter}

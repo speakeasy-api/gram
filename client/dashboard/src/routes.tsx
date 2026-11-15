@@ -260,6 +260,12 @@ const ROUTE_STRUCTURE = {
             title: "Add Function",
             url: "function",
           },
+          // Okta applications that match catalog servers. Rolled out behind
+          // okta-mcp-import, which the page checks.
+          okta: {
+            title: "Sync from Okta",
+            url: "sync-from-okta",
+          },
         },
       },
       // The single catalog entry point, and a tab of the MCP index rather than

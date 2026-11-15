@@ -127,6 +127,7 @@ import {
 } from "./pages/org/encryption-keys/EncryptionKeys";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import UserSessionIssuerDetail from "./pages/user-session-issuers/UserSessionIssuerDetail";
+import { SyncFromOkta } from "./pages/mcp/sync-from-okta/SyncFromOkta";
 import {
   McpSessionsConfiguration,
   McpSessionsProviderDetail,
@@ -324,6 +325,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           },
           function: {
             component: FunctionsOnboarding,
+          },
+          okta: {
+            component: SyncFromOkta,
           },
         },
       },
