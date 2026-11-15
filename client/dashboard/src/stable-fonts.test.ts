@@ -17,6 +17,7 @@ it("wires stable fonts into the deployed build and serves them cross-origin", ()
   const nginx = fs.readFileSync(path.join(dashboard, "nginx.conf"), "utf8");
   const fontLocation = nginx.match(/location \^~ \/fonts\/ \{([^}]+)\}/)?.[1];
   expect(fontLocation).toContain("try_files $uri =404;");
+  expect(fontLocation).toContain("expires 1d;");
   expect(fontLocation).toContain(
     'add_header Access-Control-Allow-Origin "*" always;',
   );
