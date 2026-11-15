@@ -223,21 +223,50 @@ func IssueTokens(issuer, resource, clientID, email string, scopes []string, acce
 func OAuthResource(baseURL string) string { return Resource(baseURL, PathOAuthMCP) }
 
 // DCRIssuer is the DCR-only authorization server's issuer. It names the
-// fixture by another host than baseURL (127.0.0.1 for localhost, the same
-// listener): Speakeasy's dashboard treats every provider on one host as the
-// same provider, so on baseURL's host Auto-Configure would reuse the main
-// authorization server and never see this one.
+// fixture by another host than baseURL, the other loopback name for the same
+// listener (127.0.0.1 for localhost and back): Speakeasy's dashboard treats
+// every provider on one host as the same provider, so on baseURL's host
+// Auto-Configure would reuse the main authorization server and never see this
+// one. Any other host has no known alternate name, so the issuer stays on it
+// (see DCRSharesHost).
 func DCRIssuer(baseURL string) string {
 	base := strings.TrimRight(baseURL, "/")
 	u, err := url.Parse(base)
-	if err != nil || u.Hostname() != "localhost" {
+	if err != nil {
 		return base + PathDCR
 	}
-	u.Host = net.JoinHostPort("127.0.0.1", u.Port())
-	if u.Port() == "" {
-		u.Host = "127.0.0.1"
+	alternate, ok := loopbackAlternates[u.Hostname()]
+	if !ok {
+		return base + PathDCR
+	}
+	u.Host = alternate
+	if port := portOf(base); port != "" {
+		u.Host = net.JoinHostPort(alternate, port)
 	}
 	return u.String() + PathDCR
+}
+
+// DCRSharesHost reports whether DCRIssuer had to keep baseURL's host, so the
+// dashboard sees one provider and Auto-Configure registers a client ID
+// metadata document client instead of using DCR.
+func DCRSharesHost(baseURL string) bool {
+	u, err := url.Parse(strings.TrimRight(baseURL, "/"))
+	if err != nil {
+		return true
+	}
+	_, ok := loopbackAlternates[u.Hostname()]
+	return !ok
+}
+
+// loopbackAlternates pairs the loopback names the local TLS certificate covers.
+var loopbackAlternates = map[string]string{"localhost": "127.0.0.1", "127.0.0.1": "localhost"}
+
+func portOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return u.Port()
 }
 
 // AutoResource is the resource identifier of the DCR server's MCP endpoint.

@@ -273,6 +273,9 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 	// 5. The Auto-Configured OAuth Server: a second OAuth-protected fixture
 	// endpoint with no client yet. An admin's "Set up sign-in" discovers its
 	// authorization server and registers a client, as with a real vendor.
+	if fixtureauth.DCRSharesHost(base) {
+		logger.WarnContext(ctx, "the MCP fixture is not on a loopback host, so its DCR-only authorization server shares the main one's host: Auto-Configure on the Auto-Configured OAuth Server will reuse the main provider with a metadata document client instead of testing DCR", attr.SlogURLOriginal(base))
+	}
 	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: fixtureauth.AutoResource(base), ID: s.det("remotemcp-notion"), ProjectID: proj})
 	if err := expect("point the auto-configured oauth server", n, err); err != nil {
 		return err

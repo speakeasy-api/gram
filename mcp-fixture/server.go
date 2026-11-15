@@ -126,6 +126,7 @@ func (s *Server) Handler() http.Handler {
 	// resource, which sit at the host root.
 	dcr := s.dcrServer()
 	dcrMux := http.NewServeMux()
+	dcrMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok") })
 	dcr.handleOAuth(dcrMux, fixtureauth.PathAutoMCP)
 	mux.Handle(fixtureauth.PathDCR+"/", http.StripPrefix(fixtureauth.PathDCR, dcrMux))
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server"+fixtureauth.PathDCR, dcr.authorizationServerMetadata)

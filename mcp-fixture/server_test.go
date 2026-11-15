@@ -341,6 +341,9 @@ func TestDCRServerTakesOnlyRegisteredClients(t *testing.T) {
 		require.Equal(t, dcr, asm["issuer"], metadataURL)
 		require.Equal(t, false, asm["client_id_metadata_document_supported"], metadataURL)
 		require.Equal(t, dcr+"/oauth/register", asm["registration_endpoint"], metadataURL)
+		docs := get(t, asm["service_documentation"].(string))
+		_ = docs.Body.Close()
+		require.Equal(t, http.StatusOK, docs.StatusCode, "service_documentation must resolve")
 	}
 
 	verifier := "a-long-enough-pkce-code-verifier-for-the-fixture-test-1234567890"
@@ -568,5 +571,9 @@ func TestDCRIssuerUsesAnotherHost(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "https://127.0.0.1:24973/dcr", fixtureauth.DCRIssuer("https://localhost:24973/"))
 	require.Equal(t, "https://127.0.0.1:24973/dcr/mcp/auto", fixtureauth.AutoResource("https://localhost:24973"))
-	require.Equal(t, "http://127.0.0.1:5000/dcr", fixtureauth.DCRIssuer("http://127.0.0.1:5000"))
+	require.Equal(t, "http://localhost:5000/dcr", fixtureauth.DCRIssuer("http://127.0.0.1:5000"))
+	require.False(t, fixtureauth.DCRSharesHost("https://localhost:24973"))
+	// A host with no known alternate name keeps the issuer on it, and says so.
+	require.Equal(t, "https://dev.example.ts.net:24973/dcr", fixtureauth.DCRIssuer("https://dev.example.ts.net:24973"))
+	require.True(t, fixtureauth.DCRSharesHost("https://dev.example.ts.net:24973"))
 }
