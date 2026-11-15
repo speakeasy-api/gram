@@ -13,6 +13,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -60,8 +62,14 @@ var DefaultScopes = []string{ScopeNotesRead, ScopeNotesWrite}
 const (
 	// PathOAuthMCP takes the fixture's own per-user OAuth tokens.
 	PathOAuthMCP = "/mcp/oauth"
-	// PathAutoMCP is a second OAuth-protected resource, for a server whose
-	// sign-in an admin sets up through discovery and client registration.
+	// PathDCR is where the fixture's second authorization server lives. It
+	// takes only dynamically registered clients (no client ID metadata
+	// documents), so a sign-in set up against it exercises DCR, while
+	// PathOAuthMCP's server is used through a metadata document client.
+	PathDCR = "/dcr"
+	// PathAutoMCP is the DCR authorization server's protected resource, for
+	// a server whose sign-in an admin sets up through discovery and client
+	// registration. It is relative to PathDCR.
 	PathAutoMCP = "/mcp/auto"
 	// PathSharedMCP takes the shared token or a caller's own token.
 	PathSharedMCP = "/mcp/shared"
@@ -213,6 +221,27 @@ func IssueTokens(issuer, resource, clientID, email string, scopes []string, acce
 // OAuthResource is the resource identifier of the fixture's OAuth-protected
 // MCP endpoint for a fixture served at baseURL.
 func OAuthResource(baseURL string) string { return Resource(baseURL, PathOAuthMCP) }
+
+// DCRIssuer is the DCR-only authorization server's issuer. It names the
+// fixture by another host than baseURL (127.0.0.1 for localhost, the same
+// listener): Speakeasy's dashboard treats every provider on one host as the
+// same provider, so on baseURL's host Auto-Configure would reuse the main
+// authorization server and never see this one.
+func DCRIssuer(baseURL string) string {
+	base := strings.TrimRight(baseURL, "/")
+	u, err := url.Parse(base)
+	if err != nil || u.Hostname() != "localhost" {
+		return base + PathDCR
+	}
+	u.Host = net.JoinHostPort("127.0.0.1", u.Port())
+	if u.Port() == "" {
+		u.Host = "127.0.0.1"
+	}
+	return u.String() + PathDCR
+}
+
+// AutoResource is the resource identifier of the DCR server's MCP endpoint.
+func AutoResource(baseURL string) string { return Resource(DCRIssuer(baseURL), PathAutoMCP) }
 
 // Resource is the resource identifier of the fixture endpoint at path.
 func Resource(baseURL, path string) string {

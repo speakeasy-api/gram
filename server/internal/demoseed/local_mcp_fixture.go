@@ -273,7 +273,7 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 	// 5. The Auto-Configured OAuth Server: a second OAuth-protected fixture
 	// endpoint with no client yet. An admin's "Set up sign-in" discovers its
 	// authorization server and registers a client, as with a real vendor.
-	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: base + fixtureauth.PathAutoMCP, ID: s.det("remotemcp-notion"), ProjectID: proj})
+	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: fixtureauth.AutoResource(base), ID: s.det("remotemcp-notion"), ProjectID: proj})
 	if err := expect("point the auto-configured oauth server", n, err); err != nil {
 		return err
 	}

@@ -1967,7 +1967,7 @@ func (q *Queries) ServersInsertSignInExampleMCPServers(ctx context.Context, arg 
 const serversInsertSignInExampleRemoteMCPServers = `-- name: ServersInsertSignInExampleRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   ($1::uuid, $2::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
-   'streamable-http', 'https://mcp-fixture.example.com/mcp/auto')
+   'streamable-http', 'https://mcp-fixture.example.com/dcr/mcp/auto')
 `
 
 type ServersInsertSignInExampleRemoteMCPServersParams struct {

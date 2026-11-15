@@ -193,7 +193,7 @@ WHERE project_id = @project_id::uuid AND slug = 'pass-through-token';
 -- name: ServersInsertSignInExampleRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   (@notion_id::uuid, @project_id::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
-   'streamable-http', 'https://mcp-fixture.example.com/mcp/auto');
+   'streamable-http', 'https://mcp-fixture.example.com/dcr/mcp/auto');
 
 -- name: ServersInsertNotionUserSessionIssuer :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug,

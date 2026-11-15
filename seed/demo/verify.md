@@ -730,7 +730,8 @@ open their effective assignments; the dropdown always offers compact member sear
         sign-in.
       - `external-oauth` (`search_logs`): the client signs in at the
         fixture's authorization server (pick an email), not at Speakeasy.
-      - `per-user-oauth` (`whoami`): the consent page lists one service,
+      - `per-user-oauth` (`whoami`), through a client ID metadata document
+        client: the consent page lists one service,
         **MCP Fixture OAuth**; **Connect** opens the fixture's sign-in page;
         pick an email, then **Give access**. `whoami` returns that email with
         `auth: oauth`.
@@ -742,8 +743,10 @@ open their effective assignments; the dropdown always offers compact member sear
         `whoami` returns that email with `auth: own-token`.
       - `auto-configured-oauth`: first, as an admin, open its **Settings →
         Identity → User Identity → Auto-Configure → Save**; the provider then
-        reads **Connected**. A client's sign-in then connects through the
-        fixture and `whoami` returns the picked email.
+        reads **Connected**, with a client registered by DCR (the fixture's
+        `/dcr` authorization server refuses metadata document clients). A
+        client's sign-in then connects through the fixture and `whoami`
+        returns the picked email.
       - `tunnelled-private` (`whoami`, with `GRAM_API_KEY`): the call reaches
         the fixture through the tunnel; `pitchfork logs mcp-fixture` shows
         `tunnel agent connected`.

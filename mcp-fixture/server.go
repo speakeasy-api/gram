@@ -3,6 +3,9 @@
 //
 //   - /mcp/oauth: an MCP endpoint protected by the fixture's own OAuth 2.1
 //     authorization server. Signing in means picking (or typing) an email.
+//   - /dcr/mcp/auto: the same, behind a second authorization server at /dcr
+//     that takes only dynamically registered clients, so setting up its
+//     sign-in exercises DCR where /mcp/oauth's uses a metadata document.
 //   - /mcp/shared: an MCP endpoint that accepts the checked-in shared token
 //     (fixtureauth.SharedToken), or a caller's own fixture access token.
 //   - /mcp/ema: an MCP endpoint whose protected-resource metadata names the
@@ -54,11 +57,6 @@ var (
 	tokensPage = template.Must(template.ParseFS(templateFS, "templates/tokens.html"))
 )
 
-// oauthPaths are the MCP endpoints that take the fixture's OAuth tokens. Each
-// is its own protected resource: a token works only at the endpoint it was
-// issued for.
-var oauthPaths = []string{fixtureauth.PathOAuthMCP, fixtureauth.PathAutoMCP}
-
 // Config configures a fixture server.
 type Config struct {
 	// BaseURL is the fixture's external URL, e.g. https://localhost:41234. It
@@ -76,6 +74,9 @@ type Config struct {
 	// DevIDPURL is the dev-idp's external URL (GRAM_DEVIDP_EXTERNAL_URL).
 	// Empty leaves the Enterprise Managed Authorization endpoint unserved.
 	DevIDPURL string
+	// NoMetadataDocuments makes the authorization server take only
+	// dynamically registered clients, as fixtureauth.PathDCR's does.
+	NoMetadataDocuments bool
 }
 
 // Server is the fixture. Build it with New and serve Handler.
@@ -116,27 +117,26 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok") })
 
-	// Authorization server.
-	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.authorizationServerMetadata)
-	mux.HandleFunc("GET /.well-known/openid-configuration", s.authorizationServerMetadata)
-	mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.protectedResourceMetadata(fixtureauth.PathOAuthMCP))
-	for _, path := range oauthPaths {
-		mux.HandleFunc("GET /.well-known/oauth-protected-resource"+path, s.protectedResourceMetadata(path))
-	}
-	mux.HandleFunc("POST /oauth/register", s.register)
-	mux.HandleFunc("GET /oauth/authorize", s.authorizeGet)
-	mux.HandleFunc("POST /oauth/authorize", s.authorizePost)
-	mux.HandleFunc("POST /oauth/token", s.token)
-	mux.HandleFunc("POST /oauth/revoke", s.revoke)
+	// The authorization server, and PathOAuthMCP, which takes its tokens.
+	s.handleOAuth(mux, fixtureauth.PathOAuthMCP)
+
+	// A second, DCR-only authorization server under PathDCR, with its own
+	// issuer, guarding PathAutoMCP. Its metadata is also served at the
+	// well-known locations RFC 8414 and RFC 9728 derive from the issuer and
+	// resource, which sit at the host root.
+	dcr := s.dcrServer()
+	dcrMux := http.NewServeMux()
+	dcr.handleOAuth(dcrMux, fixtureauth.PathAutoMCP)
+	mux.Handle(fixtureauth.PathDCR+"/", http.StripPrefix(fixtureauth.PathDCR, dcrMux))
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server"+fixtureauth.PathDCR, dcr.authorizationServerMetadata)
+	mux.HandleFunc("GET /.well-known/openid-configuration"+fixtureauth.PathDCR, dcr.authorizationServerMetadata)
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource"+fixtureauth.PathDCR+fixtureauth.PathAutoMCP, dcr.protectedResourceMetadata(fixtureauth.PathAutoMCP))
 
 	// Personal tokens, like a vendor's "create API token" page.
 	mux.HandleFunc("GET /tokens", s.tokensGet)
 	mux.HandleFunc("POST /tokens", s.tokensPost)
 
 	// MCP endpoints.
-	for _, path := range oauthPaths {
-		mux.Handle(path, s.mcpHandler(s.authenticateOAuth(path)))
-	}
 	mux.Handle(fixtureauth.PathSharedMCP, s.mcpHandler(s.authenticateShared))
 	mux.Handle(fixtureauth.PathOwnTokenMCP, s.mcpHandler(s.authenticateOwnToken))
 	mux.Handle(fixtureauth.PathOpenMCP, s.mcpHandler(authenticateOpen))
@@ -175,6 +175,30 @@ func (r *statusRecorder) Flush() {
 	}
 }
 
+// handleOAuth serves the authorization server and path, the MCP endpoint that
+// takes its tokens. Each endpoint is its own protected resource: a token works
+// only at the endpoint it was issued for.
+func (s *Server) handleOAuth(mux *http.ServeMux, path string) {
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.authorizationServerMetadata)
+	mux.HandleFunc("GET /.well-known/openid-configuration", s.authorizationServerMetadata)
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.protectedResourceMetadata(path))
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource"+path, s.protectedResourceMetadata(path))
+	mux.HandleFunc("POST /oauth/register", s.register)
+	mux.HandleFunc("GET /oauth/authorize", s.authorizeGet)
+	mux.HandleFunc("POST /oauth/authorize", s.authorizePost)
+	mux.HandleFunc("POST /oauth/token", s.token)
+	mux.HandleFunc("POST /oauth/revoke", s.revoke)
+	mux.Handle(path, s.mcpHandler(s.authenticateOAuth(path)))
+}
+
+// dcrServer is the DCR-only authorization server served under PathDCR.
+func (s *Server) dcrServer() *Server {
+	cfg := s.cfg
+	cfg.BaseURL = fixtureauth.DCRIssuer(s.issuer)
+	cfg.NoMetadataDocuments = true
+	return New(cfg)
+}
+
 // ---------------------------------------------------------------------------
 // Metadata
 
@@ -191,7 +215,7 @@ func (s *Server) authorizationServerMetadata(w http.ResponseWriter, _ *http.Requ
 		"token_endpoint_auth_methods_supported":      []string{"none"},
 		"revocation_endpoint_auth_methods_supported": []string{"none"},
 		"code_challenge_methods_supported":           []string{"S256"},
-		"client_id_metadata_document_supported":      true,
+		"client_id_metadata_document_supported":      !s.cfg.NoMetadataDocuments,
 		"service_documentation":                      s.issuer + "/healthz",
 	})
 }
@@ -291,6 +315,9 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 // client ID metadata document.
 func (s *Server) resolveClient(ctx context.Context, clientID string) (client, error) {
 	if strings.HasPrefix(clientID, "https://") || strings.HasPrefix(clientID, "http://") {
+		if s.cfg.NoMetadataDocuments {
+			return client{}, errors.New("this authorization server takes only dynamically registered clients")
+		}
 		if err := checkMetadataDocumentURL(clientID); err != nil {
 			return client{}, err
 		}

@@ -469,12 +469,13 @@ recheck action for the inactive fixture, and the seed safety suite.
 
 The Auto-Configured OAuth Server has its own `<org>-auto-configured-oauth`
 endpoint, which is where its sign-in page lives (shared seed:
-`https://mcp-fixture.example.com/mcp/auto`; local org: the MCP fixture's
-second OAuth-protected endpoint). It has its own user session issuer and no
+`https://mcp-fixture.example.com/dcr/mcp/auto`; local org: the MCP fixture's
+`/dcr/mcp/auto`, behind its DCR-only authorization server). It has its own user session issuer and no
 upstream client, so the seed holds no credential. Its server page shows one
 step left: **Settings → Identity → User Identity → Auto-Configure → Save**
-discovers the fixture's authorization server and registers a client with it,
-as an admin would with a real vendor; its rows then offer **Connect account**.
+discovers the fixture's DCR-only authorization server and registers a client
+with it by dynamic client registration (the Per-User OAuth Server's client is
+a client ID metadata document instead), as an admin would with a real vendor; its rows then offer **Connect account**.
 
 Linear (`<org>-linear`) is set up the same way: its own endpoint and user
 session issuer, pointing at the real `https://mcp.linear.app/mcp`, with no

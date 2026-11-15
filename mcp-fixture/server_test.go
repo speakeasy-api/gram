@@ -285,36 +285,109 @@ func TestAPIStub(t *testing.T) {
 func TestTokensAreBoundToTheirResource(t *testing.T) {
 	t.Parallel()
 	_, base := startFixture(t, time.Hour)
+	dcr := fixtureauth.DCRIssuer(base)
+	autoURL := fixtureauth.AutoResource(base)
 
-	auto, err := fixtureauth.IssueTokens(base, fixtureauth.Resource(base, fixtureauth.PathAutoMCP), "client", "sam@fixture.test", nil, time.Hour, time.Now())
+	auto, err := fixtureauth.IssueTokens(dcr, autoURL, "client", "sam@fixture.test", nil, time.Hour, time.Now())
 	require.NoError(t, err)
-	who := callTool(t, base+fixtureauth.PathAutoMCP, auto.AccessToken, "whoami", nil)
+	who := callTool(t, autoURL, auto.AccessToken, "whoami", nil)
 	require.Equal(t, "sam@fixture.test", who["identity"])
 
-	// The same token is refused at the other OAuth endpoint.
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+fixtureauth.PathOAuthMCP, strings.NewReader(`{}`))
+	unauthorized := func(endpoint, token string) {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, strings.NewReader(`{}`))
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode, endpoint)
+	}
+
+	// The same token is refused at the other OAuth endpoint, and the main
+	// authorization server's token is refused at the DCR server's endpoint.
+	unauthorized(base+fixtureauth.PathOAuthMCP, auto.AccessToken)
+	mainIssued, err := fixtureauth.IssueTokens(base, autoURL, "client", "sam@fixture.test", nil, time.Hour, time.Now())
 	require.NoError(t, err)
-	req.Header.Set("Authorization", "Bearer "+auto.AccessToken)
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	_ = resp.Body.Close()
-	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	unauthorized(autoURL, mainIssued.AccessToken)
 
 	// A token for another server's resource (External OAuth) works nowhere here.
 	foreign, err := fixtureauth.IssueTokens(base, "https://speakeasy.test/mcp/external", "client", "sam@fixture.test", nil, time.Hour, time.Now())
 	require.NoError(t, err)
-	for _, path := range []string{fixtureauth.PathOAuthMCP, fixtureauth.PathAutoMCP, fixtureauth.PathSharedMCP} {
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+path, strings.NewReader(`{}`))
-		require.NoError(t, err)
-		req.Header.Set("Authorization", "Bearer "+foreign.AccessToken)
-		resp, err := http.DefaultClient.Do(req)
-		require.NoError(t, err)
-		_ = resp.Body.Close()
-		require.Equal(t, http.StatusUnauthorized, resp.StatusCode, path)
+	for _, endpoint := range []string{base + fixtureauth.PathOAuthMCP, autoURL, base + fixtureauth.PathSharedMCP} {
+		unauthorized(endpoint, foreign.AccessToken)
+	}
+}
+
+// The second authorization server takes only dynamically registered clients,
+// so a sign-in set up against it goes through DCR.
+func TestDCRServerTakesOnlyRegisteredClients(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	_, base := startFixture(t, time.Hour)
+	dcr := fixtureauth.DCRIssuer(base)
+	autoURL := fixtureauth.AutoResource(base)
+	redirect := "https://client.example.test/callback"
+
+	// Discovery, from the well-known locations at the host root and from the
+	// 401's resource_metadata.
+	prm := decode[map[string]any](t, get(t, base+"/.well-known/oauth-protected-resource"+fixtureauth.PathDCR+fixtureauth.PathAutoMCP))
+	require.Equal(t, autoURL, prm["resource"])
+	require.Equal(t, []any{dcr}, prm["authorization_servers"])
+	prm = decode[map[string]any](t, get(t, dcr+"/.well-known/oauth-protected-resource"+fixtureauth.PathAutoMCP))
+	require.Equal(t, autoURL, prm["resource"])
+	for _, metadataURL := range []string{base + "/.well-known/oauth-authorization-server" + fixtureauth.PathDCR, dcr + "/.well-known/oauth-authorization-server"} {
+		asm := decode[map[string]any](t, get(t, metadataURL))
+		require.Equal(t, dcr, asm["issuer"], metadataURL)
+		require.Equal(t, false, asm["client_id_metadata_document_supported"], metadataURL)
+		require.Equal(t, dcr+"/oauth/register", asm["registration_endpoint"], metadataURL)
 	}
 
-	meta := decode[map[string]any](t, get(t, base+"/.well-known/oauth-protected-resource"+fixtureauth.PathAutoMCP))
-	require.Equal(t, fixtureauth.Resource(base, fixtureauth.PathAutoMCP), meta["resource"])
+	verifier := "a-long-enough-pkce-code-verifier-for-the-fixture-test-1234567890"
+	sum := sha256.Sum256([]byte(verifier))
+	authorize := func(clientID string) url.Values {
+		return url.Values{
+			"response_type": {"code"}, "client_id": {clientID}, "redirect_uri": {redirect}, "state": {"xyz"},
+			"code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])}, "code_challenge_method": {"S256"}, "resource": {autoURL},
+		}
+	}
+
+	// A metadata document client is refused.
+	refused := get(t, dcr+"/oauth/authorize?"+authorize("https://client.example.test/client.json").Encode())
+	_ = refused.Body.Close()
+	require.NotEqual(t, http.StatusOK, refused.StatusCode)
+
+	// A registered client signs in and calls a tool.
+	reg, err := http.Post(dcr+"/oauth/register", "application/json", strings.NewReader(`{"redirect_uris":["`+redirect+`"],"client_name":"Test client","token_endpoint_auth_method":"none"}`))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, reg.StatusCode)
+	clientID := decode[map[string]any](t, reg)["client_id"].(string)
+	q := authorize(clientID)
+	page := get(t, dcr+"/oauth/authorize?"+q.Encode())
+	_ = page.Body.Close()
+	require.Equal(t, http.StatusOK, page.StatusCode)
+
+	form := url.Values{}
+	maps.Copy(form, q)
+	form.Set("email", "sam@fixture.test")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dcr+"/oauth/authorize", strings.NewReader(form.Encode()))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := noRedirect().Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusFound, resp.StatusCode)
+	loc, err := url.Parse(resp.Header.Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, dcr, loc.Query().Get("iss"))
+
+	tok := decode[tokenResponse](t, postForm(t, dcr+"/oauth/token", url.Values{
+		"grant_type": {"authorization_code"}, "code": {loc.Query().Get("code")}, "client_id": {clientID},
+		"redirect_uri": {redirect}, "code_verifier": {verifier}, "resource": {autoURL},
+	}))
+	require.Empty(t, tok.Error)
+	who := callTool(t, autoURL, tok.AccessToken, "whoami", nil)
+	require.Equal(t, "sam@fixture.test", who["identity"])
 }
 
 func TestOpenEndpointNeedsNoCredentials(t *testing.T) {
@@ -487,4 +560,13 @@ func TestOwnTokenEndpoint(t *testing.T) {
 		require.Equal(t, "pat@fixture.test", got["identity"])
 		_ = session.Close()
 	}
+}
+
+// The DCR server sits on another host than a localhost fixture, so the
+// dashboard does not take it for the main authorization server.
+func TestDCRIssuerUsesAnotherHost(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "https://127.0.0.1:24973/dcr", fixtureauth.DCRIssuer("https://localhost:24973/"))
+	require.Equal(t, "https://127.0.0.1:24973/dcr/mcp/auto", fixtureauth.AutoResource("https://localhost:24973"))
+	require.Equal(t, "http://127.0.0.1:5000/dcr", fixtureauth.DCRIssuer("http://127.0.0.1:5000"))
 }
