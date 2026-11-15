@@ -40,6 +40,7 @@ var (
 	DataExportRouteV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.data_export_route_event_v1", "Emitted when changes to data export routes are made")
 	AiScanTargetV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_agent_ai_scan_target_event_v1", "Emitted when an organization changes the Shadow AI scan targets its device agents probe for")
 	AIToolDecisionV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_tool_decision_event_v1", "Emitted when an organization decides whether a detected AI tool may reach its MCP gateway")
+	ShadowMCPOfficialServerV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.shadow_mcp_official_server_event_v1", "Emitted when an organization chooses the official version of a Shadow MCP server or keeps direct connections to it working")
 	DeviceIntegrationV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_integration_event_v1", "Emitted when changes to device integration configs are made")
 	DirectoryReviewItemV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.directory_review_item_event_v1", "Emitted when an admin approves, dismisses or opts out of a directory review decision")
 	DirectoryReviewSettingsV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.directory_review_settings_event_v1", "Emitted when an admin turns directory review emails on or off")

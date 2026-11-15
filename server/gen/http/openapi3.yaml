@@ -13801,6 +13801,90 @@ paths:
             x-speakeasy-react-hook:
                 name: SetResourceAudience
                 type: mutation
+    /rpc/access.setShadowMCPOfficialServer:
+        post:
+            description: 'Choose the official version of one project-scoped Shadow MCP server, or keep direct connections to it working. Omitting mcp_server_id with allow_direct_access false restores the default: the server that proxies to the same URL is official, and direct connections are blocked wherever a Shadow MCP policy applies. Requires an authenticated session authorized for org:admin on the active organization.'
+            operationId: setShadowMCPOfficialServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetShadowMCPOfficialServerForm'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: setShadowMCPOfficialServer access
+            tags:
+                - access
+            x-speakeasy-name-override: setShadowMCPOfficialServer
+            x-speakeasy-react-hook:
+                name: SetShadowMCPOfficialServer
+                type: mutation
     /rpc/access.syncDirectoryGroups:
         post:
             description: Fetch the organization's directory groups from WorkOS and save any that are new or changed.
@@ -130740,6 +130824,27 @@ components:
             required:
                 - mcp_server_id
                 - scopes
+        SetShadowMCPOfficialServerForm:
+            type: object
+            properties:
+                allow_direct_access:
+                    type: boolean
+                    description: Keep direct connections to the Shadow MCP server working under the ordinary Shadow MCP rules instead of blocking them.
+                mcp_server_id:
+                    type: string
+                    description: The MCP server to treat as the official version. Omit it to use the server that proxies to the same URL.
+                    format: uuid
+                project_id:
+                    type: string
+                    format: uuid
+                server_url:
+                    type: string
+                    description: The Shadow MCP server's URL.
+                    format: uri
+            required:
+                - project_id
+                - server_url
+                - allow_direct_access
         SetSlackDirectoryDefaultProjectRequestBody:
             type: object
             properties:
@@ -131309,6 +131414,12 @@ components:
         ShadowMCPOfficialServer:
             type: object
             properties:
+                chosen:
+                    type: boolean
+                    description: True when an administrator chose this server. False when it is the server that proxies to the same URL.
+                direct_access_allowed:
+                    type: boolean
+                    description: True while direct connections to the Shadow MCP server keep working under the ordinary Shadow MCP rules, for example while the official server is tested.
                 gateway_name:
                     type: string
                     description: The gateway that serves the official server, when url is a gateway's address.
@@ -131328,6 +131439,8 @@ components:
             required:
                 - mcp_server_id
                 - name
+                - chosen
+                - direct_access_allowed
         ShareSkillRequestBody:
             type: object
             properties:

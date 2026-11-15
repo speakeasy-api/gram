@@ -34,6 +34,7 @@ const (
 	subjectTypeDeployment                   subjectType = "deployment"
 	subjectTypeAiScanTarget                 subjectType = "device_agent_ai_scan_target"
 	subjectTypeAIToolDecision               subjectType = "ai_tool_decision"
+	subjectTypeShadowMCPOfficialServer      subjectType = "shadow_mcp_official_server"
 	subjectTypeDeviceIntegration            subjectType = "device_integration_config"
 	subjectTypeDirectoryReviewItem          subjectType = "directory_review_item"
 	subjectTypeDirectoryReviewSettings      subjectType = "directory_review_settings"

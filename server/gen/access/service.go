@@ -107,6 +107,13 @@ type Service interface {
 	// Update or clear the administrator-defined display name for one
 	// project-scoped Shadow MCP inventory server URL.
 	UpdateShadowMCPInventoryServerName(context.Context, *UpdateShadowMCPInventoryServerNamePayload) (err error)
+	// Choose the official version of one project-scoped Shadow MCP server, or keep
+	// direct connections to it working. Omitting mcp_server_id with
+	// allow_direct_access false restores the default: the server that proxies to
+	// the same URL is official, and direct connections are blocked wherever a
+	// Shadow MCP policy applies. Requires an authenticated session authorized for
+	// org:admin on the active organization.
+	SetShadowMCPOfficialServer(context.Context, *SetShadowMCPOfficialServerPayload) (err error)
 	// List users with observed telemetry usage for one project-scoped Shadow MCP
 	// server URL.
 	ListShadowMCPInventoryUsers(context.Context, *ListShadowMCPInventoryUsersPayload) (res *ListShadowMCPInventoryUsersResult, err error)
@@ -235,7 +242,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [45]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listAgentPolicyScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess", "createTemporaryGrant", "listTemporaryGrants", "renewTemporaryGrant", "revokeTemporaryGrant"}
+var MethodNames = [46]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listAgentPolicyScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "setShadowMCPOfficialServer", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess", "createTemporaryGrant", "listTemporaryGrants", "renewTemporaryGrant", "revokeTemporaryGrant"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -1634,6 +1641,21 @@ type SetResourceAudiencePayload struct {
 	ExpectedVersion string
 }
 
+// SetShadowMCPOfficialServerPayload is the payload type of the access service
+// setShadowMCPOfficialServer method.
+type SetShadowMCPOfficialServerPayload struct {
+	SessionToken *string
+	ProjectID    string
+	// The Shadow MCP server's URL.
+	ServerURL string
+	// The MCP server to treat as the official version. Omit it to use the server
+	// that proxies to the same URL.
+	McpServerID *string
+	// Keep direct connections to the Shadow MCP server working under the ordinary
+	// Shadow MCP rules instead of blocking them.
+	AllowDirectAccess bool
+}
+
 // The enforcement verdict for a shadow MCP server, computed server-side from
 // policies, grants, and the recorded decision. state is the canonical
 // compression of who may call the server; the remaining fields name the
@@ -1794,6 +1816,13 @@ type ShadowMCPOfficialServer struct {
 	URL *string
 	// The gateway that serves the official server, when url is a gateway's address.
 	GatewayName *string
+	// True when an administrator chose this server. False when it is the server
+	// that proxies to the same URL.
+	Chosen bool
+	// True while direct connections to the Shadow MCP server keep working under
+	// the ordinary Shadow MCP rules, for example while the official server is
+	// tested.
+	DirectAccessAllowed bool
 }
 
 // SyncDirectoryGroupsPayload is the payload type of the access service

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   probe: vi.fn(),
   capture: vi.fn(),
   toastSuccess: vi.fn(),
+  save: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/probeRemoteMcpURL.js", () => ({
@@ -34,6 +35,25 @@ vi.mock("@/routes", () => ({
         },
       },
     },
+  }),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useProjectSlugForRequests: () => "default",
+}));
+vi.mock("@gram/client/react-query/mcpServers.js", () => ({
+  useMcpServers: () => ({
+    data: {
+      mcpServers: [
+        { id: "server-tools", name: "Company Tools", visibility: "private" },
+        { id: "server-off", name: "Old Server", visibility: "disabled" },
+      ],
+    },
+  }),
+}));
+vi.mock("./useSaveShadowMCPOfficialServer", () => ({
+  useSaveShadowMCPOfficialServer: () => ({
+    save: mocks.save,
+    isPending: false,
   }),
 }));
 vi.mock("sonner", () => ({
@@ -79,6 +99,8 @@ describe("OfficialServerPanel", () => {
     mocks.probe.mockReset();
     mocks.capture.mockReset();
     mocks.toastSuccess.mockReset();
+    mocks.save.mockReset();
+    mocks.save.mockResolvedValue(undefined);
     window.localStorage.clear();
   });
   afterEach(cleanup);
@@ -162,6 +184,8 @@ describe("OfficialServerPanel", () => {
           slug: "tracker",
           url: "https://app.example.com/mcp/team-gateway",
           gatewayName: "Team Gateway",
+          chosen: false,
+          directAccessAllowed: false,
         },
       }),
     );
@@ -181,6 +205,55 @@ describe("OfficialServerPanel", () => {
         .getAttribute("href"),
     ).toBe("/acme/projects/default/mcp/tracker");
     expect(mocks.probe).not.toHaveBeenCalled();
+  });
+
+  it("keeps direct connections working from the closed Advanced section", async () => {
+    renderPanel(
+      server({
+        officialServer: {
+          mcpServerId: "11111111-1111-4111-8111-111111111111",
+          name: "Tracker",
+          url: "https://app.example.com/mcp/tracker",
+          chosen: false,
+          directAccessAllowed: false,
+        },
+      }),
+    );
+
+    // Closed until asked for.
+    expect(screen.queryByText("Keep direct connections working")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /Keep direct connections working/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await vi.waitFor(() =>
+      expect(mocks.save).toHaveBeenCalledWith({
+        serverUrl: "https://tracker.example.com/mcp",
+        mcpServerId: undefined,
+        allowDirectAccess: true,
+      }),
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalled();
+  });
+
+  it("cannot keep direct connections before there is an official server", async () => {
+    mocks.probe.mockResolvedValue({ outcome: "mcp_available" });
+    renderPanel(server());
+    await screen.findByRole("link", { name: "Make official" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    const keep = screen.getByRole("checkbox", {
+      name: /Keep direct connections working/,
+    });
+    expect(keep.hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByText("Available once this server has an official version."),
+    ).toBeTruthy();
   });
 
   it("renders nothing for a local command", () => {

@@ -17,6 +17,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowmcprepo "github.com/speakeasy-api/gram/server/internal/shadowmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -266,6 +267,89 @@ func TestRenderShadowMCPUserBlockReason_SendsAgentToGatewayThatServesOfficialSer
 
 	require.Contains(t, reason, `"Chat", through the gateway "Team Gateway"`)
 	require.Contains(t, reason, "https://localhost:8080/mcp/"+gatewaySlug, "a gateway member is reached at the gateway's address")
+}
+
+func setOfficialServerChoice(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, serverURL string, chosen uuid.NullUUID, allowDirectAccess bool) {
+	t.Helper()
+	key, ok := shadowmcp.OfficialServerKey(serverURL)
+	require.True(t, ok)
+	_, err := shadowmcprepo.New(conn).UpsertShadowMCPOfficialServerChoice(ctx, shadowmcprepo.UpsertShadowMCPOfficialServerChoiceParams{
+		ProjectID:         projectID,
+		ServerUrl:         key,
+		McpServerID:       chosen,
+		AllowDirectAccess: allowDirectAccess,
+		UserID:            pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+}
+
+func TestEnforceShadowMCPToolAccess_KeptDirectAccessFollowsOrdinaryRules(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	serverURL := "https://testing.example.com/mcp"
+	seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
+		Name: "Testing", RemoteURL: serverURL, Visibility: "", EndpointSlug: "testing-" + uuid.NewString(),
+	})
+	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, serverURL, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, true)
+
+	// Allow-by-default: the direct connection keeps working while the
+	// official server is tested.
+	detail, denied := ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
+		allowAllTestPolicy(uuid.NewString()), "search",
+		shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "testing"})
+	require.False(t, denied)
+	require.Empty(t, detail)
+
+	// Block-by-default still blocks it, for the ordinary reason.
+	detail, denied = ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
+		blockAllTestPolicy(uuid.NewString()), "search",
+		shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "testing"})
+	require.True(t, denied)
+	require.Contains(t, detail, "not Speakeasy-hosted")
+	require.NotContains(t, detail, "official version")
+}
+
+func TestRenderShadowMCPUserBlockReason_SendsAgentToChosenServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// The server people use directly, and an unrelated server the admin
+	// chose as its official version.
+	directURL := "https://direct.example.com/mcp"
+	chosenSlug := "chosen-" + uuid.NewString()
+	chosenID := seedOfficialServer(t, ctx, ti.conn, *authCtx.ProjectID, officialServerSeed{
+		Name: "Company Tools", RemoteURL: "https://internal.example.com/mcp", Visibility: "", EndpointSlug: chosenSlug,
+	})
+	setOfficialServerChoice(t, ctx, ti.conn, *authCtx.ProjectID, directURL, uuid.NullUUID{UUID: chosenID, Valid: true}, false)
+
+	detail, denied := ti.service.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID,
+		allowAllTestPolicy(uuid.NewString()), "search",
+		shadowmcp.AccessEvidence{FullURL: directURL, URLHost: "", ServerIdentity: "direct"})
+	require.True(t, denied)
+	require.Contains(t, detail, `official version "Company Tools"`)
+
+	reason := ti.service.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       authCtx.ProjectID.String(),
+		RequesterUserID: authCtx.UserID,
+		UserMessage:     nil,
+		AuditReason:     "Speakeasy blocked this tool call",
+		Evidence:        shadowmcp.AccessEvidence{FullURL: directURL, URLHost: "", ServerIdentity: "direct"},
+		ToolName:        "search",
+		ToolInput:       nil,
+		RiskPolicyID:    uuid.NewString(),
+		PolicyName:      "Shadow MCP Block",
+	})
+	require.Contains(t, reason, "https://localhost:8080/mcp/"+chosenSlug)
 }
 
 func TestRenderShadowMCPUserBlockReason_KeepsRequestLinkWithoutOfficialServer(t *testing.T) {

@@ -1,6 +1,7 @@
 package access
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -8,6 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -116,4 +120,130 @@ func TestService_ReadShadowMCPInventoryTarget_NoOfficialServerByDefault(t *testi
 	})
 	require.NoError(t, err)
 	require.Nil(t, server.OfficialServer)
+}
+
+func seedAccessOfficialServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, name string, remoteURL string, visibility string) uuid.UUID {
+	t.Helper()
+	remote, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     projectID,
+		Name:          conv.ToPGText(name),
+		Slug:          conv.ToPGText("remote-" + uuid.NewString()),
+		TransportType: "streamable-http",
+		Url:           remoteURL,
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                    uuid.New(),
+		ProjectID:             projectID,
+		Name:                  conv.ToPGText(name),
+		Slug:                  conv.ToPGText("server-" + uuid.NewString()),
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: remote.ID, Valid: true},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            visibility,
+		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	return server.ID
+}
+
+func TestService_SetShadowMCPOfficialServer_ChooseKeepDirectAndRestore(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	seedShadowMCPInventoryServer(t, ctx, ti, authCtx.ProjectID.String(), "Tracker")
+
+	chosenID := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Company Tools", "https://internal.example.com/mcp", "private")
+	read := func() *gen.ShadowMCPInventoryServer {
+		server, err := ti.service.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      *authCtx.ProjectID,
+			TargetKind:     shadowMCPTargetKindServerURL,
+			TargetKey:      "https://github.example.com/mcp",
+		})
+		require.NoError(t, err)
+		return server
+	}
+	require.Nil(t, read().OfficialServer)
+
+	// Choose an unrelated server as the official version, and keep direct
+	// connections working while it is tested.
+	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+		SessionToken:      nil,
+		ProjectID:         authCtx.ProjectID.String(),
+		ServerURL:         "https://github.example.com/mcp/",
+		McpServerID:       new(chosenID.String()),
+		AllowDirectAccess: true,
+	}))
+	official := read().OfficialServer
+	require.NotNil(t, official)
+	require.Equal(t, chosenID.String(), official.McpServerID)
+	require.Equal(t, "Company Tools", official.Name)
+	require.True(t, official.Chosen)
+	require.True(t, official.DirectAccessAllowed)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerSet)
+	require.NoError(t, err)
+	require.Equal(t, "https://github.example.com/mcp", record.SubjectDisplay)
+	after, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, chosenID.String(), after["mcp_server_id"])
+	require.Equal(t, true, after["allow_direct_access"])
+
+	// Saving the same choice again records nothing new.
+	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+		SessionToken:      nil,
+		ProjectID:         authCtx.ProjectID.String(),
+		ServerURL:         "https://github.example.com/mcp",
+		McpServerID:       new(chosenID.String()),
+		AllowDirectAccess: true,
+	}))
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerSet)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), count)
+
+	// Restoring the default removes the choice.
+	require.NoError(t, ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+		SessionToken:      nil,
+		ProjectID:         authCtx.ProjectID.String(),
+		ServerURL:         "https://github.example.com/mcp",
+		McpServerID:       nil,
+		AllowDirectAccess: false,
+	}))
+	require.Nil(t, read().OfficialServer)
+	count, err = audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionShadowMCPOfficialServerSet)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), count)
+}
+
+func TestService_SetShadowMCPOfficialServer_RejectsDisabledOrForeignServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+
+	disabledID := seedAccessOfficialServer(t, ctx, ti, *authCtx.ProjectID, "Off", "https://off.example.com/mcp", "disabled")
+	err := ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+		SessionToken:      nil,
+		ProjectID:         authCtx.ProjectID.String(),
+		ServerURL:         "https://github.example.com/mcp",
+		McpServerID:       new(disabledID.String()),
+		AllowDirectAccess: false,
+	})
+	require.Error(t, err)
+
+	err = ti.service.SetShadowMCPOfficialServer(ctx, &gen.SetShadowMCPOfficialServerPayload{
+		SessionToken:      nil,
+		ProjectID:         authCtx.ProjectID.String(),
+		ServerURL:         "https://github.example.com/mcp",
+		McpServerID:       new(uuid.NewString()),
+		AllowDirectAccess: false,
+	})
+	require.Error(t, err)
 }

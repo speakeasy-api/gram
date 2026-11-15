@@ -20,7 +20,9 @@ import { useRoutes } from "@/routes";
 import { useNavigate } from "react-router";
 import {
   canMakeShadowMCPServerOfficial,
+  SHADOW_MCP_OFFICIAL_STATE_LABEL,
   shadowMCPOfficialServerDescription,
+  shadowMCPOfficialState,
   shadowMCPOnboardHref,
 } from "./shadowMCPOfficialServer";
 import {
@@ -65,8 +67,6 @@ const INVENTORY_FILTERS = defineFilters([
   { id: "review", label: "Review", kind: "select" },
 ]);
 
-const ONBOARDED_STATUS_LABEL = "Onboarded";
-
 const INVENTORY_PAGE_LIMIT = 50;
 const FIRST_PAGE_CURSOR = "";
 
@@ -84,12 +84,15 @@ function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
   // An onboarded server has left the triage queue: the organization serves
   // it now, which says more than the access verdict on the direct URL. A
   // pending request still wins, because someone is waiting on an answer.
-  if (server.officialServer && status !== "pending") {
+  const officialState = shadowMCPOfficialState(server, status === "pending");
+  if (officialState) {
     return (
       <SimpleTooltip tooltip={shadowMCPOfficialServerDescription(server)}>
         <span tabIndex={0} className="inline-flex cursor-help">
-          <Badge variant="success">
-            <Badge.Text>{ONBOARDED_STATUS_LABEL}</Badge.Text>
+          <Badge variant={officialState === "testing" ? "warning" : "success"}>
+            <Badge.Text>
+              {SHADOW_MCP_OFFICIAL_STATE_LABEL[officialState]}
+            </Badge.Text>
           </Badge>
         </span>
       </SimpleTooltip>
@@ -341,10 +344,16 @@ export function ShadowMCPInventoryTable({
       key: "status",
       header: "Status",
       sortable: true,
-      sortValue: (server) =>
-        server.officialServer && shadowMCPInventoryStatus(server) !== "pending"
-          ? ONBOARDED_STATUS_LABEL
-          : shadowMCPInventoryStatusLabel(shadowMCPInventoryStatus(server)),
+      sortValue: (server) => {
+        const status = shadowMCPInventoryStatus(server);
+        const officialState = shadowMCPOfficialState(
+          server,
+          status === "pending",
+        );
+        return officialState
+          ? SHADOW_MCP_OFFICIAL_STATE_LABEL[officialState]
+          : shadowMCPInventoryStatusLabel(status);
+      },
       width: "0.9fr",
       render: (server) =>
         server.targetKind === "stdio_command" ? (

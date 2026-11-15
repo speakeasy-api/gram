@@ -29,6 +29,10 @@ import {
 } from "@/components/ui/collapsible-preview";
 import { OfficialServerPanel } from "@/components/shadow-mcp/OfficialServerPanel";
 import {
+  SHADOW_MCP_OFFICIAL_STATE_LABEL,
+  shadowMCPOfficialState,
+} from "@/components/shadow-mcp/shadowMCPOfficialServer";
+import {
   eligibleShadowMCPAllowRulePolicies,
   shadowMCPBlockingPolicyDisposition,
   shadowMCPInventoryStatus,
@@ -177,20 +181,32 @@ function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
   // The same rule as the inventory row: an onboarded server reads as
   // onboarded unless someone is waiting on a request for the direct URL.
   // Where it is served is the panel's job, so the tile only names the state.
-  const onboarded = !!server.officialServer && status !== "pending";
+  const officialState = shadowMCPOfficialState(server, status === "pending");
 
   return (
     <MetricCard.Group className="flex-wrap">
       <MetricCard
         label="Status"
-        value={onboarded ? "Onboarded" : shadowMCPInventoryStatusLabel(status)}
-        tone={onboarded ? "success" : statusTone(status)}
+        value={
+          officialState
+            ? SHADOW_MCP_OFFICIAL_STATE_LABEL[officialState]
+            : shadowMCPInventoryStatusLabel(status)
+        }
+        tone={
+          officialState === "testing"
+            ? "warning"
+            : officialState
+              ? "success"
+              : statusTone(status)
+        }
         size="xs"
         className={SUMMARY_TILE_CLASS}
         description={
-          onboarded
-            ? "Served by your organization"
-            : shadowMCPInventoryStatusDescription(server)
+          officialState === "testing"
+            ? "Direct connections still work"
+            : officialState
+              ? "Served by your organization"
+              : shadowMCPInventoryStatusDescription(server)
         }
       />
       {/* First-seen rides under the call count rather than taking a tile of

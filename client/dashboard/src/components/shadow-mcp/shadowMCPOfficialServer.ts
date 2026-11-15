@@ -56,11 +56,33 @@ export function shadowMCPOfficialServerDescription(
   if (!official.url) {
     return `${served} It has no address yet, so direct connections still work.`;
   }
+  if (official.directAccessAllowed) {
+    return `${served} Direct connections still work while you test it.`;
+  }
   if (server.accessSummary?.state === "unenforced") {
     return `${served} No Shadow MCP policy is on, so direct connections still work.`;
   }
   return `${served} Direct connections are blocked and agents are sent there.`;
 }
+
+/**
+ * The state an official version puts a Shadow MCP server in. "testing" means
+ * an official server exists but direct connections were kept working, which
+ * an admin should not forget about, so it reads differently from
+ * "onboarded". A server someone is waiting on keeps its pending state.
+ */
+export function shadowMCPOfficialState(
+  server: Pick<ShadowMCPInventoryServer, "officialServer">,
+  pending: boolean,
+): "onboarded" | "testing" | null {
+  if (!server.officialServer || pending) return null;
+  return server.officialServer.directAccessAllowed ? "testing" : "onboarded";
+}
+
+export const SHADOW_MCP_OFFICIAL_STATE_LABEL = {
+  onboarded: "Onboarded",
+  testing: "Testing",
+} as const;
 
 type OnboardCheckState = "pass" | "fail" | "skipped";
 

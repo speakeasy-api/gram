@@ -16,10 +16,17 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Stack } from "@/components/ui/Stack";
 import { useIsSpeakeasyStaff, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
-import { AlertCircle, Plug } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { AlertCircle, ChevronRight, Plug } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { SHADOW_MCP_ONBOARD_SOURCE } from "@/components/shadow-mcp/shadowMCPOfficialServer";
+import { useSaveShadowMCPOfficialServer } from "@/components/shadow-mcp/useSaveShadowMCPOfficialServer";
+import { Checkbox } from "@/components/ui/Checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
 import { useCreateUnproxiedMcpSource } from "../unproxied-mcp/hooks";
@@ -76,6 +83,9 @@ function CreateRemoteMcpForm() {
     prefilledUrl !== "";
   const [name, setName] = useState(searchParams.get("name")?.trim() ?? "");
   const [url, setUrl] = useState(prefilledUrl);
+  const [keepDirectConnections, setKeepDirectConnections] = useState(false);
+  const keepDirectId = useId();
+  const officialChoice = useSaveShadowMCPOfficialServer();
   const [mode, setMode] = useState<ProxyMode>("proxied");
   const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
   const [identityMode, setIdentityMode] =
@@ -165,6 +175,33 @@ function CreateRemoteMcpForm() {
     void verify.trigger();
   };
 
+  // A server made from a Shadow MCP link becomes that server's official
+  // version. The server found by URL already is, unless the admin edited the
+  // URL, kept direct connections working, or made a server Speakeasy does not
+  // proxy; then the choice is stored explicitly. A failure here leaves the
+  // server in place and says how to finish by hand.
+  const recordOfficialChoice = async (
+    mcpServerId: string,
+    proxied: boolean,
+  ) => {
+    if (!fromShadowMCP) return;
+    const sameURL =
+      url.trim().replace(/\/+$/, "") === prefilledUrl.replace(/\/+$/, "");
+    if (sameURL && proxied && !keepDirectConnections) return;
+    try {
+      await officialChoice.save({
+        serverUrl: prefilledUrl,
+        mcpServerId: sameURL && proxied ? undefined : mcpServerId,
+        allowDirectAccess: keepDirectConnections,
+      });
+    } catch {
+      toast.warning(
+        "Server added, but it is not yet linked to the Shadow MCP server. Link it under Advanced on that server's Shadow MCP page.",
+        { duration: 12000 },
+      );
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (creationLocked) return;
@@ -189,6 +226,7 @@ function CreateRemoteMcpForm() {
           name: trimmedName === "" ? undefined : trimmedName,
           url: url.trim(),
         });
+        await recordOfficialChoice(mcpServer.id, false);
         toast.success("MCP server added");
         routes.mcp.details.overview.goTo(mcpServerRouteParam(mcpServer));
         return;
@@ -208,6 +246,7 @@ function CreateRemoteMcpForm() {
               ? agentCredential.authorizationValue.trim()
               : undefined,
         });
+      await recordOfficialChoice(mcpServer.id, true);
       // The guardrail is attempted only now that the server exists. If it
       // fails the server stays, the failure is reported, and the user lands on
       // the server's Guardrails tab, where the guardrail can be added again.
@@ -269,6 +308,37 @@ function CreateRemoteMcpForm() {
               connections are blocked wherever a Shadow MCP policy applies, and
               agents are sent to this official server.
             </Alert>
+          ) : null}
+          {fromShadowMCP ? (
+            <Collapsible>
+              <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
+                <ChevronRight className="size-3.5" aria-hidden />
+                Advanced
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3">
+                <div className="flex items-start gap-2.5">
+                  <Checkbox
+                    id={keepDirectId}
+                    className="mt-0.5"
+                    checked={keepDirectConnections}
+                    disabled={creationLocked || isPending}
+                    onCheckedChange={(checked) =>
+                      setKeepDirectConnections(checked === true)
+                    }
+                  />
+                  <label htmlFor={keepDirectId} className="space-y-0.5">
+                    <span className="block text-sm">
+                      Keep direct connections working while I test it
+                    </span>
+                    <Text muted small>
+                      Direct connections then follow the policy&apos;s usual
+                      rules. Turn this off on the Shadow MCP page when the
+                      official server is ready.
+                    </Text>
+                  </label>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           ) : null}
           <fieldset disabled={creationLocked} className="contents">
             <Stack gap={1}>

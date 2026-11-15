@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canMakeShadowMCPServerOfficial,
+  shadowMCPOfficialState,
   onboardReadiness,
   shadowMCPOfficialServerDescription,
   shadowMCPOnboardHref,
@@ -55,7 +56,12 @@ describe("canMakeShadowMCPServerOfficial", () => {
     expect(
       canMakeShadowMCPServerOfficial({
         targetKind: "server_url",
-        officialServer: { mcpServerId: "id", name: "Sentry" },
+        officialServer: {
+          mcpServerId: "id",
+          name: "Sentry",
+          chosen: false,
+          directAccessAllowed: false,
+        },
       }),
     ).toBe(false);
   });
@@ -66,6 +72,8 @@ describe("shadowMCPOfficialServerDescription", () => {
     mcpServerId: "id",
     name: "Linear",
     url: "https://app.example.com/mcp/linear",
+    chosen: false,
+    directAccessAllowed: false,
   };
 
   it("says direct connections are blocked when a policy enforces it", () => {
@@ -88,6 +96,17 @@ describe("shadowMCPOfficialServerDescription", () => {
     ).toContain("through the gateway “Team Gateway”");
   });
 
+  it("says direct connections still work while the admin tests it", () => {
+    expect(
+      shadowMCPOfficialServerDescription({
+        officialServer: { ...official, directAccessAllowed: true },
+        accessSummary: testAccessSummary("blocked"),
+      }),
+    ).toBe(
+      "Served as “Linear”. Direct connections still work while you test it.",
+    );
+  });
+
   it("does not claim a block when no policy is on", () => {
     expect(
       shadowMCPOfficialServerDescription({
@@ -100,7 +119,12 @@ describe("shadowMCPOfficialServerDescription", () => {
   it("does not claim a block when the official server has no address", () => {
     expect(
       shadowMCPOfficialServerDescription({
-        officialServer: { mcpServerId: "id", name: "GitHub" },
+        officialServer: {
+          mcpServerId: "id",
+          name: "GitHub",
+          chosen: false,
+          directAccessAllowed: false,
+        },
         accessSummary: testAccessSummary("blocked"),
       }),
     ).toContain("It has no address yet, so direct connections still work");
@@ -170,5 +194,35 @@ describe("onboardReadiness", () => {
       "fail",
       "skipped",
     ]);
+  });
+});
+
+describe("shadowMCPOfficialState", () => {
+  const official = {
+    mcpServerId: "id",
+    name: "Linear",
+    chosen: false,
+    directAccessAllowed: false,
+  };
+
+  it("reads as onboarded, or testing while direct connections are kept", () => {
+    expect(shadowMCPOfficialState({ officialServer: official }, false)).toBe(
+      "onboarded",
+    );
+    expect(
+      shadowMCPOfficialState(
+        { officialServer: { ...official, directAccessAllowed: true } },
+        false,
+      ),
+    ).toBe("testing");
+  });
+
+  it("leaves a pending request or an unmanaged server alone", () => {
+    expect(shadowMCPOfficialState({ officialServer: official }, true)).toBe(
+      null,
+    );
+    expect(shadowMCPOfficialState({ officialServer: undefined }, false)).toBe(
+      null,
+    );
   });
 });

@@ -6844,6 +6844,31 @@ type SessionQuarantine struct {
 	ReleasedBy pgtype.Text
 }
 
+type ShadowMcpOfficialServer struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: restricted
+	ServerUrl string
+	// @access: confidential
+	McpServerID uuid.NullUUID
+	// @access: confidential
+	AllowDirectAccess bool
+	// @access: confidential
+	CreatedByUserID pgtype.Text
+	// @access: confidential
+	UpdatedByUserID pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type SigintCustomSignal struct {
 	// @access: confidential
 	ID uuid.UUID
