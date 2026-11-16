@@ -1078,6 +1078,7 @@ trackedFiles:
   src/models/components/captureeventresult.ts: {}
   src/models/components/challengebucket.ts: {}
   src/models/components/challengeresolution.ts: {}
+  src/models/components/challengetemporarygrant.ts: {}
   src/models/components/changeprescriptionrequestbody.ts: {}
   src/models/components/chat.ts: {}
   src/models/components/chatanalysissettings.ts: {}
@@ -9755,7 +9756,7 @@ examples:
     speakeasy-default-list-agent-policy-scopes:
       responses:
         "200":
-          application/json: {"scopes": [{"agent_eligible": false, "category": "environment", "description": "chip proliferate furthermore emotional marten moralise aha idolized", "label": "<value>", "resource_type": "chat", "sensitive": false, "slug": "agent:transfer", "sub_scopes": [], "visibility": "user_visible"}]}
+          application/json: {"scopes": [{"agent_eligible": false, "category": "environment", "description": "chip proliferate furthermore emotional marten moralise aha idolized", "label": "<value>", "resource_type": "chat", "sensitive": false, "slug": "agent:transfer", "sub_scopes": [], "temporary_grantable": false, "visibility": "user_visible"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

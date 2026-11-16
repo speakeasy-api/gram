@@ -1058,25 +1058,26 @@ func (q *Queries) HasPermanentPrincipalGrants(ctx context.Context, arg HasPerman
 const insertChallengeResolutions = `-- name: InsertChallengeResolutions :many
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,
-  resource_kind, resource_id, resolution_type, role_slug, resolved_by
+  resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by
 )
 SELECT
   $1, unnest($2::text[]), $3, $4,
-  $5, $6, $7, $8, $9
+  $5, $6, $7, $8, $9::uuid, $10
 ON CONFLICT (organization_id, challenge_id) DO NOTHING
 RETURNING id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by, created_at
 `
 
 type InsertChallengeResolutionsParams struct {
-	OrganizationID string
-	ChallengeIds   []string
-	PrincipalUrn   string
-	Scope          string
-	ResourceKind   string
-	ResourceID     string
-	ResolutionType string
-	RoleSlug       pgtype.Text
-	ResolvedBy     string
+	OrganizationID   string
+	ChallengeIds     []string
+	PrincipalUrn     string
+	Scope            string
+	ResourceKind     string
+	ResourceID       string
+	ResolutionType   string
+	RoleSlug         pgtype.Text
+	TemporaryGrantID uuid.NullUUID
+	ResolvedBy       string
 }
 
 // Creates resolution records for one or more denied challenges.
@@ -1091,6 +1092,7 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 		arg.ResourceID,
 		arg.ResolutionType,
 		arg.RoleSlug,
+		arg.TemporaryGrantID,
 		arg.ResolvedBy,
 	)
 	if err != nil {
@@ -2257,6 +2259,56 @@ func (q *Queries) ListAssignableAgents(ctx context.Context, organizationID strin
 	for rows.Next() {
 		var i ListAssignableAgentsRow
 		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChallengeResolutionTemporaryGrants = `-- name: ListChallengeResolutionTemporaryGrants :many
+SELECT id, expires_at, created_at, (expires_at > clock_timestamp())::boolean AS active
+FROM principal_grants
+WHERE organization_id = $1
+  AND id = ANY($2::uuid[])
+  AND expires_at IS NOT NULL
+`
+
+type ListChallengeResolutionTemporaryGrantsParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+type ListChallengeResolutionTemporaryGrantsRow struct {
+	ID        uuid.UUID
+	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+	Active    bool
+}
+
+// Returns each temporary grant a challenge resolution points at, expired ones
+// included. A grant that is missing was revoked (revocation deletes the row).
+// active compares the deadline with the database clock, the same clock
+// authorization reads grants with. created_at moves when an expired grant is
+// restarted, which tells a resolution of the earlier grant from the new one.
+func (q *Queries) ListChallengeResolutionTemporaryGrants(ctx context.Context, arg ListChallengeResolutionTemporaryGrantsParams) ([]ListChallengeResolutionTemporaryGrantsRow, error) {
+	rows, err := q.db.Query(ctx, listChallengeResolutionTemporaryGrants, arg.OrganizationID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChallengeResolutionTemporaryGrantsRow
+	for rows.Next() {
+		var i ListChallengeResolutionTemporaryGrantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.Active,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
