@@ -200,29 +200,33 @@ export default function IdentityAccess(): JSX.Element {
             // holds the left column and what the role is for runs alongside
             // it. As badges alone they were three words in a corner of an
             // otherwise empty card, and said nothing about what holding one
-            // means.
-            roles.map((role) => (
-              <div
-                key={role.id}
-                className="border-border flex items-baseline gap-3 border-b px-4 py-3 last:border-b-0"
-              >
-                <span className="w-28 shrink-0">
-                  <Badge variant="neutral" title={role.slug}>
-                    {/* A role the roles list did not return has no page to open. */}
-                    <Badge.Text>
-                      <RoleLink
-                        roleId={rolesById.has(role.id) ? role.id : undefined}
-                      >
-                        {role.name}
-                      </RoleLink>
-                    </Badge.Text>
-                  </Badge>
-                </span>
-                <span className="text-muted-foreground min-w-0 flex-1 text-xs">
-                  {role.description || role.slug}
-                </span>
-              </div>
-            ))
+            // means. The badge column is as wide as the longest role name —
+            // a fixed width let a long name run over its description — and
+            // each row is a subgrid of it, so the descriptions still line up.
+            <div className="grid grid-cols-[minmax(7rem,max-content)_minmax(0,1fr)]">
+              {roles.map((role) => (
+                <div
+                  key={role.id}
+                  className="border-border col-span-full grid grid-cols-subgrid items-baseline gap-x-3 border-b px-4 py-3 last:border-b-0"
+                >
+                  <span>
+                    <Badge variant="neutral" title={role.slug}>
+                      {/* A role the roles list did not return has no page to open. */}
+                      <Badge.Text>
+                        <RoleLink
+                          roleId={rolesById.has(role.id) ? role.id : undefined}
+                        >
+                          {role.name}
+                        </RoleLink>
+                      </Badge.Text>
+                    </Badge>
+                  </span>
+                  <span className="text-muted-foreground min-w-0 text-xs">
+                    {role.description || role.slug}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </IdentityPanel>
 
