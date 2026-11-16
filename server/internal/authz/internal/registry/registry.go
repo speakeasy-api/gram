@@ -138,8 +138,8 @@ type Dimension struct {
 	// text. A wildcard is always accepted where the key allows one.
 	Values []string
 	// Required marks a key every check of the type must carry with a concrete
-	// value. Without it, a loosely matched check that omits the key still
-	// matches a grant constrained on it.
+	// value. A check that omits it is refused as invalid instead of matching
+	// no grant constrained on it.
 	Required bool
 }
 

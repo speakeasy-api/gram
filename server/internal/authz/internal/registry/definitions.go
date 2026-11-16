@@ -21,7 +21,7 @@ var Definitions = Registry{
 			Kind:       "org",
 			Parent:     "",
 			Category:   ScopeCategoryOrg,
-			Match:      MatchLoose,
+			Match:      MatchStandard,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -93,7 +93,7 @@ var Definitions = Registry{
 			Kind:       "chat",
 			Parent:     "project",
 			Category:   ScopeCategorySession,
-			Match:      MatchLoose,
+			Match:      MatchStandard,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -130,7 +130,7 @@ var Definitions = Registry{
 			Kind:       "project",
 			Parent:     "org",
 			Category:   ScopeCategoryProject,
-			Match:      MatchLoose,
+			Match:      MatchStandard,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -281,7 +281,7 @@ var Definitions = Registry{
 			Kind:     "mcp",
 			Parent:   "project",
 			Category: ScopeCategoryMCP,
-			Match:    MatchLoose,
+			Match:    MatchStandard,
 			Dimensions: []Dimension{
 				// Required since the hotfix: a project-bounded grant must
 				// never match a check that does not name its project.
@@ -384,7 +384,7 @@ var Definitions = Registry{
 			Kind:       "environment",
 			Parent:     "project",
 			Category:   ScopeCategoryEnvironment,
-			Match:      MatchLoose,
+			Match:      MatchStandard,
 			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: true}},
 			Permissions: []Permission{
 				{
@@ -421,7 +421,7 @@ var Definitions = Registry{
 			Kind:       "skill",
 			Parent:     "project",
 			Category:   ScopeCategorySkill,
-			Match:      MatchLoose,
+			Match:      MatchStandard,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -458,7 +458,7 @@ var Definitions = Registry{
 			Kind:       "assistant",
 			Parent:     "project",
 			Category:   ScopeCategoryAssistant,
-			Match:      MatchLoose,
+			Match:      MatchStandard,
 			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: true}},
 			Permissions: []Permission{
 				{
@@ -495,7 +495,7 @@ var Definitions = Registry{
 			Kind:     "risk_policy",
 			Parent:   "org",
 			Category: ScopeCategoryRiskPolicy,
-			Match:    MatchLoose,
+			Match:    MatchStandard,
 			Dimensions: []Dimension{
 				{Key: SelectorKeyServerURL, Values: nil, Required: false},
 				{Key: SelectorKeyServerIdentity, Values: nil, Required: false},
@@ -551,7 +551,7 @@ var Definitions = Registry{
 			Kind:       "inference",
 			Parent:     "project",
 			Category:   ScopeCategoryInference,
-			Match:      MatchLoose,
+			Match:      MatchStandard,
 			Dimensions: []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: true}},
 			Permissions: []Permission{
 				{
@@ -574,7 +574,7 @@ var Definitions = Registry{
 			Kind:       "agent",
 			Parent:     "org",
 			Category:   ScopeCategoryAgent,
-			Match:      MatchLoose,
+			Match:      MatchStandard,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
@@ -642,7 +642,7 @@ var Definitions = Registry{
 			Kind:       "workload",
 			Parent:     "org",
 			Category:   ScopeCategoryWorkload,
-			Match:      MatchLoose,
+			Match:      MatchStandard,
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
