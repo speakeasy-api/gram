@@ -75,7 +75,7 @@ func TestDemoSeedSafety(t *testing.T) {
 		OrgID: otherTenantSpec.OrgID, ProjectID: uuid.MustParse(otherTenantSpec.ProjectID()),
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, planted, "fixture must include a root endpoint")
+	require.EqualValues(t, 3, planted, "fixture must include a root endpoint and two same-slug toolsets")
 
 	require.NoError(t, demoseedtest.PlantMCPServerDependents(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
@@ -156,7 +156,7 @@ func TestDemoSeedSafety(t *testing.T) {
 		OrgID: constants.DemoOrganizationID, ProjectID: uuid.MustParse(DefaultSpec().ProjectID()),
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, planted, "reseed must remove custom-domain dependents")
+	require.EqualValues(t, 3, planted, "reseed must remove both kinds of custom-domain dependents")
 
 	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
 		ctx, db, constants.DemoOrganizationID, DefaultSpec().ProjectID(),
