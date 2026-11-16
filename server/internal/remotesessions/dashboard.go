@@ -443,6 +443,9 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 			if err != nil {
 				return serverIdentityRequest{}, fmt.Errorf("parse replace_client_server_ids: %w", err)
 			}
+			if serverID == uuid.Nil {
+				return serverIdentityRequest{}, errors.New("replace_client_server_ids must not contain the nil id")
+			}
 			serverIDs = append(serverIDs, serverID)
 		}
 		req.replacement = &ClientReplacement{ServerIDs: serverIDs}
@@ -453,6 +456,9 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 	req.mcpServerID, err = uuid.Parse(payload.McpServerID)
 	if err != nil {
 		return serverIdentityRequest{}, fmt.Errorf("parse mcp_server_id: %w", err)
+	}
+	if req.mcpServerID == uuid.Nil {
+		return serverIdentityRequest{}, errors.New("mcp_server_id must not be the nil id")
 	}
 	if (payload.ProviderID == nil) == (payload.CreateProvider == nil) {
 		return serverIdentityRequest{}, errors.New("exactly one of provider_id or create_provider is required")
