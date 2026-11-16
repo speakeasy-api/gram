@@ -63,9 +63,9 @@ References:
 
    Setup does not read or change organization billing flags, trial state or
    eligibility. Before testing checkout, separately select a **synthetic local**
-   organization with the existing `gram-payg-self-serve-billing` feature gate
-   enabled and eligible billing/trial state. Keep its identifiers only in your
-   shell/internal rollout record (`M3_ORG_ID` / `M3_ORG_SLUG`), not shared logs.
+   organization with eligible billing/trial state. Keep its identifiers only in
+   your shell/internal rollout record (`M3_ORG_ID` / `M3_ORG_SLUG`), not shared
+   logs.
    These are checkout prerequisites, not setup requirements. Trial reset is
    separate work (GRW-92) and is not part of this procedure.
 
