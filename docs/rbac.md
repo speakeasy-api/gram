@@ -1234,7 +1234,7 @@ Grant row:
 Handler check:
 
 ```go
-authz.MCPServer(toolsetA, project).ToolCall("search_docs", "read_only")
+authz.MCPServer(authz.MCPServerIDFrom("toolset_a"), authz.ProjectIDFrom("project_a")).ToolCall("search_docs", "read_only")
 ```
 
 Result: allowed.
@@ -1260,13 +1260,13 @@ Grant row:
 Allowed check:
 
 ```go
-authz.MCPServer(toolsetA, project).ToolCall("search_docs", "read_only")
+authz.MCPServer(authz.MCPServerIDFrom("toolset_a"), authz.ProjectIDFrom("project_a")).ToolCall("search_docs", "read_only")
 ```
 
 Denied check:
 
 ```go
-authz.MCPServer(toolsetA, project).ToolCall("delete_customer", "destructive")
+authz.MCPServer(authz.MCPServerIDFrom("toolset_a"), authz.ProjectIDFrom("project_a")).ToolCall("delete_customer", "destructive")
 ```
 
 The first check matches the constrained tool. The second does not.
