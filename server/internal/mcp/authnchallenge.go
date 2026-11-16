@@ -1369,9 +1369,7 @@ func clientCredentialMisconfiguredError(err error) *oops.ShareableError {
 	return oops.E(oops.CodeFailedPrecondition, err, "%s", selfClientMisconfiguredDescription)
 }
 
-// remoteSessionUnavailableError sets Retry-After on w and returns the 503 for a
-// required upstream token endpoint that is temporarily unavailable, so every
-// path that hits one tells the client the same thing and paces its retries.
+// remoteSessionUnavailableError returns the 503 for a required token endpoint that failed; only an outage sets its own Retry-After.
 func remoteSessionUnavailableError(w http.ResponseWriter, err error) *oops.ShareableError {
 	if address := remotesessions.OutageAddress(err); address != guardian.AddressFine {
 		// Still a 503, but without Retry-After: waiting does not fix an address.

@@ -45,10 +45,7 @@ func AddressFailureOf(err error, tunneled bool) AddressFailure {
 		return AddressFine
 	}
 	// A timeout anywhere in the chain wins: the call also ran out of time.
-	if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
-		return AddressFine
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
+	if timedOut(err) || errors.Is(err, context.DeadlineExceeded) {
 		return AddressFine
 	}
 	if errors.Is(err, ErrBlockedIP) {
@@ -60,11 +57,29 @@ func AddressFailureOf(err error, tunneled bool) AddressFailure {
 	return AddressFine
 }
 
+// timedOut reports a net.Error timeout anywhere in err's tree, joined branches included.
+func timedOut(err error) bool {
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() { //nolint:errorlint // each node of the tree is checked in turn
+		return true
+	}
+	switch wrapped := err.(type) { //nolint:errorlint // walks the tree itself
+	case interface{ Unwrap() error }:
+		return wrapped.Unwrap() != nil && timedOut(wrapped.Unwrap())
+	case interface{ Unwrap() []error }:
+		for _, branch := range wrapped.Unwrap() {
+			if branch != nil && timedOut(branch) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Problem completes a sentence about the thing at the address, empty for AddressFine.
 func (f AddressFailure) Problem() string {
 	switch f {
 	case AddressNotAllowed:
-		return "uses an address Speakeasy does not connect to directly"
+		return "uses a private or internal address Speakeasy can't reach"
 	case AddressNotFound:
 		return "uses an address that does not point anywhere"
 	case AddressFine:

@@ -167,7 +167,19 @@ func unavailableLabel(failure mcpconnectionattempts.Code) string {
 
 // NeedsAttention reports whether the status line should warn.
 func (g gatewayServer) NeedsAttention() bool {
-	return g.Status == gatewayServerReconnect || g.Status == gatewayServerNotSetUp || g.reconnectsOutage()
+	return g.Status == gatewayServerReconnect || g.Status == gatewayServerNotSetUp || g.reconnectsOutage() || g.AddressNotice() != ""
+}
+
+// AddressNotice says an address an admin must fix stops this server, empty when none does.
+func (g gatewayServer) AddressNotice() string {
+	switch {
+	case g.Status != gatewayServerUnavailable || g.address == guardian.AddressFine:
+		return ""
+	case g.signInAddress:
+		return g.Name + " can't connect because its sign-in provider " + g.address.Problem() + ". Ask your administrator to check the sign-in provider's address."
+	default:
+		return g.Name + " " + g.address.Problem() + ". Ask your administrator to check the server's address."
+	}
 }
 
 // ConnectionUnavailable reports a server a recorded outage stopped; its page keeps Refresh in reach.
@@ -357,7 +369,7 @@ func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewa
 				server.cardIDs = append(server.cardIDs, card.ClientID)
 				server.Status = strongerStatus(server.Status, cardStatus(card))
 				server.providerOutage = server.providerOutage || (card.Unavailable && !card.UnavailableTunnel)
-				server.connectionDown = server.connectionDown || card.Unavailable
+				server.connectionDown = server.connectionDown || card.connectionDown()
 				if card.SignInAddress {
 					server.address, server.signInAddress = card.signInAddressFailure, true
 				}
@@ -425,7 +437,7 @@ func (c remoteSessionCard) reconnectsDespiteOutage() bool {
 
 // cardStatus is the status one service gives the servers it signs in to.
 func cardStatus(card remoteSessionCard) gatewayServerStatus {
-	if card.Unavailable || card.SignInAddress {
+	if card.connectionDown() {
 		return gatewayServerUnavailable
 	}
 	reconnect := card.Expired || card.Unroutable || card.IdentityReconnect || card.Rejected || card.Inactive
