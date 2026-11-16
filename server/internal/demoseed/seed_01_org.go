@@ -391,9 +391,11 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 	// own-sessions-only, hiding every seeded chat (owned by the seeded users).
 	if err := s.q.OrgInsertFeatures(ctx, repo.OrgInsertFeaturesParams{
 		OrgID: org,
-		// upstream_auth_enforced: the seed describes an organization on typed
-		// upstream auth, which is the state every organization migrates to, so
-		// the demo and local orgs never exercise the legacy resolver.
+		// upstream_auth_enforced: the seeded org runs on typed upstream auth, so
+		// the demo and local orgs do not exercise the legacy resolver. The seed
+		// sets the feature directly, skipping the admin enable endpoint's audit
+		// record and blocker checks (see docs/rbac.md); upstreamAuthReadiness
+		// fails the run if the typed auth it records is incomplete.
 		Features: []string{"logs", "tool_io_logs", "session_capture", "skills", "rbac", "signals_intelligence", "upstream_auth_enforced"},
 	}); err != nil {
 		return fmt.Errorf("insert demo features: %w", err)
