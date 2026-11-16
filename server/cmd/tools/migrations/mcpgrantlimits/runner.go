@@ -76,7 +76,7 @@ func Run(ctx context.Context, db DB, opts Options) (Report, error) {
 	for _, principal := range principals {
 		changed, err := rewritePrincipal(ctx, db, principal, opts.Apply)
 		if err != nil {
-			return report, fmt.Errorf("rewrite organization %s: %w", principal.OrganizationID, err)
+			return report, fmt.Errorf("rewrite a principal's rules: %w", err)
 		}
 		if changed.LimitsRemoved+changed.Merged+changed.BlocksRemoved == 0 {
 			continue

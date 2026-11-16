@@ -66,6 +66,9 @@ func parseMCPGrantLimitsFlags(args []string, getenv func(string) string) (mcpGra
 			return mcpGrantLimitsConfig{}, errors.New("$GRAM_DATABASE_URL must name a single host; fallbacks to other hosts are not allowed")
 		}
 	}
+	if *apply && !requiresTLS(dbConfig) {
+		return mcpGrantLimitsConfig{}, errors.New("writes require a TLS connection: set sslmode=require, verify-ca or verify-full in $GRAM_DATABASE_URL")
+	}
 	target := net.JoinHostPort(dbConfig.Host, strconv.Itoa(int(dbConfig.Port))) + "/" + dbConfig.Database
 	if *apply && *confirmTarget != target {
 		return mcpGrantLimitsConfig{}, fmt.Errorf("writes require -confirm-target=%s to match the parsed database target", target)
@@ -91,13 +94,16 @@ func runMCPGrantLimits(args []string, stdout io.Writer, getenv func(string) stri
 	}
 	defer pool.Close()
 	report, err := mcpgrantlimits.Run(ctx, pool, mcpgrantlimits.Options{OrganizationID: cfg.orgID, Apply: cfg.apply})
-	if err != nil {
-		_, _ = fmt.Fprintf(stdout, "migration failed: %v\n", err)
-		return 1
-	}
 	mode := "dry-run"
 	if cfg.apply {
 		mode = "apply"
+	}
+	if err != nil {
+		// Each principal commits on its own, so the counts so far are what an
+		// apply has already written.
+		_, _ = fmt.Fprintf(stdout, "migration failed: %v\n", err)
+		_, _ = fmt.Fprintf(stdout, "before the failure: mode=%s environment=%s principals=%d limits_removed=%d merged=%d blocks_removed=%d\n", mode, cfg.environment, report.Principals, report.LimitsRemoved, report.Merged, report.BlocksRemoved)
+		return 1
 	}
 	_, _ = fmt.Fprintf(stdout, "mode=%s environment=%s principals=%d limits_removed=%d merged=%d blocks_removed=%d\n", mode, cfg.environment, report.Principals, report.LimitsRemoved, report.Merged, report.BlocksRemoved)
 	return 0

@@ -47,4 +47,4 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations mcp-grant-limits \
   -confirm-apply=mcp-grant-limits
 ```
 
-`-confirm-target` must exactly match the host, port, and database parsed from `GRAM_DATABASE_URL` by pgx. Stop on any error, investigate, then rerun the same command. A subsequent preview should report `principals=0 limits_removed=0 merged=0 blocks_removed=0`.
+`-confirm-target` must exactly match the host, port, and database parsed from `GRAM_DATABASE_URL` by pgx. An apply also needs `sslmode=require`, `verify-ca` or `verify-full` in `GRAM_DATABASE_URL`. If an apply fails part way, it prints the counts already written before the failure. Stop on any error, investigate, then rerun the same command. A subsequent preview should report `principals=0 limits_removed=0 merged=0 blocks_removed=0`.
