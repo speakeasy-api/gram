@@ -95,7 +95,7 @@ it("shows each mismatch when the warning is opened", () => {
   expect(
     rows.map((row) => [
       row.textContent,
-      within(row).getByRole("checkbox").getAttribute("aria-label"),
+      within(row).getByRole("img").getAttribute("aria-label"),
     ]),
   ).toEqual([
     [expect.stringMatching(/^stray.*Linear/), "Not bound"],

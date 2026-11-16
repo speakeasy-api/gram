@@ -1,4 +1,3 @@
-import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
@@ -59,7 +58,7 @@ export function ClientDriftWarning({
             <thead className="bg-muted/40 sticky top-0">
               <tr>
                 <th className="text-eyebrow px-4 py-2 font-normal">Client</th>
-                <th className="text-eyebrow px-4 py-2 font-normal">
+                <th className="text-eyebrow px-4 py-2 text-center font-normal">
                   Bound to this provider
                 </th>
                 <th className="text-eyebrow px-4 py-2 font-normal">
@@ -116,16 +115,17 @@ function ClientRow({ use }: { use: ClientUse }): JSX.Element {
           </div>
         </div>
       </td>
-      <td className="px-4 py-3 align-top">
-        <Checkbox
-          checked={use.bound}
+      <td className="px-4 py-3 text-center align-top">
+        <span
+          role="img"
           aria-label={use.bound ? "Bound" : "Not bound"}
-          tabIndex={-1}
-          className={cn(
-            "pointer-events-none mt-0.5",
-            !use.bound && "border-warning",
-          )}
-        />
+          className="inline-flex"
+        >
+          <Icon
+            name={use.bound ? "check" : "x"}
+            className={cn("size-4", !use.bound && "text-warning")}
+          />
+        </span>
       </td>
       <td className="px-4 py-3 align-top">
         {use.servers.length > 0 ? (
