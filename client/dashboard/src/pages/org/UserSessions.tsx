@@ -17,6 +17,7 @@ import {
 } from "@/components/connections/groupConnections";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
@@ -73,10 +74,13 @@ const CONNECTIONS_DESCRIPTION =
 
 export default function UserSessions(): JSX.Element {
   const project = useProject();
-  const tabbed =
-    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
-    "enabled";
+  const flag = useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard);
+  const tabbed = flag.status === "enabled";
   const tabs = useMcpSessionsTabs();
+
+  // Wait for the flag rather than drawing one layout and swapping to the
+  // other, which would remount the list and drop its search and grouping.
+  if (flag.status === "loading") return <SplashScreen />;
 
   if (!tabbed) {
     return (

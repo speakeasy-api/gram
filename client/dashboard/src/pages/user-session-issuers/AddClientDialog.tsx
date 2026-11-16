@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import type { VerifyCimdURLResult } from "@gram/client/models/components/verifycimdurlresult.js";
 import { useVerifyUserSessionIssuerCimdClientURLMutation } from "@gram/client/react-query/verifyUserSessionIssuerCimdClientURL.js";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { monogram, summarizeDocument } from "./knownClients";
 import type { OrganizationClients } from "./useOrganizationClients";
 
@@ -34,8 +34,9 @@ export function AddClientDialog({
     result: VerifyCimdURLResult;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Bumped on close, so a check still running then can't fill the next one.
+  const attempt = useRef(0);
   const verify = useVerifyUserSessionIssuerCimdClientURLMutation({
-    onSuccess: (result) => setChecked({ url: url.trim(), result }),
     onError: (err) =>
       setError(err instanceof Error ? err.message : "Couldn't check it."),
   });
@@ -54,9 +55,11 @@ export function AddClientDialog({
     (canCheck ? result?.verified === true : true);
 
   const reset = (): void => {
+    attempt.current += 1;
     setUrl("");
     setChecked(null);
     setError(null);
+    clients.clearAddError();
   };
 
   return (
@@ -87,6 +90,7 @@ export function AddClientDialog({
               onChange={(value: string) => {
                 setUrl(value);
                 setError(null);
+                clients.clearAddError();
               }}
               placeholder="https://example.com/oauth/client-metadata.json"
               className="min-w-0 flex-1 font-mono text-xs"
@@ -98,11 +102,22 @@ export function AddClientDialog({
                 disabled={trimmed === "" || verify.isPending}
                 onClick={() => {
                   setError(null);
-                  verify.mutate({
-                    request: {
-                      verifyURLRequestBody: { clientIdMetadataUri: trimmed },
+                  const started = attempt.current;
+                  verify.mutate(
+                    {
+                      request: {
+                        verifyURLRequestBody: { clientIdMetadataUri: trimmed },
+                      },
                     },
-                  });
+                    {
+                      // Kept with the address that was checked, not whatever
+                      // the field holds by the time the answer arrives.
+                      onSuccess: (result) => {
+                        if (attempt.current !== started) return;
+                        setChecked({ url: trimmed, result });
+                      },
+                    },
+                  );
                 }}
               >
                 <Button.Text>
@@ -163,7 +178,13 @@ export function AddClientDialog({
         </Text>
 
         <Dialog.Footer>
-          <Button variant="tertiary" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="tertiary"
+            onClick={() => {
+              reset();
+              onOpenChange(false);
+            }}
+          >
             <Button.Text>Cancel</Button.Text>
           </Button>
           <Button

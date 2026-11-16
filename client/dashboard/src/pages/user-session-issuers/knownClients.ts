@@ -9,16 +9,23 @@ export type KnownClient = {
 
 /**
  * Speakeasy's catalog as one entry per client people recognize. The catalog
- * lists documents, and a client can publish several ("ChatGPT" and "ChatGPT
- * (connectors)"), so documents share an entry when their names match once a
- * trailing parenthetical is dropped. Disabled entries admit nothing and are
- * left out.
+ * lists documents, and a client can publish several: "ChatGPT" and "ChatGPT
+ * (connectors)" are one client. A qualified name joins the entry named
+ * exactly like its stem, and otherwise stands on its own, so "Anthropic
+ * (Claude)" and "Anthropic (Claude Code)" stay two clients rather than one
+ * vendor. Disabled entries admit nothing and are left out.
  */
 export function groupKnownClients(presets: CimdClientPreset[]): KnownClient[] {
+  const enabled = presets.filter((preset) => preset.enabled);
+  const plainNames = new Set(
+    enabled
+      .map((preset) => preset.displayName)
+      .filter((name) => stem(name) === name),
+  );
   const byName = new Map<string, KnownClient>();
-  for (const preset of presets) {
-    if (!preset.enabled) continue;
-    const name = baseName(preset.displayName);
+  for (const preset of enabled) {
+    const base = stem(preset.displayName);
+    const name = plainNames.has(base) ? base : preset.displayName;
     const key = name.toLowerCase();
     const entry = byName.get(key) ?? { key, name, documents: [] };
     entry.documents.push({
@@ -31,7 +38,7 @@ export function groupKnownClients(presets: CimdClientPreset[]): KnownClient[] {
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function baseName(displayName: string): string {
+function stem(displayName: string): string {
   const trimmed = displayName.replace(/\s*\([^)]*\)\s*$/, "").trim();
   return trimmed === "" ? displayName : trimmed;
 }
@@ -64,14 +71,26 @@ export function summarizeDocument(raw: string | undefined): DocumentSummary {
     }
     const record = parsed as Record<string, unknown>;
     const redirects = Array.isArray(record.redirect_uris)
-      ? record.redirect_uris.filter(
-          (value): value is string => typeof value === "string",
-        )
+      ? record.redirect_uris.filter(isWebAddress)
       : [];
-    const website =
-      typeof record.client_uri === "string" ? record.client_uri : null;
+    const website = isWebAddress(record.client_uri) ? record.client_uri : null;
     return { callbackUrls: redirects, website };
   } catch {
     return { callbackUrls: [], website: null };
+  }
+}
+
+/**
+ * The document is the client's own, so only absolute http(s) addresses are
+ * shown: anything else (a script URL, a relative path) is not something a
+ * person can judge from the preview.
+ */
+function isWebAddress(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
   }
 }

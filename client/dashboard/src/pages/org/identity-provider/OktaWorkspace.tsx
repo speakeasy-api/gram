@@ -176,7 +176,8 @@ export function OktaWorkspace(): JSX.Element {
                 value={shownView}
                 onValueChange={(value) => {
                   const next = views.find((item) => item === value);
-                  if (next) void navigate(oktaViewHref(next));
+                  if (next)
+                    void navigate(oktaViewHref(next, undefined, emaReturn));
                 }}
                 className="min-w-0 gap-6"
               >

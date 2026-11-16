@@ -41,21 +41,33 @@ export function parseEmaReturn(
   path: string | null,
 ): EmaReturn | undefined {
   if (!providerName || !path) return undefined;
-  // A same-origin path only: "//host" and "/\host" leave the site.
-  if (
-    !path.startsWith("/") ||
-    path.startsWith("//") ||
-    path.startsWith("/\\")
-  ) {
+  // A same-origin path only. Browsers drop tabs and newlines and read "\" as
+  // "/" before parsing, so "/\n/evil.example" leaves the site like "//host"
+  // does: refuse control characters, then let the URL parser decide.
+  // eslint-disable-next-line no-control-regex
+  if (!path.startsWith("/") || /[\u0000-\u001f\u007f\\]/.test(path)) {
     return undefined;
   }
-  return { providerName, path };
+  const base = "https://speakeasy.invalid";
+  let resolved: URL;
+  try {
+    resolved = new URL(path, base);
+  } catch {
+    return undefined;
+  }
+  if (resolved.origin !== base) return undefined;
+  return {
+    providerName,
+    path: `${resolved.pathname}${resolved.search}${resolved.hash}`,
+  };
 }
 
 /** The provider page again, asking it to turn EMA on with this issuer. */
 export function emaReturnHref(target: EmaReturn, issuerUrl: string): string {
-  const search = new URLSearchParams({ ema: issuerUrl });
-  return `${target.path}?${search.toString()}`;
+  // The path may carry its own query or hash; add to them, don't append blindly.
+  const url = new URL(target.path, "https://speakeasy.invalid");
+  url.searchParams.set("ema", issuerUrl);
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 /** The deployment cannot hold identity provider connections at all. */

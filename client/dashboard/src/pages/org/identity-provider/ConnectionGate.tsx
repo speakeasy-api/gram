@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import type { IconName } from "@/components/ui/Icon/names";
@@ -11,6 +11,7 @@ import {
   isConnectionVerified,
   VERIFICATION_REASON_LABELS,
 } from "./connectionView";
+import { parseEmaReturn } from "./oktaEma";
 import { CONNECTION_SECTION_ID, oktaViewHref } from "./tabs";
 
 /** Which server gate the tab sits behind: the applications snapshot needs a clean verification, readiness accepts a degraded one. */
@@ -56,7 +57,7 @@ export function ConnectionGate({
         icon={icon}
         action={
           <Button asChild>
-            <Link to={setupHref(oktaViewHref("setup"))}>Go to Okta setup</Link>
+            <SetupLink setupHref={setupHref}>Go to Okta setup</SetupLink>
           </Button>
         }
         heading="Verify the connection first"
@@ -74,9 +75,9 @@ export function ConnectionGate({
         icon={icon}
         action={
           <Button asChild>
-            <Link to={setupHref(oktaViewHref("setup", CONNECTION_SECTION_ID))}>
+            <SetupLink setupHref={setupHref} sectionId={CONNECTION_SECTION_ID}>
               Re-verify the connection
-            </Link>
+            </SetupLink>
           </Button>
         }
         heading="The connection needs attention"
@@ -85,4 +86,30 @@ export function ConnectionGate({
     );
   }
   return <>{children}</>;
+}
+
+/** A link to Okta setup that keeps an Enterprise Managed Auth setup in progress. */
+function SetupLink({
+  setupHref,
+  sectionId,
+  children,
+  ...props
+}: {
+  setupHref: (search: string) => string;
+  sectionId?: string;
+  children: ReactNode;
+}): JSX.Element {
+  const [searchParams] = useSearchParams();
+  const emaReturn = parseEmaReturn(
+    searchParams.get("emaFor"),
+    searchParams.get("emaReturn"),
+  );
+  return (
+    <Link
+      {...props}
+      to={setupHref(oktaViewHref("setup", sectionId, emaReturn))}
+    >
+      {children}
+    </Link>
+  );
 }

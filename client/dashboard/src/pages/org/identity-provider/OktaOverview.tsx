@@ -97,7 +97,14 @@ export function OktaOverview({
             id={inputId}
             value={domain}
             placeholder="acme.okta.com"
-            onChange={setDomain}
+            onChange={(value: string) => {
+              setDomain(value);
+              // A check describes the domain it ran on; once the field
+              // changes, the overview must not offer the old issuer.
+              setCheckedIssuer(undefined);
+              setUnusable(false);
+              lookup.reset();
+            }}
           />
           <Button
             type="submit"
@@ -180,7 +187,7 @@ export function OktaOverview({
                   size="sm"
                   asChild
                 >
-                  <Link to={oktaViewHref("setup")}>
+                  <Link to={oktaViewHref("setup", undefined, emaReturn)}>
                     <Button.Text>
                       {connection.kind === "connected"
                         ? "Manage connection"
@@ -202,7 +209,9 @@ export function OktaOverview({
             action={
               connection.kind === "connected" ? (
                 <Button variant="secondary" size="sm" asChild>
-                  <Link to={oktaViewHref("cross-app-access")}>
+                  <Link
+                    to={oktaViewHref("cross-app-access", undefined, emaReturn)}
+                  >
                     <Button.Text>Review access</Button.Text>
                   </Link>
                 </Button>
@@ -230,7 +239,7 @@ function emaStatus({
   if (pending) return <Badge variant="neutral">Checking</Badge>;
   if (ready) return <Badge variant="success">Ready</Badge>;
   if (failed) {
-    return <Badge variant="warning">Okta not found at this address</Badge>;
+    return <Badge variant="warning">Couldn&apos;t use this domain</Badge>;
   }
   return null;
 }

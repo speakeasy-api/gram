@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -63,6 +69,7 @@ vi.mock("./useOrganizationClients", () => ({
     add: vi.fn(),
     adding: false,
     addError: null,
+    clearAddError: vi.fn(),
     remove: vi.fn(),
     removing: false,
   }),
@@ -122,11 +129,17 @@ it("saves session length on its own through the organization for an organization
 it("offers Known clients and Any client only, and warns before narrowing to known clients", () => {
   show(<ClientAccessSection issuer={issuer("p_a")} editableProjectId="p_a" />);
   expect(screen.getAllByRole("radio")).toHaveLength(2);
-  expect(screen.queryByText(/drop many active connections/)).toBeNull();
+  expect(screen.queryByText(/can't sign in again/)).toBeNull();
 
   fireEvent.click(screen.getByLabelText("Known clients"));
-  expect(screen.getByText(/drop many active connections/)).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Zed" })).toBeTruthy();
+  expect(screen.getByText(/can't sign in again/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "See all" }));
+  expect(
+    within(
+      screen.getByRole("list", { name: "Allowed by Speakeasy" }),
+    ).getByText("Zed"),
+  ).toBeTruthy();
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
   expect(screen.getByRole("button", { name: "Add" })).toBeTruthy();
 
   fireEvent.click(screen.getByRole("button", { name: "Save" }));

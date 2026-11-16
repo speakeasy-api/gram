@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EnterpriseManagedAuthSection } from "./EnterpriseManagedAuthSection";
 
 vi.mock("@/components/require-scope", () => ({
@@ -25,10 +25,21 @@ vi.mock("@/routes", () => ({
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
+const okta = {
+  isPending: false,
+  isError: false,
+  data: { id: "remote-1", name: "Okta", issuer: "https://acme.okta.com" },
+};
+const trusted = vi.hoisted(() => ({
+  state: undefined as unknown,
+}));
 vi.mock("@gram/client/react-query/organizationRemoteSessionIssuer.js", () => ({
-  useOrganizationRemoteSessionIssuer: () => ({
-    data: { name: "Okta", issuer: "https://acme.okta.com" },
-  }),
+  useOrganizationRemoteSessionIssuer: () => trusted.state,
+}));
+vi.mock("@/lib/remote-identity/components/ProviderLink", () => ({
+  IssuerLink: ({ issuer }: { issuer: { id: string; name: string } }) => (
+    <a href={`/remote-identity-providers/${issuer.id}`}>{issuer.name}</a>
+  ),
 }));
 vi.mock("./MakeOrganizationWideDialog", () => ({
   MakeOrganizationWideDialog: () => <div role="dialog">Make wide</div>,
@@ -55,6 +66,9 @@ function show(
   );
 }
 
+beforeEach(() => {
+  trusted.state = okta;
+});
 afterEach(cleanup);
 
 describe("EnterpriseManagedAuthSection", () => {
@@ -94,6 +108,66 @@ describe("EnterpriseManagedAuthSection", () => {
         .getByRole("link", { name: "Okta connection" })
         .getAttribute("href"),
     ).toContain("view=setup");
+  });
+
+  it("points a provider other than Okta at its own page, not Okta's", () => {
+    trusted.state = {
+      ...okta,
+      data: {
+        id: "remote-1",
+        name: "Login",
+        issuer: "https://login.example.com",
+      },
+    };
+    show({
+      ...base,
+      trustedRemoteSessionIssuerId: "remote-1",
+      trustedRemoteSessionClientId: "client-1",
+    });
+    expect(screen.queryByRole("link", { name: "Okta connection" })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Login" }).getAttribute("href"),
+    ).toBe("/remote-identity-providers/remote-1");
+  });
+
+  it("treats a provider Okta's own setup created as Okta, whatever its domain", () => {
+    trusted.state = {
+      ...okta,
+      data: {
+        id: "remote-1",
+        slug: "okta-sign-in",
+        name: "Login",
+        issuer: "https://login.example.com",
+      },
+    };
+    show({
+      ...base,
+      trustedRemoteSessionIssuerId: "remote-1",
+      trustedRemoteSessionClientId: "client-1",
+    });
+    expect(screen.getByRole("link", { name: "Okta connection" })).toBeDefined();
+  });
+
+  it("says so when the trusted provider can't be loaded", () => {
+    trusted.state = { isPending: false, isError: true, data: undefined };
+    show({ ...base, trustedRemoteSessionIssuerId: "remote-1" });
+    expect(screen.queryByText("Loading…")).toBeNull();
+    expect(
+      screen.getByText(/Couldn't load this identity provider/),
+    ).toBeDefined();
+  });
+
+  it("won't swap the provider from a return link while browser sign-in uses it", () => {
+    show(
+      {
+        ...base,
+        trustedRemoteSessionIssuerId: "remote-1",
+        trustedRemoteSessionClientId: "client-1",
+      },
+      "/acme/mcp-authentication/usi-1?ema=https%3A%2F%2Fother.example.com",
+    );
+    expect(screen.queryByRole("button", { name: "Turn on EMA" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Okta connection" })).toBeDefined();
   });
 
   it("asks a project-specific provider to become organization-wide first", () => {

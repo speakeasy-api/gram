@@ -1,5 +1,6 @@
 import type { GramCore } from "@gram/client/core.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   lookUpProvider,
@@ -93,13 +94,52 @@ describe("lookUpProvider", () => {
 
   it("says when nothing answers at the address", async () => {
     mocks.fetchMetadata.mockImplementation(() =>
-      Promise.resolve({ ok: false, error: new Error("boom") }),
+      Promise.resolve({ ok: false, error: gramError(400) }),
     );
     await expect(
       lookUpProvider(core, "login.example.com"),
     ).rejects.toBeInstanceOf(ProviderLookupError);
   });
+
+  it.each([403, 500])(
+    "reports a %s from Speakeasy as it is, not as a bad address",
+    async (status) => {
+      const error = gramError(status);
+      mocks.fetchMetadata.mockImplementation(() =>
+        Promise.resolve({ ok: false, error }),
+      );
+      await expect(lookUpProvider(core, "login.example.com")).rejects.toBe(
+        error,
+      );
+    },
+  );
+
+  it("refuses metadata that names a different issuer", async () => {
+    mocks.fetchMetadata.mockImplementation(() =>
+      ok({ ...draft, issuer: "https://other.example.com" }),
+    );
+    await expect(lookUpProvider(core, "login.example.com")).rejects.toThrow(
+      /publishes metadata for https:\/\/other\.example\.com/,
+    );
+  });
+
+  it("refuses signing keys served over plain http", async () => {
+    mocks.fetchMetadata.mockImplementation(() =>
+      ok({ ...draft, jwksUri: "http://login.example.com/keys" }),
+    );
+    await expect(lookUpProvider(core, "login.example.com")).rejects.toThrow(
+      /insecure connection/,
+    );
+  });
 });
+
+function gramError(status: number): GramError {
+  return new GramError("request failed", {
+    response: new Response("{}", { status }),
+    request: new Request("https://speakeasy.invalid"),
+    body: "{}",
+  });
+}
 
 describe("turnOnEma", () => {
   const found = { issuer: "https://login.example.com", draft };

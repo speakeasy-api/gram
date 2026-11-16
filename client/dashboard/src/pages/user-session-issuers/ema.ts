@@ -8,6 +8,7 @@ import { organizationUserSessionIssuersUpdate } from "@gram/client/funcs/organiz
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { unwrapAsync } from "@gram/client/types/fp.js";
 
 /** An identity provider found at the address the admin gave. */
@@ -42,9 +43,22 @@ export async function lookUpProvider(
         fetchIssuerMetadataRequestBody: { issuer },
       }),
     );
-  } catch {
+  } catch (error) {
+    // The server answers 400 when the address itself is the problem: nothing
+    // there, or no metadata it can read. Anything else is on Speakeasy's side
+    // or the person's access, and is reported as it is.
+    if (error instanceof GramError && error.statusCode === 400) {
+      throw new ProviderLookupError(
+        "No identity provider answered at this address. Check it and try again.",
+      );
+    }
+    throw error;
+  }
+  // The metadata must describe the provider that was asked for: one naming
+  // another issuer could have EMA trust tokens nobody here chose to trust.
+  if (draft.issuer && !sameIssuer(draft.issuer, issuer)) {
     throw new ProviderLookupError(
-      "No identity provider answered at this address. Check it and try again.",
+      `This address publishes metadata for ${draft.issuer}. Enter that address instead, or check with whoever runs the provider.`,
     );
   }
   if (!draft.jwksUri) {
@@ -52,7 +66,20 @@ export async function lookUpProvider(
       "This provider doesn't publish signing keys, so Speakeasy can't check the identity it vouches for.",
     );
   }
-  return { issuer: draft.issuer || issuer, draft };
+  if (!isHttps(draft.jwksUri)) {
+    throw new ProviderLookupError(
+      "This provider publishes its signing keys over an insecure connection, so Speakeasy can't rely on them.",
+    );
+  }
+  return { issuer, draft };
+}
+
+function isHttps(address: string): boolean {
+  try {
+    return new URL(address).protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 /** "https://login.example.com/" and "login.example.com" name one issuer. */

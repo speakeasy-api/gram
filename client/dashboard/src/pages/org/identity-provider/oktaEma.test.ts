@@ -29,12 +29,17 @@ describe("parseEmaReturn", () => {
     });
   });
 
-  it.each(["https://evil.example", "//evil.example", "/\\evil.example", "x"])(
-    "refuses %s",
-    (path) => {
-      expect(parseEmaReturn("acme-workforce", path)).toBeUndefined();
-    },
-  );
+  it.each([
+    "https://evil.example",
+    "//evil.example",
+    "/\\evil.example",
+    "x",
+    "/\n/evil.example",
+    "/\t/evil.example",
+    "/\r//evil.example",
+  ])("refuses %s", (path) => {
+    expect(parseEmaReturn("acme-workforce", path)).toBeUndefined();
+  });
 
   it("needs both the name and the path", () => {
     expect(parseEmaReturn(null, "/x")).toBeUndefined();
@@ -50,5 +55,14 @@ describe("emaReturnHref", () => {
         "https://acme.okta.com",
       ),
     ).toBe("/org/x?ema=https%3A%2F%2Facme.okta.com");
+  });
+
+  it("keeps the path's own query and hash", () => {
+    expect(
+      emaReturnHref(
+        { providerName: "acme-workforce", path: "/org/x?tab=y#ema" },
+        "https://acme.okta.com",
+      ),
+    ).toBe("/org/x?tab=y&ema=https%3A%2F%2Facme.okta.com#ema");
   });
 });

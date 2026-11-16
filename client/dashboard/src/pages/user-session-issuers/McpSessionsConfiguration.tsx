@@ -1,6 +1,5 @@
 import { TabbedPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/Heading";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
@@ -83,15 +82,10 @@ function ProviderList(): JSX.Element {
   return (
     <>
       <Stack gap={4}>
-        <div>
-          <Heading variant="h4" className="mb-2">
-            MCP Authentication Providers
-          </Heading>
-          <Text muted small className="max-w-2xl">
-            Where people sign in to this project&apos;s MCP servers. Each one
-            sets how sign-in works for every server that uses it.
-          </Text>
-        </div>
+        <Text muted small className="max-w-2xl">
+          Where people sign in to this project&apos;s MCP servers. Each one sets
+          how sign-in works for every server that uses it.
+        </Text>
         <IssuerTable
           tier={usable}
           showProject={false}

@@ -78,6 +78,7 @@ export function SessionLengthSection({
                 setNumber(Number.isFinite(parsed) && parsed >= 0 ? parsed : 0);
               }}
               aria-invalid={!valid ? true : undefined}
+              aria-describedby={!valid ? `${fieldId}-error` : undefined}
               className="w-[90px]"
               disabled={readOnly}
             />
@@ -102,7 +103,9 @@ export function SessionLengthSection({
             </Select>
           </div>
           {!valid && (
-            <FieldError>Enter a duration of at least one hour.</FieldError>
+            <FieldError id={`${fieldId}-error`}>
+              Enter a duration of at least one hour.
+            </FieldError>
           )}
           {update.error && <FieldError>{update.error.message}</FieldError>}
         </SettingsSection.Body>

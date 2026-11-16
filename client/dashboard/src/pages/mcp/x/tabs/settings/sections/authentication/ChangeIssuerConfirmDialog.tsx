@@ -50,7 +50,7 @@ export function ChangeIssuerConfirmDialog({
   let summary: string;
   if (impact.isError) {
     summary = replacing
-      ? "Couldn't check whether the authorization server changes too. You can still change the issuer."
+      ? "Couldn't check whether the authorization server changes too. You can still change the MCP Authentication Provider."
       : "Couldn't check where clients will sign in. You can still require sign-in.";
   } else if (!replacing) {
     summary = candidateIssuerUrl

@@ -35,6 +35,17 @@ it("groups a client's documents under the name people know it by, leaving out di
   ]);
 });
 
+it("keeps differently qualified clients of one vendor apart", () => {
+  const known = groupKnownClients([
+    preset("Anthropic (Claude Code)", "https://a.example/code.json"),
+    preset("Anthropic (Claude)", "https://a.example/claude.json"),
+  ]);
+  expect(known.map((client) => client.name)).toEqual([
+    "Anthropic (Claude Code)",
+    "Anthropic (Claude)",
+  ]);
+});
+
 it("makes a short monogram for a client without a logo", () => {
   expect(monogram("Factory Droid")).toBe("FD");
   expect(monogram("Zed")).toBe("Ze");
@@ -44,7 +55,12 @@ it("reads callback URLs and website from a client document, and nothing from a b
   expect(
     summarizeDocument(
       JSON.stringify({
-        redirect_uris: ["https://a.example/cb", 7],
+        redirect_uris: [
+          "https://a.example/cb",
+          7,
+          "javascript:alert(1)",
+          "/relative",
+        ],
         client_uri: "https://a.example",
       }),
     ),

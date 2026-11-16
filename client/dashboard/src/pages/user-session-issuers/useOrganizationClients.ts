@@ -21,6 +21,8 @@ export type OrganizationClients = {
   add: (url: string, onDone: () => void) => void;
   adding: boolean;
   addError: Error | null;
+  /** Forgets a failed add, so its message does not outlive the attempt. */
+  clearAddError: () => void;
   remove: (id: string, onDone: () => void) => void;
   removing: boolean;
 };
@@ -122,6 +124,12 @@ export function useOrganizationClients(
     },
     adding: create.isPending,
     addError: create.error,
+    clearAddError: () => {
+      // Resetting a pending add would drop its success handling while the
+      // request still lands, so only a settled attempt is forgotten.
+      if (!createOrganization.isPending) createOrganization.reset();
+      if (!createProject.isPending) createProject.reset();
+    },
     remove: (id, onDone) => {
       const options = {
         onSuccess: async () => {

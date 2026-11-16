@@ -33,9 +33,11 @@ export function RemoteMcpSessionsSection({
     undefined,
     { enabled: !!userSessionIssuerId, throwOnError: false },
   );
+  // Only the in-place session controls read the clients, and the provider
+  // page holds those once its rollout is on.
   const clientsQuery = useAllRemoteSessionClients(
     { userSessionIssuerId },
-    { enabled: !!userSessionIssuerId },
+    { enabled: !!userSessionIssuerId && !mcpAuthenticationPage },
   );
   const loading = issuerQuery.isLoading || clientsQuery.isLoading;
   const failed = issuerQuery.isError || clientsQuery.isError;
@@ -76,8 +78,9 @@ export function RemoteMcpSessionsSection({
       <SettingsSection.Header>
         <SettingsSection.Title>Sessions</SettingsSection.Title>
         <SettingsSection.Description>
-          Choose where people sign in to this server. How long their sessions
-          last and which clients may connect come with that choice.
+          {mcpAuthenticationPage
+            ? "Choose where people sign in to this server. How long their sessions last and which clients may connect come with that choice."
+            : "Control how long User Identity connections last and which MCP clients may initiate them."}
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>

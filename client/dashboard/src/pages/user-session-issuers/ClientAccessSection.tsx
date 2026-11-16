@@ -8,6 +8,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Dialog } from "@/components/ui/Dialog";
 import { FieldError } from "@/components/ui/Field";
 import { Label } from "@/components/ui/Label";
 import {
@@ -23,6 +24,7 @@ import type { UserSessionIssuerCimdClient } from "@gram/client/models/components
 import { useCimdClientPresets } from "@gram/client/react-query/cimdClientPresets.js";
 import { Info, Plus } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
+import { ExplainerDialog } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthRow";
 import { AddClientDialog } from "./AddClientDialog";
 import { groupKnownClients, monogram, type KnownClient } from "./knownClients";
 import {
@@ -96,6 +98,19 @@ export function ClientAccessSection({
         <SettingsSection.Title>Client access</SettingsSection.Title>
         <SettingsSection.Description>
           Which MCP clients may connect through this provider.
+          <ExplainerDialog title="Client ID Metadata Documents (CIMD)">
+            <Text muted small className="block">
+              A client can host a small public file — its name, logo and where
+              it sends users after sign-in — and hand Speakeasy that URL instead
+              of registering first. This setting decides whose files Speakeasy
+              accepts.
+            </Text>
+            <Text muted small className="block">
+              Clients that publish no such file register themselves
+              automatically (Dynamic Client Registration). That path stays open
+              to every client no matter what you pick here.
+            </Text>
+          </ExplainerDialog>
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -152,10 +167,13 @@ export function ClientAccessSection({
           <div className="border-t px-6 py-4">
             <Alert
               variant="warning"
-              title="This can drop many active connections"
+              title="Clients not on these lists can't sign in again"
             >
-              Clients that are not on these lists are refused the next time they
-              refresh. People using them have to reconnect with a known client.
+              This covers clients that identify themselves with a published
+              document; clients that register themselves aren&apos;t affected.
+              People already connected through them stay connected until their
+              session ends, then have to sign in again with a listed client.
+              Enterprise Managed Auth sign-ins from them stop right away.
             </Alert>
           </div>
         )}
@@ -255,8 +273,7 @@ function KnownClients({
         <div className="flex flex-col gap-0.5">
           <Text className="text-sm">Allowed by Speakeasy</Text>
           <Text small muted>
-            Clients Speakeasy has checked and keeps current. Select one to see
-            what it allows.
+            Clients Speakeasy has checked and keeps current.
           </Text>
         </div>
         {presets.isLoading ? (
@@ -275,16 +292,7 @@ function KnownClients({
             </Button>
           </InlineRow>
         ) : (
-          <ul
-            aria-label="Allowed by Speakeasy"
-            className="flex flex-wrap gap-2"
-          >
-            {known.map((client) => (
-              <li key={client.key}>
-                <KnownClientMark client={client} />
-              </li>
-            ))}
-          </ul>
+          <SpeakeasyClients known={known} />
         )}
       </div>
 
@@ -427,54 +435,80 @@ function OrganizationClientList({
   );
 }
 
-/** One client Speakeasy allows: its mark, opening what it allows. */
-function KnownClientMark({ client }: { client: KnownClient }): JSX.Element {
+/** How many logos the summary shows before "and N more". */
+const PREVIEW_COUNT = 6;
+
+/**
+ * The clients Speakeasy allows, summarized by a few logos; the full list,
+ * with what each one allows, opens in a dialog.
+ */
+function SpeakeasyClients({ known }: { known: KnownClient[] }): JSX.Element {
+  const preview = known.slice(0, PREVIEW_COUNT);
+  const more = known.length - preview.length;
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label={client.name}
-          title={client.name}
-          className="hover:border-foreground data-[state=open]:border-foreground bg-card flex size-10 cursor-pointer items-center justify-center border font-mono text-xs"
-        >
-          <ClientMark name={client.name} />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-[440px] max-w-[90vw]">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center border font-mono text-xs">
+    <Dialog>
+      <InlineRow>
+        <div className="flex items-center -space-x-1.5" aria-hidden="true">
+          {preview.map((client) => (
+            <span
+              key={client.key}
+              title={client.name}
+              className="bg-card flex size-8 items-center justify-center border font-mono text-xs"
+            >
               <ClientMark name={client.name} />
             </span>
-            <div className="flex min-w-0 flex-col">
-              <Text>{client.name}</Text>
-              <span className="text-eyebrow">Checked by Speakeasy</span>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <span className="text-eyebrow">Allows</span>
-            {client.documents.map((document) => (
-              <div
-                key={document.url}
-                className="flex flex-col gap-0.5 border-l pl-2.5"
-              >
-                <Text small>{document.name}</Text>
-                <code className="font-mono text-xs break-all">
-                  {document.url}
-                </code>
-                {document.isPattern && (
-                  <Text small muted>
-                    Covers every address that fills each * with one path
-                    segment.
-                  </Text>
-                )}
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
-      </PopoverContent>
-    </Popover>
+        <Text small muted>
+          {more > 0 ? `+${more} more` : `${known.length} clients`}
+        </Text>
+        <Dialog.Trigger asChild>
+          <Button variant="secondary" size="sm">
+            <Button.Text>See all</Button.Text>
+          </Button>
+        </Dialog.Trigger>
+      </InlineRow>
+      <Dialog.Content className="max-w-xl">
+        <Dialog.Header>
+          <Dialog.Title>Allowed by Speakeasy</Dialog.Title>
+          <Dialog.Description>
+            Clients Speakeasy has checked and keeps current, with the documents
+            each one may identify itself with.
+          </Dialog.Description>
+        </Dialog.Header>
+        <ul
+          aria-label="Allowed by Speakeasy"
+          className="max-h-[60vh] divide-y overflow-y-auto border"
+        >
+          {known.map((client) => (
+            <li key={client.key} className="flex gap-3 px-4 py-3">
+              <span className="flex size-8 shrink-0 items-center justify-center border font-mono text-xs">
+                <ClientMark name={client.name} />
+              </span>
+              <div className="flex min-w-0 flex-col gap-1">
+                <Text>{client.name}</Text>
+                {client.documents.map((document) => (
+                  <div key={document.url} className="flex flex-col gap-0.5">
+                    {document.name !== client.name && (
+                      <Text small>{document.name}</Text>
+                    )}
+                    <code className="text-muted-foreground font-mono text-xs break-all">
+                      {document.url}
+                    </code>
+                    {document.isPattern && (
+                      <Text small muted>
+                        Covers every address that fills each * with one path
+                        segment.
+                      </Text>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 

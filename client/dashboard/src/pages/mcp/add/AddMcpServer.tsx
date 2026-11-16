@@ -6,6 +6,7 @@ import {
   type ReleaseStage,
 } from "@/components/release-stage-badge";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useRBAC } from "@/hooks/useRBAC";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useIconDither } from "@/components/icon-dither";
 import { Text } from "@/components/ui/Text";
@@ -168,6 +169,10 @@ export default function AddMcpServer(): JSX.Element {
   };
 
   const oktaSync = useFeatureFlag(FEATURE_FLAGS.oktaMcpImport);
+  // The Sync from Okta page needs org:admin, so nobody else is offered it.
+  const { hasScope } = useRBAC();
+  const canSyncFromOkta =
+    oktaSync.status === "enabled" && hasScope("org:admin");
   const connectOptions: AddOption[] = [
     {
       href: routes.mcp.catalog.href(),
@@ -190,7 +195,7 @@ export default function AddMcpServer(): JSX.Element {
       description:
         "Connect a server running inside your own network through a tunnel.",
     },
-    ...(oktaSync.status === "enabled"
+    ...(canSyncFromOkta
       ? [
           {
             href: routes.mcp.add.okta.href(),

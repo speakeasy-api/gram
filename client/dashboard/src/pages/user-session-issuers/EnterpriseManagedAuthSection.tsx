@@ -9,9 +9,9 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
+import { IssuerLink } from "@/lib/remote-identity/components/ProviderLink";
 import { useOrgRoutes } from "@/routes";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
@@ -52,7 +52,9 @@ export function EnterpriseManagedAuthSection({
   let body: JSX.Element;
   if (issuer.projectId !== "") {
     body = <ProjectSpecific issuer={issuer} />;
-  } else if (returnedIssuer) {
+  } else if (returnedIssuer && !issuer.trustedRemoteSessionClientId) {
+    // Browser sign-in bound to the current identity provider pins EMA to it,
+    // so a return link may not swap it here; TurnedOn says where to change it.
     body = <ConfirmReturned issuer={issuer} address={returnedIssuer} />;
   } else if (editing) {
     body = (
@@ -136,7 +138,10 @@ function TurnedOn({
       toast.success("Enterprise Managed Auth turned off");
     },
   });
-  const providerName = trusted.data?.name || trusted.data?.issuer || "Loading…";
+  const providerName = trusted.isPending
+    ? "Loading…"
+    : trusted.data?.name || trusted.data?.issuer || "Identity provider";
+  const okta = trusted.data ? isOktaIssuer(trusted.data) : false;
   // Browser sign-in also goes through this identity provider; turning EMA
   // off alone would leave that sign-in without the provider it needs.
   const signInToo = !!issuer.trustedRemoteSessionClientId;
@@ -148,7 +153,12 @@ function TurnedOn({
           <Badge variant="success">On</Badge>
           <Text>{providerName}</Text>
         </div>
-        {signInToo ? (
+        {trusted.isError ? (
+          <Text small className="text-destructive">
+            Couldn't load this identity provider. Reload the page to try again.
+          </Text>
+        ) : null}
+        {signInToo && okta ? (
           <Text small muted>
             People also sign in to these MCP servers through this identity
             provider. Change both from the{" "}
@@ -161,9 +171,21 @@ function TurnedOn({
             .
           </Text>
         ) : null}
+        {signInToo && !okta ? (
+          <Text small muted>
+            People also sign in to these MCP servers through this identity
+            provider, so it stays on while browser sign-in uses it.
+            {trusted.data ? (
+              <>
+                {" "}
+                See <IssuerLink issuer={trusted.data} className="underline" />.
+              </>
+            ) : null}
+          </Text>
+        ) : null}
         {turnOff.isError ? (
           <Text small className="text-destructive">
-            {emaChangeError(turnOff.error, "off")}
+            {emaChangeError("off")}
           </Text>
         ) : null}
       </div>
@@ -303,16 +325,29 @@ function useTurnOn(issuer: UserSessionIssuer, onDone: () => void) {
   });
 }
 
-/**
- * Why EMA could not change. Servers that chain this provider's sign-in to
- * another service depend on what it trusts, so the server refuses until
- * identity chaining is turned off on them.
- */
-function emaChangeError(error: Error | null, to: "on" | "off"): string {
-  if (error instanceof GramError && error.statusCode === 409) {
-    return "Some MCP servers use this provider's sign-in for identity chaining to other services. Turn identity chaining off on those servers, then try again.";
-  }
+function emaChangeError(to: "on" | "off"): string {
   return `Couldn't turn Enterprise Managed Auth ${to}. Try again.`;
+}
+
+/**
+ * Okta's own setup names the identity provider it creates "okta-sign-in…";
+ * otherwise, Okta's org authorization server lives on an Okta-run host.
+ */
+function isOktaIssuer({
+  slug,
+  issuer,
+}: {
+  slug?: string | undefined;
+  issuer: string;
+}): boolean {
+  if (slug?.startsWith("okta-sign-in")) return true;
+  try {
+    return /\.(okta|oktapreview|okta-emea)\.com$/i.test(
+      new URL(issuer).hostname,
+    );
+  } catch {
+    return false;
+  }
 }
 
 function lookupMessage(error: Error | null): string | null {
@@ -353,7 +388,12 @@ function AnotherProvider({
               id={inputId}
               value={address}
               placeholder="https://login.example.com"
-              onChange={setAddress}
+              onChange={(value: string) => {
+                setAddress(value);
+                // A lookup describes the address it ran on; once the field
+                // changes, nothing may be turned on with the old result.
+                lookUp.reset();
+              }}
             />
             <Button
               type="submit"
@@ -377,7 +417,7 @@ function AnotherProvider({
         {found ? <FoundDetails issuer={issuer} found={found} /> : null}
         {turnOn.isError ? (
           <Text small className="text-destructive">
-            {emaChangeError(turnOn.error, "on")}
+            {emaChangeError("on")}
           </Text>
         ) : null}
       </div>
@@ -464,7 +504,7 @@ function ConfirmReturned({
         {found ? <FoundDetails issuer={issuer} found={found} /> : null}
         {turnOn.isError ? (
           <Text small className="text-destructive">
-            {emaChangeError(turnOn.error, "on")}
+            {emaChangeError("on")}
           </Text>
         ) : null}
       </div>
