@@ -47,8 +47,9 @@ func (r *PostgresReader) WithDataExportMutations(auditLogger *audit.Logger, dash
 }
 
 type CreateDataExportInput struct {
-	ProjectID     string `json:"project_id,omitempty" jsonschema:"project ID that will export telemetry; supply exactly one project selector"`
-	ProjectSlug   string `json:"project_slug,omitempty" jsonschema:"project slug that will export telemetry; supply exactly one project selector"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID     string `json:"-"`
+	ProjectSlug   string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 	Name          string `json:"name" jsonschema:"display name for the OTEL destination"`
 	EndpointURL   string `json:"endpoint_url" jsonschema:"HTTP or HTTPS OTEL collector endpoint without credentials, query parameters, or fragments"`
 	DataSource    string `json:"data_source" jsonschema:"data to export: product_telemetry, risk_findings, tool_call_logs, or mcp_connection_logs"`
@@ -266,7 +267,7 @@ func dataExportMutationToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrDataExportInvalidInput):
 		refusal = dataExportMutationRefusal{Code: "invalid_input", Message: "Choose exactly one existing project, provide a valid HTTP or HTTPS endpoint without credentials, query parameters, or fragments, and use a supported data source and sensitive-data policy. min_severity is only for mcp_connection_logs and must be info, warn, or error."}
 	case errors.Is(err, ErrForbidden):
-		refusal = dataExportMutationRefusal{Code: "project_not_found", Message: "No accessible project matched that project ID or slug. Read the project inventory and choose one of the returned projects."}
+		refusal = dataExportMutationRefusal{Code: "project_not_found", Message: "No accessible project matched that project slug. Read the project inventory and choose one of the returned projects."}
 	default:
 		return nil, false
 	}

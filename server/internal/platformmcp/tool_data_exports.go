@@ -44,8 +44,9 @@ func (r *PostgresReader) WithDataExports(encryptionClient *encryption.Client, da
 }
 
 type ListDataExportsInput struct {
-	ProjectID   string `json:"project_id,omitempty" jsonschema:"optional project ID; omit both project selectors to list the organization's exports"`
-	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"optional project slug; omit both project selectors to list the organization's exports"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
+	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"the project's slug, as list_projects returns it; omit it to list the organization's exports"`
 	Limit       int    `json:"limit,omitempty" jsonschema:"maximum number of destinations and routes to return in each collection; server clamps this to 100"`
 }
 

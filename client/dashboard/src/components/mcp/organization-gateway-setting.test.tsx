@@ -41,7 +41,7 @@ function renderReason(
 }
 
 const issuersLink = () =>
-  screen.queryByRole("link", { name: "Speakeasy Authorization Servers" });
+  screen.queryByRole("link", { name: "MCP Authentication" });
 
 describe("GatewayNotServed", () => {
   it("sends admins to make a project's server organization-wide", () => {

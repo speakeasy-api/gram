@@ -58,6 +58,7 @@ func registerGatewayTools(reg *Registrar, service *GatewayService) {
 		Name:  setGatewayMembersToolName,
 		Title: "Choose a Gateway's MCP Servers",
 		Description: "Replace the MCP servers behind one gateway in an explicit project with exactly the listed servers, in order: servers not yet on it are added, servers left out are removed, and the rest are reordered. An empty list removes every member. " +
+			"It changes only which servers the gateway fronts; to read a gateway's address, network access or discovery mode, use get_mcp_connection_settings; set_mcp_address and set_mcp_network_access change the address and network access. " +
 			"Before calling, tell the user which servers will be added and removed. When the gateway is in a plugin, the change reaches everyone holding that plugin; an organization administrator adding a server here approves it in Shadow MCP for that audience, as distributing it would. " +
 			"Browser connections approved through the Tool access picker keep their approved members and need new consent for added or previously unavailable servers. Cached tool lists need new consent to include new tools. Older connections, management-issued sessions and agents follow current membership and their access grants. " +
 			"The change is applied together or not at all: when any added server cannot sit behind a gateway, the refusal lists each one with its reason. Calling again with the same list changes nothing and reports unchanged.",

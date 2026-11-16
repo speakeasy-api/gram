@@ -43,6 +43,8 @@ func newApp() *cli.App {
 			newMCPCommand(),
 			newNetworkIngressServerCommand(),
 			newNetingressAttestorCommand(),
+			newTailnetGatewayCommand(),
+			newNetingressLocalTokenCommand(),
 			newNetworkIngressWorkerCommand(),
 			newWorkerCommand(),
 			newAdminCommand(),

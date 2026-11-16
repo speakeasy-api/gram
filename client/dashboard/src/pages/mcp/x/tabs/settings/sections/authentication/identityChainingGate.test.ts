@@ -22,7 +22,6 @@ const speakeasy = (state: InternalSessionIssuer["state"]) =>
     kmsCleanupPending: 0,
   }) as InternalSessionIssuer;
 const rollouts = {
-  externalRollout: true,
   speakeasyRollout: true,
   speakeasyIssuer: undefined,
 };
@@ -70,20 +69,6 @@ describe("identityChainingProviders", () => {
       {
         ...rollouts,
         speakeasyRollout: false,
-        speakeasyIssuer: speakeasy("enabled"),
-      },
-    ],
-    [
-      "the external rollout off",
-      trusting,
-      { ...rollouts, externalRollout: false },
-    ],
-    [
-      "the external rollout off, even with Speakeasy on",
-      trusting,
-      {
-        ...rollouts,
-        externalRollout: false,
         speakeasyIssuer: speakeasy("enabled"),
       },
     ],

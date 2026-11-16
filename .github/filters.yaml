@@ -19,8 +19,24 @@ client:
   - "package.json"
   - "pnpm-lock.yaml"
   - "pnpm-workspace.yaml"
-  - "tsconfig.json"
+  - "tsconfig*.json"
+  - "mise.toml"
+  - ".node-version"
+  - ".mise-tasks/lint/client.sh"
+  - ".oxfmtrc.json"
   - "sdks/typescript/**"
+
+# Root tsconfig includes task sources and the dashboard's source SDK.
+tooling:
+  - ".github/**"
+  - ".mise-tasks/**"
+  - "client/dashboard/src/sdk/**"
+  - "package.json"
+  - "pnpm-lock.yaml"
+  - "pnpm-workspace.yaml"
+  - "tsconfig*.json"
+  - "mise.toml"
+  - ".node-version"
 
 functions:
   - ".github/**"

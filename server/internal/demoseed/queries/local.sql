@@ -73,10 +73,10 @@ ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
 -- name: LocalGrantToolLogVisibility :exec
 -- log:read is likewise held by no system role, so without it the Tool Logs page
 -- and the session Tool calls view would be closed to the local admin.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES (@organization_id::text, 'user:' || @user_id::text, 'log:read', NULL,
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES (@organization_id::text, 'user:' || @user_id::text, 'log:read',
         jsonb_build_object('resource_kind', 'project', 'resource_id', '*'))
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors) DO NOTHING;
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
 
 -- name: LocalEnablePlatformMCPFeature :exec
 -- platform_mcp is the default-on organization entitlement locally; the shared
@@ -214,3 +214,57 @@ WHERE id = (
   LIMIT 1
 )
 AND NOT (@tool_urn::text = ANY(tool_urns));
+
+-- Locally a vendor (Linear, Notion) cannot fetch a client ID metadata
+-- document from localhost, so the shared seed's metadata document client
+-- becomes the public client the local seed registered with the vendor by
+-- dynamic registration.
+-- name: LocalVendorAppPointRegisteredClient :execrows
+UPDATE remote_session_clients
+SET client_id = @client_id::text, client_id_metadata_uri = NULL,
+    callback_base_url = @callback_base_url::text, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: LocalUpsertInspectRemoteServer :exec
+-- Remote MCP servers for the Inspect tab that exist only locally: the mock
+-- task tracker (server/cmd/mock-mcp), an unreachable upstream and a disabled
+-- copy of the mock. They live in the seeded project, so the next seed run's
+-- projects cascade removes them before the fixtures add them back.
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
+VALUES (@id::uuid, @project_id::uuid, @name::text, @slug::text, 'streamable-http', @url::text)
+ON CONFLICT (id) DO UPDATE
+  SET name = EXCLUDED.name, slug = EXCLUDED.slug, url = EXCLUDED.url,
+      deleted_at = NULL, updated_at = clock_timestamp();
+
+-- name: LocalUpsertInspectMCPServer :exec
+-- Like DeepWiki, each takes no upstream credential and sits under the shared
+-- workforce issuer, so the local developer connects without a sign-in.
+INSERT INTO mcp_servers (id, project_id, name, slug, remote_mcp_server_id,
+                         user_session_issuer_id, visibility)
+VALUES (@id::uuid, @project_id::uuid, @name::text, @slug::text, @remote_mcp_server_id::uuid,
+        @user_session_issuer_id::uuid, @visibility::text)
+ON CONFLICT (id) DO UPDATE
+  SET name = EXCLUDED.name, slug = EXCLUDED.slug, visibility = EXCLUDED.visibility,
+      deleted_at = NULL, updated_at = clock_timestamp();
+
+-- name: LocalUpsertInspectEndpoint :exec
+-- Restores the fixture endpoint if it was soft-deleted, but only within the
+-- local fixture's project.
+INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)
+VALUES (@id::uuid, @project_id::uuid, @mcp_server_id::uuid, @slug::text)
+ON CONFLICT (id) DO UPDATE
+  SET mcp_server_id = EXCLUDED.mcp_server_id, meta_mcp_server_id = NULL, slug = EXCLUDED.slug,
+      deleted_at = NULL, updated_at = clock_timestamp()
+  WHERE mcp_endpoints.project_id = EXCLUDED.project_id;
+
+-- name: LocalGrantRoleReadOnlyConnect :execrows
+-- A role limited to the read-only tools of one server, the read_only reason
+-- on the Inspect tab for its members. Custom role grants are cleared with
+-- the roles on every seed run.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT @organization_id::text, 'role:organization:' || r.id, 'mcp:connect',
+       jsonb_build_object('resource_kind', 'mcp',
+         'resource_id', (@mcp_server_id::uuid)::text, 'disposition', 'read_only')
+FROM organization_roles r
+WHERE r.organization_id = @organization_id::text AND r.workos_slug = @role_slug::text
+ON CONFLICT DO NOTHING;

@@ -243,9 +243,6 @@ function EnvironmentPageInner() {
     selectedToolset.functionEnvironmentVariables?.forEach((entry) => {
       names.add(entry.name);
     });
-    selectedToolset.externalMcpHeaderDefinitions?.forEach((entry) => {
-      names.add(entry.name);
-    });
 
     const entriesToUpdate = Array.from(names)
       .filter((name) => !environment.entries?.some((e) => e.name === name))

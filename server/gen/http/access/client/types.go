@@ -230,6 +230,12 @@ type CreateTemporaryGrantRequestBody struct {
 	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
 	// Why the access is needed, recorded in the audit log.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Denied authorization challenges this grant answers. Each must be an
+	// unresolved deny of this scope by this principal that the grant's selector
+	// covers and that no exclusion still blocks; they are resolved as
+	// temporary_grant in the same transaction. Only accepted with a grant to one
+	// member (user:<id>).
+	ChallengeIds []string `form:"challenge_ids,omitempty" json:"challenge_ids,omitempty" xml:"challenge_ids,omitempty"`
 }
 
 // RenewTemporaryGrantRequestBody is the type of the "access" service
@@ -9567,6 +9573,9 @@ type ScopeDefinitionResponseBody struct {
 	// agents cannot hold; those are ignored for the role's agent members rather
 	// than granted.
 	AgentEligible *bool `form:"agent_eligible,omitempty" json:"agent_eligible,omitempty" xml:"agent_eligible,omitempty"`
+	// Whether an administrator can give this scope for a limited time with
+	// createTemporaryGrant.
+	TemporaryGrantable *bool `form:"temporary_grantable,omitempty" json:"temporary_grantable,omitempty" xml:"temporary_grantable,omitempty"`
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
@@ -10031,6 +10040,22 @@ type AuthzChallengeResponseBody struct {
 	ResolvedBy *string `form:"resolved_by,omitempty" json:"resolved_by,omitempty" xml:"resolved_by,omitempty"`
 	// Role slug assigned (when resolution_type=role_assigned).
 	ResolutionRoleSlug *string `form:"resolution_role_slug,omitempty" json:"resolution_role_slug,omitempty" xml:"resolution_role_slug,omitempty"`
+	// The temporary grant given (when resolution_type=temporary_grant).
+	ResolutionTemporaryGrant *ChallengeTemporaryGrantResponseBody `form:"resolution_temporary_grant,omitempty" json:"resolution_temporary_grant,omitempty" xml:"resolution_temporary_grant,omitempty"`
+}
+
+// ChallengeTemporaryGrantResponseBody is used to define fields on response
+// body types.
+type ChallengeTemporaryGrantResponseBody struct {
+	// Temporary grant ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// active: authorizing requests. expired: its deadline passed, or the same
+	// access was given again later as a new grant. revoked: ended early, so the
+	// grant no longer exists.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// When the grant stops, or stopped, authorizing new requests. Absent once
+	// revoked, and once the same access was given again later.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
 // ChallengeBucketResponseBody is used to define fields on response body types.
@@ -10080,6 +10105,8 @@ type ChallengeBucketResponseBody struct {
 	ResolvedBy *string `form:"resolved_by,omitempty" json:"resolved_by,omitempty" xml:"resolved_by,omitempty"`
 	// Role slug assigned (when resolution_type=role_assigned).
 	ResolutionRoleSlug *string `form:"resolution_role_slug,omitempty" json:"resolution_role_slug,omitempty" xml:"resolution_role_slug,omitempty"`
+	// The temporary grant given (when resolution_type=temporary_grant).
+	ResolutionTemporaryGrant *ChallengeTemporaryGrantResponseBody `form:"resolution_temporary_grant,omitempty" json:"resolution_temporary_grant,omitempty" xml:"resolution_temporary_grant,omitempty"`
 }
 
 // ChallengeResolutionResponseBody is used to define fields on response body
@@ -10479,6 +10506,12 @@ func NewCreateTemporaryGrantRequestBody(p *access.CreateTemporaryGrantPayload) *
 	}
 	if p.Selector != nil {
 		body.Selector = marshalAccessSelectorToSelectorRequestBody(p.Selector)
+	}
+	if p.ChallengeIds != nil {
+		body.ChallengeIds = make([]string, len(p.ChallengeIds))
+		for i, val := range p.ChallengeIds {
+			body.ChallengeIds[i] = val
+		}
 	}
 	return body
 }
@@ -30737,6 +30770,9 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 	if body.AgentEligible == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agent_eligible", "body"))
 	}
+	if body.TemporaryGrantable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary_grantable", "body"))
+	}
 	if body.Sensitive == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sensitive", "body"))
 	}
@@ -31525,9 +31561,37 @@ func ValidateAuthzChallengeResponseBody(body *AuthzChallengeResponseBody) (err e
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.resolved_at", *body.ResolvedAt, goa.FormatDateTime))
 	}
 	if body.ResolutionType != nil {
-		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
+		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "temporary_grant" || *body.ResolutionType == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "temporary_grant", "dismissed"}))
 		}
+	}
+	if body.ResolutionTemporaryGrant != nil {
+		if err2 := ValidateChallengeTemporaryGrantResponseBody(body.ResolutionTemporaryGrant); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateChallengeTemporaryGrantResponseBody runs the validations defined on
+// ChallengeTemporaryGrantResponseBody
+func ValidateChallengeTemporaryGrantResponseBody(body *ChallengeTemporaryGrantResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "active" || *body.Status == "expired" || *body.Status == "revoked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "expired", "revoked"}))
+		}
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -31610,8 +31674,13 @@ func ValidateChallengeBucketResponseBody(body *ChallengeBucketResponseBody) (err
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.resolved_at", *body.ResolvedAt, goa.FormatDateTime))
 	}
 	if body.ResolutionType != nil {
-		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
+		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "temporary_grant" || *body.ResolutionType == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "temporary_grant", "dismissed"}))
+		}
+	}
+	if body.ResolutionTemporaryGrant != nil {
+		if err2 := ValidateChallengeTemporaryGrantResponseBody(body.ResolutionTemporaryGrant); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -31645,8 +31714,8 @@ func ValidateChallengeResolutionResponseBody(body *ChallengeResolutionResponseBo
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.ResolutionType != nil {
-		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
+		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "temporary_grant" || *body.ResolutionType == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "temporary_grant", "dismissed"}))
 		}
 	}
 	if body.CreatedAt != nil {

@@ -2,7 +2,9 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -72,19 +74,30 @@ func namedRemoteInspector(canonicalURL, serverName string) *testDirectRemoteInsp
 	return &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: canonicalURL, Transport: "streamable-http", Trust: "user_supplied_unreviewed", ServerName: serverName}}
 }
 
-// registeredServerAddress returns the name and slug of the MCP server a
-// registration created, and the slug of its endpoint address.
-func registeredServerAddress(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal, project ResolvedProject, registrationID string) (string, string, string) {
+// registrationOfMCP returns the Platform setup record behind an MCP server
+// the caller added. No tool returns it, so tests that inspect it look it up.
+func registrationOfMCP(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal, project ResolvedProject, mcpID string) platformrepo.PlatformMcpCatalogRegistration {
 	t.Helper()
 
-	id, err := uuid.Parse(registrationID)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	registrationID, err := store.RegistrationIDForMCP(ctx, principal, project.Slug, mcpID, "test")
 	require.NoError(t, err)
 	registration, err := platformrepo.New(conn).GetPlatformMCPCatalogRegistrationByID(ctx, platformrepo.GetPlatformMCPCatalogRegistrationByIDParams{
-		ID:             id,
+		ID:             uuid.MustParse(registrationID),
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      project.ID,
 	})
 	require.NoError(t, err)
+	return registration
+}
+
+// registeredServerAddress returns the name and slug of an added MCP server,
+// and the slug of the endpoint address its registration created.
+func registeredServerAddress(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal, project ResolvedProject, mcpID string) (string, string, string) {
+	t.Helper()
+
+	registration := registrationOfMCP(t, ctx, conn, principal, project, mcpID)
 	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: registration.McpServerID.UUID, ProjectID: project.ID})
 	require.NoError(t, err)
 	endpoint, err := mcpendpointsrepo.New(conn).GetMCPEndpointByID(ctx, mcpendpointsrepo.GetMCPEndpointByIDParams{ID: registration.McpEndpointID.UUID, ProjectID: project.ID})
@@ -122,7 +135,7 @@ func TestRemoteRegistrationUsesTheServerNameForItsAddress(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	name, serverSlug, endpointSlug := registeredServerAddress(t, ctx, conn, principal, project, remote.RegistrationID)
+	name, serverSlug, endpointSlug := registeredServerAddress(t, ctx, conn, principal, project, remote.MCPID)
 	require.Equal(t, "Linear", name)
 	require.Equal(t, "linear", serverSlug)
 	require.Equal(t, organizationSlug(t, ctx, conn, principal)+"-linear", endpointSlug)
@@ -151,7 +164,7 @@ func TestRemoteRegistrationKeepsTheWholeNameWhenItFits(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, serverSlug, endpointSlug := registeredServerAddress(t, ctx, conn, principal, project, remote.RegistrationID)
+	_, serverSlug, endpointSlug := registeredServerAddress(t, ctx, conn, principal, project, remote.MCPID)
 	require.Equal(t, name, serverSlug)
 	require.Equal(t, orgSlug+"-"+name, endpointSlug)
 }
@@ -185,11 +198,11 @@ func TestRemoteRegistrationAddsASuffixWhenTheReadableAddressIsTaken(t *testing.T
 	})
 	require.NoError(t, err)
 
-	_, firstSlug, firstEndpoint := registeredServerAddress(t, ctx, conn, principal, project, first.RegistrationID)
+	_, firstSlug, firstEndpoint := registeredServerAddress(t, ctx, conn, principal, project, first.MCPID)
 	require.Equal(t, "linear", firstSlug)
 	require.Equal(t, orgSlug+"-linear", firstEndpoint)
 
-	_, secondSlug, secondEndpoint := registeredServerAddress(t, ctx, conn, principal, project, second.RegistrationID)
+	_, secondSlug, secondEndpoint := registeredServerAddress(t, ctx, conn, principal, project, second.MCPID)
 	require.Regexp(t, `^linear-[a-z0-9]{5}$`, secondSlug)
 	require.Equal(t, orgSlug+"-"+secondSlug, secondEndpoint)
 }
@@ -222,9 +235,9 @@ func TestRemoteRegistrationRetryIgnoresAChangedServerName(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, retry.Replayed)
-	require.Equal(t, first.RegistrationID, retry.RegistrationID)
+	require.Equal(t, first.MCPID, retry.MCPID)
 	require.Equal(t, first.ReceiptID, retry.ReceiptID)
-	name, serverSlug, _ := registeredServerAddress(t, ctx, conn, principal, project, retry.RegistrationID)
+	name, serverSlug, _ := registeredServerAddress(t, ctx, conn, principal, project, retry.MCPID)
 	require.Equal(t, "Linear", name)
 	require.Equal(t, "linear", serverSlug)
 }
@@ -249,14 +262,7 @@ func TestInventorySearchFindsAServerNamedByItsUpstreamBySourceURL(t *testing.T) 
 		"idempotency_key": "inventory-upstream-name",
 	})
 	require.NoError(t, err)
-	registrationID, err := uuid.Parse(remote.RegistrationID)
-	require.NoError(t, err)
-	registration, err := platformrepo.New(conn).GetPlatformMCPCatalogRegistrationByID(ctx, platformrepo.GetPlatformMCPCatalogRegistrationByIDParams{
-		ID:             registrationID,
-		OrganizationID: principal.OrganizationID,
-		ProjectID:      project.ID,
-	})
-	require.NoError(t, err)
+	mcpServerID := uuid.MustParse(remote.MCPID)
 
 	candidates, err := platformrepo.New(conn).ListPlatformMCPInventoryAuthorizationCandidatePage(ctx, platformrepo.ListPlatformMCPInventoryAuthorizationCandidatePageParams{
 		OrganizationID: principal.OrganizationID,
@@ -267,7 +273,7 @@ func TestInventorySearchFindsAServerNamedByItsUpstreamBySourceURL(t *testing.T) 
 	})
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
-	require.Equal(t, registration.McpServerID.UUID, candidates[0].ID)
+	require.Equal(t, mcpServerID, candidates[0].ID)
 }
 
 // newNeverCheckedServer adds a server by URL and returns a registrar with the
@@ -293,7 +299,7 @@ func newNeverCheckedServer(t *testing.T, dbName string, limiter Limiter, prober 
 		"idempotency_key": dbName,
 	})
 	require.NoError(t, err)
-	return callCtx, reg, project.Slug, remote.RegistrationID
+	return callCtx, reg, project.Slug, remote.MCPID
 }
 
 // A server that has never been checked reports its real state on the first
@@ -303,8 +309,8 @@ func TestReadinessToolChecksAServerThatHasNeverBeenChecked(t *testing.T) {
 	t.Parallel()
 
 	prober := &countingCatalogReadinessProber{}
-	callCtx, reg, projectSlug, registrationID := newNeverCheckedServer(t, "platform_mcp_readiness_first_probe", allowOperationLimiter{}, prober)
-	args := map[string]any{"project_slug": projectSlug, "registration_id": registrationID}
+	callCtx, reg, projectSlug, mcpID := newNeverCheckedServer(t, "platform_mcp_readiness_first_probe", allowOperationLimiter{}, prober)
+	args := map[string]any{"project_slug": projectSlug, "mcp_id": mcpID}
 
 	first, err := invokeTool[GetMCPReadinessToolOutput](t, callCtx, reg, "get_mcp_readiness", args)
 	require.NoError(t, err)
@@ -336,9 +342,9 @@ func TestReadinessToolReportsUncheckedWhenTheFirstCheckCannotRun(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			callCtx, reg, projectSlug, registrationID := newNeverCheckedServer(t, "platform_mcp_readiness_first_probe_"+tc.name, tc.limiter, tc.prober)
+			callCtx, reg, projectSlug, mcpID := newNeverCheckedServer(t, "platform_mcp_readiness_first_probe_"+tc.name, tc.limiter, tc.prober)
 
-			out, err := invokeTool[GetMCPReadinessToolOutput](t, callCtx, reg, "get_mcp_readiness", map[string]any{"project_slug": projectSlug, "registration_id": registrationID})
+			out, err := invokeTool[GetMCPReadinessToolOutput](t, callCtx, reg, "get_mcp_readiness", map[string]any{"project_slug": projectSlug, "mcp_id": mcpID})
 			require.NoError(t, err)
 			require.Equal(t, ReadinessDegraded, out.State)
 			require.Equal(t, "readiness_unavailable", out.EvidenceCode)
@@ -354,9 +360,9 @@ func TestRepairPlanDoesNotCheckAServerThatHasNeverBeenChecked(t *testing.T) {
 	t.Parallel()
 
 	prober := &countingCatalogReadinessProber{}
-	callCtx, reg, projectSlug, registrationID := newNeverCheckedServer(t, "platform_mcp_repair_plan_no_probe", allowOperationLimiter{}, prober)
+	callCtx, reg, projectSlug, mcpID := newNeverCheckedServer(t, "platform_mcp_repair_plan_no_probe", allowOperationLimiter{}, prober)
 
-	plan, err := invokeTool[GetMCPRepairPlanToolOutput](t, callCtx, reg, "get_mcp_repair_plan", map[string]any{"project_slug": projectSlug, "registration_id": registrationID})
+	plan, err := invokeTool[GetMCPRepairPlanToolOutput](t, callCtx, reg, "get_mcp_repair_plan", map[string]any{"project_slug": projectSlug, "mcp_id": mcpID})
 	require.NoError(t, err)
 	require.Equal(t, ReadinessDegraded, plan.State)
 	require.Equal(t, "unavailable", plan.Freshness)
@@ -396,15 +402,7 @@ func TestInventorySearchMatchesTheSourceURL(t *testing.T) {
 		"idempotency_key": "inventory-source-url",
 	})
 	require.NoError(t, err)
-	registrationID, err := uuid.Parse(remote.RegistrationID)
-	require.NoError(t, err)
-	registration, err := platformrepo.New(conn).GetPlatformMCPCatalogRegistrationByID(ctx, platformrepo.GetPlatformMCPCatalogRegistrationByIDParams{
-		ID:             registrationID,
-		OrganizationID: principal.OrganizationID,
-		ProjectID:      project.ID,
-	})
-	require.NoError(t, err)
-	mcpServerID := registration.McpServerID.UUID
+	mcpServerID := uuid.MustParse(remote.MCPID)
 
 	query := normalizeInventoryQuery("https://remote.example.test/mcp")
 	candidates, err := platformrepo.New(conn).ListPlatformMCPInventoryAuthorizationCandidatePage(ctx, platformrepo.ListPlatformMCPInventoryAuthorizationCandidatePageParams{
@@ -468,7 +466,7 @@ func TestRemoteRegistrationToolReportsAServerAlreadyInTheProject(t *testing.T) {
 	require.False(t, first.AlreadyRegistered)
 
 	again := register("remote-already-second")
-	require.Equal(t, first.RegistrationID, again.RegistrationID)
+	require.Equal(t, first.MCPID, again.MCPID)
 	require.True(t, again.AlreadyRegistered)
 }
 
@@ -479,8 +477,8 @@ func TestReadinessToolRechecksAServerWhoseCheckHasExpired(t *testing.T) {
 	t.Parallel()
 
 	prober := &countingCatalogReadinessProber{ttl: time.Second}
-	callCtx, reg, projectSlug, registrationID := newNeverCheckedServer(t, "platform_mcp_readiness_refresh_probe", allowOperationLimiter{}, prober)
-	args := map[string]any{"project_slug": projectSlug, "registration_id": registrationID}
+	callCtx, reg, projectSlug, mcpID := newNeverCheckedServer(t, "platform_mcp_readiness_refresh_probe", allowOperationLimiter{}, prober)
+	args := map[string]any{"project_slug": projectSlug, "mcp_id": mcpID}
 	read := func() GetMCPReadinessToolOutput {
 		out, err := invokeTool[GetMCPReadinessToolOutput](t, callCtx, reg, "get_mcp_readiness", args)
 		require.NoError(t, err)
@@ -510,4 +508,98 @@ func TestReadinessToolRechecksAServerWhoseCheckHasExpired(t *testing.T) {
 	require.Equal(t, "stale", stale.Freshness)
 	require.Equal(t, ReadinessNeedsConfiguration, stale.State)
 	require.Equal(t, int32(3), prober.calls.Load())
+}
+
+// Every tool names an MCP server by mcp_id and resolves its Platform setup
+// record itself. A server built outside Platform setup, one another member
+// added, and an unknown ID are each refused with their own reason, which
+// names the refused tool, and nothing is changed.
+func TestMCPIDToolsRefuseServersTheCallerCannotActOn(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_mcp_id_refusals")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	gate := &testRegistrationGate{enabled: true}
+	attachment := &projectRecordingAttachment{}
+	dashboardURL, err := url.Parse("https://dashboard.example.test")
+	require.NoError(t, err)
+	registrations := newRegistrationService(testCatalog{}, gate, store).
+		WithDirectRemoteInspector(namedRemoteInspector("https://remote.example.test/mcp", "")).
+		WithIdentityProviderAttachment(attachment).
+		WithDashboardURL(dashboardURL)
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	registerRemoteRegistrationTool(reg, registrations, nil)
+	registerIdentityProviderTool(reg, registrations)
+	registerReadinessTools(reg, NewReadinessService(store, gate, NewProviderAdapters(nil), allowOperationLimiter{}, allowBudget(), &countingCatalogReadinessProber{}))
+
+	remote, err := invokeTool[RegisterRemoteMCPToolOutput](t, ContextWithPrincipal(ctx, principal), reg, "register_remote_mcp", map[string]any{
+		"project_slug":    project.Slug,
+		"remote_url":      "https://remote.example.test/mcp",
+		"idempotency_key": "mcp-id-refusals",
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, remote.MCPID)
+
+	// The seeded server was built in the dashboard, so it has no setup record.
+	rows, err := platformrepo.New(conn).ListPlatformMCPInventoryAuthorizationCandidates(ctx, principal.OrganizationID)
+	require.NoError(t, err)
+	var dashboardMCPID string
+	for _, row := range rows {
+		if row.ProjectID == project.ID && row.ID.String() != remote.MCPID {
+			dashboardMCPID = row.ID.String()
+			break
+		}
+	}
+	require.NotEmpty(t, dashboardMCPID)
+
+	otherMember := principal
+	otherMember.UserID = "user_" + uuid.NewString()
+
+	type refusal struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	refuse := func(caller Principal, tool, mcpID string) refusal {
+		t.Helper()
+		arguments := map[string]any{"project_slug": project.Slug, "mcp_id": mcpID}
+		if tool == "attach_platform_mcp_identity_provider" {
+			arguments["confirmed"] = true
+		}
+		encoded, err := json.Marshal(arguments)
+		require.NoError(t, err)
+		_, err = descriptorByName(t, reg, tool).Invoke(ContextWithPrincipal(ctx, caller), encoded)
+		refused, ok := errors.AsType[*ToolRefusalError](err)
+		require.True(t, ok, "%s: expected a refusal, got %v", tool, err)
+		var payload refusal
+		require.NoError(t, json.Unmarshal([]byte(refused.Payload), &payload), refused.Payload)
+		return payload
+	}
+
+	for _, tool := range []string{"get_mcp_readiness", "get_mcp_repair_plan", "attach_platform_mcp_identity_provider"} {
+		notAdded := refuse(principal, tool, dashboardMCPID)
+		require.Equal(t, "not_added_through_setup", notAdded.Code, tool)
+		require.Contains(t, notAdded.Message, "not added through Platform setup, so "+tool+" does not apply", tool)
+
+		otherMembers := refuse(otherMember, tool, remote.MCPID)
+		require.Equal(t, "added_by_another_member", otherMembers.Code, tool)
+		require.Contains(t, otherMembers.Message, "added by another member; only the member who added it can use "+tool, tool)
+
+		require.Equal(t, "mcp_not_found", refuse(principal, tool, uuid.NewString()).Code, tool)
+		require.Equal(t, "mcp_not_found", refuse(principal, tool, "not-an-id").Code, tool)
+	}
+	require.Empty(t, attachment.attachedProjects(), "no refused call connects a sign-in provider")
+
+	// The member who added the server acts on it by the same mcp_id.
+	readiness, err := invokeTool[GetMCPReadinessToolOutput](t, ContextWithPrincipal(ctx, principal), reg, "get_mcp_readiness", map[string]any{"project_slug": project.Slug, "mcp_id": remote.MCPID})
+	require.NoError(t, err)
+	require.Equal(t, remote.MCPID, readiness.MCPID)
+	attached, err := invokeTool[AttachPlatformMCPIdentityProviderToolOutput](t, ContextWithPrincipal(ctx, principal), reg, "attach_platform_mcp_identity_provider", map[string]any{"project_slug": project.Slug, "mcp_id": remote.MCPID, "confirmed": true})
+	require.NoError(t, err)
+	require.Equal(t, remote.MCPID, attached.MCPID)
+	require.Equal(t, []string{project.Slug}, attachment.attachedProjects())
 }

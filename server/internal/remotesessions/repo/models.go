@@ -52,12 +52,18 @@ type RemoteSession struct {
 	UserSessionIssuerID uuid.UUID
 	// @access: confidential
 	RemoteSessionClientID uuid.UUID
+	// @access: confidential
+	OrganizationID pgtype.Text
 	// @access: secret-restricted
-	AccessTokenEncrypted string
+	AccessTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	AccessTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	AccessExpiresAt pgtype.Timestamptz
 	// @access: secret-restricted
 	RefreshTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	RefreshTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	AuthorizationExpiresAt pgtype.Timestamptz
 	// @access: confidential
@@ -113,6 +119,10 @@ type RemoteSessionClient struct {
 	ClientID string
 	// @access: secret-restricted
 	ClientSecretEncrypted pgtype.Text
+	// @access: secret-restricted
+	ClientSecretOrgEncrypted pgtype.Text
+	// @access: confidential
+	ClientSecretGeneration int64
 	// @access: confidential
 	ClientIDIssuedAt pgtype.Timestamptz
 	// @access: confidential
@@ -318,10 +328,14 @@ type TrustedIssuerSession struct {
 	SubjectUrn string
 	// @access: secret-restricted
 	IdentityAssertionEncrypted pgtype.Text
+	// @access: secret-restricted
+	IdentityAssertionOrgEncrypted pgtype.Text
 	// @access: confidential
 	IdentityAssertionExpiresAt pgtype.Timestamptz
 	// @access: secret-restricted
 	RefreshTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	RefreshTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	RefreshExpiresAt pgtype.Timestamptz
 	// @access: confidential
@@ -337,7 +351,11 @@ type TrustedIssuerSession struct {
 	// @access: secret-restricted
 	UpstreamSubjectEncrypted pgtype.Text
 	// @access: secret-restricted
+	UpstreamSubjectOrgEncrypted pgtype.Text
+	// @access: secret-restricted
 	NonceEncrypted pgtype.Text
+	// @access: secret-restricted
+	NonceOrgEncrypted pgtype.Text
 	// @access: secret-restricted
 	CredentialConfigHash pgtype.Text
 	// @access: confidential

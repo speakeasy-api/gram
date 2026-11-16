@@ -263,7 +263,7 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
    * getIssuerMigratePreflight organizationUserSessionIssuers
    *
    * @remarks
-   * Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. Requires org:read.
+   * Report the impact, blockers, and configuration warnings for consolidating one user_session_issuer onto another. When no hard blocker is present, it runs the consolidation in a transaction it rolls back and reports how each affected MCP server's upstream OAuth clients would change. That run takes the same locks a consolidation does, and returns 409 when another writer holds them for too long. Requires org:admin.
    */
   async getMigratePreflight(
     request: GetOrganizationUserSessionIssuerMigratePreflightRequest,
