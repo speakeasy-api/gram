@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 	tailscale "tailscale.com/client/tailscale/v2"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -195,7 +196,7 @@ func (c *HTTPClient) api(creds Credentials) (*tailscale.Client, error) {
 	client := &tailscale.Client{
 		BaseURL:   c.baseURL,
 		UserAgent: userAgent,
-		Auth:      &tailscale.OAuth{ClientID: creds.ClientID, ClientSecret: creds.ClientSecret, Scopes: nil},
+		Auth:      &guardedOAuth{clientID: creds.ClientID, clientSecret: creds.ClientSecret, http: c.http},
 		HTTP:      c.http,
 	}
 	c.clients[key] = client
@@ -359,5 +360,35 @@ func statusError(status int) error {
 		return ErrUnavailable
 	default:
 		return nil
+	}
+}
+
+// guardedOAuth authenticates API calls with the customer's OAuth client, like
+// tailscale.OAuth, but exchanges the client for tokens through the same
+// guardian HTTP client the API calls use. tailscale.OAuth builds its token
+// source on context.Background(), so its token requests went through
+// http.DefaultClient: outside the outbound policy and without a timeout, and
+// they carry the client secret.
+type guardedOAuth struct {
+	clientID     string
+	clientSecret string
+	http         *guardian.HTTPClient
+}
+
+var _ tailscale.Auth = (*guardedOAuth)(nil)
+
+func (o *guardedOAuth) HTTPClient(orig *guardian.HTTPClient, baseURL string) *guardian.HTTPClient {
+	config := clientcredentials.Config{
+		ClientID: o.clientID, ClientSecret: o.clientSecret, Scopes: nil,
+		TokenURL: baseURL + "/api/v2/oauth/token", EndpointParams: nil, AuthStyle: oauth2.AuthStyleAutoDetect,
+	}
+	// The token source outlives any one request, as it refreshes tokens
+	// later, so it takes a background context carrying only the client.
+	tokenCtx := context.WithValue(context.Background(), oauth2.HTTPClient, o.http)
+	return &guardian.HTTPClient{
+		Transport:     &oauth2.Transport{Base: orig.Transport, Source: oauth2.ReuseTokenSource(nil, config.TokenSource(tokenCtx))},
+		CheckRedirect: orig.CheckRedirect,
+		Jar:           orig.Jar,
+		Timeout:       orig.Timeout,
 	}
 }

@@ -342,3 +342,22 @@ func TestNewRequiresTLSOutsideLoopback(t *testing.T) {
 	_, err = tailscaleapi.New(policy, "https://:443")
 	require.Error(t, err, "a port without a hostname is not a usable base url")
 }
+
+// The token exchange carries the customer's client secret, so it must go
+// through the same outbound policy as the API calls. The default policy
+// blocks loopback, so a stub on loopback must never see a token request.
+func TestTokenExchangeGoesThroughTheOutboundPolicy(t *testing.T) {
+	t.Parallel()
+	stub := &stubAPI{mu: sync.Mutex{}, requests: nil, tokenRequests: 0, tokenStatus: 0, status: http.StatusOK, token: "tok", response: map[string]any{}}
+	server := httptest.NewServer(stub.handler())
+	t.Cleanup(server.Close)
+	client, err := tailscaleapi.New(guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), server.URL)
+	require.NoError(t, err)
+
+	_, err = client.CreateAuthKey(t.Context(), creds, tailscaleapi.AuthKeyRequest{Tag: "tag:speakeasy", Description: "slot 0", TTL: time.Hour})
+	require.Error(t, err)
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	require.Zero(t, stub.tokenRequests, "the policy refuses the token request as it does the API calls")
+	require.Empty(t, stub.requests)
+}
