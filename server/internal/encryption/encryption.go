@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -63,6 +64,20 @@ func (e *decryptionError) Error() string {
 
 func (e *decryptionError) Unwrap() error {
 	return e.inner
+}
+
+// ErrorCode returns the ENC-* code of an error from Encrypt or Decrypt, so
+// callers can record why a value failed without recording the value.
+func ErrorCode(err error) (string, bool) {
+	if decErr, ok := errors.AsType[*decryptionError](err); ok {
+		return decErr.code, true
+	}
+
+	if encErr, ok := errors.AsType[*encryptionError](err); ok {
+		return encErr.code, true
+	}
+
+	return "", false
 }
 
 type Client struct {

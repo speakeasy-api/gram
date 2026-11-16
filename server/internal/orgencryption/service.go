@@ -167,6 +167,26 @@ func (e *Encryptor) Decrypt(ctx context.Context, column string, ciphertext strin
 	return plaintext, nil
 }
 
+// RequireUsable proves the organization can seal values for the use case now:
+// its configuration is usable, the use case has an active DEK, and that DEK
+// unwraps. Callers run it before an irreversible call, such as a token refresh
+// that rotates the refresh token, whose result must then be sealed.
+func (e *Encryptor) RequireUsable(ctx context.Context) error {
+	cfg, err := e.service.config(ctx, e.organizationID, e.useCase)
+	if err != nil {
+		return err
+	}
+	if cfg.activeDataKeyID == uuid.Nil {
+		return ErrNotProvisioned
+	}
+
+	if _, err := e.service.dataKey(ctx, e.organizationID, cfg.activeDataKeyID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // config returns the organization's configuration state and active DEK for the
 // use case, failing closed when it is missing or suspended.
 func (s *Service) config(ctx context.Context, organizationID string, useCase UseCase) (cachedConfig, error) {

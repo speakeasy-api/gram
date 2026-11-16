@@ -673,6 +673,26 @@ const (
 	// told apart without revealing the key.
 	EncryptionKeyFingerprintKey = attribute.Key("gram.encryption.key_fingerprint")
 
+	// OrgEncryptionUseCaseKey is the organization encryption use case a value
+	// or key belongs to, such as oauth-session-tokens.
+	OrgEncryptionUseCaseKey = attribute.Key("gram.orgencryption.use_case")
+
+	// OrgEncryptionTransitionStateKey is an organization's transition state
+	// for one use case: platform_key, dual_write or org_kms.
+	OrgEncryptionTransitionStateKey = attribute.Key("gram.orgencryption.transition_state")
+
+	// OrgEncryptionErrorCodeKey is the ENC-* code of a platform-key
+	// decryption failure. It never carries the value or ciphertext.
+	OrgEncryptionErrorCodeKey = attribute.Key("gram.orgencryption.error_code")
+
+	// OrgEncryptionMismatchedCountKey counts values whose two copies did not
+	// match during verification.
+	OrgEncryptionMismatchedCountKey = attribute.Key("gram.orgencryption.mismatched_count")
+
+	// OrgEncryptionUnopenableCountKey counts organization-key copies that did
+	// not open during verification.
+	OrgEncryptionUnopenableCountKey = attribute.Key("gram.orgencryption.unopenable_count")
+
 	// OAuthValidationTriggerKey names which caller presented a stored remote
 	// session credential to its upstream: the consent page's Verify, the
 	// connect callback, or the idle keepalive re-check. Used as a metric
@@ -2602,6 +2622,34 @@ func OAuthStoredToken[V ~string](v V) attribute.KeyValue {
 
 func SlogEncryptionKeyFingerprint(v string) slog.Attr {
 	return slog.String(string(EncryptionKeyFingerprintKey), v)
+}
+
+func OrgEncryptionUseCase[V ~string](v V) attribute.KeyValue {
+	return OrgEncryptionUseCaseKey.String(string(v))
+}
+
+func SlogOrgEncryptionUseCase[V ~string](v V) slog.Attr {
+	return slog.String(string(OrgEncryptionUseCaseKey), string(v))
+}
+
+func OrgEncryptionTransitionState[V ~string](v V) attribute.KeyValue {
+	return OrgEncryptionTransitionStateKey.String(string(v))
+}
+
+func SlogOrgEncryptionTransitionState[V ~string](v V) slog.Attr {
+	return slog.String(string(OrgEncryptionTransitionStateKey), string(v))
+}
+
+func SlogOrgEncryptionErrorCode(v string) slog.Attr {
+	return slog.String(string(OrgEncryptionErrorCodeKey), v)
+}
+
+func SlogOrgEncryptionMismatchedCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionMismatchedCountKey), v)
+}
+
+func SlogOrgEncryptionUnopenableCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionUnopenableCountKey), v)
 }
 
 func OAuthValidationTrigger[V ~string](v V) attribute.KeyValue {

@@ -28,4 +28,45 @@
 // suspension stops a process within configCacheTTL of it being recorded. An
 // unreachable or revoked KEK stops a process once its cached DEK expires,
 // within DataKeyCacheTTL.
+//
+// Values that already exist under the application (platform) key move to
+// organization keys one use case at a time, through a recorded transition
+// state per organization: platform_key, then dual_write, then org_kms. Cipher
+// decides which copies to write and read from that state, and is the only
+// place a platform-key copy is read; once an organization reaches org_kms it
+// never is. In dual_write a failing organization key still fails the
+// operation rather than falling back. Runner backfills and verifies the
+// organization-key copies through a CopyStore each feature implements, and
+// Transitions finalizes and then clears the platform-key copies.
+//
+// # Fencing
+//
+// Transition state is cached per process, and a writer can hold a Decision
+// across a provider call, so every feature statement that writes or clears
+// either copy of a value fences itself on the generation it decided under. It
+// adds this predicate, comparing against the row's own organization column
+// rather than a caller parameter so a row of another organization never
+// passes:
+//
+//	AND COALESCE((
+//	  SELECT t.generation FROM organization_encryption_transitions AS t
+//	  WHERE t.organization_id = <table>.organization_id AND t.use_case = '<use case>'
+//	), 0) = @decided_generation
+//
+// The COALESCE is required: an organization with no transition row is at
+// generation 0, and without it every write of a platform_key organization
+// would be fenced. orgencryptiontest.RequireFencedWrites checks a feature's
+// queries.sql for this shape.
+//
+// An INSERT fences through INSERT ... SELECT ... WHERE or ON CONFLICT ... DO
+// UPDATE ... WHERE. A statement that matches no row because of the fence
+// returns ErrFenced to its caller, which decides again with Cipher.Redecide,
+// seals the same plaintext again, and retries the write. It never repeats a
+// call to a provider: a refresh may already have rotated the refresh token,
+// and the only copy of the new one is the plaintext the caller holds.
+//
+// The subquery reads the transition state as of the statement's start, so a
+// statement that started before finalize committed can still land after a
+// clearing batch. Transitions.ClearPlatformCopies counts again after a settle
+// delay to catch such writes.
 package orgencryption

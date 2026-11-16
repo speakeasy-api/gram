@@ -434,3 +434,136 @@ WHERE id = @id
   AND purpose = 'encrypt'
   AND deleted IS FALSE
 RETURNING *;
+
+-- Transition state: where an organization is in moving one use case's values
+-- from the platform key to its own key. A missing row is platform_key at
+-- generation 0. Rows are never deleted or recreated, so generation only grows.
+
+-- name: GetEncryptionTransition :one
+SELECT *
+FROM organization_encryption_transitions
+WHERE organization_id = @organization_id
+  AND use_case = @use_case;
+
+-- name: ListEncryptionTransitions :many
+SELECT *
+FROM organization_encryption_transitions
+WHERE organization_id = @organization_id
+ORDER BY use_case;
+
+-- Callers hold the organization lock, so a missing row cannot be inserted
+-- concurrently while they decide.
+-- name: LockEncryptionTransition :one
+SELECT *
+FROM organization_encryption_transitions
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+FOR UPDATE;
+
+-- name: CreateEncryptionTransition :one
+INSERT INTO organization_encryption_transitions (organization_id, use_case, state, platform_copies_cleared_at)
+VALUES (@organization_id, @use_case, @state, sqlc.narg('platform_copies_cleared_at'))
+RETURNING *;
+
+-- Lands only while the row is still at the generation the caller locked, so a
+-- state change can never skip one.
+-- name: UpdateEncryptionTransitionState :one
+UPDATE organization_encryption_transitions
+SET state = @state,
+    generation = generation + 1,
+    state_changed_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+  AND generation = @generation
+RETURNING *;
+
+-- name: MarkEncryptionTransitionPlatformCopiesCleared :one
+UPDATE organization_encryption_transitions
+SET platform_copies_cleared_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+  AND generation = @generation
+  AND platform_copies_cleared_at IS NULL
+RETURNING *;
+
+-- name: RecordEncryptionTransitionBackfillStarted :exec
+UPDATE organization_encryption_transitions
+SET last_backfill_started_at = clock_timestamp(),
+    last_backfill_completed_at = NULL,
+    last_backfill_error = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND use_case = @use_case;
+
+-- name: RecordEncryptionTransitionBackfillCompleted :exec
+UPDATE organization_encryption_transitions
+SET last_backfill_completed_at = clock_timestamp(),
+    last_backfill_converted_count = @converted_count::bigint,
+    last_backfill_remaining_count = @remaining_count::bigint,
+    last_backfill_unreadable_count = @unreadable_count::bigint,
+    last_backfill_error = sqlc.narg('error'),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND use_case = @use_case;
+
+-- The database clock, so times compared with state_changed_at and the
+-- backfill columns come from the same clock.
+-- name: GetEncryptionClock :one
+SELECT clock_timestamp()::timestamptz AS now;
+
+-- Records a clean verification pass that started at verified_at. It lands only
+-- while the state is still the generation the pass verified under.
+-- name: RecordEncryptionTransitionVerified :exec
+UPDATE organization_encryption_transitions
+SET last_verified_at = @verified_at::timestamptz,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+  AND generation = @generation;
+
+-- Records a value whose platform-key copy does not decrypt. A new hash means
+-- the row was rewritten, so detection starts over.
+-- name: UpsertEncryptionUnreadableValue :exec
+INSERT INTO organization_encryption_unreadable_values (
+  organization_id, use_case, source_column, row_id, platform_ciphertext_sha256, error_code
+) VALUES (
+  @organization_id, @use_case, @source_column, @row_id, @platform_ciphertext_sha256, @error_code
+)
+ON CONFLICT (organization_id, use_case, source_column, row_id) DO UPDATE
+SET first_detected_at = CASE
+      WHEN organization_encryption_unreadable_values.platform_ciphertext_sha256 = EXCLUDED.platform_ciphertext_sha256
+        THEN organization_encryption_unreadable_values.first_detected_at
+      ELSE clock_timestamp()
+    END,
+    platform_ciphertext_sha256 = EXCLUDED.platform_ciphertext_sha256,
+    error_code = EXCLUDED.error_code,
+    last_detected_at = clock_timestamp(),
+    updated_at = clock_timestamp();
+
+-- Unreadable records are derived state, so deleting one once its value seals
+-- is safe.
+-- name: DeleteEncryptionUnreadableValue :exec
+DELETE FROM organization_encryption_unreadable_values
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+  AND source_column = @source_column
+  AND row_id = @row_id;
+
+-- Test fixture: moves when a use case entered its state, so tests can pass the
+-- minimum time in dual_write without waiting.
+-- name: SetEncryptionTransitionStateChangedAt :exec
+UPDATE organization_encryption_transitions
+SET state_changed_at = @state_changed_at
+WHERE organization_id = @organization_id
+  AND use_case = @use_case;
+
+-- Test fixture: reads one unreadable value record.
+-- name: GetEncryptionUnreadableValue :one
+SELECT *
+FROM organization_encryption_unreadable_values
+WHERE organization_id = @organization_id
+  AND use_case = @use_case
+  AND source_column = @source_column
+  AND row_id = @row_id;
