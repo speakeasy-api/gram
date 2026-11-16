@@ -17,10 +17,6 @@ export type AdminProjectRedeployPreview = {
    */
   activeDeploymentId: string;
   /**
-   * External MCP sources the new deployment would drop.
-   */
-  externalMcps: number;
-  /**
    * Function sources whose runners would be deployed again.
    */
   functionAssets: number;
@@ -53,7 +49,6 @@ export const AdminProjectRedeployPreview$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     active_deployment_id: z.string(),
-    external_mcps: z.int(),
     function_assets: z.int(),
     openapi_assets: z.int(),
     organization_id: z.string(),
@@ -64,7 +59,6 @@ export const AdminProjectRedeployPreview$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "active_deployment_id": "activeDeploymentId",
-      "external_mcps": "externalMcps",
       "function_assets": "functionAssets",
       "openapi_assets": "openapiAssets",
       "organization_id": "organizationId",

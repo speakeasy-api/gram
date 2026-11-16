@@ -1,6 +1,6 @@
 /**
- * Source type as used in deployment assets ("openapi", "function", "externalmcp").
- * URN kind as used in tool URNs ("http", "function", "externalmcp").
+ * Source type as used in deployment assets ("openapi", "function").
+ * URN kind as used in tool URNs ("http", "function").
  *
  * The only non-trivial mapping is "openapi" ↔ "http".
  */
@@ -8,14 +8,12 @@
 export type SourceType =
   | "openapi"
   | "function"
-  | "externalmcp"
   | "remotemcp"
   | "tunneledmcp"
   | "unproxiedmcp";
 export type UrnKind =
   | "http"
   | "function"
-  | "externalmcp"
   | "remotemcp"
   | "tunneledmcp"
   | "unproxiedmcp";
@@ -23,7 +21,6 @@ export type UrnKind =
 const sourceTypeToUrn: Record<SourceType, UrnKind> = {
   openapi: "http",
   function: "function",
-  externalmcp: "externalmcp",
   remotemcp: "remotemcp",
   tunneledmcp: "tunneledmcp",
   unproxiedmcp: "unproxiedmcp",
@@ -32,7 +29,6 @@ const sourceTypeToUrn: Record<SourceType, UrnKind> = {
 const urnToSourceType: Record<UrnKind, SourceType> = {
   http: "openapi",
   function: "function",
-  externalmcp: "externalmcp",
   remotemcp: "remotemcp",
   tunneledmcp: "tunneledmcp",
   unproxiedmcp: "unproxiedmcp",
