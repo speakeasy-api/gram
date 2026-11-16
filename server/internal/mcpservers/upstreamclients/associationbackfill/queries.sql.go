@@ -1077,8 +1077,13 @@ func (q *Queries) SeedGatewayMemberFixture(ctx context.Context, arg SeedGatewayM
 }
 
 const seedGrantFixture = `-- name: SeedGrantFixture :exec
-INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, resource)
-VALUES ($1, $2, $3, 'encrypted', $4)
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, resource)
+VALUES ($1, $2, $3,
+  (SELECT org.id FROM remote_session_clients AS client
+   LEFT JOIN projects AS project ON project.id = client.project_id
+   JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+   WHERE client.id = $3),
+  'encrypted', $4)
 `
 
 type SeedGrantFixtureParams struct {

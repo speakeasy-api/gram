@@ -18373,6 +18373,7 @@ INSERT INTO remote_sessions (
     subject_urn,
     user_session_issuer_id,
     remote_session_client_id,
+    organization_id,
     access_token_encrypted,
     access_expires_at,
     refresh_token_encrypted,
@@ -18391,6 +18392,13 @@ VALUES (
     $1,
     $2,
     $3,
+    (
+        SELECT org.id
+        FROM remote_session_clients AS client
+        LEFT JOIN projects AS project ON project.id = client.project_id
+        JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+        WHERE client.id = $3
+    ),
     -- The column is nullable, but every writer still stores a platform-key
     -- token, so the cast keeps the parameter a string. Switch it to
     -- sqlc.narg when a finalized organization starts writing NULL here; never
@@ -18412,6 +18420,9 @@ VALUES (
 ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
 DO UPDATE SET
     grant_generation = remote_sessions.grant_generation + 1,
+    -- Same client, so the same organization; this fills rows written before
+    -- the column existed.
+    organization_id = EXCLUDED.organization_id,
     access_token_encrypted = EXCLUDED.access_token_encrypted,
     access_expires_at = EXCLUDED.access_expires_at,
     refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
@@ -18459,6 +18470,10 @@ type UpsertRemoteSessionParams struct {
 // UpdateRemoteSessionTokensIfUnchanged and never advances this generation. A
 // soft-deleted row falls outside the partial index, so a re-auth after
 // revocation inserts a fresh active row alongside the tombstone.
+// organization_id is the client's organization, through its project first,
+// never the sign-in's: the issuer only records where the grant was made.
+// Joining organization_metadata leaves it NULL rather than failing the
+// sign-in when a project names an organization with no metadata row.
 func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessionParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, upsertRemoteSession,
 		arg.SubjectUrn,

@@ -5004,8 +5004,13 @@ WITH link AS (
   VALUES ($4, $7)
   ON CONFLICT DO NOTHING
 ), session AS (
-  INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted)
-  VALUES ($8::text, $7, $4, 'fixture-not-a-token')
+  INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted)
+  VALUES ($8::text, $7, $4,
+    (SELECT org.id FROM remote_session_clients AS client
+     LEFT JOIN projects AS project ON project.id = client.project_id
+     JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+     WHERE client.id = $4),
+    'fixture-not-a-token')
   ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
   DO UPDATE SET access_token_encrypted = EXCLUDED.access_token_encrypted
   RETURNING id, grant_generation, user_session_issuer_id
