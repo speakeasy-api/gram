@@ -201,7 +201,11 @@ function SelfGrantAccessForm({
           setOpen(next);
         }}
       >
-        <Dialog.Content className="sm:max-w-lg">
+        <Dialog.Content
+          // The close button would do nothing while the grant is in flight.
+          closeable={!createGrant.isPending}
+          className="sm:max-w-lg"
+        >
           <form
             className="flex flex-col gap-5"
             aria-label="Grant myself temporary access"
