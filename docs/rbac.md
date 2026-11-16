@@ -988,9 +988,15 @@ Check:
 
 Result: denied.
 
-One nuance: if a grant has a key that the check does not include, matching skips that key. This allows a more specific grant to satisfy a broader connection-level check that does not yet constrain that dimension. Be aware of this when deciding whether a handler should use a plain resource check or a dimensional check.
+A grant key the check does not include never matches: absence is not permission. Three checks may leave a key out, each set by how the check is built (`Check.mayOmit` in `server/internal/authz/access.go`):
 
-Because of that, some resource kinds require a dimension on every check. `requiredCheckDimensions` in `server/internal/authz/checks.go` lists them, and the engine rejects a check of that kind that omits one, or sets it to `*`, as an invalid check (it fails closed). Today only `mcp` is listed, with `project_id`: an MCP grant can be bounded to one project (`{"resource_kind":"mcp","resource_id":"*","project_id":"<PROJECT_ID>"}`), and a check without the project would otherwise pass it in any project. Build MCP checks with `authz.MCPCheck(scope, resourceID, projectID)` or `authz.MCPToolCallCheck` with `ProjectID` set. Project-level operations name the project as both the resource and the `project_id`.
+- a probe (`Check.Probe()`), which asks whether the caller could act on some resource and never gates an action;
+- a connection to a server (`authz.MCPServer(id, project).Connect()` or `authz.MCPCheck` with `mcp:connect`), which names no tool, so a grant limited to some tools or dispositions still lets the caller connect;
+- the risk policy audience question (`authz.RiskPolicyEvaluateCheck`), which names no server, so an audience grant limited to a server still places the caller under the policy.
+
+Blocks, auth client checks and `WithStrictSelectorMatch` allow none of them. A `Require` or `RequireAny` refusal caused only by a missing key is logged as an error naming the key, so a call site that should carry it shows up.
+
+Some resource kinds also require a dimension on every check. `requiredCheckDimensions` in `server/internal/authz/checks.go` lists them, and the engine rejects a check of that kind that omits one, or sets it to `*`, as an invalid check (it fails closed). Today only `mcp` is listed, with `project_id`: an MCP grant can be bounded to one project (`{"resource_kind":"mcp","resource_id":"*","project_id":"<PROJECT_ID>"}`), and a check without the project should be refused as invalid rather than match no project-bounded grant. Build MCP checks with `authz.MCPCheck(scope, resourceID, projectID)` or `authz.MCPToolCallCheck` with `ProjectID` set. Project-level operations name the project as both the resource and the `project_id`.
 
 #### Auth client checks
 
