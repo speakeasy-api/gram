@@ -1,4 +1,4 @@
-name: Reflow golden flows
+name: Reflow
 
 # Runs the Reflow collection's golden flows against a freshly booted local
 # stack. Pushes to main record the baseline that pull requests compare with.
@@ -26,7 +26,7 @@ env:
 
 jobs:
   golden:
-    name: golden
+    name: golden flows
     if: >-
       github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&

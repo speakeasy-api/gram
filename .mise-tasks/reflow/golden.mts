@@ -32,7 +32,11 @@ type SearchPage = {
   flows: { slug: string; golden?: unknown }[];
   next_offset?: number | null;
 };
-type CiRunResult = { ci_run_id?: string; error?: unknown };
+type CiRunResult = {
+  ci_run_id?: string;
+  error?: unknown;
+  apply?: { error?: { reason?: string; message?: string } } | null;
+};
 
 const collection = process.env["usage_collection"];
 assert(collection, "--collection is required");
@@ -99,7 +103,7 @@ function shards<T>(items: T[], size: number): T[][] {
 async function ciRun(
   name: string,
   selection: string[],
-): Promise<{ id?: string; exitCode: number | null }> {
+): Promise<{ id?: string; exitCode: number | null; tooLarge: boolean }> {
   const resultFile = path.join(outDir, `${name}.json`);
   const runArgs = [
     ...selection,
@@ -122,7 +126,15 @@ async function ciRun(
   const result = JSON.parse(
     await fs.readFile(resultFile, "utf8").catch(() => "{}"),
   ) as CiRunResult;
-  return { id: result.ci_run_id, exitCode: ran.exitCode };
+  const applyError = result.apply?.error;
+  return {
+    id: result.ci_run_id,
+    exitCode: ran.exitCode,
+    // Reflow refused to run this many flows at once (apply --json reason).
+    tooLarge:
+      applyError?.reason === "plan_too_large" ||
+      /more than 20/i.test(applyError?.message ?? ""),
+  };
 }
 
 async function gate(ciRunId: string): Promise<boolean> {
@@ -141,10 +153,11 @@ async function run() {
     );
   }
   let failed = false;
+  const shardLines: string[] = [];
 
   console.log(`== all ${slugs.length} golden flows`);
   let full = await ciRun("all", []);
-  if (!full.id) {
+  if (!full.id && full.tooLarge) {
     // Usually more than 20 flows had to run. Each shard runs its share, so
     // the second full run can carry those results and run little or nothing.
     const groups = shards(slugs, shardSize);
@@ -155,9 +168,13 @@ async function run() {
       const name = `shard-${index + 1}`;
       console.log(`\n== ${name}: ${group.join(", ")}`);
       const shard = await ciRun(name, group);
-      if (!shard.id || !(await gate(shard.id))) {
+      const passed = shard.id ? await gate(shard.id) : false;
+      if (!passed) {
         failed = true;
       }
+      shardLines.push(
+        `- ${name} (${group.length} flows): ${shard.id ? (passed ? "passed" : `failed, CI run \`${shard.id}\``) : `no CI run recorded (exit ${shard.exitCode})`}`,
+      );
     }
     console.log(`\n== all ${slugs.length} golden flows, again`);
     full = await ciRun("all", []);
@@ -189,6 +206,9 @@ async function run() {
     }
   }
 
+  if (shardLines.length) {
+    report = `All flows did not fit in one run, so they ran in shards first:\n\n${shardLines.join("\n")}\n\n${report}`;
+  }
   await fs.writeFile(path.join(outDir, "report.md"), report);
   if (failed) {
     process.exitCode = 1;
