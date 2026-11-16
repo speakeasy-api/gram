@@ -702,7 +702,7 @@ func (s *Service) loadMemberToolset(
 // and a call that named a private member already recorded the same check, so
 // the request keeps one.
 func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, error) {
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
+	connect := authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID)).Connect()
 	visibility := mcpservers.VisibilityPrivate
 	if public {
 		visibility = mcpservers.VisibilityPublic

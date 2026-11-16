@@ -62,6 +62,14 @@ var noRawAuthzChecksPackages = []string{
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections",
 	"github.com/speakeasy-api/gram/server/internal/slackapp",
 	"github.com/speakeasy-api/gram/server/internal/auditapi",
+	"github.com/speakeasy-api/gram/server/internal/mcp",
+	"github.com/speakeasy-api/gram/server/internal/remotemcp",
+	"github.com/speakeasy-api/gram/server/internal/metamcp",
+	"github.com/speakeasy-api/gram/server/internal/tunneledmcp",
+	"github.com/speakeasy-api/gram/server/internal/unproxiedmcp",
+	"github.com/speakeasy-api/gram/server/internal/externalmcp",
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp",
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval",
 }
 
 // noRawAuthzCheckConstructors are the authz constructors a typed ref

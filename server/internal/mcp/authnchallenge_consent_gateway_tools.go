@@ -176,7 +176,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	// when it reaches at least one member, as its token exchange requires.
 	if s.authz != nil && private && !organizationGateway {
 		connectResourceID := endpoint.connectResourceID()
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), endpoint.ProjectID.String())); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(connectResourceID), authz.ProjectIDOf(endpoint.ProjectID)).Connect()); err != nil {
 			return nil, nil, nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, connectResourceID.String(), endpoint.Slug)))
 		}
 	}

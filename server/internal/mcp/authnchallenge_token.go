@@ -680,7 +680,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 			err = oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any meta MCP members")
 		}
 	} else if err == nil {
-		connect := authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String())
+		connect := authz.MCPServer(authz.MCPServerIDOf(endpoint.connectResourceID()), authz.ProjectIDOf(endpoint.ProjectID)).Connect()
 		authorizationCtx, err = s.authz.PrepareContext(authorizationCtx)
 		if err == nil {
 			err = s.authz.Require(authorizationCtx, connect)
