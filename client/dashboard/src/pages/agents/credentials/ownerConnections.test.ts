@@ -163,6 +163,7 @@ describe("serverConnection", () => {
       status: "missing",
       signIns: [client("client_two")],
       connected: 1,
+      connectedNames: [undefined],
     });
     // The attachment endpoint accepts only sessions made through this
     // server's own issuer.
@@ -200,6 +201,7 @@ describe("serverConnection", () => {
         { id: "client_three", credentialOwner: "subject" },
       ],
       connected: 1,
+      connectedNames: ["Linear"],
     });
     expect(missingSignInNames(connection)).toEqual({
       names: ["Stripe"],
@@ -447,6 +449,41 @@ describe("attachOwnerConnections", () => {
       );
       expect(missing).toEqual([]);
       expect(attachBinding).toHaveBeenCalledTimes(1);
+    });
+
+    it("needs one of each server's own sign-ins when enforced servers share the issuer", async () => {
+      // client_one serves this server; the second server signs in only
+      // through client_two, which the caller never connected.
+      const second = { ...server, id: "server_second", name: "Second" };
+      const run = (skipMissing: boolean) =>
+        attachOwnerConnections(
+          api({
+            auth: (mcpServerId) =>
+              Promise.resolve(
+                authentication([
+                  mcpServerId === second.id
+                    ? {
+                        ...own,
+                        id: "auth_two",
+                        remoteSessionClientId: "client_two",
+                      }
+                    : own,
+                ]),
+              ),
+            clients: [],
+            candidates: [session({})],
+            bindings: [],
+          }).fake,
+          "agent_new",
+          [server, second],
+          undefined,
+          skipMissing,
+          true,
+        );
+      await expect(run(true)).resolves.toEqual(["Second"]);
+      await expect(run(false)).rejects.toThrow(
+        "Your connection to Second is no longer available.",
+      );
     });
 
     it("keeps every issuer registration for a hosted server", async () => {

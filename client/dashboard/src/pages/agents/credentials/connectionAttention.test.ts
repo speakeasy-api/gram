@@ -53,8 +53,24 @@ describe("missingSignInsSentence", () => {
         status: "missing",
         signIns: [signIn("linear_two", "Linear")],
         connected: 1,
+        connectedNames: ["Linear"],
       }),
     ).toBe("This server has 2 Linear sign-ins; 1 is connected.");
+  });
+
+  it("does not call a connected sign-in of another name the server's", () => {
+    // A hosted server needs every sign-in on its issuer: a connected Stripe
+    // registration is not a second Linear one.
+    expect(
+      missingSignInsSentence(linear, {
+        status: "missing",
+        signIns: [signIn("linear_one", "Linear")],
+        connected: 1,
+        connectedNames: ["Stripe"],
+      }),
+    ).toBe(
+      "This server has 2 sign-ins; 1 is connected. Still needs a connection to Linear.",
+    );
   });
 
   it("does not hide two missing sign-ins that share the server's name", () => {

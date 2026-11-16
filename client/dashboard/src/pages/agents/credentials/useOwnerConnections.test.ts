@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => {
     // registration when left unset.
     required: undefined as string[] | undefined,
     enforcement: "legacy" as string,
+    // The agent's attachments, read when editing.
+    bindings: [] as unknown[],
   };
 });
 vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
@@ -55,6 +57,8 @@ vi.mock("@tanstack/react-query", () => ({
           },
           refetch: mocks.refetch,
         };
+      if (queryKey[1] === "bindings")
+        return { data: { items: mocks.bindings }, refetch: mocks.refetch };
       return {
         data: queryKey[1] === "clients" ? mocks.clients : mocks.sessions,
         refetch: mocks.refetch,
@@ -69,6 +73,7 @@ afterEach(() => {
   mocks.sessions = [];
   mocks.required = undefined;
   mocks.enforcement = "legacy";
+  mocks.bindings = [];
 });
 
 // The org-wide issuer lists a personal sign-in that belongs to another server.
@@ -260,6 +265,7 @@ describe("a server sharing an org-wide issuer with another server", () => {
       status: "missing",
       signIns: [{ ...otherServersSignIn, name: "Stripe" }],
       connected: 1,
+      connectedNames: ["Linear"],
     });
   });
 
@@ -324,6 +330,34 @@ describe("a server sharing an org-wide issuer with another server", () => {
     });
     const { result } = renderHook(() => useOwnerConnections([server], true));
     expect(result.current.byServer.get(server.id)).toEqual({
+      status: "ready",
+      sessions: [ownSession],
+    });
+  });
+
+  it("keeps an assignment ready when enforced and another one lost its session", () => {
+    mocks.enforcement = "enforced";
+    mocks.auth.set(server.id, {
+      data: {
+        status: "configured",
+        clients: [
+          ownSignIn,
+          { ...ownSignIn, remoteSessionClientId: "client_second" },
+        ],
+      },
+    });
+    mocks.bindings = [
+      {
+        id: "binding_own",
+        remoteSessionClientId: "client_own",
+        remoteSession: ownSession,
+      },
+      { id: "binding_gone", remoteSessionClientId: "client_second" },
+    ];
+    const { result } = renderHook(() =>
+      useOwnerConnections([server], true, "agent_example"),
+    );
+    expect(result.current.assignedByServer?.get(server.id)).toEqual({
       status: "ready",
       sessions: [ownSession],
     });

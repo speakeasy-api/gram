@@ -291,7 +291,12 @@ export function useOwnerConnections(
         bindingRead.isError
       )
         continue;
-      if (bindingRead.data.items.some((binding) => !binding.remoteSession)) {
+      // An attachment whose session is gone leaves its sign-in unserved, but
+      // where any one sign-in serves, the others decide below.
+      if (
+        !clientsRead.anyOne &&
+        bindingRead.data.items.some((binding) => !binding.remoteSession)
+      ) {
         assignedByServer.set(server.id, { status: "missing" });
         continue;
       }

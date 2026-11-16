@@ -24,10 +24,16 @@ export type ServerConnection =
    * At least one upstream sign-in has no usable assigned or personal
    * connection. `signIns` lists each one, and `connected` counts the ones that
    * do have a connection, so the reader is told what is left to connect
-   * rather than only that something is. Both are absent where the cause is
-   * not a sign-in, such as an assignment whose session is gone.
+   * rather than only that something is. `connectedNames` names the connected
+   * ones, so a sentence never guesses what they are. All are absent where the
+   * cause is not a sign-in, such as an assignment whose session is gone.
    */
-  | { status: "missing"; signIns?: ServerSignIn[]; connected?: number }
+  | {
+      status: "missing";
+      signIns?: ServerSignIn[];
+      connected?: number;
+      connectedNames?: (string | undefined)[];
+    }
   /** Every sign-in is connected, but one of them no longer works. */
   | { status: "ended"; sessions: RemoteSession[] }
   | { status: "ready"; sessions: RemoteSession[] };
@@ -69,6 +75,7 @@ export function serverConnection(
   // so a server that also misses another sign-in lists them as outstanding
   // rather than counting them as connected.
   const ended: ServerSignIn[] = [];
+  const connectedClients: ServerSignIn[] = [];
   for (const client of personal) {
     const matching = sessions.filter(
       (candidate) =>
@@ -85,7 +92,11 @@ export function serverConnection(
       continue;
     }
     found.push(session);
-    if (connectionLifetime(session, now).kind === "ended") ended.push(client);
+    if (connectionLifetime(session, now).kind === "ended") {
+      ended.push(client);
+      continue;
+    }
+    connectedClients.push(client);
   }
   if (anyOne) {
     const working = found.filter(
@@ -99,7 +110,10 @@ export function serverConnection(
     return {
       status: "missing",
       signIns: [...missing, ...ended],
-      connected: found.length - ended.length,
+      connected: connectedClients.length,
+      ...(connectedClients.length > 0 && {
+        connectedNames: connectedClients.map((client) => client.name),
+      }),
     };
   if (
     found.some((session) => connectionLifetime(session, now).kind === "ended")
@@ -365,8 +379,9 @@ export async function attachOwnerConnections(
       api.remoteSessions.listBindings(scope, undefined, { signal }),
     ]);
     // Under enforcement one working sign-in serves a server, so the ones the
-    // caller never connected are skipped as long as another one serves.
-    let served = 0;
+    // caller never connected are skipped as long as another of that server's
+    // own serves. Servers sharing the issuer each need one of their own.
+    const served = new Set<string>();
     for (const client of clients) {
       if (client.credentialOwner === "self") continue;
       const current = bindings.items.filter(
@@ -381,7 +396,7 @@ export async function attachOwnerConnections(
             connectionLifetime(binding.remoteSession).kind !== "ended",
         )
       ) {
-        served += 1;
+        served.add(client.id);
         continue;
       }
       const session = candidates.find(
@@ -423,17 +438,25 @@ export async function attachOwnerConnections(
         undefined,
         { signal },
       );
-      served += 1;
+      served.add(client.id);
     }
-    const personalCount = clients.filter(
-      (client) => client.credentialOwner !== "self",
-    ).length;
-    if (typed && personalCount > 0 && served === 0) {
+    if (!typed) continue;
+    for (const sharing of personal) {
+      if (
+        sharing.projectId !== server.projectId ||
+        sharing.issuerId !== server.issuerId
+      )
+        continue;
+      const own = (signIns.get(sharing.id) ?? []).filter(
+        (client) => client.credentialOwner !== "self",
+      );
+      if (own.length === 0 || own.some((client) => served.has(client.id)))
+        continue;
       if (!skipMissing)
         throw new Error(
-          `Your connection to ${server.name} is no longer available. Sign in to it again, then retry.`,
+          `Your connection to ${sharing.name} is no longer available. Sign in to it again, then retry.`,
         );
-      missing.add(server.name);
+      missing.add(sharing.name);
     }
   }
   return [...missing];

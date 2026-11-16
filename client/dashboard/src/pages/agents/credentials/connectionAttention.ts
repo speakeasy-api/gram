@@ -77,13 +77,16 @@ export function missingSignInsSentence(
     return null;
   const total = connected + missing;
   const verb = connected === 1 ? "is" : "are";
-  // What is left shares the server's name, as when one service is registered
-  // twice: say so plainly rather than naming the server back to itself.
+  // Every sign-in, connected or left, shares the server's name, as when one
+  // service is registered twice: say so plainly rather than naming the server
+  // back to itself. Connected sign-ins of another name get the general wording.
   if (
     connected > 0 &&
     unnamed === 0 &&
     names.length === 1 &&
-    names[0] === server.name
+    names[0] === server.name &&
+    connection.connectedNames?.length === connected &&
+    connection.connectedNames.every((name) => name === server.name)
   )
     return `This server has ${total} ${server.name} sign-ins; ${connected} ${verb} connected.`;
   const progress =
