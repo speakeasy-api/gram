@@ -57,7 +57,7 @@ func listingCases() []listingCase {
 	}
 	return []listingCase{
 		{name: "saved key rejected", url: failing(http.StatusUnauthorized), savedKey: true},
-		{name: "rate limited", url: failing(http.StatusTooManyRequests), reason: mcpconnectionattempts.CodeProviderRateLimited, who: mcpconnectionattempts.WhoProvider, named: true, status: "unavailable", label: "Unavailable · it's limiting requests · try again in a few minutes"},
+		{name: "rate limited", url: failing(http.StatusTooManyRequests), reason: mcpconnectionattempts.CodeProviderRateLimited, who: mcpconnectionattempts.WhoProvider, named: true, status: "unavailable", label: "Unavailable · it's busy · try again in a few minutes"},
 		{name: "server error", url: failing(http.StatusInternalServerError), reason: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider, named: true, status: "unavailable", label: "Unavailable · it had an error · try again in a few minutes"},
 		{name: "stopped", url: stoppedUpstream, reason: mcpconnectionattempts.CodeProviderUnreachable, who: mcpconnectionattempts.WhoProvider, named: true, status: "unavailable", label: "Unavailable · it didn't answer · try again in a few minutes"},
 		{name: "unreadable listing", url: func(t *testing.T) string {
@@ -232,7 +232,7 @@ func TestGatewayConsentSavedKeyBesideASignIn(t *testing.T) {
 	require.Equal(t, "not_connected", outcomes[0].Status)
 	require.Equal(t, "Not connected", outcomes[0].Label)
 	require.Equal(t, []string{mcpconnectionattempts.CodeNeedsSignIn.String()}, discoveryReasons(rec))
-	require.NotContains(t, page, "rejected the credential set up for it")
+	require.NotContains(t, page, "isn't set up correctly")
 }
 
 // The gateway listing's own time running out is no member's failure: a slow member, and one that never got a turn, keep member_tools_missing.
