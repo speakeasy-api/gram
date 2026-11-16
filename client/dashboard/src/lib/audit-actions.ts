@@ -299,6 +299,7 @@ export const AUDIT_ACTIONS = [
   "risk_result:unmask",
   "session_quarantine:open",
   "session_quarantine:release",
+  "shadow_mcp_official_server:set",
   "sigint-sensor:create",
   "sigint-sensor:delete",
   "sigint-sensor:update",
@@ -993,6 +994,9 @@ export function staticActionPhrase(action: AuditAction): string {
       return "saved an evaluation review for";
     case "risk_policy:eval_review_delete":
       return "deleted an evaluation review for";
+
+    case "shadow_mcp_official_server:set":
+      return "set the official version of Shadow MCP server";
 
     case "risk_result:dismiss":
       return "dismissed risk finding";
