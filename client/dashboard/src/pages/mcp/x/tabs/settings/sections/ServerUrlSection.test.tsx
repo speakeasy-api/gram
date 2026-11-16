@@ -242,7 +242,9 @@ describe("ServerUrlSection", () => {
     fireEvent.change(screen.getByPlaceholderText("endpoint"), {
       target: { value: "renamed" },
     });
-    expect(screen.getByText(/This saves as .*\/mcp\/acme-renamed\./)).toBeTruthy();
+    expect(
+      screen.getByText(/This saves as .*\/mcp\/acme-renamed\./),
+    ).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Save address"));
     confirmWithServerName("Change address");
     expect(updateEndpoint).toHaveBeenCalledWith(
