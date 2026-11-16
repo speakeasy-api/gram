@@ -152,9 +152,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *test
 	t.Parallel()
 
 	const (
-		refused      = `server "member" couldn't sign in: the service rejected the sign-in details saved for this server. Connecting again won't fix this. Ask your administrator to update the sign-in details saved for server "member".`
-		forbidden    = `server "member" was refused by the service it uses. The account saved for this server may not be allowed to do this. Connecting again won't fix this. Ask your administrator to check what that account is allowed to do.`
-		connectFirst = `server "member" was refused by the service it uses. You may need to connect it first: {page}. If it still fails after you connect, ask your administrator to check the sign-in details saved for server "member".`
+		refused      = `server "member" couldn't sign in: the service rejected the sign-in details saved for this server. Connecting won't fix this. Ask your administrator to update the sign-in details saved for server "member".`
+		forbidden    = `The service behind server "member" refused this request. The account saved for this server may not be allowed to do this. Connecting won't fix this. Ask your administrator to check what that account is allowed to do.`
+		connectFirst = `The service behind server "member" refused this request. You may need to connect this server first: {page}. If it still fails after you connect, ask your administrator to check the sign-in details saved for server "member".`
 		noKey        = `server "member" requires authentication and has no credential for this caller. Ask your administrator to connect it`
 		bearer       = `Bearer resource_metadata="https://example.com/.well-known/oauth-protected-resource"`
 	)
