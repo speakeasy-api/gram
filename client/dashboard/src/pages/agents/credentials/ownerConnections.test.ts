@@ -207,6 +207,41 @@ describe("serverConnection", () => {
     });
   });
 
+  it("counts a sign-in whose connection ended as outstanding, not connected", () => {
+    // One sign-in ended, another was never made: neither works, so neither
+    // may read as connected in "1 of 2 sign-ins connected".
+    const connection = serverConnection(
+      "issuer_one",
+      [
+        { id: "client_one", credentialOwner: "subject", name: "Linear" },
+        { id: "client_two", credentialOwner: "subject", name: "Stripe" },
+      ],
+      [session({ accessExpiresAt: earlier })],
+      now,
+    );
+    expect(connection).toEqual({
+      status: "missing",
+      signIns: [
+        { id: "client_two", credentialOwner: "subject", name: "Stripe" },
+        { id: "client_one", credentialOwner: "subject", name: "Linear" },
+      ],
+      connected: 0,
+    });
+  });
+
+  it("keeps the count of sign-ins that share a name", () => {
+    expect(
+      missingSignInNames({
+        status: "missing",
+        signIns: [
+          { id: "client_one", credentialOwner: "subject", name: "Linear" },
+          { id: "client_two", credentialOwner: "subject", name: "Linear" },
+        ],
+        connected: 0,
+      }),
+    ).toEqual({ names: ["2 Linear sign-ins"], unnamed: 0 });
+  });
+
   it("prefers a working connection over one that has ended", () => {
     const ended = session({ id: "session_old", accessExpiresAt: earlier });
     const working = session({ id: "session_new" });

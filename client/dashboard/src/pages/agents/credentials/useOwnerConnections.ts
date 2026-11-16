@@ -138,12 +138,19 @@ export function useOwnerConnections(
    * of every listed server. An issuer shared across the organization lists
    * registrations that belong to other servers, and those servers' own auth
    * clients are where the name a person recognizes, such as "Stripe", lives.
+   * One registration can sit under several auth clients; when they disagree
+   * on its name none of them wins, and the registration's own display name is
+   * used instead, whatever order the reads land in.
    */
-  const signInNames = new Map<string, string>();
+  const signInNames = new Map<string, string | null>();
   for (const read of auth) {
     for (const client of read.data?.clients ?? []) {
-      if (client.remoteSessionClientId && client.name)
-        signInNames.set(client.remoteSessionClientId, client.name);
+      if (!client.remoteSessionClientId || !client.name) continue;
+      const known = signInNames.get(client.remoteSessionClientId);
+      signInNames.set(
+        client.remoteSessionClientId,
+        known === undefined || known === client.name ? client.name : null,
+      );
     }
   }
   /**

@@ -432,7 +432,7 @@ export function CredentialsWizard({
   // A link that names a platform, such as the Claude Tag button, can reach
   // someone who may not trust one. Say so before they choose servers and sign
   // in, rather than only at Agent sign-in, which refuses them.
-  const presetRefused =
+  const presetRefusedForLink =
     initialPlatformKey !== undefined &&
     !editing &&
     !existing &&
@@ -586,6 +586,9 @@ export function CredentialsWizard({
   const [platformKey, setPlatformKey] = useState<string | null>(
     initialPlatformKey ?? null,
   );
+  // Only while the setup still trusts that platform: someone who switches to
+  // an API key is no longer asking for anything their role refuses.
+  const presetRefused = presetRefusedForLink && credential === "workload";
   // Applied once the catalog and the admission have both arrived, and only
   // while the reader has not chosen something else.
   const adopted = useRef(false);
@@ -2283,16 +2286,21 @@ export function CredentialsWizard({
         !connectionSelectable(connections.byServer.get(server.id)),
     );
   const unconnectedNote = (() => {
-    const only = unconnected.length === 1 ? unconnected[0]! : undefined;
-    const needs = only
-      ? missingSignInsSentence(only, connections.byServer.get(only.id))
-      : null;
     const names = new Intl.ListFormat("en", { type: "conjunction" }).format(
       unconnected.map((server) => server.name),
     );
-    return needs
-      ? `Connect or remove ${names}. ${needs}`
-      : `Connect or remove ${names}.`;
+    // What each one still needs, named by server once there is more than one.
+    const needs = unconnected.flatMap((server) => {
+      const sentence = missingSignInsSentence(
+        server,
+        connections.byServer.get(server.id),
+      );
+      if (!sentence) return [];
+      return [
+        unconnected.length === 1 ? sentence : `${server.name}: ${sentence}`,
+      ];
+    });
+    return [`Connect or remove ${names}.`, ...needs].join(" ");
   })();
 
   const blocked = authStop
@@ -2636,6 +2644,20 @@ export function CredentialsWizard({
 
   return (
     <div className="space-y-6">
+      {presetRefused && (
+        <Alert variant="warning" title={null}>
+          {/* The catalog that names the platform needs workload access too,
+              so the one preset the agents page links to is named here. */}
+          Setting up{" "}
+          {platform?.displayName ??
+            (initialPlatformKey === "claude-tag"
+              ? "Claude Tag"
+              : "a platform's sign-in")}{" "}
+          needs permission to manage workload identities, and your role does not
+          include it. Ask an organization admin to set it up, or to give you
+          that permission.
+        </Alert>
+      )}
       <WizardStepper
         // Issuing another key shows only the steps it walks through, so the
         // count reads "1 of 3" rather than starting on step 4.
@@ -2660,20 +2682,6 @@ export function CredentialsWizard({
           );
         }}
       />
-      {presetRefused && (
-        <Alert variant="warning" title={null}>
-          {/* The catalog that names the platform needs workload access too,
-              so the one preset the agents page links to is named here. */}
-          Setting up{" "}
-          {platform?.displayName ??
-            (initialPlatformKey === "claude-tag"
-              ? "Claude Tag"
-              : "a platform's sign-in")}{" "}
-          needs permission to manage workload identities, and your role does not
-          include it. Ask an organization admin to set it up, or to give you
-          that permission.
-        </Alert>
-      )}
       {errorAlert}
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-16">
         <div>{body()}</div>

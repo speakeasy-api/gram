@@ -57,6 +57,15 @@ describe("missingSignInsSentence", () => {
     ).toBe("1 of 2 sign-ins connected. Still needs a connection to Linear.");
   });
 
+  it("does not hide two missing sign-ins that share the server's name", () => {
+    expect(
+      missingSignInsSentence(
+        linear,
+        missing(signIn("linear_one", "Linear"), signIn("linear_two", "Linear")),
+      ),
+    ).toBe("Still needs a connection to 2 Linear sign-ins.");
+  });
+
   it("adds nothing when the connection is not missing a sign-in", () => {
     expect(missingSignInsSentence(linear, undefined)).toBeNull();
     expect(missingSignInsSentence(linear, { status: "missing" })).toBeNull();

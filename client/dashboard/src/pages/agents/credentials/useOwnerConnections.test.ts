@@ -249,6 +249,39 @@ describe("a server sharing an org-wide issuer with another server", () => {
     });
   });
 
+  it("falls back to the registration's own name when its auth clients disagree", () => {
+    const other = { ...server, id: "server_other" };
+    const third = { ...server, id: "server_third" };
+    mocks.clients = [
+      { ...otherServersSignIn, displayName: "Shared registration" },
+      { id: "client_own", credentialOwner: "subject" },
+    ];
+    mocks.auth.set(server.id, {
+      data: { status: "configured", clients: [ownSignIn] },
+    });
+    for (const [id, name] of [
+      [other.id, "Stripe"],
+      [third.id, "Billing"],
+    ] as const) {
+      mocks.auth.set(id, {
+        data: {
+          status: "configured",
+          clients: [
+            { ...ownSignIn, remoteSessionClientId: "client_other", name },
+          ],
+        },
+      });
+    }
+    const { result } = renderHook(() =>
+      useOwnerConnections([server, other, third], true),
+    );
+    const connection = result.current.byServer.get(server.id);
+    expect(connection?.status).toBe("missing");
+    expect(
+      connection?.status === "missing" ? connection.signIns?.[0]?.name : null,
+    ).toBe("Shared registration");
+  });
+
   it("keeps the server checking until enforcement is known", () => {
     mocks.enforcement = "loading";
     const { result } = renderHook(() => useOwnerConnections([server], true));

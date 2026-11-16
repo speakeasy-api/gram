@@ -58,6 +58,10 @@ export function serverConnection(
   if (personal.length === 0) return { status: "not-required" };
   const found: RemoteSession[] = [];
   const missing: ServerSignIn[] = [];
+  // The sign-ins whose only connection has ended. They still need a person,
+  // so a server that also misses another sign-in lists them as outstanding
+  // rather than counting them as connected.
+  const ended: ServerSignIn[] = [];
   for (const client of personal) {
     const matching = sessions.filter(
       (candidate) =>
@@ -74,9 +78,14 @@ export function serverConnection(
       continue;
     }
     found.push(session);
+    if (connectionLifetime(session, now).kind === "ended") ended.push(client);
   }
   if (missing.length > 0)
-    return { status: "missing", signIns: missing, connected: found.length };
+    return {
+      status: "missing",
+      signIns: [...missing, ...ended],
+      connected: found.length - ended.length,
+    };
   if (
     found.some((session) => connectionLifetime(session, now).kind === "ended")
   )
@@ -117,7 +126,8 @@ export type ServerSignIn = Pick<
 /**
  * The names of the sign-ins a missing connection still needs, in the order the
  * server asks for them, for a sentence such as "Still needs Stripe and Vercel".
- * A sign-in with no known name counts as one more, so the total stays true.
+ * Two sign-ins that share a name read as "2 Linear sign-ins", and a sign-in
+ * with no known name counts as one more, so the total stays true.
  */
 export function missingSignInNames(connection: ServerConnection | undefined): {
   names: string[];
@@ -125,13 +135,14 @@ export function missingSignInNames(connection: ServerConnection | undefined): {
 } {
   if (connection?.status !== "missing" || !connection.signIns)
     return { names: [], unnamed: 0 };
-  const names = [
-    ...new Set(
-      connection.signIns.flatMap((signIn) =>
-        signIn.name ? [signIn.name] : [],
-      ),
-    ),
-  ];
+  const counts = new Map<string, number>();
+  for (const signIn of connection.signIns) {
+    if (signIn.name)
+      counts.set(signIn.name, (counts.get(signIn.name) ?? 0) + 1);
+  }
+  const names = [...counts].map(([name, count]) =>
+    count === 1 ? name : `${count} ${name} sign-ins`,
+  );
   const unnamed = connection.signIns.filter((signIn) => !signIn.name).length;
   return { names, unnamed };
 }
