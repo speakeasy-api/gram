@@ -466,19 +466,25 @@ func clientCredentialsTransportFailure(err error) toolconfig.ClientGrantFailure 
 }
 
 const (
-	clientGrantRetryMessage = "This tool couldn't sign in to the service it uses. Try again in a few minutes. If it keeps happening, ask your administrator."
-	clientGrantSetupMessage = "This tool couldn't sign in to the service it uses because of how it is set up. Ask your administrator to fix it."
+	clientGrantUnavailableMessage   = "This tool couldn't sign in: its sign-in service didn't answer or had an error. Try again in a few minutes. If it keeps happening, ask your administrator."
+	clientGrantRejectedMessage      = "This tool couldn't sign in: the service rejected the sign-in details saved for it. Ask your administrator to update the tool's sign-in details."
+	clientGrantAddressMessage       = "This tool couldn't sign in: the sign-in address saved for it can't be used. Ask your administrator to check the tool's sign-in address."
+	clientGrantMisconfiguredMessage = "This tool couldn't sign in: its sign-in service answered in a way Speakeasy didn't expect. Ask your administrator to check the tool's sign-in address."
 )
 
-// clientGrantFailureMessage tells the caller only whether waiting can help; the connection log says why.
+// clientGrantFailureMessage names what failed in everyday words; both address failures read the same.
 func clientGrantFailureMessage(failure toolconfig.ClientGrantFailure) string {
 	switch failure {
 	case toolconfig.ClientGrantUnavailable:
-		return clientGrantRetryMessage
-	case toolconfig.ClientGrantBlocked, toolconfig.ClientGrantAddressNotFound, toolconfig.ClientGrantRejected, toolconfig.ClientGrantMisconfigured:
-		return clientGrantSetupMessage
+		return clientGrantUnavailableMessage
+	case toolconfig.ClientGrantRejected:
+		return clientGrantRejectedMessage
+	case toolconfig.ClientGrantBlocked, toolconfig.ClientGrantAddressNotFound:
+		return clientGrantAddressMessage
+	case toolconfig.ClientGrantMisconfigured:
+		return clientGrantMisconfiguredMessage
 	default:
-		return clientGrantSetupMessage
+		return clientGrantMisconfiguredMessage
 	}
 }
 
